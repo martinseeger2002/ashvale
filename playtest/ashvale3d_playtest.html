@@ -11345,7 +11345,28 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       myEnt.H.setGear(gearOf(me)); place(myEnt, me.x, me.y); setTimeout(() => hawkify(myEnt, me.eq.ring && me.eq.ring.id), 0);
       if (me.look && myEnt.H.setOutfit) myEnt.H.setOutfit(me.look);
       const NPCN = {};
-      function npcEnt(n) { const e = makeEnt('n:' + n.id, MOD.npc(n.look || n.id), { kind: 'npc', id: n.id }); place(e, n.x, n.y); e.yaw = e.tyaw = n.face != null ? n.face : PI; NPCN[n.id] = n; if (n.gear && e.H && e.H.setGear) e.H.setGear(n.gear); return e; }
+      /* which way a person stands when nobody is talking to them (2026-10-06: "all of the NPC's are all facing the same
+         direction"): the zone data can say (n.face, radians); otherwise they look out over the most open ground within 5 tiles -
+         the street or the square rather than a wall - leaning toward paths, where people walk up to them. Indoors only the room
+         counts. Ties break on the id, so neighbours do not all turn alike. */
+      function homeYaw(n) {
+        if (n.face != null) return n.face;
+        const M = core.M, inside = !!(M.insideAt && M.insideAt(n.x, n.y)); let best = -1, yaw = PI, hv = 0;
+        for (let i = 0; i < String(n.id).length; i++) hv = (hv * 31 + String(n.id).charCodeAt(i)) >>> 0;
+        for (let d = 0; d < 8; d++) {
+          const dx = [0, 1, 1, 1, 0, -1, -1, -1][d], dy = [1, 1, 0, -1, -1, -1, 0, 1][d];
+          let sc = 0;
+          for (let r = 1; r <= 5; r++) {
+            const x = n.x + dx * r, y = n.y + dy * r;
+            if (M.blocked(x, y) || (!!(M.insideAt && M.insideAt(x, y))) !== inside) break;
+            sc += (6 - r) * (M.tileAt(x, y) === 'p' ? 1.5 : 1);
+          }
+          sc += ((hv >>> (d * 3)) & 7) * 0.05;
+          if (sc > best) { best = sc; yaw = Math.atan2(dx, dy); }
+        }
+        return yaw;
+      }
+      function npcEnt(n) { const e = makeEnt('n:' + n.id, MOD.npc(n.look || n.id), { kind: 'npc', id: n.id }); place(e, n.x, n.y); e.homeYaw = homeYaw(n); e.yaw = e.tyaw = e.homeYaw; NPCN[n.id] = n; if (n.gear && e.H && e.H.setGear) e.H.setGear(n.gear); return e; }
       for (const n of core.M.npcs) npcEnt(n);   /* gear: what an NPC carries (the castle's watchmen hold bows) */
       /* monsters get a model while they are within MOB_NEAR tiles (seeded land wakes camps everywhere you have been) */
       const MOB_NEAR = 60, MOB_FAR = 90;
@@ -11450,6 +11471,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (core.S.t % 25 === 0) persist();
         if (SEEDED || core.S.t % 5 === 0) streamRegions();
         lazyTick();
+        if (core.S.t % 4 === 0) npcsTurnBack();
         netRoom();
       }
       function handle(e, now) {
@@ -11560,7 +11582,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (t.H.setTint) t.H.setTint(tc ? tc[0] : null, tc ? tc[1] : 0);
         if (t.H.setFrozen) t.H.setFrozen(!!(t.fx && (t.fx.freeze || t.fx.stun)));
       }
-      function faceNpc(id) { const n = ents.get('n:' + id); if (n) n.tyaw = Math.atan2(myEnt.to.x - n.to.x, myEnt.to.z - n.to.z); }
+      function faceNpc(id) { const n = ents.get('n:' + id); if (n) { n.tyaw = Math.atan2(myEnt.to.x - n.to.x, myEnt.to.z - n.to.z); n.facing = 1; } }
+      function npcsTurnBack() { for (const n of core.M.npcs) { const e = ents.get('n:' + n.id); if (e && e.facing && e.homeYaw != null && !n.patrol && !n.guard && Math.max(Math.abs(n.x - me.x), Math.abs(n.y - me.y)) > 6) { e.facing = 0; e.tyaw = e.homeYaw; } } }   /* back to their own spot once you walk off */
       let insideRoof = false;
       /* the floor bar (the operator: "hard to find how to get back down"): while you are in a building with storeys, which floor
          you are on and a button each way; PageUp / PageDown do the same */
