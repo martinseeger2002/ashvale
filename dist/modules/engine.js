@@ -54,7 +54,7 @@
       return {
         backend: backend || 'memory',
         get: k => (Object.prototype.hasOwnProperty.call(cache, k) ? cache[k] : null),
-        set(k, v) { cache[k] = v; if (!S) return Promise.resolve(); try { return Promise.resolve(S.setItem(k, v)).catch(warn); } catch (e) { warn(e); return Promise.resolve(); } }
+        set(k, v) { cache[k] = v; if (!S) return Promise.resolve(true); try { return Promise.resolve(S.setItem(k, v)).then(() => true, e => { warn(e); return false; }); } catch (e) { warn(e); return Promise.resolve(false); } }   /* true = kept, false = the store refused it */
       };
     }
     /* ask the wallet for this page's storage again (arcade.storage asks once and gives up after 5 s: a wallet that is
@@ -485,6 +485,7 @@
         if (core.S.t % 25 === 0) persist();
         if (SEEDED || core.S.t % 5 === 0) streamRegions();
         lazyTick();
+        netWatch();
         if (core.S.t % 4 === 0) npcsTurnBack();
         netRoom();
       }
@@ -881,6 +882,25 @@
          the members standing in it; monsters, loot, fires and weather of an area come only from its host. Players near a
          region border also VIEW the neighbour region's room (net.neighbours, below). Avatars are drawn 150 ms behind, interpolated. */
       const remotes = new Map(); let room = null, roomZone = null, netT = 0, joining = false, retryAt = 0;
+      /* CONNECTION WATCH (2026-10-06: "When a player loses connection to the server, they should be notified so they
+         don't continue to play on a broken server"). A room can die without ever saying 'closed' (the arcade node restarts
+         and the page's link to it never comes back): then you play on alone and nobody sees you. Signs, all from what the
+         game already does: our own sends keep failing; or other players are in the room (every game sends at least a 1 Hz
+         heartbeat) and none has been heard from for 45 s - that one first reconnects quietly, since a friend's tab in the
+         background goes quiet too. A loud loss shows the HUD's connection banner (Reload) until the room is back. */
+      const NW = { heard: 0, fails: 0, lost: false, was: false, quiet: 0, quietTry: false, tries: 0 };
+      function netDrop(why, loud) {
+        const old = room; room = null; dropRemotes(); hosts.clear(); passive = false; applyAuth(); hud.setOnline(false);
+        if (old) { try { old.leave(); } catch (e) { /* gone already */ } }
+        retryAt = 0; NW.fails = 0;
+        if (loud) { NW.lost = true; NW.tries = 0; hud.netLost && hud.netLost(true, 'net', why); } else NW.quietTry = true;
+      }
+      function netWatch() {
+        if (!room) return;
+        const now = performance.now(), others = (room.members ? room.members().length : 1) > 1;
+        if (NW.fails >= 6) netDrop('your messages are not getting through', true);
+        else if (others && NW.heard && now - NW.heard > 45000 && now - NW.quiet > 180000) { NW.quiet = now; netDrop('', false); }
+      }
       function zoneHere() { return core.zoneOf(me.x, me.y); }
       const label = (name, from) => name + ' (' + (from.tag ? '@' + from.tag : 'guest') + ')';   /* @tag = stamped by the arcade node */
       /* a player's total level above the name over their head (2026-10-05) */
@@ -914,13 +934,16 @@
           hosts.clear(); electedOnce = false; myJoin = Date.now(); joinedAt = performance.now(); passive = true; applyAuth();   /* passive until the hosts are known */
           const res = await net.join(z, { game: 'ashvale', loopback: q.has('loopback') });
           hud.setOnline(!!(res && res.online));
+          if (res && res.online) { NW.heard = performance.now(); NW.fails = 0; NW.was = true; NW.quietTry = false; if (NW.lost) { NW.lost = false; hud.netLost && hud.netLost(false); hud.chat('Back in touch with other players.', 'sys'); } }
+          else if (NW.was && (NW.lost || NW.quietTry)) { NW.quietTry = false; NW.tries++; if (!NW.lost) NW.lost = true; hud.netLost && hud.netLost(true, 'net', 'the arcade is not answering' + (NW.tries > 2 ? ': reload the page' : ', still trying')); }
           if (res && res.online && core.regionOf(me.x, me.y) === z) {
             const R = res.room; room = R; myNetId = R.me.id; netStatus = res.backend + ' as ' + (R.me.tag ? '@' + R.me.tag : 'guest');
             { let h = 2166136261; for (let i = 0; i < myNetId.length; i++) h = Math.imul(h ^ myNetId.charCodeAt(i), 16777619) >>> 0; core.uidSpace(1 + h % 4095); }   /* my own uid space for things I create as a host */
             R.on('message', ev => { if (room === R) onNet(ev); });
+            R.on('message', () => { if (room === R) NW.heard = performance.now(); }); R.on('join', () => { if (room === R) NW.heard = performance.now(); }); R.on('leave', () => { if (room === R) NW.heard = performance.now(); });
             R.on('leave', ev => { if (room !== R) return; dropRemote(ev.from.id); elect(); });
             R.on('join', () => { if (room !== R) return; clearTimeout(gearT); gearT = setTimeout(() => { netGear(); if (hosted.size) fullSnap(); }, 600); });   /* newcomers missed our gear/outfit/name: send it again (one resend for a burst of joins) */
-            R.on('closed', why => { if (room !== R) return; room = null; dropRemotes(); hosts.clear(); passive = false; applyAuth(); hud.setOnline(false); hud.chat('Lost contact with other players' + (why ? ' (' + why + ')' : '') + '. Retrying soon.', 'sys'); retryAt = performance.now() + 15000; });
+            R.on('closed', why => { if (room !== R) return; room = null; dropRemotes(); hosts.clear(); passive = false; applyAuth(); hud.setOnline(false); NW.lost = true; NW.tries = 0; hud.netLost && hud.netLost(true, 'net', why || ''); hud.chat('Lost contact with other players' + (why ? ' (' + why + ')' : '') + '. Retrying soon.', 'sys'); retryAt = performance.now() + 15000; });
             netGear();
             if (R.me && !R.me.guest && R.me.address && R.me.address !== walletState.address) { walletState.address = R.me.address; walletRefresh(); }
             if (!trade && deps.trade) trade = deps.trade.create({ host, toast: (t, k) => hud.chat(t, k || 'trade'), send: (to, obj) => netSend({ tr: obj, to }), offerable: tradeOfferable, onSettled: tradeSettled, itemOf: p => { const j = p && p.json; if (!j || p.creator !== DATA.assets.issuer) return null; const k = j.key || ((j.attributes || []).find(a => a && a.trait_type === 'Key') || {}).value; const d = k && core.item(k); return d ? { key: k, name: d.name, icon: (() => { try { return MOD.icon(k, 64); } catch (e) { return null; } })() } : null; }, nameOf: id => { const r = remotes.get(id); return r ? label(r.name, r.from) : 'another player'; } });
@@ -1298,7 +1321,7 @@
         while (outQ.length && T.filter(t => now - t <= 1000).length < 5 && T.length < 9) {
           const w = outQ.shift(); T.push(now); if (!w.R) lastSend = now; netStats.sent++;
           netStats.max2s = Math.max(netStats.max2s, T.length); netStats.max1s = Math.max(netStats.max1s, T.filter(t => now - t <= 1000).length);
-          (w.R || room).send(w.o).then(ok => { if (!ok) netStats.dropped++; }, () => { netStats.dropped++; });
+          (w.R || room).send(w.o).then(ok => { if (!ok) netStats.dropped++; if (!w.R) NW.fails = ok ? 0 : NW.fails + 1; }, () => { netStats.dropped++; if (!w.R) NW.fails++; });
         }
         netStats.queued = outQ.length;
       }
@@ -1705,7 +1728,14 @@
       }
       function resize() { const w = host.clientWidth || innerWidth, h = host.clientHeight || innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = w / h < 1.2 ? 55 : 45; camera.updateProjectionMatrix(); }
       if (window.ResizeObserver) new ResizeObserver(resize).observe(host); window.addEventListener('resize', resize); resize();
-      function persist() { if (stopped) return; store.set(SAVE, JSON.stringify(core.exportPlayer(PID))); }   /* stopped: New character cleared the save; the reload's visibilitychange must not write the old one back */
+      let saveFails = 0;
+      function persist() {
+        if (stopped) return;
+        Promise.resolve(store.set(SAVE, JSON.stringify(core.exportPlayer(PID)))).then(ok => {   /* false: the arcade did not take it */
+          if (ok === false) { if (++saveFails === 2) hud.netLost && hud.netLost(true, 'save'); }
+          else { if (saveFails >= 2) { hud.netLost && hud.netLost(false, 'save'); hud.chat('Your progress is saving again.', 'sys'); } saveFails = 0; }
+        });
+      }   /* stopped: New character cleared the save; the reload's visibilitychange must not write the old one back */
       document.addEventListener('visibilitychange', () => { if (document.hidden) persist(); else { lastTick = performance.now(); } });
       window.addEventListener('pagehide', persist);
 
@@ -1757,6 +1787,7 @@
         give(id, n) { const p = me; for (let k = 0; k < (core.item(id).stack ? 1 : n || 1); k++) { const f = p.inv.indexOf(null); if (core.item(id).stack) { const i = p.inv.findIndex(s => s && s.id === id); if (i >= 0) { p.inv[i].n += n || 1; break; } } if (f < 0) break; p.inv[f] = { id, n: core.item(id).stack ? n || 1 : 1 }; } hud.refresh('all'); },
         setLevel(skill, L) { me.xp[skill] = core.xpFor(L) * 10; if (skill === 'hitpoints') me.hp = L; hud.refresh('all'); },
         teleport(x, y) { me.x = x; me.y = y; me.path = []; place(myEnt, x, y); cam.snap = true; streamRegions(); arriveCheck(); },
+        netHealth: () => ({ online: !!room, lost: NW.lost, heardAgo: NW.heard ? Math.round(performance.now() - NW.heard) : null, fails: NW.fails, saveFails }), _netBreak: () => { if (room) { const R = room; R.send = () => Promise.resolve(false); } },
         zones: () => ({ loaded: (core.D.zones || []).map(z => z.id), index: ZINDEX ? ZINDEX.map(z => z.id) : null, waiting: Object.keys(LZ_WAIT), travelling }),
         tap: tapAt, menuAt, targetsAt, pad: () => PAD && PAD.state(), fps: () => frames, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries }), setCam(y, p, d) { if (y != null) cam.tyaw = cam.yaw = y; if (p != null) cam.tpitch = cam.pitch = p; if (d != null) cam.tdist = cam.dist = d; },
         net: () => ({ host: hostOf(zoneHere()), amHost: !!room && hostOf(zoneHere()) === myNetId, hosts: Object.fromEntries(hosts), hosted: Array.from(hosted), area: zoneHere(), region: roomZone, myId: myNetId, ids: Array.from(remotes.keys()), room: room && room.id, me: room && room.me, neighbours: nb ? nb.rooms().map(R => R.id) : [], viewers: Array.from(remotes).filter(e => e[1].viewOnly).map(e => e[0]), status: netStatus, stats: Object.assign({ perSec: +(netStats.sent / Math.max(1, (performance.now() - netStats.t0) / 1000)).toFixed(2) }, netStats, { times: undefined }), gear: Array.from(remotes.values()).map(r => [r.name, r.e.H.gear || null]), remotes: Array.from(remotes.keys()), names: Array.from(remotes.values()).map(r => r.e.tag && r.e.tag.textContent) }),

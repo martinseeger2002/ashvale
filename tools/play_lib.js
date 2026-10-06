@@ -28,7 +28,9 @@ const bag = () => { const o = {}; for (const s of ASH.me.inv) if (s) o[s.id] = (
 const chatEl = () => [...document.querySelectorAll('.ash *')].find(e => e.children.length > 2 && /Welcome to Ashvale/.test(e.innerText || '') && (e.innerText || '').length < 8000);
 const chat = (n = 8) => { const e = chatEl(); return e ? e.innerText.split('\n').filter(Boolean).slice(-n) : []; };
 const until = async (fn, ms, step = 400) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (fn()) return true; await sleep(step); } return !!fn(); };
-const cmd = c => ASH.core.cmd('me', c);
+// window.__run (set by tools/bot.py, 2026-10-06: "He also should be running most places"): every move goes out as
+// a run -- what a double-click is -- while there is energy for it
+const cmd = c => ASH.core.cmd('me', (window.__run && (ASH.me.energy || 0) > 1500 && ['walk', 'attack', 'take', 'npc', 'gather'].includes(c.c)) ? Object.assign({}, c, { run: true }) : c);
 async function walkTo(x, y, ms = 90000) { cmd({ c: 'walk', x, y }); return until(() => ASH.me.x === x && ASH.me.y === y || (!ASH.me.path.length && Math.max(Math.abs(ASH.me.x - x), Math.abs(ASH.me.y - y)) <= 1), ms); }
 async function talk(id) { const before = chat(40).length; cmd({ c: 'npc', id }); await until(() => !ASH.me.act || ASH.me.act.k !== 'npc', 60000); await sleep(1500); const after = chat(40); return after.slice(Math.max(0, before - 40 + after.length - 40)); }
 function nearest(key) { let best = null, bd = 1e9; for (const m of ASH.core.S.mobs) if (m.key === key && !m.dead) { const d = Math.max(Math.abs(m.x - ASH.me.x), Math.abs(m.y - ASH.me.y)); if (d < bd) { bd = d; best = m; } } return best && { uid: best.uid, x: best.x, y: best.y, hp: best.hp, dist: bd }; }

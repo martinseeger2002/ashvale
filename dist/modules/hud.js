@@ -150,6 +150,20 @@
     let bannerT = 0;
     function levelUp(skill, lvl) { banner.innerHTML = 'Congratulations!<small>' + A.cap(skill) + ' level ' + lvl + '</small>'; banner.style.display = 'block'; clearTimeout(bannerT); bannerT = setTimeout(() => banner.style.display = 'none', 2600); }
     function death(on) { dead.style.display = on ? 'flex' : 'none'; }
+    /* the connection banner (2026-10-06: a player who lost the server is told, so they don't play on a broken one):
+       kind 'net' = the shared world is not reachable (others can't see you; the game reconnects by itself), 'save' = progress
+       is not being saved. Stays until the engine says it's back; Reload is always there. */
+    const nl = el('netlost', ui), NL = { net: null, save: null };
+    function netLost(on, kind, why) {
+      kind = kind || 'net'; NL[kind] = on ? (why || '') : null;
+      const k = NL.save != null ? 'save' : NL.net != null ? 'net' : null;
+      if (!k) { nl.style.display = 'none'; return; }
+      nl.innerHTML = '<div><b>' + (k === 'save' ? 'Your progress is not being saved.' : 'Connection lost.') + '</b> ' +
+        (k === 'save' ? 'The arcade is not answering. Reload before you play on, or what you do now may be lost.'
+                      : 'Other players can\'t see you and the shared world isn\'t updating' + (NL.net ? ' (' + A.esc(NL.net) + ')' : '') + '. Reconnecting\u2026') +
+        '</div><button class="btn">Reload</button>';
+      nl.style.display = 'flex'; nl.querySelector('.btn').onclick = () => location.reload();
+    }
     /* the portal swirl (2026-10-06): shown while the town you are travelling to is still loading (engine arriveCheck) */
     const trav = el('travel', ui); trav.innerHTML = '<div class="sw"></div><div class="sw2"></div><div class="tt"></div><div class="pb"><i></i></div>';
     function travel(on, name, frac) {
@@ -210,7 +224,7 @@
     { const r0 = K.refresh; K.refresh = w => { r0(w); if (st.chest) K.drawChest(); }; }   /* the chest window follows the bag and the wallet */
     setTab(st.tab);
     return {
-      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, playerStats, travel, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => K.openChest(), closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
+      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, playerStats, travel, netLost, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => K.openChest(), closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };

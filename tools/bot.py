@@ -89,6 +89,24 @@ class Memory:
                 for k, v in self.d['monsters'].items()}
 
 
+# Pick up what lies within r tiles, counting only what really reaches the bag (2026-10-06: "Cinder Walker stands
+# around a lot"). Loot that shows on the ground but cannot be taken -- the area's host never confirms it, or it is
+# somebody else's -- used to cost play_lib's pickUp 15 s an item, every sweep, and was reported as picked up anyway.
+# Here an item gets 3 s; one that does not come is remembered and never tried again.
+TAKE_JS = """const r = %d, bad = window.__untakeable = window.__untakeable || new Set(), got = [];
+  const count = () => ASH.me.inv.reduce((a, q) => a + (q ? (q.n || 1) : 0), 0);
+  for (const g of ASH.core.S.ground.slice()) {
+    if (bad.has(g.uid) || Math.max(Math.abs(g.x - ASH.me.x), Math.abs(g.y - ASH.me.y)) > r) continue;
+    const before = count();
+    ASH.core.cmd('me', { c: 'take', uid: g.uid });
+    const t0 = Date.now();
+    while (Date.now() - t0 < 3000 && ASH.core.S.ground.some(q => q.uid === g.uid)) await wait(150);
+    if (count() > before || (g.id === 'coins' && !ASH.core.S.ground.some(q => q.uid === g.uid))) got.push(g.id);
+    else bad.add(g.uid);
+  }
+  return got;"""
+
+
 class Bot:
     def __init__(self, g, minutes): self.g, self.t0, self.limit, self.mem = g, time.time(), minutes * 60, Memory()
     def r(self, js):
@@ -197,8 +215,9 @@ class Bot:
             if worn or price('armoury', piece) > s.get('gold', 0) - 15: continue
             if self.r("return await buy('garrick', %r, 1)" % piece): log('bought', piece, self.r("return await equip(%r)" % piece))
         self.wear()
-    def ground_near(self, r):
-        return self.r("return ASH.core.S.ground.filter(g => Math.max(Math.abs(g.x - ASH.me.x), Math.abs(g.y - ASH.me.y)) <= %d).length" % r) or 0
+    def ground_near(self, r):   # what is left that it has not already found it cannot take
+        return self.r("const bad = window.__untakeable || new Set(); return ASH.core.S.ground.filter(g => !bad.has(g.uid) && "
+                      "Math.max(Math.abs(g.x - ASH.me.x), Math.abs(g.y - ASH.me.y)) <= %d).length" % r) or 0
     def scavenge(self, r=8, settle=1500):
         """pick up whatever lies within r tiles (2026-10-05: "if he sees anything laying around he should pick it up
         and use it or sell it"; 2026-10-06: "Make sure Cinder Walker doesn't leave loot lying around"), then put on
@@ -207,7 +226,7 @@ class Bot:
         self.r("await wait(%d); return 1" % settle)
         got, here = [], self.st().get('at')
         for _ in range(4):
-            more = self.r("return await pickUp(%d)" % r) or []
+            more = self.r(TAKE_JS % r) or []
             got += more
             if not self.ground_near(r): break
             if not more:
@@ -439,7 +458,10 @@ def toughen(b):
     best hit is half a rat's health (two blows), and wear the best armour his defence allows"""
     rat_hp = MONS.get('rat', {}).get('hp', 5); need = -(-rat_hp // 2)
     while b.time_left():
-        mh = b.r("return ASH.core.maxHit(ASH.me)") or 0
+        # his best hit in the style that trains strength (Aggressive, +3): read in Accurate it stays one lower and
+        # he would train rats for ever (2026-10-06: strength 15 read as best hit 2)
+        mh = b.r("const was = (ASH.me.styles || {}).melee || 0; ASH.core.cmd('me', { c: 'style', i: 1 }); "
+                 "const h = ASH.core.maxHit(ASH.me); ASH.core.cmd('me', { c: 'style', i: was }); return h") or 0
         dfn = b.r("return ASH.core.lv(ASH.me, 'defence')") or 1
         report_quests(b, {}, {})   # the report shows training and lessons too, not only quest attempts
         b.best_armour()
@@ -481,7 +503,11 @@ if __name__ == '__main__':
     mins = next((float(x[8:]) for x in sys.argv[1:] if x.startswith('MINUTES=')), 45)
     if not a: print(__doc__); sys.exit()
     with LiveGame('cinderwalker') as g:
-        b = Bot(g, mins); b.r("ASH.core.cmd('me', { c: 'look', name: 'Cinderwalker' }); return 1")
+        b = Bot(g, mins); b.r("ASH.core.cmd('me', { c: 'look', name: 'Cinderwalker' }); window.__run = true; return 1")
+        # how smoothly this browser draws the game: a few frames a second is what other players see as jumps
+        log('frames per second', b.r("let n = 0; const t0 = performance.now(); await new Promise(res => { "
+                                     "const f = () => { n++; if (performance.now() - t0 < 3000) requestAnimationFrame(f); else res(); }; "
+                                     "requestAnimationFrame(f); }); return Math.round(n * 1000 / (performance.now() - t0))"))
         cmd = a[0]; log('#### bot', ' '.join(a), 'for', mins, 'min')
         if cmd == 'status': log('status', json.dumps(b.r("return report('status')"), default=str)[:1500])
         elif cmd == 'money': b.money(int(a[1]) if len(a) > 1 else 60)

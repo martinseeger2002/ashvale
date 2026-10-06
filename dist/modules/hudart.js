@@ -129,6 +129,9 @@
 .ash .dragicon img{width:100%;height:100%}.ash .dragicon .n{position:absolute;left:2px;top:0;font-size:10px;color:#ff0;text-shadow:1px 1px 0 #000}
 .ash .slot.dragsrc{opacity:.35}
 .ash .splat.fx{width:30px;height:30px;font-size:10px;color:#003;text-shadow:none}
+.ash .netlost{position:absolute;left:50%;top:max(8px,env(safe-area-inset-top));transform:translateX(-50%);width:min(560px,calc(100vw - 24px));z-index:18;display:none;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:10px;background:#5a1414f0;box-shadow:0 0 0 2px #e05a4a,0 6px 20px #000a;color:#fde9e4;font:14px/1.35 system-ui,sans-serif}
+.ash .netlost b{color:#fff}
+.ash .netlost .btn{flex:none;margin:0;padding:8px 14px}
 .ash .travel{position:absolute;inset:0;z-index:19;display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#05070d;overflow:hidden;pointer-events:auto;touch-action:none}
 .ash .travel .sw{position:absolute;left:50%;top:50%;width:170vmax;height:170vmax;margin:-85vmax 0 0 -85vmax;border-radius:50%;background:repeating-conic-gradient(from 0deg,#1b4f9a00 0deg,#3d8ff0aa 14deg,#9fd0ff55 22deg,#1b4f9a00 40deg),radial-gradient(circle,#bfe4ff 0,#5fa8ff 7%,#1d4c9c 22%,#0b1a3a 46%,#05070d 70%);animation:ashsw 2.4s linear infinite}
 .ash .travel .sw2{position:absolute;left:50%;top:50%;width:46vmin;height:46vmin;margin:-23vmin 0 0 -23vmin;border-radius:50%;border:2.2vmin solid #8fd0ff;box-shadow:0 0 6vmin #4aa3ff,inset 0 0 6vmin #4aa3ff;animation:ashsw2 1.6s ease-in-out infinite alternate}
