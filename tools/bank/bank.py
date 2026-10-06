@@ -51,30 +51,70 @@ def db():
     for col in ('want', 'coll'):   # want: the exact piece (a pickup of a drop); coll: a quest reward's own collection
         try: c.execute('alter table jobs add column %s text' % col)
         except sqlite3.OperationalError: pass
+    # persisted drops (2026-10-06): units (Gold and other tokens have no piece), live = shown to every player until
+    # someone takes it, paid = the picker's piece has been handed out
+    for col, ty in (('units', 'integer default 1'), ('live', 'integer default 0'), ('paid', 'integer default 0')):
+        try: c.execute('alter table drops add column %s %s' % (col, ty))
+        except sqlite3.OperationalError: pass
     return c
 
 # ---------------------------------------------------------------- requests (from the room)
 def handle_drop(c, addr, msg):
     """{t:'drop', items:[[itemId, piece]], x, y}: the exact pieces a player dropped (or died with), so whoever picks one up is
-    paid THAT piece (2026-10-04: "it should be the exact same NFT")"""
-    x, y = int(msg.get('x') or 0), int(msg.get('y') or 0)
+    paid THAT piece (2026-10-04: "it should be the exact same NFT"). v3 (2026-10-06: "items dropped by a player
+    should persist in the @ashvale wallet in the exact same location until a player picks them up"): items are
+    [itemId, piece or '', units] and the game only sends what its rules keep (Gold, stones, magical, worth 100+ GOLD); those are
+    LIVE: held for no time limit and shown to every player who asks what lies near them ('ground?')"""
+    x, y = int(msg.get('x') or 0), int(msg.get('y') or 0); live = 1 if (msg.get('v') or 0) >= 3 else 0
     for it in (msg.get('items') or [])[:40]:
-        try: k, pc = str(it[0]), str(it[1])
-        except (TypeError, IndexError): continue
-        if k in ITEMS and len(pc) == 64 and not c.execute('select 1 from drops where piece=? and taken_by is null', (pc,)).fetchone():
-            c.execute('insert into drops(addr,item,piece,x,y,at) values(?,?,?,?,?,?)', (addr, k, pc, x, y, time.time()))
-    c.commit(); log('DROP', addr, json.dumps(msg.get('items'))[:200], x, y)
+        try: k, pc = str(it[0]), str(it[1] or ''); u = max(1, min(1000000, int(it[2]) if len(it) > 2 else 1))
+        except (TypeError, IndexError, ValueError): continue
+        if k not in ITEMS: continue
+        if pc:
+            if len(pc) != 64 or c.execute('select 1 from drops where piece=? and taken_by is null', (pc,)).fetchone(): continue
+            c.execute('insert into drops(addr,item,piece,x,y,at,units,live) values(?,?,?,?,?,?,1,?)', (addr, k, pc, x, y, time.time(), live))
+        elif live:   # a token (Gold...): an amount on a spot; the same kind dropped on the same spot again adds to it
+            r = c.execute('select n from drops where item=? and piece is null and live=1 and taken_by is null and x=? and y=?', (k, x, y)).fetchone()
+            if r: c.execute('update drops set units=units+?, at=? where n=?', (u, time.time(), r['n']))
+            else: c.execute('insert into drops(addr,item,piece,x,y,at,units,live) values(?,?,null,?,?,?,?,1)', (addr, k, x, y, time.time(), u))
+    c.commit(); log('DROP', addr, json.dumps(msg.get('items'))[:200], x, y, 'live' if live else '')
+def handle_took(c, addr, msg):
+    """{t:'took', id, n, x, y}: a player picked up a persisted drop. It leaves every other player's ground at once (the next
+    'ground?' no longer lists it), and the picker's deposit is paid THAT piece. The dropper taking back its own: just gone."""
+    try: k, x, y = str(msg['id']), int(msg['x']), int(msg['y'])
+    except (KeyError, TypeError, ValueError): return None
+    r = c.execute('select n, addr from drops where item=? and live=1 and taken_by is null and abs(x-?)<=2 and abs(y-?)<=2 order by abs(x-?)+abs(y-?), at limit 1',
+                  (k, x, y, x, y)).fetchone()
+    if r:
+        c.execute('update drops set taken_by=?, taken_at=?, paid=? where n=?', (addr, time.time(), 1 if r['addr'] == addr else 0, r['n'])); c.commit()
+        log('TOOK', addr, k, x, y, 'drop', r['n'], '(its own)' if r['addr'] == addr else '')
+    return None
+def handle_ground(c, addr, msg):
+    """'ground?' {x0, y0, x1, y1}: the persisted drops lying in that rectangle, for the game to show (in chunks: a room message
+    is 512 bytes). Each item: [drop id, itemId, units, x, y]."""
+    try: x0, y0, x1, y1 = (int(msg[k]) for k in ('x0', 'y0', 'x1', 'y1'))
+    except (KeyError, TypeError, ValueError): return None
+    if x1 - x0 > 400 or y1 - y0 > 400: return None
+    rows = [[r['n'], r['item'], r['units'] or 1, r['x'], r['y']] for r in
+            c.execute('select n, item, units, x, y from drops where live=1 and taken_by is null and x between ? and ? and y between ? and ? order by n', (x0, x1, y0, y1))]
+    box, q = [x0, y0, x1, y1], str(msg.get('q') or '')[:12]
+    chunks = [rows[i:i + 10] for i in range(0, len(rows), 10)] or [[]]
+    return [{'t': 'ground', 'to': addr, 'q': q, 'box': box, 'i': i, 'of': len(chunks), 'items': ch} for i, ch in enumerate(chunks)]
 def claim_drop(c, addr, k, at):
-    """the piece of kind k dropped where this player picked one up (within 2 tiles, within the hour)"""
+    """the piece of kind k dropped where this player picked one up (within 2 tiles): one it already said it took ('took'), else
+    an untaken one - a live drop (persisted) at any age, an older-style drop within the hour"""
     for x, y in at:
-        r = c.execute('select n, piece from drops where item=? and taken_by is null and addr<>? and abs(x-?)<=2 and abs(y-?)<=2 and at>? order by at limit 1',
-                      (k, addr, int(x), int(y), time.time() - 3600)).fetchone()
-        if r: c.execute('update drops set taken_by=?, taken_at=? where n=?', (addr, time.time(), r['n'])); return r['piece']
+        r = c.execute("""select n, piece from drops where item=? and piece is not null and addr<>? and abs(x-?)<=2 and abs(y-?)<=2 and
+                         ((taken_by=? and paid=0) or (taken_by is null and (live=1 or at>?))) order by (taken_by is null), at limit 1""",
+                      (k, addr, int(x), int(y), addr, time.time() - 3600)).fetchone()
+        if r: c.execute('update drops set taken_by=?, taken_at=?, paid=1 where n=?', (addr, time.time(), r['n'])); return r['piece']
     return None
 def claim_drop_any(c, addr, k):
-    """no spot from the game: the newest untaken drop of kind k by someone else (the hour it is held for its picker)"""
-    r = c.execute('select n, piece from drops where item=? and taken_by is null and addr<>? and at>? order by at desc limit 1', (k, addr, time.time() - 3600)).fetchone()
-    if r: c.execute('update drops set taken_by=?, taken_at=? where n=?', (addr, time.time(), r['n'])); return r['piece']
+    """no spot from the game: one it said it took, else the newest untaken older-style drop of kind k within the hour"""
+    r = c.execute("""select n, piece from drops where item=? and piece is not null and addr<>? and
+                     ((taken_by=? and paid=0) or (taken_by is null and live=0 and at>?)) order by (taken_by is null), at desc limit 1""",
+                  (k, addr, addr, time.time() - 3600)).fetchone()
+    if r: c.execute('update drops set taken_by=?, taken_at=?, paid=1 where n=?', (addr, time.time(), r['n'])); return r['piece']
     return None
 def holdings(addr):
     """what this address holds on chain, by game item: {itemId: units} - gear by its Key (any @ashvale collection), tokens by id"""
@@ -107,6 +147,8 @@ def handle_felled(c, addr, msg):
 def handle(c, addr, msg):
     """-> reply dict (or a list of them). Queues jobs; never touches the chain itself."""
     if msg.get('t') == 'drop': handle_drop(c, addr, msg); return None
+    if msg.get('t') == 'took': return handle_took(c, addr, msg)
+    if msg.get('t') == 'ground?': return handle_ground(c, addr, msg)
     if msg.get('t') in ('fell', 'felled?'): return handle_felled(c, addr, msg)
     rid = str(msg.get('id') or '')[:40]
     if not rid: return None
@@ -196,7 +238,7 @@ class Deliverer:
     def stock_for(self, c, k):
         if time.time() - self.stock_t > 300: self.stock, self.stock_t = held_pieces(), time.time()
         busy = {r['piece'] for r in c.execute('select piece from given where item=? and at>?', (k, time.time() - 900))}   # sent in the last 15 min (still listed as ours)
-        busy |= {r['piece'] for r in c.execute('select piece from drops where item=? and taken_by is null and at>?', (k, time.time() - 3600))}   # dropped: kept for whoever picks it up
+        busy |= {r['piece'] for r in c.execute("select piece from drops where item=? and piece is not null and ((taken_by is null and (live=1 or at>?)) or (taken_by is not null and paid=0))", (k, time.time() - 3600))}   # dropped: kept for whoever picks it up (a live one for ever)
         busy |= {r['want'] for r in c.execute("select want from jobs where item=? and want is not null and status in ('queued','retry')", (k,))}
         for pid in self.stock.get(k, []):   # lowest number first; a piece that came back to @ashvale is recycled
             if pid not in busy: return pid
@@ -302,7 +344,7 @@ def room_loop(stop):
                     if fr.evaluate("window.__bankClosed || null"): raise RuntimeError('room closed')
                     for m in fr.evaluate("window.__bankQ.splice(0)"):
                         d, f = m.get('data') or {}, m.get('from') or {}
-                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?'): continue
+                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'took', 'ground?'): continue
                         if f.get('guest') or not f.get('address'): continue
                         try: rep = handle(c, f['address'], d)
                         except Exception: log('HANDLE ERROR', traceback.format_exc()[-400:]); rep = {'t': 'dep', 'id': d.get('id'), 'to': f['address'], 'ok': False, 'note': 'The bank hit an error; try again later.'}

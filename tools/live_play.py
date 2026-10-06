@@ -59,7 +59,11 @@ class LiveGame:
             from pw_send import AshvaleBrowser
             self.B = AshvaleBrowser().__enter__()
         L = json.load(open(os.path.join(HERE, 'chain', 'modules.json')))['launcher']
-        pg = self.B.pg; pg.set_viewport_size({'width': 1100, 'height': 760})
+        pg = self.B.pg
+        # the bot draws the game in software on a shared machine: at 1100x760 it managed 10 frames a second, and
+        # other players saw it move in jumps (2026-10-06: "his movement on the screen a lot of the time is
+        # really Janky"). A quarter of the pixels for @cinderwalker; everybody else as before.
+        pg.set_viewport_size({'width': 560, 'height': 380} if self.tag == 'cinderwalker' else {'width': 1100, 'height': 760})
         pg.goto(APP + '/inscriptions/' + L + '/full', timeout=180000)
         self.fr = None
         for _ in range(90):

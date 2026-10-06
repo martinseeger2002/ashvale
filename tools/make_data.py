@@ -1475,13 +1475,16 @@ module('rules', 3, {
     # 2026-10-05: monsters should eventually come back even while players stay ("maybe give them like a 20 minute spawn time")
     "respawn": {"emptyTicks": 50, "deadTicks": 2000, "note": "a dead monster comes back when its zone has been empty this long (50 ticks = 30 s) and someone enters, or after deadTicks (2000 = 20 min) at its post when no player stands within 8 tiles of it"},
     "carry": {"base": 30000, "perStrength": 1000, "unit": "grams", "frozenPct": 150},
-    "death": {"pileTicks": 1000, "note": "everything carried and worn drops where you die; gear, tools and Gold in the pile stay until taken (rules.persist), the rest lasts pileTicks (1000 = 10 minutes)"},
+    "death": {"pileTicks": 1000, "note": "everything carried and worn drops where you die; what rules.persist keeps (Gold, stones, magical, worth 100+) stays until taken, the rest lasts pileTicks (1000 = 10 minutes)"},
     # town portals (2026-10-04: "put a town portal in each of the towns"): stand by one and travel to any other;
     # `to` is where you arrive. The Ashvale stone (Teleport "ashvale") takes you to the same spot.
     "portals": [{"id": "ashvale", "name": "Ashvale", "x": 19, "y": 55, "to": [19, 56]},
                 {"id": "saltmere", "name": "Saltmere", "x": 462, "y": 28, "to": [462, 29]}],   # the lake castle's portal is added by tools/castle/make_castle.js when the castle ships
     # 2026-10-04: "logs, pelts arrows potions should all de spawn. Only Gear and tools and Gold should persist."
-    "persist": {"cats": ["weapon", "armour", "cosmetic", "jewellery", "pack", "tool", "currency"], "note": "dropped things of these categories lie where they fell until someone takes them; everything else despawns"},
+    # 2026-10-06: "Gold, and valuable items should stay there until somebody picks them up" (by value, 100 GOLD);
+    # "All teleport or rune stone must always persist". The @ashvale Bank keeps them in the world across sessions.
+    "persist": {"minValue": 100, "always": ["currency"], "teleport": True,
+                "note": "a drop lies where it fell until someone takes it when it is Gold, a teleport stone or rune stone, magical, or worth minValue GOLD or more (value x how many); everything else despawns. The @ashvale Bank holds persisted drops and shows them to every player"},
     "dexterity": {"drainPerLevelPermille": 5, "drainMaxPermille": 400, "dodgePerTenLevels": 1, "fastAt": 50, "fastKinds": ["dagger", "bow"],
                   "xpPerRunTile": 2, "xpPerDamage": 10},
     "speechcraft": {"pctPerLevelPermille": 4, "maxPermille": 300, "xpPerGold": 1, "xpQuestTalk": 250},

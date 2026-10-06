@@ -1175,14 +1175,19 @@
         if ((e.e === 'drop' || e.e === 'xdrop') && (e.owner === PID || e.from === PID)) {
           const backedAll = Math.max(0, (L.bag[e.id] || 0) - carriedOf(e.id));
           if (backedAll > 0) { L.holds.push({ k: e.id, n: Math.min(e.n || 1, backedAll), x: e.x, y: e.y, t: now }); L.holds = L.holds.filter(h => now - h.t < 7200000).slice(-100); ledgerSave(); setTimeout(returnNext, HOLD + 1000); }
-          const W = walletState.data, have = W.gear[e.id]; if (!have || !have.length) return;   /* only NFTs have an identity; tokens are just amounts */
+          /* persisted (2026-10-06: Gold, stones, magical things, anything worth 100+ GOLD stay where they fell until
+             somebody picks them up, held by the @ashvale Bank): the Bank is told what lies where, so every player sees it */
+          const keep = core.persists && core.persists(e.id, e.n || 1), W = walletState.data, have = W.gear[e.id];
+          if (keep && (!have || !have.length)) { const n = e.n || 1; bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'drop', v: 3, items: [[e.id, '', n]], x: e.x, y: e.y }); }); return; }
+          if (!have || !have.length) return;   /* only NFTs have an identity; tokens are just amounts */
           const out = Object.values(L.out || {}).flat().map(o => o.piece), held = new Set(L.dropped.filter(d => now - d.t < 7200000).map(d => d.pc).concat(out));
           const backed = Math.max(0, (L.bag[e.id] || 0) - carriedOf(e.id)), items = [];
           for (const pc of have) { if (items.length >= Math.min(e.n || 1, backed)) break; if (!held.has(pc)) { items.push([e.id, pc]); L.dropped.push({ k: e.id, pc, x: e.x, y: e.y, t: now }); } }
           if (!items.length) return;
           L.dropped = L.dropped.filter(d => now - d.t < 7200000).slice(-100); ledgerSave();
-          bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'drop', v: 2, items, x: e.x, y: e.y }); });
+          bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'drop', v: keep ? 3 : 2, items: keep ? items.map(it => [it[0], it[1], 1]) : items, x: e.x, y: e.y }); });
         } else if (e.e === 'take' && e.p === PID && e.x != null) {
+          if (core.persists && core.persists(e.id, e.n || 1)) bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'took', v: 1, id: e.id, n: e.n || 1, x: e.x, y: e.y }); });
           L.picks.push({ k: e.id, n: e.n || 1, x: e.x, y: e.y, t: now }); L.picks = L.picks.filter(q => now - q.t < 7200000).slice(-100); ledgerSave();
           L.holds = L.holds.filter(h => !(h.k === e.id && !h.taken && Math.abs(h.x - e.x) <= 2 && Math.abs(h.y - e.y) <= 2));   /* your own drop back in your bag: nothing to send */
           setTimeout(depositSoon, HOLD + 1000);
@@ -1251,6 +1256,20 @@
         bankRoom().then(R => { if (R && R.me) R.send({ t: 'felled?', v: 1, x0: me.x - 80, y0: me.y - 80, x1: me.x + 80, y1: me.y + 80 }); });
       }
       setInterval(() => felledAsk(false), 15000); setTimeout(() => felledAsk(true), 8000);
+      /* persisted drops near you, from the @ashvale Bank: asked when you arrive somewhere new and every minute (the operator
+         2026-10-06: dropped Gold and valuables "should persist ... in the exact same location until a player picks them up") */
+      let gAt = null, gT = 0, gSeq = 0; const gGot = {};
+      function groundAsk(force) {
+        const k = Math.floor(me.x / 48) + ',' + Math.floor(me.y / 48); if (!force && k === gAt && performance.now() - gT < 60000) return;
+        gAt = k; gT = performance.now(); const q = 'g' + (++gSeq);
+        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'ground?', v: 1, q, x0: me.x - 80, y0: me.y - 80, x1: me.x + 80, y1: me.y + 80 }); });
+      }
+      function groundHeard(d) {   /* the Bank's answer comes in chunks of 10: put them down once all are in */
+        const q = String(d.q || ''); const G = gGot[q] = gGot[q] || { items: [], n: 0 };
+        G.items.push(...(d.items || [])); G.n++;
+        if (G.n >= (d.of | 0)) { delete gGot[q]; coreCall(() => core.bankGround && core.bankGround(d.box, G.items)); }
+      }
+      setInterval(() => groundAsk(false), 10000); setTimeout(() => groundAsk(true), 9000);
       function bankRoom() {
         if (bank.room) return Promise.resolve(bank.room); if (bank.joining) return bank.joining;
         bank.joining = net.join('bank', { game: 'ashvale' }).then(res => {
@@ -1259,6 +1278,7 @@
           const R = res.room; bank.room = R;
           R.on('message', ({ from, data }) => {
             if (data && data.t === 'felled' && from && from.address === DATA.assets.issuer && R.me && data.to === R.me.address) { core.setFelled(data.cells || []); return; }   /* trees others felled */
+            if (data && data.t === 'ground' && from && from.address === DATA.assets.issuer && R.me && data.to === R.me.address) { groundHeard(data); return; }   /* persisted drops near me */
             if (!data || data.t !== 'dep' || !from || from.address !== DATA.assets.issuer || !R.me || data.to !== R.me.address) return;   /* only @ashvale answers, only to me */
             const q = bank.sent[data.id]; if (!q) return; delete bank.sent[data.id]; clearTimeout(q.timer);
             if (data.ok) {

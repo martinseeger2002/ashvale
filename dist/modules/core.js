@@ -465,12 +465,21 @@
     }
 
     // ---------------- ground items
-    const PERSIST = new Set(((D.rules.persist || {}).cats) || ['weapon', 'armour', 'cosmetic', 'jewellery', 'pack', 'tool', 'currency']);
-    const perishable = (id) => { const d = IT[id]; if (!d || d.form) return false; return !(PERSIST.has(d.category) || PERSIST.has(d.category + '/' + d.subcategory)); };
+    /* what lies where it fell until someone takes it (rules.persist). 2026-10-06: Gold and valuable things (minValue
+       GOLD or more, value x how many) persist, and every teleport or rune stone always does; magical items always did. Old
+       rules (cats: categories) still read the same way. */
+    const PR = D.rules.persist || {}, PERSIST = new Set(PR.cats || PR.always || ['weapon', 'armour', 'cosmetic', 'jewellery', 'pack', 'tool', 'currency']);
+    const perishable = (id, n) => {
+      const d = IT[id]; if (!d || d.form) return false;
+      if (PERSIST.has(d.category) || PERSIST.has(d.category + '/' + d.subcategory)) return false;
+      if (PR.teleport && d.teleport) return false;
+      if (PR.minValue != null && (d.value || 0) * Math.max(1, n || 1) >= PR.minValue) return false;
+      return true;
+    };
     function dropGround(id, n, x, y, owner, life, extra) {
       if (!isAuth(zoneOf(x, y))) { ev(Object.assign({ e: 'xdrop', id, n, x, y, life: life || 300, owner: owner || null }, extra || {})); return null; }
       const g = S.ground.find(q => q.x === x && q.y === y && q.id === id && IT[id].stack);
-      const keep = !perishable(id);   /* gear, tools and Gold (rules.persist) and every magical item lie where they fell until someone takes them; the rest despawns (2026-10-04) */
+      const keep = !perishable(id, g ? g.n + n : n);   /* gear, tools and Gold (rules.persist) and every magical item lie where they fell until someone takes them; the rest despawns (2026-10-04) */
       if (g) { g.n += n; g.until = keep ? 1e15 : S.t + (life || 300); ev({ e: 'ground', g: g.uid, n: g.n, x, y }); return g; }
       const ng = { uid: nuid(), id, n, x, y, owner: owner || null, until: keep ? 1e15 : S.t + (life || 300) };
       if (extra) Object.assign(ng, extra);
@@ -1355,6 +1364,32 @@
     }
     function groundAdd(uid, id, n, x, y, from) { if (!IT[id] || isAuth(zoneOf(x, y))) return; const g = S.ground.find(q => q.uid === uid); if (g) { g.n = n; return; } S.ground.push({ uid, id, n, x, y, owner: null, until: S.t + 1e9, from: from || null }); ev({ e: 'drop', g: uid, id, n, x, y }); }
     function groundRemove(uid) { const i = S.ground.findIndex(q => q.uid === uid); if (i >= 0 && !isAuth(zoneOf(S.ground[i].x, S.ground[i].y))) { S.ground.splice(i, 1); ev({ e: 'vanish', g: uid }); } }
+    /* PERSISTED DROPS (2026-10-06): what the @ashvale Bank holds on the ground (Gold, stones, magical things, anything
+       worth 100+ GOLD that a player dropped), listed for a rectangle. Only the game in charge of an area puts them down (the
+       host, or a solo player); everyone else gets them with the host's ground like any other item. Each keeps a uid from its
+       drop id (2^42 + n), so every game agrees on it; one already lying there (the fresh drop itself) is linked, not doubled.
+       Those the Bank no longer lists in the rectangle (somebody took them) go. */
+    const BANK_UID = 4398046511104;
+    function bankGround(box, items) {
+      const want = new Set();
+      for (const r of items || []) {
+        const did = r[0] | 0, id = String(r[1]), n = Math.max(1, r[2] | 0), x = r[3] | 0, y = r[4] | 0;
+        if (!IT[id] || !inMap(x, y) || !isAuth(zoneOf(x, y))) continue;
+        want.add(did); const uid = BANK_UID + did;
+        const g = S.ground.find(q => q.uid === uid || q.bank === did);
+        if (g) { g.n = n; g.until = 1e15; continue; }
+        const live = S.ground.find(q => q.bank == null && q.id === id && q.x === x && q.y === y);
+        if (live) { live.bank = did; live.until = 1e15; continue; }
+        S.ground.push({ uid, id, n, x, y, owner: null, until: 1e15, bank: did }); ev({ e: 'drop', g: uid, id, n, x, y, bank: 1 });
+      }
+      const [x0, y0, x1, y1] = box || [0, 0, -1, -1];
+      for (let i = 0; i < S.ground.length;) {
+        const g = S.ground[i];
+        if (g.bank != null && !want.has(g.bank) && g.x >= x0 && g.x <= x1 && g.y >= y0 && g.y <= y1 && isAuth(zoneOf(g.x, g.y))) { S.ground.splice(i, 1); ev({ e: 'vanish', g: g.uid, x: g.x, y: g.y }); }
+        else i++;
+      }
+      return want.size;
+    }
     function groundFull(zone, list) { S.ground = S.ground.filter(g => zoneOf(g.x, g.y) !== zone || isAuth(zone)); for (const r of list) groundAdd(r[0], r[1], r[2], r[3], r[4], r[5]); }
     /* owner side: what the host resolved about OUR player */
     function applyHit(pid, dmg) { const p = S.players[pid]; if (!p || p.puppet || p.dead) return; p.hp -= Math.min(dmg, p.hp); if (p.retal && !p.act && !p.path.length) { } if (p.hp <= 0) killPlayer(p); }
@@ -1390,7 +1425,7 @@
       return true;
     }
     return {
-      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
+      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       get rngState() { return R.state; },
       isHawk, airborne, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf,
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,

@@ -429,7 +429,9 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
   ok(rot.length === 2 && rot.every(g => g.until - died[2] === D.rules.death.pileTicks), 'bread and arrows in the pile last ' + D.rules.death.pileTicks + ' ticks (10 minutes)');
   for (let i = c.S.t; i <= until; i++) c.tick();
   const left = c.S.ground.filter(g => g.from === 'p1').map(g => g.id).sort().join(',');
-  ok(left === 'coins,pack_t1,sword_t1', 'then they despawn; the Gold, the sword and the pack stay until taken (' + left + ')'); }
+  /* 2026-10-06: Gold and valuables (100+ GOLD) persist, the rest of the pile despawns with it */
+  const want = pile.filter(g => c.persists(g.id, g.n)).map(g => g.id).sort().join(',');
+  ok(left === want && left.split(',').includes('coins'), 'then they despawn; the Gold and anything worth 100+ GOLD stay until taken (' + left + ')'); }
 /* drops (2026-10-01): animals -> only their pelt; armed enemies -> what they carry and wear + their purse */
 {
   const killDrops = (key, seed) => {
