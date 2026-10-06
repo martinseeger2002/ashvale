@@ -150,6 +150,13 @@
     let bannerT = 0;
     function levelUp(skill, lvl) { banner.innerHTML = 'Congratulations!<small>' + A.cap(skill) + ' level ' + lvl + '</small>'; banner.style.display = 'block'; clearTimeout(bannerT); bannerT = setTimeout(() => banner.style.display = 'none', 2600); }
     function death(on) { dead.style.display = on ? 'flex' : 'none'; }
+    /* the portal swirl (2026-10-06): shown while the town you are travelling to is still loading (engine arriveCheck) */
+    const trav = el('travel', ui); trav.innerHTML = '<div class="sw"></div><div class="sw2"></div><div class="tt"></div><div class="pb"><i></i></div>';
+    function travel(on, name, frac) {
+      trav.style.display = on ? 'flex' : 'none'; if (!on) return;
+      trav.querySelector('.tt').textContent = 'Travelling to ' + (name || 'another town') + '\u2026';
+      trav.querySelector('.pb i').style.width = Math.round(Math.max(0.08, Math.min(1, frac || 0)) * 100) + '%';
+    }
     function setOpp(o) { if (!o) { opp.style.display = 'none'; return; } opp.style.display = 'block'; opp.innerHTML = '<div class="y t">' + A.esc(o.name) + '</div><div class="bar"><i style="width:' + Math.max(0, Math.min(100, 100 * o.hp / o.max)) + '%"></i></div>'; }
     function setHover(html) { hover.innerHTML = html || ''; }
     function fatal(msg) { err.style.display = 'flex'; err.textContent = msg; }
@@ -203,7 +210,7 @@
     { const r0 = K.refresh; K.refresh = w => { r0(w); if (st.chest) K.drawChest(); }; }   /* the chest window follows the bag and the wallet */
     setTab(st.tab);
     return {
-      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, playerStats, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => K.openChest(), closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
+      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, playerStats, travel, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => K.openChest(), closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };

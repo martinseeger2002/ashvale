@@ -58,7 +58,9 @@
       const ox = z.origin[0], oy = z.origin[1], T = z.tiles.map(r => r.split(''));
       for (const o of L) for (let y = o.y; y < o.y + (o.h || 1); y++) for (let x = o.x; x < o.x + (o.w || 1); x++) { const r = T[y - oy]; if (r && x - ox >= 0 && x - ox < r.length) r[x - ox] = 'B'; }
       return T.map(r => r.join('')); };
-    for (const z of D.zones) {
+    /* one zone's content into the set-piece lists; returns what it added (area loading adds zones later: M.addZone) */
+    function ingest(z) {
+      const n0 = npcs.length, s0 = spawns.length, o0 = objects.length;
       pieces.push({ id: z.id, x0: z.origin[0], y0: z.origin[1], x1: z.origin[0] + z.size[0], y1: z.origin[1] + z.size[1], tiles: decks(z) });
       W = Math.max(W, z.origin[0] + z.size[0]); H = Math.max(H, z.origin[1] + z.size[1]);
       for (const n of z.npcs || []) npcs.push(Object.assign({ zone: z.id }, n));
@@ -66,8 +68,11 @@
       for (const o of z.objects || []) objects.push(Object.assign({ zone: z.id }, o));
       for (const f of z.fishing || []) { const k = key(f.x, f.y); nodes.set(k, { kind: 'fish', x: f.x, y: f.y, item: f.fish, req: f.req, xp: f.xp, tool: f.tool }); fixed.add(k); }
       if (z.respawn) respawn = z.respawn;
+      return { npcs: npcs.slice(n0), spawns: spawns.slice(s0), objects: objects.slice(o0) };
     }
-    for (const o of objects) if (o.k === 'range') { const k = key(o.x, o.y); nodes.set(k, { kind: 'range', x: o.x, y: o.y }); fixed.add(k); }
+    for (const z of D.zones) ingest(z);
+    const ranges = (objs) => { for (const o of objs) if (o.k === 'range') { const k = key(o.x, o.y); nodes.set(k, { kind: 'range', x: o.x, y: o.y }); fixed.add(k); } };
+    ranges(objects);
     const B = opts.bounds || [0, 0, W, H];
     let inWorld = (x, y) => x >= B[0] && y >= B[1] && x < B[0] + B[2] && y < B[1] + B[3];
     if (WG && !opts.bounds) {
@@ -88,24 +93,27 @@
     /* the walk-in buildings with more than one storey, and the tile their stairs stand on (an inside corner, away from
        the door unless the object names one) */
     const STOREYED = [];
-    for (const o of objects) if (o.enter && (o.floors | 0) > 1) {
+    const storeys = (objs) => { for (const o of objs) if (o.enter && (o.floors | 0) > 1) {
       let st = o.stairsAt;
       if (!st) { const dx = o.door ? o.door[0] : -9; st = [Math.abs(dx - (o.x + o.w - 2)) > 1 ? o.x + o.w - 2 : o.x + 1, o.y + 1]; }
       const alt = [st[0] - 1 > o.x ? st[0] - 1 : st[0] + 1, st[1]];   /* the flights alternate st / alt floor by floor (a switchback) */
       STOREYED.push({ x: o.x, y: o.y, w: o.w, h: o.h, floors: o.floors | 0, stairs: st, alt, lh: o.lh || null });   /* lh: a storey's height (the castle keep's are 3.2 m) */
-    }
+    } };
+    storeys(objects);
     /* raised walkable ground (kind 'cdeck', tools/castle/make_castle.js; 2026-10-05: walls "should be able to have a
        character walking on them", and the stairs "should be like the terrain and I just walk up them"): the wall walk and
        tower tops (o.cells) stand o.lh metres up, the stair tiles (o.ramps [x, y, metres]) in between. A step between two
        tiles is allowed when their heights differ by 2.3 m or less (src/core.js canStep), so you walk up the stairs onto
        the wall and cannot step off it into the yard. */
     const LIFT = new Map();
-    for (const o of objects) if (o.k === 'cdeck' && o.cells) { for (const c of o.cells) LIFT.set(c[0] + ',' + c[1], o.lh || 4.2); for (const r of o.ramps || []) LIFT.set(r[0] + ',' + r[1], r[2]); }
+    const lifts = (objs) => { for (const o of objs) if (o.k === 'cdeck' && o.cells) { for (const c of o.cells) LIFT.set(c[0] + ',' + c[1], o.lh || 4.2); for (const r of o.ramps || []) LIFT.set(r[0] + ',' + r[1], r[2]); } };
+    lifts(objects);
     const buildingAt = (x, y) => { for (let i = 0; i < STOREYED.length; i++) { const b = STOREYED[i]; if (x >= b.x && y >= b.y && x < b.x + b.w && y < b.y + b.h) return i; } return -1; };
     const inOld = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
-    const wset = (x, y, b) => { const k = key(x, y); wall.set(k, (wall.get(k) || 0) | b); };   /* anywhere: not only the old map's rectangle (the operator: walls you could walk through) */
-    const wclr = (x, y, b) => { const k = key(x, y); wall.set(k, (wall.get(k) || 0) & ~b); };
-    for (const o of objects) if (o.enter) {
+    const wset = (x, y, b) => { const k = key(x, y); wall.set(k, (wall.get(k) || 0) | b); touched.add(k); };   /* anywhere: not only the old map's rectangle (the operator: walls you could walk through) */
+    const wclr = (x, y, b) => { const k = key(x, y); wall.set(k, (wall.get(k) || 0) & ~b); touched.add(k); };
+    const touched = new Set();   /* tile keys whose wall / inside / open state a zone set (baked into chunks below) */
+    const walls = (objs, npcList) => { for (const o of objs) if (o.enter) {
       const x1 = o.x + o.w - 1, y1 = o.y + o.h - 1;
       for (let x = o.x; x <= x1; x++) { wset(x, o.y, 1); wset(x, o.y - 1, 4); wset(x, y1, 4); wset(x, y1 + 1, 1); }
       for (let y = o.y; y <= y1; y++) { wset(o.x, y, 8); wset(o.x - 1, y, 2); wset(x1, y, 2); wset(x1 + 1, y, 8); }
@@ -116,7 +124,8 @@
       }
       for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) inside.add(key(x, y));   /* monsters never wander into buildings */
     }
-    for (const n of npcs) open.add(key(n.x, n.y));   /* an NPC's own tile is never blocked */
+    for (const n of npcList) open.add(key(n.x, n.y)); };   /* an NPC's own tile is never blocked */
+    walls(objects, npcs);
     const HB = WG && WG.pieces().length ? WG.pieces()[0].hb : 0;
     const extras = new Map();   /* chunk key -> [[tile key, kind, value]] */
     const ext = (k, kind, v) => { const ck = key(kx(k) >> SH, ky(k) >> SH); if (!extras.has(ck)) extras.set(ck, []); extras.get(ck).push([k, kind, v]); };
@@ -187,7 +196,7 @@
        free outdoor tile by one of the buildings. Deterministic from the building positions; added after every zone's
        own spawns, so the uids those already had do not move. */
     const YD = D.rules && D.rules.yard;
-    if (YD) for (const P of pieces) {
+    const yard = (P) => {
       const bl = objects.filter(o => o.zone === P.id && YD.kinds.indexOf(o.k) >= 0).sort((a, b) => a.y - b.y || a.x - b.x);
       let made = 0;
       for (let i = YD.per - 1; i < bl.length && made < YD.max; i += YD.per) {
@@ -200,11 +209,35 @@
           spawns.push({ zone: P.id, m: YD.birds[(i + k) % YD.birds.length], x, y }); k++; made++; t += 3;
         }
       }
+    };
+    if (YD) for (const P of pieces) yard(P);
+    const pin = (P) => { for (let y = P.y0 >> SH; y <= (P.y1 - 1) >> SH; y++) for (let x = P.x0 >> SH; x <= (P.x1 - 1) >> SH; x++) chunkAt(x << SH, y << SH); };
+    /* area loading (handoff/area_loading.md): a zone that arrives after the world was made. Its content joins the lists the
+       same way createWorld's did; chunks already filled where it lies (worldgen land, no town) are dropped so they fill
+       again with the town in them; its yard birds come after its own spawns, as at creation. Returns what it added (the
+       core makes the monsters). A zone already here is ignored. */
+    function addZone(z) {
+      if (!z || pieces.some(P => P.id === z.id)) return null;
+      touched.clear();
+      const got = ingest(z), P = pieces[pieces.length - 1];
+      ranges(got.objects); storeys(got.objects); lifts(got.objects); walls(got.objects, got.npcs);
+      for (const n of got.npcs) touched.add(key(n.x, n.y));
+      for (const o of got.objects) if (o.enter) for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) touched.add(key(x, y));
+      for (const k of touched) { if (wall.has(k)) ext(k, 0, wall.get(k)); if (inside.has(k)) ext(k, 1, 0); if (open.has(k)) ext(k, 2, 0); }
+      /* drop every filled chunk the zone or its walls reach, with the nodes it made (fixed ones - fishing, ranges - stay) */
+      const ck = new Set(); for (let y = P.y0 >> SH; y <= (P.y1 - 1) >> SH; y++) for (let x = P.x0 >> SH; x <= (P.x1 - 1) >> SH; x++) ck.add(key(x, y));
+      for (const k of touched) ck.add(key(kx(k) >> SH, ky(k) >> SH));
+      for (const k of ck) { const c = chunks.get(k); if (!c) continue; chunks.delete(k);
+        for (let i = 0; i < CH * CH; i++) if (NODE[c.t[i]]) { const nk = key(c.x0 + (i & CM), c.y0 + (i >> SH)); if (!fixed.has(nk)) nodes.delete(nk); }
+        if (c === lc) { lc = null; lcx = lcy = 0x7fffffff; } }
+      pin(P);
+      const s0 = spawns.length; if (YD) yard(P);
+      return { id: z.id, npcs: got.npcs, spawns: got.spawns.concat(spawns.slice(s0)), objects: got.objects };
     }
 
     return {
       API, CH, cfg: CFG, key, kx, ky, W, H, pieces, npcs, spawns, objects, nodes, respawn: respawn || [Math.floor(W / 2), Math.floor(H / 2)],
-      tileAt, blocked, losAt, wallAt, insideAt, zoneAt, nodeAt, inWorld,
+      tileAt, blocked, losAt, wallAt, insideAt, zoneAt, nodeAt, inWorld, addZone, hasZone: (id) => pieces.some(P => P.id === id),
       regionOf: (x, y) => 'vale:' + FACE + ':' + Math.floor((x + GX) / REG) + ':' + Math.floor((y + GY) / REG),
       seeded: !!WG, inPiece: (x, y) => !!chunkAt(x, y).zi[ci(x, y)],
       /* seeded land, in the vale frame: sites (camps, ore, fishing; ids and monster uids from worldgen), the ground height
@@ -240,10 +273,25 @@
     const C = Object.assign({}, DEF_CFG, D.globecfg || {});
     const G = AG.createGlobe({ n: C.n, radius_m: C.radius_m, seed: C.seed });
     const W = WGM.createWorldgen(G, { seed: C.seed });
-    W.setSetPieces(W.piecesFromZones(D.zones, C.face, C.origin[0], C.origin[1], { belt: C.belt || {}, links: C.links || [] }));
+    W.setSetPieces(W.piecesFromZones(pieceZones(D), C.face, C.origin[0], C.origin[1], { belt: C.belt || {}, links: C.links || [] }));
     return W;
   }
-  const AshWorld = { API, V, CH, createWorld, seededWorldgen, key, kx, ky };
+  /* the zones worldgen places, in a fixed order: with a zone index (area loading, handoff/area_loading.md) EVERY zone of the
+     index, each as its full zone when it is loaded and as its stub (edge band + building pads) when not - worldgen reads
+     nothing else outside a town, so the land around it is the same either way; without an index, the zones given */
+  function pieceZones(D) {
+    const ZI = D.zoneIndex && D.zoneIndex.zones; if (!ZI) return D.zones;
+    const have = new Map((D.zones || []).map(z => [z.id, z]));
+    return ZI.map(e => have.get(e.id) || stubZone(e));
+  }
+  function stubZone(e) { return { id: e.id, origin: e.origin, size: e.size, tiles: e.stub, objects: e.pads || [] }; }
+  /* a zone that arrived after the world was made: worldgen gets its real inside (the stub's place in the list is kept) */
+  function arriveWorldgen(W, D, z) {
+    const C = Object.assign({}, DEF_CFG, D.globecfg || {});
+    const sp = W.piecesFromZones([z], C.face, C.origin[0], C.origin[1], { belt: C.belt || {}, links: C.links || [] })[0];
+    return W.replacePiece ? W.replacePiece(sp) : false;
+  }
+  const AshWorld = { API, V, CH, createWorld, seededWorldgen, pieceZones, stubZone, arriveWorldgen, key, kx, ky };
   if (root.ASH3D && root.ASH3D.define) root.ASH3D.define('world', { api: API, v: V }, () => AshWorld);
   if (typeof module !== 'undefined' && module.exports) module.exports = AshWorld;
   root.AshWorld = AshWorld;

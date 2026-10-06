@@ -129,6 +129,14 @@
 .ash .dragicon img{width:100%;height:100%}.ash .dragicon .n{position:absolute;left:2px;top:0;font-size:10px;color:#ff0;text-shadow:1px 1px 0 #000}
 .ash .slot.dragsrc{opacity:.35}
 .ash .splat.fx{width:30px;height:30px;font-size:10px;color:#003;text-shadow:none}
+.ash .travel{position:absolute;inset:0;z-index:19;display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#05070d;overflow:hidden;pointer-events:auto;touch-action:none}
+.ash .travel .sw{position:absolute;left:50%;top:50%;width:170vmax;height:170vmax;margin:-85vmax 0 0 -85vmax;border-radius:50%;background:repeating-conic-gradient(from 0deg,#1b4f9a00 0deg,#3d8ff0aa 14deg,#9fd0ff55 22deg,#1b4f9a00 40deg),radial-gradient(circle,#bfe4ff 0,#5fa8ff 7%,#1d4c9c 22%,#0b1a3a 46%,#05070d 70%);animation:ashsw 2.4s linear infinite}
+.ash .travel .sw2{position:absolute;left:50%;top:50%;width:46vmin;height:46vmin;margin:-23vmin 0 0 -23vmin;border-radius:50%;border:2.2vmin solid #8fd0ff;box-shadow:0 0 6vmin #4aa3ff,inset 0 0 6vmin #4aa3ff;animation:ashsw2 1.6s ease-in-out infinite alternate}
+.ash .travel .tt{position:relative;font:700 24px Georgia,serif;color:#eef6ff;text-shadow:0 0 12px #2b6fd0,2px 2px 0 #000;text-align:center;padding:0 16px}
+.ash .travel .pb{position:relative;width:min(260px,70vw);height:8px;border-radius:4px;background:#0b1a3acc;box-shadow:0 0 0 1px #4aa3ff88;overflow:hidden}
+.ash .travel .pb i{display:block;height:100%;width:0;background:linear-gradient(90deg,#4aa3ff,#cfeaff);transition:width .3s}
+@keyframes ashsw{to{transform:rotate(360deg)}}
+@keyframes ashsw2{from{transform:scale(.9);opacity:.75}to{transform:scale(1.12);opacity:1}}
 .ash .err{position:absolute;inset:0;background:#000c;color:#fff;display:none;align-items:center;justify-content:center;text-align:center;padding:20px;z-index:20;font-size:15px}
 `;
   const SPLAT_RED = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 26 24"><path d="M13 1l3 4 5-2-1 5 5 2-4 3 4 4-5 1 1 5-5-2-3 4-3-4-5 2 1-5-5-1 4-4-4-3 5-2-1-5 5 2z" fill="#c4161c" stroke="#5a0000" stroke-width="1.2"/></svg>');

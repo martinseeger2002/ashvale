@@ -54,6 +54,47 @@ def part_modules():
     return out
 
 
+PAD_KINDS = ('house', 'shop', 'smithy', 'furnace', 'well', 'cpad')
+STUB_BAND = 5   # worldgen reads this many tiles in from each edge (wg_paths.js profile(): dpt 0..4; exits: the edge itself)
+
+
+def zone_stub_tiles(z):
+    """the zone's tiles as worldgen sees them from OUTSIDE: piers and bridges laid as 'B' (worldgen.js decks()), then
+    everything more than STUB_BAND tiles in from every edge blanked to '.' (only the inside of a town reads it)"""
+    ox, oy = z['origin']; T = [list(r) for r in z['tiles']]
+    for o in z.get('objects') or []:
+        if o.get('k') not in ('pier', 'bridge'): continue
+        for y in range(o['y'], o['y'] + (o.get('h') or 1)):
+            r = T[y - oy] if 0 <= y - oy < len(T) else None
+            if r is None: continue
+            for x in range(o['x'], o['x'] + (o.get('w') or 1)):
+                if 0 <= x - ox < len(r): r[x - ox] = 'B'
+    h, B = len(T), STUB_BAND
+    out = []
+    for y, r in enumerate(T):
+        w = len(r)
+        if y < B or y >= h - B or w <= 2 * B: out.append(''.join(r))
+        else: out.append(''.join(r[:B]) + '.' * (w - 2 * B) + ''.join(r[w - B:]))
+    return out
+
+
+def zone_index(zones):
+    """data module `zoneindex` (handoff/area_loading.md): what the game must know about EVERY zone while only the zones
+    near the player are loaded - where each is, who lives there, and worldgen's view of it from outside"""
+    out = []
+    for zid, j in zones:
+        z = j['data']; ox, oy = z['origin']; w, h = z['size']
+        pads = [{k: o[k] for k in ('k', 'x', 'y', 'w', 'h', 'top') if k in o} for o in z.get('objects') or []
+                if o.get('k') in PAD_KINDS and o.get('w') and o.get('h') and not (o['w'] < 3 and o['h'] < 3)
+                and ox <= o['x'] < ox + w and oy <= o['y'] < oy + h]
+        e = {'id': zid, 'name': z.get('name', zid), 'origin': z['origin'], 'size': z['size'], 'stub': zone_stub_tiles(z), 'pads': pads,
+             'npcs': [{'id': n['id'], 'name': n.get('name', n['id']), 'x': n['x'], 'y': n['y']} for n in z.get('npcs') or []]}
+        for k in ('level', 'ground', 'respawn', 'weather'):
+            if k in z: e[k] = z[k]
+        out.append(e)
+    return {"ashvale3d": "module", "name": "zoneindex", "api": 1, "v": 1, "data": {"zones": out}}
+
+
 def read(p):
     with open(p, encoding='utf-8') as f:
         return f.read()
@@ -123,14 +164,28 @@ def main():
         mods[name] = js
         m = meta_of(js, name)
         reg['modules'][name] = {"id": None, "v": m['v'], "api": m['api'], "kind": "js"}
-    reg['modules']['data'], reg['modules']['zones'] = {}, {}
+    reg['modules']['data'] = {}
+    # zones load by area (handoff/area_loading.md): listed under the registry's top-level `lazy`, which the launcher's
+    # loader never reads (it reads `modules`); the engine fetches them near the player. `zoneindex` (always loaded) is
+    # what the game knows about every zone meanwhile. Pages without /content/ carry them in window.ASH3D_LAZY.
+    reg['lazy'] = {'zones': {}}
+    zone_js = []
     for name in DATA_MODULES + ['zone.' + z for z in ZONES]:
         j = json.loads(read(os.path.join(DATA, DATA_PATHS.get(name, name) + '.json')))
-        mods[name] = "ASH3D.defineData(" + json.dumps(j, separators=(',', ':')) + ");\n"
-        grp, key = ('zones', name[5:]) if name.startswith('zone.') else ('data', name)
-        reg['modules'][grp][key] = {"id": None, "v": j['v'], "api": j['api'], "kind": "json"}
+        if name.startswith('zone.'):
+            zone_js.append((name[5:], j))
+            mods[name] = "(window.ASH3D_LAZY = window.ASH3D_LAZY || {})[" + json.dumps(name) + "] = " + json.dumps(j, separators=(',', ':')) + ";\n"
+            reg['lazy']['zones'][name[5:]] = {"id": None, "v": j['v'], "api": j['api'], "kind": "json"}
+        else:
+            mods[name] = "ASH3D.defineData(" + json.dumps(j, separators=(',', ':')) + ");\n"
+            reg['modules']['data'][name] = {"id": None, "v": j['v'], "api": j['api'], "kind": "json"}
         with open(os.path.join(DIST, 'modules', name + '.json'), 'w') as f:
             json.dump(j, f, separators=(',', ':'))
+    zi = zone_index(zone_js)
+    mods['zoneindex'] = "ASH3D.defineData(" + json.dumps(zi, separators=(',', ':')) + ");\n"
+    reg['modules']['data']['zoneindex'] = {"id": None, "v": zi['v'], "api": zi['api'], "kind": "json"}
+    with open(os.path.join(DIST, 'modules', 'zoneindex.json'), 'w') as f:
+        json.dump(zi, f, separators=(',', ':'))
     parts = part_modules()
     if parts:
         reg['modules']['parts'] = {}
@@ -153,7 +208,7 @@ def main():
     css = ("html,body{margin:0;height:100%;background:#0b0906;overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%}"
            "#ash{position:fixed;left:0;top:0;width:100vw;height:100vh;height:100dvh;touch-action:none}")
     errhook = "window.__ashErrors=[];window.addEventListener('error',function(e){window.__ashErrors.push(String(e.message||e))});(function(){var ce=console.error;console.error=function(){try{window.__ashErrors.push(Array.prototype.map.call(arguments,String).join(' '))}catch(x){}return ce.apply(console,arguments)}})();"
-    scripts = [errhook, loader, three_js] + [mods[n] for n in JS_MODULES] + [mods[n] for n in DATA_MODULES + ['zone.' + z for z in ZONES]] + [mods['part.' + pid] for pid, _ in parts] + [boot]
+    scripts = [errhook, loader, three_js] + [mods[n] for n in JS_MODULES] + [mods[n] for n in DATA_MODULES + ['zoneindex'] + ['zone.' + z for z in ZONES]] + [mods['part.' + pid] for pid, _ in parts] + [boot]
     body = '<div id="ash"></div>\n' + ''.join('<script>\n' + s.replace('</script', '<\\/script') + '\n</script>\n' for s in scripts)
     head = ('<title>ASHVALE</title>\n<meta charset="utf-8">\n'
             '<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">\n'
@@ -169,7 +224,7 @@ def main():
         # resolves), the arcade's realtime + storage SDKs, saves through arcade.storage (no localStorage in inscriptions)
         areg = json.loads(json.dumps(reg))
         areg['modules']['three'] = {"id": THREE_ARCADE_ID, "v": THREE_V, "api": 160, "kind": "esm"}
-        game = [errhook, loader] + [mods[n] for n in JS_MODULES] + [mods[n] for n in DATA_MODULES + ['zone.' + z for z in ZONES]] + [mods['part.' + pid] for pid, _ in parts]
+        game = [errhook, loader] + [mods[n] for n in JS_MODULES] + [mods[n] for n in DATA_MODULES + ['zoneindex'] + ['zone.' + z for z in ZONES]] + [mods['part.' + pid] for pid, _ in parts]
         abody = ('<div id="ash"></div>\n<script src="/r/realtime.js"></script>\n<script src="/r/swap.js"></script>\n<script src="/r/storage.js"></script>\n' +
                  ''.join('<script>\n' + x.replace('</script', '<\\/script') + '\n</script>\n' for x in game) +
                  '<script type="module">\nimport * as THREE from "/content/' + THREE_ARCADE_ID + '";\n'

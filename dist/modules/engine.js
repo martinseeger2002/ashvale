@@ -75,7 +75,51 @@
         const iv = setInterval(ask, 3000); ask();
       });
     }
-    async function openStore() {
+    /* ---------- area loading (handoff/area_loading.md, 2026-10-06: "only load assets from the parcel and the
+       adjacent parcels"). Zone modules are in the registry's `lazy` section, which the launcher's loader never fetches;
+       DATA.zoneindex says where every zone is. A zone is fetched when its rectangle touches the 3 x 3 block of 512 m
+       regions around the player; pages without /content/ carry them in window.ASH3D_LAZY. LZ: the zones that arrived. */
+    const LZ = {}, LZ_WAIT = {};
+    const ZINDEX = DATA.zoneindex && DATA.zoneindex.zones ? DATA.zoneindex.zones : null;
+    function zonesNear(x, y) {
+      if (!ZINDEX) return [];
+      const C = Object.assign({ origin: [-24, 164], grid: [-216, -28], region: 512 }, DATA.globecfg || {}), GX = C.origin[0] - C.grid[0], GY = C.origin[1] - C.grid[1], R = C.region;
+      const rx = Math.floor((x + GX) / R), ry = Math.floor((y + GY) / R), x0 = (rx - 1) * R - GX, y0 = (ry - 1) * R - GY, x1 = x0 + 3 * R, y1 = y0 + 3 * R;
+      return ZINDEX.filter(z => z.origin[0] < x1 && z.origin[0] + z.size[0] > x0 && z.origin[1] < y1 && z.origin[1] + z.size[1] > y0).map(z => z.id);
+    }
+    function fetchZone(id) {
+      if (LZ[id]) return Promise.resolve(LZ[id]);
+      if (LZ_WAIT[id]) return LZ_WAIT[id];
+      const keep = (j) => { const d = j && j.ashvale3d === 'module' ? j.data : j; if (!d || !d.tiles) throw new Error('zone ' + id + ': not a zone module'); return (LZ[id] = Object.assign({ id }, d)); };
+      const page = G.ASH3D_LAZY && G.ASH3D_LAZY['zone.' + id];
+      if (page) return Promise.resolve(keep(page));
+      const reg = G.ASH3D && G.ASH3D._values && G.ASH3D._values.$registry, e = reg && reg.lazy && reg.lazy.zones && reg.lazy.zones[id];
+      if (!e || !e.id) return Promise.reject(new Error('zone ' + id + ' is not in the registry'));
+      const p = fetch('/content/' + e.id).then(r => { if (!r.ok) throw new Error('zone ' + id + ': HTTP ' + r.status); return r.json(); }).then(keep);
+      LZ_WAIT[id] = p; p.catch(() => {}).then(() => { delete LZ_WAIT[id]; });
+      return p;
+    }
+    /* before the world starts (behind the boot screen): the zones around where this character stands (a new one: the spawn) */
+    async function preloadZones(st) {
+      if (!ZINDEX) return;
+      let at = (ZINDEX.find(z => z.respawn) || {}).respawn || [0, 0];
+      try {
+        const sv = JSON.parse(st.get('ashvale3d.save.v1') || 'null'), C = DATA.globecfg || {};
+        if (sv && (sv.v | 0) >= 2 && Array.isArray(sv.pos) && C.origin) at = [sv.pos[1] - C.origin[0], sv.pos[2] - C.origin[1]];
+        else if (sv && Number.isInteger(sv.x) && Number.isInteger(sv.y)) at = [sv.x, sv.y];
+      } catch (e) { /* a new character */ }
+      const bootEl = G.document && G.document.getElementById('boot'); if (bootEl) bootEl.textContent = 'Loading the land around you…';
+      /* the zone you stand IN must be here before the core places you (on land without its town you could be "blocked" and put
+         back at the spawn): that one is waited for, retried for as long as it takes; the rest of the ring may come later */
+      const zin = (ZINDEX.find(z => at[0] >= z.origin[0] && at[1] >= z.origin[1] && at[0] < z.origin[0] + z.size[0] && at[1] < z.origin[1] + z.size[1]) || {}).id;
+      const near = zonesNear(at[0], at[1]).filter(id => id !== zin).map(id => fetchZone(id).catch(e => console.warn('ASHVALE: ' + e.message)));
+      for (let k = 0; zin && !LZ[zin]; k++) {
+        try { await fetchZone(zin); } catch (e) { console.warn('ASHVALE: ' + e.message + ', trying again'); if (bootEl) bootEl.textContent = 'Still loading the land around you…'; await new Promise(r => setTimeout(r, Math.min(10000, 1000 * (k + 1)))); }
+      }
+      await Promise.race([Promise.all(near), new Promise(r => setTimeout(r, 15000))]);
+    }
+    async function openStore() { const st = await openStoreOnly(); try { await preloadZones(st); } catch (e) { console.warn('ASHVALE: zones', e && e.message); } return st; }
+    async function openStoreOnly() {
       const A = G.arcade && G.arcade.storage, framed = !!(G.parent && G.parent !== G);
       if (A && A.ready) {
         let S = null;
@@ -111,8 +155,12 @@
       let settings = { sound: true, shadows: !isPhone, runToggle: false }; try { Object.assign(settings, JSON.parse(store.get(SET) || '{}')); } catch (e) { /* defaults */ }
 
       /* ---------- data + rules */
+      /* the zones here now: an eager registry's (DATA zone.*), and the ones area loading fetched before the start (LZ). With an
+         index, more arrive while you play (lazyTick, core.addZone) */
       const zones = Object.keys(DATA).filter(k => k.indexOf('zone.') === 0).map(k => Object.assign({ id: k.slice(5) }, DATA[k]));
+      if (ZINDEX) for (const z of ZINDEX) if (LZ[z.id] && !zones.some(q => q.id === z.id)) zones.push(Object.assign({}, LZ[z.id]));
       const D = { items: DATA.items.items, monsters: DATA.monsters.monsters, shops: DATA.shops, quests: DATA.quests, rules: DATA.rules, zones, globecfg: DATA.globecfg };
+      if (ZINDEX) D.zoneIndex = DATA.zoneindex;
       const seed = opts.seed || q.get('seed') || ('ashvale-' + Date.now());
       /* globe P2: seeded land around the old map (worldgen + globe modules, when the registry has them; ?flat turns it off) */
       { const get = n => G.ASH3D && G.ASH3D.get ? G.ASH3D.get(n) : null, WGM = get('worldgen'), AG = get('globe'), AW = get('world') || G.AshWorld;
@@ -180,6 +228,51 @@
         for (const r of chunkRegs.values()) r.built.setView(me.x + 0.5, me.y + 0.5, TREE_R);
       }
       streamRegions();
+      /* ---------- area loading while you play (handoff/area_loading.md): every few ticks, fetch the zones that now touch
+         the 3 x 3 regions around you (the rest of the world stays unloaded). A zone arrives at least a region away, long
+         before its town is in sight; a teleport into one that is not here yet waits behind the travel screen. */
+      function lazyTick(force) {
+        if (!ZINDEX || (!force && core.S.t % 8)) return;
+        for (const id of zonesNear(me.x, me.y)) if (!core.hasZone(id) && !LZ_WAIT[id])
+          fetchZone(id).then(z => { if (!core.hasZone(id)) coreCall(() => core.addZone(Object.assign({}, z))); }).catch(e => console.warn('ASHVALE: ' + e.message + ' (trying again soon)'));
+      }
+      function zoneAtIndex(x, y) { return ZINDEX ? ZINDEX.find(z => x >= z.origin[0] && y >= z.origin[1] && x < z.origin[0] + z.size[0] && y < z.origin[1] + z.size[1]) || null : null; }
+      /* the portal swirl (2026-10-06): when you arrive (portal, runestone, waking after a death) in a town whose zone
+         has not come yet, the screen stays on the swirl until it has, and at least TRAVEL_MS so it never just flickers */
+      const TRAVEL_MS = 900; let travelling = null;
+      function arriveCheck() {
+        if (!ZINDEX) return;
+        const zi = zoneAtIndex(me.x, me.y); lazyTick(true);
+        if (!zi || core.hasZone(zi.id) || travelling) return;
+        const t0 = performance.now(), want = zi.id; travelling = want;
+        hud.travel && hud.travel(true, zi.name || zi.id);
+        let k = 0;
+        const step = () => {
+          if (core.hasZone(want)) { const left = Math.max(0, TRAVEL_MS - (performance.now() - t0)); setTimeout(() => { travelling = null; streamRegions(true); cam.snap = true; hud.travel && hud.travel(false); }, left); return; }
+          hud.travel && hud.travel(true, zi.name || zi.id, Math.min(0.9, (performance.now() - t0) / 4000));
+          fetchZone(want).then(z => { if (!core.hasZone(want)) coreCall(() => core.addZone(Object.assign({}, z))); step(); })
+            .catch(e => { console.warn('ASHVALE: ' + e.message + ', trying again'); setTimeout(step, Math.min(8000, 800 * ++k)); });
+        };
+        step();
+      }
+      /* a zone arrived: its town joins the scene's regions, its people get models (fading in when they are in sight), the
+         seeded-land meshes already built where it lies are dropped (they were drawn without the town) */
+      function zoneArrived(e, now) {
+        const z = (core.D.zones || []).find(q => q.id === e.zone); if (!z) return;
+        const rect = [z.origin[0], z.origin[1], z.size[0], z.size[1]];
+        for (const [k, r] of Array.from(chunkRegs)) {
+          if (r.rect[0] < rect[0] + rect[2] + 2 && r.rect[0] + r.rect[2] > rect[0] - 2 && r.rect[1] < rect[1] + rect[3] + 2 && r.rect[1] + r.rect[3] > rect[1] - 2) {
+            scene.remove(r.built.group); r.built.dispose(); chunkRegs.delete(k); regions.splice(regions.indexOf(r), 1);
+          }
+        }
+        if (!regions.some(r => r.id === z.id)) regions.push({ id: z.id, rect, built: null });
+        for (const id of e.npcs || []) {
+          const n = core.M.npcs.find(q => q.id === id); if (!n || ents.has('n:' + id)) continue;
+          const en = npcEnt(n), d = Math.max(Math.abs(n.x - me.x), Math.abs(n.y - me.y));
+          if (d < 56 && en.H.setOpacity) { en.H.setOpacity(0); en.fadeIn = now; }
+        }
+        mmImg = null; minimapFor(); streamRegions(); syncMounts();
+      }
       /* the minimap picture: the whole old map, or (seeded land) a 160 m window around you, redrawn when you near its edge */
       let mmImg = null, mmO = [0, 0];
       function minimapFor() {
@@ -261,7 +354,8 @@
       myEnt.H.setGear(gearOf(me)); place(myEnt, me.x, me.y); setTimeout(() => hawkify(myEnt, me.eq.ring && me.eq.ring.id), 0);
       if (me.look && myEnt.H.setOutfit) myEnt.H.setOutfit(me.look);
       const NPCN = {};
-      for (const n of core.M.npcs) { const e = makeEnt('n:' + n.id, MOD.npc(n.look || n.id), { kind: 'npc', id: n.id }); place(e, n.x, n.y); e.yaw = e.tyaw = n.face != null ? n.face : PI; NPCN[n.id] = n; if (n.gear && e.H && e.H.setGear) e.H.setGear(n.gear); }   /* gear: what an NPC carries (the castle's watchmen hold bows) */
+      function npcEnt(n) { const e = makeEnt('n:' + n.id, MOD.npc(n.look || n.id), { kind: 'npc', id: n.id }); place(e, n.x, n.y); e.yaw = e.tyaw = n.face != null ? n.face : PI; NPCN[n.id] = n; if (n.gear && e.H && e.H.setGear) e.H.setGear(n.gear); return e; }
+      for (const n of core.M.npcs) npcEnt(n);   /* gear: what an NPC carries (the castle's watchmen hold bows) */
       /* monsters get a model while they are within MOB_NEAR tiles (seeded land wakes camps everywhere you have been) */
       const MOB_NEAR = 60, MOB_FAR = 90;
       function mobEnt(m) { const e = makeEnt('m:' + m.uid, MOD.monster((D.monsters[m.key] || {}).look || m.key), { kind: 'mob', uid: m.uid }); place(e, m.x, m.y); e.yaw = e.tyaw = faceYaw(m.face); e.max = D.monsters[m.key].hp; if (m.dead) { e.dead = true; e.root.visible = false; } return e; }
@@ -364,6 +458,7 @@
         roofCheck(); showWeather();
         if (core.S.t % 25 === 0) persist();
         if (SEEDED || core.S.t % 5 === 0) streamRegions();
+        lazyTick();
         netRoom();
       }
       function handle(e, now) {
@@ -406,7 +501,7 @@
             if (e.p === PID) setTimeout(() => hud.death(true), 700);
             break;
           }
-          case 'respawn': { const t = ents.get('p:' + e.p); if (!t) break; t.dead = false; t.oneShot = false; t.loco = null; t.H.setOpacity && t.H.setOpacity(1); t.root.visible = true; const p = core.S.players[e.p]; place(t, p.x, p.y); t.H.play('idle', { loop: true }); if (e.p === PID) { hud.death(false); cam.snap = true; } break; }
+          case 'respawn': { const t = ents.get('p:' + e.p); if (!t) break; t.dead = false; t.oneShot = false; t.loco = null; t.H.setOpacity && t.H.setOpacity(1); t.root.visible = true; const p = core.S.players[e.p]; place(t, p.x, p.y); t.H.play('idle', { loop: true }); if (e.p === PID) { hud.death(false); cam.snap = true; arriveCheck(); } break; }
           case 'gone': { const t = ents.get('m:' + e.mob); if (t) { t.dead = true; t.deadT = now - 5000; t.oneShot = true; t.root.visible = false; } break; }   /* the host says it is dead: hide it at once (2026-10-02: frozen monsters after re-entering a zone) */
           case 'spawn': { const m = core.mobByUid(e.mob), t = ents.get('m:' + e.mob); if (!t) break; t.dead = false; t.oneShot = false; t.loco = null; t.root.visible = true; t.H.setOpacity && t.H.setOpacity(1); place(t, m.x, m.y); t.H.play('idle', { loop: true }); t.spawnT = now; t.hp = m.hp; break; }
           case 'msg': if (mine) hud.chat(e.text, e.kind); break;
@@ -424,7 +519,8 @@
             else { const r = host.getBoundingClientRect(); hud.menu(r.width / 2, r.height / 2, L); }
             if ((e.unknown || []).length) hud.chat('Not yet attuned: ' + e.unknown.join(', ') + '.', 'sys');
           } break;
-          case 'teleport': if (mine) { place(myEnt, e.x, e.y); cam.snap = true; streamRegions(); sfx('equip'); } break;
+          case 'teleport': if (mine) { place(myEnt, e.x, e.y); cam.snap = true; streamRegions(); sfx('equip'); arriveCheck(); } break;
+          case 'zoneadd': zoneArrived(e, now); break;
           case 'chest': if (mine) { const c = ents.get('n:' + e.npc); if (c) c.H.play('open'); hud.openChest(); } break;   /* the town chest */
           case 'shopclose': if (mine) hud.closeShop(); break;
           case 'mobeat': { const t = ents.get('m:' + e.mob); if (t && !t.dead) { playOnce(t, 'eat'); sfx('eat'); } break; }
@@ -1491,6 +1587,7 @@
         if (now - lastTick > TICK * 4) lastTick = now;
         const tSec = now / 1000;
         for (const e of ents.values()) {
+          if (e.fadeIn) { const k = (now - e.fadeIn) / 500; if (k >= 1) { e.H.setOpacity(1); e.fadeIn = 0; } else e.H.setOpacity(Math.max(0.02, k)); }   /* a person whose zone just arrived */
           if (e.key.charAt(0) === 'r') continue;
           const a = Math.min(1, (now - e.t0) / e.dur);
           if (!e.dead || a < 1) { e.root.position.lerpVectors(e.from, e.to, a); e.root.position.y = heightAt(e.root.position.x, e.root.position.z) + liftOf(e, a) + hawkAlt(e); }   /* on an upper floor; a hawk over the trees */
@@ -1631,7 +1728,8 @@
         screenOf(kind, id) { let pos, up = 0.8; if (kind === 'mob') { const e = ents.get('m:' + id); pos = e.root.position; up = (e.H.height || 1) * e.scale * 0.5; } else if (kind === 'npc') { const e = ents.get('n:' + id); pos = e.root.position; } else if (kind === 'item') { const o = gItems.get(id); pos = o.position; up = 0.08; } else if (kind === 'tile') { pos = new THREE.Vector3(id[0] + 0.5, heightAt(id[0] + 0.5, id[1] + 0.5), id[1] + 0.5); up = 0; } else if (kind === 'me') { pos = myEnt.root.position; } else if (kind === 'remote') { const e = ents.get('r:' + id); if (!e || !e.root.visible) return null; pos = e.root.position; up = (e.H.height || 1.6) * e.scale * 0.5; } const s = toScreen(pos, up); if (!s) return null; const r = host.getBoundingClientRect(); return { x: s.x + r.left, y: s.y + r.top }; },
         give(id, n) { const p = me; for (let k = 0; k < (core.item(id).stack ? 1 : n || 1); k++) { const f = p.inv.indexOf(null); if (core.item(id).stack) { const i = p.inv.findIndex(s => s && s.id === id); if (i >= 0) { p.inv[i].n += n || 1; break; } } if (f < 0) break; p.inv[f] = { id, n: core.item(id).stack ? n || 1 : 1 }; } hud.refresh('all'); },
         setLevel(skill, L) { me.xp[skill] = core.xpFor(L) * 10; if (skill === 'hitpoints') me.hp = L; hud.refresh('all'); },
-        teleport(x, y) { me.x = x; me.y = y; me.path = []; place(myEnt, x, y); cam.snap = true; streamRegions(); },
+        teleport(x, y) { me.x = x; me.y = y; me.path = []; place(myEnt, x, y); cam.snap = true; streamRegions(); arriveCheck(); },
+        zones: () => ({ loaded: (core.D.zones || []).map(z => z.id), index: ZINDEX ? ZINDEX.map(z => z.id) : null, waiting: Object.keys(LZ_WAIT), travelling }),
         tap: tapAt, menuAt, targetsAt, pad: () => PAD && PAD.state(), fps: () => frames, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries }), setCam(y, p, d) { if (y != null) cam.tyaw = cam.yaw = y; if (p != null) cam.tpitch = cam.pitch = p; if (d != null) cam.tdist = cam.dist = d; },
         net: () => ({ host: hostOf(zoneHere()), amHost: !!room && hostOf(zoneHere()) === myNetId, hosts: Object.fromEntries(hosts), hosted: Array.from(hosted), area: zoneHere(), region: roomZone, myId: myNetId, ids: Array.from(remotes.keys()), room: room && room.id, me: room && room.me, neighbours: nb ? nb.rooms().map(R => R.id) : [], viewers: Array.from(remotes).filter(e => e[1].viewOnly).map(e => e[0]), status: netStatus, stats: Object.assign({ perSec: +(netStats.sent / Math.max(1, (performance.now() - netStats.t0) / 1000)).toFixed(2) }, netStats, { times: undefined }), gear: Array.from(remotes.values()).map(r => [r.name, r.e.H.gear || null]), remotes: Array.from(remotes.keys()), names: Array.from(remotes.values()).map(r => r.e.tag && r.e.tag.textContent) }),
         weather: (kind, intensity, ticks) => coreCall(() => core.setWeather(zoneHere(), kind, intensity == null ? 80 : intensity, ticks || 500)),

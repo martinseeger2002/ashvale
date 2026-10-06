@@ -45,6 +45,8 @@ for k, e in reg['modules'].items():
     if k in ('data', 'zones', 'parts'):
         for n, sub in e.items(): todo.append((k + '/' + n, file_of(n, k, sub), sub))
     else: todo.append((k, file_of(k, '', e), e))
+for k, e in (reg.get('lazy') or {}).items():   # zones that load by area (handoff/area_loading.md): same keys, same inscriptions
+    for n, sub in e.items(): todo.append((k + '/' + n, file_of(n, k, sub), sub))
 changed = [(key, p, e) for key, p, e in todo if st['modules'].get(key, {}).get('sha') != sha(p)]
 print(len(todo), 'modules,', len(changed), 'changed:', ', '.join(k for k, _, _ in changed[:12]) + (' ...' if len(changed) > 12 else ''), flush=True)
 if DRY: sys.exit()

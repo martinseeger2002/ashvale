@@ -67,7 +67,7 @@
       } else if (ST.tab === 'quest') {
         let h = '<h4>Quests</h4>';
         const Q = core.D.quests.quests;
-        const NM = {}; for (const z of core.D.zones || []) for (const n of z.npcs || []) if (!(n.id in NM)) NM[n.id] = n.name;
+        const NM = {}; for (const z of (core.zoneIndex ? core.zoneIndex() : core.D.zones) || []) for (const n of z.npcs || []) if (!(n.id in NM)) NM[n.id] = n.name;   /* every zone's people, loaded or not (zoneindex) */
         /* @cinderwalker 2026-10-05: the panel said "slay 8 undefineds" for a quest that wants logs, and sent everyone to
            Elder Maren whatever quest they held. Every goal kind and every giver now says what it actually is - and
            running that wording over every goal in the data found a second one: "Logs" and "Oak logs" are already

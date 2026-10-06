@@ -231,24 +231,10 @@
     "v": 2,
     "api": 1,
     "kind": "json"
-   }
-  },
-  "zones": {
-   "village": {
-    "id": null,
-    "v": 2,
-    "api": 1,
-    "kind": "json"
    },
-   "whisperwood": {
+   "zoneindex": {
     "id": null,
-    "v": 2,
-    "api": 1,
-    "kind": "json"
-   },
-   "saltmere": {
-    "id": null,
-    "v": 2,
+    "v": 1,
     "api": 1,
     "kind": "json"
    }
@@ -1013,6 +999,28 @@
    "palette": {
     "id": null,
     "v": 1,
+    "api": 1,
+    "kind": "json"
+   }
+  }
+ },
+ "lazy": {
+  "zones": {
+   "village": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json"
+   },
+   "whisperwood": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json"
+   },
+   "saltmere": {
+    "id": null,
+    "v": 2,
     "api": 1,
     "kind": "json"
    }

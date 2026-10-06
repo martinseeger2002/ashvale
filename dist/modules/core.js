@@ -105,11 +105,17 @@
     /* where you wake after dying (2026-10-05: "instead of spawning in the spawn spot they should be brought to the town
        portal of the town that they were most recently in"): each portal's town is the zone it stands in; p.town = the last
        town zone you were in; the wake-up spot is that town's portal, else the old spawn (the Ashvale well) */
+    /* area loading (handoff/area_loading.md): with a zone index only the zones near the players are loaded (D.zones grows
+       through addZone); what must be known about every zone - where it is, its respawn spot, its ground - comes from the
+       index. Without one (tests, the referee's arena) every zone is given and nothing changes. */
+    const LAZY = !!(D.zoneIndex && D.zoneIndex.zones), ZINDEX = LAZY ? D.zoneIndex.zones : D.zones;
+    const zoneRectAt = (x, y) => { for (const z of ZINDEX) if (x >= z.origin[0] && y >= z.origin[1] && x < z.origin[0] + z.size[0] && y < z.origin[1] + z.size[1]) return z.id; return null; };
     let PORTAL_ZONE = null;   /* built on first use: the world (M) is made further down */
-    function wakeSpot(p) { const P = p.town ? portalOf(p.town) : null; return P ? { at: P.to, name: P.name } : { at: M.respawn, name: null }; }
+    const RESPAWN0 = () => (LAZY && (ZINDEX.find(z => z.respawn) || {}).respawn) || M.respawn;
+    function wakeSpot(p) { const P = p.town ? portalOf(p.town) : null; return P ? { at: P.to, name: P.name } : { at: RESPAWN0(), name: null }; }
     function townCheck(p) {
       if (!M.zoneAt || (S.t + String(p.id).length) % 5) return;
-      if (!PORTAL_ZONE) { PORTAL_ZONE = {}; for (const P of PORTALS) { const z = M.zoneAt(P.x, P.y); if (z) PORTAL_ZONE[z] = P.id; } }
+      if (!PORTAL_ZONE) { PORTAL_ZONE = {}; for (const P of PORTALS) { const z = LAZY ? zoneRectAt(P.x, P.y) : M.zoneAt(P.x, P.y); if (z) PORTAL_ZONE[z] = P.id; } }
       const z = M.zoneAt(p.x, p.y), id = z && PORTAL_ZONE[z]; if (id && p.town !== id) p.town = id;
     }
     const M = worldMod().createWorld(D, opts.world);
@@ -124,11 +130,21 @@
     const msg = (p, text, kind) => ev({ e: 'msg', p: p.id, text, kind: kind || '' });
 
     const MIX = new Map();   /* uid -> monster (monsters are only ever added) */
-    for (const sp of M.spawns) {
-      const m = MON[sp.m]; if (!m) continue;
-      S.mobs.push({ uid: S.uid++, key: sp.m, x: sp.x, y: sp.y, sx: sp.x, sy: sp.y, hp: m.hp, tgt: 0, atk: 0, dead: 0, back: 0, face: 2, step: 0, zone: M.zoneAt(sp.x, sp.y),
-        carry0: sp.carry || null, carry: sp.carry ? Object.assign({}, sp.carry) : null });
+    /* a zone's monsters. Lazily loaded zones arrive in any order, so their monsters get FIXED uids (the worldgen camps'
+       hash, siteUid below) from the zone and their place in its list - every game agrees on them whatever it loaded first.
+       Eager games (no index) count 1, 2, 3 as before, which keeps every test and replay hash. */
+    const ZN = {};
+    function spawnMobs(list, announce) {
+      for (const sp of list) {
+        const m = MON[sp.m], zid = sp.zone || ''; const i = ZN[zid] = (ZN[zid] || 0) + 1; if (!m) continue;
+        const uid = LAZY ? siteUid('z:' + zid + ':' + (i - 1)) : S.uid++; if (MIX.has(uid)) continue;
+        const mob = { uid, key: sp.m, x: sp.x, y: sp.y, sx: sp.x, sy: sp.y, hp: m.hp, tgt: 0, atk: 0, dead: 0, back: 0, face: 2, step: 0, zone: M.zoneAt(sp.x, sp.y),
+          carry0: sp.carry || null, carry: sp.carry ? Object.assign({}, sp.carry) : null };
+        S.mobs.push(mob); if (LAZY) MIX.set(uid, mob);
+        if (announce) ev({ e: 'mobadd', mob: uid });
+      }
     }
+    spawnMobs(M.spawns, false);
     /* ---------------- SHARED WORLD (v0.3): one game per zone room is the HOST (authority) for that zone's monsters and
        ground items; everyone else is a REPLICA for that zone: no monster AI and no rolls there, state comes from the host.
        Solo = authority everywhere (the default). Every player stays the authority over their own HP, XP and inventory. */
@@ -149,17 +165,17 @@
        "weather" {kinds: {kind: weight}, min, max}; rules.weather.kinds[kind] = generic multipliers that the rules read
        (sight, range, fireFail, fireBurn, run). Rolled from the seeded RNG by the zone's host; replicas take it from the host. */
     const WX = RU.weather || { kinds: {}, intensity: [50, 100] };
-    const ZW = {}; for (const z of D.zones) if (z.weather) ZW[z.id] = z.weather;
+    const ZW = {}; for (const z of ZINDEX) if (z.weather) ZW[z.id] = z.weather;
     /* 2026-10-03: the weather follows the world's climate. On seeded land every area and every set piece belongs
        to the weather region of its climate zone ('cz<n>', tables in rules.weather.climate), and coasts are a little
        foggier; each region rolls like a zone does, so everyone in it agrees */
     const WC = (RU.weather && RU.weather.climate) || null, CLIMW = !!(WC && M.seeded && M.climateAt && M.climateAt(0, 0) >= 0);
-    if (CLIMW) for (const z of D.zones) delete ZW[z.id];   /* the towns take their region's weather too */
+    if (CLIMW) for (const z of ZINDEX) delete ZW[z.id];   /* the towns take their region's weather too */
     if (CLIMW) for (const k in WC) if (/^\d+$/.test(k)) { ZW['cz' + k] = WC[k]; ZW['czc' + k] = Object.assign({}, WC[k], { kinds: Object.assign({}, WC[k].kinds, { fog: (WC[k].kinds.fog || 0) + (WC.coastFog || 0) }) }); }
     for (const z in ZW) S.weather[z] = { kind: 'clear', intensity: 0, until: (ZW[z].min || 300) };   /* every zone starts clear */
     /* seeded land has no weather table of its own: an area takes the weather of the set piece of its kind (woods take
        Whisperwood's, open land the village's), so everyone agrees without another host or roll (globe P2) */
-    const WZ = {}, ZFOREST = (D.zones.find(z => z.ground === 'forest') || D.zones[0] || {}).id, ZOPEN = (D.zones.find(z => z.respawn) || D.zones[0] || {}).id;
+    const WZ = {}, ZFOREST = (ZINDEX.find(z => z.ground === 'forest') || ZINDEX[0] || {}).id, ZOPEN = (ZINDEX.find(z => z.respawn) || ZINDEX[0] || {}).id;
     function weatherZone(z) {
       if (z == null) return z;
       if (CLIMW && String(z).indexOf('cz') === 0) return z;
@@ -294,7 +310,7 @@
 
     // ---------------- players
     function newPlayer(id, save) {
-      const p = { id, name: 'Adventurer', kind: 'p', x: M.respawn[0], y: M.respawn[1], path: [], act: null, hp: 10, xp: {}, inv: new Array(28).fill(null), eq: {},
+      const R0 = RESPAWN0(), p = { id, name: 'Adventurer', kind: 'p', x: R0[0], y: R0[1], path: [], act: null, hp: 10, xp: {}, inv: new Array(28).fill(null), eq: {},
         styles: { melee: 0, ranged: 0, magic: 0 }, look: null, run: true, energy: 10000, retal: true, atk: 0, dead: 0, face: 2, quests: {}, kills: {}, skilling: null, gT: 0, shop: null, moved: 0, spawnT: 0 };
       for (const s of SK) p.xp[s] = 0;
       p.xp.hitpoints = XP[RU.start.hitpoints] * 10;
@@ -764,7 +780,7 @@
         const need = (st) => st.goal.n == null ? 1 : st.goal.n;
         const have = (st) => st.goal.bring && IT[st.goal.bring] ? invCount(p, st.goal.bring) : q.n;
         const fill = (L, st) => L.map(l => String(l).replace(/\{(n|goal|left|name)\}/g, (m, k) => k === 'name' ? (p.name || 'traveller') : !st ? '' : k === 'n' ? have(st) : k === 'goal' ? need(st) : Math.max(0, need(st) - have(st))));
-        const open = (st) => st && M.pieces.some(z => z.id === st.zone);
+        const open = (st) => st && ZINDEX.some(z => z.id === st.zone);   /* a step opens when its zone EXISTS (it may not be loaded yet) */
         if (!q) { q = p.quests[n.quest] = { step: 1, n: 0 }; lines = fill(Q.steps[0].talk, Q.steps[0]); ev({ e: 'quest', p: p.id, q: n.quest, step: 1 }); addXp(p, 'speechcraft', SPEECH.xpQuestTalk || 250); }
         else {
           const st = Q.steps[q.step - 1];
@@ -1360,8 +1376,21 @@
       for (const g of S.ground) { mix(g.x); mix(g.y); mix(g.n); mix(hashStr(g.id)); }
       return h >>> 0;
     }
+    /* area loading: a zone arrives (the engine fetched it near a player). The map takes it (M.addZone), worldgen swaps the
+       town's stub for its real inside, and its monsters appear ('mobadd'); 'zoneadd' tells the engine to draw it. */
+    function addZone(z) {
+      if (!z || !M.addZone || M.hasZone(z.id)) return false;
+      const zz = Object.assign({ id: z.id }, z);
+      if (D.wg) worldMod().arriveWorldgen(D.wg, D, zz);
+      const got = M.addZone(zz); if (!got) return false;
+      if (Array.isArray(D.zones) && !D.zones.some(q => q.id === zz.id)) D.zones.push(zz);
+      if (!CLIMW && zz.weather && !ZW[zz.id]) { ZW[zz.id] = zz.weather; S.weather[zz.id] = { kind: 'clear', intensity: 0, until: S.t + (zz.weather.min || 300) }; }
+      spawnMobs(got.spawns, true);
+      ev({ e: 'zoneadd', zone: zz.id, npcs: got.npcs.map(n => n.id) });
+      return true;
+    }
     return {
-      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash,
+      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       get rngState() { return R.state; },
       isHawk, airborne, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf,
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,

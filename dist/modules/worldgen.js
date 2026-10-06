@@ -181,6 +181,15 @@
         sample, newSample: ctx.newSample, field, lattice, height: (f, x, y) => sample(f, x, y, SMP).h,
         setEdits, edits: () => EDL,
         walkable: ctx.walkable, tileAt: ctx.tileAt, tiles: ctx.tiles, forTiles: ctx.forTiles, sites: ctx.sites, setSetPieces: (l) => { LASTPC = l; ctx.setSetPieces(l); }, piecesFromZones, objectsIn,
+        /* area loading (handoff/area_loading.md): a town first placed as its index STUB (edge band + building pads, all that
+           is read outside it) gets its real tiles and objects when its zone arrives. Paths, pads and edge profiles were made
+           from the stub and are identical, so only the samples are dropped (the inside of the town reads the new tiles). */
+        replacePiece: (sp) => {
+          const pc = ctx.PIECE_BY_ID && ctx.PIECE_BY_ID.get(String(sp.id)); if (!pc) return false;
+          pc.tiles = sp.tiles || []; pc.objects = sp.objects || [];
+          if (LASTPC) LASTPC = LASTPC.map(q => String(q.id) === String(sp.id) ? sp : q);
+          ctx.clearCaches(); return true;
+        },
         parcelAt, fold, toSphere, xform: ctx.xform, coreSpawn, dCore,
         neighbourFace: (f, k) => ctx.ADJ[f * 3 + k], faceHeight: ctx.HGT, faceEdge: ctx.EDGE,
         faceCorners: f => [[ctx.FQ[f * 6], ctx.FQ[f * 6 + 1]], [ctx.FQ[f * 6 + 2], ctx.FQ[f * 6 + 3]], [ctx.FQ[f * 6 + 4], ctx.FQ[f * 6 + 5]]],
