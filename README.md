@@ -46,3 +46,7 @@ machine; the tests use Playwright Chromium with SwiftShader.
    inscribed, then a new registry. The launcher (chain/modules.json "launcher") never changes after the first release.
 4. Live test: `tests/live/two_players_live.py <launcher id>`. The Games card's `play` already points at the launcher, so
    no new card is needed unless the description changes.
+
+## Contributing
+
+This repository is a public copy of the game. Changes pushed here are brought into the game by an hourly sync; plain data changes are released automatically after the tests pass, everything else is reviewed first.
