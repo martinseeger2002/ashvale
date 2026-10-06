@@ -37,6 +37,7 @@ ZONES = ['village', 'whisperwood', 'saltmere', 'castle']   # castle: the lake ca
 ZONES = ZONES   # saltmere: the second town, on the sea shore 3.4 km east (tools/make_zone_saltmere.mjs)
 if os.environ.get('ASH_NO_CASTLE') == '1':   # 2026-10-05: "forget about this castle for now" - a release without it
     ZONES = [z for z in ZONES if z != 'castle']
+AREA = os.environ.get('ASH_AREA_LOADING', '1') != '0'   # area loading (handoff/area_loading.md): live since registry v62 (the operator's OK 2026-10-06); ASH_AREA_LOADING=0 builds the old layout
 PARTS_DIR = os.path.join(DATA, 'parts')   # model part modules (characters, gear, clothes): one JSON each, no code
 
 
@@ -168,24 +169,33 @@ def main():
     # zones load by area (handoff/area_loading.md): listed under the registry's top-level `lazy`, which the launcher's
     # loader never reads (it reads `modules`); the engine fetches them near the player. `zoneindex` (always loaded) is
     # what the game knows about every zone meanwhile. Pages without /content/ carry them in window.ASH3D_LAZY.
-    reg['lazy'] = {'zones': {}}
+    # AREA (ASH_AREA_LOADING=1): until the operator's playtest OK the default build keeps the old layout (zones in `modules`, no
+    # index), so a release of anyone's own modules can never pair the new layout with the live engine.
+    if AREA: reg['lazy'] = {'zones': {}}
+    else: reg['modules']['zones'] = {}
     zone_js = []
     for name in DATA_MODULES + ['zone.' + z for z in ZONES]:
         j = json.loads(read(os.path.join(DATA, DATA_PATHS.get(name, name) + '.json')))
-        if name.startswith('zone.'):
+        if not name.startswith('zone.'):
+            mods[name] = "ASH3D.defineData(" + json.dumps(j, separators=(',', ':')) + ");\n"
+            reg['modules']['data'][name] = {"id": None, "v": j['v'], "api": j['api'], "kind": "json"}
+        elif AREA:
             zone_js.append((name[5:], j))
             mods[name] = "(window.ASH3D_LAZY = window.ASH3D_LAZY || {})[" + json.dumps(name) + "] = " + json.dumps(j, separators=(',', ':')) + ";\n"
             reg['lazy']['zones'][name[5:]] = {"id": None, "v": j['v'], "api": j['api'], "kind": "json"}
         else:
+            zone_js.append((name[5:], j))
             mods[name] = "ASH3D.defineData(" + json.dumps(j, separators=(',', ':')) + ");\n"
-            reg['modules']['data'][name] = {"id": None, "v": j['v'], "api": j['api'], "kind": "json"}
+            reg['modules']['zones'][name[5:]] = {"id": None, "v": j['v'], "api": j['api'], "kind": "json"}
         with open(os.path.join(DIST, 'modules', name + '.json'), 'w') as f:
             json.dump(j, f, separators=(',', ':'))
     zi = zone_index(zone_js)
-    mods['zoneindex'] = "ASH3D.defineData(" + json.dumps(zi, separators=(',', ':')) + ");\n"
-    reg['modules']['data']['zoneindex'] = {"id": None, "v": zi['v'], "api": zi['api'], "kind": "json"}
-    with open(os.path.join(DIST, 'modules', 'zoneindex.json'), 'w') as f:
-        json.dump(zi, f, separators=(',', ':'))
+    mods['zoneindex'] = ("ASH3D.defineData(" + json.dumps(zi, separators=(',', ':')) + ");\n") if AREA else ''
+    if AREA: reg['modules']['data']['zoneindex'] = {"id": None, "v": zi['v'], "api": zi['api'], "kind": "json"}
+    zp = os.path.join(DIST, 'modules', 'zoneindex.json')
+    if AREA:
+        with open(zp, 'w') as f: json.dump(zi, f, separators=(',', ':'))
+    elif os.path.exists(zp): os.remove(zp)
     parts = part_modules()
     if parts:
         reg['modules']['parts'] = {}

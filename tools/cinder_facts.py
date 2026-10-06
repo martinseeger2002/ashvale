@@ -22,7 +22,7 @@ def _attr(item, name):
 # what the live game has loaded (ASH.core.D), trimmed to what the facts use: the released data, never the work in progress
 LIVE_JS = """(() => { const D = ASH.core.D, pick = (o, ks) => { const r = {}; for (const k of ks) if (o[k] !== undefined) r[k] = o[k]; return r; };
   return { items: D.items, monsters: D.monsters, shops: D.shops, quests: D.quests, rules: D.rules,
-           zones: (D.zones || []).map(z => pick(z, ['id', 'name', 'level', 'origin', 'size', 'start', 'spawns', 'npcs'])) }; })()"""
+           zones: (ASH.core.zoneIndex ? ASH.core.zoneIndex() : (D.zones || [])).map(z => pick(z, ['id', 'name', 'level', 'origin', 'size', 'start', 'spawns', 'npcs'])) }; })()"""
 
 
 def local_data():

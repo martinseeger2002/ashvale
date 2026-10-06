@@ -71,6 +71,8 @@ def each_module():
             for n, sub in e.items(): yield (k + '/' + n, file_of(n, k), sub, e, n)
         else:
             yield (k, file_of(k, ''), e, reg['modules'], k)
+    for k, e in (reg.get('lazy') or {}).items():   # zones that load by area (handoff/area_loading.md): same keys
+        for n, sub in e.items(): yield (k + '/' + n, file_of(n, k), sub, e, n)
 
 
 held, unchanged, fresh, missing = [], [], [], []

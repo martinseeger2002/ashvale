@@ -49,13 +49,53 @@ def bug(where, what, snap=None):
     line = '- BOT %s **%s**: %s%s' % (time.strftime('%Y-%m-%d %H:%M'), where, what, ('  \n  state: ' + json.dumps(snap, default=str)[:600]) if snap else '')
     if not os.path.exists(BUGS): open(BUGS, 'w').write('# Quest bugs (found by playing the live game as @cinderwalker)\n\n')
     open(BUGS, 'a').write(line + '\n'); log('BUG', where, what)
+LEARNED = os.path.join(HERE, 'chain', 'cinder_learned.json')
+class Memory:
+    """What @cinderwalker has learned from playing (2026-10-06: "It should be learning as it plays so that it can
+    play better"). One record per monster, kept across runs in chain/cinder_learned.json: fights, kills, deaths, and
+    what it now believes it needs before taking that monster on -- defence, combat level, food -- moved by what
+    actually happened. A death with food still in the bag means it was too weak: train more. A death with none means
+    it ran out: carry more. A run of kills without a death means it over-prepared: relax the food a little."""
+    def __init__(self):
+        try: self.d = json.load(open(LEARNED))
+        except Exception: self.d = {'monsters': {}, 'lessons': []}
+    def save(self):
+        tmp = LEARNED + '.tmp'; json.dump(self.d, open(tmp, 'w'), indent=1); os.replace(tmp, LEARNED)
+    def m(self, key):
+        return self.d['monsters'].setdefault(key, {'fights': 0, 'kills': 0, 'deaths': 0, 'streak': 0,
+                                                   'need_def': 1, 'need_cb': 1, 'need_food': FIGHT_FOOD})
+    def lesson(self, key, text):
+        line = '%s %s: %s' % (time.strftime('%m-%d %H:%M'), key, text)
+        self.d['lessons'] = (self.d.get('lessons', []) + [line])[-40:]; log('LEARNED', key + ':', text)
+    def killed(self, key, s):
+        m = self.m(key); m['fights'] += 1; m['kills'] += 1; m['streak'] += 1
+        if m['streak'] >= 5 and m['need_food'] > 3:
+            m['need_food'] -= 1; m['streak'] = 0
+            self.lesson(key, '5 kills in a row without dying: %d food is enough' % m['need_food'])
+        self.save()
+    def died(self, key, before):
+        m = self.m(key); m['fights'] += 1; m['deaths'] += 1; m['streak'] = 0
+        food, dfn, cb = before.get('bread', 0), before.get('def', 1), before.get('cb', 1)
+        if food > 0:   # it had food and still lost: too weak for it
+            m['need_def'] = max(m['need_def'], dfn + 3); m['need_cb'] = max(m['need_cb'], cb + 2)
+            self.lesson(key, 'died with %d food left at defence %d, combat %d: training to defence %d, combat %d first'
+                        % (food, dfn, cb, m['need_def'], m['need_cb']))
+        else:          # it ran out of food: bring more
+            m['need_food'] = min(15, m['need_food'] + 2)
+            self.lesson(key, 'died with no food left: carrying %d next time' % m['need_food'])
+        self.save()
+    def summary(self):
+        return {k: '%d kills, %d deaths; wants defence %d, combat %d, %d food' % (v['kills'], v['deaths'], v['need_def'], v['need_cb'], v['need_food'])
+                for k, v in self.d['monsters'].items()}
+
+
 class Bot:
-    def __init__(self, g, minutes): self.g, self.t0, self.limit = g, time.time(), minutes * 60
+    def __init__(self, g, minutes): self.g, self.t0, self.limit, self.mem = g, time.time(), minutes * 60, Memory()
     def r(self, js):
         try: return self.g.run(js)
         except Exception as e: log('step error', str(e)[:160]); return None
     def time_left(self): return not LiveGame.stopping and time.time() - self.t0 < self.limit
-    def st(self): return self.r("return { at: [ASH.me.x, ASH.me.y], hp: ASH.me.hp, max: ASH.core.maxHp(ASH.me), cb: ASH.core.combatLevel(ASH.me), atk: ASH.core.lv(ASH.me, 'attack'), gold: bag().coins || 0, bread: ASH.me.inv.filter(q => q && ASH.core.item(q.id).edible).reduce((a, q) => a + q.n, 0), raw: ASH.me.inv.filter(q => q && ASH.core.item(q.id).cooks).reduce((a, q) => a + q.n, 0), weapon: ASH.me.eq.weapon && ASH.me.eq.weapon.id, q: JSON.parse(JSON.stringify(ASH.me.quests || {})), dead: !!ASH.me.dead }") or {}
+    def st(self): return self.r("return { at: [ASH.me.x, ASH.me.y], hp: ASH.me.hp, max: ASH.core.maxHp(ASH.me), cb: ASH.core.combatLevel(ASH.me), atk: ASH.core.lv(ASH.me, 'attack'), def: ASH.core.lv(ASH.me, 'defence'), gold: bag().coins || 0, bread: ASH.me.inv.filter(q => q && ASH.core.item(q.id).edible).reduce((a, q) => a + q.n, 0), raw: ASH.me.inv.filter(q => q && ASH.core.item(q.id).cooks).reduce((a, q) => a + q.n, 0), weapon: ASH.me.eq.weapon && ASH.me.eq.weapon.id, q: JSON.parse(JSON.stringify(ASH.me.quests || {})), dead: !!ASH.me.dead }") or {}
     def attune_here(self):
         """touch any town portal within reach it has not touched yet: touching attunes it, and an attuned portal can be
         travelled to from any other (2026-10-05: "he still hasn't learned that there are town portals")"""
@@ -111,6 +151,7 @@ class Bot:
             if s.get('gold', 0) >= gold and s.get('bread', 0) >= food: return True
             log('earning: round', i + 1, 'gold %s/%s food %s/%s' % (s.get('gold'), gold, s.get('bread'), food))
             self.fight('rat', 5)
+            self.scavenge(12, settle=500)   # sweep the grounds before the trip to cook and sell
             self.cook()
             self.money(gold)
         s = self.st(); return s.get('gold', 0) >= gold and s.get('bread', 0) >= food
@@ -123,10 +164,10 @@ class Bot:
     def prepare(self):
         """before quests: a weapon on, and food in the bag -- earned from rats when it has nothing"""
         self.unpack(); s = self.st()
-        if s.get('weapon') and s.get('bread', 0) >= 3: return True
+        if s.get('weapon') and s.get('bread', 0) >= FIGHT_FOOD: return True
         want = self.cheapest_weapon() + 15 if not s.get('weapon') else 15
-        log('preparing: weapon %s, food %s, gold %s -> earning %s GOLD and 4 food' % (s.get('weapon'), s.get('bread'), s.get('gold'), want))
-        self.earn(want, 4); self.gear(); self.cook()
+        log('preparing: weapon %s, food %s, gold %s -> earning %s GOLD and %d food' % (s.get('weapon'), s.get('bread'), s.get('gold'), want, FIGHT_FOOD + 1))
+        self.earn(want, FIGHT_FOOD + 1); self.gear(); self.cook()
         s = self.st(); log('prepared: weapon %s, food %s, gold %s' % (s.get('weapon'), s.get('bread'), s.get('gold')))
         return bool(s.get('weapon'))
     def cook(self):
@@ -156,10 +197,26 @@ class Bot:
             if worn or price('armoury', piece) > s.get('gold', 0) - 15: continue
             if self.r("return await buy('garrick', %r, 1)" % piece): log('bought', piece, self.r("return await equip(%r)" % piece))
         self.wear()
-    def scavenge(self, r=8):
+    def ground_near(self, r):
+        return self.r("return ASH.core.S.ground.filter(g => Math.max(Math.abs(g.x - ASH.me.x), Math.abs(g.y - ASH.me.y)) <= %d).length" % r) or 0
+    def scavenge(self, r=8, settle=1500):
         """pick up whatever lies within r tiles (2026-10-05: "if he sees anything laying around he should pick it up
-        and use it or sell it"), then put on anything better than what it wears"""
-        got = self.r("return await pickUp(%d)" % r) or []
+        and use it or sell it"; 2026-10-06: "Make sure Cinder Walker doesn't leave loot lying around"), then put on
+        anything better than what it wears. A monster's drop lands two ticks after it dies, so it waits for that first,
+        then sweeps until nothing is left; a full bag is emptied at the shop and chest and it comes back for the rest."""
+        self.r("await wait(%d); return 1" % settle)
+        got, here = [], self.st().get('at')
+        for _ in range(4):
+            more = self.r("return await pickUp(%d)" % r) or []
+            got += more
+            if not self.ground_near(r): break
+            if not more:
+                free = self.r("return ASH.me.inv.filter(s => !s).length") or 0
+                if free == 0 and here:
+                    log('bag full with loot still on the ground: emptying it and coming back')
+                    self.tidy(); self.walk(here[0], here[1], 4)
+                else:
+                    break   # what is left cannot be taken (somebody else's, or gone)
         if got: log('picked up', got); self.upgrade()
         return got
     def upgrade(self):
@@ -203,15 +260,26 @@ class Bot:
         lvl = MONS.get(key, {}).get('level', 1)
         if lvl < 5: return True
         s = self.st()
-        if not s.get('weapon') or s.get('bread', 0) < 2: self.cook(); self.gear(); s = self.st()
-        if not s.get('weapon') or s.get('bread', 0) < 2:
+        if not s.get('weapon') or s.get('bread', 0) < FIGHT_FOOD: self.cook(); self.gear(); s = self.st()
+        if not s.get('weapon') or s.get('bread', 0) < FIGHT_FOOD:
             log('not ready for', key, '(weapon %s, food %s): earning on rats first' % (s.get('weapon'), s.get('bread')))
             self.prepare(); s = self.st()
         if s.get('cb', 0) < lvl - 3 and getattr(self, 'trained_for', {}).get(key, 0) < 3:   # far weaker than it: rats first, a few rounds
             self.trained_for = getattr(self, 'trained_for', {}); self.trained_for[key] = self.trained_for.get(key, 0) + 1
             log('combat %s vs %s level %s: training on rats first' % (s.get('cb'), key, lvl)); self.fight('rat', 8); self.cook(); s = self.st()
+        m = self.mem.m(key)
+        for _ in range(4):   # what experience says this monster needs; a few rounds on rats at a time, then try again
+            s = self.st()
+            if s.get('def', 1) >= m['need_def'] and s.get('cb', 1) >= m['need_cb']: break
+            log('learned that %s needs defence %d and combat %d (now %d and %d): training on rats' % (key, m['need_def'], m['need_cb'], s.get('def', 1), s.get('cb', 1)))
+            self.r("ASH.core.cmd('me', { c: 'style', i: %d }); return 1" % (2 if s.get('def', 1) < m['need_def'] else 1))
+            self.fight('rat', 10); self.cook(); self.money(10 ** 6); self.best_armour()
+        self.r("ASH.core.cmd('me', { c: 'style', i: 0 }); return 1")
+        if s.get('bread', 0) < m['need_food']:
+            log('learned to carry %d food for %s; has %d' % (m['need_food'], key, s.get('bread', 0)))
+            self.earn(0, m['need_food']); s = self.st()
         if s.get('hp', 1) < s.get('max', 1) * 0.6 and s.get('bread', 0) == 0: self.rest()
-        if not s.get('weapon') or s.get('bread', 0) < 2: log('still not ready for', key, '(weapon %s, food %s)' % (s.get('weapon'), s.get('bread'))); return False
+        if not s.get('weapon') or s.get('bread', 0) < FIGHT_FOOD: log('still not ready for', key, '(weapon %s, food %s)' % (s.get('weapon'), s.get('bread'))); return False
         return True
     def rest(self):
         """no food and hurt: walk back to the well and wait to heal"""
@@ -235,6 +303,7 @@ class Bot:
             .sort((a, b) => Math.max(Math.abs(a.x - me.x), Math.abs(a.y - me.y)) - Math.max(Math.abs(b.x - me.x), Math.abs(b.y - me.y)))[0];
             return P && [P.x, P.y + 2]""" % json.dumps(here))
         if not spot: spot = [22, 52]   # the village well: outside Whisperwood, where the rats are
+        self.scavenge(12, settle=500)   # nothing left behind on the way out
         log('the %s grounds are hunted out: stepping out of %s to %s for 45 s so they come back' % (key, here, spot))
         self.walk(spot[0], spot[1], 4)
         self.cook(); self.tidy()   # use the time: cook what it caught, sell the loot
@@ -262,8 +331,11 @@ class Bot:
         kills = 0; deaths = 0; misses = 0; self.watch_deaths()
         while kills < n and self.time_left():
             s = self.st()
-            if s.get('dead') or self.died(): deaths += 1; self.recover(); continue
-            self.last = s.get('at')
+            if s.get('dead') or self.died():
+                deaths += 1
+                if MONS.get(key, {}).get('level', 1) >= 5: self.mem.died(key, getattr(self, 'before', s))
+                self.recover(); continue
+            self.last = s.get('at'); self.before = s
             if not self.ready(key): return kills
             if s.get('hp', 1) < s.get('max', 1) * 0.4 and s.get('bread', 0) == 0: self.rest(); continue
             if deaths >= 3: bug('fight ' + key, 'died 3 times: a player at combat %s cannot beat %s (level %s)' % (s.get('cb'), MONS.get(key, {}).get('name'), MONS.get(key, {}).get('level')), s); return kills
@@ -280,7 +352,7 @@ class Bot:
                 log('back to the', key, 'grounds', sp[0]); self.walk(sp[0][0], sp[0][1] + 1, 6); self.r("await wait(3000); return 1")
                 continue
             if m[2] > 12: self.walk(m[0], m[1], 3)
-            if self.r("return await kill(%r, 60000)" % key): kills += 1; misses = 0; log('killed', key, kills, '/', n); self.scavenge(6)
+            if self.r("return await kill(%r, 60000)" % key): kills += 1; misses = 0; self.mem.killed(key, s); log('killed', key, kills, '/', n); self.scavenge(6)
             else: log('fight with', key, 'did not end in a kill'); misses += 1
         return kills
     def train(self, skill, level):
@@ -296,7 +368,8 @@ class Bot:
         """a quest step in a zone the live game has not released (the Keep) cannot be done yet: the core gates it"""
         z = step.get('zone')
         if not z: return True
-        if not hasattr(self, '_zones'): self._zones = set(self.r("return (ASH.core.D.zones || []).map(z => z.id)") or [])
+        if not hasattr(self, '_zones'):   # every released zone, loaded or not (area loading: D.zones is only the loaded ones)
+            self._zones = set(self.r("return (ASH.core.zoneIndex ? ASH.core.zoneIndex() : ASH.core.D.zones || []).map(z => z.id)") or [])
         return not self._zones or z in self._zones
     def npc(self, nid): return self.r("const n = ASH.core.M.npcs.find(q => q.id === %r); return n && [n.x, n.y]" % nid)
     def quest(self, qid):
@@ -352,9 +425,14 @@ def report_quests(b, tries, notes):
     lv = b.r("const o = {}; for (const k in ASH.me.xp) { const l = ASH.core.lv(ASH.me, k); if (l > 1) o[k] = l; } o.combat = ASH.core.combatLevel(ASH.me); return o")
     open(REPORT, 'w').write('# @cinderwalker: the quests, played on the live game\n\nUpdated %s. **%d of %d done.** Levels: %s\n\n'
                             '| Quest | Giver | Where it stands | Attempts | Last problem |\n|---|---|---|---|---|\n%s\n\n'
-                            'Every bug it hits is also in handoff/qwen_quest_bugs.md. Log: chain/bot.log.\n'
-                            % (time.strftime('%Y-%m-%d %H:%M'), done, len(QUESTS), json.dumps(lv), '\n'.join(rows)))
+                            '## What it has learned\n\n%s\n\nLatest lessons:\n%s\n\n'
+                            'Every bug it hits is also in handoff/qwen_quest_bugs.md. Log: chain/bot.log. Memory: chain/cinder_learned.json.\n'
+                            % (time.strftime('%Y-%m-%d %H:%M'), done, len(QUESTS), json.dumps(lv), '\n'.join(rows),
+                               '\n'.join('- %s: %s' % kv for kv in b.mem.summary().items()) or '- nothing yet',
+                               '\n'.join('- ' + l for l in b.mem.d.get('lessons', [])[-8:]) or '- none yet'))
     return done
+DEFENCE_GOAL = 10   # wolves hunt in packs; defence 10 also opens the tier-2 armour
+FIGHT_FOOD = 5      # cooked food carried into any fight with a monster of level 5 or more
 def toughen(b):
     """before the quests (2026-10-06: "Once he has reached the experience where he can kill a rat in one or two
     blows, and he has the best armor that he can wear he should start the wolf quest"): train strength on rats until his
@@ -362,10 +440,19 @@ def toughen(b):
     rat_hp = MONS.get('rat', {}).get('hp', 5); need = -(-rat_hp // 2)
     while b.time_left():
         mh = b.r("return ASH.core.maxHit(ASH.me)") or 0
+        dfn = b.r("return ASH.core.lv(ASH.me, 'defence')") or 1
+        report_quests(b, {}, {})   # the report shows training and lessons too, not only quest attempts
         b.best_armour()
-        if mh >= need: b.r("ASH.core.cmd('me', { c: 'style', i: 0 }); return 1"); log('ready for the quests: best hit %d (a rat has %d hp)' % (mh, rat_hp)); return True
-        b.r("ASH.core.cmd('me', { c: 'style', i: 1 }); return 1")   # Aggressive: the xp goes to strength
-        log('training strength on rats: best hit %d, wants %d (strength %s)' % (mh, need, b.r("return ASH.core.lv(ASH.me, 'strength')")))
+        if mh >= need and dfn >= DEFENCE_GOAL:
+            b.r("ASH.core.cmd('me', { c: 'style', i: 0 }); return 1")
+            log('ready for the quests: best hit %d (a rat has %d hp), defence %d' % (mh, rat_hp, dfn)); return True
+        if mh < need:
+            b.r("ASH.core.cmd('me', { c: 'style', i: 1 }); return 1")   # Aggressive: the xp goes to strength
+            log('training strength on rats: best hit %d, wants %d (strength %s)' % (mh, need, b.r("return ASH.core.lv(ASH.me, 'strength')")))
+        else:
+            # 2026-10-06: he kept dying to wolves at defence 1 -- all his training had gone to attack and strength
+            b.r("ASH.core.cmd('me', { c: 'style', i: 2 }); return 1")   # Defensive: the xp goes to defence
+            log('training defence on rats: defence %d, wants %d' % (dfn, DEFENCE_GOAL))
         b.fight('rat', 10); b.cook(); b.money(10**6)
     return False
 def play_all(b):

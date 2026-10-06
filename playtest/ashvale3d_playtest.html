@@ -11078,7 +11078,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       if (LZ_WAIT[id]) return LZ_WAIT[id];
       const keep = (j) => { const d = j && j.ashvale3d === 'module' ? j.data : j; if (!d || !d.tiles) throw new Error('zone ' + id + ': not a zone module'); return (LZ[id] = Object.assign({ id }, d)); };
       const page = G.ASH3D_LAZY && G.ASH3D_LAZY['zone.' + id];
-      if (page) return Promise.resolve(keep(page));
+      if (page) { const ms = +G.ASH3D_LAZY_DELAY || 0; return ms ? (LZ_WAIT[id] = new Promise(r => setTimeout(() => { delete LZ_WAIT[id]; r(keep(page)); }, ms))) : Promise.resolve(keep(page)); }   /* a playtest page can slow the arrival down to show it */
       const reg = G.ASH3D && G.ASH3D._values && G.ASH3D._values.$registry, e = reg && reg.lazy && reg.lazy.zones && reg.lazy.zones[id];
       if (!e || !e.id) return Promise.reject(new Error('zone ' + id + ' is not in the registry'));
       const p = fetch('/content/' + e.id).then(r => { if (!r.ok) throw new Error('zone ' + id + ': HTTP ' + r.status); return r.json(); }).then(keep);
@@ -11104,7 +11104,12 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       }
       await Promise.race([Promise.all(near), new Promise(r => setTimeout(r, 15000))]);
     }
-    async function openStore() { const st = await openStoreOnly(); try { await preloadZones(st); } catch (e) { console.warn('ASHVALE: zones', e && e.message); } return st; }
+    async function openStore() {
+      /* while the wallet opens the save (that can take seconds), the zones around the spawn are already on their way: most
+         characters stand there, and for the rest it is a few KB that warm the cache */
+      if (ZINDEX && !G.ASH3D_LAZY_DELAY) { const r0 = (ZINDEX.find(z => z.respawn) || {}).respawn; if (r0) for (const id of zonesNear(r0[0], r0[1])) fetchZone(id).catch(() => {}); }   /* (not on a playtest page that shows a slow arrival) */
+      const st = await openStoreOnly(); try { await preloadZones(st); } catch (e) { console.warn('ASHVALE: zones', e && e.message); } return st;
+    }
     async function openStoreOnly() {
       const A = G.arcade && G.arcade.storage, framed = !!(G.parent && G.parent !== G);
       if (A && A.ready) {
