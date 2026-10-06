@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Ring of Angels</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0a12; overflow: hidden; }
+  canvas { display: block; }
+  p {
+    position: fixed; left: 0; right: 0; bottom: 22px; margin: 0;
+    text-align: center; color: #f3e6c0; font: 15px/1.4 Georgia, serif;
+    letter-spacing: .2em; text-transform: uppercase; pointer-events: none;
+    text-shadow: 0 2px 16px #000;
+  }
+</style>
+</head>
+<body>
+<p>The Ring of Angels</p>
+<script type="module">
+import * as THREE from "./three.module.min.js";
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0a12);
+scene.fog = new THREE.Fog(0x0b0a12, 7, 16);
+
+const camera = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 0.1, 40);
+camera.position.set(1.7, 1.05, 2.25);
+
+const env = new THREE.Scene();
+function lamp(color, x, y, z, w, h) {
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(w, h),
+    new THREE.MeshBasicMaterial({ color: color })
+  );
+  mesh.position.set(x, y, z);
+  mesh.lookAt(0, 0.4, 0);
+  env.add(mesh);
+}
+lamp(0xfff6d8, 2.2, 2.4, 1.6, 6, 4);
+lamp(0xffe2a8, -2.2, 1.2, 2.2, 4, 3);
+lamp(0xd0dcff, -2, 2.2, -2, 4, 3);
+lamp(0xffffff, 0.2, 3, 0.4, 2.4, 1.4);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(env, 0.04).texture;
+
+const gold = new THREE.MeshStandardMaterial({
+  color: 0xffd56a, metalness: 0.86, roughness: 0.28
+});
+const featherMat = new THREE.MeshStandardMaterial({
+  color: 0xf6f3ec, metalness: 0.08, roughness: 0.38, side: THREE.DoubleSide
+});
+const gemMat = new THREE.MeshPhysicalMaterial({
+  color: 0xb7dcff, metalness: 0, roughness: 0.02,
+  transmission: 0.72, thickness: 0.5, ior: 1.7,
+  clearcoat: 1, clearcoatRoughness: 0.04, envMapIntensity: 1.6
+});
+
+const ring = new THREE.Group();
+const band = new THREE.Mesh(new THREE.TorusGeometry(1, 0.155, 64, 160), gold);
+band.rotation.x = Math.PI / 2;
+band.castShadow = true;
+band.receiveShadow = true;
+ring.add(band);
+
+const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.042, 20, 48), gold);
+bezel.rotation.x = Math.PI / 2;
+bezel.position.set(0, 0.2, 0.88);
+bezel.castShadow = true;
+ring.add(bezel);
+
+const gem = new THREE.Mesh(new THREE.SphereGeometry(0.2, 48, 32), gemMat);
+gem.scale.set(1, 1.18, 1);
+gem.position.set(0, 0.38, 0.88);
+gem.castShadow = true;
+ring.add(gem);
+
+function featherShape() {
+  const s = new THREE.Shape();
+  s.moveTo(0, 0);
+  s.bezierCurveTo(0.45, 0.42, 1.05, 0.72, 1.35, 0.55);
+  s.bezierCurveTo(1.05, 0.22, 0.55, -0.02, 0, -0.08);
+  s.lineTo(0, 0);
+  return s;
+}
+function wing(side) {
+  const group = new THREE.Group();
+  [[1, 0.12, 0.1, -0.12], [0.72, 0.04, 0.0, 0.16], [0.48, 0.0, -0.06, 0.36]].forEach(function (sp) {
+    const geo = new THREE.ExtrudeGeometry(featherShape(), {
+      depth: 0.03, bevelEnabled: true, bevelThickness: 0.01,
+      bevelSize: 0.01, bevelSegments: 2, curveSegments: 14
+    });
+    geo.translate(0, 0, -0.015);
+    const mesh = new THREE.Mesh(geo, featherMat);
+    mesh.scale.set(sp[0] * side, sp[0], 1);
+    mesh.position.set(sp[1] * side, sp[2], 0);
+    mesh.rotation.z = sp[3] * side;
+    mesh.castShadow = true;
+    group.add(mesh);
+  });
+  group.position.set(0, 0.3, 0.58);
+  group.rotation.x = -0.5;
+  return group;
+}
+ring.add(wing(1));
+ring.add(wing(-1));
+ring.position.y = 0.12;
+scene.add(ring);
+
+const floor = new THREE.Mesh(
+  new THREE.CircleGeometry(3.4, 80),
+  new THREE.MeshStandardMaterial({ color: 0x14121c, roughness: 0.94, metalness: 0.04 })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -0.02;
+floor.receiveShadow = true;
+scene.add(floor);
+
+scene.add(new THREE.HemisphereLight(0xfff4dc, 0x2a2044, 0.7));
+const key = new THREE.DirectionalLight(0xfff6e2, 2.2);
+key.position.set(4, 6.5, 3);
+key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024);
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far = 16;
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x9eb6ff, 2);
+rim.position.set(-4, 2.2, -3);
+scene.add(rim);
+const spark = new THREE.PointLight(0xfff1cc, 18, 8);
+spark.position.set(-0.8, 1.4, 1.6);
+scene.add(spark);
+const front = new THREE.PointLight(0xffe0a0, 10, 6);
+front.position.set(0.2, 0.6, 2.2);
+scene.add(front);
+
+addEventListener("resize", function () {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+const clock = new THREE.Clock();
+(function tick() {
+  const t = clock.getElapsedTime();
+  ring.rotation.y = t * 0.4;
+  camera.lookAt(0, 0.38, 0.15);
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

@@ -14,7 +14,9 @@
     host.classList.add('ash');
     const el = (cls, parent, html, tag) => { const e = document.createElement(tag || 'div'); if (cls) e.className = cls; if (html != null) e.innerHTML = html; (parent || host).appendChild(e); return e; };
     const layer = el('lay'), ui = el('lay');
-    const hover = el('hover t', ui), opp = el('opp stone ui', ui);
+    const hover = el('hover t', ui), opp = el('opp stone ui', ui), xy = el('xy', ui, '');
+    let xyKey = '';
+    function setPos(x, y) { const k = x + ', ' + y; if (k === xyKey) return; xyKey = k; xy.textContent = k; }
     const mmBox = el('mm ui', ui), mmCanvas = el('', mmBox, null, 'canvas'); mmCanvas.width = mmCanvas.height = 300;
     const compass = el('compass ui t', ui, 'N');
     const orbs = el('orbs ui', ui), hpOrb = el('orb hp', orbs, '<i></i><b></b>'), runOrb = el('orb run', orbs, '<i></i><b></b>');

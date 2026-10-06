@@ -88,15 +88,27 @@
           const col = !q ? 'r' : !st ? 'g' : 'y';
           /* a quest you have started opens its story (2026-10-06: "each one of the quests should be clickable") */
           h += '<div class="qrow"' + (q ? ' data-q="' + A.esc(id) + '" style="cursor:pointer"' : '') + '><div class="' + col + '" style="margin-bottom:4px">' + A.esc(Q[id].name) + (q ? ' <span style="opacity:.6">&#9656;</span>' : '') + '</div><div class="info" style="margin:0 0 8px">';
+          const held = (iid) => { let c = 0; for (const s of p.inv || []) if (s && s.id === iid) c += s.n; return c; };
+          const g = st && st.goal, need = g ? (g.n == null ? 1 : g.n) : 1;
+          const ready = !!(st && g && (!((g.kill || g.cook || g.talk) && (q.n | 0) < need)) && !(g.bring && held(g.bring) < (g.bn == null ? need : g.bn)) && !(g.with && held(g.with) < (g.wn == null ? 1 : g.wn)));
           if (!q) h += 'Speak to ' + who(Q[id].giver) + '.';
           else if (!st) h += 'Completed!';
-          else if (q.n >= st.goal.n) h += 'Return to ' + who(Q[id].giver) + '.';
+          else if (ready) h += 'Return to ' + who(Q[id].giver) + '.';
           else {
-            const g = st.goal, n = g.n || 1, have = q.n | 0;
-            if (g.kill) { const m = core.D.monsters[g.kill]; h += 'Step ' + q.step + ': slay ' + many(A.esc((m ? m.name : g.kill).toLowerCase()), n) + ' (' + have + '/' + n + ').'; }
-            else if (g.bring) { const it = core.item ? core.item(g.bring) : (core.D.items || {})[g.bring]; h += 'Step ' + q.step + ': bring ' + many(A.esc((it ? it.name : g.bring).toLowerCase()), n) + ' (' + have + '/' + n + ').'; }
-            else if (g.talk) h += 'Step ' + q.step + ': talk to ' + who(g.talk) + (n > 1 ? ' ' + n + ' times' : '') + '.';
-            else h += 'Step ' + q.step + ': ask ' + who(Q[id].giver) + ' what is left to do (' + have + '/' + n + ').';
+            const have = q.n | 0;
+            const iname = (iid) => { const it = core.item ? core.item(iid) : (core.D.items || {})[iid]; return A.esc((it && it.name ? it.name : iid).toLowerCase()); };
+            if (g.kill && g.bring) {
+              const m = core.D.monsters[g.kill], bn = g.bn == null ? need : g.bn;
+              h += 'Step ' + q.step + ': slay ' + many(A.esc((m ? m.name : g.kill).toLowerCase()), need) + ' (' + have + '/' + need + ') and bring ' + many(iname(g.bring), bn) + ' (' + held(g.bring) + '/' + bn + ').';
+            }
+            else if (g.kill) { const m = core.D.monsters[g.kill]; h += 'Step ' + q.step + ': slay ' + many(A.esc((m ? m.name : g.kill).toLowerCase()), need) + ' (' + have + '/' + need + ').'; }
+            else if (g.cook) h += 'Step ' + q.step + ': cook ' + many(iname(g.cook), need) + ' (' + have + '/' + need + ').';
+            else if (g.bring) {
+              const bn = g.bn == null ? need : g.bn;
+              h += 'Step ' + q.step + ': bring ' + many(iname(g.bring), bn) + ' (' + held(g.bring) + '/' + bn + ')' + (g.with ? ' and ' + many(iname(g.with), g.wn == null ? 1 : g.wn) + ' (' + held(g.with) + '/' + (g.wn == null ? 1 : g.wn) + ')' : '') + '.';
+            }
+            else if (g.talk) h += 'Step ' + q.step + ': talk to ' + who(g.talk) + (need > 1 ? ' ' + need + ' times' : '') + '.';
+            else h += 'Step ' + q.step + ': ask ' + who(Q[id].giver) + ' what is left to do (' + have + '/' + need + ').';
           }
           h += '</div></div>';
         }

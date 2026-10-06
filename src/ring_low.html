@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ring of Angels, low poly</title>
+<style>
+  body { margin: 0; background: #1a140e; color: #f3e6c4; font: 14px/1.3 Georgia, serif; }
+  h1 { font-size: 18px; letter-spacing: .08em; text-transform: uppercase; margin: 16px 18px 8px; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; padding: 0 18px 18px; }
+  figure { margin: 0; background: #0e0c14; border: 1px solid #5a4a34; }
+  figcaption { padding: 6px 8px; color: #e8c070; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+  canvas { display: block; }
+  #err { color: #ffb4a8; padding: 12px 18px; }
+</style>
+</head>
+<body>
+<h1>The Ring of Angels — Ashvale resolution</h1>
+<p id="err"></p>
+<div class="row" id="board"></div>
+<script type="module">
+import * as THREE from "./three.module.min.js";
+import { createModels } from "./models.js";
+
+const files = ["palette","body.human","cloth.shirt_tunic","cloth.pants_trousers","cloth.shirt_robe","cloth.pants_robe","cloth.hair_short","cloth.hair_long","cloth.boots","cloth.belt","item.ring_angels","gear.angel_wings","char.iria"];
+const parts = {};
+for (const id of files) parts[id] = await fetch("./parts/" + id + ".json").then(r => { if (!r.ok) throw new Error(id); return r.json(); });
+const M = createModels(THREE, { parts });
+
+function stage(w, h) {
+  const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, preserveDrawingBuffer: true });
+  renderer.setSize(w, h, false);
+  renderer.setClearColor(0x14101a, 1);
+  const scene = new THREE.Scene();
+  scene.add(new THREE.AmbientLight(0xffffff, 1.15));
+  const sun = new THREE.DirectionalLight(0xfff2d0, 1.5);
+  sun.position.set(3, 6, 4);
+  scene.add(sun);
+  const cam = new THREE.PerspectiveCamera(32, w / h, 0.05, 40);
+  return { renderer, scene, cam };
+}
+function frame(view, object, dist, yaw, pitch, lookY) {
+  object.rotation.y = 0;
+  const bb = new THREE.Box3().setFromObject(object);
+  const ctr = bb.getCenter(new THREE.Vector3());
+  ctr.y = lookY == null ? ctr.y : lookY;
+  const r = Math.max(0.4, bb.getSize(new THREE.Vector3()).length() * 0.55);
+  view.cam.position.set(ctr.x + Math.sin(yaw) * r * dist, ctr.y + r * pitch, ctr.z + Math.cos(yaw) * r * dist);
+  view.cam.lookAt(ctr);
+  view.renderer.render(view.scene, view.cam);
+}
+function panel(caption, canvas) {
+  const fig = document.createElement("figure");
+  const cap = document.createElement("figcaption");
+  cap.textContent = caption;
+  fig.append(canvas, cap);
+  document.getElementById("board").append(fig);
+}
+
+const icon = document.createElement("img");
+icon.width = 128; icon.height = 128; icon.alt = "icon";
+icon.src = M.icon("ring_angels", 128);
+const fig = document.createElement("figure");
+const cap = document.createElement("figcaption");
+cap.textContent = "Inventory icon";
+fig.append(icon, cap);
+document.getElementById("board").append(fig);
+
+function show(caption, build, opts) {
+  const view = stage(280, 320);
+  const obj = build();
+  view.scene.add(obj.object || obj);
+  frame(view, obj.object || obj, opts.dist || 1.15, opts.yaw || 0, opts.pitch || 0.55, opts.lookY);
+  panel(caption, view.renderer.domElement);
+}
+
+const angles = [["Front", 0.2], ["Three-quarter", 0.9], ["Side", 1.7], ["Back", 2.8]];
+for (const [name, yaw] of angles) {
+  show("Worn, " + name, () => {
+    const H = M.humanoid();
+    H.setGear({ ring: "ring_angels" });
+    H.play("idle", { loop: true });
+    H.update(0.4);
+    return H;
+  }, { yaw, lookY: 1.05, dist: 1.35, pitch: 0.35 });
+}
+for (const [name, yaw] of [["Front", 0.3], ["Three-quarter", 1.0], ["Side", 1.8]]) {
+  show("Iria, " + name, () => {
+    const H = M.npc("iria");
+    H.play("idle", { loop: true });
+    H.update(0.2);
+    return H;
+  }, { yaw, lookY: 1.05, dist: 1.85, pitch: 0.42 });
+}
+for (const [name, lift] of [["Flare, start", 0], ["Flare, rising", 0.35], ["Flare, open", 0.7]]) {
+  show(name, () => {
+    const H = M.humanoid();
+    H.setGear({ ring: "ring_angels" });
+    H.play("cast", { loop: false });
+    H.update(0.25 + lift);
+    const g = new THREE.Group();
+    g.add(H.object);
+    const geo = new THREE.ConeGeometry(0.1, 0.62, 5);
+    for (const side of [-1, 1]) {
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xf7f4ee }));
+      m.position.set(side * (0.28 + lift * 0.2), 1.25 + lift * 0.45, 0);
+      m.rotation.z = side * (-0.5 - lift);
+      g.add(m);
+    }
+    const spark = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.07), new THREE.MeshBasicMaterial({ color: 0xf4e4a8 }));
+    spark.position.set(0.2, 1.4 + lift, 0.2);
+    g.add(spark);
+    return g;
+  }, { yaw: 0.7, lookY: 1.2, dist: 1.4, pitch: 0.4 });
+}
+</script>
+</body>
+</html>
