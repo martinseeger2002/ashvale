@@ -1,0 +1,12 @@
+{
+ "game": {
+  "name": "ASHVALE",
+  "description": "A 3D fantasy RPG on a whole small planet of your own. Walk out of Ashvale village into an endless generated world of forest, moor and shore, fight, chop, mine, fish, cook on campfires, brave fog, rain and snow, and meet other players standing exactly where they are. Seven others built this village and never left it: Silas by the well, Pip on the street, Latency at the north gate, the rest about the roads. Right-click one and talk. Your progress carries over.",
+  "version": "0.8.1",
+  "players": "Solo or online",
+  "multiplayer": true,
+  "family": "ashvale",
+  "genre": "rpg",
+  "play": "c879bc1f5f3cfc1300b9f24252a47ce395028dc65fc78a0ab3004a9f272649f5"
+ }
+}

@@ -1,0 +1,39 @@
+# ASHVALE public repository: what stays on this machine (2026-10-06: "leave out the key file and any logs and
+# any other private data. Or secure data.")
+
+# keys, wallets, sign-ins, private data
+*.key
+.key
+.env*
+*.pem
+*secret*
+*_state.json
+*.token
+*.sqlite
+*.sqlite.*
+*.db
+
+# runtime state, logs and internal notes
+chain/
+handoff/
+*.log
+*.out
+nohup.out
+
+# third-party reference data from another game
+ref_osrs_items.json
+REFERENCE_RUNESCAPE.md
+
+# large or generated
+kits/
+trailer/
+tests/shots/
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.mp4
+*.mov
+*.webm
+*.wav
+.claude/

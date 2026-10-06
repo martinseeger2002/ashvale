@@ -1,0 +1,130 @@
+{
+ "ashvale3d": "earth-registry",
+ "app": "earth",
+ "version": 1,
+ "loader": 1,
+ "modules": {
+  "three": {
+   "id": null,
+   "v": "0.160.0",
+   "api": 160,
+   "kind": "esm"
+  },
+  "globe": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "file": "playtest/earth/modules/globe.js"
+  },
+  "wg_geo": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "file": "playtest/earth/modules/wg_geo.js"
+  },
+  "wg_terrain": {
+   "id": null,
+   "v": "5",
+   "api": 1,
+   "kind": "js",
+   "file": "playtest/earth/modules/wg_terrain.js"
+  },
+  "wg_paths": {
+   "id": null,
+   "v": "2",
+   "api": 1,
+   "kind": "js",
+   "file": "playtest/earth/modules/wg_paths.js"
+  },
+  "wg_sites": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "file": "playtest/earth/modules/wg_sites.js"
+  },
+  "wg_tiles": {
+   "id": null,
+   "v": "2",
+   "api": 1,
+   "kind": "js",
+   "file": "playtest/earth/modules/wg_tiles.js"
+  },
+  "worldgen": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "file": "playtest/earth/modules/worldgen.js"
+  },
+  "atlas_shapes": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "file": "playtest/earth/modules/atlas_shapes.js"
+  },
+  "atlas_chunk": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "file": "playtest/earth/modules/atlas_chunk.js"
+  },
+  "earth": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "file": "playtest/earth/modules/earth.js"
+  },
+  "data": {
+   "wg_tables": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/wg_tables.json"
+   },
+   "atlas_palette": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/atlas_palette.json"
+   },
+   "globecfg": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/globecfg.json"
+   }
+  },
+  "zones": {
+   "whisperwood": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/zone.whisperwood.json"
+   },
+   "village": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/zone.village.json"
+   },
+   "saltmere": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/zone.saltmere.json"
+   }
+  }
+ }
+}

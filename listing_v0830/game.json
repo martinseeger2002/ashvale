@@ -1,0 +1,12 @@
+{
+ "game": {
+  "name": "ASHVALE",
+  "description": "A 3D fantasy RPG on a whole small planet of your own: two continents in a wide ocean, island chains, rivers that run from the mountains to the sea, deserts, rainforest, taiga and snowy peaks, with weather that follows the climate. Walk out of Ashvale village, take the trail down to Saltmere, a harbour town on the coast with docks and tall houses you can climb, and fight, chop, mine, fish and cook your way across the world. The trail has an end now: Cobb the elder gives the last quest, and a stone that brings you back to the harbour whenever it wakes. Meet other players standing exactly where they are. Your progress carries over.",
+  "version": "0.8.30",
+  "players": "Solo or online",
+  "multiplayer": true,
+  "family": "ashvale",
+  "genre": "rpg",
+  "play": "c879bc1f5f3cfc1300b9f24252a47ce395028dc65fc78a0ab3004a9f272649f5"
+ }
+}

@@ -1,0 +1,1 @@
+{"ashvale3d":"part","api":1,"v":1,"id":"cloth.hat_cap","kind":"cloth","slot":"hat","style":"cap","color":"#8a3030","hides":[],"items":{"hat_cap":"#8a3030"},"shapes":[{"t":"sphere","s":[0.16],"c":"$c","p":[0,0.16,-0.005],"seg":[12,6],"th":0.5,"k":[1,0.85,1],"j":"head"},{"t":"box","s":[0.2,0.02,0.12],"c":"$c:0.85","p":[0,0.17,0.16],"j":"head"}],"ground":{"p":[0,-0.1,0]}}

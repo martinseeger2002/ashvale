@@ -1,0 +1,1 @@
+{"ashvale3d":"module","name":"part.char.boar","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"char.boar","kind":"char","role":"monster","name":"Wild boar","body":"beast","beast":{"size":1.05,"legLen":0.75,"color":"#4a3a30","snout":"#6a5446","mane":true,"tail":"#3a2c24","tailLen":0.14,"tailW":0.03,"ears":"round","inner":"#5a4436","eyes":"#2a1a10","tusks":"#efe6d0"}}}

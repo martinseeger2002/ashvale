@@ -1,0 +1,1 @@
+{"ashvale3d":"module","name":"part.item.ring","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"item.ring","kind":"item","items":{"ring_hawk":"#d9b040"},"shapes":[{"t":"torus","s":[0.05,0.012],"c":"$c","p":[0,0.012,0],"seg":[6,16],"r":[1.5707963267948966,0,0]},{"t":"sphere","s":[0.02],"c":"#7a3a2a","p":[0,0.06,0],"seg":[6,4]}]}}

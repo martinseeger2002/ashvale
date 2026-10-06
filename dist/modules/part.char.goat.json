@@ -1,0 +1,1 @@
+{"ashvale3d":"module","name":"part.char.goat","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"char.goat","kind":"char","role":"monster","name":"Mountain goat","body":"beast","beast":{"size":0.9,"legLen":1.15,"color":"#e6e0d4","snout":"#cfc7b8","tail":"#d8d0c2","tailLen":0.1,"mane":true,"eyes":"#c8a030","tusks":"#3a3430"}}}

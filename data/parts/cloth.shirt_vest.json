@@ -1,0 +1,1 @@
+{"ashvale3d":"part","api":1,"v":1,"id":"cloth.shirt_vest","kind":"cloth","slot":"shirt","style":"vest","paint":{"torso":"$c","bust":"$c"},"shapes":[{"t":"box","s":[0.07,0.3,0.02],"c":"$skin","p":[0,0.36,0.105],"j":"torso"}]}

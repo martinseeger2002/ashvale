@@ -1,0 +1,12 @@
+{
+ "game": {
+  "name": "ASHVALE Atlas",
+  "description": "The whole ASHVALE planet in one view: start from orbit and zoom all the way down to the ground, seamlessly. Two continents in a wide ocean, island chains, rivers from mountain creeks to the sea, deserts, rainforest, taiga and snowy ranges, Ashvale village and the harbour town of Saltmere. Drag to pan, scroll or pinch to zoom, right-drag to turn.",
+  "version": "1.0",
+  "players": "Solo",
+  "multiplayer": false,
+  "family": "ashvale",
+  "genre": "explorer",
+  "play": "a4597d82acb371406e493f222061aecab2858d392355f74ea24e38ee8045e25d"
+ }
+}

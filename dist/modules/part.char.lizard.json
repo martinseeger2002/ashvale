@@ -1,0 +1,1 @@
+{"ashvale3d":"module","name":"part.char.lizard","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"char.lizard","kind":"char","role":"monster","name":"Sand lizard","body":"beast","beast":{"size":0.6,"legLen":0.4,"color":"#c8a060","snout":"#b08848","tail":"#b89050","tailLen":0.8,"tailW":0.06,"ears":"round","inner":"#c8a060","eyes":"#e0a020"}}}

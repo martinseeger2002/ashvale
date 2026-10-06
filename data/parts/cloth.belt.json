@@ -1,0 +1,1 @@
+{"ashvale3d":"part","api":1,"v":1,"id":"cloth.belt","kind":"cloth","slot":"belt","style":"belt","unless":"robeTop","shapes":[{"t":"cyl","s":["0.172*W","0.172*W",0.06],"c":"$c","p":[0,0.03,0],"seg":10,"k":[1,1,0.66],"j":"torso"},{"t":"box","s":[0.06,0.05,0.02],"c":"$gold","p":[0,0.03,0.115],"j":"torso"}]}

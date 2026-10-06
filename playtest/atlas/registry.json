@@ -1,0 +1,524 @@
+{
+ "ashvale3d": "atlas-registry",
+ "app": "atlas",
+ "version": 1,
+ "loader": 1,
+ "modules": {
+  "three": {
+   "id": null,
+   "v": "0.160.0",
+   "api": 160,
+   "kind": "esm"
+  },
+  "globe": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "bytes": 35924,
+   "sha256": "ad1a727f95aa283d5e6ac151af0ab190e033e632cb542c3c0b74897f09a95d9e",
+   "file": "playtest/atlas/modules/globe.js"
+  },
+  "globeview": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "bytes": 32304,
+   "sha256": "9ef72def05970f1cbd344ef1b6f1f035ee970fee36211c4e1883a21315700a6e",
+   "file": "playtest/atlas/modules/globeview.js"
+  },
+  "fog": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "bytes": 3450,
+   "sha256": "85caf20e84b624b43356c90d4dd9e505cf66affdd650bf9ef1973f53f5c29fdf",
+   "file": "playtest/atlas/modules/fog.js"
+  },
+  "models": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "bytes": 43743,
+   "sha256": "356a944cb2f580c7458744a05eeb5413bffb88f62c0ce9e658d09eb189f7c07f",
+   "file": "playtest/atlas/modules/models.js"
+  },
+  "wg_geo": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "bytes": 9301,
+   "sha256": "e1e227f54cb597fc60ddb689fe43f580d6beaf60d79a6271070bc8d6a7b19abf",
+   "file": "playtest/atlas/modules/wg_geo.js"
+  },
+  "wg_terrain": {
+   "id": null,
+   "v": "2",
+   "api": 1,
+   "kind": "js",
+   "bytes": 8455,
+   "sha256": "8c4bfba8f443dbf591fc7d8bfc851a59fde19d3fadfc0c4c4a8e4436f71fddbb",
+   "file": "playtest/atlas/modules/wg_terrain.js"
+  },
+  "wg_paths": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "bytes": 11214,
+   "sha256": "992b32f4358b4b20de99fa4d9bcdf283a4f95ad2bcfec885c2190134a8fa6ab3",
+   "file": "playtest/atlas/modules/wg_paths.js"
+  },
+  "wg_sites": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "bytes": 9883,
+   "sha256": "d0970bfc9effad5676278f9b9783fc2953e859698336c80176b651454323a477",
+   "file": "playtest/atlas/modules/wg_sites.js"
+  },
+  "wg_tiles": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "bytes": 6991,
+   "sha256": "ea8d8944e71d7afb29f9946de38fbbdf4dd86a0ab528a646871fe480b4031c3e",
+   "file": "playtest/atlas/modules/wg_tiles.js"
+  },
+  "worldgen": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "bytes": 14142,
+   "sha256": "ec2c0f587009d7401c1b4f64da0fe3ee286141ea76d8d3077c0530caca38e1d1",
+   "file": "playtest/atlas/modules/worldgen.js"
+  },
+  "atlas_shapes": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "bytes": 12262,
+   "sha256": "260a2f743a49b7d112c230cf63b223529c8e44288c9fe1e73861657b13da6211",
+   "file": "playtest/atlas/modules/atlas_shapes.js"
+  },
+  "atlas_chunk": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "bytes": 14827,
+   "sha256": "c940259f16b6a58c3ea5e0867a4050d52c4376063869ffb895670343b7ca6e2e",
+   "file": "playtest/atlas/modules/atlas_chunk.js"
+  },
+  "roam": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "bytes": 18609,
+   "sha256": "da04ba21f1d186ebbe798c6ff583f718b99ed9888564d8fc8fb87170b946d867",
+   "file": "playtest/atlas/modules/roam.js"
+  },
+  "roam_ctl": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "bytes": 13731,
+   "sha256": "9f4ef10b0b41ea32e13f101f6e32fba236fc02838038085b0821b98542522402",
+   "file": "playtest/atlas/modules/roam_ctl.js"
+  },
+  "roamhud": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "bytes": 6208,
+   "sha256": "5070f5524f5572220c0920fb4dd33dbade577e5e02a050fee39b7d2c48e135a6",
+   "file": "playtest/atlas/modules/roamhud.js"
+  },
+  "atlas": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "bytes": 9258,
+   "sha256": "248d5e003e2fb7ae7dd30f160eba6ee5c44a00d3d5f82987bd5fb089dc2e6e20",
+   "file": "playtest/atlas/modules/atlas.js"
+  },
+  "data": {
+   "wg_tables": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json",
+    "bytes": 2515,
+    "sha256": "43ae7ae884663c799b0d573778bfd443141aed468535273d3371e181eb5a2c7e",
+    "file": "playtest/atlas/modules/wg_tables.json"
+   },
+   "atlas_palette": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 1646,
+    "sha256": "2970e362e50da7ad34d8f9ebc17191f90074f324187894bb059688641da6a7f9",
+    "file": "playtest/atlas/modules/atlas_palette.json"
+   }
+  },
+  "zones": {
+   "whisperwood": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json",
+    "bytes": 3360,
+    "sha256": "c9828100aeeaf8d62f6134d0b2ef935d84d29c690b2cb3594413c05856f972a0",
+    "file": "playtest/atlas/modules/zone.whisperwood.json"
+   },
+   "village": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json",
+    "bytes": 4526,
+    "sha256": "59ac3e4dd3385322b36d0c2655421af8c1b3ac1230e17e6ddab1901279a5db42",
+    "file": "playtest/atlas/modules/zone.village.json"
+   }
+  },
+  "parts": {
+   "body.human": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 3608,
+    "sha256": "7a3b375dea63e5bee41313b5001b1d7b0bb9773a3db0c04e1373439a097db4e3",
+    "file": "playtest/atlas/modules/part.body.human.json"
+   },
+   "cloth.apron": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 256,
+    "sha256": "2cbc3e9a4cfc965b89460e9c3d75ddfcbb0c7964203db20abe802ab18b6e4aec",
+    "file": "playtest/atlas/modules/part.cloth.apron.json"
+   },
+   "cloth.beard_full": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 446,
+    "sha256": "89060b7129641a4069703b964c6c7e5acb93acb7edb4d85e46372ee895bdd47a",
+    "file": "playtest/atlas/modules/part.cloth.beard_full.json"
+   },
+   "cloth.beard_goatee": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 270,
+    "sha256": "e36d211a61ca2422ecc13ae1d28875a0f1f3113cfa1423808005bab991bc6c9f",
+    "file": "playtest/atlas/modules/part.cloth.beard_goatee.json"
+   },
+   "cloth.beard_moustache": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 281,
+    "sha256": "fb032c040c92f8f1dffd5596fec5ff0afc2798502b6693bc423461cb9d1b8644",
+    "file": "playtest/atlas/modules/part.cloth.beard_moustache.json"
+   },
+   "cloth.beard_stubble": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 305,
+    "sha256": "30884f9fe3e15064f2fcf13239fa76dfad5a0c51dc41fb70e38c1ac137d54216",
+    "file": "playtest/atlas/modules/part.cloth.beard_stubble.json"
+   },
+   "cloth.belt": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 374,
+    "sha256": "a5ff3a5c0d5febefa21f8b9914cb870f17533e7fa20d910d996934f60623f24f",
+    "file": "playtest/atlas/modules/part.cloth.belt.json"
+   },
+   "cloth.boots": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 202,
+    "sha256": "b6f336026416ff9fb59680207651c8093938eaae24a00c63eafef4e6fb557b12",
+    "file": "playtest/atlas/modules/part.cloth.boots.json"
+   },
+   "cloth.cape": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 674,
+    "sha256": "64e6a2616f63b931f4bea9c75c9faa7ad9da0b6d49218db3f9d85ab161b4623f",
+    "file": "playtest/atlas/modules/part.cloth.cape.json"
+   },
+   "cloth.gloves": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 195,
+    "sha256": "42b543a5ad4e18d6aadae944848bea4e662550647bf387a7a161fac65dda2b51",
+    "file": "playtest/atlas/modules/part.cloth.gloves.json"
+   },
+   "cloth.hair_bald": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 187,
+    "sha256": "ed52b260accd7017a5b2a89919fc7ce0c94b368eab6b0f17be129eecfdc53005",
+    "file": "playtest/atlas/modules/part.cloth.hair_bald.json"
+   },
+   "cloth.hair_bun": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 409,
+    "sha256": "59b8f5289d1faa6c2e1f69f65c3d8582b66bd7a00b0f976d86d86485a7469e1a",
+    "file": "playtest/atlas/modules/part.cloth.hair_bun.json"
+   },
+   "cloth.hair_curly": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 948,
+    "sha256": "80bc43dc437cf0322ed466ad01520fa76a2855d80ec8350494d5d51923217f6d",
+    "file": "playtest/atlas/modules/part.cloth.hair_curly.json"
+   },
+   "cloth.hair_long": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 460,
+    "sha256": "39c7d4adf52856fcd91cfb2ae0fc8046080fa0a39aba882543d04a940642ea59",
+    "file": "playtest/atlas/modules/part.cloth.hair_long.json"
+   },
+   "cloth.hair_mohawk": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 266,
+    "sha256": "a0143c93a0925b79af86eeec927d6c0ab5ec66a09453aa9b7b71c973700718cd",
+    "file": "playtest/atlas/modules/part.cloth.hair_mohawk.json"
+   },
+   "cloth.hair_ponytail": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 431,
+    "sha256": "5f7131e5087dcf714326cd303708fecc278b2dfab4a233b12107bffe74ef8f6f",
+    "file": "playtest/atlas/modules/part.cloth.hair_ponytail.json"
+   },
+   "cloth.hair_short": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 335,
+    "sha256": "14d3f21ce84fbaf95bc10f1f3d38389797ab8b6663dff0213b52efb7b8e6af8a",
+    "file": "playtest/atlas/modules/part.cloth.hair_short.json"
+   },
+   "cloth.hat_ashcrown": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 1197,
+    "sha256": "4f50b371a59a71b52cf6b6d2475231e51f1609c2bfcc998aacd76fbe115b1f7b",
+    "file": "playtest/atlas/modules/part.cloth.hat_ashcrown.json"
+   },
+   "cloth.hat_ashshard": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 674,
+    "sha256": "f87838e855183aa87adece26702d904087cf99d9599646785f5c4433e2c10160",
+    "file": "playtest/atlas/modules/part.cloth.hat_ashshard.json"
+   },
+   "cloth.hat_bandana": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 460,
+    "sha256": "4381d3869fd36ba0dbb04862b12e9f93f61960c9650fd40f90e718ae0b8deac4",
+    "file": "playtest/atlas/modules/part.cloth.hat_bandana.json"
+   },
+   "cloth.hat_bonewrap": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 1188,
+    "sha256": "77a1d5d65bd286c25388fa9359205290de7caef086be9b929707fd0ef9b888ba",
+    "file": "playtest/atlas/modules/part.cloth.hat_bonewrap.json"
+   },
+   "cloth.hat_cap": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 443,
+    "sha256": "1784e902046c5d1d22a67364288c570ba9c1dce686d6df17466c9908b4540679",
+    "file": "playtest/atlas/modules/part.cloth.hat_cap.json"
+   },
+   "cloth.hat_crown": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 875,
+    "sha256": "9343b7be7193b2b37ba495eb061b5888d7fa36a6d8d856a1db9f2811b3dbf362",
+    "file": "playtest/atlas/modules/part.cloth.hat_crown.json"
+   },
+   "cloth.hat_feather": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 560,
+    "sha256": "44bc6712194ad2f56b8636778941e56848177198ce3c68b6aa3efc2ac791a575",
+    "file": "playtest/atlas/modules/part.cloth.hat_feather.json"
+   },
+   "cloth.hat_hood": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 451,
+    "sha256": "b020ce4319f420c4c8b7f9ef34243291598915959bcd75c3be0f7ed2857c1365",
+    "file": "playtest/atlas/modules/part.cloth.hat_hood.json"
+   },
+   "cloth.hat_shroud": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 466,
+    "sha256": "f5bedecf064540c12ee3a24c9592ecfa7780ba86e7bb74902a0669b44be694be",
+    "file": "playtest/atlas/modules/part.cloth.hat_shroud.json"
+   },
+   "cloth.hat_wizard": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 543,
+    "sha256": "ca87e3adb032d2533228b23ab333afe6c4e5379cfeacd57f9950985b1743791e",
+    "file": "playtest/atlas/modules/part.cloth.hat_wizard.json"
+   },
+   "cloth.pants_robe": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 363,
+    "sha256": "f7dde9b79b591a7f8cf2b76b20de062e806a843debb2b2069689f7da9736fec6",
+    "file": "playtest/atlas/modules/part.cloth.pants_robe.json"
+   },
+   "cloth.pants_shorts": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 221,
+    "sha256": "1ad0dd80e969bdbab9cdfc74332c5eb45fea664ba4918ead2bbc362bc59c6444",
+    "file": "playtest/atlas/modules/part.cloth.pants_shorts.json"
+   },
+   "cloth.pants_skirt": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 342,
+    "sha256": "5673432cce19c330f775c235c57c3271cfe5241f3f8a5d2ba2391cd829b0fcd2",
+    "file": "playtest/atlas/modules/part.cloth.pants_skirt.json"
+   },
+   "cloth.pants_trousers": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 239,
+    "sha256": "d79e2fb6d111f4b9c2fc5ccf1eeed311f28d364c676ba6c91eb8879ffaa566f1",
+    "file": "playtest/atlas/modules/part.cloth.pants_trousers.json"
+   },
+   "cloth.shirt_robe": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 492,
+    "sha256": "95c881d32139a9f15d42b0ead846966571b65cab0ae473d0b6d6ad4102451119",
+    "file": "playtest/atlas/modules/part.cloth.shirt_robe.json"
+   },
+   "cloth.shirt_shirt": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 264,
+    "sha256": "593ef982357f07ee2c37d8cf72598de826f70d3cd267274de0c8c3f00a205558",
+    "file": "playtest/atlas/modules/part.cloth.shirt_shirt.json"
+   },
+   "cloth.shirt_tunic": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 384,
+    "sha256": "4d59eabf2c30767c09bbf966f1ad320d3706851171ba69b9ec094337ccc63743",
+    "file": "playtest/atlas/modules/part.cloth.shirt_tunic.json"
+   },
+   "cloth.shirt_vest": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 299,
+    "sha256": "9d72b86b92909c1114343561f63ee166092b8fd883309abbd530dde1f0f8508c",
+    "file": "playtest/atlas/modules/part.cloth.shirt_vest.json"
+   },
+   "palette": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "bytes": 1008,
+    "sha256": "fbd7ff082fb2fae20173a39bce1762c6e13ad13fe0af0a9c7f39c687ecc44f9f",
+    "file": "playtest/atlas/modules/part.palette.json"
+   }
+  }
+ }
+}

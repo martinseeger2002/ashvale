@@ -1,0 +1,1 @@
+{"ashvale3d":"module","name":"part.char.rat","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"char.rat","kind":"char","role":"monster","name":"Giant rat","body":"beast","beast":{"size":0.55,"color":"#7a6a5a","snout":"#a08878","tail":"#d8a0a0","tailLen":0.6,"tailW":0.03,"ears":"round","inner":"#d89a9a","eyes":"#d02020"}}}

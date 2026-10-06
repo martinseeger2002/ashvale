@@ -1,0 +1,114 @@
+<!doctype html><html><head><meta charset="utf-8"><title>ASHVALE models</title>
+<style>html,body{margin:0;height:100%;background:#87a8c8;overflow:hidden;font:12px monospace}#ui{position:fixed;left:6px;top:6px;background:#0008;color:#fff;padding:6px;border-radius:6px}</style></head>
+<body><div id="ui"></div>
+<script type="module">
+/* models_view.html - look at every model in src/models.js. Serve ~/ashvale3d over http and open
+   tools/models_view.html#view=chars|monsters|items|anim&anim=<name>&t=<seconds>  (t freezes time for screenshots) */
+import * as THREE from '../vendor/three.module.min.js';
+import { createModels } from '../src/models.js';
+const Q = Object.fromEntries(location.hash.slice(1).split('&').filter(Boolean).map(s => s.split('=')));
+const view = Q.view || 'chars', anim = Q.anim || 'idle', T = Q.t != null ? +Q.t : null;
+const idx = await (await fetch('../data/parts/')).text(), parts = {};
+for (const f of [...idx.matchAll(/href="([^"]+\.json)"/g)].map(m => m[1])) { const j = await (await fetch('../data/parts/' + f)).json(); parts[j.id] = j; }
+const M = createModels(THREE, { parts, onReject: (id, why) => console.error('rejected', id, why) });
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setPixelRatio(Math.min(2, devicePixelRatio)); r.setSize(innerWidth, innerHeight); r.shadowMap.enabled = true; document.body.appendChild(r.domElement);
+const sc = new THREE.Scene(); sc.background = new THREE.Color('#87a8c8');
+sc.add(new THREE.HemisphereLight(0xdfe8ff, 0x4a5a3a, 1.2));
+const sun = new THREE.DirectionalLight(0xfff2dd, 1.8); sun.position.set(4, 8, 6); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12 }); sc.add(sun);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshLambertMaterial({ color: '#5f8a3e' })); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; sc.add(ground);
+const cam = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.05, 200);
+const chars = [];
+function place(H, x, z, label) { H.object.position.set(x, 0, z); sc.add(H.object); chars.push(H); }
+const GEAR = t => ({ head: 'helmet_t' + t, body: Q.body || 'body_t' + t, legs: 'legs_t' + t, weapon: Q.weapon || 'sword_t' + t, shield: 'shield_t' + t });
+if (view === 'chars') {
+  const plain = M.humanoid(); place(plain, -6, 0);
+  for (let t = 1; t <= 5; t++) place(M.humanoid().setGear(GEAR(t)), -6 + 2 * t, 0);
+  place(M.humanoid().setGear({ weapon: 'bow_t4', ammo: 'arrows_t3', body: 'body_t1', legs: 'legs_t1' }), -5, 2.4);
+  place(M.humanoid({ shirt: '#4658c6' }).setGear({ weapon: 'staff_t5', head: 'helmet_t1' }), -3, 2.4);
+  place(M.humanoid().setTool('hatchet'), -1, 2.4);
+  for (const [i, k] of ['maren', 'tam', 'garrick', 'wren'].entries()) place(M.npc(k), 1.5 + 2 * i, 2.4);
+  cam.position.set(0, 3.2, 9.5); cam.lookAt(0, 0.9, 1);
+} else if (view === 'packs') {
+  for (let t = 1; t <= 5; t++) {
+    const g = { head: 'helmet_t' + t, body: Q.body || 'body_t3', legs: 'legs_t' + t, pack: 'pack_t' + t };
+    if (Q.cape) g.cape = Q.cape;
+    if (Q.arrows) { g.ammo = 'arrows_t' + t; g.weapon = 'bow_t3'; }
+    place(M.humanoid().setGear(g), (t - 3) * 1.7, 0);
+  }
+  if (Q.back) { cam.position.set(0, 1.8, -6.4); cam.lookAt(0, 1.05, 0); }
+  else if (Q.front) { cam.position.set(0, 1.8, 6.4); cam.lookAt(0, 1.05, 0); }
+  else { cam.position.set(5.6, 2.35, -7.8); cam.lookAt(0, 1.02, 0); }
+} else if (view === 'outfits') {
+  const looks = [
+    { hair: 'long', hairColor: '#c89a50', skin: '#f1c9a5', shirt: { style: 'shirt', color: '#3f5d8a' }, pants: { style: 'skirt', color: '#5b3a7a' } },
+    { hair: 'short', beard: 'full', hairColor: '#1c1612', skin: '#a86f48', shirt: { style: 'vest', color: '#8a6a4a' }, pants: { style: 'trousers', color: '#3a3430' }, cape: '#8a3030' },
+    { hair: 'ponytail', hairColor: '#9a3020', hat: { style: 'feather', color: '#2f6a6a' }, shirt: { style: 'tunic', color: '#c8a040' }, pants: { style: 'shorts', color: '#3a3430' }, gloves: '#6b4a2b' },
+    { hair: 'bald', beard: 'goatee', hairColor: '#4a3020', skin: '#7c4f31', shirt: { style: 'shirt', color: '#d8d0bc' }, pants: { style: 'trousers', color: '#2f6a6a' }, belt: '#8a3030' },
+    { hair: 'curly', hairColor: '#1c1612', skin: '#5a3822', hat: { style: 'wizard', color: '#3f5d8a' }, shirt: { style: 'robe', color: '#3f5d8a' }, pants: { style: 'robe', color: '#3f5d8a' } },
+    { hair: 'bun', hairColor: '#e8d8a8', hat: { style: 'crown' }, shirt: { style: 'shirt', color: '#8a3030' }, pants: { style: 'skirt', color: '#8a3030' }, cape: '#5b3a7a' },
+    { hair: 'mohawk', hairColor: '#3a3a6a', beard: 'stubble', shirt: { style: 'vest', color: '#3a3430' }, pants: { style: 'trousers', color: '#8a6a4a' }, hat: { style: 'bandana', color: '#c86a2a' } },
+    { hair: 'short', hat: { style: 'hood', color: '#4f6d3a' }, shirt: { style: 'tunic', color: '#4f6d3a' }, pants: { style: 'trousers', color: '#5a4630' }, cape: '#4f6d3a' }
+  ];
+  looks.forEach((L, i) => { const H = M.humanoid().setOutfit(L); if (Q.rot) H.object.rotation.y = +Q.rot; place(H, -5.25 + 1.5 * i, 0); });
+  cam.position.set(0, 2.2, 7.5); cam.lookAt(0, 1.0, 0);
+} else if (view === 'npcs') {
+  ['maren', 'tam', 'garrick', 'wren'].forEach((k, i) => place(M.npc(k), -2.4 + 1.6 * i, 0));
+  place(M.humanoid().setGear({ head: 'hat_wizard', cape: 'cape_gold', body: 'body_t2' }), 4, 0);
+  cam.position.set(0.8, 1.9, 5.2); cam.lookAt(0.8, 1.0, 0);
+} else if (view === 'bodies') {
+  const L = [{}, { shirt: { style: 'tunic', color: '#3f5d8a' } }, { shirt: { style: 'shirt', color: '#8a3030' }, pants: { style: 'skirt', color: '#5b3a7a' } }, { shirt: { style: 'vest', color: '#3a3430' } }];
+  L.forEach((o, i) => { const m = M.humanoid().setOutfit(Object.assign({}, o)); m.object.rotation.y = +(Q.rot || 0.3); place(m, -5.6 + 1.5 * i, 0);
+    const f = M.humanoid().setOutfit(Object.assign({ body: 'female', hair: 'long', hairColor: '#8a5a2a' }, o)); f.object.rotation.y = +(Q.rot || 0.3); place(f, 0.4 + 1.5 * i, 0); });
+  const a1 = M.humanoid().setGear({ head: 'helmet_t3', body: 'body_t3', legs: 'legs_t3', weapon: 'sword_t3', shield: 'shield_t3', pack: 'pack_t2' }); place(a1, -1.5, 2.2);
+  const a2 = M.humanoid().setOutfit({ body: 'female', hair: 'ponytail' }).setGear({ head: 'helmet_t1', body: 'chain_t4', legs: 'legs_t4', weapon: 'bow_t3', ammo: 'arrows_t2', pack: 'pack_t3' }); place(a2, 0, 2.2);
+  cam.position.set(0, 2.4, 9); cam.lookAt(0, 0.95, 0.6);
+} else if (view === 'bodyface') {
+  const m = M.humanoid(); place(m, -0.35, 0); m.object.rotation.y = 0.25;
+  const f = M.humanoid().setOutfit({ body: 'female', hair: 'long', hairColor: '#8a5a2a' }); f.object.rotation.y = -0.25; place(f, 0.35, 0);
+  cam.position.set(0, 1.55, 2.6); cam.lookAt(0, 1.25, 0);
+} else if (view === 'face') {
+  const H = M.humanoid().setOutfit({ beard: 'moustache' }); if (Q.rot) H.object.rotation.y = +Q.rot; place(H, 0, 0);
+  const H2 = M.humanoid().setOutfit({ hair: 'long', hairColor: '#c89a50', skin: '#f1c9a5' }); H2.object.rotation.y = -0.5; place(H2, 0.7, -0.4);
+  cam.position.set(0.3, 1.75, 1.6); cam.lookAt(0.3, 1.6, 0);
+} else if (view === 'monsters') {
+  for (const [i, k] of M.names.monsters.entries()) { const H = M.monster(k); if (Q.rot) H.object.rotation.y = +Q.rot; place(H, -4 + 2 * i, 0); }
+  if (Q.side) { cam.position.set(9, 1.6, 0.5); cam.lookAt(0, 0.5, 0); } else { cam.position.set(0, 2.6, 6.5); cam.lookAt(0, 0.6, 0); }
+} else if (view === 'cast') {
+  /* Elder Maren's quest cast next to a plain player for scale: #view=cast[&only=wraith,lich][&front=1] */
+  const cast = (Q.only || 'player,goblin,goblin_shaman,goblin_chief,wraith,ash_knight,lich').split(',');
+  cast.forEach((k, i) => { const H = k === 'player' ? M.humanoid() : M.monster(k); if (Q.rot) H.object.rotation.y = +Q.rot; place(H, (i - (cast.length - 1) / 2) * 1.5, 0); });
+  const d = 3.4 + (cast.length - 1) * 1.05;
+  if (Q.front) { cam.position.set(0, 1.75, d); cam.lookAt(0, 1.02, 0); }
+  else { cam.position.set(d * 0.66, 2.2, d * 0.78); cam.lookAt(0, 1.02, 0); }
+} else if (view === 'items') {
+  const ids = Q.only ? Q.only.split(',') : ['sword_t1', 'sword_t3', 'sword_t5', 'longsword_t1', 'longsword_t5', 'dagger_t1', 'dagger_t3', 'dagger_t5', 'mace_t2', 'mace_t5', 'shield_t2', 'shield_t5', 'bow_t1', 'bow_t5', 'staff_t2', 'staff_t5', 'helmet_t1', 'helmet_t3', 'helmet_t5', 'body_t2', 'body_t4', 'chain_t1', 'chain_t3', 'chain_t5', 'legs_t3', 'arrows_t2', 'pack_t1', 'pack_t2', 'pack_t3', 'pack_t4', 'pack_t5', 'coins', 'bread', 'potion', 'trout_raw', 'trout', 'salmon_raw', 'salmon', 'trout_burnt', 'salmon_burnt', 'lobster_raw', 'lobster', 'lobster_burnt', 'shrimp_raw', 'shrimp', 'shrimp_burnt', 'logs', 'oak_logs', 'willow_logs', 'maple_logs', 'yew_logs', 'copper_ore', 'tin_ore', 'iron_ore', 'coal', 'mithril_ore', 'gold_ore', 'pelt', 'hatchet', 'pickaxe', 'net', 'hat_cap', 'hat_feather', 'hat_wizard', 'hat_hood', 'hat_bandana', 'hat_crown', 'cape_red', 'cape_gold', 'mushroom', 'chanterelle', 'porcini', 'fly_agaric', 'glowcap', 'hat_bonewrap', 'hat_ashshard', 'hat_ashcrown', 'ghostlight', 'staff_verdant'];
+  ids.forEach((id, i) => { const row = Math.floor(i / 10), n = Math.min(10, ids.length - row * 10); const o = M.item(id); o.position.set((i % 10 - (n - 1) / 2) * 1.05, 0, -1.5 + row * 1.05); sc.add(o); });
+  const a = M.projectile('arrow', 4); a.position.set(5.4, 0.35, 0.5); sc.add(a); const s = M.projectile('spell', 5); s.position.set(5.4, 0.4, 1.8); sc.add(s);
+  const rows = Math.ceil(ids.length / 10);
+  cam.position.set(0, 2.6 + rows * 0.62, 4.2 + rows * 0.62); cam.lookAt(0, 0, -1.5 + (rows - 1) / 2);
+  const icons = document.createElement('div'); icons.style.cssText = 'position:fixed;right:6px;top:6px;width:280px;background:#2a2016;padding:4px;display:flex;flex-wrap:wrap;gap:2px';
+  ids.forEach(id => { const u = M.icon(id, 64); const im = document.createElement('img'); im.src = u || ''; im.width = 32; im.height = 32; im.title = id; im.style.background = '#3e3022'; icons.appendChild(im); }); document.body.appendChild(icons);
+} else if (view === 'anim') {
+  const list = ['idle', 'walk', 'run', 'slash', 'stab', 'crush', 'block', 'hit', 'death', 'bow', 'cast', 'chop', 'mine', 'fish', 'cook', 'pickup', 'eat'];
+  list.forEach((a, i) => {
+    const g = a === 'bow' ? { weapon: 'bow_t3', ammo: 'arrows_t2', body: 'body_t2', legs: 'legs_t2' } : a === 'cast' ? { weapon: 'staff_t4' } : GEAR(3);
+    const H = M.humanoid().setGear(g); if (a === 'chop') H.setTool('hatchet'); if (a === 'mine') H.setTool('pickaxe'); if (a === 'fish') H.setTool('net');
+    H.play(a, { loop: true }); H.object.rotation.y = 0.9; place(H, -7.2 + (i % 9) * 1.8, -1 + Math.floor(i / 9) * 2.6);
+  });
+  const W = M.monster('wolf'); W.play('bite', { loop: true }); W.object.rotation.y = 0.9; place(W, 7.2, 1.6);
+  cam.position.set(0, 4.5, 12); cam.lookAt(0, 0.8, 0.4);
+}
+const events = []; chars.forEach((H, i) => H.onEvent((t, n) => events.push(t + ':' + n)));
+document.getElementById('ui').textContent = view + (view === 'anim' ? '' : '') + '  chars ' + chars.length;
+window.__ok = true;
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (T == null) chars.forEach(H => H.update(dt));
+  r.render(sc, cam); requestAnimationFrame(frame);
+}
+if (T != null) { const steps = Math.round(T / (1 / 60)); for (let k = 0; k < steps; k++) chars.forEach(H => H.update(1 / 60)); }
+window.__events = events;
+requestAnimationFrame(frame);
+addEventListener('resize', () => { r.setSize(innerWidth, innerHeight); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); });
+</script></body></html>

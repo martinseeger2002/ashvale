@@ -1,0 +1,1 @@
+{"ashvale3d":"module","name":"part.cloth.beard_stubble","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"cloth.beard_stubble","kind":"cloth","slot":"beard","style":"stubble","shapes":[{"t":"sphere","s":[0.114],"c":"$skin:0.8","p":[0,0.058,0.026],"seg":[10,7],"k":[0.97,0.8,1.01],"j":"head"}]}}

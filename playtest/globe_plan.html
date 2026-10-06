@@ -1,0 +1,179 @@
+<title>Ashvale Globe</title>
+<style>
+:root{--bg:#f6f3ec;--fg:#1f1b14;--mut:#6b5f4b;--acc:#8a4b12;--line:#d9cfbd;--code:#ece5d6}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15130f;--fg:#ece5d6;--mut:#a8997e;--acc:#e8a35a;--line:#3a3328;--code:#221e17;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#15130f;--fg:#ece5d6;--mut:#a8997e;--acc:#e8a35a;--line:#3a3328;--code:#221e17;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 Georgia,'Iowan Old Style',serif}
+main{max-width:46rem;margin:0 auto;padding-inline:16px;padding-block:20px 60px}
+h1{font-size:1.6rem;line-height:1.2;text-wrap:balance;margin:.2em 0 .6em}
+h2{font-size:1.15rem;color:var(--acc);margin:1.8em 0 .5em;border-bottom:1px solid var(--line);padding-bottom:.2em;text-wrap:balance}
+li{margin:.25em 0}code{background:var(--code);padding:0 .25em;border-radius:3px;font-size:.88em;font-family:ui-monospace,Menlo,monospace}
+pre{background:var(--code);padding:10px 12px;border-radius:6px;overflow-x:auto;font:12px/1.45 ui-monospace,Menlo,monospace}
+.tw{overflow-x:auto;margin:.8em 0}table{border-collapse:collapse;font:13px/1.4 system-ui,sans-serif;font-variant-numeric:tabular-nums;min-width:100%}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}th{color:var(--mut);font-weight:600}
+strong{color:var(--fg)}p{margin:.6em 0}
+</style>
+<main>
+<h1>ASHVALE Globe: round world, parcel NFTs, Genie</h1>
+<p>Design for moving ASHVALE onto a round, modular world made of hexagon parcels (a Goldberg polyhedron, the same</p>
+<p>family as the truncated icosahedron), where every parcel is an NFT. Written 2026-10-02 from the operator&#x27;s brief, adapted to</p>
+<p>the DogecoinArcade rules we already run on.</p>
+<p>the operator&#x27;s decisions (2026-10-02):</p>
+<ul>
+<li><strong>Scale:</strong> the full 1,500-4,000 km² base region exists from day one. It is <strong>generated from a seed</strong> in the game&#x27;s style, so every player sees the same land and nothing is stored for it. Hand-made places are inscribed modules dropped into chosen spots. Only changes get inscribed.
+<li><strong>Parcel NFTs:</strong> <strong>minted when claimed.</strong> One small @ashvale inscription defines the whole grid. Each parcel&#x27;s NFT is inscribed by @ashvale only when someone claims or buys it; the first valid one per cell counts. Unclaimed parcels exist in the world, owned by nobody.
+<li><strong>Creators:</strong> &quot;The creator gets to give the genie a text prompt and then my local model builds their parcel with continuity.&quot; The Genie is the creator tool. Everything it makes is inscribed by @ashvale, so the only-@ashvale-assets rule holds.
+<li><strong>Genie review:</strong> <strong>automatic checks</strong>. A build goes live when it passes every check; failed builds retry, then refund. The operator can roll any parcel back.
+</ul>
+<p>Arcade rules that shape all of it:</p>
+<ul>
+<li>Nothing here is EVM. NFTs are arcade inscriptions; ownership is the arcade&#x27;s owner field. Only items inscribed by @ashvale and tokens issued by @ashvale count.
+<li>Everything protocol-level stays <strong>game-agnostic</strong> and is built by Arcade. ASHVALE only *suggests* features. The asks are listed in section 9.
+<li><strong>Modular:</strong> every piece is a small module in the registry, so a fix is one or two inscriptions. The launcher never changes. Saves carry over.
+<li>Public text never names other games. This document is internal.
+</ul>
+<h2>1. The shape of the world</h2>
+<p><strong>Grid:</strong> class-I Goldberg polyhedron GP(n,0) on an icosahedron. Cells = 10n² + 2: twelve pentagons, the rest</p>
+<p>hexagons. It is the hexagon-and-pentagon tiling of the truncated icosahedron, refined.</p>
+<p><strong>The key simplification: gameplay happens on flat faces.</strong></p>
+<ul>
+<li>The planet is an icosahedron of 20 flat triangles. On a flat triangle the hexagon grid is perfect, and the game&#x27;s square tiles fit with no distortion.
+<li>Crossing an edge to the next face means unfolding that face into the same plane, which is exact. The only places that cannot be flattened are the 12 corners, where 5 faces meet.
+<li><strong>The 12 corners become impassable peaks</strong> (the 12 pentagon parcels plus a ring around each). Nobody walks over a point that can&#x27;t be flattened.
+<li>The globe view projects the faces onto a sphere, so the planet looks round from above.
+<li><strong>At ground level curvature is invisible.</strong> On the recommended planet the ground drops 3.5 cm over 50 m, and the fog already ends at about 52 m.
+</ul>
+<p><strong>Cell index (stable forever):</strong></p>
+<ul>
+<li>The 20 triangles pair into 10 diamonds. Each diamond is an n×n grid of cells (i, j); the 2 poles are extra. <code>cell = d·n² + i·n + j</code> for d = 0..9; <code>north = 10n²</code>, <code>south = 10n² + 1</code>.
+<li>Pentagons: the 2 poles plus (i=0, j=0) of each diamond.
+<li><strong>Neighbours:</strong> inside a diamond, the six axial steps (±1,0), (0,±1), (+1,−1), (−1,+1). Across a diamond edge, a fixed 10×4 edge table maps (d, edge, offset) to (d&#x27;, i&#x27;, j&#x27;). Pentagons have 5 neighbours.
+<li>Lat/lon, sphere position and face-planar centre all come from the index by pure maths, so nothing about the grid is stored. One tiny <strong>grid spec</strong> inscription pins <code>{n, radius, seed, version}</code>.
+<li><strong>n is never changed after launch</strong>: changing it would renumber every parcel. Finer detail lives inside a parcel (section 8).
+</ul>
+<p><strong>Inside a parcel:</strong></p>
+<ul>
+<li>The game&#x27;s existing square tiles, 1 m each, in face-planar coordinates.
+<li>Square tiles can&#x27;t line up across a face edge (the next face is turned 60°). So each of the 30 face edges is a <strong>seam strip</strong>: a river, ridge or cliff two tiles wide, crossed only at ports (bridges, fords, passes).
+<li>A port joins a tile on one face to a tile on the other, as one extra pathfinding edge. Walking over it turns your heading by the fold.
+<li>Rendering is free-form: you see across the seam normally. Only the tile grid has to respect it.
+</ul>
+<h2>2. World size</h2>
+<p>The parcel is the unit a creator owns and the Genie builds. I fix it at <strong>0.1 km²</strong>: a hexagon about 340 m across,</p>
+<p>about 100,000 tiles. That&#x27;s a village with its woods, buildable from one prompt. The candidates differ in the number</p>
+<p>of cells.</p>
+<div class="tw"><table><tr><th></th><th>A: n = 64</th><th><strong>B: n = 128 (recommended)</strong></th><th>C: n = 256</th></tr><tr><td>Parcels</td><td>40,962</td><td><strong>163,842</strong></td><td>655,362</td></tr><tr><td>Planet radius</td><td>18 km</td><td><strong>36 km</strong></td><td>72 km</td></tr><tr><td>Surface</td><td>4,096 km²</td><td><strong>16,384 km²</strong></td><td>65,536 km²</td></tr><tr><td>Base region (2,500 km²)</td><td>61% of the planet</td><td><strong>15%</strong></td><td>4%</td></tr><tr><td>Parcels left for creators</td><td>about 10,000</td><td><strong>about 82,000</strong></td><td>400,000+</td></tr><tr><td>Globe view at cell detail</td><td>0.25 M triangles: one mesh</td><td><strong>1 M: chunked LOD</strong></td><td>4 M: deep LOD</td></tr><tr><td>Parcel table in memory</td><td>0.7 MB</td><td><strong>2.6 MB</strong></td><td>10.5 MB</td></tr><tr><td>Ground drop at 50 m</td><td>7 cm</td><td><strong>3.5 cm</strong></td><td>1.7 cm</td></tr><tr><td>Face edge</td><td>20 km</td><td><strong>40 km</strong></td><td>80 km</td></tr></table></div>
+<p><strong>Recommendation: B.</strong></p>
+<ul>
+<li>The base region is a real continent (15%), with about 82,000 creator parcels around it.
+<li>Memory and LOD stay comfortable on a phone.
+<li>Indexing and arcade queries stay in the hundreds of thousands, not millions.
+<li>A is too small for creators. C is mostly empty land that costs indexing and LOD work for nothing.
+</ul>
+<p><strong>Land use on B (163,842 cells):</strong></p>
+<div class="tw"><table><tr><th>Class</th><th>Cells</th><th>Area</th><th>Who</th></tr><tr><td><code>core</code>: the Ashvale base region</td><td>25,000</td><td>2,500 km²</td><td>@ashvale only; hand-made set pieces plus seeded land</td></tr><tr><td><code>creator</code>: claimable parcels</td><td>82,000</td><td>8,200 km²</td><td>minted to whoever claims; built by the Genie</td></tr><tr><td><code>wild</code>: seeded, reserved</td><td>40,000</td><td>4,000 km²</td><td>@ashvale; future expansions and events</td></tr><tr><td><code>sea</code> and <code>peak</code></td><td>16,842</td><td>1,684 km²</td><td>nobody; oceans, plus the 12 corner peaks</td></tr></table></div>
+<p>The class of every cell comes from the grid spec plus the seed, by rule, so the map of classes is never stored.</p>
+<h2>3. The base region (Ashvale)</h2>
+<ul>
+<li><strong>Size:</strong> 2,500 km² (the middle of the 1,500-4,000 brief), 25,000 contiguous core cells.
+<li><strong>Where:</strong> centred on one icosahedron face and reaching across its three edges into the neighbouring faces. Three of the corner peaks form its mountain rim. A vale ringed by peaks, with the three edge seams as its great rivers (bridges are the ports).
+<li><strong>Distortion:</strong> none in gameplay, because every face is flat. The seams are the only fold, and they are rivers. The globe view shows the continent slightly curved; that&#x27;s projection, not gameplay.
+<li><strong>Filling it:</strong> - <strong>Seeded land.</strong> A <code>worldgen</code> module turns (seed, face-planar x, y) into height, biome, trees, rocks, fishing spots and monster camps, in the same style and numbers as today&#x27;s village and Whisperwood. It&#x27;s deterministic, so every player gets identical land, and the shared world still agrees. - <strong>Set pieces.</strong> The existing village and Whisperwood zones are inscribed modules placed at fixed coordinates near the centre (spawn). A set piece wins over the seed inside its footprint; heights blend over a 16 m margin. Every future hand-made town or dungeon is one more set piece. - <strong>Content density.</strong> Seeded land must stay sparse enough to be fun, with real places every few hundred metres. worldgen places &quot;sites&quot; (camps, ruins, ponds, mines) on a seeded poisson grid. Travel aids are planned: run, carts or boats along rivers, and teleport stones at set pieces.
+<li><strong>Marking:</strong> core cells have class <code>core</code> in the grid rule. Their builds are @ashvale&#x27;s own, and nothing in a core cell can be claimed.
+</ul>
+<h2>4. Parcels as arcade NFTs</h2>
+<p><strong>Grid spec (one inscription by @ashvale, never changes):</strong></p>
+<pre>{&quot;ashvale&quot;:&quot;grid&quot;,&quot;v&quot;:1,&quot;n&quot;:128,&quot;radius_m&quot;:36110,&quot;seed&quot;:&quot;&lt;hex&gt;&quot;,&quot;classes&quot;:&quot;&lt;rule id&gt;&quot;,&quot;worldgen&quot;:&quot;&lt;module id&gt;&quot;}</pre>
+<p><strong>Parcel NFT (inscribed by @ashvale when claimed):</strong> a small picture of the parcel (seen from above, rendered by</p>
+<p>the game) with this JSON beside it:</p>
+<pre>{&quot;ashvale&quot;:&quot;parcel&quot;,&quot;grid&quot;:&quot;&lt;grid spec id&gt;&quot;,&quot;cell&quot;:91234,&quot;d&quot;:5,&quot;i&quot;:73,&quot;j&quot;:101,
+ &quot;lat&quot;:12.41,&quot;lon&quot;:-48.07,&quot;class&quot;:&quot;creator&quot;,&quot;biome&quot;:&quot;forest&quot;,&quot;name&quot;:&quot;Parcel 91234&quot;}</pre>
+<ul>
+<li><strong>Location:</strong> cell, diamond coordinates and lat/lon, all re-checkable from the grid maths.
+<li><strong>Ownership:</strong> the arcade&#x27;s owner field. It moves with trades, escrow and gifts, exactly like the Armoury NFTs.
+<li><strong>Valid</strong> when the creator is @ashvale, the grid id matches, the cell&#x27;s class is <code>creator</code>, and it&#x27;s the <strong>first</strong> @ashvale parcel inscription for that cell (lowest inscription number). Any later duplicate is ignored. The game checks this, so a mistake can&#x27;t create two owners.
+<li><strong>Claiming:</strong> the buyer pays @ashvale (price and currency still to decide: see the end). The claim service inscribes the parcel NFT and sends it to the buyer. That&#x27;s the existing inscribe-and-send flow; the arcade&#x27;s escrow can hold the payment until the NFT lands.
+<li><strong>Rights:</strong> the owner may request Genie builds for that parcel, name it, and trade it. Owning a parcel never changes game rules, items or stats.
+</ul>
+<p><strong>Chain to game sync:</strong></p>
+<ol>
+<li>The client reads the grid spec once and computes the whole grid locally.
+<li>Parcels near the player (the current one and two rings out) are fetched by cell from @ashvale&#x27;s parcel inscriptions (needs Arcade ask 9.1). Builds and owners are cached in memory.
+<li>Owners refresh on entering a parcel and every 5 minutes. Builds refresh when a newer @ashvale build for that cell appears.
+<li>The globe view only needs claimed parcels, fetched page by page.
+<li><strong>Eventual consistency is fine.</strong> A trade takes a block or two to show, and the game never blocks play on it. Building and ownership checks always re-read the chain before acting.
+</ol>
+<h2>5. Three.js and the client</h2>
+<p>New modules, each separate in the registry:</p>
+<ul>
+<li><code>globe</code>: pure maths, no three.js. Index to centre, neighbours, lat/lon, face, planar coordinates, seam ports and class rule. Golden-file tests (cell count, 12 pentagons, neighbour symmetry, stable ids).
+<li><code>worldgen</code>: seed plus planar coordinates to terrain, biome and sites. Pure and deterministic, so it runs inside the core and the referee too.
+<li><code>globeview</code>: the planet from space, for the map, parcel picking and the claiming UI: - Each of the 10 diamonds is a quadtree of chunks (16×16 cells at the finest level). - Far chunks are coarse meshes with vertex colours baked from class and biome. Near chunks show cell borders and owner tint. - Frustum and horizon culling per chunk, and one draw call per chunk. - About 1 M cell triangles in total, of which only a few tens of thousands are drawn at once.
+<li>The <strong>ground level</strong> keeps today&#x27;s scene, engine, models and hud: - The world streams as 64×64 m terrain chunks, built from worldgen plus any set piece or build covering them. - Chunks within about 120 m are loaded, and the fog hides the edge. - Chunks unload behind you. A chunk is a pure function of (seed, chunk coordinates, the builds that cover it), so it&#x27;s cheap to rebuild and nothing is downloaded except builds.
+<li><strong>Parcel data streaming:</strong> the current parcel plus two rings (19 parcels) of metadata. Builds are fetched only for parcels whose chunks are actually loading.
+</ul>
+<h2>6. Migration from today&#x27;s ASHVALE (same game, now on a globe)</h2>
+<p><strong>Unchanged:</strong> the deterministic core rules, combat, skills, items, the parts and models system, the hud, trades,</p>
+<p>escrow, GOLD, the save format and the modular launcher.</p>
+<p><strong>Refactored, in this order:</strong></p>
+<ol>
+<li><strong>Coordinates.</strong> Positions become (face, x, y) in face-planar metres, with integer tiles as now. The core keeps working in a local window: a few hundred metres of tiles anchored at an origin, re-anchored as players travel (the re-anchor is a logged command, so replays stay exact). Pathfinding is unchanged inside the window, plus port edges at seams.
+<li><strong>Zones become chunks.</strong> Today&#x27;s <code>zoneAt</code> map becomes a chunk map that is filled as chunks stream. The village and Whisperwood become the first two set pieces at fixed coordinates.
+<li><strong>Rooms.</strong> One shared-world room per parcel, with the host per parcel as now. Players near a border also listen to the neighbour&#x27;s room (Arcade ask 9.2), the same multi-room need the cross-border fights already have.
+<li><strong>Saves.</strong> A save migration maps today&#x27;s (zone, x, y) to the new coordinates of the set piece. Levels, items and quests carry over, as promised.
+<li><strong>Respawn rule</strong> (&quot;only after the area was empty&quot;) becomes per chunk.
+</ol>
+<h2>7. The Genie (creator builds)</h2>
+<p><strong>Flow:</strong></p>
+<ol>
+<li>The owner stands on their parcel, opens the Genie, writes a prompt (up to 500 characters) and pays GOLD. The payment is held by the arcade&#x27;s escrow or an inscription request (Arcade&#x27;s <code>/r/referee/attest</code> flow, now live).
+<li>The <strong>Genie service</strong> on the operator&#x27;s machine (the local model, the same box as the local agent) takes requests one at a time and builds: - <strong>Inputs:</strong> the prompt, the parcel&#x27;s seeded land, the neighbours&#x27; builds (their border strips, roads and biome), the style guide and the parts library. - <strong>Output:</strong> a <strong>build recipe</strong> (JSON, schema-constrained), plus any new parts in the existing parts language.
+<li><strong>Automatic checks</strong>, all of which must pass: - schema, plus every part through the models validator; - budgets: parts count, triangles, bytes ≤ 20 KB; - the game&#x27;s palette; - the <strong>border margin</strong> (16 m) left as seeded except at road ports, and roads meeting the neighbours&#x27; ports; - walkable: every port is reachable and no area is sealed; - a <strong>model judge</strong> comparing headless screenshots against the neighbours and the style references.
+<li>A passing build is inscribed by @ashvale, with its JSON beside it so the game can find it (the registry lesson). A failing build is retried a few times, and then the GOLD is refunded.
+<li>the operator can roll back any parcel: a new build that points to an older one.
+</ol>
+<p><strong>Build recipe (one per parcel version):</strong></p>
+<pre>{&quot;ashvale&quot;:&quot;build&quot;,&quot;v&quot;:1,&quot;grid&quot;:&quot;&lt;id&gt;&quot;,&quot;cell&quot;:91234,&quot;parcel&quot;:&quot;&lt;parcel NFT id&gt;&quot;,&quot;seq&quot;:3,&quot;base&quot;:&quot;&lt;previous build id&gt;&quot;,
+ &quot;worldgen&quot;:&quot;&lt;module id pinned&gt;&quot;,&quot;request&quot;:&quot;&lt;request id&gt;&quot;,
+ &quot;terrain&quot;:[{&quot;op&quot;:&quot;flatten&quot;,&quot;at&quot;:[x,y],&quot;r&quot;:30,&quot;h&quot;:2.0},{&quot;op&quot;:&quot;pond&quot;,&quot;at&quot;:[x,y],&quot;r&quot;:12}],
+ &quot;structures&quot;:[{&quot;part&quot;:&quot;&lt;part id&gt;&quot;,&quot;at&quot;:[x,y],&quot;rot&quot;:90,&quot;s&quot;:1}],
+ &quot;paths&quot;:[{&quot;pts&quot;:[[x,y],[x,y]],&quot;kind&quot;:&quot;dirt&quot;}],
+ &quot;props&quot;:[{&quot;part&quot;:&quot;tree_oak&quot;,&quot;scatter&quot;:{&quot;area&quot;:[[x,y],[x,y]],&quot;n&quot;:40}}],
+ &quot;npcs&quot;:[{&quot;role&quot;:&quot;shopkeeper&quot;,&quot;shop&quot;:&quot;general&quot;}],
+ &quot;parts&quot;:[&quot;&lt;new part ids inscribed with this build&gt;&quot;]}</pre>
+<ul>
+<li><strong>Current build of a cell:</strong> the newest valid @ashvale build for that cell (highest <code>seq</code> whose <code>base</code> chain is intact).
+<li><strong>Aesthetics are enforced by data:</strong> new parts must use the same shape grammar and palette, and NPC roles, shops and monsters come only from @ashvale&#x27;s lists. A build can change how a parcel looks and what&#x27;s on it, never the game&#x27;s rules.
+<li>The Genie never touches the grid or other parcels, and the planet is never rebuilt.
+</ul>
+<h2>8. Scaling and evolution</h2>
+<ul>
+<li><strong>Layers, never rebuilds:</strong> - L0 grid (immutable) - L1 worldgen (a versioned module; each build pins the version it was made on) - L2 set pieces and builds - L3 live state (owners, game state) - A new worldgen version only changes land that has no build, and is released like any module.
+<li><strong>Finer detail:</strong> inside a parcel, as tiles and sub-lots (<code>cell·64 + lot</code>), never by changing n.
+<li><strong>New layers:</strong> - Interiors and dungeons are instanced spaces keyed by (cell, layer). - A second world is a new grid spec with its own id.
+<li><strong>Many owners:</strong> ownership lives on chain. The game caches only what&#x27;s near, and the globe view pages claimed parcels.
+<li><strong>Many builds:</strong> each one is ≤ 20 KB, fetched only when its chunks load. @ashvale&#x27;s daily inscription budget limits Genie throughput (about 10-12 builds a day per account), so the queue is first come, first served. Extra builders are possible later as additional approved @ashvale-controlled accounts.
+</ul>
+<h2>9. Asks for Arcade (all game-agnostic)</h2>
+<ol>
+<li><strong>Query inscriptions by JSON field:</strong> <code>/r/inscriptions?creator=X&amp;json.k=v&amp;json.cell=N</code>, with paging and an optional &quot;first per key / newest per key&quot;. Every game with lots of data inscriptions needs this.
+<li><strong>Multi-room membership</strong> in the realtime mesh (listen to neighbour rooms, keep the per-player send budget).
+<li>Optional: a compact <strong>owners-of-collection</strong> endpoint (id to owner pairs, paged and compressed), for map views.
+</ol>
+<h2>10. Phases</h2>
+<ul>
+<li><strong>P0, globe foundation (no gameplay change):</strong> - <code>globe</code> module and tests; - the grid spec inscription; - <code>globeview</code>, a private playtest page: spin the planet, tap a cell, see its class and info.
+<li><strong>P1, parcel NFTs:</strong> - claim service, parcel picture renderer, validity rules; - the Arcade query ask; - owner tints on the globe; - the first claims done by hand.
+<li><strong>P2, base region:</strong> - <code>worldgen</code> in the game&#x27;s style; - the core window and chunk refactor; - village and Whisperwood placed as set pieces; - save migration; - the full suites and the operator&#x27;s playtest before release.
+<li><strong>P3, Genie v1:</strong> - request flow and GOLD escrow; - the build recipe; - the automatic checks and judge; - first creator parcels go live.
+<li><strong>P4, scale:</strong> Arcade asks 2 and 3, more set pieces, travel aids, worldgen v2.
+</ul>
+<p>The local agent will be running this after 2026-10-15, so each phase ships with its own tests, docs and a handoff</p>
+<p>note.</p>
+<h2>Still to decide (the operator)</h2>
+<ul>
+<li>Parcel price, and in what (coins or GOLD).
+<li>Genie price per build in GOLD, and how many revisions a payment covers.
+<li>Whether only the owner can request a Genie build (assumed yes).
+</ul>
+</main>

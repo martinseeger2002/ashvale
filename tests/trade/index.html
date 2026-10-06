@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="background:#333">
+<script>
+/* mock of Arcade's arcade.swap (contract from claude/trade @730d365) */
+const calls = []; let tradeFn = null;
+window.arcade = { swap: {
+  items: async () => ({ address: 'nMINE', inscriptions: [
+     { creator: 'nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c', id: 'a'.repeat(64), number: 760, contenttype: 'image/png', json: { name: 'Steel platebody #4' }, held: true },
+     { creator: 'nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c', id: 'b'.repeat(64), number: 761, contenttype: 'image/png', json: { name: 'Iron sword #9' }, held: true },
+     { creator: 'nSOMEONEELSE', id: 'e'.repeat(64), number: 900, contenttype: 'image/png', json: { name: 'Fake sword' }, held: true } ],
+    balances: [{ propertyid: 26, balance: '500' }] }),
+  trade: async (o) => { calls.push(['trade', o]); return { id: 't1' }; },
+  answer: async (id, ok, why) => { calls.push(['answer', id, ok, why || null]); },
+  cancel: async (id) => calls.push(['cancel', id]),
+  onTrade: fn => { tradeFn = fn; } } };
+window.fetch = async (u) => ({ json: async () => u.includes('nTHEM') ? [{ creator: 'nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c', id: 'c'.repeat(64), number: 800, contenttype: 'image/png', json: { name: 'Mithril sword #2' }, held: true }] : [] });
+</script>
+<script src="../../src/trade.js"></script>
+<script>
+const toasts = [];
+const T = ASHTrade.create({ toast: (t, k) => toasts.push([t, k]), nameOf: id => id === 'p2' ? 'Bob (@bob)' : id });
+window.__t = { T, calls, toasts, fire: t => tradeFn(t) };
+</script>

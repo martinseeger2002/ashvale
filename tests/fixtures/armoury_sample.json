@@ -1,0 +1,460 @@
+{
+ "source": "https://app.dogecoinarcade.com/r/inscriptions/nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c (2026-10-01)",
+ "inscriptions": [
+  {
+   "id": "2ad8131e4c52a133db15ac211fcfd26fd8b833d728d1761983ff8d44a7349bd4",
+   "number": 748,
+   "creator": "nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c",
+   "owner": "nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c",
+   "creatortag": "ashvale",
+   "ownertag": "ashvale",
+   "block": 1517940,
+   "contenttype": "image/png",
+   "length": 583,
+   "sha256": "222af047086bac65d2a0eb39686223e0091f69c7a3d51a1d9b6eaee05dac3bc5",
+   "transactions": 1,
+   "held": true,
+   "json": {
+    "name": "Starweave staff #3",
+    "description": "ASHVALE Armoury: Starweave staff, tier 5 staff (needs magic 40). Won in the valley of Ashvale.",
+    "edition": 462,
+    "collection": "ASHVALE Armoury",
+    "attributes": [
+     {
+      "trait_type": "Key",
+      "value": "staff_t5"
+     },
+     {
+      "trait_type": "Slot",
+      "value": "staff"
+     },
+     {
+      "trait_type": "Tier",
+      "value": "5"
+     },
+     {
+      "trait_type": "Req",
+      "value": "magic 40"
+     },
+     {
+      "trait_type": "Attack",
+      "value": "0"
+     },
+     {
+      "trait_type": "Strength",
+      "value": "0"
+     },
+     {
+      "trait_type": "Defence",
+      "value": "0"
+     },
+     {
+      "trait_type": "Ranged",
+      "value": "0"
+     },
+     {
+      "trait_type": "Magic",
+      "value": "44"
+     },
+     {
+      "trait_type": "Copy",
+      "value": "3 of 3"
+     }
+    ]
+   },
+   "rawjson": "{\"name\":\"Starweave staff #3\",\"description\":\"ASHVALE Armoury: Starweave staff, tier 5 staff (needs magic 40). Won in the valley of Ashvale.\",\"edition\":462,\"collection\":\"ASHVALE Armoury\",\"attributes\":[{\"trait_type\":\"Key\",\"value\":\"staff_t5\"},{\"trait_type\":\"Slot\",\"value\":\"staff\"},{\"trait_type\":\"Tier\",\"value\":\"5\"},{\"trait_type\":\"Req\",\"value\":\"magic 40\"},{\"trait_type\":\"Attack\",\"value\":\"0\"},{\"trait_type\":\"Strength\",\"value\":\"0\"},{\"trait_type\":\"Defence\",\"value\":\"0\"},{\"trait_type\":\"Ranged\",\"value\":\"0\"},{\"trait_type\":\"Magic\",\"value\":\"44\"},{\"trait_type\":\"Copy\",\"value\":\"3 of 3\"}]}",
+   "collection": "ASHVALE Armoury",
+   "edition": 462
+  },
+  {
+   "id": "67a6f09c52e19b026d8f286424369465d80875847f2007908e57a087f1c97845",
+   "number": 745,
+   "creator": "nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c",
+   "owner": "nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c",
+   "creatortag": "ashvale",
+   "ownertag": "ashvale",
+   "block": 1517940,
+   "contenttype": "image/png",
+   "length": 607,
+   "sha256": "c3712c37bd2ac84c2305820e495f33e7c7177389175e499f15a13fe67454b456",
+   "transactions": 1,
+   "held": true,
+   "json": {
+    "name": "Elder shortbow #3",
+    "description": "ASHVALE Armoury: Elder shortbow, tier 5 bow (needs ranged 40). Won in the valley of Ashvale.",
+    "edition": 459,
+    "collection": "ASHVALE Armoury",
+    "attributes": [
+     {
+      "trait_type": "Key",
+      "value": "bow_t5"
+     },
+     {
+      "trait_type": "Slot",
+      "value": "bow"
+     },
+     {
+      "trait_type": "Tier",
+      "value": "5"
+     },
+     {
+      "trait_type": "Req",
+      "value": "ranged 40"
+     },
+     {
+      "trait_type": "Attack",
+      "value": "0"
+     },
+     {
+      "trait_type": "Strength",
+      "value": "0"
+     },
+     {
+      "trait_type": "Defence",
+      "value": "0"
+     },
+     {
+      "trait_type": "Ranged",
+      "value": "44"
+     },
+     {
+      "trait_type": "Magic",
+      "value": "0"
+     },
+     {
+      "trait_type": "Copy",
+      "value": "3 of 3"
+     }
+    ]
+   },
+   "rawjson": "{\"name\":\"Elder shortbow #3\",\"description\":\"ASHVALE Armoury: Elder shortbow, tier 5 bow (needs ranged 40). Won in the valley of Ashvale.\",\"edition\":459,\"collection\":\"ASHVALE Armoury\",\"attributes\":[{\"trait_type\":\"Key\",\"value\":\"bow_t5\"},{\"trait_type\":\"Slot\",\"value\":\"bow\"},{\"trait_type\":\"Tier\",\"value\":\"5\"},{\"trait_type\":\"Req\",\"value\":\"ranged 40\"},{\"trait_type\":\"Attack\",\"value\":\"0\"},{\"trait_type\":\"Strength\",\"value\":\"0\"},{\"trait_type\":\"Defence\",\"value\":\"0\"},{\"trait_type\":\"Ranged\",\"value\":\"44\"},{\"trait_type\":\"Magic\",\"value\":\"0\"},{\"trait_type\":\"Copy\",\"value\":\"3 of 3\"}]}",
+   "collection": "ASHVALE Armoury",
+   "edition": 459
+  },
+  {
+   "id": "24844ae2e2c964b459610f8b15187f70f711e752b83a563caf54cab4aaa446ae",
+   "number": 740,
+   "creator": "nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c",
+   "owner": "nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c",
+   "creatortag": "ashvale",
+   "ownertag": "ashvale",
+   "block": 1517940,
+   "contenttype": "image/png",
+   "length": 602,
+   "sha256": "f7d858066613bbdc4ee2d2b3ed55cdf1b42732b5095e5d25100da92097edef87",
+   "transactions": 1,
+   "held": true,
+   "json": {
+    "name": "Adamant kiteshield #1",
+    "description": "ASHVALE Armoury: Adamant kiteshield, tier 5 shield (needs defence 40). Won in the valley of Ashvale.",
+    "edition": 454,
+    "collection": "ASHVALE Armoury",
+    "attributes": [
+     {
+      "trait_type": "Key",
+      "value": "shield_t5"
+     },
+     {
+      "trait_type": "Slot",
+      "value": "shield"
+     },
+     {
+      "trait_type": "Tier",
+      "value": "5"
+     },
+     {
+      "trait_type": "Req",
+      "value": "defence 40"
+     },
+     {
+      "trait_type": "Attack",
+      "value": "0"
+     },
+     {
+      "trait_type": "Strength",
+      "value": "0"
+     },
+     {
+      "trait_type": "Defence",
+      "value": "37"
+     },
+     {
+      "trait_type": "Ranged",
+      "value": "0"
+     },
+     {
+      "trait_type": "Magic",
+      "value": "0"
+     },
+     {
+      "trait_type": "Copy",
+      "value": "1 of 3"
+     }
+    ]
+   },
+   "rawjson": "{\"name\":\"Adamant kiteshield #1\",\"description\":\"ASHVALE Armoury: Adamant kiteshield, tier 5 shield (needs defence 40). Won in the valley of Ashvale.\",\"edition\":454,\"collection\":\"ASHVALE Armoury\",\"attributes\":[{\"trait_type\":\"Key\",\"value\":\"shield_t5\"},{\"trait_type\":\"Slot\",\"value\":\"shield\"},{\"trait_type\":\"Tier\",\"value\":\"5\"},{\"trait_type\":\"Req\",\"value\":\"defence 40\"},{\"trait_type\":\"Attack\",\"value\":\"0\"},{\"trait_type\":\"Strength\",\"value\":\"0\"},{\"trait_type\":\"Defence\",\"value\":\"37\"},{\"trait_type\":\"Ranged\",\"value\":\"0\"},{\"trait_type\":\"Magic\",\"value\":\"0\"},{\"trait_type\":\"Copy\",\"value\":\"1 of 3\"}]}",
+   "collection": "ASHVALE Armoury",
+   "edition": 454
+  },
+  {
+   "id": "acbc8f4586ccfb54af91a01858f17c9feda1a40b665c6174488e2963591512f6",
+   "number": 737,
+   "creator": "nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c",
+   "owner": "nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c",
+   "creatortag": "ashvale",
+   "ownertag": "ashvale",
+   "block": 1517939,
+   "contenttype": "image/png",
+   "length": 571,
+   "sha256": "8bbe94590c00f8cf39b08638fa5fdfd5792cd6cfdc04133e3545b670084f1fef",
+   "transactions": 1,
+   "held": true,
+   "json": {
+    "name": "Adamant sword #1",
+    "description": "ASHVALE Armoury: Adamant sword, tier 5 sword (needs attack 40). Won in the valley of Ashvale.",
+    "edition": 451,
+    "collection": "ASHVALE Armoury",
+    "attributes": [
+     {
+      "trait_type": "Key",
+      "value": "sword_t5"
+     },
+     {
+      "trait_type": "Slot",
+      "value": "sword"
+     },
+     {
+      "trait_type": "Tier",
+      "value": "5"
+     },
+     {
+      "trait_type": "Req",
+      "value": "attack 40"
+     },
+     {
+      "trait_type": "Attack",
+      "value": "34"
+     },
+     {
+      "trait_type": "Strength",
+      "value": "33"
+     },
+     {
+      "trait_type": "Defence",
+      "value": "0"
+     },
+     {
+      "trait_type": "Ranged",
+      "value": "0"
+     },
+     {
+      "trait_type": "Magic",
+      "value": "0"
+     },
+     {
+      "trait_type": "Copy",
+      "value": "1 of 3"
+     }
+    ]
+   },
+   "rawjson": "{\"name\":\"Adamant sword #1\",\"description\":\"ASHVALE Armoury: Adamant sword, tier 5 sword (needs attack 40). Won in the valley of Ashvale.\",\"edition\":451,\"collection\":\"ASHVALE Armoury\",\"attributes\":[{\"trait_type\":\"Key\",\"value\":\"sword_t5\"},{\"trait_type\":\"Slot\",\"value\":\"sword\"},{\"trait_type\":\"Tier\",\"value\":\"5\"},{\"trait_type\":\"Req\",\"value\":\"attack 40\"},{\"trait_type\":\"Attack\",\"value\":\"34\"},{\"trait_type\":\"Strength\",\"value\":\"33\"},{\"trait_type\":\"Defence\",\"value\":\"0\"},{\"trait_type\":\"Ranged\",\"value\":\"0\"},{\"trait_type\":\"Magic\",\"value\":\"0\"},{\"trait_type\":\"Copy\",\"value\":\"1 of 3\"}]}",
+   "collection": "ASHVALE Armoury",
+   "edition": 451
+  },
+  {
+   "id": "ec41718da6c27f6bb6cdbc957c7a157e549153fe3a90d25afdbaf726ae534c08",
+   "number": 734,
+   "creator": "nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c",
+   "owner": "nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c",
+   "creatortag": "ashvale",
+   "ownertag": "ashvale",
+   "block": 1517936,
+   "contenttype": "image/png",
+   "length": 804,
+   "sha256": "c86e3c5096ebef83bf029d36d98a8f669a2a83ecb65c33dedb778ca8f4192476",
+   "transactions": 1,
+   "held": true,
+   "json": {
+    "name": "Adamant platelegs #1",
+    "description": "ASHVALE Armoury: Adamant platelegs, tier 5 legs (needs defence 40). Won in the valley of Ashvale.",
+    "edition": 448,
+    "collection": "ASHVALE Armoury",
+    "attributes": [
+     {
+      "trait_type": "Key",
+      "value": "legs_t5"
+     },
+     {
+      "trait_type": "Slot",
+      "value": "legs"
+     },
+     {
+      "trait_type": "Tier",
+      "value": "5"
+     },
+     {
+      "trait_type": "Req",
+      "value": "defence 40"
+     },
+     {
+      "trait_type": "Attack",
+      "value": "0"
+     },
+     {
+      "trait_type": "Strength",
+      "value": "0"
+     },
+     {
+      "trait_type": "Defence",
+      "value": "37"
+     },
+     {
+      "trait_type": "Ranged",
+      "value": "0"
+     },
+     {
+      "trait_type": "Magic",
+      "value": "0"
+     },
+     {
+      "trait_type": "Copy",
+      "value": "1 of 3"
+     }
+    ]
+   },
+   "rawjson": "{\"name\":\"Adamant platelegs #1\",\"description\":\"ASHVALE Armoury: Adamant platelegs, tier 5 legs (needs defence 40). Won in the valley of Ashvale.\",\"edition\":448,\"collection\":\"ASHVALE Armoury\",\"attributes\":[{\"trait_type\":\"Key\",\"value\":\"legs_t5\"},{\"trait_type\":\"Slot\",\"value\":\"legs\"},{\"trait_type\":\"Tier\",\"value\":\"5\"},{\"trait_type\":\"Req\",\"value\":\"defence 40\"},{\"trait_type\":\"Attack\",\"value\":\"0\"},{\"trait_type\":\"Strength\",\"value\":\"0\"},{\"trait_type\":\"Defence\",\"value\":\"37\"},{\"trait_type\":\"Ranged\",\"value\":\"0\"},{\"trait_type\":\"Magic\",\"value\":\"0\"},{\"trait_type\":\"Copy\",\"value\":\"1 of 3\"}]}",
+   "collection": "ASHVALE Armoury",
+   "edition": 448
+  },
+  {
+   "id": "5b38f7cf3ae6ec64ca97480073995286d332121baafa0253ef71ccc1605bf1f7",
+   "number": 731,
+   "creator": "nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c",
+   "owner": "nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c",
+   "creatortag": "ashvale",
+   "ownertag": "ashvale",
+   "block": 1517936,
+   "contenttype": "image/png",
+   "length": 1014,
+   "sha256": "e9a5aa586da9662271f63694b8227747d9dafec97b61e9b69340fd317d9a691d",
+   "transactions": 1,
+   "held": true,
+   "json": {
+    "name": "Adamant platebody #1",
+    "description": "ASHVALE Armoury: Adamant platebody, tier 5 body (needs defence 40). Won in the valley of Ashvale.",
+    "edition": 445,
+    "collection": "ASHVALE Armoury",
+    "attributes": [
+     {
+      "trait_type": "Key",
+      "value": "body_t5"
+     },
+     {
+      "trait_type": "Slot",
+      "value": "body"
+     },
+     {
+      "trait_type": "Tier",
+      "value": "5"
+     },
+     {
+      "trait_type": "Req",
+      "value": "defence 40"
+     },
+     {
+      "trait_type": "Attack",
+      "value": "0"
+     },
+     {
+      "trait_type": "Strength",
+      "value": "0"
+     },
+     {
+      "trait_type": "Defence",
+      "value": "52"
+     },
+     {
+      "trait_type": "Ranged",
+      "value": "0"
+     },
+     {
+      "trait_type": "Magic",
+      "value": "0"
+     },
+     {
+      "trait_type": "Copy",
+      "value": "1 of 3"
+     }
+    ]
+   },
+   "rawjson": "{\"name\":\"Adamant platebody #1\",\"description\":\"ASHVALE Armoury: Adamant platebody, tier 5 body (needs defence 40). Won in the valley of Ashvale.\",\"edition\":445,\"collection\":\"ASHVALE Armoury\",\"attributes\":[{\"trait_type\":\"Key\",\"value\":\"body_t5\"},{\"trait_type\":\"Slot\",\"value\":\"body\"},{\"trait_type\":\"Tier\",\"value\":\"5\"},{\"trait_type\":\"Req\",\"value\":\"defence 40\"},{\"trait_type\":\"Attack\",\"value\":\"0\"},{\"trait_type\":\"Strength\",\"value\":\"0\"},{\"trait_type\":\"Defence\",\"value\":\"52\"},{\"trait_type\":\"Ranged\",\"value\":\"0\"},{\"trait_type\":\"Magic\",\"value\":\"0\"},{\"trait_type\":\"Copy\",\"value\":\"1 of 3\"}]}",
+   "collection": "ASHVALE Armoury",
+   "edition": 445
+  },
+  {
+   "id": "9478587f99f89c98f07594b8e0621d2581a4b980261b93aaaa76adfe5cab82fc",
+   "number": 728,
+   "creator": "nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c",
+   "owner": "nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c",
+   "creatortag": "ashvale",
+   "ownertag": "ashvale",
+   "block": 1517936,
+   "contenttype": "image/png",
+   "length": 788,
+   "sha256": "e3d31c4ffa4c8d68e13b5b50f057115e0e40fe595d3b6e437b8f46dad103194d",
+   "transactions": 1,
+   "held": true,
+   "json": {
+    "name": "Adamant helm #1",
+    "description": "ASHVALE Armoury: Adamant helm, tier 5 helmet (needs defence 40). Won in the valley of Ashvale.",
+    "edition": 442,
+    "collection": "ASHVALE Armoury",
+    "attributes": [
+     {
+      "trait_type": "Key",
+      "value": "helmet_t5"
+     },
+     {
+      "trait_type": "Slot",
+      "value": "helmet"
+     },
+     {
+      "trait_type": "Tier",
+      "value": "5"
+     },
+     {
+      "trait_type": "Req",
+      "value": "defence 40"
+     },
+     {
+      "trait_type": "Attack",
+      "value": "0"
+     },
+     {
+      "trait_type": "Strength",
+      "value": "0"
+     },
+     {
+      "trait_type": "Defence",
+      "value": "21"
+     },
+     {
+      "trait_type": "Ranged",
+      "value": "0"
+     },
+     {
+      "trait_type": "Magic",
+      "value": "0"
+     },
+     {
+      "trait_type": "Copy",
+      "value": "1 of 3"
+     }
+    ]
+   },
+   "rawjson": "{\"name\":\"Adamant helm #1\",\"description\":\"ASHVALE Armoury: Adamant helm, tier 5 helmet (needs defence 40). Won in the valley of Ashvale.\",\"edition\":442,\"collection\":\"ASHVALE Armoury\",\"attributes\":[{\"trait_type\":\"Key\",\"value\":\"helmet_t5\"},{\"trait_type\":\"Slot\",\"value\":\"helmet\"},{\"trait_type\":\"Tier\",\"value\":\"5\"},{\"trait_type\":\"Req\",\"value\":\"defence 40\"},{\"trait_type\":\"Attack\",\"value\":\"0\"},{\"trait_type\":\"Strength\",\"value\":\"0\"},{\"trait_type\":\"Defence\",\"value\":\"21\"},{\"trait_type\":\"Ranged\",\"value\":\"0\"},{\"trait_type\":\"Magic\",\"value\":\"0\"},{\"trait_type\":\"Copy\",\"value\":\"1 of 3\"}]}",
+   "collection": "ASHVALE Armoury",
+   "edition": 442
+  }
+ ]
+}

@@ -1,0 +1,1 @@
+{"ashvale3d":"module","name":"part.char.portal","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"char.portal","kind":"char","role":"npc","name":"Town portal","body":"portal","portal":{"size":1.0,"stone":"#8a8780","glow":"#8fd8ff"}}}

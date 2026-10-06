@@ -1,0 +1,67 @@
+"""the chest ledger, played through the 2026-10-04 bugs: duplicate, lost on store, Gold stuck"""
+import json
+from playwright.sync_api import sync_playwright
+URL = __import__('os').environ.get('ASH_URL', 'http://127.0.0.1:8738/dist/ashvale3d.html')
+ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']
+fails = 0
+def ok(c, m):
+    global fails
+    print(('ok   ' if c else 'FAIL ') + m, flush=True); fails += 0 if c else 1
+with sync_playwright() as p:
+    b = p.chromium.launch(args=ARGS); pg = b.new_page()
+    pg.goto(URL + '?fresh&nocreator&seed=ledger', wait_until='domcontentloaded', timeout=120000); pg.wait_for_timeout(9000)
+    E = lambda js: pg.evaluate(js)
+    E("localStorage.removeItem('ashvale3d.chest.nLEDGER')")
+    E("(() => { for (let i = 0; i < 28; i++) ASH.me.inv[i] = null; ASH.me.eq = {}; ASH.give('bread', 5); ASH.give('pickaxe', 1); })()")
+    E("(() => { const W = ASH.walletState(); W.address = 'nLEDGER'; W.status = 'ready'; W.data = { address: 'nLEDGER', gear: {}, tokens: {}, gold: 100, raw: {}, pieces: [] }; })()")
+    S = lambda: E("ASH.chest.state()")
+    s = S(); ok(s['loose'].get('bread') == 5 and s['loose'].get('pickaxe') == 1, 'new loot is loose: %s' % json.dumps(s['loose']))
+    ok(s['chest'].get('coins') == 100, 'Gold in the wallet shows in the chest: %s' % s['chest'].get('coins'))
+    E("ASH.chest.take('coins', 10)"); ok(E("ASH.core.invCount(ASH.me, 'coins')") == 10 and S()['chest'].get('coins') == 90, 'take 10 Gold out of the chest')
+    E("ASH.chest.promise({bread: 5, pickaxe: 1})"); s = S()
+    ok(not s['loose'] and s['arriving'] == 6, 'after the Bank promises: nothing loose, 6 arriving (%s)' % json.dumps(s['loose']))
+    E("ASH.chest.store('pickaxe', 1)"); s = S(); ok(E("ASH.core.invCount(ASH.me, 'pickaxe')") == 0 and s['chest'].get('pickaxe') == 1, 'a pickaxe still on its way stores into the chest at once (the operator: no waiting)')
+    E("ASH.chest.take('pickaxe', 1)"); s = S(); ok(E("ASH.core.invCount(ASH.me, 'pickaxe')") == 1 and not s['chest'].get('pickaxe') and not s['loose'].get('pickaxe'), 'and comes back out, still on its way, never twice')
+    E("ASH.core.storeItem(ASH.pid || 'me', 'bread', 2)") if False else E("(() => { const i = ASH.me.inv.findIndex(q => q && q.id === 'bread'); ASH.me.inv[i] = null; const j = ASH.me.inv.findIndex(q => q && q.id === 'bread'); ASH.me.inv[j] = null; })()")
+    s = S(); ok(E("ASH.core.invCount(ASH.me, 'bread')") == 3 and not s['loose'].get('bread'), 'eat 2 bread while on its way: 3 left, none loose')
+    E("(() => { const D = ASH.walletState().data; D.tokens = { bread: 5 }; D.gear = { pickaxe: ['x1'] }; D.gold = 100; })()"); s = S()
+    ok(not s['chest'].get('bread') and not s['chest'].get('pickaxe'), 'delivery lands: no duplicate in the chest (chest %s)' % json.dumps(s['chest']))
+    ok(s['chest'].get('coins') == 90 and s['arriving'] == 0, 'Gold still 90 in the chest, nothing arriving (%s)' % s['arriving'])
+    E("ASH.chest.store('pickaxe', 1)"); s = S(); ok(E("ASH.core.invCount(ASH.me, 'pickaxe')") == 0 and s['chest'].get('pickaxe') == 1, 'a delivered pickaxe stores into the chest')
+    E("ASH.chest.take('pickaxe', 1)"); E("ASH.chest.take('pickaxe', 1)")
+    ok(E("ASH.core.invCount(ASH.me, 'pickaxe')") == 1, 'taking twice gives one pickaxe (one NFT)')
+    pg.click('[title=Wallet], .tabs [data-tab=wallet]', timeout=2000) if False else None
+    E("ASH.core.cmd ? 0 : 0")
+    n0 = E("ASH.core.invCount(ASH.me, 'pickaxe')"); E("(() => { const api = ASH; })()")
+    E("ASH.walletState().data.gear.pickaxe = ['x1']")
+    ok(E("!document.querySelector('.ash [data-tab=wallet], .ash .tab[data-t=wallet]')"), 'there is no Wallet tab (2026-10-05)')
+    E("ASH.core.invCount(ASH.me, 'coins')")
+    E("(() => { const i = ASH.me.inv.findIndex(q => q && q.id === 'pickaxe'); ASH.me.inv[i] = null; })()"); s = S()
+    ok(not s['chest'].get('pickaxe') and not s['loose'].get('pickaxe'), 'a sold/dropped pickaxe is spent: not back in the chest')
+    E("ASH.walletState().data.gear = {}"); s = S(); ok(not s['chest'].get('pickaxe'), 'once it goes back to @ashvale the ledger settles (chest %s)' % json.dumps(s['chest']))
+    # death: the bag and worn gear drop, the chest is safe; picking your own pile back up never asks for a new deposit
+    E("ASH.walletState().data.gear = { pickaxe: ['x2'], sword_t1: ['s1'] }"); E("ASH.chest.take('pickaxe', 1)"); E("ASH.chest.take('sword_t1', 1)")
+    s0 = S(); chest_gold = s0['chest'].get('coins')
+    E("(() => { for (let i = 0; i < 28; i++) ASH.me.inv[i] = null; ASH.me.eq = {}; })()"); s = S()
+    ok(s['chest'].get('coins') == chest_gold and not s['chest'].get('pickaxe') and not s['chest'].get('sword_t1'), 'death: the chest keeps its Gold (%s) and nothing dropped reappears in it' % s['chest'].get('coins'))
+    E("ASH.give('pickaxe', 1); ASH.give('sword_t1', 1); ASH.give('coins', 10)"); s = S()
+    ok(not s['loose'], 'picking your own pile back up: nothing to deposit again (%s)' % json.dumps(s['loose']))
+    ok(s['chest'].get('coins') == chest_gold and not s['chest'].get('pickaxe'), 'and the chest is unchanged (%s)' % json.dumps(s['chest']))
+    # brand new (not yet deposited) straight into the chest (2026-10-05: "before they have settled on chain")
+    E("(() => { ASH.give('oak_logs', 3); })()"); s = S()
+    ok(s['loose'].get('oak_logs') == 3, 'three new oak logs, not in the wallet yet')
+    E("ASH.chest.store('oak_logs', 3)"); s = S()
+    ok(E("ASH.core.invCount(ASH.me, 'oak_logs')") == 0 and s['chest'].get('oak_logs') == 3 and s['loose'].get('oak_logs') == 3, 'they go into the chest at once, and still go to the Bank (%s / %s)' % (s['chest'].get('oak_logs'), s['loose'].get('oak_logs')))
+    E("(() => { const L = JSON.parse(localStorage.getItem('ashvale3d.chest.nLEDGER')); })()")
+    E("(() => { ASH.chest.paidForTest && ASH.chest.paidForTest({ oak_logs: 3 }); })()"); s = S()
+    ok(s['chest'].get('oak_logs') == 3 and not s['loose'].get('oak_logs'), 'the Bank pays: still 3 in the chest, nothing left to deposit (%s)' % json.dumps(s['chest']))
+    E("(() => { const D = ASH.walletState().data; D.tokens.oak_logs = 3; D.at = Date.now(); })()"); s = S()
+    ok(s['chest'].get('oak_logs') == 3 and not s['loose'].get('oak_logs'), 'they land on chain: still exactly 3 in the chest (%s)' % json.dumps(s['chest']))
+    # traded or sent away on the arcade: the item leaves the bag, but only when two wallet reads 20 s apart agree
+    E("(() => { const D = ASH.walletState().data; D.gear = { sword_t1: ['s1'] }; D.at = Date.now(); })()"); S()
+    ok(E("ASH.core.invCount(ASH.me, 'sword_t1')") == 1, 'the sword is carried and in the wallet')
+    E("(() => { const D = ASH.walletState().data; D.gear = {}; D.at = Date.now(); })()"); S()
+    ok(E("ASH.core.invCount(ASH.me, 'sword_t1')") == 1, 'one wallet read without it: the sword stays (a bad read never removes anything)')
+    E("(() => { const D = ASH.walletState().data; D.gear = {}; D.at = Date.now() + 30000; })()"); s = S()
+    ok(E("ASH.core.invCount(ASH.me, 'sword_t1')") == 0 and not s['loose'].get('sword_t1'), 'a second read agrees: it left your bag, and nothing is deposited again')
+    print('FAILED: %d' % fails if fails else 'ALL OK'); b.close()

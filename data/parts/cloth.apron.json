@@ -1,0 +1,1 @@
+{"ashvale3d":"part","api":1,"v":1,"id":"cloth.apron","kind":"cloth","slot":"apron","style":"apron","shapes":[{"t":"box","s":["0.3*W",0.66,0.02],"c":"$c","p":[0,0.12,0.125],"j":"torso"}]}

@@ -1,0 +1,1 @@
+{"ashvale3d":"module","name":"part.char.goblin","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"char.goblin","kind":"char","role":"monster","name":"Goblin","body":"humanoid","build":"small","gear":{"weapon":"sword_t1"},"outfit":{"skin":"#6e9a3e","hair":"bald","shirt":null,"pants":{"style":"shorts","color":"#6b4a2b"},"boots":"#4a3420","belt":"#4a3420"}}}
