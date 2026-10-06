@@ -11,7 +11,7 @@
   },
   "netretry": {
    "id": null,
-   "v": "1",
+   "v": "2",
    "api": 1,
    "kind": "js"
   },
