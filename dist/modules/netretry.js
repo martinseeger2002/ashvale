@@ -44,9 +44,12 @@
     early_fetch.__ashRetry = true; early_fetch.__ashEarly = true; G.fetch = early_fetch;
     const t0 = Date.now();
     (async () => {
-      const L = await (await retrying('/r/inscriptions?creator=' + CREATOR + '&limit=300')).json();
-      let reg = null;
-      for (const q of L || []) { const j = q && q.json; if (j && j.ashvale3d === 'registry' && (j.loader || 1) <= (G.ASH3D.LOADER || 1) && (!reg || j.version > reg.version)) reg = j; }
+      /* the list is newest first and a release's registry is its last inscription, so the newest registry is nearly always
+         in the first few: ask for 10 (~1/20 of the bytes of the launcher's 300, which on slow 4G held the downloads back
+         ~1.5 s), and only if none of them is a registry ask for the 300 the launcher saw */
+      const pick = (L) => { let reg = null; for (const q of L || []) { const j = q && q.json; if (j && j.ashvale3d === 'registry' && (j.loader || 1) <= (G.ASH3D.LOADER || 1) && (!reg || j.version > reg.version)) reg = j; } return reg; };
+      let reg = pick(await (await retrying('/r/inscriptions?creator=' + CREATOR + '&limit=10')).json());
+      if (!reg) reg = pick(await (await retrying('/r/inscriptions?creator=' + CREATOR + '&limit=300')).json());
       if (!reg || !reg.modules) return;
       const defs = G.ASH3D._defs, todo = [];
       for (const k in reg.modules) {   /* the loader's own flatten(): data, zones and parts are groups */
@@ -70,5 +73,5 @@
       stats.ms = Date.now() - t0;
     })().catch(e => { console.warn('ASHVALE: parallel downloads off (' + (e && e.message || e) + '), loading one by one'); });
   }
-  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('netretry', { api: API, v: 2 }, () => ({ on: !!(G.fetch && G.fetch.__ashRetry), early: stats }));
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('netretry', { api: API, v: 3 }, () => ({ on: !!(G.fetch && G.fetch.__ashRetry), early: stats }));
 })(typeof globalThis !== 'undefined' ? globalThis : this);
