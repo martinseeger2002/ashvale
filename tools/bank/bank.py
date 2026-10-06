@@ -47,7 +47,8 @@ def db():
             txid text, piece text, err text, at real, done_at real, req text);
         create table if not exists given(piece text primary key, addr text, item text, at real);
         create table if not exists felled(x integer, y integer, by text, at real, primary key(x, y));   -- trees felled for good, shared (2026-10-05)
-        create table if not exists drops(n integer primary key, addr text, item text, piece text, x integer, y integer, at real, taken_by text, taken_at real);""")
+        create table if not exists drops(n integer primary key, addr text, item text, piece text, x integer, y integer, at real, taken_by text, taken_at real);
+        create table if not exists ghosts(n integer primary key, addr text, item text, units integer, x integer, y integer, at real, left integer);   -- picked-up copies of drops somebody else already took (2026-10-06)""")
     for col in ('want', 'coll'):   # want: the exact piece (a pickup of a drop); coll: a quest reward's own collection
         try: c.execute('alter table jobs add column %s text' % col)
         except sqlite3.OperationalError: pass
@@ -88,6 +89,16 @@ def handle_took(c, addr, msg):
     if r:
         c.execute('update drops set taken_by=?, taken_at=?, paid=? where n=?', (addr, time.time(), 1 if r['addr'] == addr else 0, r['n'])); c.commit()
         log('TOOK', addr, k, x, y, 'drop', r['n'], '(its own)' if r['addr'] == addr else '')
+        return None
+    # nothing untaken there, but a drop of it there was already taken by somebody: this was a GHOST (a copy an outdated game
+    # kept showing - 2026-10-06 picked up the same 200 Gold again and again). Its units are not paid out on the next deposit.
+    g = c.execute('select n, units from drops where item=? and live=1 and taken_by is not null and taken_by<>? and abs(x-?)<=2 and abs(y-?)<=2 and taken_at>? order by taken_at desc limit 1',
+                  (k, addr, x, y, time.time() - 86400)).fetchone()
+    if g:
+        try: u = max(1, min(int(msg.get('n') or 1), g['units'] or 1))
+        except (TypeError, ValueError): u = 1
+        c.execute('insert into ghosts(addr,item,units,x,y,at,left) values(?,?,?,?,?,?,?)', (addr, k, u, x, y, time.time(), u)); c.commit()
+        log('GHOST', addr, k, u, x, y, 'copy of drop', g['n'], '- not paid out')
     return None
 def handle_ground(c, addr, msg):
     """'ground?' {x0, y0, x1, y1}: the persisted drops lying in that rectangle, for the game to show (in chunks: a room message
@@ -98,6 +109,7 @@ def handle_ground(c, addr, msg):
     rows = [[r['n'], r['item'], r['units'] or 1, r['x'], r['y']] for r in
             c.execute('select n, item, units, x, y from drops where live=1 and taken_by is null and x between ? and ? and y between ? and ? order by n', (x0, x1, y0, y1))]
     box, q = [x0, y0, x1, y1], str(msg.get('q') or '')[:12]
+    log('GROUND?', addr, box, len(rows), 'live drops')
     chunks = [rows[i:i + 10] for i in range(0, len(rows), 10)] or [[]]
     return [{'t': 'ground', 'to': addr, 'q': q, 'box': box, 'i': i, 'of': len(chunks), 'items': ch} for i, ch in enumerate(chunks)]
 def claim_drop(c, addr, k, at):
@@ -182,6 +194,9 @@ def handle(c, addr, msg):
         except (TypeError, ValueError): claim = n
         want = n; base = claim - held.get(k, 0)
         n = min(n, max(0, base - owed.get(k, 0) - fresh.get(k, 0)))   # only what no NFT or token of yours stands for yet
+        for gr in c.execute('select n, left from ghosts where addr=? and item=? and left>0 order by n', (addr, k)).fetchall():   # ghost pickups are never paid
+            if n <= 0: break
+            cut = min(n, gr['left']); n -= cut; c.execute('update ghosts set left=left-? where n=?', (cut, gr['n'])); log('GHOST CUT', addr, k, cut)
         if base < want: absorb.append(k)   # the count itself is stale: the wallet's units stand for these (never because a delivery is merely on its way)
         if n <= 0: continue
         if k == 'coins':

@@ -1164,7 +1164,18 @@
       const HOLD = 90000;
       const holdOf = (L, k) => { const now = Date.now(); return (L.holds || []).filter(h => h.k === k && !h.taken && now - h.t < HOLD).reduce((a, h) => a + h.n, 0); };
       const pickHold = (L, k) => { const now = Date.now(); return (L.picks || []).filter(q => q.k === k && now - q.t < HOLD).reduce((a, q) => a + q.n, 0); };
+      /* persisted drops and the @ashvale Bank, whether or not this game's wallet view has loaded yet (2026-10-06: a pickup
+         made before it had was never reported, and the Bank kept showing - and would have paid again for - Gold already
+         taken): a pickup of anything persisted is reported at once; a drop of a persisted TOKEN (Gold...) is reported by
+         amount. A persisted NFT's drop needs its exact piece, so it stays with the wallet code below. */
+      function persistTell(e) {
+        if (!core.persists || e.x == null || !core.persists(e.id, e.n || 1)) return;
+        const tell = o => bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send(o); });
+        if (e.e === 'take' && e.p === PID) tell({ t: 'took', v: 1, id: e.id, n: e.n || 1, x: e.x, y: e.y });
+        else if ((e.e === 'drop' || e.e === 'xdrop') && (e.owner === PID || e.from === PID) && core.item(e.id) && core.item(e.id).stack) tell({ t: 'drop', v: 3, items: [[e.id, '', e.n || 1]], x: e.x, y: e.y });
+      }
       function chestEvent(e) {
+        persistTell(e);
         if (!walletState.data || !walletState.address) return;
         const L = ledgerFor(walletState.address), now = Date.now(); L.dropped = L.dropped || []; L.picks = L.picks || []; L.holds = L.holds || [];
         if (e.e === 'take' && e.p !== PID && e.x != null) {   /* someone else took one of your drops: it goes now */
@@ -1178,8 +1189,7 @@
           /* persisted (2026-10-06: Gold, stones, magical things, anything worth 100+ GOLD stay where they fell until
              somebody picks them up, held by the @ashvale Bank): the Bank is told what lies where, so every player sees it */
           const keep = core.persists && core.persists(e.id, e.n || 1), W = walletState.data, have = W.gear[e.id];
-          if (keep && (!have || !have.length)) { const n = e.n || 1; bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'drop', v: 3, items: [[e.id, '', n]], x: e.x, y: e.y }); }); return; }
-          if (!have || !have.length) return;   /* only NFTs have an identity; tokens are just amounts */
+          if (!have || !have.length) return;   /* only NFTs have an identity; tokens are just amounts (persisted ones: persistTell) */
           const out = Object.values(L.out || {}).flat().map(o => o.piece), held = new Set(L.dropped.filter(d => now - d.t < 7200000).map(d => d.pc).concat(out));
           const backed = Math.max(0, (L.bag[e.id] || 0) - carriedOf(e.id)), items = [];
           for (const pc of have) { if (items.length >= Math.min(e.n || 1, backed)) break; if (!held.has(pc)) { items.push([e.id, pc]); L.dropped.push({ k: e.id, pc, x: e.x, y: e.y, t: now }); } }
@@ -1187,7 +1197,6 @@
           L.dropped = L.dropped.filter(d => now - d.t < 7200000).slice(-100); ledgerSave();
           bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'drop', v: keep ? 3 : 2, items: keep ? items.map(it => [it[0], it[1], 1]) : items, x: e.x, y: e.y }); });
         } else if (e.e === 'take' && e.p === PID && e.x != null) {
-          if (core.persists && core.persists(e.id, e.n || 1)) bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'took', v: 1, id: e.id, n: e.n || 1, x: e.x, y: e.y }); });
           L.picks.push({ k: e.id, n: e.n || 1, x: e.x, y: e.y, t: now }); L.picks = L.picks.filter(q => now - q.t < 7200000).slice(-100); ledgerSave();
           L.holds = L.holds.filter(h => !(h.k === e.id && !h.taken && Math.abs(h.x - e.x) <= 2 && Math.abs(h.y - e.y) <= 2));   /* your own drop back in your bag: nothing to send */
           setTimeout(depositSoon, HOLD + 1000);
@@ -1276,6 +1285,16 @@
           bank.joining = null;
           if (!res || !res.online) { bank.note = 'The @ashvale Bank cannot be reached from here' + (res && res.why ? ' (' + res.why + ')' : '') + '.'; return null; }
           const R = res.room; bank.room = R;
+          /* a room the arcade has dropped us from answers every send with "not in that room any more" (seen 2026-10-06 after
+             a node restart): then every deposit, drop and question to the Bank failed in silence. A failed send leaves that
+             room (the SDK would hand the same dead one back), joins again and sends it once more */
+          const send0 = R.send.bind(R);
+          R.send = o => send0(o).then(ok => {
+            if (ok || bank.room !== R) return ok;
+            bank.room = null; try { R.leave(); } catch (e) { /* gone */ }
+            return bankRoom().then(R2 => R2 && R2 !== R ? R2.send(o) : false);
+          });
+          R.on('closed', () => { if (bank.room === R) bank.room = null; });
           R.on('message', ({ from, data }) => {
             if (data && data.t === 'felled' && from && from.address === DATA.assets.issuer && R.me && data.to === R.me.address) { core.setFelled(data.cells || []); return; }   /* trees others felled */
             if (data && data.t === 'ground' && from && from.address === DATA.assets.issuer && R.me && data.to === R.me.address) { groundHeard(data); return; }   /* persisted drops near me */
@@ -1602,7 +1621,7 @@
           case 'k': { const m = core.mobByUid(a[1]); if (!m) break; core.applyMobs([[m.uid, m.x, m.y, 0, 1]]); if (fromNet(a[2]) === PID) core.creditKill(PID, m.key); for (const pid of core.S.order) { const o = core.S.players[pid]; if (o.act && o.act.k === 'attack' && o.act.uid === m.uid) o.act = null; } handle({ e: 'die', mob: m.uid }, now); break; }
           case 's': core.applyMobs([[a[1], a[2], a[3], a[4], 0]]); break;
           case 'd': core.groundAdd(a[1], a[2], a[3], a[4], a[5], a[6] ? fromNet(a[6]) : null); break;
-          case 't': core.groundRemove(a[1]); if (fromNet(a[2]) === PID) core.grantItem(PID, a[3], a[4]); break;
+          case 't': core.groundRemove(a[1]); if (fromNet(a[2]) === PID) { core.grantItem(PID, a[3], a[4]); persistTell({ e: 'take', p: PID, id: a[3], n: a[4], x: a[5], y: a[6] }); } break;   /* the host gave it to us: tell the Bank too */
           case 'v': core.groundRemove(a[1]); break;
           case 'n': { const g = core.S.ground.find(q => q.uid === a[1]); if (g) g.n = a[2]; break; }
           case 'e': handle({ e: 'mobeat', mob: a[1] }, now); break;

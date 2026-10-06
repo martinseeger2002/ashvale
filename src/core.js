@@ -1085,13 +1085,13 @@
         if (!g) p.act = null;
         else {
           if (p.x !== g.x || p.y !== g.y) { p.path = findPath(p.x, p.y, (x, y) => x === g.x && y === g.y, g.x, g.y); stepPath(p); if (!p.path.length && (p.x !== g.x || p.y !== g.y)) p.act = null; }
-          if (p.act && p.x === g.x && p.y === g.y && !isAuth(zoneOf(g.x, g.y))) {   /* replica: ask the host; first claim wins */
+          if (p.act && p.x === g.x && p.y === g.y && !isAuth(zoneOf(g.x, g.y)) && g.bank == null) {   /* replica: ask the host; first claim wins (a persisted drop is the @ashvale Bank's: its 'took' decides, taken here) */
             if (!canAdd(p, g.id, g.n)) msg(p, "You don't have enough inventory space to hold that item.", 'warn'); else ev({ e: 'claim', p: p.id, g: g.uid });
             p.act = null;
           }
           if (p.act && p.x === g.x && p.y === g.y) {
             if (!canAdd(p, g.id, g.n)) msg(p, "You don't have enough inventory space to hold that item.", 'warn');
-            else { const left = addItem(p, g.id, g.n); ev({ e: 'take', p: p.id, g: g.uid, id: g.id, n: g.n - left, x: g.x, y: g.y }); if (left) g.n = left; else S.ground.splice(S.ground.indexOf(g), 1); }
+            else { const left = addItem(p, g.id, g.n); ev({ e: 'take', p: p.id, g: g.uid, id: g.id, n: g.n - left, x: g.x, y: g.y }); if (left) g.n = left; else { S.ground.splice(S.ground.indexOf(g), 1); if (g.bank != null) BANK_GONE.add(g.bank); } }   /* a persisted drop taken here: no host's copy brings it back (2026-10-06: the same 200 Gold, picked up again and again) */
             p.act = null;
           }
         }
@@ -1362,19 +1362,25 @@
         else if (!r[4] && m.dead) { m.dead = 0; ev({ e: 'spawn', mob: m.uid }); }
       }
     }
-    function groundAdd(uid, id, n, x, y, from) { if (!IT[id] || isAuth(zoneOf(x, y))) return; const g = S.ground.find(q => q.uid === uid); if (g) { g.n = n; return; } S.ground.push({ uid, id, n, x, y, owner: null, until: S.t + 1e9, from: from || null }); ev({ e: 'drop', g: uid, id, n, x, y }); }
-    function groundRemove(uid) { const i = S.ground.findIndex(q => q.uid === uid); if (i >= 0 && !isAuth(zoneOf(S.ground[i].x, S.ground[i].y))) { S.ground.splice(i, 1); ev({ e: 'vanish', g: uid }); } }
+    function groundAdd(uid, id, n, x, y, from) {
+      if (!IT[id] || isAuth(zoneOf(x, y))) return;
+      const did = uid >= BANK_UID ? uid - BANK_UID : null;   /* a persisted drop (its uid says so), even from a host too old to say */
+      if (did != null && BANK_GONE.has(did)) return;         /* the Bank already told us somebody took it: an old host's copy stays gone */
+      const g = S.ground.find(q => q.uid === uid); if (g) { g.n = n; return; }
+      S.ground.push({ uid, id, n, x, y, owner: null, until: S.t + 1e9, from: from || null, bank: did }); ev({ e: 'drop', g: uid, id, n, x, y });
+    }
+    function groundRemove(uid) { if (uid >= BANK_UID) BANK_GONE.add(uid - BANK_UID); const i = S.ground.findIndex(q => q.uid === uid); if (i >= 0 && !isAuth(zoneOf(S.ground[i].x, S.ground[i].y))) { S.ground.splice(i, 1); ev({ e: 'vanish', g: uid }); } }
     /* PERSISTED DROPS (2026-10-06): what the @ashvale Bank holds on the ground (Gold, stones, magical things, anything
-       worth 100+ GOLD that a player dropped), listed for a rectangle. Only the game in charge of an area puts them down (the
-       host, or a solo player); everyone else gets them with the host's ground like any other item. Each keeps a uid from its
-       drop id (2^42 + n), so every game agrees on it; one already lying there (the fresh drop itself) is linked, not doubled.
-       Those the Bank no longer lists in the rectangle (somebody took them) go. */
-    const BANK_UID = 4398046511104;
+       worth 100+ GOLD that a player dropped), listed for a rectangle. Every game puts them down itself - the area's host may be
+       an older game - each with a uid from its drop id (2^42 + n), so every game agrees on it; one already lying there (the
+       fresh drop itself) is linked, not doubled. A host's ground snapshot leaves them alone, and taking one needs no host:
+       the Bank's 'took' decides who has it. Those the Bank no longer lists in the rectangle (somebody took them) go. */
+    const BANK_UID = 4398046511104, BANK_GONE = new Set();
     function bankGround(box, items) {
       const want = new Set();
       for (const r of items || []) {
         const did = r[0] | 0, id = String(r[1]), n = Math.max(1, r[2] | 0), x = r[3] | 0, y = r[4] | 0;
-        if (!IT[id] || !inMap(x, y) || !isAuth(zoneOf(x, y))) continue;
+        if (!IT[id] || !inMap(x, y)) continue;   /* every game puts them down (the area's host may be an older game): same uid everywhere */
         want.add(did); const uid = BANK_UID + did;
         const g = S.ground.find(q => q.uid === uid || q.bank === did);
         if (g) { g.n = n; g.until = 1e15; continue; }
@@ -1385,12 +1391,12 @@
       const [x0, y0, x1, y1] = box || [0, 0, -1, -1];
       for (let i = 0; i < S.ground.length;) {
         const g = S.ground[i];
-        if (g.bank != null && !want.has(g.bank) && g.x >= x0 && g.x <= x1 && g.y >= y0 && g.y <= y1 && isAuth(zoneOf(g.x, g.y))) { S.ground.splice(i, 1); ev({ e: 'vanish', g: g.uid, x: g.x, y: g.y }); }
+        if (g.bank != null && !want.has(g.bank) && g.x >= x0 && g.x <= x1 && g.y >= y0 && g.y <= y1) { BANK_GONE.add(g.bank); S.ground.splice(i, 1); ev({ e: 'vanish', g: g.uid, x: g.x, y: g.y }); }
         else i++;
       }
       return want.size;
     }
-    function groundFull(zone, list) { S.ground = S.ground.filter(g => zoneOf(g.x, g.y) !== zone || isAuth(zone)); for (const r of list) groundAdd(r[0], r[1], r[2], r[3], r[4], r[5]); }
+    function groundFull(zone, list) { S.ground = S.ground.filter(g => zoneOf(g.x, g.y) !== zone || isAuth(zone) || g.bank != null);   /* the Bank's persisted drops stay: the Bank, not the host, says when they go */ for (const r of list) groundAdd(r[0], r[1], r[2], r[3], r[4], r[5]); }
     /* owner side: what the host resolved about OUR player */
     function applyHit(pid, dmg) { const p = S.players[pid]; if (!p || p.puppet || p.dead) return; p.hp -= Math.min(dmg, p.hp); if (p.retal && !p.act && !p.path.length) { } if (p.hp <= 0) killPlayer(p); }
     function storeItem(pid, id, n) { const p = S.players[pid]; if (!p || !IT[id]) return 0; const had = invCount(p, id); removeItem(p, id, Math.min(n, had)); ev({ e: 'inv', p: pid }); return Math.min(n, had); }   /* into the town chest: it stays in the wallet, only out of the bag */

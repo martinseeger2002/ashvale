@@ -33,4 +33,24 @@ core.bankGround(box, [[9, 'coins', 40, 24, 52]]);
 ok(!core.S.ground.some(g => g.bank === 7 || g.bank === 8), 'drops the Bank no longer lists (taken by someone) go');
 core.bankGround([200, 200, 300, 300], []);
 ok(core.S.ground.some(g => g.bank === 9), 'an answer about another area leaves this one alone');
+/* an older host shares a persisted drop without saying so (2026-10-06): its uid says so, and once the Bank has said it was
+   taken, the host's copy is not put back */
+{ const c2 = AshCore.create(D, { seed: 'ghost' }); c2.setAuth('village', false);
+  const uid = 4398046511104 + 77;
+  c2.groundAdd(uid, 'coins', 30, 20, 52);
+  ok(c2.S.ground.some(g => g.uid === uid && g.bank === 77), "a host's copy of a persisted drop is known as one by its uid");
+  c2.bankGround([0, 0, 60, 70], []);
+  ok(!c2.S.ground.some(g => g.uid === uid), 'the Bank no longer lists it (taken): it goes');
+  c2.groundAdd(uid, 'coins', 30, 20, 52);
+  ok(!c2.S.ground.some(g => g.uid === uid), 'and the old host sending it again does not bring it back'); }
+/* taken here: a host's copy never brings it back, not even before the Bank's next answer (the operator: "I am able to keep
+   picking up the same 200 Gold over and over again") */
+{ const c3 = AshCore.create(D, { seed: 'again' }); c3.setAuth('village', false);
+  const q = c3.addPlayer('me', null); q.x = 21; q.y = 52; const uid = 4398046511104 + 88;
+  c3.groundAdd(uid, 'coins', 200, 22, 52); const had = (q.inv.find(s => s && s.id === 'coins') || {}).n || 0;
+  c3.cmd('me', { c: 'take', uid }); for (let i = 0; i < 6; i++) c3.tick();
+  const got = ((q.inv.find(s => s && s.id === 'coins') || {}).n || 0) - had;
+  ok(got === 200 && !c3.S.ground.some(g => g.uid === uid), 'a persisted drop is picked up here (200 Gold)');
+  c3.groundAdd(uid, 'coins', 200, 22, 52);
+  ok(!c3.S.ground.some(g => g.uid === uid), "the host sending its copy again does not put it back"); }
 console.log(fails ? fails + ' FAILED' : 'all passed'); process.exit(fails ? 1 : 0);

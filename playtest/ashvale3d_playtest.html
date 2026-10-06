@@ -7775,13 +7775,13 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
         if (!g) p.act = null;
         else {
           if (p.x !== g.x || p.y !== g.y) { p.path = findPath(p.x, p.y, (x, y) => x === g.x && y === g.y, g.x, g.y); stepPath(p); if (!p.path.length && (p.x !== g.x || p.y !== g.y)) p.act = null; }
-          if (p.act && p.x === g.x && p.y === g.y && !isAuth(zoneOf(g.x, g.y))) {   /* replica: ask the host; first claim wins */
+          if (p.act && p.x === g.x && p.y === g.y && !isAuth(zoneOf(g.x, g.y)) && g.bank == null) {   /* replica: ask the host; first claim wins (a persisted drop is the @ashvale Bank's: its 'took' decides, taken here) */
             if (!canAdd(p, g.id, g.n)) msg(p, "You don't have enough inventory space to hold that item.", 'warn'); else ev({ e: 'claim', p: p.id, g: g.uid });
             p.act = null;
           }
           if (p.act && p.x === g.x && p.y === g.y) {
             if (!canAdd(p, g.id, g.n)) msg(p, "You don't have enough inventory space to hold that item.", 'warn');
-            else { const left = addItem(p, g.id, g.n); ev({ e: 'take', p: p.id, g: g.uid, id: g.id, n: g.n - left, x: g.x, y: g.y }); if (left) g.n = left; else S.ground.splice(S.ground.indexOf(g), 1); }
+            else { const left = addItem(p, g.id, g.n); ev({ e: 'take', p: p.id, g: g.uid, id: g.id, n: g.n - left, x: g.x, y: g.y }); if (left) g.n = left; else { S.ground.splice(S.ground.indexOf(g), 1); if (g.bank != null) BANK_GONE.add(g.bank); } }   /* a persisted drop taken here: no host's copy brings it back (2026-10-06: the same 200 Gold, picked up again and again) */
             p.act = null;
           }
         }
@@ -8052,19 +8052,25 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
         else if (!r[4] && m.dead) { m.dead = 0; ev({ e: 'spawn', mob: m.uid }); }
       }
     }
-    function groundAdd(uid, id, n, x, y, from) { if (!IT[id] || isAuth(zoneOf(x, y))) return; const g = S.ground.find(q => q.uid === uid); if (g) { g.n = n; return; } S.ground.push({ uid, id, n, x, y, owner: null, until: S.t + 1e9, from: from || null }); ev({ e: 'drop', g: uid, id, n, x, y }); }
-    function groundRemove(uid) { const i = S.ground.findIndex(q => q.uid === uid); if (i >= 0 && !isAuth(zoneOf(S.ground[i].x, S.ground[i].y))) { S.ground.splice(i, 1); ev({ e: 'vanish', g: uid }); } }
+    function groundAdd(uid, id, n, x, y, from) {
+      if (!IT[id] || isAuth(zoneOf(x, y))) return;
+      const did = uid >= BANK_UID ? uid - BANK_UID : null;   /* a persisted drop (its uid says so), even from a host too old to say */
+      if (did != null && BANK_GONE.has(did)) return;         /* the Bank already told us somebody took it: an old host's copy stays gone */
+      const g = S.ground.find(q => q.uid === uid); if (g) { g.n = n; return; }
+      S.ground.push({ uid, id, n, x, y, owner: null, until: S.t + 1e9, from: from || null, bank: did }); ev({ e: 'drop', g: uid, id, n, x, y });
+    }
+    function groundRemove(uid) { if (uid >= BANK_UID) BANK_GONE.add(uid - BANK_UID); const i = S.ground.findIndex(q => q.uid === uid); if (i >= 0 && !isAuth(zoneOf(S.ground[i].x, S.ground[i].y))) { S.ground.splice(i, 1); ev({ e: 'vanish', g: uid }); } }
     /* PERSISTED DROPS (2026-10-06): what the @ashvale Bank holds on the ground (Gold, stones, magical things, anything
-       worth 100+ GOLD that a player dropped), listed for a rectangle. Only the game in charge of an area puts them down (the
-       host, or a solo player); everyone else gets them with the host's ground like any other item. Each keeps a uid from its
-       drop id (2^42 + n), so every game agrees on it; one already lying there (the fresh drop itself) is linked, not doubled.
-       Those the Bank no longer lists in the rectangle (somebody took them) go. */
-    const BANK_UID = 4398046511104;
+       worth 100+ GOLD that a player dropped), listed for a rectangle. Every game puts them down itself - the area's host may be
+       an older game - each with a uid from its drop id (2^42 + n), so every game agrees on it; one already lying there (the
+       fresh drop itself) is linked, not doubled. A host's ground snapshot leaves them alone, and taking one needs no host:
+       the Bank's 'took' decides who has it. Those the Bank no longer lists in the rectangle (somebody took them) go. */
+    const BANK_UID = 4398046511104, BANK_GONE = new Set();
     function bankGround(box, items) {
       const want = new Set();
       for (const r of items || []) {
         const did = r[0] | 0, id = String(r[1]), n = Math.max(1, r[2] | 0), x = r[3] | 0, y = r[4] | 0;
-        if (!IT[id] || !inMap(x, y) || !isAuth(zoneOf(x, y))) continue;
+        if (!IT[id] || !inMap(x, y)) continue;   /* every game puts them down (the area's host may be an older game): same uid everywhere */
         want.add(did); const uid = BANK_UID + did;
         const g = S.ground.find(q => q.uid === uid || q.bank === did);
         if (g) { g.n = n; g.until = 1e15; continue; }
@@ -8075,12 +8081,12 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       const [x0, y0, x1, y1] = box || [0, 0, -1, -1];
       for (let i = 0; i < S.ground.length;) {
         const g = S.ground[i];
-        if (g.bank != null && !want.has(g.bank) && g.x >= x0 && g.x <= x1 && g.y >= y0 && g.y <= y1 && isAuth(zoneOf(g.x, g.y))) { S.ground.splice(i, 1); ev({ e: 'vanish', g: g.uid, x: g.x, y: g.y }); }
+        if (g.bank != null && !want.has(g.bank) && g.x >= x0 && g.x <= x1 && g.y >= y0 && g.y <= y1) { BANK_GONE.add(g.bank); S.ground.splice(i, 1); ev({ e: 'vanish', g: g.uid, x: g.x, y: g.y }); }
         else i++;
       }
       return want.size;
     }
-    function groundFull(zone, list) { S.ground = S.ground.filter(g => zoneOf(g.x, g.y) !== zone || isAuth(zone)); for (const r of list) groundAdd(r[0], r[1], r[2], r[3], r[4], r[5]); }
+    function groundFull(zone, list) { S.ground = S.ground.filter(g => zoneOf(g.x, g.y) !== zone || isAuth(zone) || g.bank != null);   /* the Bank's persisted drops stay: the Bank, not the host, says when they go */ for (const r of list) groundAdd(r[0], r[1], r[2], r[3], r[4], r[5]); }
     /* owner side: what the host resolved about OUR player */
     function applyHit(pid, dmg) { const p = S.players[pid]; if (!p || p.puppet || p.dead) return; p.hp -= Math.min(dmg, p.hp); if (p.retal && !p.act && !p.path.length) { } if (p.hp <= 0) killPlayer(p); }
     function storeItem(pid, id, n) { const p = S.players[pid]; if (!p || !IT[id]) return 0; const had = invCount(p, id); removeItem(p, id, Math.min(n, had)); ev({ e: 'inv', p: pid }); return Math.min(n, had); }   /* into the town chest: it stays in the wallet, only out of the bag */
@@ -12202,7 +12208,18 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       const HOLD = 90000;
       const holdOf = (L, k) => { const now = Date.now(); return (L.holds || []).filter(h => h.k === k && !h.taken && now - h.t < HOLD).reduce((a, h) => a + h.n, 0); };
       const pickHold = (L, k) => { const now = Date.now(); return (L.picks || []).filter(q => q.k === k && now - q.t < HOLD).reduce((a, q) => a + q.n, 0); };
+      /* persisted drops and the @ashvale Bank, whether or not this game's wallet view has loaded yet (2026-10-06: a pickup
+         made before it had was never reported, and the Bank kept showing - and would have paid again for - Gold already
+         taken): a pickup of anything persisted is reported at once; a drop of a persisted TOKEN (Gold...) is reported by
+         amount. A persisted NFT's drop needs its exact piece, so it stays with the wallet code below. */
+      function persistTell(e) {
+        if (!core.persists || e.x == null || !core.persists(e.id, e.n || 1)) return;
+        const tell = o => bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send(o); });
+        if (e.e === 'take' && e.p === PID) tell({ t: 'took', v: 1, id: e.id, n: e.n || 1, x: e.x, y: e.y });
+        else if ((e.e === 'drop' || e.e === 'xdrop') && (e.owner === PID || e.from === PID) && core.item(e.id) && core.item(e.id).stack) tell({ t: 'drop', v: 3, items: [[e.id, '', e.n || 1]], x: e.x, y: e.y });
+      }
       function chestEvent(e) {
+        persistTell(e);
         if (!walletState.data || !walletState.address) return;
         const L = ledgerFor(walletState.address), now = Date.now(); L.dropped = L.dropped || []; L.picks = L.picks || []; L.holds = L.holds || [];
         if (e.e === 'take' && e.p !== PID && e.x != null) {   /* someone else took one of your drops: it goes now */
@@ -12216,8 +12233,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           /* persisted (2026-10-06: Gold, stones, magical things, anything worth 100+ GOLD stay where they fell until
              somebody picks them up, held by the @ashvale Bank): the Bank is told what lies where, so every player sees it */
           const keep = core.persists && core.persists(e.id, e.n || 1), W = walletState.data, have = W.gear[e.id];
-          if (keep && (!have || !have.length)) { const n = e.n || 1; bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'drop', v: 3, items: [[e.id, '', n]], x: e.x, y: e.y }); }); return; }
-          if (!have || !have.length) return;   /* only NFTs have an identity; tokens are just amounts */
+          if (!have || !have.length) return;   /* only NFTs have an identity; tokens are just amounts (persisted ones: persistTell) */
           const out = Object.values(L.out || {}).flat().map(o => o.piece), held = new Set(L.dropped.filter(d => now - d.t < 7200000).map(d => d.pc).concat(out));
           const backed = Math.max(0, (L.bag[e.id] || 0) - carriedOf(e.id)), items = [];
           for (const pc of have) { if (items.length >= Math.min(e.n || 1, backed)) break; if (!held.has(pc)) { items.push([e.id, pc]); L.dropped.push({ k: e.id, pc, x: e.x, y: e.y, t: now }); } }
@@ -12225,7 +12241,6 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           L.dropped = L.dropped.filter(d => now - d.t < 7200000).slice(-100); ledgerSave();
           bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'drop', v: keep ? 3 : 2, items: keep ? items.map(it => [it[0], it[1], 1]) : items, x: e.x, y: e.y }); });
         } else if (e.e === 'take' && e.p === PID && e.x != null) {
-          if (core.persists && core.persists(e.id, e.n || 1)) bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'took', v: 1, id: e.id, n: e.n || 1, x: e.x, y: e.y }); });
           L.picks.push({ k: e.id, n: e.n || 1, x: e.x, y: e.y, t: now }); L.picks = L.picks.filter(q => now - q.t < 7200000).slice(-100); ledgerSave();
           L.holds = L.holds.filter(h => !(h.k === e.id && !h.taken && Math.abs(h.x - e.x) <= 2 && Math.abs(h.y - e.y) <= 2));   /* your own drop back in your bag: nothing to send */
           setTimeout(depositSoon, HOLD + 1000);
@@ -12314,6 +12329,16 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           bank.joining = null;
           if (!res || !res.online) { bank.note = 'The @ashvale Bank cannot be reached from here' + (res && res.why ? ' (' + res.why + ')' : '') + '.'; return null; }
           const R = res.room; bank.room = R;
+          /* a room the arcade has dropped us from answers every send with "not in that room any more" (seen 2026-10-06 after
+             a node restart): then every deposit, drop and question to the Bank failed in silence. A failed send leaves that
+             room (the SDK would hand the same dead one back), joins again and sends it once more */
+          const send0 = R.send.bind(R);
+          R.send = o => send0(o).then(ok => {
+            if (ok || bank.room !== R) return ok;
+            bank.room = null; try { R.leave(); } catch (e) { /* gone */ }
+            return bankRoom().then(R2 => R2 && R2 !== R ? R2.send(o) : false);
+          });
+          R.on('closed', () => { if (bank.room === R) bank.room = null; });
           R.on('message', ({ from, data }) => {
             if (data && data.t === 'felled' && from && from.address === DATA.assets.issuer && R.me && data.to === R.me.address) { core.setFelled(data.cells || []); return; }   /* trees others felled */
             if (data && data.t === 'ground' && from && from.address === DATA.assets.issuer && R.me && data.to === R.me.address) { groundHeard(data); return; }   /* persisted drops near me */
@@ -12640,7 +12665,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           case 'k': { const m = core.mobByUid(a[1]); if (!m) break; core.applyMobs([[m.uid, m.x, m.y, 0, 1]]); if (fromNet(a[2]) === PID) core.creditKill(PID, m.key); for (const pid of core.S.order) { const o = core.S.players[pid]; if (o.act && o.act.k === 'attack' && o.act.uid === m.uid) o.act = null; } handle({ e: 'die', mob: m.uid }, now); break; }
           case 's': core.applyMobs([[a[1], a[2], a[3], a[4], 0]]); break;
           case 'd': core.groundAdd(a[1], a[2], a[3], a[4], a[5], a[6] ? fromNet(a[6]) : null); break;
-          case 't': core.groundRemove(a[1]); if (fromNet(a[2]) === PID) core.grantItem(PID, a[3], a[4]); break;
+          case 't': core.groundRemove(a[1]); if (fromNet(a[2]) === PID) { core.grantItem(PID, a[3], a[4]); persistTell({ e: 'take', p: PID, id: a[3], n: a[4], x: a[5], y: a[6] }); } break;   /* the host gave it to us: tell the Bank too */
           case 'v': core.groundRemove(a[1]); break;
           case 'n': { const g = core.S.ground.find(q => q.uid === a[1]); if (g) g.n = a[2]; break; }
           case 'e': handle({ e: 'mobeat', mob: a[1] }, now); break;

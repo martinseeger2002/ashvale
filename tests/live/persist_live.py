@@ -8,6 +8,7 @@ HERE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 sys.path.insert(0, os.path.join(HERE, 'tools'))
 from live_play import LiveGame
 SPOT, GOLD = (27, 49), int(os.environ.get('GOLD', '25'))
+A, Bt = os.environ.get('DROPPER', 'cinderwalker'), os.environ.get('PICKER', 'emberwalker')
 DB = os.path.join(HERE, 'chain', 'bank', 'bank.sqlite')
 def rows(q, *a):
     c = sqlite3.connect('file:%s?mode=ro' % DB, uri=True); c.row_factory = sqlite3.Row
@@ -18,7 +19,7 @@ def bank_item(g):
     return g.run("return ASH.core.S.ground.filter(q => q.id === 'coins' && Math.abs(q.x - %d) <= 1 && Math.abs(q.y - %d) <= 1).map(q => ({uid: q.uid, n: q.n, bank: q.bank == null ? null : q.bank, x: q.x, y: q.y}))" % SPOT)
 phase = sys.argv[1]
 if phase == 'drop':
-    with LiveGame('cinderwalker') as g:
+    with LiveGame(A) as g:
         addr = g.run("return ASH.walletState ? ASH.walletState().address : null"); say('cinderwalker', addr)
         say('walk', g.run("return await walkTo(%d, %d, 90000)" % SPOT), 'at', g.run("return [ASH.me.x, ASH.me.y]"))
         have = g.run("return bag().coins || 0"); say('gold in the bag', have)
@@ -34,7 +35,7 @@ if phase == 'drop':
         say('waiting out the 90 s hold so the Gold goes back to @ashvale'); g.run("await wait(100000); return 1")
         say('after the hold, still on the ground', bank_item(g))
 elif phase == 'reload':
-    with LiveGame('cinderwalker') as g:
+    with LiveGame(A) as g:
         g.run("return await walkTo(%d, %d, 90000)" % (SPOT[0] + 4, SPOT[1]))
         for k in range(12):
             it = bank_item(g)
@@ -42,7 +43,7 @@ elif phase == 'reload':
             g.run("await wait(5000); return 1")
         else: say('FAIL: not put back after 60 s', it)
 elif phase == 'pick':
-    with LiveGame('emberwalker') as g:
+    with LiveGame(Bt) as g:
         addr = g.run("return ASH.walletState ? ASH.walletState().address : null"); say('emberwalker', addr)
         g.run("return await walkTo(%d, %d, 120000)" % (SPOT[0] + 1, SPOT[1]))
         it = None
