@@ -215,18 +215,38 @@
   },
   "vorth_rosary": {
    "name": "Vorth's rosary",
-   "description": "A string of burnt-orange beads. Used, it carries you to the mouth of the Spider Cave in the woods west of Whisperwood.",
+   "description": "A string of burnt-orange beads. Worn in the shield hand: Magic +2, Prayer +4, and two seconds added to each prayer point (same as a Vorthan robe). Once Mother Wenna has sent you for the keeper's beads, using them carries you to the mouth of the Spider Cave west of Whisperwood.",
    "collection": "ASHVALE The Red Pyre",
    "game": "ashvale",
    "category": "jewellery",
    "subcategory": "charm",
+   "tier": 1,
    "weight": 80,
-   "model": "item.ring",
-   "value": 80,
+   "req": {
+    "prayer": 1
+   },
+   "model": "gear.rosary",
+   "value": 140,
    "attributes": [
+    {
+     "trait_type": "Magic",
+     "value": 2
+    },
+    {
+     "trait_type": "Prayer",
+     "value": 4
+    },
+    {
+     "trait_type": "Prayer seconds",
+     "value": 2
+    },
     {
      "trait_type": "Teleport",
      "value": "spidercave"
+    },
+    {
+     "trait_type": "Teleport from step",
+     "value": "red_pyre:3"
     },
     {
      "trait_type": "Cooldown ticks",

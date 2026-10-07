@@ -896,16 +896,44 @@
             anim.push({ smoke: true, x: x + 0.3, y: y + 1.7, z: z - 0.2, parts: [] });
             break;
           }
-          case 'altar': {   /* the church altar: pray at it to restore your Prayer points (world.js makes it a node) */
-            const fl = floorY(o, y);
-            B.add('box', 0x8a857a, x, fl + 0.45, z, 1.0, 0.9, 0.6); B.add('box', 0xa8a294, x, fl + 0.93, z, 1.12, 0.07, 0.7);
-            B.add('box', 0xf2eee0, x, fl + 0.97, z, 1.0, 0.02, 0.62); B.add('box', 0x6a3a8a, x, fl + 0.7, z - 0.31, 0.34, 0.5, 0.01);
-            B.add('box', 0xe8c050, x, fl + 1.2, z + 0.1, 0.05, 0.42, 0.05); B.add('box', 0xe8c050, x, fl + 1.3, z + 0.1, 0.26, 0.05, 0.05);
-            for (const sx of [-0.38, 0.38]) { B.add('cyl', 0xf4eccc, x + sx, fl + 1.07, z + 0.1, 0.05, 0.18, 0.05); const f = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.09, 5), new THREE.MeshBasicMaterial({ color: 0xffd060 })); f.position.set(x + sx, fl + 1.2, z + 0.1); group.add(f); torches.push({ f, ph: sx * 7, x: x + sx, y: fl + 1.2, z: z + 0.1 }); }
-            const p = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.4, 0.9), new THREE.MeshBasicMaterial({ visible: false })); p.position.set(x, fl + 0.7, z); p.userData.pick = { kind: 'node', i: K(o.x, o.y) }; group.add(p); pickables.push(p);
+          case 'altar': {   /* the church altar: pray at it to restore your Prayer points (world.js makes it a node).
+               face = the front the congregation looks at. Default "n" (Saltmere). "w"/"e" for an altar on an east or west wall. */
+            const fl = floorY(o, y), face = o.face || 'n', ew = face === 'e' || face === 'w';
+            if (ew) {
+              const fx = face === 'w' ? -1 : 1;
+              B.add('box', 0x8a857a, x, fl + 0.45, z, 0.6, 0.9, 1.0); B.add('box', 0xa8a294, x, fl + 0.93, z, 0.7, 0.07, 1.12);
+              B.add('box', 0xf2eee0, x, fl + 0.97, z, 0.62, 0.02, 1.0); B.add('box', 0x6a3a8a, x + fx * 0.31, fl + 0.7, z, 0.01, 0.5, 0.34);
+              B.add('box', 0xe8c050, x + fx * -0.1, fl + 1.2, z, 0.05, 0.42, 0.05); B.add('box', 0xe8c050, x + fx * -0.1, fl + 1.3, z, 0.05, 0.05, 0.26);
+              for (const sz of [-0.38, 0.38]) { B.add('cyl', 0xf4eccc, x + fx * -0.1, fl + 1.07, z + sz, 0.05, 0.18, 0.05); const f = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.09, 5), new THREE.MeshBasicMaterial({ color: 0xffd060 })); f.position.set(x + fx * -0.1, fl + 1.2, z + sz); group.add(f); torches.push({ f, ph: sz * 7, x: x + fx * -0.1, y: fl + 1.2, z: z + sz }); }
+              const p = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.4, 1.1), new THREE.MeshBasicMaterial({ visible: false })); p.position.set(x, fl + 0.7, z); p.userData.pick = { kind: 'node', i: K(o.x, o.y) }; group.add(p); pickables.push(p);
+            } else {
+              const fz = face === 's' ? 1 : -1;
+              B.add('box', 0x8a857a, x, fl + 0.45, z, 1.0, 0.9, 0.6); B.add('box', 0xa8a294, x, fl + 0.93, z, 1.12, 0.07, 0.7);
+              B.add('box', 0xf2eee0, x, fl + 0.97, z, 1.0, 0.02, 0.62); B.add('box', 0x6a3a8a, x, fl + 0.7, z + fz * 0.31, 0.34, 0.5, 0.01);
+              B.add('box', 0xe8c050, x, fl + 1.2, z + fz * -0.1, 0.05, 0.42, 0.05); B.add('box', 0xe8c050, x, fl + 1.3, z + fz * -0.1, 0.26, 0.05, 0.05);
+              for (const sx of [-0.38, 0.38]) { B.add('cyl', 0xf4eccc, x + sx, fl + 1.07, z + fz * -0.1, 0.05, 0.18, 0.05); const f = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.09, 5), new THREE.MeshBasicMaterial({ color: 0xffd060 })); f.position.set(x + sx, fl + 1.2, z + fz * -0.1); group.add(f); torches.push({ f, ph: sx * 7, x: x + sx, y: fl + 1.2, z: z + fz * -0.1 }); }
+              const p = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.4, 0.9), new THREE.MeshBasicMaterial({ visible: false })); p.position.set(x, fl + 0.7, z); p.userData.pick = { kind: 'node', i: K(o.x, o.y) }; group.add(p); pickables.push(p);
+            }
             break;
           }
-          case 'pew': { const fl = floorY(o, y), w = (o.w || 1) - 0.1; B.add('box', 0x6a4426, x, fl + 0.42, z + 0.05, w, 0.07, 0.42); B.add('box', 0x6a4426, x, fl + 0.72, z + 0.25, w, 0.55, 0.06); for (const sx of [-1, 1]) B.add('box', 0x5a3a1e, x + sx * (w / 2 - 0.05), fl + 0.4, z + 0.05, 0.07, 0.8, 0.5); break; }
+          case 'pew': {
+            /* face = the way you sit (backrest opposite). Default "n": long seat along X, back on +z (Saltmere).
+               "e"/"w": long seat along Z for a church whose altar is on the east or west wall. */
+            const fl = floorY(o, y), face = o.face || 'n', ew = face === 'e' || face === 'w';
+            const len = (ew ? (o.h || 1) : (o.w || 1)) - 0.1, d = 0.42;
+            if (ew) {
+              const bx = face === 'e' ? -1 : 1;   /* backrest on the side you are not facing */
+              B.add('box', 0x6a4426, x + bx * 0.05, fl + 0.42, z, d, 0.07, len);
+              B.add('box', 0x6a4426, x + bx * 0.25, fl + 0.72, z, 0.06, 0.55, len);
+              for (const sz of [-1, 1]) B.add('box', 0x5a3a1e, x + bx * 0.05, fl + 0.4, z + sz * (len / 2 - 0.05), 0.5, 0.8, 0.07);
+            } else {
+              const bz = face === 's' ? -1 : 1;
+              B.add('box', 0x6a4426, x, fl + 0.42, z + bz * 0.05, len, 0.07, d);
+              B.add('box', 0x6a4426, x, fl + 0.72, z + bz * 0.25, len, 0.55, 0.06);
+              for (const sx of [-1, 1]) B.add('box', 0x5a3a1e, x + sx * (len / 2 - 0.05), fl + 0.4, z + bz * 0.05, 0.07, 0.8, 0.5);
+            }
+            break;
+          }
           case 'shelf': { const w = o.w || 1, d = o.h || 1, lng = w >= d, ex = lng ? w : d; const zb = lng ? o.y + 0.25 : z, xb = lng ? x : o.x + 0.25, fl = floorY(o, y);
             B.add('box', 0x6a4a2a, xb, fl + 0.75, zb, lng ? ex - 0.1 : 0.4, 1.5, lng ? 0.4 : ex - 0.1);
             for (let k = 0; k < 3; k++) for (let n = 0; n < ex * 3; n++) { const t = (n + 0.5) / (ex * 3) - 0.5, col = [0xd29a52, 0xc84040, 0x8a5aa0, 0x6aa0d0, 0xe0c060][(n + k * 2 + o.x) % 5]; B.add('box', col, xb + (lng ? t * (ex - 0.2) : 0.05), fl + 0.35 + k * 0.45, zb + (lng ? 0.05 : t * (ex - 0.2)), 0.16, 0.18, 0.16); }

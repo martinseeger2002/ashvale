@@ -473,7 +473,7 @@
     function stepClear(x, y, dx, dy) {   /* walls and corner-cutting only (the target tile itself may be occupied) */
       const nx = x + dx, ny = y + dy; if (!inMap(nx, ny)) return false;
       if (!dx || !dy) return edgeOpen(x, y, dx, dy);
-      if (M.blocked(x + dx, y) || M.blocked(x, y + dy)) return false;
+      if ((M.blocked(x + dx, y) && !gateOpen(x + dx, y)) || (M.blocked(x, y + dy) && !gateOpen(x, y + dy))) return false;
       return edgeOpen(x, y, dx, 0) && edgeOpen(x + dx, y, 0, dy) && edgeOpen(x, y, 0, dy) && edgeOpen(x, y + dy, dx, 0);
     }
     let LV_LIMIT = -1;
@@ -482,6 +482,7 @@
     /* THE CANOE (2026-10-07, Ziibiing): while you sit in one, only water is open - rivers, lakes, the shallows, under a
        bridge - and never across a corner of land */
     let BOAT = false;
+    let GATE_P = null;   /* while a player paths: an open gate (need flag met) is walkable even though its tile is F */
     const isWet = (x, y) => { const t = M.tileAt(x, y); return t === '~' || t === 'v' || t === 'B'; };
     /* the hawk (2026-10-04): its own stats. hp 4; a strike every `strike` ticks with a hitPct % chance of hitDmg; a
        strike costs `energy` run energy (Dexterity) and leaves it open to a hit for those ticks; a third of the carrying
@@ -490,6 +491,11 @@
     const slotLimit = (p) => isHawk(p) ? Math.min(HK.slots, p.inv.length) : p.inv.length;
     const airborne = (p) => isHawk(p) && !(p.burden > 0) && !(p.striking > S.t);   /* in the air: no land animal can touch it */
     const isHawk = (p) => !!(p && p.eq && p.eq.ring && IT[p.eq.ring.id] && IT[p.eq.ring.id].form === 'hawk');
+    function gateOpen(x, y) {
+      if (!GATE_P) return false;
+      const o = passageAt(x, y); if (!o || o.k !== 'gate') return false;
+      return !o.need || hasFlag(GATE_P, o.need);
+    }
     function canStep(x, y, dx, dy) {
       const nx = x + dx, ny = y + dy;
       if (FLY) return inMap(nx, ny);   /* a hawk flies over trees, walls and water */
@@ -497,12 +503,12 @@
       if (M.lifts && LV_LIMIT < 0) {   /* raised ground (a castle's stairs and wall walk): heights decide, not the wall tiles */
         const la = M.liftAt(x, y), lb = M.liftAt(nx, ny);
         if (la || lb) {
-          const ok1 = (ax, ay) => { const l = M.liftAt(ax, ay); return Math.abs(l - la) <= LIFT_STEP && (l > 0 || (inMap(ax, ay) && !M.blocked(ax, ay))); };
+          const ok1 = (ax, ay) => { const l = M.liftAt(ax, ay); return Math.abs(l - la) <= LIFT_STEP && (l > 0 || (inMap(ax, ay) && !M.blocked(ax, ay)) || gateOpen(ax, ay)); };
           if (!inMap(nx, ny) || !ok1(nx, ny)) return false;
           return !dx || !dy || (ok1(x + dx, y) && ok1(x, y + dy));
         }
       }
-      if (!inMap(nx, ny) || M.blocked(nx, ny)) return false;
+      if (!inMap(nx, ny) || (M.blocked(nx, ny) && !gateOpen(nx, ny))) return false;
       if (LV_LIMIT >= 0 && M.buildingAt(nx, ny) !== LV_LIMIT) return false;
       return stepClear(x, y, dx, dy);
     }
@@ -577,7 +583,7 @@
 
     // ---------------- commands
     function cmd(pid, c) { if (!c || typeof c.c !== 'string') return; queue.push([pid, c]); log.push([S.t, pid, c]); }
-    function apply(p, c) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); BOAT = !!p.boat && !FLY; try { apply0(p, c); } finally { LV_LIMIT = -1; FLY = false; BOAT = false; } }
+    function apply(p, c) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); BOAT = !!p.boat && !FLY; GATE_P = p; try { apply0(p, c); } finally { LV_LIMIT = -1; FLY = false; BOAT = false; GATE_P = null; } }
     function apply0(p, c) {
       if (p.dead && c.c !== 'style' && c.c !== 'run' && c.c !== 'retal' && c.c !== 'look') return;
       if (isHawk(p) && ['npc', 'light', 'climb', 'buy', 'sell', 'trade', 'eat', 'use'].indexOf(c.c) >= 0 && !(c.c === 'use' && p.inv[c.slot | 0] && IT[p.inv[c.slot | 0].id].teleport)) { msg(p, 'A hawk can only fly, strike, fish and carry. Take off the ring over open ground to land.', 'warn'); return; }
@@ -715,13 +721,24 @@
     function useItem(p, slot) {
       const s = p.inv[slot]; if (!s) return; const d = IT[s.id];
       if (d.buryXp) { bury(p, slot); return; }
-      if (d.eq) { equip(p, slot); return; }   /* a click wears gear; a ring's teleport fires only when its effect triggers */
+      /* rings wear on click (their teleport is a trigger, e.g. the Ring of Angels). Charms and stones with a Teleport
+         trait Use to travel; Wear still equips a charm that also has an eq slot (Vorth's rosary in the shield hand). */
+      if (d.eq && (d.eq === 'ring' || d.teleport == null)) { equip(p, slot); return; }
       if (d.teleport) {   /* a town stone: home, as often as you like, once its cooldown has passed (30 minutes) */
+        if (d.teleFrom) {   /* "questId:step" — beads stay cold until that quest step (or the quest is finished) */
+          const parts = String(d.teleFrom).split(':'), qid = parts[0], need = Math.max(1, parts[1] | 0);
+          const q = p.quests && p.quests[qid];
+          if (!(questFinished(p, qid) || (q && q.step >= need))) {
+            msg(p, 'The beads are cold. They will not carry you until Mother Wenna has sent you for them.', 'warn');
+            return;
+          }
+        }
         const P = portalOf(d.teleport); if (!P) { msg(p, 'Nothing happens.'); return; }
         p.cd = p.cd || {}; const left = (p.cd[s.id] || 0) - S.t;
         if (left > 0) { msg(p, 'The stone is still cold. It wakes again in ' + Math.ceil(left * 0.6 / 60) + ' minute' + (Math.ceil(left * 0.6 / 60) === 1 ? '' : 's') + '.', 'warn'); return; }
         p.cd[s.id] = S.t + (d.cooldown || 0); teleport(p, P, 'The stone warms in your hand, and ' + P.name + ' rises around you.'); return;
       }
+      if (d.eq) { equip(p, slot); return; }
       if (d.edible) { eat(p, slot); return; }
       if (d.burnTicks) { p.act = { k: 'light', slot, id: s.id }; p.gT = 0; p.path = []; p.skilling = null; return; }   /* tap logs = light them (needs a tinderbox) */
       if (p.using && p.using.slot === slot && p.using.id === s.id) {
@@ -1800,7 +1817,7 @@
         if (nx != null) { const x = kx(nx), y = ky(nx); if (!M.npcs.some(o => o !== n && o.escort && o.x === x && o.y === y)) { n.x = x; n.y = y; } }
       }
     }
-    function playerTick(p) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); BOAT = !!p.boat && !FLY; try { playerTick0(p); } finally { LV_LIMIT = -1; FLY = false; BOAT = false; } }
+    function playerTick(p) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); BOAT = !!p.boat && !FLY; GATE_P = p; try { playerTick0(p); } finally { LV_LIMIT = -1; FLY = false; BOAT = false; GATE_P = null; } }
     function playerTick0(p) {
       if (!(p.hp >= 0)) p.hp = maxHp(p);
       if (p.boat === 2 && !p.dead && !p.puppet) rideTick(p);   /* hitpoints that are not a number (the antidote bug, 2026-10-07): back to full */

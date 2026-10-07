@@ -1176,6 +1176,12 @@
     "api": 1,
     "kind": "json"
    },
+   "gear.rosary": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "gear.shield": {
     "id": null,
     "v": 1,

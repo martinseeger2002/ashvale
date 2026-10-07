@@ -51,7 +51,7 @@ byid['pike'] = {
     "examine": "Pike, a bandit lookout in a frayed hood. He stands too still for a thief, and his eyes keep dropping to the gate."
 }
 byid['vorthan_reader'] = {
-    "id": "vorthan_reader", "name": "Vorthan Reader", "look": "vorthan_reader", "x": 35, "y": 4,
+    "id": "vorthan_reader", "name": "Vorthan Reader", "look": "vorthan_reader", "x": 36, "y": 3,
     "lines": [
         "The Bright Three are a lie the valley tells itself. Althas, Caelen, Mira - hearth, road, well. Pretty names for a locked door.",
         "Vorth was the fourth. They buried him still breathing. We wear the orange so the living remember the fire that was stolen.",
@@ -60,7 +60,7 @@ byid['vorthan_reader'] = {
     "examine": "A Vorthan in an orange hooded robe. The cloth is the colour of a banked fire."
 }
 byid['vorthan_acolyte'] = {
-    "id": "vorthan_acolyte", "name": "Vorthan Acolyte", "look": "vorthan_acolyte", "x": 35, "y": 5,
+    "id": "vorthan_acolyte", "name": "Vorthan Acolyte", "look": "vorthan_acolyte", "x": 36, "y": 5,
     "lines": [
         "The Red Pyre is not a church of Ashvale. It is the place Vorth's name is still spoken.",
         "Do not touch the beads on the keeper. They remember the cave."
@@ -73,15 +73,17 @@ extra_ww['objects'] = [
     {"k": "tent", "x": 43, "y": 21, "w": 2, "h": 2},
     {"k": "tent", "x": 44, "y": 26, "w": 2, "h": 2},
     {"k": "campfire", "x": 41, "y": 24, "w": 1, "h": 1},
-    {"k": "gate", "x": 28, "y": 3, "to": [30, 3], "out": [27, 3], "need": "vorth_gate",
+    {"k": "gate", "x": 28, "y": 3, "to": [30, 3], "out": [27, 3], "span": "ns", "need": "vorth_gate",
      "label": "Open the gate", "name": "Compound gate",
      "shut": "The gate is barred. The lookout will not open it.",
      "say": "Pike's latch lifts. You slip through."},
-    {"k": "church", "x": 33, "y": 3, "w": 4, "h": 4, "door": [33, 5], "enter": True,
+    {"k": "church", "x": 33, "y": 3, "w": 4, "h": 3, "door": [33, 4], "enter": True,
      "sign": "The Red Pyre", "wall": "#8a2018", "roof": "#4a0c0c"},
-    {"k": "altar", "x": 35, "y": 6, "w": 1, "h": 1},
-    {"k": "pew", "x": 33, "y": 4, "w": 2, "h": 1},
-    {"k": "pew", "x": 33, "y": 5, "w": 2, "h": 1},
+    {"k": "altar", "x": 36, "y": 4, "w": 1, "h": 1, "face": "w"},
+    {"k": "pew", "x": 34, "y": 3, "w": 1, "h": 1, "face": "e"},
+    {"k": "pew", "x": 35, "y": 3, "w": 1, "h": 1, "face": "e"},
+    {"k": "pew", "x": 34, "y": 5, "w": 1, "h": 1, "face": "e"},
+    {"k": "pew", "x": 35, "y": 5, "w": 1, "h": 1, "face": "e"},
     {"k": "sconce", "x": 34, "y": 3, "w": 1, "h": 1, "face": "n", "night": True}
 ]
 spawns = [s for s in (extra_ww.get('spawns') or []) if s.get('m') != 'vorthan']
@@ -152,16 +154,22 @@ items['items']['vorthan_robe'] = {
 }
 items['items']['vorth_rosary'] = {
     "name": "Vorth's rosary",
-    "description": "A string of burnt-orange beads. Used, it carries you to the mouth of the Spider Cave in the woods west of Whisperwood.",
+    "description": "A string of burnt-orange beads. Worn in the shield hand: Magic +2, Prayer +4, and two seconds added to each prayer point (same as a Vorthan robe). Once Mother Wenna has sent you for the keeper's beads, using them carries you to the mouth of the Spider Cave west of Whisperwood.",
     "collection": "ASHVALE The Red Pyre",
     "game": "ashvale",
     "category": "jewellery",
     "subcategory": "charm",
+    "tier": 1,
     "weight": 80,
-    "model": "item.ring",
-    "value": 80,
+    "req": {"prayer": 1},
+    "model": "gear.rosary",
+    "value": 140,
     "attributes": [
+        {"trait_type": "Magic", "value": 2},
+        {"trait_type": "Prayer", "value": 4},
+        {"trait_type": "Prayer seconds", "value": 2},
         {"trait_type": "Teleport", "value": "spidercave"},
+        {"trait_type": "Teleport from step", "value": "red_pyre:3"},
         {"trait_type": "Cooldown ticks", "value": 0}
     ],
     "nft": {"copies": 25, "key": "vorth_rosary"}
