@@ -69,7 +69,8 @@
       if (per != null && (typeof a.value !== 'number' || a.value < 0 || a.value > per * Math.max(1, j.tier || 1) + 4)) errs.push(a.trait_type + ' out of range for tier ' + (j.tier || 1));
       if (flat && (typeof a.value !== 'number' || a.value < flat[0] || a.value > flat[1])) errs.push(a.trait_type + ' out of range');
     }
-    if (o.chain && o.creator !== RI.creator && o.creator !== '@ashvale') errs.push('not created by @ashvale');
+    const also = RI.also || ['ns3A7VS6DDaCoBvNFnayHeS9pysgi7Ukrf', '@yourfirstname', 'yourfirstname'];
+    if (o.chain && o.creator !== RI.creator && o.creator !== '@ashvale' && also.indexOf(o.creator) < 0) errs.push('not created by @ashvale or @yourfirstname');
     return { ok: !errs.length, errors: errs };
   }
   function clampItem(j, RI) {
@@ -557,6 +558,7 @@
 
     function useItem(p, slot) {
       const s = p.inv[slot]; if (!s) return; const d = IT[s.id];
+      if (d.eq) { equip(p, slot); return; }   /* a click wears gear; a ring's teleport fires only when its effect triggers */
       if (d.teleport) {   /* a town stone: home, as often as you like, once its cooldown has passed (30 minutes) */
         const P = portalOf(d.teleport); if (!P) { msg(p, 'Nothing happens.'); return; }
         p.cd = p.cd || {}; const left = (p.cd[s.id] || 0) - S.t;
@@ -704,7 +706,14 @@
     function creditKill(p, key) {
       const md = MON[key]; if (!md) return;
       p.kills[key] = (p.kills[key] || 0) + 1;
-      for (const qid in p.quests) { const q = p.quests[qid]; const st = D.quests.quests[qid].steps[q.step - 1]; if (st && st.goal.kill === key && q.n < st.goal.n) { q.n++; msg(p, D.quests.quests[qid].name + ': ' + q.n + ' / ' + st.goal.n + ' ' + md.name.toLowerCase() + (st.goal.n > 1 ? 's' : '') + ' slain.', 'quest'); } }
+      for (const qid in p.quests) { const q = p.quests[qid]; const st = D.quests.quests[qid].steps[q.step - 1]; if (st && st.goal.kill === key && q.n < (st.goal.n == null ? 1 : st.goal.n)) { q.n++; msg(p, D.quests.quests[qid].name + ': ' + q.n + ' / ' + (st.goal.n || 1) + ' ' + md.name.toLowerCase() + ((st.goal.n || 1) > 1 ? 's' : '') + ' slain.', 'quest'); } }
+    }
+    function creditCook(p, item) {
+      if (!IT[item]) return;
+      for (const qid in p.quests) {
+        const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.steps[q.step - 1];
+        if (st && st.goal.cook === item && q.n < (st.goal.n == null ? 1 : st.goal.n)) { q.n++; msg(p, Q.name + ': ' + q.n + ' / ' + (st.goal.n || 1) + ' ' + IT[item].name.toLowerCase() + ' cooked.', 'quest'); }
+      }
     }
     function killMob(m, p) {
       const md = MON[m.key];
@@ -733,7 +742,39 @@
       if (dodged) msg(p, 'You dodge the ' + md.name.toLowerCase() + "'s attack.");
       if (p.retal && !p.act && !p.path.length) p.act = { k: 'attack', uid: m.uid };
       if (hk && p.hawkHp <= 0) hawkFalls(p);
+      else if (angelSave(p)) { /* the ring carried them home */ }
       else if (p.hp <= 0) killPlayer(p);
+    }
+    function angelRest(p, d) {   /* an hour until Iria's second quest is done, then the Gift of Angels shortens it */
+      const base = d.cooldown || 6000;
+      const Q = D.quests.quests.angel_gift, q = p.quests && p.quests.angel_gift, g = IT.gift_of_angels;
+      if (q && Q && q.step > Q.steps.length && g && g.cooldown) return g.cooldown;
+      return base;
+    }
+    function angelSave(p) {
+      if (!p || p.dead || p.puppet || isHawk(p)) return false;
+      const ring = p.eq && p.eq.ring;
+      if (!ring) return false;
+      const d = IT[ring.id];
+      if (!d || d.form !== 'angels') return false;
+      const mx = maxHp(p);
+      if (!(mx > 0) || p.hp >= mx / 5) return false;
+      const P = portalOf((d.teleport) || 'ashvale');
+      if (!P) return false;
+      const until = (p.cd && p.cd[ring.id]) || 0;
+      if (S.t < until) {
+        const mins = Math.max(1, Math.ceil((until - S.t) * 0.6 / 60));
+        msg(p, 'The Ring of Angels is still resting. It can carry you home again in ' + mins + ' minute' + (mins === 1 ? '' : 's') + '.', 'warn');
+        return false;
+      }
+      const rest = angelRest(p, d);
+      p.cd = p.cd || {}; p.cd[ring.id] = S.t + rest;
+      if (p.hp < 1) p.hp = 1;
+      const home = p.x + ',' + p.y;
+      const mins = Math.max(1, Math.round(rest * 0.6 / 60));
+      teleport(p, P, 'The Ring of Angels flares, and Ashvale rises around you. It rests for ' + mins + ' minutes.');
+      ev({ e: 'angels', p: p.id, x: p.x, y: p.y, from: home });
+      return true;
     }
     function hawkFalls(p) {   /* hawk HP gone: you tumble out of the sky as yourself; the ring comes off (your own HP is untouched) */
       const r = p.eq.ring; if (!r) return; p.hawkHp = 0; delete p.eq.ring; p.perch = null; p.striking = 0;
@@ -783,25 +824,46 @@
       if (n.tailor && !(p._trade)) { ev({ e: 'tailor', p: p.id, npc: n.id }); msg(p, n.name + ': ' + (n.greet || 'Fancy a new look? Pick anything you like.'), 'npc'); return; }
       if (n.shop) { const sh = shopOf(n.shop); p.shop = n.shop; ev({ e: 'shop', p: p.id, shop: n.shop, npc: n.id }); msg(p, n.name + ': ' + sh.greet, 'npc'); return; }
       if (n.lines) { ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: n.lines }); return; }   /* dialogue straight off the zone data, checked after shop and quest */
-      if (n.quest) {
-        const Q = D.quests.quests[n.quest]; let q = p.quests[n.quest]; let lines;
+      /* an NPC may offer the next quest only after the one before it is finished (Iria's supper, then the Gift of Angels) */
+      let qid = n.quest;
+      if (n.quests && n.quests.length) {
+        qid = n.quests[n.quests.length - 1];
+        for (const id of n.quests) {
+          const Q0 = D.quests.quests[id], q0 = p.quests[id];
+          if (Q0 && (!q0 || q0.step <= Q0.steps.length)) { qid = id; break; }
+        }
+      }
+      if (qid && D.quests.quests[qid]) {
+        const Q = D.quests.quests[qid]; let q = p.quests[qid]; let lines;
         if (q && q.hid) delete q.hid;   /* back in the log, at the step it was left on */
-        /* three goal kinds, all data: {"kill":key,"n":n} counted by creditKill, {"bring":item,"n":n} counted in your
-           bag at the counter, {"talk":npc} counted by the loop above. n defaults to 1 (a talk, one of anything). */
+        /* goal kinds, all data: {"kill":key,"n":n} counted by creditKill, {"cook":item,"n":n} by a successful cook,
+           {"bring":item,"n":n} counted in your bag, {"talk":npc} by the loop above. A step may ask for a kill and a
+           bring together, and a bring may also require "with". n defaults to 1. */
         const need = (st) => st.goal.n == null ? 1 : st.goal.n;
-        const have = (st) => st.goal.bring && IT[st.goal.bring] ? invCount(p, st.goal.bring) : q.n;
-        const fill = (L, st) => L.map(l => String(l).replace(/\{(n|goal|left|name)\}/g, (m, k) => k === 'name' ? (p.name || 'traveller') : !st ? '' : k === 'n' ? have(st) : k === 'goal' ? need(st) : Math.max(0, need(st) - have(st))));
+        const bringN = (st) => st.goal.bn == null ? need(st) : st.goal.bn;
+        const withN = (st) => st.goal.wn == null ? 1 : st.goal.wn;
+        const counted = (st) => (st.goal.kill || st.goal.cook || st.goal.talk) ? (q.n | 0) : (st.goal.bring && IT[st.goal.bring] ? invCount(p, st.goal.bring) : (q.n | 0));
+        const met = (st) => {
+          const g = st.goal;
+          if ((g.kill || g.cook || g.talk) && (q.n | 0) < need(st)) return false;
+          if (g.bring && (!IT[g.bring] || invCount(p, g.bring) < bringN(st))) return false;
+          if (g.with && (!IT[g.with] || invCount(p, g.with) < withN(st))) return false;
+          return !!(g.kill || g.cook || g.talk || g.bring);
+        };
+        const fill = (L, st) => L.map(l => String(l).replace(/\{(n|goal|left|name)\}/g, (m, k) => k === 'name' ? (p.name || 'traveller') : !st ? '' : k === 'n' ? counted(st) : k === 'goal' ? need(st) : Math.max(0, need(st) - counted(st))));
         const open = (st) => st && ZINDEX.some(z => z.id === st.zone);   /* a step opens when its zone EXISTS (it may not be loaded yet) */
-        if (!q) { q = p.quests[n.quest] = { step: 1, n: 0 }; lines = fill(Q.steps[0].talk, Q.steps[0]); ev({ e: 'quest', p: p.id, q: n.quest, step: 1 }); addXp(p, 'speechcraft', SPEECH.xpQuestTalk || 250); }
+        if (!q) { q = p.quests[qid] = { step: 1, n: 0 }; lines = fill(Q.steps[0].talk, Q.steps[0]); ev({ e: 'quest', p: p.id, q: qid, step: 1 }); addXp(p, 'speechcraft', SPEECH.xpQuestTalk || 250); }
         else {
           const st = Q.steps[q.step - 1];
           if (!st) lines = fill(Q.done, null);
           else if (!open(st)) { const prev = Q.steps[q.step - 2]; lines = prev && prev.locked && prev.locked.length ? fill(prev.locked, st) : ['The road to that place is not open yet. Come back another day.']; }
-          else if (have(st) >= need(st)) {
+          else if (met(st)) {
             if (st.goal.bring) {   /* the goods change hands here, and only here: a step cannot be handed in twice */
-              removeItem(p, st.goal.bring, need(st)); ev({ e: 'inv', p: p.id });
-              msg(p, 'You hand over ' + need(st) + ' x ' + IT[st.goal.bring].name + '.', 'quest');
+              removeItem(p, st.goal.bring, bringN(st));
+              msg(p, 'You hand over ' + bringN(st) + ' x ' + IT[st.goal.bring].name + '.', 'quest');
             }
+            if (st.goal.with) { removeItem(p, st.goal.with, withN(st)); msg(p, 'You hand over ' + withN(st) + ' x ' + IT[st.goal.with].name + '.', 'quest'); }
+            if (st.goal.bring || st.goal.with) ev({ e: 'inv', p: p.id });
             const done = st.complete && st.complete.length ? fill(st.complete, st) : ['Well done, traveller. Take this, you have earned it.'];
             giveReward(p, st.reward, n.name, Q.name);
             q.step++; q.n = 0;
@@ -809,8 +871,8 @@
             if (!nx) lines = done.concat(fill(Q.done, null));
             else if (!open(nx)) { lines = done.concat(st.locked && st.locked.length ? fill(st.locked, nx) : ['Rest now. When the road to ' + nx.zone + ' opens, come and see me again.']); q.wait = 1; }
             else lines = done.concat(fill(nx.talk, nx));
-            ev({ e: 'quest', p: p.id, q: n.quest, step: q.step }); addXp(p, 'speechcraft', SPEECH.xpQuestTalk || 250);
-          } else lines = st.progress && st.progress.length ? fill(st.progress, st) : [st.talk[0], 'So far: ' + have(st) + ' of ' + need(st) + '.'];
+            ev({ e: 'quest', p: p.id, q: qid, step: q.step }); addXp(p, 'speechcraft', SPEECH.xpQuestTalk || 250);
+          } else lines = st.progress && st.progress.length ? fill(st.progress, st) : [st.talk[0], 'So far: ' + counted(st) + ' of ' + need(st) + '.'];
         }
         ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines });
       }
@@ -844,7 +906,7 @@
         const rd = IT[p.inv[raw].id]; p.inv[raw] = null;
         const burnPct = Math.max(0, 40 - 4 * (lv(p, 'cooking') - rd.cookReq)) + (nd.burnBonus || 0);   /* an open fire burns a little more often */
         if (R.int(100) < burnPct) { addItem(p, rd.burns, 1); msg(p, 'You accidentally burn the ' + IT[rd.cooks].name.toLowerCase() + '.'); }
-        else { addItem(p, rd.cooks, 1); addXp(p, 'cooking', rd.cookXp * 10); msg(p, 'You cook the ' + IT[rd.cooks].name.toLowerCase() + '.'); }
+        else { addItem(p, rd.cooks, 1); addXp(p, 'cooking', rd.cookXp * 10); msg(p, 'You cook the ' + IT[rd.cooks].name.toLowerCase() + '.'); creditCook(p, rd.cooks); }
         ev({ e: 'gather', p: p.id, node: i, ok: true });
         return;
       }
@@ -1446,7 +1508,7 @@
     }
     function groundFull(zone, list) { S.ground = S.ground.filter(g => zoneOf(g.x, g.y) !== zone || isAuth(zone) || g.bank != null);   /* the Bank's persisted drops stay: the Bank, not the host, says when they go */ for (const r of list) groundAdd(r[0], r[1], r[2], r[3], r[4], r[5]); }
     /* owner side: what the host resolved about OUR player */
-    function applyHit(pid, dmg) { const p = S.players[pid]; if (!p || p.puppet || p.dead) return; p.hp -= Math.min(dmg, p.hp); if (p.retal && !p.act && !p.path.length) { } if (p.hp <= 0) killPlayer(p); }
+    function applyHit(pid, dmg) { const p = S.players[pid]; if (!p || p.puppet || p.dead) return; p.hp -= Math.min(dmg, p.hp); if (angelSave(p)) return; if (p.retal && !p.act && !p.path.length) { } if (p.hp <= 0) killPlayer(p); }
     function storeItem(pid, id, n) { const p = S.players[pid]; if (!p || !IT[id]) return 0; const had = invCount(p, id); removeItem(p, id, Math.min(n, had)); ev({ e: 'inv', p: pid }); return Math.min(n, had); }   /* into the town chest: it stays in the wallet, only out of the bag */
     function grantItem(pid, id, n) { const p = S.players[pid]; if (!p || !IT[id]) return; const left = addItem(p, id, n); if (left) dropGround(id, left, p.x, p.y, null, 300); ev({ e: 'take', p: pid, id, n: n - left }); }
     function addPlayer(id, save) {

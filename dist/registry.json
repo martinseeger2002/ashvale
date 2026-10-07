@@ -390,6 +390,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.iria": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.latency": {
     "id": null,
     "v": 1,
@@ -768,6 +774,12 @@
     "api": 1,
     "kind": "json"
    },
+   "gear.angel_wings": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "gear.arrows": {
     "id": null,
     "v": 1,
@@ -991,6 +1003,12 @@
     "kind": "json"
    },
    "item.ring": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.ring_angels": {
     "id": null,
     "v": 1,
     "api": 1,

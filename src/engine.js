@@ -11,10 +11,11 @@
     /* HARD RULE (2026-10-01): "only items that were inscribed and tokens created by @ashvale should be allowed in
        the game". Anything read from a wallet (NFTs, tokens) must pass allowedAsset() before it reaches the game. */
     const ASHVALE_ADDR = 'nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c';
+    const YOURFIRST_ADDR = 'ns3A7VS6DDaCoBvNFnayHeS9pysgi7Ukrf';
     /* tokens issued before the schema (empty category/subcategory): classified by property id, only when @ashvale issued them */
     const LEGACY_TOKENS = { 26: ['currency', 'gold'], 20: ['xp', 'attack'], 21: ['xp', 'strength'], 22: ['xp', 'defence'], 23: ['xp', 'ranged'], 24: ['xp', 'magic'], 25: ['xp', 'hitpoints'] };
     function classifyToken(t, items) {   /* an arcade token row -> {propertyid, category, subcategory, item} or null */
-      if (!t || t.issuer !== ASHVALE_ADDR) return null;
+      if (!t || (t.issuer !== ASHVALE_ADDR && t.issuer !== YOURFIRST_ADDR)) return null;
       let cat = t.category || '', sub = t.subcategory || '';
       if (!cat && LEGACY_TOKENS[t.propertyid]) [cat, sub] = LEGACY_TOKENS[t.propertyid];
       if (!cat) return null;
@@ -30,16 +31,31 @@
         async tokens(ids) { const rows = ids && ids.length ? await j('/r/tokens?ids=' + ids.slice(0, 100).join(',')) : []; return (Array.isArray(rows) ? rows : []).map(t => classifyToken(t, items)).filter(Boolean); },
         async balances(addr) {
           const rows = await j('/r/balances/' + encodeURIComponent(addr)); if (!Array.isArray(rows)) return [];
-          const mine = rows.filter(r => r && r.issuer === ASHVALE_ADDR), meta = await this.tokens(mine.map(r => r.propertyid));
+          const mine = rows.filter(r => r && (r.issuer === ASHVALE_ADDR || r.issuer === YOURFIRST_ADDR)), meta = await this.tokens(mine.map(r => r.propertyid));
           return mine.map(r => Object.assign({ balance: r.balance != null ? r.balance : r.amount }, meta.find(m => m.propertyid === r.propertyid) || {})).filter(x => x.category);
         },
         classifyToken: t => classifyToken(t, items)
       };
     }
+    function ashvaleFlag(j) {
+      if (!j || typeof j !== 'object') return false;
+      if (j.game === 'ashvale' || j.ashvale === true) return true;
+      for (const t of (j.attributes || [])) {
+        if (!t) continue;
+        const k = String(t.trait_type || '').toLowerCase();
+        if ((k === 'flag' || k === 'game') && String(t.value).toLowerCase() === 'ashvale') return true;
+      }
+      return false;
+    }
     function allowedAsset(a) {
       if (!a) return false;
       const by = a.creator || a.issuer || a.owner_at_creation || null, addr = by && typeof by === 'object' ? by.address || by.tag : by;
-      return addr === ASHVALE_ADDR || addr === '@ashvale' || addr === 'ashvale';
+      if (addr === ASHVALE_ADDR || addr === '@ashvale' || addr === 'ashvale') return true;
+      const also = (DATA.assets && DATA.assets.also) || [];
+      const extra = addr === YOURFIRST_ADDR || addr === '@yourfirstname' || addr === 'yourfirstname' || also.indexOf(addr) >= 0;
+      if (!extra || !ashvaleFlag(a.json || a)) return false;
+      const ct = String(a.contenttype || a.content_type || '');
+      return !ct || ct === 'application/json';
     }
     const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0], [1, -1], [1, 1], [-1, 1], [-1, -1]];
     const SPELL_COL = { Wind: '#e6f2ff', Water: '#3d8bff', Earth: '#7cc04a', Fire: '#ff6a1a' };
@@ -547,6 +563,7 @@
             else { const r = host.getBoundingClientRect(); hud.menu(r.width / 2, r.height / 2, L); }
             if ((e.unknown || []).length) hud.chat('Not yet attuned: ' + e.unknown.join(', ') + '.', 'sys');
           } break;
+          case 'angels': { const t = ents.get('p:' + e.p); if (t) { angelFlare(t.root.position); if (t.H && t.H.play) t.H.play('cast', { loop: false }); } if (mine) sfx('level'); break; }
           case 'teleport': if (mine) { place(myEnt, e.x, e.y); cam.snap = true; streamRegions(); sfx('equip'); arriveCheck(); } break;
           case 'zoneadd': zoneArrived(e, now); break;
           case 'chest': if (mine) { const c = ents.get('n:' + e.npc); if (c) c.H.play('open'); hud.openChest(); } break;   /* the town chest */
@@ -641,7 +658,18 @@
       }
 
       /* ---------- little particle bursts (level up, respawn) */
-      const bursts = [], burstGeo = new THREE.BoxGeometry(0.07, 0.07, 0.07);
+      const bursts = [], burstGeo = new THREE.BoxGeometry(0.07, 0.07, 0.07), wingGeo = new THREE.ConeGeometry(0.1, 0.62, 5);
+      function angelFlare(pos) {
+        burst(pos, 0xf4e4a8);
+        for (const side of [-1, 1]) {
+          const m = new THREE.Mesh(wingGeo, new THREE.MeshBasicMaterial({ color: 0xf7f4ee }));
+          m.position.copy(pos).add(new THREE.Vector3(side * 0.28, 1.25, 0));
+          m.rotation.z = side * -0.7;
+          m.userData.v = new THREE.Vector3(side * 0.35, 1.5, 0);
+          m.userData.t = 0; m.userData.life = 1.15;
+          scene.add(m); bursts.push(m);
+        }
+      }
       function burst(pos, color) { for (let k = 0; k < 18; k++) { const m = new THREE.Mesh(burstGeo, new THREE.MeshBasicMaterial({ color })); m.position.copy(pos).add(new THREE.Vector3(0, 1.2, 0)); const a = k / 18 * 2 * PI; m.userData.v = new THREE.Vector3(Math.cos(a) * 1.6, 2 + (k % 3), Math.sin(a) * 1.6); m.userData.t = 0; scene.add(m); bursts.push(m); } }
 
       /* ---------- sound: tiny WebAudio synth (no files) */
@@ -925,6 +953,50 @@
         const mob = typeof e.src === 'number' && e.dst === PID ? e.src : e.src === PID && typeof e.dst === 'number' ? e.dst : null;
         if (mob == null) return; const m = core.mobByUid(mob); if (m) lastCombat = { zone: m.zone, t: performance.now() };
       }
+      /* ONE DEVICE AT A TIME (2026-10-06: the same player on two devices showed one character jumping between two
+         spots). Every game of a signed-in player also joins the room 'one.<address>'; the arcade stamps each sender's
+         address, so only that player's own games can speak there. A game that opens says 'claim' with its session id:
+         every OLDER game of that player that hears it stops (no saves, no network, a notice with Play here instead).
+         Heartbeats every 15 s cover a lost claim: of two sessions that hear each other, the one that started later wins.
+         Same-id messages are let through (two devices may share an id) and our own echo is told apart by the session. */
+      const ONE = { sid: Math.random().toString(36).slice(2, 10) + Date.now().toString(36), at: Date.now(), room: null, addr: null, t: 0, said: 0 };
+      function evicted() {
+        if (stopped) return;
+        stopped = true; hud.showHelp && hud.showHelp(false); hud.hideMenu && hud.hideMenu(); hud.elsewhere && hud.elsewhere();
+        const R = room; room = null; dropRemotes(); hud.setOnline(false); if (R) R.leave();
+        if (nb) nb.update([], []);
+        if (bank.room) { try { bank.room.leave(); } catch (e) { /* gone */ } bank.room = null; }
+        if (ONE.room) { ONE.room.leave(); ONE.room = null; } clearInterval(ONE.t);
+      }
+      async function oneDevice(who) {
+        if (!who || who.guest || !who.address || ONE.addr === who.address) return;
+        ONE.addr = who.address;
+        const res = await net.join('one.' + who.address, { game: 'ashvale', loopback: q.has('loopback') });
+        if (!res || !res.online || stopped) return;
+        const R = ONE.room = res.room;
+        const say = claim => { if (ONE.room === R && !stopped) { ONE.said = Date.now(); R.send({ t: 'dev', s: ONE.sid, at: ONE.at, claim: !!claim }); } };
+        R.on('message', ev => {
+          const m = ev.data || {};
+          if (stopped || m.t !== 'dev' || m.s === ONE.sid || !ev.from || ev.from.address !== who.address) return;
+          if (m.claim || m.at > ONE.at || (m.at === ONE.at && String(m.s) > ONE.sid)) evicted();
+          else if (Date.now() - ONE.said > 3000) say(false);   /* the other is older: make sure it hears us */
+        }, { self: true });
+        R.on('join', () => say(false));
+        say(true); ONE.t = setInterval(() => say(false), 15000);
+      }
+      /* NEW VERSION (2026-10-06): every 3 minutes look up the newest registry, by the launcher's own rule (newest
+         @ashvale registry this loader can run). A newer one than ours: save now and tell the player to leave, refresh the
+         Games tab and come back in. */
+      const VER = { mine: ((G.ASH3D && G.ASH3D._values && G.ASH3D._values.$registry) || {}).version | 0, told: 0 };
+      async function versionCheck() {
+        if (stopped || !VER.mine || VER.told || !/^https?:/.test(location.protocol)) return;
+        try {
+          const L = await (await fetch('/r/inscriptions?creator=nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c&limit=10')).json();
+          let v = 0; for (const x of L || []) { const j = x && x.json; if (j && j.ashvale3d === 'registry' && (j.loader || 1) <= (G.ASH3D.LOADER || 1)) v = Math.max(v, j.version | 0); }
+          if (v > VER.mine) { VER.told = v; persist(); hud.newVersion && hud.newVersion(v); hud.chat('A new version of ASHVALE is out. Leave the game, refresh your Games tab and open ASHVALE again.', 'sys'); }
+        } catch (e) { /* offline for now: the next check */ }
+      }
+      if (VER.mine) setInterval(versionCheck, 180000);
       async function netRoom() {
         const z = core.regionOf(me.x, me.y); if ((z === roomZone && (room || performance.now() < retryAt)) || joining) return;
         joining = true; roomZone = z;
@@ -937,7 +1009,7 @@
           if (res && res.online) { NW.heard = performance.now(); NW.fails = 0; NW.was = true; NW.quietTry = false; if (NW.lost) { NW.lost = false; hud.netLost && hud.netLost(false); hud.chat('Back in touch with other players.', 'sys'); } }
           else if (NW.was && (NW.lost || NW.quietTry)) { NW.quietTry = false; NW.tries++; if (!NW.lost) NW.lost = true; hud.netLost && hud.netLost(true, 'net', 'the arcade is not answering' + (NW.tries > 2 ? ': reload the page' : ', still trying')); }
           if (res && res.online && core.regionOf(me.x, me.y) === z) {
-            const R = res.room; room = R; myNetId = R.me.id; netStatus = res.backend + ' as ' + (R.me.tag ? '@' + R.me.tag : 'guest');
+            const R = res.room; room = R; myNetId = R.me.id; oneDevice(R.me); netStatus = res.backend + ' as ' + (R.me.tag ? '@' + R.me.tag : 'guest');
             { let h = 2166136261; for (let i = 0; i < myNetId.length; i++) h = Math.imul(h ^ myNetId.charCodeAt(i), 16777619) >>> 0; core.uidSpace(1 + h % 4095); }   /* my own uid space for things I create as a host */
             R.on('message', ev => { if (room === R) onNet(ev); });
             R.on('message', () => { if (room === R) NW.heard = performance.now(); }); R.on('join', () => { if (room === R) NW.heard = performance.now(); }); R.on('leave', () => { if (room === R) NW.heard = performance.now(); });
@@ -946,7 +1018,7 @@
             R.on('closed', why => { if (room !== R) return; room = null; dropRemotes(); hosts.clear(); passive = false; applyAuth(); hud.setOnline(false); NW.lost = true; NW.tries = 0; hud.netLost && hud.netLost(true, 'net', why || ''); hud.chat('Lost contact with other players' + (why ? ' (' + why + ')' : '') + '. Retrying soon.', 'sys'); retryAt = performance.now() + 15000; });
             netGear();
             if (R.me && !R.me.guest && R.me.address && R.me.address !== walletState.address) { walletState.address = R.me.address; walletRefresh(); }
-            if (!trade && deps.trade) trade = deps.trade.create({ host, toast: (t, k) => hud.chat(t, k || 'trade'), send: (to, obj) => netSend({ tr: obj, to }), offerable: tradeOfferable, onSettled: tradeSettled, itemOf: p => { const j = p && p.json; if (!j || p.creator !== DATA.assets.issuer) return null; const k = j.key || ((j.attributes || []).find(a => a && a.trait_type === 'Key') || {}).value; const d = k && core.item(k); return d ? { key: k, name: d.name, icon: (() => { try { return MOD.icon(k, 64); } catch (e) { return null; } })() } : null; }, nameOf: id => { const r = remotes.get(id); return r ? label(r.name, r.from) : 'another player'; } });
+            if (!trade && deps.trade) trade = deps.trade.create({ host, toast: (t, k) => hud.chat(t, k || 'trade'), send: (to, obj) => netSend({ tr: obj, to }), offerable: tradeOfferable, onSettled: tradeSettled, itemOf: p => { const j = p && p.json; if (!j || !allowedAsset(p)) return null; const k = j.key || ((j.attributes || []).find(a => a && a.trait_type === 'Key') || {}).value; const d = k && core.item(k); return d ? { key: k, name: d.name, icon: (() => { try { return MOD.icon(k, 64); } catch (e) { return null; } })() } : null; }, nameOf: id => { const r = remotes.get(id); return r ? label(r.name, r.from) : 'another player'; } });
           } else { netStatus = res && res.why ? 'solo (' + res.why + ')' : 'solo'; retryAt = performance.now() + 60000; passive = false; applyAuth(); }
         } catch (e) { console.warn('net', e && e.message); retryAt = performance.now() + 30000; passive = false; applyAuth(); }
         joining = false;
@@ -988,8 +1060,14 @@
       let netStatus = 'connecting', gearT = 0, lastPosKey = '', trade = null;
       /* the wallet (2026-10-04: tradable NFTs as your inventory, tradable tokens as your Gold): read-only, from the
          arcade's public views of the signed-in player's address; guests and solo play have none */
-      const WAL = deps.wallet && DATA.assets ? deps.wallet.create({ assets: DATA.assets }) : null;
-      const walletState = { status: WAL ? 'signed-out' : 'off', data: null, address: null, error: '' };
+      /* A page opened on this machine's preview (port 8098) reads the local arcade. The published
+         game is served by the arcade itself, so it keeps the same-origin wallet and the signed-in player. */
+      const localPreview = (location.hostname === '127.0.0.1' || location.hostname === 'localhost') && location.port === '8098';
+      const arcadeBase = q.get('arcade') || (localPreview ? 'http://127.0.0.1:8420' : '');
+      const hintedAddr = q.get('wallet') || '';
+      const hintedTag = q.get('wallettag') || (localPreview ? 'yourfirstname' : '');
+      const WAL = deps.wallet && DATA.assets ? deps.wallet.create({ assets: DATA.assets, base: arcadeBase }) : null;
+      const walletState = { status: WAL ? 'signed-out' : 'off', data: null, address: hintedAddr || null, error: '' };
       /* trips (plan phase C): play settled in fixed time windows (the operator: time-based, not town-based), for the judge (tools/judge3d_tail.js).
          The seed comes from the arcade viewer this page runs in (the same parent bridge the 2D game uses). */
       function bridge(msg, kind, ms) { return new Promise(ok => { if (!G.parent || G.parent === G) { ok({ error: 'open this inside DogecoinArcade' }); return; }
@@ -1038,7 +1116,14 @@
       if (TRIP && POOLS.length) setInterval(claimNext, 21000);
       async function walletRefresh() {
         if (!WAL) return walletState;
-        const addr = (room && room.me && !room.me.guest && room.me.address) || walletState.address;
+        let addr = (room && room.me && !room.me.guest && room.me.address) || hintedAddr || walletState.address;
+        if (!addr && hintedTag) {
+          try {
+            const t = await fetch((arcadeBase || '') + '/r/tag/' + encodeURIComponent(hintedTag));
+            const j = t.ok ? await t.json() : null;
+            if (j && j.address) addr = j.address;
+          } catch (e) { /* the tag view is optional */ }
+        }
         if (!addr) { walletState.status = 'signed-out'; hud.refresh('wallet'); return walletState; }
         walletState.address = addr; walletState.status = 'loading'; hud.refresh('wallet');
         try { walletState.data = await WAL.load(addr); walletState.status = 'ready'; walletState.error = ''; ledgerFor(addr); }
@@ -1065,7 +1150,7 @@
           const w = walCounts(); L = { bag: {}, spent: {} };
           for (const k in w) { const c = carriedOf(k); if (c && w[k]) L.bag[k] = Math.min(c, w[k]); }
         }
-        L.pend = L.pend || {}; L.pspent = L.pspent || {}; L.gone = L.gone || {}; L.autoTake = L.autoTake || {}; L.pchest = L.pchest || {}; L.lchest = L.lchest || {};
+        L.bag = L.bag || {}; L.spent = L.spent || {}; L.pend = L.pend || {}; L.pspent = L.pspent || {}; L.gone = L.gone || {}; L.autoTake = L.autoTake || {}; L.pchest = L.pchest || {}; L.lchest = L.lchest || {};
         L.addr = addr; ledger = L; return L;
       }
       const ledgerSave = () => { if (!ledger) return; try { G.localStorage.setItem(CKEY(ledger.addr), JSON.stringify({ bag: ledger.bag, spent: ledger.spent, pend: ledger.pend, pspent: ledger.pspent, out: ledger.out || {}, gone: ledger.gone || {}, autoTake: ledger.autoTake || {}, pchest: ledger.pchest || {}, lchest: ledger.lchest || {} })); } catch (e) { /* private window */ } };
@@ -1130,14 +1215,15 @@
         for (const k in L.spent) {
           const away = (L.out[k] || []).reduce((a, o) => a + o.n, 0), n = (L.spent[k] || 0) - away - holdOf(L, k);   /* a fresh drop waits 90 s */
           if (n <= 0) continue;
-          if (W.gear[k]) { const used = new Set((L.out[k] || []).map(o => o.piece)), dr = (L.dropped || []).filter(d => d.k === k && W.gear[k].indexOf(d.pc) >= 0 && (d.taken || Date.now() - d.t >= HOLD)).map(d => d.pc), pc = dr.find(x => !used.has(x)) || W.gear[k].find(x => !used.has(x)); if (pc) { pick = { k, n: 1, body: { kind: 'inscription', inscription: pc }, piece: pc }; break; } }
-          else if (W.pids && W.pids[k]) { pick = { k, n, body: { kind: 'token', propertyid: W.pids[k], amount: String(n) } }; break; }
+          const homeOf = (maker) => (maker === YOURFIRST_ADDR || maker === '@yourfirstname' || maker === 'yourfirstname') ? '@yourfirstname' : '@ashvale';
+          if (W.gear[k]) { const used = new Set((L.out[k] || []).map(o => o.piece)), dr = (L.dropped || []).filter(d => d.k === k && W.gear[k].indexOf(d.pc) >= 0 && (d.taken || Date.now() - d.t >= HOLD)).map(d => d.pc), pc = dr.find(x => !used.has(x)) || W.gear[k].find(x => !used.has(x)); if (pc) { pick = { k, n: 1, body: { kind: 'inscription', inscription: pc }, piece: pc, home: homeOf(W.makers && W.makers[pc]) }; break; } }
+          else if (W.pids && W.pids[k]) { pick = { k, n, body: { kind: 'token', propertyid: W.pids[k], amount: String(n) }, home: homeOf(W.issuers && W.issuers[String(W.pids[k])]) }; break; }
         }
         if (!pick) return;
         returning = true;
         try {
           const r = await fetch('/r/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-            body: JSON.stringify(Object.assign({ to: '@ashvale', label: 'ASHVALE', note: 'Back to Ashvale', silent: true }, pick.body)) });
+            body: JSON.stringify(Object.assign({ to: pick.home, label: pick.home === '@yourfirstname' ? 'yourfirstname' : 'ASHVALE', note: pick.home === '@yourfirstname' ? 'Back to yourfirstname' : 'Back to Ashvale', silent: true }, pick.body)) });
           const j = await r.json().catch(() => ({}));
           if (r.status !== 202 || !j.id) { returnsOff = now + 600000; return; }   /* refused: try again in ten minutes */
           const o = { id: j.id, n: pick.n, piece: pick.piece || null, st: 'pending', t: now }; (L.out[pick.k] = L.out[pick.k] || []).push(o); ledgerSave();
@@ -1296,9 +1382,10 @@
           });
           R.on('closed', () => { if (bank.room === R) bank.room = null; });
           R.on('message', ({ from, data }) => {
-            if (data && data.t === 'felled' && from && from.address === DATA.assets.issuer && R.me && data.to === R.me.address) { core.setFelled(data.cells || []); return; }   /* trees others felled */
-            if (data && data.t === 'ground' && from && from.address === DATA.assets.issuer && R.me && data.to === R.me.address) { groundHeard(data); return; }   /* persisted drops near me */
-            if (!data || data.t !== 'dep' || !from || from.address !== DATA.assets.issuer || !R.me || data.to !== R.me.address) return;   /* only @ashvale answers, only to me */
+            const bankFrom = from && (from.address === DATA.assets.issuer || from.address === YOURFIRST_ADDR || from.tag === 'yourfirstname');
+            if (data && data.t === 'felled' && bankFrom && R.me && data.to === R.me.address) { core.setFelled(data.cells || []); return; }   /* trees others felled */
+            if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }   /* persisted drops near me */
+            if (!data || data.t !== 'dep' || !bankFrom || !R.me || data.to !== R.me.address) return;   /* only @ashvale or @yourfirstname answers, only to me */
             const q = bank.sent[data.id]; if (!q) return; delete bank.sent[data.id]; clearTimeout(q.timer);
             if (data.ok) {
               const L = ledgerFor(walletState.address || R.me.address);
@@ -1740,6 +1827,7 @@
         /* opponent box */
         if (lastOpp && now - lastOpp.t < 6000) { const m = typeof lastOpp.uid === 'number' ? core.mobByUid(lastOpp.uid) : null; if (m) hud.setOpp({ name: D.monsters[m.key].name, hp: m.hp, max: D.monsters[m.key].hp }); else hud.setOpp(null); } else hud.setOpp(null);
         if (now - mmT > 66) { mmT = now; drawMinimap(); }
+        hud.setPos(me.x, me.y);
         netPos(now); netNeighbours(now); flushNet();
         if (fogMod && myEnt) fogMod.focus(myEnt.root.position);
         if (SCENE.see && myEnt) {   /* see-through: a circle round the avatar's chest on screen, for anything 2 m or more in front of it */
@@ -1815,6 +1903,7 @@
       else if (!store.get('ashvale3d.help') || !save) hud.showHelp(true);
       hud.refresh('all');
       netRoom();
+      if (hintedAddr || hintedTag) walletRefresh().then(() => { if (q.has('chest')) hud.openChest(); });
       /* controller (src/gamepad.js): stick walks, A = the left-click option of the target near you, X attack, Y bag */
       const PAD = deps.gamepad ? deps.gamepad.create({ core, pid: PID, hud, host, cam, settings: () => settings, toggle: k => hudApi().toggle(k), send, doAct, optionsFor, sfx, facing: () => myEnt.yaw, screenOf: (k, id) => game.screenOf(k, id) }) : null;
       requestAnimationFrame(frame);
@@ -1835,7 +1924,8 @@
         chestEventForTest: chestEvent,
         chest: { state: chestState, take: chestTake, store: chestStore, promise: paid => { const L = ledgerFor(walletState.address); for (const k in paid) L.pend[k] = (L.pend[k] || 0) + paid[k]; ledgerSave(); },
           paidForTest: paid => { const L = ledgerFor(walletState.address); for (const k in paid) { const toChest = Math.min(paid[k], L.lchest[k] || 0); L.lchest[k] -= toChest; L.pchest[k] = (L.pchest[k] || 0) + toChest; L.pend[k] = (L.pend[k] || 0) + paid[k] - toChest; } ledgerSave(); } },   /* tests */ trip: () => TRIP && TRIP.state(), trade: () => trade, peers: () => Array.from(remotes.values()).map(r => r.from), _remIds: () => Array.from(remotes.keys()), optionsAt: (cx, cy) => { const L = []; for (const t of targetsAt(cx, cy)) for (const o of optionsFor(t)) L.push(o.html.replace(/<[^>]+>/g, '')); return L; }, _remAnim: () => JSON.stringify(Array.from(remotes.values()).map(r => [r.anim, r.buf.length, r.buf.length && r.buf[r.buf.length - 1].a])),
-        stop() { stopped = true; }
+        stop() { stopped = true; },
+        versionCheck, oneDevice: () => ({ sid: ONE.sid, at: ONE.at, room: !!ONE.room, addr: ONE.addr, stopped, version: VER.mine, told: VER.told })
       };
       void _handle;
       return game;

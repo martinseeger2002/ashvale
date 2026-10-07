@@ -17,8 +17,26 @@ WORLD = json.load(open(os.path.expanduser('~/ashvale/world.json')))
 DATA_API = 1          # bump only when a field's MEANING changes (adding fields is fine without a bump)
 
 
+def overlay(base, extra):
+    """data/extra/<module>.json is merged over what this script makes (hand-written additions, e.g. a collaborator's
+    NPC, quests and items from GitHub, kept so a rerun does not wipe them): dicts merge, lists of {id: ...} merge by id,
+    any other value (and any other list) is replaced."""
+    if isinstance(base, dict) and isinstance(extra, dict):
+        for k, v in extra.items(): base[k] = overlay(base[k], v) if k in base else v
+        return base
+    if isinstance(base, list) and isinstance(extra, list) and extra and all(isinstance(x, dict) and 'id' in x for x in base + extra):
+        at = {x['id']: i for i, x in enumerate(base)}
+        for x in extra:
+            if x['id'] in at: base[at[x['id']]] = overlay(base[at[x['id']]], x)
+            else: base.append(x)
+        return base
+    return extra
+
+
 def module(name, v, data):
     os.makedirs(OUT, exist_ok=True)
+    xp = os.path.join(OUT, 'extra', name + '.json')
+    if os.path.exists(xp): data = overlay(data, json.load(open(xp)))
     m = {"ashvale3d": "module", "name": name, "api": DATA_API, "v": v, "data": data}
     path = os.path.join(OUT, name + '.json')
     with open(path, 'w') as f:

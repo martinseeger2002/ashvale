@@ -14,7 +14,9 @@
     host.classList.add('ash');
     const el = (cls, parent, html, tag) => { const e = document.createElement(tag || 'div'); if (cls) e.className = cls; if (html != null) e.innerHTML = html; (parent || host).appendChild(e); return e; };
     const layer = el('lay'), ui = el('lay');
-    const hover = el('hover t', ui), opp = el('opp stone ui', ui);
+    const hover = el('hover t', ui), opp = el('opp stone ui', ui), xy = el('xy', ui, '');
+    let xyKey = '';
+    function setPos(x, y) { const k = x + ', ' + y; if (k === xyKey) return; xyKey = k; xy.textContent = k; }
     const mmBox = el('mm ui', ui), mmCanvas = el('', mmBox, null, 'canvas'); mmCanvas.width = mmCanvas.height = 300;
     const compass = el('compass ui t', ui, 'N');
     const orbs = el('orbs ui', ui), hpOrb = el('orb hp', orbs, '<i></i><b></b>'), runOrb = el('orb run', orbs, '<i></i><b></b>');
@@ -153,7 +155,7 @@
     /* the connection banner (2026-10-06: a player who lost the server is told, so they don't play on a broken one):
        kind 'net' = the shared world is not reachable (others can't see you; the game reconnects by itself), 'save' = progress
        is not being saved. Stays until the engine says it's back; Reload is always there. */
-    const nl = el('netlost', ui), NL = { net: null, save: null };
+    const nl = el('netlost ui', ui), NL = { net: null, save: null };
     function netLost(on, kind, why) {
       kind = kind || 'net'; NL[kind] = on ? (why || '') : null;
       const k = NL.save != null ? 'save' : NL.net != null ? 'net' : null;
@@ -163,6 +165,22 @@
                       : 'Other players can\'t see you and the shared world isn\'t updating' + (NL.net ? ' (' + A.esc(NL.net) + ')' : '') + '. Reconnecting\u2026') +
         '</div><button class="btn">Reload</button>';
       nl.style.display = 'flex'; nl.querySelector('.btn').onclick = () => location.reload();
+    }
+    /* a new release is out (2026-10-06: players are told to leave, refresh their Games tab and come back in).
+       The engine has saved before this shows; it stays up, the game keeps running until they go. */
+    const nv = el('newver', ui);
+    function newVersion(v) {
+      nv.innerHTML = '<b>A new version of ASHVALE is out' + (v ? ' (v' + A.esc(String(v)) + ')' : '') + '.</b> Your progress is saved. ' +
+        'Leave the game, refresh your Games tab and open ASHVALE again to play the new version.';
+      nv.style.display = 'block';
+    }
+    /* this character was opened on another device (2026-10-06: one device at a time). The newest game wins;
+       this one has stopped (no saves, no network). Play here reloads, which makes this the newest. */
+    const ew = el('elsewhere ui', ui);
+    function elsewhere() {
+      ew.innerHTML = '<div><b>ASHVALE is open on another device</b>Your character can only be in one place, so the game has stopped here. ' +
+        'Your progress is kept by the game you opened last.<button class="btn">Play here instead</button></div>';
+      ew.style.display = 'flex'; ew.querySelector('.btn').onclick = () => location.reload();
     }
     /* the portal swirl (2026-10-06): shown while the town you are travelling to is still loading (engine arriveCheck) */
     const trav = el('travel', ui); trav.innerHTML = '<div class="sw"></div><div class="sw2"></div><div class="tt"></div><div class="pb"><i></i></div>';
@@ -224,7 +242,7 @@
     { const r0 = K.refresh; K.refresh = w => { r0(w); if (st.chest) K.drawChest(); }; }   /* the chest window follows the bag and the wallet */
     setTab(st.tab);
     return {
-      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, playerStats, travel, netLost, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => K.openChest(), closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
+      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, playerStats, travel, netLost, newVersion, elsewhere, setPos, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => K.openChest(), closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };

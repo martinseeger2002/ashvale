@@ -22,8 +22,8 @@
         try { return Promise.resolve(r.send(obj)).then(() => true, () => false); } catch (e) { return Promise.resolve(false); }
       },
       members() { try { return (r.members() || []).map(norm); } catch (e) { return [me]; } },
-      on(t, fn) {
-        if (t === 'message') r.on('message', (data, p) => { const from = norm(p); if (from.id !== me.id) fn({ from, data }); });
+      on(t, fn, o) {   /* o.self: also the messages stamped with our own id (another device of the same player can share it) */
+        if (t === 'message') r.on('message', (data, p) => { const from = norm(p); if (from.id !== me.id || (o && o.self)) fn({ from, data }); });
         else if (t === 'join' || t === 'leave') r.on(t, p => { const from = norm(p); if (from.id !== me.id) fn({ from }); });
         else if (t === 'closed') r.on('closed', why => fn(why));
         return room;
@@ -35,7 +35,8 @@
   const LOOP_K = Math.random().toString(36).slice(2, 7);   /* one id per tab in every room, as the arcade keeps one per player */
   function loopback(roomId, opts) {
     const k = LOOP_K;
-    const me = { id: 'dev-' + k, tag: 'dev_' + k, address: null, guest: false };
+    let la = null; try { la = new URLSearchParams(G.location.search).get('loopaddr'); } catch (e) { /* no location */ }   /* dev: two tabs as one player */
+    const me = { id: 'dev-' + k, tag: 'dev_' + k, address: la || null, guest: false };
     const ch = new BroadcastChannel('ashvale3d:' + (opts.game || 'dev') + ':' + roomId), fns = { message: [], join: [], leave: [], closed: [] }, members = new Map();
     const fire = (t, o) => { for (const f of fns[t]) { try { f(o); } catch (e) { console.error(e); } } };
     ch.onmessage = (ev) => {

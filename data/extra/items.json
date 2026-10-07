@@ -1,0 +1,50 @@
+{
+ "items": {
+  "ring_angels": {
+   "name": "The Ring of Angels",
+   "description": "The Ring of Angels. Worn, it saves you when a hit leaves you below one fifth of your hitpoints, by carrying you to Ashvale. It rests for an hour between saves, or ten minutes once you hold the Gift of Angels.",
+   "collection": "ASHVALE Armoury",
+   "game": "ashvale",
+   "category": "jewellery",
+   "subcategory": "ring",
+   "weight": 10,
+   "model": "item.ring_angels",
+   "value": 500,
+   "attributes": [
+    {
+     "trait_type": "Form",
+     "value": "angels"
+    },
+    {
+     "trait_type": "Teleport",
+     "value": "ashvale"
+    },
+    {
+     "trait_type": "Cooldown ticks",
+     "value": 6000
+    }
+   ],
+   "nft": {
+    "copies": 1,
+    "key": "ring_angels"
+   }
+  },
+  "gift_of_angels": {
+   "name": "Gift of Angels",
+   "description": "Gift of Angels. Iria's blessing. While you have finished her second task, the Ring of Angels rests ten minutes between saves instead of an hour.",
+   "collection": "ASHVALE",
+   "game": "ashvale",
+   "category": "jewellery",
+   "subcategory": "charm",
+   "weight": 10,
+   "model": "item.ring_angels",
+   "value": 0,
+   "attributes": [
+    {
+     "trait_type": "Cooldown ticks",
+     "value": 1000
+    }
+   ]
+  }
+ }
+}

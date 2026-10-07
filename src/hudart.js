@@ -62,6 +62,7 @@
 .ash .chat div{margin:1px 0;text-shadow:1px 1px 0 #000}
 .ash .chat .warn{color:#ff6a5a}.ash .chat .level{color:#7fd0ff}.ash .chat .trade{color:#ffd77a}.ash .chat .quest{color:#d9a0ff}.ash .chat .npc{color:#9cf}.ash .chat .sys{color:#ffcf3f}
 .ash .hover{position:absolute;left:8px;top:6px;font-size:13px;color:#fff;text-shadow:1px 1px 0 #000;pointer-events:none;white-space:nowrap}
+.ash .xy{position:absolute;right:8px;bottom:6px;font-size:11px;color:#c8b48a;text-shadow:1px 1px 0 #000;pointer-events:none}
 .ash .opp{position:absolute;left:8px;top:28px;padding:4px 8px;min-width:130px;display:none}
 .ash .opp .bar{height:10px;background:#a00;margin-top:3px;border:1px solid #000}.ash .opp .bar i{display:block;height:100%;background:#0c0}
 .ash .hpb{position:absolute;width:34px;height:5px;background:#c00;border:1px solid #000;transform:translate(-50%,-50%)}
@@ -132,6 +133,12 @@
 .ash .netlost{position:absolute;left:50%;top:max(8px,env(safe-area-inset-top));transform:translateX(-50%);width:min(560px,calc(100vw - 24px));z-index:18;display:none;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:10px;background:#5a1414f0;box-shadow:0 0 0 2px #e05a4a,0 6px 20px #000a;color:#fde9e4;font:14px/1.35 system-ui,sans-serif}
 .ash .netlost b{color:#fff}
 .ash .netlost .btn{flex:none;margin:0;padding:8px 14px}
+.ash .newver{position:absolute;left:50%;top:max(8px,env(safe-area-inset-top));transform:translateX(-50%);width:min(560px,calc(100vw - 24px));z-index:17;display:none;padding:10px 14px;border-radius:10px;background:#3b2c08f2;box-shadow:0 0 0 2px #e8b33a,0 6px 20px #000a;color:#fbefcf;font:14px/1.35 system-ui,sans-serif}
+.ash .newver b{color:#ffd76a}
+.ash .elsewhere{position:absolute;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:#0b0907e8;padding:16px}
+.ash .elsewhere>div{max-width:420px;padding:20px 22px;border-radius:12px;background:#231d14;box-shadow:0 0 0 2px #8a6a2c;color:#f3e7cc;font:15px/1.45 system-ui,sans-serif;text-align:center}
+.ash .elsewhere b{display:block;font-size:18px;margin-bottom:8px;color:#ffd76a}
+.ash .elsewhere .btn{margin:14px auto 0;padding:9px 18px}
 .ash .travel{position:absolute;inset:0;z-index:19;display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#05070d;overflow:hidden;pointer-events:auto;touch-action:none}
 .ash .travel .sw{position:absolute;left:50%;top:50%;width:170vmax;height:170vmax;margin:-85vmax 0 0 -85vmax;border-radius:50%;background:repeating-conic-gradient(from 0deg,#1b4f9a00 0deg,#3d8ff0aa 14deg,#9fd0ff55 22deg,#1b4f9a00 40deg),radial-gradient(circle,#bfe4ff 0,#5fa8ff 7%,#1d4c9c 22%,#0b1a3a 46%,#05070d 70%);animation:ashsw 2.4s linear infinite}
 .ash .travel .sw2{position:absolute;left:50%;top:50%;width:46vmin;height:46vmin;margin:-23vmin 0 0 -23vmin;border-radius:50%;border:2.2vmin solid #8fd0ff;box-shadow:0 0 6vmin #4aa3ff,inset 0 0 6vmin #4aa3ff;animation:ashsw2 1.6s ease-in-out infinite alternate}
@@ -172,7 +179,7 @@
     firemaking: 'Light campfires: a tinderbox on logs. Better logs need more levels and burn longer.' };
   const START_SKILLS = [['attack', 'Hit more often in melee'], ['strength', 'Hit harder, carry 1 kg more per level'], ['defence', 'Get hit less often'], ['ranged', 'Bows and arrows'], ['magic', 'Staffs and spells'], ['hitpoints', 'More health'], ['dexterity', 'Run longer, dodge, faster daggers and bows'], ['speechcraft', 'Better prices in shops']];
   const EQ_LAYOUT = [null, 'head', null, 'cape', 'neck', 'ammo', 'weapon', 'body', 'shield', 'pack', 'legs', null, 'hands', 'feet', 'ring'];
-  const EQ_ACTIVE = { head: 1, cape: 1, pack: 1, ammo: 1, weapon: 1, body: 1, shield: 1, legs: 1 };
+  const EQ_ACTIVE = { head: 1, cape: 1, pack: 1, ammo: 1, weapon: 1, body: 1, shield: 1, legs: 1, ring: 1 };
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const fmtN = n => n >= 1e7 ? [Math.floor(n / 1e6) + 'M', 'm'] : n >= 1e5 ? [Math.floor(n / 1e3) + 'K', 'k'] : [String(n), ''];

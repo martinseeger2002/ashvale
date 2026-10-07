@@ -1,0 +1,18 @@
+{
+ "items": {
+  "also": [
+   "ns3A7VS6DDaCoBvNFnayHeS9pysgi7Ukrf",
+   "@yourfirstname",
+   "yourfirstname"
+  ],
+  "armouryMap": {
+   "ring": "jewellery/ring"
+  },
+  "categories": {
+   "jewellery": [
+    "ring",
+    "charm"
+   ]
+  }
+ }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "The Ring of Angels",
+  "description": "The Ring of Angels. Worn, it saves you when a hit leaves you below one fifth of your total hitpoints, by teleporting you to Ashvale.",
+  "edition": 1,
+  "collection": "ASHVALE Armoury",
+  "game": "ashvale",
+  "category": "jewellery",
+  "subcategory": "ring",
+  "model": "item.ring_angels",
+  "attributes": [
+    {"trait_type": "Key", "value": "ring_angels"},
+    {"trait_type": "Slot", "value": "ring"},
+    {"trait_type": "Tier", "value": "1"},
+    {"trait_type": "Req", "value": ""},
+    {"trait_type": "Attack", "value": "0"},
+    {"trait_type": "Strength", "value": "0"},
+    {"trait_type": "Defence", "value": "0"},
+    {"trait_type": "Ranged", "value": "0"},
+    {"trait_type": "Magic", "value": "0"},
+    {"trait_type": "Copy", "value": "1 of 1"},
+    {"trait_type": "Effect", "value": "Below one fifth of total hitpoints, teleport to Ashvale"}
+  ]
+}

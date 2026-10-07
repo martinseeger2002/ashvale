@@ -18,7 +18,24 @@
   const GOLD = 26;   /* ASHVALE GOLD token property id (a parameter: arcade.swap knows nothing about ASHVALE) */
   /* 2026-10-01: "only items that were inscribed and tokens created by @ashvale should be allowed in the game" */
   const ISSUER = 'nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c';
-  const ours = p => p && p.creator === ISSUER;
+  const EXTRA = new Set(['ns3A7VS6DDaCoBvNFnayHeS9pysgi7Ukrf']);
+  function ashvaleFlag(j) {
+    if (!j || typeof j !== 'object') return false;
+    if (j.game === 'ashvale' || j.ashvale === true) return true;
+    for (const t of (j.attributes || [])) {
+      if (!t) continue;
+      const k = String(t.trait_type || '').toLowerCase();
+      if ((k === 'flag' || k === 'game') && String(t.value).toLowerCase() === 'ashvale') return true;
+    }
+    return false;
+  }
+  const ours = p => {
+    if (!p) return false;
+    if (p.creator === ISSUER) return true;
+    if (!EXTRA.has(p.creator) || !ashvaleFlag(p.json)) return false;
+    const ct = String(p.contenttype || p.content_type || '');
+    return !ct || ct === 'application/json';
+  };
   const CSS = '.ash-trade{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:rgba(10,8,5,.5);font:13px/1.35 system-ui,sans-serif;color:#f3e6c4}'
     + '.ash-trade[hidden]{display:none}'
     + '.ash-trade .w{width:min(640px,96vw);max-height:92vh;overflow:auto;background:linear-gradient(#3b3226,#2a231a);border:2px solid #8a7550;border-radius:8px;padding:12px 14px;box-shadow:0 12px 40px #000c}'

@@ -24,6 +24,7 @@ APP = 'https://app.dogecoinarcade.com'
 DB = os.path.join(HERE, 'chain', 'bank', 'bank.sqlite')
 LOG = os.path.join(HERE, 'chain', 'bank', 'bank.log')
 ASHVALE = 'nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c'
+YOURFIRST = 'ns3A7VS6DDaCoBvNFnayHeS9pysgi7Ukrf'   # @yourfirstname, on the same automation lists as @ashvale
 BANK_PAGE = 'f0a8023a6c32854292243bb79ac9debacf00c3dac767e15f04551434db6a46ee'   # @ashvale's bank-room page: /r/realtime.js only
 CAP_GEAR_DAY, CAP_UNITS_DAY, CAP_GOLD_DAY = 80, 5000, 200000   # per address per day (testnet bound on unproven deposits)
 
@@ -129,13 +130,25 @@ def claim_drop_any(c, addr, k):
                   (k, addr, addr, time.time() - 3600)).fetchone()
     if r: c.execute('update drops set taken_by=?, taken_at=?, paid=1 where n=?', (addr, time.time(), r['n'])); return r['piece']
     return None
+def _flagged(j):
+    """the Ashvale flag: required on a @yourfirstname piece, the same gate the game uses"""
+    if not isinstance(j, dict): return False
+    if j.get('game') == 'ashvale' or j.get('ashvale') is True: return True
+    for a in j.get('attributes') or []:
+        if not isinstance(a, dict): continue
+        k = str(a.get('trait_type') or '').lower()
+        if k in ('flag', 'game') and str(a.get('value') or '').lower() == 'ashvale': return True
+    return False
 def holdings(addr):
     """what this address holds on chain, by game item: {itemId: units} - gear by its Key (any @ashvale collection), tokens by id"""
     out, off = {}, 0
     while True:
         L = json.load(urllib.request.urlopen(APP + '/r/inscriptions/%s?limit=200&offset=%d' % (addr, off), timeout=60))
         for p in L or []:
-            if p.get('creator') != ASHVALE or p.get('held') is False or (p.get('owner') and p.get('owner') != addr): continue
+            if p.get('creator') not in (ASHVALE, YOURFIRST) or p.get('held') is False or (p.get('owner') and p.get('owner') != addr): continue
+            if p.get('creator') == YOURFIRST:
+                ct = str(p.get('contenttype') or p.get('content_type') or '')
+                if not _flagged(p.get('json') or {}) or (ct and ct != 'application/json'): continue
             j = p.get('json') or {}
             k = j.get('key') or next((a.get('value') for a in j.get('attributes', []) if a.get('trait_type') in ('Key', 'key')), None)
             if k: out[k] = out.get(k, 0) + 1
@@ -143,7 +156,7 @@ def holdings(addr):
         off += 200
     pid2item = {v: k for k, v in token_ids().items()}
     for b in json.load(urllib.request.urlopen(APP + '/r/balances/' + addr, timeout=60)) or []:
-        if b.get('issuer') == ASHVALE and b.get('propertyid') in pid2item: out[pid2item[b['propertyid']]] = out.get(pid2item[b['propertyid']], 0) + int(b.get('units') or 0)
+        if b.get('issuer') in (ASHVALE, YOURFIRST) and b.get('propertyid') in pid2item: out[pid2item[b['propertyid']]] = out.get(pid2item[b['propertyid']], 0) + int(b.get('units') or 0)
     return out
 def handle_felled(c, addr, msg):
     """'fell': a player felled the tree at (x, y) - it stays down for everyone. 'felled?': which trees in a rectangle are down

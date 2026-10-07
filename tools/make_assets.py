@@ -19,8 +19,11 @@ issued = {}
 p = os.path.join(HERE, 'chain', 'resource_tokens.json')
 if os.path.exists(p): issued = json.load(open(p))   # {item id: propertyid}
 GEAR = ('weapon', 'armour', 'tool', 'pack', 'cosmetic', 'jewellery')   # jewellery: the hawk ring (2026-10-04)
+xp = os.path.join(HERE, 'data', 'extra', 'assets.json')   # hand-written: extra accepted creators, items that stay in-game only
+extra = json.load(open(xp)) if os.path.exists(xp) else {}
 out = {}
 for k, v in items.items():
+    if k in extra.get('skip', ()): continue
     c = v.get('category')
     if c in GEAR:
         n = v.get('nft') or {}
@@ -32,6 +35,7 @@ for k, v in items.items():
         out[k] = {"kind": "token", "propertyid": issued.get(k), "name": ('ASHVALE ' + v.get('name', k)).upper()[:40]}
 data = {"issuer": "nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c", "gold": 26, "items": out,
         "note": "2026-10-04: gear = one NFT per item (minted on demand by the @ashvale Bank), every stackable = an @ashvale token, Gold = GOLD #26"}
+if extra.get('also'): data['also'] = extra['also']
 mod = {"ashvale3d": "module", "name": "assets", "api": 1, "v": 1, "data": data}
 json.dump(mod, open(os.path.join(HERE, 'data', 'assets.json'), 'w'), separators=(',', ':'))
 n = lambda kind: sum(1 for x in out.values() if x['kind'] == kind)

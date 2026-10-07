@@ -231,7 +231,7 @@ export function createModels(THREE, opts) {
       lift: { kind: 'y', o: J.hips, p0: J.hips.position.y }, fall: { kind: 'rx', o: J.body }
     };
     const H = character(root, joints, HUMAN);
-    const gear = { head: null, body: null, legs: null, weapon: null, shield: null, ammo: null, cape: null, pack: null };
+    const gear = { head: null, body: null, legs: null, weapon: null, shield: null, ammo: null, cape: null, pack: null, ring: null };
     let tool = null, tip = null, made = [];
     const place = jn => jn ? J[jn] || null : root;
 
@@ -254,7 +254,7 @@ export function createModels(THREE, opts) {
       const hairP = clothPart('hair', O.hair || 'short'), beardP = O.beard ? clothPart('beard', O.beard) : null, hatP = O.hat ? clothPart('hat', O.hat.style) : null;
       const gearParts = [];
       const add = (id, slot) => { const I = info(id); if (I.part && I.part.kind === 'gear') gearParts.push({ I, slot }); };
-      for (const sl of ['head', 'body', 'legs', 'shield', 'ammo', 'pack']) if (gear[sl]) add(gear[sl], sl);
+      for (const sl of ['head', 'body', 'legs', 'shield', 'ammo', 'pack', 'ring']) if (gear[sl]) add(gear[sl], sl);
       if (tool) add(tool, 'weapon'); else if (gear.weapon) add(gear.weapon, 'weapon');
       const twoHanded = gearParts.some(g => g.slot === 'weapon' && g.I.part.twoHanded);
       const hidden = new Set(), tags = new Set();
