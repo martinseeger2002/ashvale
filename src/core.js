@@ -1274,7 +1274,7 @@
     function ensureStep(p, q, st) { openStep(p, q, st); }
     const VAEL_CLEAR = 10;
     function vaelTile() { const n = M.npcs.find(q => q.id === 'vael'); return n ? [n.x, n.y] : null; }
-    /* the walk the chapel carves: one tile west of the altar, then south into the open field, three tiles wide */
+    /* the walk the chapel carves: one tile west of the altar, then toward the grove (map-north / true northwest), three tiles wide */
     function onChapelPath(x, y) { return x >= 196 && x <= 198 && y <= 14 && y >= -40; }
     function townAt(x, y) {
       for (const z of ZINDEX) {
@@ -1397,7 +1397,7 @@
           }
           const lines = [
             'A mighty headache. It sits behind the eyes and will not blink.',
-            'When it eases, a path is carved there. Sixty-two paces south. One pace west. The tile reads 197, -51.',
+            'When it eases, a path is carved there. Forty-nine paces north. Thirty-seven paces west. The tile reads 197, -51.',
             'The altar will not have you. You are out of balance.'
           ];
           if (questFinished(p, 'even_grove')) lines.push('The carving is still there. When the Red Pyre is known, the one on the rope will teach the harder balance.');

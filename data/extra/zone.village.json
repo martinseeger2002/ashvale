@@ -478,7 +478,7 @@
    "y": 50,
    "talk": "quest",
    "quest": "bronze_gate",
-   "examine": "Silas the mason. He laid the well, the two shops and the north gate, and he means you to know it."
+   "examine": "Silas the mason. He laid the well, the two shops and the northwest gate, and he means you to know it."
   },
   {
    "id": "pip",
@@ -508,7 +508,7 @@
    "look": "modulus",
    "x": 33,
    "y": 50,
-   "examine": "Modulus the surveyor, measuring the east road for the third time this morning.",
+   "examine": "Modulus the surveyor, measuring the southwest road for the third time this morning.",
    "lines": [
     "I measured this street at a hundred and forty-four feet. They said it needed to be a hundred and forty-three. It is, somehow.",
     "Everything twice, once well. That's the whole trade. Count the ground before you sell it."
@@ -522,7 +522,7 @@
    "y": 44,
    "talk": "quest",
    "quest": "elder_bow",
-   "examine": "Latency the warden, on the north road. Late to everything, and there before you are."
+   "examine": "Latency the warden, on the northwest road. Late to everything, and there before you are."
   },
   {
    "id": "symmetry",
@@ -554,7 +554,7 @@
    "y": 48,
    "talk": "quest",
    "quest": "skinning_knife",
-   "examine": "Fenn the tanner, on the lane below the east road, with frames of skins that nobody in this village knew he had."
+   "examine": "Fenn the tanner, on the lane below the southwest road, with frames of skins that nobody in this village knew he had."
   },
   {
    "id": "chest",

@@ -51,7 +51,7 @@ core.cmd('p1', { c: 'gather', x: 198, y: 11 });
 let dlg = null;
 ticks(4, e => { if (e.e === 'dialog' && e.p === 'p1') dlg = e; });
 const text = dlg ? dlg.lines.join(' ') : '';
-ok(dlg && dlg.name === 'You' && /mighty headache/i.test(text) && /Sixty-two paces south/.test(text) && /One pace west/.test(text) && /197, -51/.test(text) && /out of balance/i.test(text), 'the altar carves the path and refuses: ' + text.slice(0, 80));
+ok(dlg && dlg.name === 'You' && /mighty headache/i.test(text) && /Forty-nine paces north/.test(text) && /Thirty-seven paces west/.test(text) && /197, -51/.test(text) && /out of balance/i.test(text), 'the altar carves the path and refuses: ' + text.slice(0, 80));
 ok(p.pp === before, 'prayer is not restored');
 ok(p.quests.even_grove && p.quests.even_grove.step === 1, 'The Even Grove starts at the altar');
 
@@ -145,7 +145,7 @@ ok(dlg && /Ancient Chapel/.test(dlg.lines.join(' ')), 'Wenna says it aloud');
 p.x = 198; p.y = 12; p.pp = 1;
 core.cmd('p1', { c: 'gather', x: 198, y: 11 });
 dlg = null; ticks(4, e => { if (e.e === 'dialog') dlg = e; });
-ok(dlg && /Sixty-two paces south/.test(dlg.lines.join(' ')) && p.pp === 1, 'the altar still shows the path until the second quest is done');
+ok(dlg && /Forty-nine paces north/.test(dlg.lines.join(' ')) && p.pp === 1, 'the altar still shows the path until the second quest is done');
 
 dlg = talk('vael');
 ok(dlg && /Protect from Magic/.test(dlg.lines.join(' ')) && /Gale/.test(dlg.lines.join(' ')), 'he teaches the overhead prayers and names the three');

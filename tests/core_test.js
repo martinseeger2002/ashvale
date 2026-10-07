@@ -1646,7 +1646,7 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
   const SK = D.quests.quests.skinning_knife, SKINS = new Set(['rat_pelt', 'hare_pelt', 'boar_hide', 'snow_hare_pelt', 'timber_wolf_pelt', 'lizard_skin', 'goat_hide']);
   const dv = (x, y) => Math.round(Math.hypot(x - V.x, y - V.y));
   ok(!!fen && fen.quest === 'skinning_knife' && !fen.shop && !fen.tailor && !fen.lines && ap.quest === 'tin_pipe',
-     'Fenn the tanner gives one thing on the lane below the east road, and the apprentice whose washers he mentions is still standing where he was: ' + ((fen || {}).name || 'nobody'));
+     'Fenn the tanner gives one thing on the lane below the southwest road, and the apprentice whose washers he mentions is still standing where he was: ' + ((fen || {}).name || 'nobody'));
   const ck = AshCore.create(Object.assign({}, D, { wg: AshWorld.seededWorldgen(WGM, AG, D) }), { seed: 'kitchen-range' });
   ok(!!D4.map(d => [fen.x + d[0], fen.y + d[1]]).find(xy => !ck.M.blocked(xy[0], xy[1])),
      'and there is ground to stand beside him on at ' + fen.x + ',' + fen.y + ', ' + dv(fen.x, fen.y) + ' paces from the well');
