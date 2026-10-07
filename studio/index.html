@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ASHVALE design studio</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/studio/studio.css">
+</head>
+<body>
+  <header>
+    <h1>ASHVALE <span>design studio</span></h1>
+    <div>items · NPCs · buildings → GitHub suggestion</div>
+    <div class="who">
+      <label style="margin:0;text-transform:none;letter-spacing:0">you</label>
+      <input id="author" type="text" placeholder="your name or @handle" style="width:180px">
+    </div>
+  </header>
+  <nav id="nav"></nav>
+  <div id="stage">
+    <div id="hint">Pick a class on the left. Drag to turn the preview.</div>
+  </div>
+  <aside id="form"></aside>
+  <footer id="foot">Local drafts stay on this machine. Suggest to GitHub opens a review PR against main — nothing is inscribed until someone merges it.</footer>
+  <input id="import" type="file" accept=".json,image/png,image/jpeg">
+  <script type="module" src="/studio/studio.js"></script>
+</body>
+</html>
