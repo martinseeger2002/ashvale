@@ -1851,7 +1851,22 @@
         if (flag && me.x === flag[0] && me.y === flag[1]) flag = null;
         minimapFor();
         if (mmO[0] || mmO[1]) for (const d of dots) { d.x -= mmO[0]; d.y -= mmO[1]; }
-        hud.drawMinimap(mmImg, { x: p.x - mmO[0], y: p.z - mmO[1], yaw: cam.yaw, dots, flag: flag ? [flag[0] + 0.5 - mmO[0], flag[1] + 0.5 - mmO[1]] : null });
+        hud.drawMinimap(mmImg, { x: p.x - mmO[0], y: p.z - mmO[1], yaw: cam.yaw, north: trueNorth(me.x, me.y), dots, flag: flag ? [flag[0] + 0.5 - mmO[0], flag[1] + 0.5 - mmO[1]] : null });
+      }
+      /* TRUE NORTH (2026-10-06: the compass is a dot on the minimap's rim that always points north, and "make sure
+         that north in the game matches in the Atlas" - the planet's north pole). The game's grid is laid on a face of the
+         globe, so map-up is not north: near Ashvale the pole lies ~42 degrees left of it. From the worldgen projection: the
+         pole's direction on the ground where you stand, as a game vector [x east, y south]. Recomputed every 16 tiles. */
+      const TN = { key: '', v: [0, -1] };
+      function trueNorth(x, y) {
+        const WG = D.wg, C = DATA.globecfg; if (!WG || !WG.toSphere || !C || !C.origin) return TN.v;
+        const key = (x >> 4) + ':' + (y >> 4); if (key === TN.key) return TN.v; TN.key = key;
+        const fx = x + C.origin[0] + 0.5, fy = -(y + C.origin[1]) - 0.5, u = WG.toSphere(C.face, fx, fy), un = WG.toSphere(C.face, fx, fy + 1), ue = WG.toSphere(C.face, fx + 1, fy);
+        const d = [un[0] - u[0], un[1] - u[1], un[2] - u[2]], e = [ue[0] - u[0], ue[1] - u[1], ue[2] - u[2]], N = [-u[0] * u[2], -u[1] * u[2], 1 - u[2] * u[2]];
+        const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], dd = dot(d, d), de = dot(d, e), ee = dot(e, e), nd = dot(N, d), ne = dot(N, e), det = dd * ee - de * de;
+        if (!(Math.abs(det) > 0)) return TN.v;
+        const a = (nd * ee - ne * de) / det, b = (dd * ne - de * nd) / det, gx = b, gy = -a, l = Math.hypot(gx, gy) || 1;   /* N = a*(game north) + b*(game east) */
+        TN.v = [gx / l, gy / l]; return TN.v;
       }
       function resize() { const w = host.clientWidth || innerWidth, h = host.clientHeight || innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = w / h < 1.2 ? 55 : 45; camera.updateProjectionMatrix(); }
       if (window.ResizeObserver) new ResizeObserver(resize).observe(host); window.addEventListener('resize', resize); resize();
@@ -1891,7 +1906,7 @@
           settings: () => settings,
           toggle: k => { settings[k] = !settings[k]; store.set(SET, JSON.stringify(settings)); if (k === 'shadows') { sun.castShadow = settings.shadows; for (const e of ents.values()) e.blob.visible = !settings.shadows && !e.hawk; renderer.shadowMap.needsUpdate = true; scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); } },
           resetCamera: () => { cam.tyaw = PI * 0.12; cam.tpitch = 0.92; cam.tdist = isPhone ? 9 : 11; },
-          faceNorth: () => { cam.tyaw = Math.round(cam.tyaw / (2 * PI)) * 2 * PI; },
+          faceNorth: () => { const v = trueNorth(me.x, me.y), want = -PI / 2 - Math.atan2(v[1], v[0]); cam.tyaw = want + Math.round((cam.tyaw - want) / (2 * PI)) * 2 * PI; },   /* true north up, the short way round */
           newGame: () => { stopped = true; store.set(SAVE, '').then(() => location.reload(), () => location.reload()); },
           helpSeen: () => store.set('ashvale3d.help', '1'),
           savesHere: () => store.backend,

@@ -15,7 +15,9 @@
 .ash .t{text-shadow:1px 1px 0 #000}
 .ash .mm{position:absolute;right:calc(var(--tab) + 14px);top:8px;width:var(--mm);height:var(--mm);border-radius:50%;border:3px solid #1b1610;box-shadow:0 0 0 2px #6b5d48,0 3px 8px #000a;background:#111;overflow:hidden}
 .ash .mm canvas{width:100%;height:100%;display:block}
-.ash .compass{position:absolute;right:calc(var(--tab) + 14px + var(--mm) - 22px);top:4px;width:28px;height:28px;border-radius:50%;background:#2a241c;border:2px solid #6b5d48;display:flex;align-items:center;justify-content:center;font-size:11px;color:#e33;cursor:pointer}
+.ash .compass{position:absolute;right:calc(var(--tab) + 14px);top:8px;width:var(--mm);height:var(--mm);pointer-events:none;z-index:2}
+.ash .compass i{position:absolute;left:50%;top:-7px;width:12px;height:12px;margin-left:-6px;border-radius:50%;background:#e33;border:2px solid #fff;box-shadow:0 0 0 1px #000a,0 0 6px #e33;pointer-events:auto;cursor:pointer}
+.ash .compass i::after{content:'';position:absolute;left:-10px;top:-10px;right:-10px;bottom:-10px}
 .ash .orbs{position:absolute;right:calc(var(--tab) + 22px + var(--mm));top:10px;display:flex;flex-direction:column;gap:6px}
 .ash .orb{width:calc(var(--mm)*.36);height:calc(var(--mm)*.36);min-width:34px;min-height:34px;border-radius:50%;border:2px solid #1b1610;box-shadow:0 0 0 1px #6b5d48;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;cursor:pointer;position:relative;overflow:hidden;background:#222}
 .ash .orb i{position:absolute;left:0;right:0;bottom:0;display:block}

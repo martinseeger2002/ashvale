@@ -25,7 +25,7 @@
     for (const k in PAL.tile) TILE[k] = rgb(PAL.tile[k]);
     const GRASS = TILE['.'], BED0 = rgb(PAL.bedShallow), BED1 = rgb(PAL.bedDeep), ROCK = rgb(PAL.rock), ROCKD = rgb(PAL.rockDark), SNOW = rgb(PAL.snow);
     const CT = PAL.classTint, TC = [CT.creator, CT.core, CT.wild, CT.creator, CT.creator];
-    const TREE = { T: 'tree_T', P: 'tree_P', O: 'tree_O', W: 'tree_W', M: 'tree_M', Y: 'tree_Y' };
+    const TREE = { T: 'tree_T', P: 'tree_P', O: 'tree_O', W: 'tree_W', M: 'tree_M', Y: 'tree_Y', U: 'tree_U' };
     const FLW = PAL.flower.map(rgb), G = W.G, CEN = G.raw.centres, BORDER = rgb(PAL.border);
 
     function job(anchor, cx, cy) {

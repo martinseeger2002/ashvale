@@ -84,8 +84,10 @@
       for (const [dx, dz] of [[0.52, 0.16], [-0.45, 0.25], [0, -0.5]]) cone(S, 3, 0.17, -0.62, dx, 1.43, dz, cc, 1); LIB.tree_W = done(S); }
     { const [tc, cc] = tr('M'), S = Shape(); cyl(S, 4, 0.1, 0.16, 1.05, 0, 0, 0, tc); ico(S, 0.72, 0, 1.38, 0, 1, 0.95, 1, cc, 1); LIB.tree_M = done(S); }
     { const [tc, cc] = tr('Y'), S = Shape(); cyl(S, 4, 0.12, 0.2, 1.0, 0, 0, 0, tc); cone(S, 6, 0.6, 1.3, 0, 0.75, 0, cc, 1); cone(S, 6, 0.42, 1.05, 0, 1.6, 0, cc, 1); LIB.tree_Y = done(S); }
+    { const [tc, cc] = tr('U'), S = Shape(); cyl(S, 7, 0.3, 0.34, 2.4, 0, 0, 0, cc, 0, true); box(S, 0.42, 0.22, 0.22, 0.42, 1.05, 0, cc); cyl(S, 6, 0.17, 0.17, 0.75, 0.62, 1.05, 0, cc, 0, true); box(S, 0.36, 0.2, 0.2, -0.38, 1.45, 0, cc); cyl(S, 6, 0.15, 0.15, 0.6, -0.55, 1.45, 0, cc, 0, true); LIB.tree_U = done(S); }   /* a saguaro (desert, 2026-10-06) */
     /* far trees (drawn beyond Q.full instead of the full ones): one low blob or cone on a 3-sided trunk, same colours */
     for (const k of ['T', 'O', 'W', 'M']) { const [tc, cc] = tr(k), S = Shape(), big = k === 'O' ? 1.2 : 1; cyl(S, 3, 0.08, 0.14, 0.9, 0, 0, 0, tc); octa(S, 0.72 * big, 0, 1.45, 0, cc); for (let q = S.M.length - 6; q < S.M.length; q++) S.M[q] = 1; LIB['far_' + k] = done(S); }
+    { const [tc, cc] = tr('U'), S = Shape(); cyl(S, 4, 0.3, 0.34, 2.4, 0, 0, 0, cc); LIB.far_U = done(S); }
     for (const k of ['P', 'Y']) { const [tc, cc] = tr(k), S = Shape(); cyl(S, 3, 0.07, 0.11, 0.6, 0, 0, 0, tc); cone(S, 5, 0.6, 1.9, 0, 0.45, 0, cc, 1); LIB['far_' + k] = done(S); }
     { const S = Shape(), c = col('boulder'); ico(S, 0.57, 0, 0.3, 0, 1.1, 0.75, 1, c, 1); ico(S, 0.35, 0.34, 0.19, 0.24, 1, 1, 1, rgb('#8a857a'), 1); LIB.rock = done(S); }
     for (const L in PAL.ore) { const S = Shape(); ico(S, 0.42, 0, 0.22, 0, 1.1, 0.75, 1, col('#7a7468'), 1); ico(S, 0.26, 0.25, 0.14, 0.18, 1, 1, 1, col('#8a857a'), 1); for (let k = 0; k < 4; k++) octa(S, 0.09, Math.cos(k * 1.7) * 0.28, 0.3 + (k % 2) * 0.12, Math.sin(k * 1.7) * 0.26, rgb(PAL.ore[L])); LIB['ore_' + L] = done(S); }

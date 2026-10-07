@@ -18,7 +18,7 @@
     let xyKey = '';
     function setPos(x, y) { const k = x + ', ' + y; if (k === xyKey) return; xyKey = k; xy.textContent = k; }
     const mmBox = el('mm ui', ui), mmCanvas = el('', mmBox, null, 'canvas'); mmCanvas.width = mmCanvas.height = 300;
-    const compass = el('compass ui t', ui, 'N');
+    const compass = el('compass', ui, '<i class="ui" title="North - tap to face north"></i>');   /* a dot that orbits the minimap's rim, pointing to true north */
     const orbs = el('orbs ui', ui), hpOrb = el('orb hp', orbs, '<i></i><b></b>'), runOrb = el('orb run', orbs, '<i></i><b></b>');
     const tabs = el('tabs ui', ui), panel = el('panel stone ui', ui);
     const chatw = el('chatw ui', ui), chat = el('chat', chatw), sayRow = el('say', chatw, '<input maxlength="120" enterkeyhint="send" placeholder="Say something to players here"><button>Say</button>'), sayIn = sayRow.firstChild;
@@ -222,7 +222,8 @@
       if (st.flag) { g.fillStyle = '#f22'; g.fillRect((st.flag[0] - st.x) * 4 - 1, (st.flag[1] - st.y) * 4 - 6, 2, 8); g.fillRect((st.flag[0] - st.x) * 4, (st.flag[1] - st.y) * 4 - 6, 5, 3); }
       g.restore();
       g.fillStyle = '#fff'; g.fillRect(S / 2 - 4, S / 2 - 4, 8, 8);
-      compass.style.transform = 'rotate(' + st.yaw + 'rad)';
+      const nv = st.north || [0, -1], sx = nv[0] * Math.cos(st.yaw) - nv[1] * Math.sin(st.yaw), sy = nv[0] * Math.sin(st.yaw) + nv[1] * Math.cos(st.yaw);   /* the map turns by yaw: so does north */
+      compass.style.transform = 'rotate(' + Math.atan2(sx, -sy) + 'rad)';
     }
     mmBox.addEventListener('pointerup', e => {
       const r = mmBox.getBoundingClientRect(), dx = (e.clientX - r.left - r.width / 2) / r.width * 300, dy = (e.clientY - r.top - r.height / 2) / r.height * 300;

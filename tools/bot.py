@@ -280,16 +280,23 @@ class Bot:
         """what has paid best, measured; anything not tried yet is tried first, and every fourth round the
         runner-up gets another go, so a slow start does not decide it for ever"""
         rates = self.mem.d.setdefault('earning', {})
+        gold = self.st().get('gold', 0)
+        price = {'pickaxe': 20, 'net': 5}
+        # what it can do now: rats always; mining and fishing once it holds the tool or the GOLD for it
+        able = ['rats'] + [h for h, t in self.ACTIVITY_TOOL.items()
+                           if self.has_tool(t) or self.r("return Object.keys(ASH.chest.state().chest).includes(%r)" % t)
+                           or gold >= price[t] + 2]
         for how in ('mine', 'fish', 'rats'):
-            if how not in rates: return how
-        ranked = sorted(rates, key=lambda h: -rates[h]['rate'])
+            if how in able and how not in rates: return how
+        ranked = sorted((h for h in able if h in rates), key=lambda h: -rates[h]['rate']) or ['rats']
         self._earn_n = getattr(self, '_earn_n', 0) + 1
         return ranked[1] if self._earn_n % 4 == 0 and len(ranked) > 1 else ranked[0]
 
     def learn_earning(self, how, gold0, food0, t0):
         s = self.st()
-        worth = (s.get('gold', 0) - gold0) + 3 * max(0, s.get('bread', 0) - food0)   # a meal is worth ~3 GOLD
-        rate = worth * 60 / max(30.0, time.time() - t0)
+        # GOLD counts; a meal counts only while he is short of food -- with a bag of it, more food earns nothing
+        worth = (s.get('gold', 0) - gold0) + (3 * max(0, s.get('bread', 0) - food0) if food0 < self.FOOD_CAP else 0)
+        rate = max(0.0, worth * 60 / max(30.0, time.time() - t0))   # buying a tool is not a loss of earning
         e = self.mem.d.setdefault('earning', {}).setdefault(how, {'rate': rate, 'rounds': 0})
         e['rate'] = rate if e['rounds'] == 0 else 0.6 * e['rate'] + 0.4 * rate
         e['rounds'] += 1
@@ -299,6 +306,9 @@ class Bot:
     def earn(self, gold, food=3, rounds=12):
         """the way a new player starts (2026-10-05): kill rats, cook their meat at the range for food, sell their
         pelts for GOLD, and go round again until it has `gold` and `food`. Rats are weak enough to fight bare-handed."""
+        self.unpack()   # food, gold and gear already in the chest count first (2026-10-06: 14 meals sat there while he earned food)
+        food = min(food, self.BAG_FOOD_MAX)   # 2026-10-06: a goal of 57 meals fought the surplus seller for ever
+        self.food_goal = food
         for i in range(rounds):
             if not self.time_left(): return False
             s = self.st()
@@ -306,9 +316,8 @@ class Bot:
             how = self.pick_earning()
             log('earning: round', i + 1, 'by', how, 'gold %s/%s food %s/%s' % (s.get('gold'), gold, s.get('bread'), food))
             t0 = time.time()
-            if not self.earn_by(how) and how != 'rats':
-                self.mem.d.setdefault('earning', {})[how] = {'rate': -1, 'rounds': 1}   # no tool: last choice
-                continue
+            if not self.earn_by(how):
+                continue                      # no tool after all: pick_earning sees that next round
             self.learn_earning(how, s.get('gold', 0), s.get('bread', 0), t0)
         s = self.st(); return s.get('gold', 0) >= gold and s.get('bread', 0) >= food
     def unpack(self):
@@ -336,6 +345,7 @@ class Bot:
         for _ in range(3):
             if not self.st().get('raw'): break
             log('cooked', self.r("return await gatherAt(%d, %d, %d)" % (RANGE[0], RANGE[1], 6000 + 4000 * n)))
+        self.food_surplus()
         f = self.st().get('bread', 0); log('food now', f); return f
     def gear(self):
         self.money(40); s = self.st()
@@ -384,10 +394,29 @@ class Bot:
             if (!on || (d.value || 0) > ((ond && ond.value) || 0)) { ASH.core.cmd('me', { c: 'equip', slot: i }); out.push(q.id); await wait(800); did = true; break; } }
           if (!did) break; } return out;""")
         if got: log('wore', got)
+    FOOD_CAP = 15   # meals carried; a bag full of food picks nothing up (2026-10-06: 27 meals, 0 GOLD, nothing gathered)
+    BAG_FOOD_MAX = 22   # never more than this, whatever a fight asks for: the rest of the bag is for loot
+
+    def food_surplus(self):
+        """meals beyond FOOD_CAP: sold to Tam when he is short of GOLD (a meal fetches a few), else put in the chest"""
+        extra = self.r("""const cap = %d, food = [];
+          for (const q of ASH.me.inv) if (q && (ASH.core.item(q.id) || {}).edible) food.push([q.id, q.n || 1, ASH.core.item(q.id).heal || 0]);
+          let have = food.reduce((a, f) => a + f[1], 0), out = {};
+          food.sort((a, b) => a[2] - b[2]);                       // the weakest meals go first
+          for (const [id, n] of food) { if (have <= cap) break; const m = Math.min(n, have - cap); out[id] = (out[id] || 0) + m; have -= m; }
+          return out;""" % max(self.FOOD_CAP, min(getattr(self, 'food_goal', 0) or 0, self.BAG_FOOD_MAX))) or {}
+        if not extra: return
+        short = (self.st().get('gold') or 0) < 40
+        for k, n in extra.items():
+            if short and self.r("return await sell('tam', %r, %d)" % (k, n)):
+                log('sold %d spare %s for GOLD' % (n, k)); continue
+            self.r("await talk('chest'); ASH.chest.store(%r, %d); return 1" % (k, n)); log('stored %d spare %s in the chest' % (n, k))
+
     def tidy(self):
         """the bag after a trip: wear the best, sell the loot tam buys, and put the rest in the chest -- keeping food, raw
         food to cook, tools and anything a quest wants"""
         self.upgrade()
+        self.food_surplus()
         keep = json.dumps(sorted(WANTED))
         loose = self.r("const keep = new Set(%s), out = {}; for (const q of ASH.me.inv) { if (!q) continue; const d = ASH.core.item(q.id) || {}; "
                        "if (keep.has(q.id) || d.edible || d.cooks || d.tool || d.skill || q.id === 'coins') continue; out[q.id] = (out[q.id] || 0) + (q.n || 1); } return out" % keep) or {}
@@ -397,17 +426,27 @@ class Bot:
     def best_armour(self):
         """each armour slot: the best piece the armoury sells that his levels allow, if it beats what he wears and he can
         afford it with 15 GOLD to spare"""
+        gold = self.st().get('gold') or 0
+        if getattr(self, '_armour_tried_at', None) == gold: return   # same GOLD as the trip that bought nothing
         got = self.r("""const out = [], sh = ASH.core.D.shops, stock = ((sh.shops || sh).armoury || {}).stock || [];
           const can = d => Object.entries(d.req || {}).every(([k, v]) => ASH.core.lv(ASH.me, k) >= v);
           for (const slot of ['head', 'body', 'legs', 'shield']) {
             const on = ASH.me.eq[slot], onv = on ? (ASH.core.item(on.id).value || 0) : 0;
-            const best = stock.map(k => [k, ASH.core.item(k)]).filter(([k, d]) => d && d.eq === slot && can(d) && (d.value || 0) > onv)
-              .sort((a, b) => (b[1].value || 0) - (a[1].value || 0))[0];
-            if (best) out.push([slot, best[0], ASH.core.priceBuy('armoury', best[0], ASH.me)]); }
+            const fits = stock.map(k => [k, ASH.core.item(k)]).filter(([k, d]) => d && d.eq === slot && can(d) && (d.value || 0) > onv)
+              .map(([k, d]) => [k, d, ASH.core.priceBuy('armoury', k, ASH.me)]);
+            const room = (bag().coins || 0) - 15;
+            // the best he can AFFORD now (2026-10-06: he wore nothing while saving for tier 2); else the cheapest, to say so
+            const buyable = fits.filter(f => f[2] <= room).sort((a, b) => (b[1].value || 0) - (a[1].value || 0))[0];
+            const cheapest = fits.sort((a, b) => a[2] - b[2])[0];
+            const pick = buyable || cheapest;
+            if (pick) out.push([slot, pick[0], pick[2]]); }
           return out;""") or []
+        bought = False
         for slot, k, price in got:
             if price > (self.st().get('gold') or 0) - 15: log('armour: %s wants %s (%s GOLD), cannot afford it yet' % (slot, k, price)); continue
+            bought = True
             if self.r("return await buy('garrick', %r, 1)" % k): log('bought', k, self.r("return await equip(%r)" % k))
+        self._armour_tried_at = None if bought else gold
     def wear(self):
         """put on every wearable thing in the bag for an empty slot (after a death the pile comes back into the bag)"""
         got = self.r("""const out = []; for (let i = 0; i < ASH.me.inv.length; i++) { const q = ASH.me.inv[i]; if (!q) continue; const d = ASH.core.item(q.id); const slot = d && d.eq; if (slot && !ASH.me.eq[slot]) { ASH.core.cmd('me', { c: 'equip', slot: i }); out.push(q.id); await wait(700); } } return out;""")
@@ -476,9 +515,17 @@ class Bot:
     def restock(self, key, adds=0, rounds=3):
         """not enough food for this fight: retreat and gather it (cook what it carries and keeps, earn and cook rat meat,
         buy bread) until it is enough or it gives up for now"""
+        best = self.best_food() or [None, None, 5, 4]
         for i in range(rounds):
             ok, f, need = self.food_ok(key, adds)
             if ok: return True
+            hp_spare = max(0, f.get('hp', 0) - f.get('max', 1) * 0.34)
+            if need > self.BAG_FOOD_MAX * max(best[2], f.get('avg', 2)) + hp_spare:
+                # more food than a bag holds: not this monster yet (2026-10-06: the bandit leader asked for 57 meals)
+                if not hasattr(self, 'absent'): self.absent = {}
+                self.absent[key] = time.time() + 1200
+                log('%s needs about %d healing, more than a bag of food gives: other quests and training first' % (key, need))
+                return False
             want = int(-(-max(0, need - f.get('tot', 0) - max(0, f.get('hp', 0) - f.get('max', 1) * 0.34)) // max(1, f.get('avg', 3))))
             log('not enough food for %s: %d food heals %d, the fight needs about %d: gathering %d more' % (key, f.get('n', 0), f.get('tot', 0), need, want))
             self.walk(RETREAT[0], RETREAT[1], 4); self.cook()   # what it caught first
@@ -593,6 +640,9 @@ class Bot:
         self.wear(); self.upgrade(); self.walk(RETREAT[0], RETREAT[1], 4)
     def fight(self, key, n=1):
         """kill n of key near its spawns; returns kills. Eats; retreats to restock when out of food"""
+        if not hasattr(self, 'absent'): self.absent = {}
+        if self.absent.get(key, 0) > time.time():
+            log('%s was not around a little while ago: not looking again yet' % key); return 0
         spawn = self.r("const m = nearest(%r); return m && [m.x, m.y, m.dist]" % key)
         if not spawn or spawn[2] > 40:   # monsters load as you come near: walk to where they live first
             sp = spawns_of(key)
@@ -623,7 +673,10 @@ class Bot:
                 misses += 1
                 if misses >= 2:   # hunted out: monsters come back when their zone has been empty 30 s and someone walks in
                     self.leave_zone(key, sp[0])
-                    if misses > 8: bug('fight', 'left and came back to the %s grounds at %s %d times and found none' % (key, sp[0], misses)); return kills
+                    if misses > 3:   # 2026-10-06: ten fruitless trips for an absent bandit leader -- note it, move on
+                        bug('fight', 'left and came back to the %s grounds at %s %d times and found none' % (key, sp[0], misses))
+                        self.absent[key] = time.time() + 1200
+                        log('no %s to be found: on to other quests, back in 20 minutes' % key); return kills
                 log('back to the', key, 'grounds', sp[0]); self.walk(sp[0][0], sp[0][1] + 1, 6); self.r("await wait(3000); return 1")
                 continue
             if m[2] > 12: self.walk(m[0], m[1], 3)
@@ -677,6 +730,8 @@ class Bot:
                 lvl = MONS[G['kill']]['level']
                 if (self.st().get('cb') or 0) < lvl - 2: log('too weak for', G['kill'], '- training'); self.gear(); self.train('attack', min(40, lvl + 2))
                 self.fight(G['kill'], max(0, need - q.get('n', 0)))
+                if getattr(self, 'absent', {}).get(G['kill'], 0) > time.time():
+                    log('%s is not around: %s waits, other quests first' % (G['kill'], Q['name'])); return False
             elif kind == 'bring':
                 k = G['bring']
                 if k not in ITEMS: bug('%s step %d' % (qid, q['step']), 'bring goal names an unknown item "%s"' % k); return False
@@ -773,6 +828,19 @@ if __name__ == '__main__':
     if not a: print(__doc__); sys.exit()
     with LiveGame('cinderwalker') as g:
         b = Bot(g, mins); b.r("ASH.core.cmd('me', { c: 'look', name: 'Cinderwalker' }); window.__run = true; return 1")
+        # Eat as health goes down, the way a player does: click the red hit-point orb, which eats the first meal in the
+        # bag (2026-10-06: "He should be eating his meals as his hit points go down ... As his meals are eaten
+        # room for pelts will be freed up"). In the page, every second, whatever the bot is doing: when he is missing at
+        # least one meal's worth of health, and not more often than every 1.8 s.
+        b.r("""if (!window.__autoEat) window.__autoEat = setInterval(() => { try {
+              const p = ASH.me, C = ASH.core; if (!p || p.dead) return;
+              const meal = p.inv.find(q => q && (C.item(q.id) || {}).edible); if (!meal) return;
+              const heal = (C.item(meal.id).heal || 2), max = C.maxHp(p);
+              if (max - p.hp < heal || Date.now() - (window.__ateAt || 0) < 1800) return;
+              const orb = document.querySelector('.orb.hp');
+              if (orb) orb.click(); else C.cmd('me', { c: 'eat', slot: p.inv.indexOf(meal) });
+              window.__ateAt = Date.now(); window.__ate = (window.__ate || 0) + 1;
+            } catch (e) {} }, 1000); return 1""")
         # how smoothly this browser draws the game: a few frames a second is what other players see as jumps
         log('frames per second', b.r("let n = 0; const t0 = performance.now(); await new Promise(res => { "
                                      "const f = () => { n++; if (performance.now() - t0 < 3000) requestAnimationFrame(f); else res(); }; "

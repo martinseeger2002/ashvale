@@ -33,8 +33,47 @@ def overlay(base, extra):
     return extra
 
 
+TREES = 'TPOWMY'   # the tree letters; the rest of the blocking letters (water, rock, fences, graves, walls) are never cleared
+BLOCKS = 'TPORNIr~FHXWMYCGA^K'
+def open_ways(tiles):
+    """No walled-in ground in a drawn area (2026-10-06: "Animals keep getting stuck in the woods because there's no way
+    out or through ... no encapsulated tiles"; Whisperwood had 125 such tiles, one of Iria's wolf dens among them). Walking is
+    4-connected, so every open tile is joined to the area's edge (where it meets the rest of the world) by clearing the
+    fewest trees (a 0-1 search: open costs 0, a tree 1); a cleared tree is forest floor. Fences, water, rock, graves and
+    walls are never touched, so a pen stays a pen. The same rule src/wg_tiles.js applies to the generated land."""
+    H, W = len(tiles), len(tiles[0]); g = [list(r) for r in tiles]
+    kind = lambda x, y: 0 if g[y][x] not in BLOCKS else 1 if g[y][x] in TREES else 2
+    from collections import deque
+    INF = 10 ** 9; dist = [[INF] * W for _ in range(H)]; came = [[None] * W for _ in range(H)]; q = deque()
+    for y in range(H):
+        for x in range(W):
+            if (x in (0, W - 1) or y in (0, H - 1)) and kind(x, y) != 2:
+                d = kind(x, y); dist[y][x] = d; (q.appendleft if d == 0 else q.append)((x, y))
+    while q:
+        x, y = q.popleft()
+        for a, b in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if not (0 <= a < W and 0 <= b < H): continue
+            k = kind(a, b)
+            if k == 2: continue
+            d = dist[y][x] + k
+            if d < dist[b][a]: dist[b][a] = d; came[b][a] = (x, y); (q.append if k else q.appendleft)((a, b))
+    cleared = 0
+    for y in range(H):
+        for x in range(W):
+            if kind(x, y) == 0 and 0 < dist[y][x] < INF:
+                c = (x, y)
+                while c and dist[c[1]][c[0]] > 0:
+                    cx, cy = c
+                    if g[cy][cx] in TREES: g[cy][cx] = ','; cleared += 1
+                    dist[cy][cx] = 0; c = came[cy][cx]
+                if c and g[c[1]][c[0]] in TREES: g[c[1]][c[0]] = ','; cleared += 1   # an edge tree it started from
+    return [''.join(r) for r in g], cleared
+
 def module(name, v, data):
     os.makedirs(OUT, exist_ok=True)
+    if name.startswith('zone.') and isinstance(data, dict) and data.get('tiles'):
+        data['tiles'], n = open_ways(data['tiles'])
+        if n: print('%-26s %d trees cleared so no ground is walled in' % (name, n))
     xp = os.path.join(OUT, 'extra', name + '.json')
     if os.path.exists(xp): data = overlay(data, json.load(open(xp)))
     m = {"ashvale3d": "module", "name": name, "api": DATA_API, "v": v, "data": data}
@@ -1135,7 +1174,7 @@ R = random.Random(20260930)
 
 # the tile legend, in one place: which letters stop you walking, and which stop you seeing. scene.js
 # draws the same letters (trees, rocks with ore), rules.json ships this same set.
-T_BLOCK = "TPORNIr~FHXWMYCGA"
+T_BLOCK = "TPORNIr~FHXWMYCGAU"   # U: a desert cactus (blocks the way, not the view)
 T_LOS = "TPORNIrHXWMYCGA"
 T_TREE = "TPOMWY"
 T_ROCK = "RNICGA"

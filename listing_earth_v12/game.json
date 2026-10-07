@@ -1,0 +1,12 @@
+{
+ "game": {
+  "name": "ASHVALE Atlas",
+  "description": "New in 1.2: a compass rose that turns with you (tap it to face north), the equator drawn round the planet and both poles marked, saguaro cactus in the deserts, and woods with a way through everywhere. In 1.1 you are here. Signed in, the Atlas shows a blue dot where your ASHVALE character last stood, and the You button flies you down to it. The whole ASHVALE planet in one view: start from orbit and zoom all the way down to the ground, seamlessly. Two continents in a wide ocean, island chains, rivers from mountain creeks to the sea, deserts, rainforest, taiga and snowy ranges, Ashvale village and the harbour town of Saltmere. Drag to pan, scroll or pinch to zoom, right-drag to turn.",
+  "version": "1.2",
+  "players": "Solo",
+  "multiplayer": false,
+  "family": "ashvale",
+  "genre": "explorer",
+  "play": "a4597d82acb371406e493f222061aecab2858d392355f74ea24e38ee8045e25d"
+ }
+}

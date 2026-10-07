@@ -41,7 +41,7 @@
   const API = 1, V = 1, WATER = 0;
   const META = { api: API, v: V, needs: { globe: 1, wg_geo: 1, wg_terrain: 1, wg_paths: 1, wg_sites: 1, wg_tiles: 1, wg_tables: 1 } };
   const BIOME = ['meadow', 'woods', 'deep woods', 'shore', 'shallows', 'deep water', 'rock', 'snow', 'site', 'hills', 'village'];
-  const BLOCK = 'TPORNIr~FHXWMYCGA^K', LOS = 'TPORNIrHXWMYCGA^K';
+  const BLOCK = 'TPORNIr~FHXWMYCGA^KU', LOS = 'TPORNIrHXWMYCGA^K';   /* U: a desert cactus blocks the way, not the view */
 
   function make(deps) {
     const AG = deps.globe, geo = deps.wg_geo, T = deps.wg_tables;

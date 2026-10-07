@@ -374,7 +374,19 @@
       let xy = null;
       if ((s.v | 0) >= 2 && Array.isArray(s.pos) && s.pos.length === 3) xy = M.fromFace(s.pos[0] | 0, s.pos[1] | 0, s.pos[2] | 0);
       else if ((s.v | 0) <= 1 && Number.isInteger(s.x) && Number.isInteger(s.y)) xy = [s.x, s.y];
-      if (xy && inMap(xy[0], xy[1]) && !M.blocked(xy[0], xy[1])) { p.x = xy[0]; p.y = xy[1]; }
+      if (!xy || !inMap(xy[0], xy[1])) return;   /* outside the world: the spawn */
+      /* 2026-10-06: "I flew over the ocean and the game lost track of my position ... My position should be kept no
+         matter where on the globe I am." A hawk (the ring is restored before this) keeps its exact spot over sea, lake or
+         woods; anyone else on a tile they cannot stand on goes to the nearest open ground, not back to the village. */
+      if (!M.blocked(xy[0], xy[1]) || isHawk(p)) { p.x = xy[0]; p.y = xy[1]; return; }
+      for (let r = 1; r <= 400; r++) {   /* ring by ring outward; in a ring, the closest open tile */
+        let best = null, bd = 1e18;
+        for (let k = -r; k <= r; k++) for (const [x, y] of [[xy[0] + k, xy[1] - r], [xy[0] + k, xy[1] + r], [xy[0] - r, xy[1] + k], [xy[0] + r, xy[1] + k]]) {
+          const d = (x - xy[0]) * (x - xy[0]) + (y - xy[1]) * (y - xy[1]); if (d < bd && inMap(x, y) && !M.blocked(x, y)) { bd = d; best = [x, y]; }
+        }
+        if (best) { p.x = best[0]; p.y = best[1]; return; }
+      }
+      p.x = xy[0]; p.y = xy[1];   /* no ground for 400 tiles: keep the spot itself (a portal stone still takes you home) */
     }
     function exportPlayer(id) {
       const p = S.players[id]; if (!p) return null;
