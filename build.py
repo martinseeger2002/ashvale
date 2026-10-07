@@ -23,6 +23,8 @@ JS_MODULES = ['netretry', 'net', 'trade', 'wallet', 'trip', 'world', 'core', 'au
 if os.environ.get('ASH_NO_CASTLE') == '1': JS_MODULES = [m for m in JS_MODULES if m != 'castle']
 if os.path.exists(os.path.join(SRC, 'weather.js')):   # weather visuals (local agent, task 6): its own module/inscription
     JS_MODULES.insert(JS_MODULES.index('engine'), 'weather')      # load order does not matter (factories), kept stable
+if os.path.exists(os.path.join(SRC, 'seasons.js')):   # the year and its seasons (2026-10-07): its own module/inscription
+    JS_MODULES.insert(JS_MODULES.index('engine'), 'seasons')
 if os.path.exists(os.path.join(SRC, 'fog.js')):       # fog measured from the camera-player segment (2026-10-02): its own module
     JS_MODULES.insert(JS_MODULES.index('engine'), 'fog')
 DATA_MODULES = ['items', 'monsters', 'shops', 'quests', 'rules', 'globecfg', 'assets', 'housekit']   # housekit: converted Quaternius house pieces (tools/housekit/q2code.mjs --game)

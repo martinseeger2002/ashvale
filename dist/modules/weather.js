@@ -9,6 +9,7 @@
                                          strength shows as how much of the particle sheet is in the air, and as the fog
                                          and sky that come with it - not as translucent particles
      W.update(dt)                        once a frame, after the camera has settled: moves the particles, fades, re-anchors
+     W.focus(vector3)                    the player's feet, every frame: the fog sheets lie at heights above it
      W.state() / W.dispose()             what it is showing now / take back every object the module added
    The KIND table is plain data: everything a kind looks like (sky colour, fog distance, how many particles, how fast
    they fall, the wind, the bank of weather ahead of the player) sits in its own lines, so a new kind (sandstorm, ash
@@ -29,7 +30,9 @@
        the storm cloud, the fog wall, the snow haze. It is one quad, so it costs one draw call and no geometry. */
     const KIND = {
       clear: { sky: '#a7c8e6', near: 24, far: 52, rain: 0, snow: 0, bank: ['#a7c8e6', 0, 0] },
-      fog: { sky: '#b8bec4', near: 3, far: 16, rain: 0, snow: 0, bank: ['#b8bec4', 54, 0.75] },
+      /* fog is sheets (2026-10-07: "Fog should be like sheets of fog parallel with the ground at a few different
+         levels. Just giant ovals of transparent fog"): the air between them stays fairly clear, so the sheets read */
+      fog: { sky: '#b8bec4', near: 9, far: 34, rain: 0, snow: 0, sheets: 1, bank: ['#b8bec4', 54, 0.35] },
       rain: {
         sky: '#7d8fa0', near: 14, far: 38, rain: 1, snow: 0, bank: ['#66727d', 40, 0.5],
         drops: LOW ? 600 : 1450, fall: 26, wind: [4.3, 1.4], len: [0.5, 1.15], colour: '#c3d4e4', alpha: 0.55
@@ -47,7 +50,7 @@
                                                               under the ground out of sight, and starts again up top */
     const DYNUSE = THREE.DynamicDrawUsage != null ? THREE.DynamicDrawUsage : 35048;   /* 35048 = gl.DYNAMIC_DRAW, for the
                                                               case where build.py has not put the name in three_entry.js */
-    const FIELDS = ['sr', 'sg', 'sb', 'near', 'far', 'rain', 'snow', 'br', 'bg', 'bb', 'bsize', 'balpha'];
+    const FIELDS = ['sr', 'sg', 'sb', 'near', 'far', 'rain', 'snow', 'sheets', 'br', 'bg', 'bb', 'bsize', 'balpha'];
 
     const SKYC = {}, BANKC = {};
     for (const k in KIND) { SKYC[k] = new THREE.Color(KIND[k].sky); BANKC[k] = new THREE.Color(KIND[k].bank[0]); }
@@ -71,7 +74,7 @@
         sr: baseSky.r + (s.r - baseSky.r) * i, sg: baseSky.g + (s.g - baseSky.g) * i, sb: baseSky.b + (s.b - baseSky.b) * i,
         near: base.near + ((clear ? base.near : K.near) - base.near) * i,
         far: base.far + ((clear ? base.far : K.far) - base.far) * i,
-        rain: (K.rain || 0) * i, snow: (K.snow || 0) * i,
+        rain: (K.rain || 0) * i, snow: (K.snow || 0) * i, sheets: (K.sheets || 0) * i,
         br: baseSky.r + (b.r - baseSky.r) * i, bg: baseSky.g + (b.g - baseSky.g) * i, bb: baseSky.b + (b.b - baseSky.b) * i,
         bsize: K.bank[1] * SIZE * i, balpha: K.bank[2] * i
       };
@@ -149,11 +152,53 @@
     const bank = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), bankMat);
     bank.frustumCulled = false; bank.visible = false; bank.renderOrder = 1;
 
+    /* ---------------- fog sheets: giant flat ovals of thin fog lying parallel with the ground at a few levels (ankle,
+       waist, over the head, up in the trees). They sit still in the world and drift slowly with the wind, so you walk
+       through and under them; one wraps round to the far side when you leave it behind. One InstancedMesh: one draw
+       call. A sheet fades out within a few metres of the lens, so passing through one never shows a hard line. */
+    const SHN = LOW ? 10 : 18, SHR = LOW ? 28 : 38, LEVELS = [0.5, 1.4, 2.8, 4.6];
+    const sheetMat = new THREE.ShaderMaterial({
+      uniforms: { tint: { value: new THREE.Color(KIND.fog.sky) }, alpha: { value: 0 }, t: { value: 0 } },
+      vertexShader: 'varying vec2 vUv; varying vec3 vW; varying float vSeed;\nvoid main() {\n  vUv = uv;\n  vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0);\n  vW = w.xyz; vSeed = instanceMatrix[3].x * 0.37 + instanceMatrix[3].z * 0.11;\n  gl_Position = projectionMatrix * viewMatrix * w;\n}',
+      /* a soft oval whose rim wanders (two slow sines round the edge), thinner in wisps across it, and gone near the lens */
+      fragmentShader: 'uniform vec3 tint; uniform float alpha; uniform float t; varying vec2 vUv; varying vec3 vW; varying float vSeed;\nvoid main() {\n  vec2 q = (vUv - 0.5) * 2.0; float ang = atan(q.y, q.x);\n  float rim = 0.78 + 0.12 * sin(ang * 3.0 + vSeed) + 0.08 * sin(ang * 5.0 - vSeed * 1.7 + t * 0.05);\n  float a = 1.0 - smoothstep(0.15 * rim, rim, length(q));\n  a *= 0.62 + 0.38 * sin(vW.x * 0.21 + vW.z * 0.13 + t * 0.07 + vSeed) * sin(vW.z * 0.17 - vW.x * 0.09 + vSeed * 2.0);\n  a *= smoothstep(1.5, 7.0, distance(vW, cameraPosition));\n  gl_FragColor = vec4(tint, clamp(a, 0.0, 1.0) * alpha);\n#include <colorspace_fragment>\n}',
+      transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false
+    });
+    const sheetGeo = new THREE.PlaneGeometry(1, 1); sheetGeo.rotateX(-Math.PI / 2);
+    const sheets = new THREE.InstancedMesh(sheetGeo, sheetMat, SHN);
+    sheets.frustumCulled = false; sheets.visible = false; sheets.renderOrder = 1;
+    if (DYNUSE && sheets.instanceMatrix.setUsage) sheets.instanceMatrix.setUsage(DYNUSE);
+    const SH = [], feet = new THREE.Vector3(camera.position.x, camera.position.y - 9, camera.position.z);
+    let feetSet = false;
+    const shM = new THREE.Matrix4(), shQ = new THREE.Quaternion(), shS = new THREE.Vector3(), shP = new THREE.Vector3(), UPV = new THREE.Vector3(0, 1, 0);
+    function placeSheet(o, anywhere) {
+      const a = Math.random() * 6.283, r = anywhere ? Math.sqrt(Math.random()) * SHR : SHR * (0.8 + Math.random() * 0.2);
+      o.x = feet.x + Math.cos(a) * r; o.z = feet.z + Math.sin(a) * r;
+      o.lv = LEVELS[Math.floor(Math.random() * LEVELS.length)] * (0.85 + Math.random() * 0.3); o.y = feet.y + o.lv;
+      o.w = 16 + Math.random() * 30; o.d = o.w * (0.35 + Math.random() * 0.35); o.rot = Math.random() * 3.1416;
+    }
+    for (let k = 0; k < SHN; k++) SH.push({});
+    function stepSheets(d) {
+      const K = KIND.rain.wind, vx = K[0] * 0.08, vz = K[1] * 0.08;      /* the fog creeps with the same wind, slowly */
+      for (let k = 0; k < SHN; k++) {
+        const o = SH[k];
+        if (o.x == null) placeSheet(o, true);
+        o.x += vx * d; o.z += vz * d;
+        const dx = o.x - feet.x, dz = o.z - feet.z;
+        if (dx * dx + dz * dz > SHR * SHR * 1.3 || Math.abs(o.y - feet.y - o.lv) > 10) placeSheet(o, false);   /* left behind */
+        shP.set(o.x, o.y, o.z); shQ.setFromAxisAngle(UPV, o.rot); shS.set(o.w, 1, o.d);
+        shM.compose(shP, shQ, shS); sheets.setMatrixAt(k, shM);
+      }
+      sheets.instanceMatrix.needsUpdate = true;
+    }
+    function focus(v) { if (v) { feet.set(v.x, v.y, v.z); if (!feetSet) { feetSet = true; for (const o of SH) o.x = null; } } }
+
     const box = new THREE.Group();
     box.add(bank);
     if (rain) box.add(rain);
     if (snow) box.add(snow);
     scene.add(box);
+    scene.add(sheets);
     const fwd = new THREE.Vector3(), skyNow = new THREE.Color();
     const aim = new THREE.Vector3(), centre = new THREE.Vector3(camera.position.x, camera.position.y + 1.5, camera.position.z);
     let t = 0, gone = false;
@@ -198,6 +243,9 @@
       box.position.copy(centre);
       if (rain && rain.visible) stepRain(d, H, rad);
       if (snow && snow.visible) stepSnow(d, H, rad);
+      if (!feetSet) feet.set(camera.position.x, camera.position.y - 9, camera.position.z);
+      sheets.visible = cur.sheets > 0.02;
+      if (sheets.visible) { sheetMat.uniforms.alpha.value = 0.62 * cur.sheets; sheetMat.uniforms.t.value = t; sheetMat.uniforms.tint.value.setRGB(cur.sr, cur.sg, cur.sb); stepSheets(d); }
 
       skyNow.setRGB(cur.sr, cur.sg, cur.sb);
       if (scene.fog) { scene.fog.color.copy(skyNow); scene.fog.near = cur.near; scene.fog.far = cur.far; }
@@ -293,7 +341,8 @@
         /* in the air, which below full strength is fewer than the cloud holds - the rest wait under the ground */
         parts: { rain: rain && rain.visible ? Math.min(RK, Math.round(RK * cur.rain)) : 0,
                  snow: snow && snow.visible ? Math.min(SK, Math.round(SK * cur.snow)) : 0 },
-        draws: (rain && rain.visible ? 1 : 0) + (snow && snow.visible ? 1 : 0) + (bank.visible ? 1 : 0)
+        draws: (rain && rain.visible ? 1 : 0) + (snow && snow.visible ? 1 : 0) + (bank.visible ? 1 : 0) + (sheets.visible ? 1 : 0),
+        sheets: sheets.visible ? SHN : 0
       };
     }
 
@@ -312,11 +361,12 @@
       if (snow) { snow.geometry.dispose(); snow.material.dispose(); }
       if (flakeTex) flakeTex.dispose();
       bank.geometry.dispose(); bankMat.dispose();
+      if (sheets.parent) sheets.parent.remove(sheets); sheetGeo.dispose(); sheetMat.dispose();
       box.clear();
     }
 
     set('clear', 0, { instant: true });
-    return { api: 1, KIND: KIND, set: set, update: update, state: state, dispose: dispose };
+    return { api: 1, KIND: KIND, set: set, update: update, state: state, dispose: dispose, focus: focus };
   }
 
 

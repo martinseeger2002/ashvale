@@ -110,6 +110,42 @@
       }
       return g;
     }
+    /* THE SEASONS (2026-10-07; the maths: the `seasons` module). Shared uniforms the ground and still water read, and a
+       register of every tree crown built, so a change of season recolours the woods in place - no rebuild. */
+    const SEASON_U = { uGround: { value: new THREE.Color(1, 1, 1) }, uSnow: { value: 0 }, uIce: { value: 0 } };
+    let SEASON_CUR = null, SEASON_LIB = null; const TREE_REG = [];
+    const BRANCH_GEO = (() => { const parts = [[0.35, 0.0], [-0.3, 0.6], [0.05, -0.4], [0.3, 0.45], [-0.25, -0.35]].map(([dx, dz], i) => {
+      const L = 0.85 + 0.1 * i % 0.3, g = new THREE.CylinderGeometry(0.025, 0.045, L, 5); g.translate(0, L / 2, 0); g.rotateZ(-dx * 1.2); g.rotateX(dz * 1.2); g.translate(0, 0.92, 0); return { geo: g }; });
+      return parts; })();
+    function seasonGround(mat) {   /* grass takes the season's tint; snow lies on all ground, a little thinner on paths and sand */
+      const prev = mat.onBeforeCompile;
+      mat.onBeforeCompile = (sh, r) => { if (prev) prev(sh, r);
+        sh.uniforms.uGround = SEASON_U.uGround; sh.uniforms.uSnow = SEASON_U.uSnow;
+        sh.fragmentShader = 'uniform vec3 uGround;\nuniform float uSnow;\n' + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n  { vec3 c0 = diffuseColor.rgb; float grassy = smoothstep(0.0, 0.05, c0.g - max(c0.r, c0.b)); vec3 c1 = mix(c0, clamp(c0 * uGround, 0.0, 1.0), grassy); diffuseColor.rgb = mix(c1, vec3(0.92, 0.94, 0.97), uSnow * (0.6 + 0.4 * grassy)); }'); };
+      mat.customProgramCacheKey = () => 'season-ground'; return mat;
+    }
+    function seasonIce(mat) {   /* still water (lakes, ponds) turns to ice when frozen; rivers and the sea never do */
+      mat.onBeforeCompile = (sh) => { sh.uniforms.uIce = SEASON_U.uIce;
+        sh.fragmentShader = 'uniform float uIce;\n' + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.80, 0.88, 0.95), uIce); diffuseColor.a = mix(diffuseColor.a, 1.0, uIce);'); };
+      mat.customProgramCacheKey = () => 'season-ice'; return mat;
+    }
+    function treeSeason(reg) {   /* one crown mesh to the current season: colour, how much leaf is left, bare branches in winter */
+      const S = SEASON_CUR, L = SEASON_LIB; if (!S || !L) return;
+      const dec = L.deciduous(reg.kind), f = dec ? S.leaf.crown : 1, M = new THREE.Matrix4(), SC = new THREE.Matrix4(), Z = new THREE.Matrix4().makeScale(0, 0, 0), C = new THREE.Color();
+      for (const t of reg.list) {
+        const c = L.leafColour(reg.kind, t.base, S); C.setRGB(c[0], c[1], c[2]);
+        if (!dec && S.snow > 0) C.lerp(SNOWC, 0.5 * S.snow);   /* snow on the evergreens */
+        reg.crown.setColorAt(t.n, C);
+        if (dec) reg.crown.setMatrixAt(t.n, f < 0.03 ? Z : M.copy(t.m).multiply(SC.makeScale(f, 0.6 + 0.4 * f, f)));
+      }
+      reg.crown.instanceColor.needsUpdate = true; reg.crown.instanceMatrix.needsUpdate = true;
+      if (reg.branches) reg.branches.visible = dec && f < 0.55;
+    }
+    function seasonApply(S, lib) {   /* the engine, when the season where you stand has moved on */
+      SEASON_CUR = S; SEASON_LIB = lib;
+      SEASON_U.uGround.value.setRGB(S.ground[0], S.ground[1], S.ground[2]); SEASON_U.uSnow.value = 0.85 * S.snow; SEASON_U.uIce.value = S.frozen ? 1 : 0;
+      for (let i = TREE_REG.length - 1; i >= 0; i--) { const r = TREE_REG[i]; if (!r.crown.parent) { TREE_REG.splice(i, 1); continue; } treeSeason(r); }
+    }
     const SEE = { uSeeP: { value: new THREE.Vector2(-1e4, -1e4) }, uSeeR: { value: 0 }, uSeeD: { value: 0 }, uSeeY: { value: -1e9 } };   /* uSeeY: the avatar's feet - the floor and ground you stand on never dissolve (the operator: upstairs it looked like standing outside the house) */
     function seeThrough(m) {
       m.onBeforeCompile = (sh) => {
@@ -281,13 +317,13 @@
           return own(cx, cy) * w + sh * (1 - w);
         };
         const wLevel = map.waterH() - 0.05;
-        /* the level of the nearest river or lake water connected to this tile through water, within 24 m (cached per tile) */
+        /* the level of the nearest river or lake water connected to this tile through water, within 10 m (cached per tile) */
         const NS = new Map(), wetT = (x, y) => { const t = at(x, y); return t === '~' || t === 'v' || t === 'B'; };
         const nearSurf = (tx, ty) => {
           const k = tx + ',' + ty; if (NS.has(k)) return NS.get(k);
           let res = null; if (wetT(tx, ty)) {
             const seen = new Set([k]); let ring = [[tx, ty]];
-            for (let d = 0; d < 24 && ring.length && res == null; d++) {
+            for (let d = 0; d < 10 && ring.length && res == null; d++) {
               const next = [];
               for (const [x, y] of ring) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
                 const nx = x + dx, ny = y + dy, nk = nx + ',' + ny; if (seen.has(nk) || !wetT(nx, ny)) continue; seen.add(nk);
@@ -296,7 +332,12 @@
               }
               ring = next;
             }
+            /* open water with no river or lake level near (the sea): every tile this search crossed is the same open water, so
+               none of them searches again - one search per stretch of sea, not one per tile (a jump to the sea-side wigwam
+               rooms spent 35 s here) */
+            if (res == null) for (const q of seen) NS.set(q, null);
           }
+          if (NS.size > 400000) NS.clear();
           NS.set(k, res); return res;
         };
         surfOf = (tx, ty) => {   /* where the water's skin stands over this tile, the same curve build draws and rings ride */
@@ -390,7 +431,7 @@
           if ((x + y) & 1) ind.push(a, c, b, b, c, d); else ind.push(a, c, d, a, d, b);
         }
         const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setIndex(ind); g.computeVertexNormals();
-        const terrain = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+        const terrain = new THREE.Mesh(g, seasonGround(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })));
         terrain.receiveShadow = true; terrain.userData.pick = { kind: 'ground' }; group.add(terrain);
         var terrainMesh = terrain;
         if (opts.outer && !seeded) { const outer = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshLambertMaterial({ color: 0x3d6a2a }));
@@ -436,13 +477,13 @@
             const n = run.x1 - run.x0; let bed = 0;
             for (let x = run.x0; x < run.x1; x++) bed += (gH(x, y) + gH(x + 1, y) + gH(x, y + 1) + gH(x + 1, y + 1)) / 4;
             bed /= n;
-            parts.push({ geo: new THREE.PlaneGeometry(n, 1).rotateX(-Math.PI / 2), m: M4((run.x0 + run.x1) / 2, run.yy, y + 0.5, 1), col: tint(run.yy, bed) });
+            parts.push({ geo: new THREE.PlaneGeometry(n, 1).rotateX(-Math.PI / 2), m: M4((run.x0 + run.x1) / 2, run.yy, y + 0.5, 1), col: tint(run.yy, bed), still: run.still });
             run = null;
           };
           for (let x = X0; x <= X1; x++) {
-            const w = x < X1 && isWt[(y - Y0) * RW + (x - X0)], yy = w ? surfC[(y - Y0) * RW + (x - X0)] : 0;
-            if (run && (!w || Math.abs(yy - run.yy) > 1e-6)) flush();
-            if (w && !run) run = { x0: x, x1: x + 1, yy }; else if (w) run.x1 = x + 1;
+            const w = x < X1 && isWt[(y - Y0) * RW + (x - X0)], yy = w ? surfC[(y - Y0) * RW + (x - X0)] : 0, still = w && map.waterKind ? map.waterKind(x, y) === 'lake' : false;
+            if (run && (!w || Math.abs(yy - run.yy) > 1e-6 || still !== run.still)) flush();
+            if (w && !run) run = { x0: x, x1: x + 1, yy, still }; else if (w) run.x1 = x + 1;
           }
           flush();
         }
@@ -452,14 +493,21 @@
           const sa = surfC[ja], sb = surfC[jb]; if (Math.abs(sa - sb) < 0.004) return;
           const bed = (gH(Math.min(xa, xb) + 0.5, Math.min(ya_, yb_) + 0.5) + gH(Math.max(xa, xb) + 0.5, Math.max(ya_, yb_) + 0.5)) / 2;
           const midY = (sa + sb) / 2;
-          if (xb !== xa) parts.push({ geo: new THREE.PlaneGeometry(1, Math.abs(sb - sa)).rotateY(Math.PI / 2), m: M4(Math.max(xa, xb) + 1, midY, ya_ + 0.5, 1), col: tint(midY, bed) });
-          else parts.push({ geo: new THREE.PlaneGeometry(1, Math.abs(sb - sa)), m: M4(xa + 0.5, midY, Math.max(ya_, yb_) + 1, 1), col: tint(midY, bed) });
+          const still = map.waterKind ? map.waterKind(xa, ya_) === 'lake' : false;
+          if (xb !== xa) parts.push({ geo: new THREE.PlaneGeometry(1, Math.abs(sb - sa)).rotateY(Math.PI / 2), m: M4(Math.max(xa, xb) + 1, midY, ya_ + 0.5, 1), col: tint(midY, bed), still });
+          else parts.push({ geo: new THREE.PlaneGeometry(1, Math.abs(sb - sa)), m: M4(xa + 0.5, midY, Math.max(ya_, yb_) + 1, 1), col: tint(midY, bed), still });
         };
         for (let y = Y0; y < Y1; y++) for (let x = X0; x < X1 - 1; x++) skirt(x, y, x + 1, y);
         for (let y = Y0; y < Y1 - 1; y++) for (let x = X0; x < X1; x++) skirt(x, y, x, y + 1);
-        if (parts.length) {
-          const wm = new THREE.Mesh(mergeGeos(parts), new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.86, emissive: 0x0a2a4a }));
+        /* moving water (rivers, the sea) and still water (lakes, ponds: they freeze in a hard winter) are two sheets */
+        const flowing = parts.filter(q => !q.still), stillP = parts.filter(q => q.still);
+        if (flowing.length) {
+          const wm = new THREE.Mesh(mergeGeos(flowing), new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.86, emissive: 0x0a2a4a }));
           wm.receiveShadow = true; group.add(wm); var waterMesh = wm;
+        }
+        if (stillP.length) {
+          const im = new THREE.Mesh(mergeGeos(stillP), seasonIce(new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.86, emissive: 0x0a2a4a })));
+          im.receiveShadow = true; group.add(im); if (!waterMesh) var waterMesh = im;
         }
       }
       /* ---------- trees (instanced) */
@@ -506,13 +554,17 @@
           trunk.setMatrixAt(n, m); crown.setMatrixAt(n, m);
           C.setHex(tk.cc).offsetHSL((hash2(t.x + 9, t.y) - 0.5) * 0.04, 0, (hash2(t.x, t.y + 9) - 0.5) * 0.12);
           if (chunk && map.snowH < 1e8) { const sn = Math.min(1, Math.max(0, (py - map.snowH + 55) / 27)) * 0.6; if (sn > 0) C.lerp(SNOWC, sn); }   /* snow on the crowns higher up */
-          crown.setColorAt(n, C);
+          crown.setColorAt(n, C); t.base = [C.r, C.g, C.b];
           tiles[n] = t.i; t.m = m; t.k = k; t.n = n; t.trunk = trunk; t.crown = crown;
           if (t.i >= 0) { treeAt.set(t.i, t); stumps.setMatrixAt(t.stump, ZERO); t.sm = M4(px, py, pz, 1); }
         });
         trunk.castShadow = crown.castShadow = true; trunk.receiveShadow = crown.receiveShadow = true;
         trunk.userData.pick = crown.userData.pick = { kind: 'tree', tiles };
         group.add(trunk, crown); treeMeshes.push(trunk, crown); quads[q].push(trunk, crown);
+        /* winter: bare branches over the trunk (deciduous kinds), shown while the leaves are down */
+        let branches = null;
+        if ('TOWM'.indexOf(k) >= 0) { branches = new THREE.InstancedMesh(mergeGeos(BRANCH_GEO), lam(0x4a3a2c), L.length); L.forEach((t, n) => branches.setMatrixAt(n, t.m)); branches.visible = false; branches.castShadow = true; group.add(branches); quads[q].push(branches); }
+        const reg = { kind: k, crown, branches, list: L.map(t => ({ n: t.n, m: t.m, base: t.base })) }; TREE_REG.push(reg); treeSeason(reg);
       }
       /* ---------- rocks */
       const rockAt = new Map(), pickables = [terrainMesh].concat(treeMeshes);
@@ -1021,7 +1073,7 @@
         const g = new THREE.Group(); g.position.set(n.x + 0.5, wsurf(n.x, n.y) + 0.02, n.y + 0.5); group.add(g);   /* sit on the water's actual skin, sea or pond */
         const rings = [0, 1, 2].map(k => { const r = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.26, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xdff4ff, transparent: true, opacity: 0.7, depthWrite: false })); g.add(r); return r; });
         const p = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.4, 8), new THREE.MeshBasicMaterial({ visible: false })); p.userData.pick = { kind: 'node', i }; g.add(p); pickables.push(p);
-        spots.push({ rings, ph: hash2(n.x, n.y) * 3 });
+        spots.push({ rings, ph: hash2(n.x, n.y) * 3, x: n.x, y: n.y, g });
       }
       /* torch light: two warm lights at the village plaza (more would cost too much on phones) */
       const lights = [];
@@ -1057,7 +1109,8 @@
         update(dt, time) {
           for (const t of torches) { const s = 0.85 + 0.15 * Math.sin(time * 13 + t.ph) + 0.08 * Math.sin(time * 31 + t.ph * 2); if (t.night) { const on = NIGHTK > 0.04; t.f.visible = on; if (t.f2) t.f2.visible = on; } t.f.scale.set(1, s, 1); if (t.f2) t.f2.scale.set(1, s, 1); }
           for (const L of lights) L.intensity = 2.6 + Math.sin(time * 11 + L.position.x) * 0.4;
-          for (const s of spots) s.rings.forEach((r, k) => { const p = ((time * 0.6 + s.ph + k / 3) % 1); r.scale.setScalar(0.6 + p * 2.2); r.material.opacity = 0.75 * (1 - p); });
+          for (const s of spots) { const ice = !!(map.iceAt && map.iceAt(s.x, s.y)); s.rings.forEach(r => { r.visible = !ice; }); }   /* a frozen pond does not ripple: you fish through the ice */
+          for (const s of spots) if (s.rings[0].visible) s.rings.forEach((r, k) => { const p = ((time * 0.6 + s.ph + k / 3) % 1); r.scale.setScalar(0.6 + p * 2.2); r.material.opacity = 0.75 * (1 - p); });
           if (waterMesh) waterMesh.material.emissive.setHSL(0.58, 0.6, 0.08 + 0.02 * Math.sin(time * 1.5));
           if (waterMesh) waterMesh.position.y = Math.sin(time * 0.55) * 0.014;   /* the whole sheet rides a slow swell, some water sits on it */
           for (const a of anim) if (a.bob) a.bob.position.y = a.y0 + 0.12 * Math.sin(time * 2.6);
@@ -1078,7 +1131,7 @@
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, canoeMesh, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, canoeMesh, seasonApply, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

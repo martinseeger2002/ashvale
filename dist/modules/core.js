@@ -166,7 +166,7 @@
        "weather" {kinds: {kind: weight}, min, max}; rules.weather.kinds[kind] = generic multipliers that the rules read
        (sight, range, fireFail, fireBurn, run). Rolled from the seeded RNG by the zone's host; replicas take it from the host. */
     const WX = RU.weather || { kinds: {}, intensity: [50, 100] };
-    const ZW = {}; for (const z of ZINDEX) if (z.weather) ZW[z.id] = z.weather;
+    const ZW = {}; for (const z of ZINDEX) if (z.weather && z.weather.kinds) ZW[z.id] = z.weather;   /* a cave's {none: true}: no weather at all */
     /* 2026-10-03: the weather follows the world's climate. On seeded land every area and every set piece belongs
        to the weather region of its climate zone ('cz<n>', tables in rules.weather.climate), and coasts are a little
        foggier; each region rolls like a zone does, so everyone in it agrees */
@@ -196,11 +196,25 @@
       if (key === 'fireFail') return (k || 0) * w.intensity / 100;
       return k == null ? 1 : 1 + (k - 1) * w.intensity / 100;
     }
+    /* THE WEATHER KEEPS THE SEASON (2026-10-07: "It should only snow in the winter at the latitude that it should snow. It's
+       not rain or be foggy in the winter. It should not snow where it is not winter"): the engine tells the core whether it is a
+       snowy winter where the roller stands (setSeason); in one, rain and fog become snow (or clear); anywhere else snow becomes
+       rain. Weather that no longer fits the season ends at once and is rolled again. */
+    let SEASONW = null;
+    const wrongFor = k => SEASONW && (SEASONW.snowy ? (k === 'rain' || k === 'fog') : k === 'snow');
+    function setSeason(st) { SEASONW = st || null; for (const z in S.weather) { const w = S.weather[z]; if (w && wrongFor(w.kind)) w.until = S.t; } }
+    function seasonKinds(K) {
+      if (!SEASONW) return K;
+      const o = Object.assign({}, K);
+      if (SEASONW.snowy) { o.snow = (o.snow || 0) + (o.rain || 0) + (o.fog || 0); delete o.rain; delete o.fog; if (!o.snow) o.snow = 1; }
+      else { o.rain = (o.rain || 0) + (o.snow || 0); delete o.snow; if (!o.rain) delete o.rain; }
+      return o;
+    }
     function weatherTick() {
       for (const z in ZW) {
         const w = S.weather[z]; if (!isAuth(z) || S.t < w.until) continue;
-        const ks = Object.keys(ZW[z].kinds), tot = ks.reduce((a, k) => a + ZW[z].kinds[k], 0); let r = R.int(tot), kind = ks[0];
-        for (const k of ks) { if (r < ZW[z].kinds[k]) { kind = k; break; } r -= ZW[z].kinds[k]; }
+        const KK = seasonKinds(ZW[z].kinds || {}), ks = Object.keys(KK), tot = ks.reduce((a, k) => a + KK[k], 0); let r = R.int(Math.max(1, tot)), kind = ks[0] || 'clear';
+        for (const k of ks) { if (r < KK[k]) { kind = k; break; } r -= KK[k]; }
         const I = kind === 'clear' ? 0 : WX.intensity[0] + R.int(WX.intensity[1] - WX.intensity[0] + 1);
         const len = ZW[z].min + R.int(Math.max(1, ZW[z].max - ZW[z].min + 1));
         const was = w.kind; S.weather[z] = { kind, intensity: I, until: S.t + len };
@@ -482,7 +496,7 @@
     /* THE CANOE (2026-10-07, Ziibiing): while you sit in one, only water is open - rivers, lakes, the shallows, under a
        bridge - and never across a corner of land */
     let BOAT = false;
-    const isWet = (x, y) => { const t = M.tileAt(x, y); return t === '~' || t === 'v' || t === 'B'; };
+    const isWet = (x, y) => { const t = M.tileAt(x, y); return (t === '~' || t === 'v' || t === 'B') && !(M.iceAt && M.iceAt(x, y)); };   /* a frozen lake is no water for a canoe */
     /* the hawk (2026-10-04): its own stats. hp 4; a strike every `strike` ticks with a hitPct % chance of hitDmg; a
        strike costs `energy` run energy (Dexterity) and leaves it open to a hit for those ticks; a third of the carrying
        capacity and `slots` bag slots; overburdened it lands and walks one step every groundEvery ticks */
@@ -2201,7 +2215,7 @@
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
-      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, EFFECTS: Object.keys(EFFECTS),
+      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, EFFECTS: Object.keys(EFFECTS),
       applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, setFelled,
       hitXp: (pid, cls, dmg, dex) => { const p = S.players[pid]; if (p && !p.puppet) hitXp(p, cls, dmg, null, dex); },
       creditKill: (pid, key) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key); }

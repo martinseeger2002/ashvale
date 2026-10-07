@@ -330,10 +330,33 @@
       const TRAVEL_MS = 900, CAVE_MS = 1400; let travelling = null, TRAVEL_KIND = null;
       /* through a cave passage the screen is the cave's own (down into the dark, up into the daylight), every time - even when
          the area there is already loaded - for at least CAVE_MS */
-      function caveTravel(kind, name) {
-        TRAVEL_KIND = kind; hud.travel && hud.travel(true, name, 0.2, kind);
-        const t0 = performance.now(), tick = () => { if (travelling) return; const f = (performance.now() - t0) / CAVE_MS; if (f >= 1) { TRAVEL_KIND = null; hud.travel && hud.travel(false); return; } hud.travel && hud.travel(true, name, 0.2 + 0.8 * f, kind); requestAnimationFrame(tick); };
+      /* 2026-10-07: "The loading screens need to come up as soon as a player clicks on a portal or the cave or a wigwam":
+         travelScreen goes up the moment you choose to go (and again, unchanged, when the jump itself comes), stays at least
+         CAVE_MS, and while a jump is still due (TRAVEL.due) or the area there is loading (arriveCheck's travelling) it waits.
+         A jump that never comes (refused, out of reach) lets it go after TRAVEL_GIVEUP. */
+      const TRAVEL = { t0: 0, kind: null, name: '', due: 0, on: false, hold: false, warm: true }, TRAVEL_GIVEUP = 8000;
+      function travelScreen(kind, name, due) {
+        const now = performance.now();
+        if (!TRAVEL.on || TRAVEL.kind !== kind) TRAVEL.t0 = now;
+        TRAVEL.warm = false;
+        TRAVEL.kind = kind; TRAVEL.name = name || TRAVEL.name; TRAVEL.due = due ? now + TRAVEL_GIVEUP : 0; TRAVEL_KIND = kind;
+        hud.travel && hud.travel(true, TRAVEL.name, 0.15, kind);
+        if (TRAVEL.on) return; TRAVEL.on = true;
+        const tick = () => {
+          const n = performance.now(), f = (n - TRAVEL.t0) / CAVE_MS;
+          if (travelling) { TRAVEL.on = false; return; }   /* arriveCheck holds the screen from here and lets it go */
+          if (f >= 1 && !TRAVEL.hold && !(TRAVEL.due && n < TRAVEL.due)) { TRAVEL.on = false; TRAVEL_KIND = null; hud.travel && hud.travel(false); return; }
+          hud.travel && hud.travel(true, TRAVEL.name, Math.min(0.95, 0.15 + 0.8 * Math.min(1, f)), TRAVEL.kind); requestAnimationFrame(tick);
+        };
         requestAnimationFrame(tick);
+      }
+      const caveTravel = (kind, name) => travelScreen(kind, name, false);
+      const PASSK = { cavemouth: 'down', caveexit: 'up', wigwamdoor: 'lodge', wigwamout: 'lodgeout' };
+      /* the moment you choose a passage or a portal: up goes the screen (when you are already beside it), and the area on
+         the far side starts loading now rather than when you arrive */
+      function travelSoon(kind, name, tx, ty, near) {
+        if (ZINDEX && tx != null) { const zi = zoneAtIndex(tx, ty); if (zi && !core.hasZone(zi.id)) fetchZone(zi.id).then(z => { if (!core.hasZone(zi.id)) coreCall(() => core.addZone(Object.assign({}, z))); }).catch(() => {}); }
+        if (near) travelScreen(kind, name, true);
       }
       function arriveCheck() {
         if (!ZINDEX) return;
@@ -343,7 +366,7 @@
         hud.travel && hud.travel(true, zi.name || zi.id, 0, TRAVEL_KIND);
         let k = 0;
         const step = () => {
-          if (core.hasZone(want)) { const left = Math.max(0, (TRAVEL_KIND ? CAVE_MS : TRAVEL_MS) - (performance.now() - t0)); setTimeout(() => { travelling = null; TRAVEL_KIND = null; streamRegions(true); cam.snap = true; hud.travel && hud.travel(false); }, left); return; }
+          if (core.hasZone(want)) { const left = Math.max(0, (TRAVEL_KIND ? CAVE_MS : TRAVEL_MS) - (performance.now() - Math.min(t0, TRAVEL.t0 || t0))); setTimeout(() => { travelling = null; TRAVEL_KIND = null; TRAVEL.due = 0; streamRegions(true); cam.snap = true; hud.travel && hud.travel(false); }, left); return; }
           hud.travel && hud.travel(true, zi.name || zi.id, Math.min(0.9, (performance.now() - t0) / 4000), TRAVEL_KIND);
           fetchZone(want).then(z => { if (!core.hasZone(want)) coreCall(() => core.addZone(Object.assign({}, z))); step(); })
             .catch(e => { console.warn('ASHVALE: ' + e.message + ', trying again'); setTimeout(step, Math.min(8000, 800 * ++k)); });
@@ -686,17 +709,17 @@
             break;
           case 'shop': if (mine) { hud.openShop(e.shop); faceNpc(e.npc); } break;
           case 'portal': if (mine) {   /* the towns you have touched a portal in (2026-10-04) */
-            const L = (e.to || []).map(P => ({ html: 'Travel to <span class="y">' + P.name + '</span>', fn: () => send({ c: 'portal', to: P.id }) }));
+            const L = (e.to || []).map(P => ({ html: 'Travel to <span class="y">' + P.name + '</span>', fn: () => { send({ c: 'portal', to: P.id }); const T = (D.rules.portals || []).find(q => q.id === P.id); travelSoon(null, P.name, T && T.to[0], T && T.to[1], true); } }));
             if (!L.length) hud.chat('Touch the town portal in another town, and you can travel there from here.', 'sys');
             else { const r = host.getBoundingClientRect(); hud.menu(r.width / 2, r.height / 2, L); }
             if ((e.unknown || []).length) hud.chat('Not yet attuned: ' + e.unknown.join(', ') + '.', 'sys');
           } break;
           case 'angels': { const t = ents.get('p:' + e.p); if (t) { angelFlare(t.root.position); if (t.H && t.H.play) t.H.play('cast', { loop: false }); } if (mine) sfx('level'); break; }
           case 'teleport': if (mine) {
-            if (e.to === 'cavemouth' || e.to === 'caveexit') {   /* the cave's own screen goes up FIRST and gets painted; the heavy part (building the cave or the land) follows behind it */
-              const uz = core.M.underAt && core.M.underAt(e.x, e.y), zi2 = uz && ZINDEX && ZINDEX.find(z => z.id === uz);
-              caveTravel(e.to === 'cavemouth' ? 'down' : 'up', zi2 ? zi2.name : (core.M.underAt && ZINDEX && (ZINDEX.find(z => z.under) || {}).name) || 'cave');
-              CAVE.hold = true; requestAnimationFrame(() => setTimeout(() => { CAVE.hold = false; place(myEnt, e.x, e.y); cam.snap = true; streamRegions(); sfx('equip'); arriveCheck(); }, 30));
+            if (e.to !== 'gate') {   /* the screen goes up FIRST and gets painted; the heavy part (building the cave, the wigwam or the land) follows behind it */
+              const uz = core.M.underAt && core.M.underAt(e.x, e.y), zi2 = (uz && ZINDEX && ZINDEX.find(z => z.id === uz)) || zoneAtIndex(e.x, e.y);
+              travelScreen(PASSK[e.to] || null, zi2 ? zi2.name : PASSK[e.to] === 'down' ? 'cave' : '', false);
+              CAVE.hold = true; TRAVEL.hold = true; requestAnimationFrame(() => setTimeout(() => { CAVE.hold = false; place(myEnt, e.x, e.y); cam.snap = true; streamRegions(true); sfx('equip'); arriveCheck(); TRAVEL.warm = true; let k = 0; const settle = () => { if (++k < 3) requestAnimationFrame(settle); else TRAVEL.hold = false; }; requestAnimationFrame(settle); }, 30));   /* and it stays until the new place has been built and drawn a few frames (the first draw compiles its materials) */
             } else { place(myEnt, e.x, e.y); cam.snap = true; streamRegions(); sfx('equip'); arriveCheck(); }
           } break;
           case 'zoneadd': zoneArrived(e, now); break;
@@ -721,7 +744,7 @@
             if (n && n.pose) myEnt.restPose = n.pose;   /* sit down with him the same way (2026-10-07) */
           } break;
           case 'unhide': { const t = ents.get('n:' + e.npc); if (t) t.root.visible = true; break; }
-          case 'weather': if (e.zone === core.weatherZone(zoneHere())) { if (e.say) hud.chat(e.say, 'sys'); showWeather(); } break;
+          case 'weather': if (e.zone === core.weatherZone(zoneHere())) { const k = seasonal({ kind: e.kind }).kind, say = k === e.kind ? e.say : (((D.rules || {}).weather || {}).say || {})[k] || e.say; if (say && k + ':' + e.intensity !== wxShown) hud.chat(say, 'sys'); showWeather(); } break;
           case 'fire': addFire(e.fire, e.x, e.y); if (e.p === PID || !e.p) sfx('sizzle', e.p === PID ? null : { x: e.x, y: e.y }); break;
           case 'fireout': removeFire(e.fire); break;
           case 'fx': { const t = ents.get('m:' + e.mob); if (!t) break; t.fx = t.fx || {}; t.fx[e.fx] = 1; applyTint(t); const el = hud.fxSplat(e.fx); if (el) t.splats.push({ el, t: performance.now(), k: t.splats.length }); if (e.fx === 'freeze') sfx('freeze', t); break; }
@@ -776,6 +799,21 @@
         GLOW.mesh.count = n; GLOW.mesh.instanceMatrix.needsUpdate = true; if (GLOW.mesh.instanceColor) GLOW.mesh.instanceColor.needsUpdate = true;
       }
       const CAVE = { on: false, t: 0, me: null, pool: [], keep: null };
+      /* A FIXED NUMBER OF LIGHTS. three.js builds every material's shader for the number of lights in the scene; one light more
+         or fewer and every material in sight is compiled again (52 programs - that was most of the wait going into the cave or
+         a wigwam, and a stall each time a town's area loaded). So the lights are all there from the start and are only ever
+         dimmed (intensity 0), never added, removed or hidden; the towns' own plaza lights come and go with their areas, and a
+         pad of dark spare lights makes up the difference (lightBudget). */
+      for (let k = 0; k < (isPhone ? 4 : 6); k++) { const L = new THREE.PointLight(0xff9a3c, 0, 10, 1.2); scene.add(L); CAVE.pool.push(L); }
+      const LBUD = { n: 8, pad: [], key: -1 };
+      for (let k = 0; k < LBUD.n; k++) { const L = new THREE.PointLight(0xffa050, 0, 1, 2); L.position.set(0, -500, 0); scene.add(L); LBUD.pad.push(L); }
+      function lightBudget() {
+        let n = 0, sum = 0;
+        for (const r of regions) { const b = r.built; if (!b) continue; if (b._pl == null) { b._pl = []; b.group.traverse(o => { if (o.isPointLight) b._pl.push(o); }); } sum += b._pl.length; }
+        if (sum === LBUD.key) return; LBUD.key = sum;
+        for (const r of regions) { const b = r.built; if (!b) continue; for (const L of b._pl) { L.visible = n < LBUD.n; if (L.visible) n++; } }
+        LBUD.pad.forEach((L, k) => { L.visible = k < LBUD.n - n; });
+      }
       function caveTick(now) {
         const inCave = !!(core.M && core.M.underAt && core.M.underAt(me.x, me.y) != null);
         if (inCave !== CAVE.on) {
@@ -785,18 +823,15 @@
             if (wxMod && wxMod.set) try { wxMod.set('clear', 0, { instant: true }); } catch (e) { /* weather module */ }
             scene.background.setHex(0x030303); scene.fog.color.setHex(0x030303); scene.fog.near = 5; scene.fog.far = 16; hemi.intensity = 0.14; sun.intensity = 0.04;
             /* no light of your own (2026-10-07: "The player should not give off any light. The only light should be coming from the torches") */
-            if (!CAVE.pool.length) for (let k = 0; k < (isPhone ? 4 : 6); k++) { const L = new THREE.PointLight(0xff9a3c, 0, 10, 1.2); scene.add(L); CAVE.pool.push(L); }
-            for (const L of CAVE.pool) L.visible = true;
           } else {
             const K = CAVE.keep || {}; scene.background.setHex(K.bg != null ? K.bg : SKY); scene.fog.color.setHex(K.fc != null ? K.fc : SKY); scene.fog.near = K.fn || 24; scene.fog.far = K.ff || 52;
-            hemi.intensity = K.hemi || 1.7; sun.intensity = K.sun || 2.3; for (const L of CAVE.pool) L.visible = false;
+            hemi.intensity = K.hemi || 1.7; sun.intensity = K.sun || 2.3; for (const L of CAVE.pool) L.intensity = 0;
             wxShown = ''; showWeather(true);
           }
         }
         /* the four torches, ranges and campfires nearest you really light their surroundings - underground always, up top while
            it is dark (a moonless night has no other light: 2026-10-07) */
         const darkUp = !inCave && SUNL.dark > 0.3;
-        if (!CAVE.pool.length && darkUp) for (let k = 0; k < (isPhone ? 4 : 6); k++) { const L = new THREE.PointLight(0xff9a3c, 0, 10, 1.2); scene.add(L); CAVE.pool.push(L); }
         if (GLOW.mesh) { GLOW.mesh.visible = inCave || darkUp; GLOW.mesh.material.opacity = inCave ? 1 : Math.min(1, Math.max(0, (SUNL.dark - 0.3) / 0.4)); }
         if ((!inCave && !darkUp) || !CAVE.pool.length) { if (!inCave) for (const L of CAVE.pool) L.intensity = 0; return; }
         if (now - CAVE.t > 1000) {
@@ -839,13 +874,17 @@
          the sky and the light's colour, and the light (with the shadows) comes from its direction; under the horizon a faint
          bluish moon, opposite it, casts the shadows. */
       const SUN_EPOCH = 1791353761, DAY_S = 7200;
+      /* THE YEAR (2026-10-07): 365 game days from year 1, day 1 at SUN_EPOCH; the axis leans, so the sun climbs and sinks
+         through the year and the hemispheres take turns at summer (the maths: the seasons module, its own inscription) */
+      const SEASONS = (() => { try { const SM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('seasons'); return SM && SM.create ? SM.create({ epoch: SUN_EPOCH, dayS: DAY_S }) : null; } catch (e) { return null; } })();
       const SUNL = { dark: 0, dir: [-0.45, 0.8, 0.3], key: '', b: null, lonA: null, base: new THREE.Color(SKY), col: new THREE.Color(), night: new THREE.Color() };
       const NEW_SKY = new THREE.Color(0x1a2434), NIGHT_SKY = new THREE.Color(0x2a3a52), DUSK_SKY = new THREE.Color(0xd8865a), SUNC = new THREE.Color(0xfff0d6), DUSKC = new THREE.Color(0xffa060), MOONC = new THREE.Color(0x9fb4ff);
       function sphereAt(x, y) { const WG = D.wg, C = DATA.globecfg; if (!WG || !WG.toSphere || !C || !C.origin) return null; const fx = x + C.origin[0] + 0.5, fy = -(y + C.origin[1]) - 0.5; return [WG.toSphere(C.face, fx, fy), WG.toSphere(C.face, fx + 1, fy), WG.toSphere(C.face, fx, fy - 1)]; }
       function sunAt(tms) {   /* the sun's direction from the planet's centre */
         if (SUNL.lonA == null) { const a = sphereAt(22, 52); SUNL.lonA = a ? Math.atan2(a[0][1], a[0][0]) : 0; }   /* Ashvale's longitude (by the well) */
         const L = SUNL.lonA - Math.PI / 2 - 2 * Math.PI * ((tms / 1000 - SUN_EPOCH) / DAY_S);
-        return [Math.cos(L), Math.sin(L), 0];
+        const dl = SEASONS ? SEASONS.declination(tms) : 0, cd = Math.cos(dl);   /* north or south of the equator by the time of year */
+        return [Math.cos(L) * cd, Math.sin(L) * cd, Math.sin(dl)];
       }
       const MOON_P = 29.530588853, MOON_NEW = 947182440;   /* the synodic month; a new moon: 2000-01-06 18:14 UTC */
       function moonAt(tms, s) {   /* {v: its direction, lit: 0 at new moon .. 1 at full} */
@@ -874,11 +913,28 @@
         STARS.pts.material.opacity = o; STARS.pts.visible = o > 0.01 && !CAVE.on;
         STARS.pts.position.copy(camera.position); STARS.pts.scale.setScalar(Math.max(60, camera.far * 0.9));
       }
+      /* the season where you stand, every few seconds: the woods, the ground and the lakes follow it; the lakes freeze by their
+         own latitude (core.M.setIce), refreshed each minute */
+      const SEASON = { t: 0, key: '', ice: 0, name: '' };
+      /* the sky's clock: real time, unless a viewer asks for a time-lapse (?timelapse=N runs the sun, moon and seasons N
+         times faster from now, ?skyday=D starts D game days on). Only this viewer's sky moves; nothing is sent */
+      const TL = { n: Math.max(1, +q.get('timelapse') || 1), t0: Date.now(), off: (+q.get('skyday') || 0) * DAY_S * 1000 };
+      const skyNow = () => TL.t0 + TL.off + (Date.now() - TL.t0) * TL.n;
+      function seasonTick(B) {
+        if (!SEASONS) return;
+        const real = Date.now(); if (real - SEASON.t < (TL.n > 1 ? 250 : 3000)) return; SEASON.t = real; const now = skyNow();
+        const lat = Math.asin(Math.max(-1, Math.min(1, B.u[2]))) * 180 / Math.PI, S = SEASONS.at(lat, now);
+        const key = [S.name, Math.round(S.leaf.crown * 20), Math.round(S.leaf.colourT * 20), Math.round(S.leaf.springT * 10), Math.round(S.snow * 20), S.frozen].join(':');
+        if (key !== SEASON.key) { SEASON.key = key; if (SCENE.seasonApply) SCENE.seasonApply(S, SEASONS); SEASON.snowy = S.snow > 0.3; wxShown = ''; if (core.setSeason) core.setSeason({ snowy: SEASON.snowy }); showWeather(); }
+        if (S.name !== SEASON.name) { if (SEASON.name) { const C = SEASONS.calendar(now); hud.chat(S.name.charAt(0).toUpperCase() + S.name.slice(1) + ' has come: year ' + C.year + ', day ' + C.day + '.', 'sys'); } SEASON.name = S.name; }
+        if (core.M.setIce && real - SEASON.ice > (TL.n > 1 ? 2000 : 60000)) { SEASON.ice = real; core.M.setIce(la => SEASONS.at(la, skyNow()).frozen); }
+      }
       function dayTick() {
         const key = (me.x >> 3) + ':' + (me.y >> 3);
         if (key !== SUNL.key) { const a = sphereAt(me.x, me.y); SUNL.key = key; SUNL.b = a ? { u: nrm3(a[0]), e: nrm3(sub3(a[1], a[0])), s: nrm3(sub3(a[2], a[0])) } : null; }   /* up, game east (+x), game south (+y) */
         const B = SUNL.b; if (!B) return;
-        const now = Date.now(), s = sunAt(now), up = dot3(s, B.u), ex = dot3(s, B.e), so = dot3(s, B.s);
+        seasonTick(B);
+        const now = skyNow(), s = sunAt(now), up = dot3(s, B.u), ex = dot3(s, B.e), so = dot3(s, B.s);
         const day = Math.min(1, Math.max(0, (up + 0.08) / 0.2)), dusk = Math.max(0, 1 - Math.abs(up) / 0.18);   /* 1 by day, 0 by night; dusk near the horizon */
         /* the moon follows the real cycle and adds light when it is up. A moonless night is starlight (2026-10-07: "add stars
            to moonless [nights] so that it is at least navigable, but just barely"): a sky full of stars, and only just enough
@@ -899,7 +955,8 @@
       }
       /* ---------- HAND TORCHES (2026-10-07: "a torch ... hold it at night and illuminate his surroundings"): whoever holds
          one (the off hand) carries a warm flickering light of its Light radius - you, and up to three players near you */
-      const TORCH = { me: null, pool: [] };
+      const TORCH = { me: new THREE.PointLight(0xffa040, 0, 8, 1.3), pool: [] };   /* made now, not on first use: see A FIXED NUMBER OF LIGHTS */
+      scene.add(TORCH.me); for (let k = 0; k < 3; k++) { const L = new THREE.PointLight(0xffa040, 0, 8, 1.3); scene.add(L); TORCH.pool.push(L); }
       /* any item worn or held with a Light value lights round you - a torch, a glowing helmet, the Spider Queen's Crown (the operator
          2026-10-07: "Or other illuminating items ... the spider queen's crown should be illuminating"); the brightest counts */
       const LIGHTC = { torch: 0xffa040 }, lightOf = ids => { let best = 0, col = 0xffa040; for (const id of ids) { const d = id && core.item(id); if (d && d.light > best) { best = d.light; col = d.id === 'hat_spidercrown' ? 0xc89aff : LIGHTC[d.id] || 0xffc070; } } return [best, col]; };
@@ -915,10 +972,18 @@
       /* ---------- weather visuals: the weather module (src/weather.js, its own inscription) when it is loaded, else scene fog */
       let wxShown = '', wxMod = null;
       try { const W = G.ASH3D && G.ASH3D.get && G.ASH3D.get('weather'); if (W && W.createWeather) wxMod = W.createWeather(THREE, { scene, camera, quality: isPhone ? 'low' : 'high' }); } catch (er) { console.warn('weather module', er && er.message); }
+      /* what falls where you stand keeps your season, whatever the region's roll was (a region can span latitudes): in a
+         snowy winter rain and fog come down as snow; anywhere else snow comes down as rain */
+      function seasonal(w) {
+        if (SEASON.snowy == null || !w) return w;
+        if (SEASON.snowy && (w.kind === 'rain' || w.kind === 'fog')) return Object.assign({}, w, { kind: 'snow' });
+        if (!SEASON.snowy && w.kind === 'snow') return Object.assign({}, w, { kind: 'rain' });
+        return w;
+      }
       const WXLOOK = { clear: [SKY, 24, 52], fog: [0xb8bec4, 3, 16], rain: [0x7d8fa0, 14, 38], snow: [0xdfe6ec, 10, 30] };
       function showWeather(instant) {
         if (CAVE.on) return;   /* underground there is no weather (caveTick puts it back on the way out) */
-        const w = core.weatherOf(zoneHere()) || { kind: 'clear', intensity: 0 }, key = w.kind + ':' + w.intensity; if (key === wxShown) return; wxShown = key;
+        const w = seasonal(core.weatherOf(zoneHere()) || { kind: 'clear', intensity: 0 }), key = w.kind + ':' + w.intensity; if (key === wxShown) return; wxShown = key;
         if (wxMod) { wxMod.set(w.kind, w.intensity / 100, { instant: !!instant }); return; }
         const L = WXLOOK[w.kind] || WXLOOK.clear, C = WXLOOK.clear, k = w.kind === 'clear' ? 0 : w.intensity / 100;
         const col = new THREE.Color(C[0]).lerp(new THREE.Color(L[0]), k);
@@ -1196,7 +1261,7 @@
           return [{ html: 'Get into the ' + nm, act: { c: 'board', x: t.x, y: t.y }, red: 1 },
                   { html: 'Examine ' + nm, fn: () => hud.chat('A canoe of birch bark over cedar ribs, sewn with spruce root and sealed with pitch. It floats light as a leaf.', 'sys') }]; }
         if (t.kind === 'passage') { const o = core.passageAt(t.x, t.y); if (!o) return []; const nm = '<span class="c">' + esc(o.name || (o.k === 'cavemouth' ? 'Cave' : o.k === 'gate' ? 'Gate' : 'Way out')) + '</span>';
-          return [{ html: esc(o.label || 'Go through'), act: { c: 'enter', x: o.x, y: o.y }, red: 1 },
+          return [{ html: esc(o.label || 'Go through'), act: { c: 'enter', x: o.x, y: o.y }, red: 1, then: () => { if (o.k !== 'gate' && o.to) travelSoon(PASSK[o.k] || null, (zoneAtIndex(o.to[0], o.to[1]) || {}).name || '', o.to[0], o.to[1], Math.max(Math.abs(me.x - o.x), Math.abs(me.y - o.y)) <= 1); } },
                   { html: 'Examine ' + nm, fn: () => hud.chat(o.k === 'cavemouth' ? 'A dark opening in the rock. Webs hang just inside, and the air smells of damp and old fur.' : o.k === 'gate' ? 'A barred wooden gate in a palisade. The lookout has the latch.' : 'A ladder up to a shaft of daylight.', 'sys') }]; }
         if (t.kind === 'remote') {
           const r = remotes.get(t.id); if (!r) return [];
@@ -1274,7 +1339,7 @@
         if (!a) return opts;
         return [a].concat(opts.filter(o => !o.act || (o.act.c !== 'plant' && o.act.c !== 'unplant' && o.act.c !== a.act.c)));
       }
-      function doAct(o, sx, sy) { if (o.act) { send(o.act); if (sx != null) { const r = host.getBoundingClientRect(); hud.marker(sx - r.left, sy - r.top, o.red); } if (o.act.c === 'walk') flag = [o.act.x, o.act.y]; else flag = null; } else if (o.fn) o.fn(); }
+      function doAct(o, sx, sy) { if (o.act) { send(o.act); if (o.then) o.then(); if (sx != null) { const r = host.getBoundingClientRect(); hud.marker(sx - r.left, sy - r.top, o.red); } if (o.act.c === 'walk') flag = [o.act.x, o.act.y]; else flag = null; } else if (o.fn) o.fn(); }
       let flag = null;
       /* The operator: "a single click should make the character walk, a double click should make the character run". The first
          tap starts walking at once; a second tap within 300 ms near the same spot upgrades the same move to a run.
@@ -2339,6 +2404,7 @@
         hud.setPos(me.x, me.y);
         netPos(now); netNeighbours(now); flushNet();
         if (fogMod && myEnt) fogMod.focus(myEnt.root.position);
+        if (wxMod && wxMod.focus && myEnt) wxMod.focus(myEnt.root.position);
         if (SCENE.see && myEnt) {   /* see-through: a circle round the avatar's chest on screen, for anything 2 m or more in front of it */
           const S = SCENE.see, hp = _seeV.copy(myEnt.root.position); hp.y += 1.0;
           const d = camera.position.distanceTo(hp); hp.project(camera);
@@ -2351,7 +2417,8 @@
         const fn0 = scene.fog.near, ff0 = scene.fog.far, fk = CAVE.on ? 1 : viewR() / VIEW, back = cam.dist;
         scene.fog.near = fn0 * fk + back; scene.fog.far = ff0 * fk + back;
         { const cf = Math.max(90, scene.fog.far + 8); if (Math.abs(camera.far - cf) > 2) { camera.far = cf; camera.updateProjectionMatrix(); } }
-        renderer.render(scene, camera);
+        lightBudget();
+        if (!((TRAVEL.on || travelling) && !TRAVEL.warm)) renderer.render(scene, camera);   /* behind a loading screen nothing is drawn: the frame time goes to building the place you are going to */
         scene.fog.near = fn0; scene.fog.far = ff0;
       }
       const arrivedProjs = [];
@@ -2502,6 +2569,10 @@
         tap: tapAt, menuAt, targetsAt, pad: () => PAD && PAD.state(), fps: () => frames, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries }), setCam(y, p, d) { if (y != null) cam.tyaw = cam.yaw = y; if (p != null) cam.tpitch = cam.pitch = p; if (d != null) cam.tdist = cam.dist = d; },
         net: () => ({ host: hostOf(zoneHere()), amHost: !!room && hostOf(zoneHere()) === myNetId, hosts: Object.fromEntries(hosts), hosted: Array.from(hosted), area: zoneHere(), region: roomZone, myId: myNetId, ids: Array.from(remotes.keys()), room: room && room.id, me: room && room.me, neighbours: nb ? nb.rooms().map(R => R.id) : [], viewers: Array.from(remotes).filter(e => e[1].viewOnly).map(e => e[0]), status: netStatus, stats: Object.assign({ perSec: +(netStats.sent / Math.max(1, (performance.now() - netStats.t0) / 1000)).toFixed(2) }, netStats, { times: undefined }), gear: Array.from(remotes.values()).map(r => [r.name, r.e.H.gear || null]), remotes: Array.from(remotes.keys()), names: Array.from(remotes.values()).map(r => r.e.tag && r.e.tag.textContent) }),
         weather: (kind, intensity, ticks) => coreCall(() => core.setWeather(zoneHere(), kind, intensity == null ? 80 : intensity, ticks || 500)),
+        wx: () => Object.assign({ season: SEASON.name, snowy: SEASON.snowy }, wxMod && wxMod.state ? wxMod.state() : {}),
+        progInfo: () => { const P = renderer.info.programs || []; return { n: P.length, names: P.map(p => p.name).slice(-60) }; },
+        tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },   /* a test taps a thing as a player would (first option) */
+        travelShown: () => { const el = host.querySelector('.travel'); return el && el.style.display !== 'none' ? el.className + ' | ' + el.querySelector('.tt').textContent : null; },
         say, store, models: MOD, allowedAsset, wallet: walletApi(DATA.items.items), walletState: () => walletState, walletRefresh,
         chestEventForTest: chestEvent,
         chest: { state: chestState, take: chestTake, store: chestStore, promise: paid => { const L = ledgerFor(walletState.address); for (const k in paid) L.pend[k] = (L.pend[k] || 0) + paid[k]; ledgerSave(); },

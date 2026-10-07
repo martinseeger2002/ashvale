@@ -6767,7 +6767,27 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
     }
     const ci = (x, y) => ((y & CM) << SH) | (x & CM);
     const tileAt = (x, y) => CHR[chunkAt(x, y).t[ci(x, y)]];
-    const blocked = (x, y) => chunkAt(x, y).fl[ci(x, y)] & 1;
+    /* ICE (2026-10-07: lakes near the pole freeze in winter and you can walk on them; "not the ocean water that should remain
+       liquid and so should ocean bays and the flowing river water should always remain open"). Each water tile is a lake (still), a
+       river channel or the sea, from worldgen's own river flag and the planet's sea parcels; the engine says, by latitude, where
+       it is frozen (setIce). A frozen lake tile does not block. */
+    const ICE = { at: null, blocks: new Map(), kinds: new Map(), SB: null };
+    function waterKind(x, y) {
+      const k = x + ',' + y; let v = ICE.kinds.get(k); if (v) return v;
+      v = 'lake';
+      if (WG && WG.sample) { const s = WG.sample(FACE, x + OX + 0.5, -(y + OY) - 0.5, ICE.SB || (ICE.SB = WG.newSample())); if (s.river >= 0.5) v = 'river'; else if (s.cls === 3) v = 'sea'; }
+      if (ICE.kinds.size > 200000) ICE.kinds.clear();
+      ICE.kinds.set(k, v); return v;
+    }
+    function latOf(x, y) { if (!WG || !WG.toSphere) return 0; const u = WG.toSphere(FACE, x + OX + 0.5, -(y + OY) - 0.5); return Math.asin(u[2] / Math.hypot(u[0], u[1], u[2])) * 180 / Math.PI; }
+    function iceAt(x, y) {
+      if (!ICE.at) return false;
+      const c = chunkAt(x, y), t = CHR[c.t[ci(x, y)]]; if (t !== '~' && t !== 'v') return false;
+      const bk = (x >> 6) + ',' + (y >> 6); let f = ICE.blocks.get(bk); if (f == null) { f = !!ICE.at(latOf((x & ~63) + 32, (y & ~63) + 32)); ICE.blocks.set(bk, f); }
+      return f && waterKind(x, y) === 'lake';
+    }
+    const setIce = fn => { ICE.at = fn || null; ICE.blocks.clear(); };
+    const blocked = (x, y) => (chunkAt(x, y).fl[ci(x, y)] & 1) && !iceAt(x, y);
     const losAt = (x, y) => (chunkAt(x, y).fl[ci(x, y)] >> 1) & 1;
     const insideAt = (x, y) => (chunkAt(x, y).fl[ci(x, y)] >> 2) & 1;
     const wallAt = (x, y) => chunkAt(x, y).wl[ci(x, y)];
@@ -6822,7 +6842,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       API, CH, cfg: CFG, key, kx, ky, W, H, pieces, npcs, spawns, objects, nodes, respawn: respawn || [Math.floor(W / 2), Math.floor(H / 2)],
       tileAt, blocked, losAt, wallAt, insideAt, zoneAt, nodeAt, inWorld, addZone, hasZone: (id) => pieces.some(P => P.id === id),
       regionOf: (x, y) => 'vale:' + FACE + ':' + Math.floor((x + GX) / REG) + ':' + Math.floor((y + GY) / REG),
-      seeded: !!WG, inPiece: (x, y) => !!chunkAt(x, y).zi[ci(x, y)], underAt, underNear, underStyle,
+      seeded: !!WG, inPiece: (x, y) => !!chunkAt(x, y).zi[ci(x, y)], underAt, underNear, underStyle, waterKind, iceAt, setIce, latOf,
       /* seeded land, in the vale frame: sites (camps, ore, fishing; ids and monster uids from worldgen), the ground height
          at a tile corner relative to the set pieces' base height (so the old map keeps its own heights), the biome */
       sitesIn(x0, y0, x1, y1) {
@@ -7064,7 +7084,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
        "weather" {kinds: {kind: weight}, min, max}; rules.weather.kinds[kind] = generic multipliers that the rules read
        (sight, range, fireFail, fireBurn, run). Rolled from the seeded RNG by the zone's host; replicas take it from the host. */
     const WX = RU.weather || { kinds: {}, intensity: [50, 100] };
-    const ZW = {}; for (const z of ZINDEX) if (z.weather) ZW[z.id] = z.weather;
+    const ZW = {}; for (const z of ZINDEX) if (z.weather && z.weather.kinds) ZW[z.id] = z.weather;   /* a cave's {none: true}: no weather at all */
     /* 2026-10-03: the weather follows the world's climate. On seeded land every area and every set piece belongs
        to the weather region of its climate zone ('cz<n>', tables in rules.weather.climate), and coasts are a little
        foggier; each region rolls like a zone does, so everyone in it agrees */
@@ -7094,11 +7114,25 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       if (key === 'fireFail') return (k || 0) * w.intensity / 100;
       return k == null ? 1 : 1 + (k - 1) * w.intensity / 100;
     }
+    /* THE WEATHER KEEPS THE SEASON (2026-10-07: "It should only snow in the winter at the latitude that it should snow. It's
+       not rain or be foggy in the winter. It should not snow where it is not winter"): the engine tells the core whether it is a
+       snowy winter where the roller stands (setSeason); in one, rain and fog become snow (or clear); anywhere else snow becomes
+       rain. Weather that no longer fits the season ends at once and is rolled again. */
+    let SEASONW = null;
+    const wrongFor = k => SEASONW && (SEASONW.snowy ? (k === 'rain' || k === 'fog') : k === 'snow');
+    function setSeason(st) { SEASONW = st || null; for (const z in S.weather) { const w = S.weather[z]; if (w && wrongFor(w.kind)) w.until = S.t; } }
+    function seasonKinds(K) {
+      if (!SEASONW) return K;
+      const o = Object.assign({}, K);
+      if (SEASONW.snowy) { o.snow = (o.snow || 0) + (o.rain || 0) + (o.fog || 0); delete o.rain; delete o.fog; if (!o.snow) o.snow = 1; }
+      else { o.rain = (o.rain || 0) + (o.snow || 0); delete o.snow; if (!o.rain) delete o.rain; }
+      return o;
+    }
     function weatherTick() {
       for (const z in ZW) {
         const w = S.weather[z]; if (!isAuth(z) || S.t < w.until) continue;
-        const ks = Object.keys(ZW[z].kinds), tot = ks.reduce((a, k) => a + ZW[z].kinds[k], 0); let r = R.int(tot), kind = ks[0];
-        for (const k of ks) { if (r < ZW[z].kinds[k]) { kind = k; break; } r -= ZW[z].kinds[k]; }
+        const KK = seasonKinds(ZW[z].kinds || {}), ks = Object.keys(KK), tot = ks.reduce((a, k) => a + KK[k], 0); let r = R.int(Math.max(1, tot)), kind = ks[0] || 'clear';
+        for (const k of ks) { if (r < KK[k]) { kind = k; break; } r -= KK[k]; }
         const I = kind === 'clear' ? 0 : WX.intensity[0] + R.int(WX.intensity[1] - WX.intensity[0] + 1);
         const len = ZW[z].min + R.int(Math.max(1, ZW[z].max - ZW[z].min + 1));
         const was = w.kind; S.weather[z] = { kind, intensity: I, until: S.t + len };
@@ -7380,7 +7414,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
     /* THE CANOE (2026-10-07, Ziibiing): while you sit in one, only water is open - rivers, lakes, the shallows, under a
        bridge - and never across a corner of land */
     let BOAT = false;
-    const isWet = (x, y) => { const t = M.tileAt(x, y); return t === '~' || t === 'v' || t === 'B'; };
+    const isWet = (x, y) => { const t = M.tileAt(x, y); return (t === '~' || t === 'v' || t === 'B') && !(M.iceAt && M.iceAt(x, y)); };   /* a frozen lake is no water for a canoe */
     /* the hawk (2026-10-04): its own stats. hp 4; a strike every `strike` ticks with a hitPct % chance of hitDmg; a
        strike costs `energy` run energy (Dexterity) and leaves it open to a hit for those ticks; a third of the carrying
        capacity and `slots` bag slots; overburdened it lands and walks one step every groundEvery ticks */
@@ -9099,7 +9133,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
-      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, EFFECTS: Object.keys(EFFECTS),
+      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, EFFECTS: Object.keys(EFFECTS),
       applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, setFelled,
       hitXp: (pid, cls, dmg, dex) => { const p = S.players[pid]; if (p && !p.puppet) hitXp(p, cls, dmg, null, dex); },
       creditKill: (pid, key) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key); }
@@ -9348,6 +9382,42 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       }
       return g;
     }
+    /* THE SEASONS (2026-10-07; the maths: the `seasons` module). Shared uniforms the ground and still water read, and a
+       register of every tree crown built, so a change of season recolours the woods in place - no rebuild. */
+    const SEASON_U = { uGround: { value: new THREE.Color(1, 1, 1) }, uSnow: { value: 0 }, uIce: { value: 0 } };
+    let SEASON_CUR = null, SEASON_LIB = null; const TREE_REG = [];
+    const BRANCH_GEO = (() => { const parts = [[0.35, 0.0], [-0.3, 0.6], [0.05, -0.4], [0.3, 0.45], [-0.25, -0.35]].map(([dx, dz], i) => {
+      const L = 0.85 + 0.1 * i % 0.3, g = new THREE.CylinderGeometry(0.025, 0.045, L, 5); g.translate(0, L / 2, 0); g.rotateZ(-dx * 1.2); g.rotateX(dz * 1.2); g.translate(0, 0.92, 0); return { geo: g }; });
+      return parts; })();
+    function seasonGround(mat) {   /* grass takes the season's tint; snow lies on all ground, a little thinner on paths and sand */
+      const prev = mat.onBeforeCompile;
+      mat.onBeforeCompile = (sh, r) => { if (prev) prev(sh, r);
+        sh.uniforms.uGround = SEASON_U.uGround; sh.uniforms.uSnow = SEASON_U.uSnow;
+        sh.fragmentShader = 'uniform vec3 uGround;\nuniform float uSnow;\n' + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n  { vec3 c0 = diffuseColor.rgb; float grassy = smoothstep(0.0, 0.05, c0.g - max(c0.r, c0.b)); vec3 c1 = mix(c0, clamp(c0 * uGround, 0.0, 1.0), grassy); diffuseColor.rgb = mix(c1, vec3(0.92, 0.94, 0.97), uSnow * (0.6 + 0.4 * grassy)); }'); };
+      mat.customProgramCacheKey = () => 'season-ground'; return mat;
+    }
+    function seasonIce(mat) {   /* still water (lakes, ponds) turns to ice when frozen; rivers and the sea never do */
+      mat.onBeforeCompile = (sh) => { sh.uniforms.uIce = SEASON_U.uIce;
+        sh.fragmentShader = 'uniform float uIce;\n' + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.80, 0.88, 0.95), uIce); diffuseColor.a = mix(diffuseColor.a, 1.0, uIce);'); };
+      mat.customProgramCacheKey = () => 'season-ice'; return mat;
+    }
+    function treeSeason(reg) {   /* one crown mesh to the current season: colour, how much leaf is left, bare branches in winter */
+      const S = SEASON_CUR, L = SEASON_LIB; if (!S || !L) return;
+      const dec = L.deciduous(reg.kind), f = dec ? S.leaf.crown : 1, M = new THREE.Matrix4(), SC = new THREE.Matrix4(), Z = new THREE.Matrix4().makeScale(0, 0, 0), C = new THREE.Color();
+      for (const t of reg.list) {
+        const c = L.leafColour(reg.kind, t.base, S); C.setRGB(c[0], c[1], c[2]);
+        if (!dec && S.snow > 0) C.lerp(SNOWC, 0.5 * S.snow);   /* snow on the evergreens */
+        reg.crown.setColorAt(t.n, C);
+        if (dec) reg.crown.setMatrixAt(t.n, f < 0.03 ? Z : M.copy(t.m).multiply(SC.makeScale(f, 0.6 + 0.4 * f, f)));
+      }
+      reg.crown.instanceColor.needsUpdate = true; reg.crown.instanceMatrix.needsUpdate = true;
+      if (reg.branches) reg.branches.visible = dec && f < 0.55;
+    }
+    function seasonApply(S, lib) {   /* the engine, when the season where you stand has moved on */
+      SEASON_CUR = S; SEASON_LIB = lib;
+      SEASON_U.uGround.value.setRGB(S.ground[0], S.ground[1], S.ground[2]); SEASON_U.uSnow.value = 0.85 * S.snow; SEASON_U.uIce.value = S.frozen ? 1 : 0;
+      for (let i = TREE_REG.length - 1; i >= 0; i--) { const r = TREE_REG[i]; if (!r.crown.parent) { TREE_REG.splice(i, 1); continue; } treeSeason(r); }
+    }
     const SEE = { uSeeP: { value: new THREE.Vector2(-1e4, -1e4) }, uSeeR: { value: 0 }, uSeeD: { value: 0 }, uSeeY: { value: -1e9 } };   /* uSeeY: the avatar's feet - the floor and ground you stand on never dissolve (the operator: upstairs it looked like standing outside the house) */
     function seeThrough(m) {
       m.onBeforeCompile = (sh) => {
@@ -9519,13 +9589,13 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
           return own(cx, cy) * w + sh * (1 - w);
         };
         const wLevel = map.waterH() - 0.05;
-        /* the level of the nearest river or lake water connected to this tile through water, within 24 m (cached per tile) */
+        /* the level of the nearest river or lake water connected to this tile through water, within 10 m (cached per tile) */
         const NS = new Map(), wetT = (x, y) => { const t = at(x, y); return t === '~' || t === 'v' || t === 'B'; };
         const nearSurf = (tx, ty) => {
           const k = tx + ',' + ty; if (NS.has(k)) return NS.get(k);
           let res = null; if (wetT(tx, ty)) {
             const seen = new Set([k]); let ring = [[tx, ty]];
-            for (let d = 0; d < 24 && ring.length && res == null; d++) {
+            for (let d = 0; d < 10 && ring.length && res == null; d++) {
               const next = [];
               for (const [x, y] of ring) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
                 const nx = x + dx, ny = y + dy, nk = nx + ',' + ny; if (seen.has(nk) || !wetT(nx, ny)) continue; seen.add(nk);
@@ -9534,7 +9604,12 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
               }
               ring = next;
             }
+            /* open water with no river or lake level near (the sea): every tile this search crossed is the same open water, so
+               none of them searches again - one search per stretch of sea, not one per tile (a jump to the sea-side wigwam
+               rooms spent 35 s here) */
+            if (res == null) for (const q of seen) NS.set(q, null);
           }
+          if (NS.size > 400000) NS.clear();
           NS.set(k, res); return res;
         };
         surfOf = (tx, ty) => {   /* where the water's skin stands over this tile, the same curve build draws and rings ride */
@@ -9628,7 +9703,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
           if ((x + y) & 1) ind.push(a, c, b, b, c, d); else ind.push(a, c, d, a, d, b);
         }
         const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setIndex(ind); g.computeVertexNormals();
-        const terrain = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+        const terrain = new THREE.Mesh(g, seasonGround(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })));
         terrain.receiveShadow = true; terrain.userData.pick = { kind: 'ground' }; group.add(terrain);
         var terrainMesh = terrain;
         if (opts.outer && !seeded) { const outer = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshLambertMaterial({ color: 0x3d6a2a }));
@@ -9674,13 +9749,13 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
             const n = run.x1 - run.x0; let bed = 0;
             for (let x = run.x0; x < run.x1; x++) bed += (gH(x, y) + gH(x + 1, y) + gH(x, y + 1) + gH(x + 1, y + 1)) / 4;
             bed /= n;
-            parts.push({ geo: new THREE.PlaneGeometry(n, 1).rotateX(-Math.PI / 2), m: M4((run.x0 + run.x1) / 2, run.yy, y + 0.5, 1), col: tint(run.yy, bed) });
+            parts.push({ geo: new THREE.PlaneGeometry(n, 1).rotateX(-Math.PI / 2), m: M4((run.x0 + run.x1) / 2, run.yy, y + 0.5, 1), col: tint(run.yy, bed), still: run.still });
             run = null;
           };
           for (let x = X0; x <= X1; x++) {
-            const w = x < X1 && isWt[(y - Y0) * RW + (x - X0)], yy = w ? surfC[(y - Y0) * RW + (x - X0)] : 0;
-            if (run && (!w || Math.abs(yy - run.yy) > 1e-6)) flush();
-            if (w && !run) run = { x0: x, x1: x + 1, yy }; else if (w) run.x1 = x + 1;
+            const w = x < X1 && isWt[(y - Y0) * RW + (x - X0)], yy = w ? surfC[(y - Y0) * RW + (x - X0)] : 0, still = w && map.waterKind ? map.waterKind(x, y) === 'lake' : false;
+            if (run && (!w || Math.abs(yy - run.yy) > 1e-6 || still !== run.still)) flush();
+            if (w && !run) run = { x0: x, x1: x + 1, yy, still }; else if (w) run.x1 = x + 1;
           }
           flush();
         }
@@ -9690,14 +9765,21 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
           const sa = surfC[ja], sb = surfC[jb]; if (Math.abs(sa - sb) < 0.004) return;
           const bed = (gH(Math.min(xa, xb) + 0.5, Math.min(ya_, yb_) + 0.5) + gH(Math.max(xa, xb) + 0.5, Math.max(ya_, yb_) + 0.5)) / 2;
           const midY = (sa + sb) / 2;
-          if (xb !== xa) parts.push({ geo: new THREE.PlaneGeometry(1, Math.abs(sb - sa)).rotateY(Math.PI / 2), m: M4(Math.max(xa, xb) + 1, midY, ya_ + 0.5, 1), col: tint(midY, bed) });
-          else parts.push({ geo: new THREE.PlaneGeometry(1, Math.abs(sb - sa)), m: M4(xa + 0.5, midY, Math.max(ya_, yb_) + 1, 1), col: tint(midY, bed) });
+          const still = map.waterKind ? map.waterKind(xa, ya_) === 'lake' : false;
+          if (xb !== xa) parts.push({ geo: new THREE.PlaneGeometry(1, Math.abs(sb - sa)).rotateY(Math.PI / 2), m: M4(Math.max(xa, xb) + 1, midY, ya_ + 0.5, 1), col: tint(midY, bed), still });
+          else parts.push({ geo: new THREE.PlaneGeometry(1, Math.abs(sb - sa)), m: M4(xa + 0.5, midY, Math.max(ya_, yb_) + 1, 1), col: tint(midY, bed), still });
         };
         for (let y = Y0; y < Y1; y++) for (let x = X0; x < X1 - 1; x++) skirt(x, y, x + 1, y);
         for (let y = Y0; y < Y1 - 1; y++) for (let x = X0; x < X1; x++) skirt(x, y, x, y + 1);
-        if (parts.length) {
-          const wm = new THREE.Mesh(mergeGeos(parts), new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.86, emissive: 0x0a2a4a }));
+        /* moving water (rivers, the sea) and still water (lakes, ponds: they freeze in a hard winter) are two sheets */
+        const flowing = parts.filter(q => !q.still), stillP = parts.filter(q => q.still);
+        if (flowing.length) {
+          const wm = new THREE.Mesh(mergeGeos(flowing), new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.86, emissive: 0x0a2a4a }));
           wm.receiveShadow = true; group.add(wm); var waterMesh = wm;
+        }
+        if (stillP.length) {
+          const im = new THREE.Mesh(mergeGeos(stillP), seasonIce(new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.86, emissive: 0x0a2a4a })));
+          im.receiveShadow = true; group.add(im); if (!waterMesh) var waterMesh = im;
         }
       }
       /* ---------- trees (instanced) */
@@ -9744,13 +9826,17 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
           trunk.setMatrixAt(n, m); crown.setMatrixAt(n, m);
           C.setHex(tk.cc).offsetHSL((hash2(t.x + 9, t.y) - 0.5) * 0.04, 0, (hash2(t.x, t.y + 9) - 0.5) * 0.12);
           if (chunk && map.snowH < 1e8) { const sn = Math.min(1, Math.max(0, (py - map.snowH + 55) / 27)) * 0.6; if (sn > 0) C.lerp(SNOWC, sn); }   /* snow on the crowns higher up */
-          crown.setColorAt(n, C);
+          crown.setColorAt(n, C); t.base = [C.r, C.g, C.b];
           tiles[n] = t.i; t.m = m; t.k = k; t.n = n; t.trunk = trunk; t.crown = crown;
           if (t.i >= 0) { treeAt.set(t.i, t); stumps.setMatrixAt(t.stump, ZERO); t.sm = M4(px, py, pz, 1); }
         });
         trunk.castShadow = crown.castShadow = true; trunk.receiveShadow = crown.receiveShadow = true;
         trunk.userData.pick = crown.userData.pick = { kind: 'tree', tiles };
         group.add(trunk, crown); treeMeshes.push(trunk, crown); quads[q].push(trunk, crown);
+        /* winter: bare branches over the trunk (deciduous kinds), shown while the leaves are down */
+        let branches = null;
+        if ('TOWM'.indexOf(k) >= 0) { branches = new THREE.InstancedMesh(mergeGeos(BRANCH_GEO), lam(0x4a3a2c), L.length); L.forEach((t, n) => branches.setMatrixAt(n, t.m)); branches.visible = false; branches.castShadow = true; group.add(branches); quads[q].push(branches); }
+        const reg = { kind: k, crown, branches, list: L.map(t => ({ n: t.n, m: t.m, base: t.base })) }; TREE_REG.push(reg); treeSeason(reg);
       }
       /* ---------- rocks */
       const rockAt = new Map(), pickables = [terrainMesh].concat(treeMeshes);
@@ -10259,7 +10345,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
         const g = new THREE.Group(); g.position.set(n.x + 0.5, wsurf(n.x, n.y) + 0.02, n.y + 0.5); group.add(g);   /* sit on the water's actual skin, sea or pond */
         const rings = [0, 1, 2].map(k => { const r = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.26, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xdff4ff, transparent: true, opacity: 0.7, depthWrite: false })); g.add(r); return r; });
         const p = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.4, 8), new THREE.MeshBasicMaterial({ visible: false })); p.userData.pick = { kind: 'node', i }; g.add(p); pickables.push(p);
-        spots.push({ rings, ph: hash2(n.x, n.y) * 3 });
+        spots.push({ rings, ph: hash2(n.x, n.y) * 3, x: n.x, y: n.y, g });
       }
       /* torch light: two warm lights at the village plaza (more would cost too much on phones) */
       const lights = [];
@@ -10295,7 +10381,8 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
         update(dt, time) {
           for (const t of torches) { const s = 0.85 + 0.15 * Math.sin(time * 13 + t.ph) + 0.08 * Math.sin(time * 31 + t.ph * 2); if (t.night) { const on = NIGHTK > 0.04; t.f.visible = on; if (t.f2) t.f2.visible = on; } t.f.scale.set(1, s, 1); if (t.f2) t.f2.scale.set(1, s, 1); }
           for (const L of lights) L.intensity = 2.6 + Math.sin(time * 11 + L.position.x) * 0.4;
-          for (const s of spots) s.rings.forEach((r, k) => { const p = ((time * 0.6 + s.ph + k / 3) % 1); r.scale.setScalar(0.6 + p * 2.2); r.material.opacity = 0.75 * (1 - p); });
+          for (const s of spots) { const ice = !!(map.iceAt && map.iceAt(s.x, s.y)); s.rings.forEach(r => { r.visible = !ice; }); }   /* a frozen pond does not ripple: you fish through the ice */
+          for (const s of spots) if (s.rings[0].visible) s.rings.forEach((r, k) => { const p = ((time * 0.6 + s.ph + k / 3) % 1); r.scale.setScalar(0.6 + p * 2.2); r.material.opacity = 0.75 * (1 - p); });
           if (waterMesh) waterMesh.material.emissive.setHSL(0.58, 0.6, 0.08 + 0.02 * Math.sin(time * 1.5));
           if (waterMesh) waterMesh.position.y = Math.sin(time * 0.55) * 0.014;   /* the whole sheet rides a slow swell, some water sits on it */
           for (const a of anim) if (a.bob) a.bob.position.y = a.y0 + 0.12 * Math.sin(time * 2.6);
@@ -10316,7 +10403,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, canoeMesh, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, canoeMesh, seasonApply, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -10501,7 +10588,12 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
 .ash .travel .sw{position:absolute;left:50%;top:50%;width:170vmax;height:170vmax;margin:-85vmax 0 0 -85vmax;border-radius:50%;background:repeating-conic-gradient(from 0deg,#1b4f9a00 0deg,#3d8ff0aa 14deg,#9fd0ff55 22deg,#1b4f9a00 40deg),radial-gradient(circle,#bfe4ff 0,#5fa8ff 7%,#1d4c9c 22%,#0b1a3a 46%,#05070d 70%);animation:ashsw 2.4s linear infinite}
 .ash .travel .sw2{position:absolute;left:50%;top:50%;width:46vmin;height:46vmin;margin:-23vmin 0 0 -23vmin;border-radius:50%;border:2.2vmin solid #8fd0ff;box-shadow:0 0 6vmin #4aa3ff,inset 0 0 6vmin #4aa3ff;animation:ashsw2 1.6s ease-in-out infinite alternate}
 .ash .travel.down{background:radial-gradient(ellipse at 50% 62%,#3a2412 0,#140c07 38%,#020101 72%)}
-.ash .travel.down .sw,.ash .travel.down .sw2,.ash .travel.up .sw,.ash .travel.up .sw2{display:none}
+.ash .travel.down .sw,.ash .travel.down .sw2,.ash .travel.up .sw,.ash .travel.up .sw2,.ash .travel.lodge .sw,.ash .travel.lodge .sw2,.ash .travel.lodgeout .sw,.ash .travel.lodgeout .sw2{display:none}
+.ash .travel.lodge{background:radial-gradient(circle at 50% 4%,#fff3d0 0,#d8c8a0 3%,transparent 7%),radial-gradient(ellipse at 50% 30%,transparent 0,#0000 30%,#1a0f07ee 78%),repeating-linear-gradient(0deg,#d9cfb4 0 3px,#e8dfc6 3px 9px,#3b2a1c 9px 10px,#e3d8bd 10px 22px),#d9cfb4}
+.ash .travel.lodge::before{content:'';position:absolute;inset:0;background:repeating-conic-gradient(from -90deg at 50% 4%,#3a2614 0 1.6deg,transparent 1.6deg 22.5deg),repeating-linear-gradient(90deg,transparent 0 62px,#5a402888 62px 64px);opacity:.85}
+.ash .travel.lodge::after{content:'';position:absolute;left:50%;bottom:-18vmin;width:90vmin;height:70vmin;margin-left:-45vmin;border-radius:50%;background:radial-gradient(ellipse at 50% 70%,#ffe08a 0,#ff8a20cc 14%,#c0400055 36%,transparent 66%);animation:ashFlicker .8s ease-in-out infinite alternate}
+.ash .travel.lodge .tt,.ash .travel.lodgeout .tt{z-index:1;color:#fff1d6;text-shadow:0 0 14px #ff8a20,2px 2px 0 #1a0f07}.ash .travel.lodge .pb,.ash .travel.lodgeout .pb{z-index:1;background:#2a1a0ecc;box-shadow:0 0 0 1px #c08a4a88}.ash .travel.lodge .pb i,.ash .travel.lodgeout .pb i{background:linear-gradient(90deg,#8a3a10,#ffc060)!important}
+.ash .travel.lodgeout{background:radial-gradient(ellipse 22% 40% at 50% 58%,#fff8e0 0,#f6e2a8 40%,#c8a060 70%,transparent 72%),repeating-linear-gradient(0deg,#3a2a1a 0 3px,#4a3624 3px 9px,#1a1008 9px 10px,#433020 10px 22px),#3a2a1a;animation:ashDawn 1.4s ease-out forwards}
 .ash .travel.down::before{content:'';position:absolute;inset:-20% 0 0 0;background-image:radial-gradient(#a08868 1px,transparent 1.6px),radial-gradient(#6a5844 1px,transparent 1.5px);background-size:37px 53px,23px 41px;background-position:0 0,11px 17px;opacity:.55;animation:ashGrit 1.6s linear infinite}
 .ash .travel.down::after{content:'';position:absolute;left:50%;top:58%;width:70vmin;height:70vmin;margin:-35vmin 0 0 -35vmin;border-radius:50%;background:radial-gradient(circle,#ff9a3c55 0,#ff7a2018 35%,transparent 65%);animation:ashFlicker .9s ease-in-out infinite alternate}
 @keyframes ashGrit{from{transform:translateY(0)}to{transform:translateY(53px)}}
@@ -11267,12 +11359,13 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
     }
     /* the portal swirl (2026-10-06): shown while the town you are travelling to is still loading (engine arriveCheck) */
     const trav = el('travel', ui); trav.innerHTML = '<div class="sw"></div><div class="sw2"></div><div class="tt"></div><div class="pb"><i></i></div>';
-    /* kind: undefined = the portal swirl; 'down' = climbing into a cave (dark stone, a torch's flicker, grit falling), 'up' = out
+    /* kind: undefined = the portal swirl; 'lodge' / 'lodgeout' = into a wigwam (birch bark walls, ironwood ribs up to the smoke
+       hole, the fire's glow) and back out through its doorway; 'down' = climbing into a cave (dark stone, a torch's flicker, grit falling), 'up' = out
        into the daylight (2026-10-07: "Make the loading screen for entering a cave different than the town portal") */
     function travel(on, name, frac, kind) {
       trav.style.display = on ? 'flex' : 'none'; if (!on) return;
       trav.className = 'travel ui' + (kind ? ' ' + kind : '');
-      trav.querySelector('.tt').textContent = kind === 'down' ? 'Climbing down into the ' + (name || 'cave') + '\u2026' : kind === 'up' ? 'Climbing out into the daylight\u2026' : 'Travelling to ' + (name || 'another town') + '\u2026';
+      trav.querySelector('.tt').textContent = kind === 'down' ? 'Climbing down into the ' + (name || 'cave') + '\u2026' : kind === 'up' ? 'Climbing out into the daylight\u2026' : kind === 'lodge' ? 'Ducking into the wigwam\u2026' : kind === 'lodgeout' ? 'Stepping out through the doorway\u2026' : 'Travelling to ' + (name || 'another town') + '\u2026';
       trav.querySelector('.pb i').style.width = Math.round(Math.max(0.08, Math.min(1, frac || 0)) * 100) + '%';
     }
     function setOpp(o) { if (!o) { opp.style.display = 'none'; return; } opp.style.display = 'block'; opp.innerHTML = '<div class="y t">' + A.esc(o.name) + '</div><div class="bar"><i style="width:' + Math.max(0, Math.min(100, 100 * o.hp / o.max)) + '%"></i></div>'; }
@@ -12386,6 +12479,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
                                          strength shows as how much of the particle sheet is in the air, and as the fog
                                          and sky that come with it - not as translucent particles
      W.update(dt)                        once a frame, after the camera has settled: moves the particles, fades, re-anchors
+     W.focus(vector3)                    the player's feet, every frame: the fog sheets lie at heights above it
      W.state() / W.dispose()             what it is showing now / take back every object the module added
    The KIND table is plain data: everything a kind looks like (sky colour, fog distance, how many particles, how fast
    they fall, the wind, the bank of weather ahead of the player) sits in its own lines, so a new kind (sandstorm, ash
@@ -12406,7 +12500,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
        the storm cloud, the fog wall, the snow haze. It is one quad, so it costs one draw call and no geometry. */
     const KIND = {
       clear: { sky: '#a7c8e6', near: 24, far: 52, rain: 0, snow: 0, bank: ['#a7c8e6', 0, 0] },
-      fog: { sky: '#b8bec4', near: 3, far: 16, rain: 0, snow: 0, bank: ['#b8bec4', 54, 0.75] },
+      /* fog is sheets (2026-10-07: "Fog should be like sheets of fog parallel with the ground at a few different
+         levels. Just giant ovals of transparent fog"): the air between them stays fairly clear, so the sheets read */
+      fog: { sky: '#b8bec4', near: 9, far: 34, rain: 0, snow: 0, sheets: 1, bank: ['#b8bec4', 54, 0.35] },
       rain: {
         sky: '#7d8fa0', near: 14, far: 38, rain: 1, snow: 0, bank: ['#66727d', 40, 0.5],
         drops: LOW ? 600 : 1450, fall: 26, wind: [4.3, 1.4], len: [0.5, 1.15], colour: '#c3d4e4', alpha: 0.55
@@ -12424,7 +12520,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
                                                               under the ground out of sight, and starts again up top */
     const DYNUSE = THREE.DynamicDrawUsage != null ? THREE.DynamicDrawUsage : 35048;   /* 35048 = gl.DYNAMIC_DRAW, for the
                                                               case where build.py has not put the name in three_entry.js */
-    const FIELDS = ['sr', 'sg', 'sb', 'near', 'far', 'rain', 'snow', 'br', 'bg', 'bb', 'bsize', 'balpha'];
+    const FIELDS = ['sr', 'sg', 'sb', 'near', 'far', 'rain', 'snow', 'sheets', 'br', 'bg', 'bb', 'bsize', 'balpha'];
 
     const SKYC = {}, BANKC = {};
     for (const k in KIND) { SKYC[k] = new THREE.Color(KIND[k].sky); BANKC[k] = new THREE.Color(KIND[k].bank[0]); }
@@ -12448,7 +12544,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         sr: baseSky.r + (s.r - baseSky.r) * i, sg: baseSky.g + (s.g - baseSky.g) * i, sb: baseSky.b + (s.b - baseSky.b) * i,
         near: base.near + ((clear ? base.near : K.near) - base.near) * i,
         far: base.far + ((clear ? base.far : K.far) - base.far) * i,
-        rain: (K.rain || 0) * i, snow: (K.snow || 0) * i,
+        rain: (K.rain || 0) * i, snow: (K.snow || 0) * i, sheets: (K.sheets || 0) * i,
         br: baseSky.r + (b.r - baseSky.r) * i, bg: baseSky.g + (b.g - baseSky.g) * i, bb: baseSky.b + (b.b - baseSky.b) * i,
         bsize: K.bank[1] * SIZE * i, balpha: K.bank[2] * i
       };
@@ -12526,11 +12622,53 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
     const bank = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), bankMat);
     bank.frustumCulled = false; bank.visible = false; bank.renderOrder = 1;
 
+    /* ---------------- fog sheets: giant flat ovals of thin fog lying parallel with the ground at a few levels (ankle,
+       waist, over the head, up in the trees). They sit still in the world and drift slowly with the wind, so you walk
+       through and under them; one wraps round to the far side when you leave it behind. One InstancedMesh: one draw
+       call. A sheet fades out within a few metres of the lens, so passing through one never shows a hard line. */
+    const SHN = LOW ? 10 : 18, SHR = LOW ? 28 : 38, LEVELS = [0.5, 1.4, 2.8, 4.6];
+    const sheetMat = new THREE.ShaderMaterial({
+      uniforms: { tint: { value: new THREE.Color(KIND.fog.sky) }, alpha: { value: 0 }, t: { value: 0 } },
+      vertexShader: 'varying vec2 vUv; varying vec3 vW; varying float vSeed;\nvoid main() {\n  vUv = uv;\n  vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0);\n  vW = w.xyz; vSeed = instanceMatrix[3].x * 0.37 + instanceMatrix[3].z * 0.11;\n  gl_Position = projectionMatrix * viewMatrix * w;\n}',
+      /* a soft oval whose rim wanders (two slow sines round the edge), thinner in wisps across it, and gone near the lens */
+      fragmentShader: 'uniform vec3 tint; uniform float alpha; uniform float t; varying vec2 vUv; varying vec3 vW; varying float vSeed;\nvoid main() {\n  vec2 q = (vUv - 0.5) * 2.0; float ang = atan(q.y, q.x);\n  float rim = 0.78 + 0.12 * sin(ang * 3.0 + vSeed) + 0.08 * sin(ang * 5.0 - vSeed * 1.7 + t * 0.05);\n  float a = 1.0 - smoothstep(0.15 * rim, rim, length(q));\n  a *= 0.62 + 0.38 * sin(vW.x * 0.21 + vW.z * 0.13 + t * 0.07 + vSeed) * sin(vW.z * 0.17 - vW.x * 0.09 + vSeed * 2.0);\n  a *= smoothstep(1.5, 7.0, distance(vW, cameraPosition));\n  gl_FragColor = vec4(tint, clamp(a, 0.0, 1.0) * alpha);\n#include <colorspace_fragment>\n}',
+      transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false
+    });
+    const sheetGeo = new THREE.PlaneGeometry(1, 1); sheetGeo.rotateX(-Math.PI / 2);
+    const sheets = new THREE.InstancedMesh(sheetGeo, sheetMat, SHN);
+    sheets.frustumCulled = false; sheets.visible = false; sheets.renderOrder = 1;
+    if (DYNUSE && sheets.instanceMatrix.setUsage) sheets.instanceMatrix.setUsage(DYNUSE);
+    const SH = [], feet = new THREE.Vector3(camera.position.x, camera.position.y - 9, camera.position.z);
+    let feetSet = false;
+    const shM = new THREE.Matrix4(), shQ = new THREE.Quaternion(), shS = new THREE.Vector3(), shP = new THREE.Vector3(), UPV = new THREE.Vector3(0, 1, 0);
+    function placeSheet(o, anywhere) {
+      const a = Math.random() * 6.283, r = anywhere ? Math.sqrt(Math.random()) * SHR : SHR * (0.8 + Math.random() * 0.2);
+      o.x = feet.x + Math.cos(a) * r; o.z = feet.z + Math.sin(a) * r;
+      o.lv = LEVELS[Math.floor(Math.random() * LEVELS.length)] * (0.85 + Math.random() * 0.3); o.y = feet.y + o.lv;
+      o.w = 16 + Math.random() * 30; o.d = o.w * (0.35 + Math.random() * 0.35); o.rot = Math.random() * 3.1416;
+    }
+    for (let k = 0; k < SHN; k++) SH.push({});
+    function stepSheets(d) {
+      const K = KIND.rain.wind, vx = K[0] * 0.08, vz = K[1] * 0.08;      /* the fog creeps with the same wind, slowly */
+      for (let k = 0; k < SHN; k++) {
+        const o = SH[k];
+        if (o.x == null) placeSheet(o, true);
+        o.x += vx * d; o.z += vz * d;
+        const dx = o.x - feet.x, dz = o.z - feet.z;
+        if (dx * dx + dz * dz > SHR * SHR * 1.3 || Math.abs(o.y - feet.y - o.lv) > 10) placeSheet(o, false);   /* left behind */
+        shP.set(o.x, o.y, o.z); shQ.setFromAxisAngle(UPV, o.rot); shS.set(o.w, 1, o.d);
+        shM.compose(shP, shQ, shS); sheets.setMatrixAt(k, shM);
+      }
+      sheets.instanceMatrix.needsUpdate = true;
+    }
+    function focus(v) { if (v) { feet.set(v.x, v.y, v.z); if (!feetSet) { feetSet = true; for (const o of SH) o.x = null; } } }
+
     const box = new THREE.Group();
     box.add(bank);
     if (rain) box.add(rain);
     if (snow) box.add(snow);
     scene.add(box);
+    scene.add(sheets);
     const fwd = new THREE.Vector3(), skyNow = new THREE.Color();
     const aim = new THREE.Vector3(), centre = new THREE.Vector3(camera.position.x, camera.position.y + 1.5, camera.position.z);
     let t = 0, gone = false;
@@ -12575,6 +12713,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       box.position.copy(centre);
       if (rain && rain.visible) stepRain(d, H, rad);
       if (snow && snow.visible) stepSnow(d, H, rad);
+      if (!feetSet) feet.set(camera.position.x, camera.position.y - 9, camera.position.z);
+      sheets.visible = cur.sheets > 0.02;
+      if (sheets.visible) { sheetMat.uniforms.alpha.value = 0.62 * cur.sheets; sheetMat.uniforms.t.value = t; sheetMat.uniforms.tint.value.setRGB(cur.sr, cur.sg, cur.sb); stepSheets(d); }
 
       skyNow.setRGB(cur.sr, cur.sg, cur.sb);
       if (scene.fog) { scene.fog.color.copy(skyNow); scene.fog.near = cur.near; scene.fog.far = cur.far; }
@@ -12670,7 +12811,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         /* in the air, which below full strength is fewer than the cloud holds - the rest wait under the ground */
         parts: { rain: rain && rain.visible ? Math.min(RK, Math.round(RK * cur.rain)) : 0,
                  snow: snow && snow.visible ? Math.min(SK, Math.round(SK * cur.snow)) : 0 },
-        draws: (rain && rain.visible ? 1 : 0) + (snow && snow.visible ? 1 : 0) + (bank.visible ? 1 : 0)
+        draws: (rain && rain.visible ? 1 : 0) + (snow && snow.visible ? 1 : 0) + (bank.visible ? 1 : 0) + (sheets.visible ? 1 : 0),
+        sheets: sheets.visible ? SHN : 0
       };
     }
 
@@ -12689,15 +12831,95 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       if (snow) { snow.geometry.dispose(); snow.material.dispose(); }
       if (flakeTex) flakeTex.dispose();
       bank.geometry.dispose(); bankMat.dispose();
+      if (sheets.parent) sheets.parent.remove(sheets); sheetGeo.dispose(); sheetMat.dispose();
       box.clear();
     }
 
     set('clear', 0, { instant: true });
-    return { api: 1, KIND: KIND, set: set, update: update, state: state, dispose: dispose };
+    return { api: 1, KIND: KIND, set: set, update: update, state: state, dispose: dispose, focus: focus };
   }
 
 
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('weather', { api: 1, v: 1, needs: { three: 160 } }, function () { return { api: 1, createWeather: createWeather }; });
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+<script>
+/* ASHVALE seasons (module `seasons`, api 1) - 2026-10-07: "There should be a 365 day precession of the globe that causes
+   spring, summer, fall and winter to occur in the hemispheres. 365 day year in game days starting on year one. ... deciduous
+   trees to turn colors in the fall, lose their leaves in the winter, grow back in the spring. ... different ground cover during
+   the different seasons ... Ashvale is pretty close to the pole, its lakes should freeze over in the winter, but the closer you
+   are to the equator, the more stable the climate is."
+
+   Pure maths and colours: no three.js, no DOM, no clock of its own (the caller passes the time), so every game, the Atlas and
+   the tests agree to the tick. Its own module so the seasons can be tuned in a small inscription.
+
+     const S = AshSeasons.create({ epoch: 1791353761, dayS: 7200 })
+     S.calendar(tms)            {year, day (1..365), frac (0..1 of the year), dayFrac}
+     S.declination(tms)         the sun's tilt north (+) or south (-) of the equator, radians (the axis leans 23.44 degrees)
+     S.at(latDeg, tms)          the season where you stand:
+        {name: 'spring'|'summer'|'autumn'|'winter', p (0..1 through the local year, 0 = spring equinox), k (how strong seasons
+         are here: 0 at the equator, 1 from 60 degrees), leaf: {stage, colourT, crown}, ground: [r,g,b tint], snow (0..1),
+         frozen (still water frozen hard enough to walk on)}
+     S.leafColour(kind, base, season) -> [r, g, b]   kind: the tree letter (T O W M deciduous; P Y U evergreen)
+*/
+(function (root) {
+  'use strict';
+  const TILT = 23.44 * Math.PI / 180, YEAR = 365, EQUINOX = 79;   /* day 80 of the year: the northern spring equinox */
+  const DECIDUOUS = { T: 1, O: 1, W: 1, M: 1 };
+  /* autumn colours per kind: broadleaf yellow-gold, oak russet, willow pale yellow, maple scarlet */
+  const AUTUMN = { T: [0.86, 0.66, 0.16], O: [0.62, 0.34, 0.12], W: [0.82, 0.78, 0.32], M: [0.80, 0.18, 0.08] };
+  const SPRING = [0.62, 0.82, 0.36];   /* new leaves: light, yellowish green */
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+  const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  function create(opts) {
+    const o = opts || {}, epoch = o.epoch || 1791353761, dayS = o.dayS || 7200;
+    function calendar(tms) {
+      const days = Math.max(0, (tms / 1000 - epoch) / dayS), whole = Math.floor(days);
+      return { year: Math.floor(whole / YEAR) + 1, day: (whole % YEAR) + 1, frac: (days % YEAR) / YEAR, dayFrac: days - whole };
+    }
+    const angle = tms => 2 * Math.PI * (((tms / 1000 - epoch) / dayS - EQUINOX) / YEAR);   /* 0 at the northern spring equinox */
+    const declination = tms => TILT * Math.sin(angle(tms));
+    function at(latDeg, tms) {
+      /* p: 0..1 through the LOCAL year from its spring equinox (the south is half a year on from the north) */
+      let p = (angle(tms) / (2 * Math.PI)) % 1; if (p < 0) p += 1;
+      if (latDeg < 0) p = (p + 0.5) % 1;
+      const k = smooth(12, 58, Math.abs(latDeg));   /* the equator barely changes; toward the pole the full swing */
+      const name = p < 0.25 ? 'spring' : p < 0.5 ? 'summer' : p < 0.75 ? 'autumn' : 'winter';
+      /* winterness: 0 in high summer, 1 at midwinter (p 0.875), a cosine round the year */
+      const cold = (1 - Math.cos(2 * Math.PI * (p - 0.375))) / 2;
+      /* leaves: bud through spring, full in summer, turn from early autumn, fall late in autumn, bare through winter - all
+         toward plain summer green where the seasons are weak */
+      let colourT = 0, crown = 1, stage = 'summer';
+      if (p < 0.18) { crown = smooth(0.06, 0.18, p); stage = 'budding'; }
+      else if (p < 0.25) { stage = 'spring'; }
+      else if (p < 0.5) { stage = 'summer'; }
+      else if (p < 0.66) { colourT = smooth(0.5, 0.64, p); stage = 'turning'; }
+      else if (p < 0.75) { colourT = 1; crown = 1 - smooth(0.66, 0.75, p); stage = 'falling'; }
+      else { colourT = 1; crown = 0; stage = 'bare'; }
+      const springT = p < 0.3 ? 1 - smooth(0.18, 0.3, p) : 0;
+      /* the leaves follow the season only as far as it reaches here: in the tropics they stay on and green */
+      crown = 1 - (1 - crown) * smooth(0.25, 0.6, k); colourT *= smooth(0.15, 0.5, k);
+      /* ground: fresh in spring, plain in summer, golden in autumn, dull in winter (before any snow) */
+      const g = p < 0.25 ? mix([1.06, 1.1, 0.86], [1, 1, 1], p / 0.25) : p < 0.5 ? [1, 1, 1] : p < 0.75 ? mix([1, 1, 1], [1.22, 1.0, 0.62], (p - 0.5) / 0.25) : [0.9, 0.86, 0.74];
+      const ground = mix([1, 1, 1], g, k);
+      /* snow lies where the winter is hard: Ashvale (60 S) gets a white midwinter, the tropics none; still water freezes in the deep of it */
+      const snow = clamp((cold * k - 0.5) / 0.3, 0, 1);
+      return { name, p, k, leaf: { stage, colourT, crown, springT }, ground, snow, frozen: snow > 0.5 };
+    }
+    function leafColour(kind, base, s) {
+      if (!DECIDUOUS[kind]) return base;   /* pines, yews and cacti keep their colour */
+      let c = base;
+      if (s.leaf.springT > 0) c = mix(c, SPRING, 0.6 * s.leaf.springT * s.k);
+      if (s.leaf.colourT > 0) c = mix(c, AUTUMN[kind] || AUTUMN.T, s.leaf.colourT);
+      return c;
+    }
+    return { api: 1, YEAR, TILT, calendar, declination, at, leafColour, deciduous: k => !!DECIDUOUS[k] };
+  }
+  const api = { api: 1, create };
+  if (root.ASH3D && root.ASH3D.define) root.ASH3D.define('seasons', { api: 1, v: 1, needs: {} }, () => api);
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  root.AshSeasons = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 
 </script>
@@ -13081,10 +13303,33 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       const TRAVEL_MS = 900, CAVE_MS = 1400; let travelling = null, TRAVEL_KIND = null;
       /* through a cave passage the screen is the cave's own (down into the dark, up into the daylight), every time - even when
          the area there is already loaded - for at least CAVE_MS */
-      function caveTravel(kind, name) {
-        TRAVEL_KIND = kind; hud.travel && hud.travel(true, name, 0.2, kind);
-        const t0 = performance.now(), tick = () => { if (travelling) return; const f = (performance.now() - t0) / CAVE_MS; if (f >= 1) { TRAVEL_KIND = null; hud.travel && hud.travel(false); return; } hud.travel && hud.travel(true, name, 0.2 + 0.8 * f, kind); requestAnimationFrame(tick); };
+      /* 2026-10-07: "The loading screens need to come up as soon as a player clicks on a portal or the cave or a wigwam":
+         travelScreen goes up the moment you choose to go (and again, unchanged, when the jump itself comes), stays at least
+         CAVE_MS, and while a jump is still due (TRAVEL.due) or the area there is loading (arriveCheck's travelling) it waits.
+         A jump that never comes (refused, out of reach) lets it go after TRAVEL_GIVEUP. */
+      const TRAVEL = { t0: 0, kind: null, name: '', due: 0, on: false, hold: false, warm: true }, TRAVEL_GIVEUP = 8000;
+      function travelScreen(kind, name, due) {
+        const now = performance.now();
+        if (!TRAVEL.on || TRAVEL.kind !== kind) TRAVEL.t0 = now;
+        TRAVEL.warm = false;
+        TRAVEL.kind = kind; TRAVEL.name = name || TRAVEL.name; TRAVEL.due = due ? now + TRAVEL_GIVEUP : 0; TRAVEL_KIND = kind;
+        hud.travel && hud.travel(true, TRAVEL.name, 0.15, kind);
+        if (TRAVEL.on) return; TRAVEL.on = true;
+        const tick = () => {
+          const n = performance.now(), f = (n - TRAVEL.t0) / CAVE_MS;
+          if (travelling) { TRAVEL.on = false; return; }   /* arriveCheck holds the screen from here and lets it go */
+          if (f >= 1 && !TRAVEL.hold && !(TRAVEL.due && n < TRAVEL.due)) { TRAVEL.on = false; TRAVEL_KIND = null; hud.travel && hud.travel(false); return; }
+          hud.travel && hud.travel(true, TRAVEL.name, Math.min(0.95, 0.15 + 0.8 * Math.min(1, f)), TRAVEL.kind); requestAnimationFrame(tick);
+        };
         requestAnimationFrame(tick);
+      }
+      const caveTravel = (kind, name) => travelScreen(kind, name, false);
+      const PASSK = { cavemouth: 'down', caveexit: 'up', wigwamdoor: 'lodge', wigwamout: 'lodgeout' };
+      /* the moment you choose a passage or a portal: up goes the screen (when you are already beside it), and the area on
+         the far side starts loading now rather than when you arrive */
+      function travelSoon(kind, name, tx, ty, near) {
+        if (ZINDEX && tx != null) { const zi = zoneAtIndex(tx, ty); if (zi && !core.hasZone(zi.id)) fetchZone(zi.id).then(z => { if (!core.hasZone(zi.id)) coreCall(() => core.addZone(Object.assign({}, z))); }).catch(() => {}); }
+        if (near) travelScreen(kind, name, true);
       }
       function arriveCheck() {
         if (!ZINDEX) return;
@@ -13094,7 +13339,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         hud.travel && hud.travel(true, zi.name || zi.id, 0, TRAVEL_KIND);
         let k = 0;
         const step = () => {
-          if (core.hasZone(want)) { const left = Math.max(0, (TRAVEL_KIND ? CAVE_MS : TRAVEL_MS) - (performance.now() - t0)); setTimeout(() => { travelling = null; TRAVEL_KIND = null; streamRegions(true); cam.snap = true; hud.travel && hud.travel(false); }, left); return; }
+          if (core.hasZone(want)) { const left = Math.max(0, (TRAVEL_KIND ? CAVE_MS : TRAVEL_MS) - (performance.now() - Math.min(t0, TRAVEL.t0 || t0))); setTimeout(() => { travelling = null; TRAVEL_KIND = null; TRAVEL.due = 0; streamRegions(true); cam.snap = true; hud.travel && hud.travel(false); }, left); return; }
           hud.travel && hud.travel(true, zi.name || zi.id, Math.min(0.9, (performance.now() - t0) / 4000), TRAVEL_KIND);
           fetchZone(want).then(z => { if (!core.hasZone(want)) coreCall(() => core.addZone(Object.assign({}, z))); step(); })
             .catch(e => { console.warn('ASHVALE: ' + e.message + ', trying again'); setTimeout(step, Math.min(8000, 800 * ++k)); });
@@ -13437,17 +13682,17 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             break;
           case 'shop': if (mine) { hud.openShop(e.shop); faceNpc(e.npc); } break;
           case 'portal': if (mine) {   /* the towns you have touched a portal in (2026-10-04) */
-            const L = (e.to || []).map(P => ({ html: 'Travel to <span class="y">' + P.name + '</span>', fn: () => send({ c: 'portal', to: P.id }) }));
+            const L = (e.to || []).map(P => ({ html: 'Travel to <span class="y">' + P.name + '</span>', fn: () => { send({ c: 'portal', to: P.id }); const T = (D.rules.portals || []).find(q => q.id === P.id); travelSoon(null, P.name, T && T.to[0], T && T.to[1], true); } }));
             if (!L.length) hud.chat('Touch the town portal in another town, and you can travel there from here.', 'sys');
             else { const r = host.getBoundingClientRect(); hud.menu(r.width / 2, r.height / 2, L); }
             if ((e.unknown || []).length) hud.chat('Not yet attuned: ' + e.unknown.join(', ') + '.', 'sys');
           } break;
           case 'angels': { const t = ents.get('p:' + e.p); if (t) { angelFlare(t.root.position); if (t.H && t.H.play) t.H.play('cast', { loop: false }); } if (mine) sfx('level'); break; }
           case 'teleport': if (mine) {
-            if (e.to === 'cavemouth' || e.to === 'caveexit') {   /* the cave's own screen goes up FIRST and gets painted; the heavy part (building the cave or the land) follows behind it */
-              const uz = core.M.underAt && core.M.underAt(e.x, e.y), zi2 = uz && ZINDEX && ZINDEX.find(z => z.id === uz);
-              caveTravel(e.to === 'cavemouth' ? 'down' : 'up', zi2 ? zi2.name : (core.M.underAt && ZINDEX && (ZINDEX.find(z => z.under) || {}).name) || 'cave');
-              CAVE.hold = true; requestAnimationFrame(() => setTimeout(() => { CAVE.hold = false; place(myEnt, e.x, e.y); cam.snap = true; streamRegions(); sfx('equip'); arriveCheck(); }, 30));
+            if (e.to !== 'gate') {   /* the screen goes up FIRST and gets painted; the heavy part (building the cave, the wigwam or the land) follows behind it */
+              const uz = core.M.underAt && core.M.underAt(e.x, e.y), zi2 = (uz && ZINDEX && ZINDEX.find(z => z.id === uz)) || zoneAtIndex(e.x, e.y);
+              travelScreen(PASSK[e.to] || null, zi2 ? zi2.name : PASSK[e.to] === 'down' ? 'cave' : '', false);
+              CAVE.hold = true; TRAVEL.hold = true; requestAnimationFrame(() => setTimeout(() => { CAVE.hold = false; place(myEnt, e.x, e.y); cam.snap = true; streamRegions(true); sfx('equip'); arriveCheck(); TRAVEL.warm = true; let k = 0; const settle = () => { if (++k < 3) requestAnimationFrame(settle); else TRAVEL.hold = false; }; requestAnimationFrame(settle); }, 30));   /* and it stays until the new place has been built and drawn a few frames (the first draw compiles its materials) */
             } else { place(myEnt, e.x, e.y); cam.snap = true; streamRegions(); sfx('equip'); arriveCheck(); }
           } break;
           case 'zoneadd': zoneArrived(e, now); break;
@@ -13472,7 +13717,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             if (n && n.pose) myEnt.restPose = n.pose;   /* sit down with him the same way (2026-10-07) */
           } break;
           case 'unhide': { const t = ents.get('n:' + e.npc); if (t) t.root.visible = true; break; }
-          case 'weather': if (e.zone === core.weatherZone(zoneHere())) { if (e.say) hud.chat(e.say, 'sys'); showWeather(); } break;
+          case 'weather': if (e.zone === core.weatherZone(zoneHere())) { const k = seasonal({ kind: e.kind }).kind, say = k === e.kind ? e.say : (((D.rules || {}).weather || {}).say || {})[k] || e.say; if (say && k + ':' + e.intensity !== wxShown) hud.chat(say, 'sys'); showWeather(); } break;
           case 'fire': addFire(e.fire, e.x, e.y); if (e.p === PID || !e.p) sfx('sizzle', e.p === PID ? null : { x: e.x, y: e.y }); break;
           case 'fireout': removeFire(e.fire); break;
           case 'fx': { const t = ents.get('m:' + e.mob); if (!t) break; t.fx = t.fx || {}; t.fx[e.fx] = 1; applyTint(t); const el = hud.fxSplat(e.fx); if (el) t.splats.push({ el, t: performance.now(), k: t.splats.length }); if (e.fx === 'freeze') sfx('freeze', t); break; }
@@ -13527,6 +13772,21 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         GLOW.mesh.count = n; GLOW.mesh.instanceMatrix.needsUpdate = true; if (GLOW.mesh.instanceColor) GLOW.mesh.instanceColor.needsUpdate = true;
       }
       const CAVE = { on: false, t: 0, me: null, pool: [], keep: null };
+      /* A FIXED NUMBER OF LIGHTS. three.js builds every material's shader for the number of lights in the scene; one light more
+         or fewer and every material in sight is compiled again (52 programs - that was most of the wait going into the cave or
+         a wigwam, and a stall each time a town's area loaded). So the lights are all there from the start and are only ever
+         dimmed (intensity 0), never added, removed or hidden; the towns' own plaza lights come and go with their areas, and a
+         pad of dark spare lights makes up the difference (lightBudget). */
+      for (let k = 0; k < (isPhone ? 4 : 6); k++) { const L = new THREE.PointLight(0xff9a3c, 0, 10, 1.2); scene.add(L); CAVE.pool.push(L); }
+      const LBUD = { n: 8, pad: [], key: -1 };
+      for (let k = 0; k < LBUD.n; k++) { const L = new THREE.PointLight(0xffa050, 0, 1, 2); L.position.set(0, -500, 0); scene.add(L); LBUD.pad.push(L); }
+      function lightBudget() {
+        let n = 0, sum = 0;
+        for (const r of regions) { const b = r.built; if (!b) continue; if (b._pl == null) { b._pl = []; b.group.traverse(o => { if (o.isPointLight) b._pl.push(o); }); } sum += b._pl.length; }
+        if (sum === LBUD.key) return; LBUD.key = sum;
+        for (const r of regions) { const b = r.built; if (!b) continue; for (const L of b._pl) { L.visible = n < LBUD.n; if (L.visible) n++; } }
+        LBUD.pad.forEach((L, k) => { L.visible = k < LBUD.n - n; });
+      }
       function caveTick(now) {
         const inCave = !!(core.M && core.M.underAt && core.M.underAt(me.x, me.y) != null);
         if (inCave !== CAVE.on) {
@@ -13536,18 +13796,15 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             if (wxMod && wxMod.set) try { wxMod.set('clear', 0, { instant: true }); } catch (e) { /* weather module */ }
             scene.background.setHex(0x030303); scene.fog.color.setHex(0x030303); scene.fog.near = 5; scene.fog.far = 16; hemi.intensity = 0.14; sun.intensity = 0.04;
             /* no light of your own (2026-10-07: "The player should not give off any light. The only light should be coming from the torches") */
-            if (!CAVE.pool.length) for (let k = 0; k < (isPhone ? 4 : 6); k++) { const L = new THREE.PointLight(0xff9a3c, 0, 10, 1.2); scene.add(L); CAVE.pool.push(L); }
-            for (const L of CAVE.pool) L.visible = true;
           } else {
             const K = CAVE.keep || {}; scene.background.setHex(K.bg != null ? K.bg : SKY); scene.fog.color.setHex(K.fc != null ? K.fc : SKY); scene.fog.near = K.fn || 24; scene.fog.far = K.ff || 52;
-            hemi.intensity = K.hemi || 1.7; sun.intensity = K.sun || 2.3; for (const L of CAVE.pool) L.visible = false;
+            hemi.intensity = K.hemi || 1.7; sun.intensity = K.sun || 2.3; for (const L of CAVE.pool) L.intensity = 0;
             wxShown = ''; showWeather(true);
           }
         }
         /* the four torches, ranges and campfires nearest you really light their surroundings - underground always, up top while
            it is dark (a moonless night has no other light: 2026-10-07) */
         const darkUp = !inCave && SUNL.dark > 0.3;
-        if (!CAVE.pool.length && darkUp) for (let k = 0; k < (isPhone ? 4 : 6); k++) { const L = new THREE.PointLight(0xff9a3c, 0, 10, 1.2); scene.add(L); CAVE.pool.push(L); }
         if (GLOW.mesh) { GLOW.mesh.visible = inCave || darkUp; GLOW.mesh.material.opacity = inCave ? 1 : Math.min(1, Math.max(0, (SUNL.dark - 0.3) / 0.4)); }
         if ((!inCave && !darkUp) || !CAVE.pool.length) { if (!inCave) for (const L of CAVE.pool) L.intensity = 0; return; }
         if (now - CAVE.t > 1000) {
@@ -13590,13 +13847,17 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
          the sky and the light's colour, and the light (with the shadows) comes from its direction; under the horizon a faint
          bluish moon, opposite it, casts the shadows. */
       const SUN_EPOCH = 1791353761, DAY_S = 7200;
+      /* THE YEAR (2026-10-07): 365 game days from year 1, day 1 at SUN_EPOCH; the axis leans, so the sun climbs and sinks
+         through the year and the hemispheres take turns at summer (the maths: the seasons module, its own inscription) */
+      const SEASONS = (() => { try { const SM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('seasons'); return SM && SM.create ? SM.create({ epoch: SUN_EPOCH, dayS: DAY_S }) : null; } catch (e) { return null; } })();
       const SUNL = { dark: 0, dir: [-0.45, 0.8, 0.3], key: '', b: null, lonA: null, base: new THREE.Color(SKY), col: new THREE.Color(), night: new THREE.Color() };
       const NEW_SKY = new THREE.Color(0x1a2434), NIGHT_SKY = new THREE.Color(0x2a3a52), DUSK_SKY = new THREE.Color(0xd8865a), SUNC = new THREE.Color(0xfff0d6), DUSKC = new THREE.Color(0xffa060), MOONC = new THREE.Color(0x9fb4ff);
       function sphereAt(x, y) { const WG = D.wg, C = DATA.globecfg; if (!WG || !WG.toSphere || !C || !C.origin) return null; const fx = x + C.origin[0] + 0.5, fy = -(y + C.origin[1]) - 0.5; return [WG.toSphere(C.face, fx, fy), WG.toSphere(C.face, fx + 1, fy), WG.toSphere(C.face, fx, fy - 1)]; }
       function sunAt(tms) {   /* the sun's direction from the planet's centre */
         if (SUNL.lonA == null) { const a = sphereAt(22, 52); SUNL.lonA = a ? Math.atan2(a[0][1], a[0][0]) : 0; }   /* Ashvale's longitude (by the well) */
         const L = SUNL.lonA - Math.PI / 2 - 2 * Math.PI * ((tms / 1000 - SUN_EPOCH) / DAY_S);
-        return [Math.cos(L), Math.sin(L), 0];
+        const dl = SEASONS ? SEASONS.declination(tms) : 0, cd = Math.cos(dl);   /* north or south of the equator by the time of year */
+        return [Math.cos(L) * cd, Math.sin(L) * cd, Math.sin(dl)];
       }
       const MOON_P = 29.530588853, MOON_NEW = 947182440;   /* the synodic month; a new moon: 2000-01-06 18:14 UTC */
       function moonAt(tms, s) {   /* {v: its direction, lit: 0 at new moon .. 1 at full} */
@@ -13625,11 +13886,28 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         STARS.pts.material.opacity = o; STARS.pts.visible = o > 0.01 && !CAVE.on;
         STARS.pts.position.copy(camera.position); STARS.pts.scale.setScalar(Math.max(60, camera.far * 0.9));
       }
+      /* the season where you stand, every few seconds: the woods, the ground and the lakes follow it; the lakes freeze by their
+         own latitude (core.M.setIce), refreshed each minute */
+      const SEASON = { t: 0, key: '', ice: 0, name: '' };
+      /* the sky's clock: real time, unless a viewer asks for a time-lapse (?timelapse=N runs the sun, moon and seasons N
+         times faster from now, ?skyday=D starts D game days on). Only this viewer's sky moves; nothing is sent */
+      const TL = { n: Math.max(1, +q.get('timelapse') || 1), t0: Date.now(), off: (+q.get('skyday') || 0) * DAY_S * 1000 };
+      const skyNow = () => TL.t0 + TL.off + (Date.now() - TL.t0) * TL.n;
+      function seasonTick(B) {
+        if (!SEASONS) return;
+        const real = Date.now(); if (real - SEASON.t < (TL.n > 1 ? 250 : 3000)) return; SEASON.t = real; const now = skyNow();
+        const lat = Math.asin(Math.max(-1, Math.min(1, B.u[2]))) * 180 / Math.PI, S = SEASONS.at(lat, now);
+        const key = [S.name, Math.round(S.leaf.crown * 20), Math.round(S.leaf.colourT * 20), Math.round(S.leaf.springT * 10), Math.round(S.snow * 20), S.frozen].join(':');
+        if (key !== SEASON.key) { SEASON.key = key; if (SCENE.seasonApply) SCENE.seasonApply(S, SEASONS); SEASON.snowy = S.snow > 0.3; wxShown = ''; if (core.setSeason) core.setSeason({ snowy: SEASON.snowy }); showWeather(); }
+        if (S.name !== SEASON.name) { if (SEASON.name) { const C = SEASONS.calendar(now); hud.chat(S.name.charAt(0).toUpperCase() + S.name.slice(1) + ' has come: year ' + C.year + ', day ' + C.day + '.', 'sys'); } SEASON.name = S.name; }
+        if (core.M.setIce && real - SEASON.ice > (TL.n > 1 ? 2000 : 60000)) { SEASON.ice = real; core.M.setIce(la => SEASONS.at(la, skyNow()).frozen); }
+      }
       function dayTick() {
         const key = (me.x >> 3) + ':' + (me.y >> 3);
         if (key !== SUNL.key) { const a = sphereAt(me.x, me.y); SUNL.key = key; SUNL.b = a ? { u: nrm3(a[0]), e: nrm3(sub3(a[1], a[0])), s: nrm3(sub3(a[2], a[0])) } : null; }   /* up, game east (+x), game south (+y) */
         const B = SUNL.b; if (!B) return;
-        const now = Date.now(), s = sunAt(now), up = dot3(s, B.u), ex = dot3(s, B.e), so = dot3(s, B.s);
+        seasonTick(B);
+        const now = skyNow(), s = sunAt(now), up = dot3(s, B.u), ex = dot3(s, B.e), so = dot3(s, B.s);
         const day = Math.min(1, Math.max(0, (up + 0.08) / 0.2)), dusk = Math.max(0, 1 - Math.abs(up) / 0.18);   /* 1 by day, 0 by night; dusk near the horizon */
         /* the moon follows the real cycle and adds light when it is up. A moonless night is starlight (2026-10-07: "add stars
            to moonless [nights] so that it is at least navigable, but just barely"): a sky full of stars, and only just enough
@@ -13650,7 +13928,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       }
       /* ---------- HAND TORCHES (2026-10-07: "a torch ... hold it at night and illuminate his surroundings"): whoever holds
          one (the off hand) carries a warm flickering light of its Light radius - you, and up to three players near you */
-      const TORCH = { me: null, pool: [] };
+      const TORCH = { me: new THREE.PointLight(0xffa040, 0, 8, 1.3), pool: [] };   /* made now, not on first use: see A FIXED NUMBER OF LIGHTS */
+      scene.add(TORCH.me); for (let k = 0; k < 3; k++) { const L = new THREE.PointLight(0xffa040, 0, 8, 1.3); scene.add(L); TORCH.pool.push(L); }
       /* any item worn or held with a Light value lights round you - a torch, a glowing helmet, the Spider Queen's Crown (the operator
          2026-10-07: "Or other illuminating items ... the spider queen's crown should be illuminating"); the brightest counts */
       const LIGHTC = { torch: 0xffa040 }, lightOf = ids => { let best = 0, col = 0xffa040; for (const id of ids) { const d = id && core.item(id); if (d && d.light > best) { best = d.light; col = d.id === 'hat_spidercrown' ? 0xc89aff : LIGHTC[d.id] || 0xffc070; } } return [best, col]; };
@@ -13666,10 +13945,18 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       /* ---------- weather visuals: the weather module (src/weather.js, its own inscription) when it is loaded, else scene fog */
       let wxShown = '', wxMod = null;
       try { const W = G.ASH3D && G.ASH3D.get && G.ASH3D.get('weather'); if (W && W.createWeather) wxMod = W.createWeather(THREE, { scene, camera, quality: isPhone ? 'low' : 'high' }); } catch (er) { console.warn('weather module', er && er.message); }
+      /* what falls where you stand keeps your season, whatever the region's roll was (a region can span latitudes): in a
+         snowy winter rain and fog come down as snow; anywhere else snow comes down as rain */
+      function seasonal(w) {
+        if (SEASON.snowy == null || !w) return w;
+        if (SEASON.snowy && (w.kind === 'rain' || w.kind === 'fog')) return Object.assign({}, w, { kind: 'snow' });
+        if (!SEASON.snowy && w.kind === 'snow') return Object.assign({}, w, { kind: 'rain' });
+        return w;
+      }
       const WXLOOK = { clear: [SKY, 24, 52], fog: [0xb8bec4, 3, 16], rain: [0x7d8fa0, 14, 38], snow: [0xdfe6ec, 10, 30] };
       function showWeather(instant) {
         if (CAVE.on) return;   /* underground there is no weather (caveTick puts it back on the way out) */
-        const w = core.weatherOf(zoneHere()) || { kind: 'clear', intensity: 0 }, key = w.kind + ':' + w.intensity; if (key === wxShown) return; wxShown = key;
+        const w = seasonal(core.weatherOf(zoneHere()) || { kind: 'clear', intensity: 0 }), key = w.kind + ':' + w.intensity; if (key === wxShown) return; wxShown = key;
         if (wxMod) { wxMod.set(w.kind, w.intensity / 100, { instant: !!instant }); return; }
         const L = WXLOOK[w.kind] || WXLOOK.clear, C = WXLOOK.clear, k = w.kind === 'clear' ? 0 : w.intensity / 100;
         const col = new THREE.Color(C[0]).lerp(new THREE.Color(L[0]), k);
@@ -13947,7 +14234,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           return [{ html: 'Get into the ' + nm, act: { c: 'board', x: t.x, y: t.y }, red: 1 },
                   { html: 'Examine ' + nm, fn: () => hud.chat('A canoe of birch bark over cedar ribs, sewn with spruce root and sealed with pitch. It floats light as a leaf.', 'sys') }]; }
         if (t.kind === 'passage') { const o = core.passageAt(t.x, t.y); if (!o) return []; const nm = '<span class="c">' + esc(o.name || (o.k === 'cavemouth' ? 'Cave' : o.k === 'gate' ? 'Gate' : 'Way out')) + '</span>';
-          return [{ html: esc(o.label || 'Go through'), act: { c: 'enter', x: o.x, y: o.y }, red: 1 },
+          return [{ html: esc(o.label || 'Go through'), act: { c: 'enter', x: o.x, y: o.y }, red: 1, then: () => { if (o.k !== 'gate' && o.to) travelSoon(PASSK[o.k] || null, (zoneAtIndex(o.to[0], o.to[1]) || {}).name || '', o.to[0], o.to[1], Math.max(Math.abs(me.x - o.x), Math.abs(me.y - o.y)) <= 1); } },
                   { html: 'Examine ' + nm, fn: () => hud.chat(o.k === 'cavemouth' ? 'A dark opening in the rock. Webs hang just inside, and the air smells of damp and old fur.' : o.k === 'gate' ? 'A barred wooden gate in a palisade. The lookout has the latch.' : 'A ladder up to a shaft of daylight.', 'sys') }]; }
         if (t.kind === 'remote') {
           const r = remotes.get(t.id); if (!r) return [];
@@ -14025,7 +14312,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (!a) return opts;
         return [a].concat(opts.filter(o => !o.act || (o.act.c !== 'plant' && o.act.c !== 'unplant' && o.act.c !== a.act.c)));
       }
-      function doAct(o, sx, sy) { if (o.act) { send(o.act); if (sx != null) { const r = host.getBoundingClientRect(); hud.marker(sx - r.left, sy - r.top, o.red); } if (o.act.c === 'walk') flag = [o.act.x, o.act.y]; else flag = null; } else if (o.fn) o.fn(); }
+      function doAct(o, sx, sy) { if (o.act) { send(o.act); if (o.then) o.then(); if (sx != null) { const r = host.getBoundingClientRect(); hud.marker(sx - r.left, sy - r.top, o.red); } if (o.act.c === 'walk') flag = [o.act.x, o.act.y]; else flag = null; } else if (o.fn) o.fn(); }
       let flag = null;
       /* The operator: "a single click should make the character walk, a double click should make the character run". The first
          tap starts walking at once; a second tap within 300 ms near the same spot upgrades the same move to a run.
@@ -15090,6 +15377,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         hud.setPos(me.x, me.y);
         netPos(now); netNeighbours(now); flushNet();
         if (fogMod && myEnt) fogMod.focus(myEnt.root.position);
+        if (wxMod && wxMod.focus && myEnt) wxMod.focus(myEnt.root.position);
         if (SCENE.see && myEnt) {   /* see-through: a circle round the avatar's chest on screen, for anything 2 m or more in front of it */
           const S = SCENE.see, hp = _seeV.copy(myEnt.root.position); hp.y += 1.0;
           const d = camera.position.distanceTo(hp); hp.project(camera);
@@ -15102,7 +15390,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         const fn0 = scene.fog.near, ff0 = scene.fog.far, fk = CAVE.on ? 1 : viewR() / VIEW, back = cam.dist;
         scene.fog.near = fn0 * fk + back; scene.fog.far = ff0 * fk + back;
         { const cf = Math.max(90, scene.fog.far + 8); if (Math.abs(camera.far - cf) > 2) { camera.far = cf; camera.updateProjectionMatrix(); } }
-        renderer.render(scene, camera);
+        lightBudget();
+        if (!((TRAVEL.on || travelling) && !TRAVEL.warm)) renderer.render(scene, camera);   /* behind a loading screen nothing is drawn: the frame time goes to building the place you are going to */
         scene.fog.near = fn0; scene.fog.far = ff0;
       }
       const arrivedProjs = [];
@@ -15253,6 +15542,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         tap: tapAt, menuAt, targetsAt, pad: () => PAD && PAD.state(), fps: () => frames, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries }), setCam(y, p, d) { if (y != null) cam.tyaw = cam.yaw = y; if (p != null) cam.tpitch = cam.pitch = p; if (d != null) cam.tdist = cam.dist = d; },
         net: () => ({ host: hostOf(zoneHere()), amHost: !!room && hostOf(zoneHere()) === myNetId, hosts: Object.fromEntries(hosts), hosted: Array.from(hosted), area: zoneHere(), region: roomZone, myId: myNetId, ids: Array.from(remotes.keys()), room: room && room.id, me: room && room.me, neighbours: nb ? nb.rooms().map(R => R.id) : [], viewers: Array.from(remotes).filter(e => e[1].viewOnly).map(e => e[0]), status: netStatus, stats: Object.assign({ perSec: +(netStats.sent / Math.max(1, (performance.now() - netStats.t0) / 1000)).toFixed(2) }, netStats, { times: undefined }), gear: Array.from(remotes.values()).map(r => [r.name, r.e.H.gear || null]), remotes: Array.from(remotes.keys()), names: Array.from(remotes.values()).map(r => r.e.tag && r.e.tag.textContent) }),
         weather: (kind, intensity, ticks) => coreCall(() => core.setWeather(zoneHere(), kind, intensity == null ? 80 : intensity, ticks || 500)),
+        wx: () => Object.assign({ season: SEASON.name, snowy: SEASON.snowy }, wxMod && wxMod.state ? wxMod.state() : {}),
+        progInfo: () => { const P = renderer.info.programs || []; return { n: P.length, names: P.map(p => p.name).slice(-60) }; },
+        tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },   /* a test taps a thing as a player would (first option) */
+        travelShown: () => { const el = host.querySelector('.travel'); return el && el.style.display !== 'none' ? el.className + ' | ' + el.querySelector('.tt').textContent : null; },
         say, store, models: MOD, allowedAsset, wallet: walletApi(DATA.items.items), walletState: () => walletState, walletRefresh,
         chestEventForTest: chestEvent,
         chest: { state: chestState, take: chestTake, store: chestStore, promise: paid => { const L = ledgerFor(walletState.address); for (const k in paid) L.pend[k] = (L.pend[k] || 0) + paid[k]; ledgerSave(); },
@@ -16112,6 +16405,6 @@ ASH3D.defineData({"ashvale3d":"module","name":"part.palette","api":1,"v":1,"data
 
 </script>
 <script>
-ASH3D.boot({ baked: {"ashvale3d":"registry","version":1,"loader":1,"modules":{"three":{"id":null,"v":"0.160.0","api":160,"kind":"esm"},"netretry":{"id":null,"v":"3","api":1,"kind":"js"},"net":{"id":null,"v":"3","api":2,"kind":"js"},"trade":{"id":null,"v":"2","api":1,"kind":"js"},"wallet":{"id":null,"v":"1","api":1,"kind":"js"},"trip":{"id":null,"v":"2","api":1,"kind":"js"},"globe":{"id":null,"v":"V","api":1,"kind":"js"},"wg_geo":{"id":null,"v":1,"api":1,"kind":"js"},"wg_terrain":{"id":null,"v":1,"api":1,"kind":"js"},"wg_paths":{"id":null,"v":1,"api":1,"kind":"js"},"wg_sites":{"id":null,"v":1,"api":1,"kind":"js"},"wg_tiles":{"id":null,"v":1,"api":1,"kind":"js"},"worldgen":{"id":null,"v":1,"api":1,"kind":"js"},"world":{"id":null,"v":"V","api":1,"kind":"js"},"core":{"id":null,"v":"1","api":1,"kind":"js"},"audit":{"id":null,"v":"1","api":1,"kind":"js"},"scene":{"id":null,"v":"1","api":2,"kind":"js"},"hudart":{"id":null,"v":"1","api":1,"kind":"js"},"hudpanels":{"id":null,"v":"1","api":1,"kind":"js"},"hudshop":{"id":null,"v":"1","api":1,"kind":"js"},"hudchest":{"id":null,"v":"2","api":1,"kind":"js"},"huddrag":{"id":null,"v":"1","api":1,"kind":"js"},"hudcreator":{"id":null,"v":"1","api":1,"kind":"js"},"hud":{"id":null,"v":"2","api":1,"kind":"js"},"models":{"id":null,"v":"1","api":1,"kind":"js"},"gamepad":{"id":null,"v":"1","api":1,"kind":"js"},"weather":{"id":null,"v":"1","api":1,"kind":"js"},"fog":{"id":null,"v":"1","api":1,"kind":"js"},"engine":{"id":null,"v":"2","api":1,"kind":"js"},"data":{"items":{"id":null,"v":4,"api":1,"kind":"json"},"monsters":{"id":null,"v":1,"api":1,"kind":"json"},"shops":{"id":null,"v":3,"api":1,"kind":"json"},"quests":{"id":null,"v":2,"api":1,"kind":"json"},"rules":{"id":null,"v":3,"api":1,"kind":"json"},"globecfg":{"id":null,"v":1,"api":1,"kind":"json"},"assets":{"id":null,"v":1,"api":1,"kind":"json"},"housekit":{"id":null,"v":1,"api":1,"kind":"json"},"wg_tables":{"id":null,"v":2,"api":1,"kind":"json"},"zoneindex":{"id":null,"v":1,"api":1,"kind":"json"}},"parts":{"body.human":{"id":null,"v":1,"api":1,"kind":"json"},"char.aldous":{"id":null,"v":1,"api":1,"kind":"json"},"char.animikii":{"id":null,"v":1,"api":1,"kind":"json"},"char.ash_knight":{"id":null,"v":1,"api":1,"kind":"json"},"char.auditor":{"id":null,"v":1,"api":1,"kind":"json"},"char.bandit":{"id":null,"v":1,"api":1,"kind":"json"},"char.bandit_leader":{"id":null,"v":1,"api":1,"kind":"json"},"char.bela":{"id":null,"v":1,"api":1,"kind":"json"},"char.boar":{"id":null,"v":1,"api":1,"kind":"json"},"char.bramble":{"id":null,"v":1,"api":1,"kind":"json"},"char.brannoc":{"id":null,"v":1,"api":1,"kind":"json"},"char.bryce":{"id":null,"v":1,"api":1,"kind":"json"},"char.calder":{"id":null,"v":1,"api":1,"kind":"json"},"char.chest":{"id":null,"v":1,"api":1,"kind":"json"},"char.chicken":{"id":null,"v":1,"api":1,"kind":"json"},"char.cobb":{"id":null,"v":1,"api":1,"kind":"json"},"char.deer":{"id":null,"v":1,"api":1,"kind":"json"},"char.edric_ghost":{"id":null,"v":1,"api":1,"kind":"json"},"char.edric_skel":{"id":null,"v":1,"api":1,"kind":"json"},"char.fenn":{"id":null,"v":1,"api":1,"kind":"json"},"char.gale":{"id":null,"v":1,"api":1,"kind":"json"},"char.garrick":{"id":null,"v":1,"api":1,"kind":"json"},"char.giant_rat":{"id":null,"v":1,"api":1,"kind":"json"},"char.giant_spider":{"id":null,"v":1,"api":1,"kind":"json"},"char.goat":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin_chief":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin_shaman":{"id":null,"v":1,"api":1,"kind":"json"},"char.hale":{"id":null,"v":1,"api":1,"kind":"json"},"char.hare":{"id":null,"v":1,"api":1,"kind":"json"},"char.hawk":{"id":null,"v":1,"api":1,"kind":"json"},"char.hen_brown":{"id":null,"v":1,"api":1,"kind":"json"},"char.hob":{"id":null,"v":1,"api":1,"kind":"json"},"char.hollis":{"id":null,"v":1,"api":1,"kind":"json"},"char.iria":{"id":null,"v":1,"api":1,"kind":"json"},"char.keel":{"id":null,"v":1,"api":1,"kind":"json"},"char.latency":{"id":null,"v":1,"api":1,"kind":"json"},"char.lich":{"id":null,"v":1,"api":1,"kind":"json"},"char.lizard":{"id":null,"v":1,"api":1,"kind":"json"},"char.mabb":{"id":null,"v":1,"api":1,"kind":"json"},"char.maiingan":{"id":null,"v":1,"api":1,"kind":"json"},"char.makak":{"id":null,"v":1,"api":1,"kind":"json"},"char.makwa":{"id":null,"v":1,"api":1,"kind":"json"},"char.maren":{"id":null,"v":1,"api":1,"kind":"json"},"char.marta":{"id":null,"v":1,"api":1,"kind":"json"},"char.migizi":{"id":null,"v":1,"api":1,"kind":"json"},"char.mishoomis":{"id":null,"v":1,"api":1,"kind":"json"},"char.modulus":{"id":null,"v":1,"api":1,"kind":"json"},"char.nessa":{"id":null,"v":1,"api":1,"kind":"json"},"char.nettie":{"id":null,"v":1,"api":1,"kind":"json"},"char.nookomis":{"id":null,"v":1,"api":1,"kind":"json"},"char.odric":{"id":null,"v":1,"api":1,"kind":"json"},"char.orin":{"id":null,"v":1,"api":1,"kind":"json"},"char.pax":{"id":null,"v":1,"api":1,"kind":"json"},"char.perla":{"id":null,"v":1,"api":1,"kind":"json"},"char.pike":{"id":null,"v":1,"api":1,"kind":"json"},"char.pip":{"id":null,"v":1,"api":1,"kind":"json"},"char.portal":{"id":null,"v":1,"api":1,"kind":"json"},"char.rat":{"id":null,"v":1,"api":1,"kind":"json"},"char.rowan":{"id":null,"v":1,"api":1,"kind":"json"},"char.sela":{"id":null,"v":1,"api":1,"kind":"json"},"char.silas":{"id":null,"v":1,"api":1,"kind":"json"},"char.snow_hare":{"id":null,"v":1,"api":1,"kind":"json"},"char.spider":{"id":null,"v":1,"api":1,"kind":"json"},"char.spider_queen":{"id":null,"v":1,"api":1,"kind":"json"},"char.swamp_monster":{"id":null,"v":1,"api":1,"kind":"json"},"char.symmetry":{"id":null,"v":1,"api":1,"kind":"json"},"char.tam":{"id":null,"v":1,"api":1,"kind":"json"},"char.timber_wolf":{"id":null,"v":1,"api":1,"kind":"json"},"char.tolly":{"id":null,"v":1,"api":1,"kind":"json"},"char.vael":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan_acolyte":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan_reader":{"id":null,"v":1,"api":1,"kind":"json"},"char.voss":{"id":null,"v":1,"api":1,"kind":"json"},"char.waabigwan":{"id":null,"v":1,"api":1,"kind":"json"},"char.wagon":{"id":null,"v":1,"api":1,"kind":"json"},"char.wenna":{"id":null,"v":1,"api":1,"kind":"json"},"char.wolf":{"id":null,"v":1,"api":1,"kind":"json"},"char.wraith":{"id":null,"v":1,"api":1,"kind":"json"},"char.wren":{"id":null,"v":1,"api":1,"kind":"json"},"char.ziigwan":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.apron":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_full":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_goatee":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_moustache":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_stubble":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.belt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.boots":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.cape":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.gloves":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_bald":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_braids":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_bun":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_curly":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_long":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_mohawk":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_ponytail":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_short":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_ashcrown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_ashshard":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bandana":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_beadband":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bigchief":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bonewrap":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_cap":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_crown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_feather":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_featherband":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_hood":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_otterturban":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_shroud":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_spidercrown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_verdant":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_wizard":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_jingle":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_ribbonskirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_shorts":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_skirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_trousers":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_beadvest":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_jingle":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_ribbon":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_shirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_tunic":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_vest":{"id":null,"v":1,"api":1,"kind":"json"},"gear.angel_wings":{"id":null,"v":1,"api":1,"kind":"json"},"gear.arrows":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bandolier":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bow":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bow_snare":{"id":null,"v":1,"api":1,"kind":"json"},"gear.chainbody":{"id":null,"v":1,"api":1,"kind":"json"},"gear.dagger":{"id":null,"v":1,"api":1,"kind":"json"},"gear.dagger_venom":{"id":null,"v":1,"api":1,"kind":"json"},"gear.fishing_rod":{"id":null,"v":1,"api":1,"kind":"json"},"gear.ghostlight":{"id":null,"v":1,"api":1,"kind":"json"},"gear.hammer":{"id":null,"v":1,"api":1,"kind":"json"},"gear.handdrum":{"id":null,"v":1,"api":1,"kind":"json"},"gear.hatchet":{"id":null,"v":1,"api":1,"kind":"json"},"gear.helmet":{"id":null,"v":1,"api":1,"kind":"json"},"gear.lobster_pot":{"id":null,"v":1,"api":1,"kind":"json"},"gear.longsword":{"id":null,"v":1,"api":1,"kind":"json"},"gear.mace":{"id":null,"v":1,"api":1,"kind":"json"},"gear.net":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pack":{"id":null,"v":1,"api":1,"kind":"json"},"gear.paddle":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pickaxe":{"id":null,"v":1,"api":1,"kind":"json"},"gear.platebody":{"id":null,"v":1,"api":1,"kind":"json"},"gear.platelegs":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pushpole":{"id":null,"v":1,"api":1,"kind":"json"},"gear.ricesticks":{"id":null,"v":1,"api":1,"kind":"json"},"gear.robe":{"id":null,"v":1,"api":1,"kind":"json"},"gear.shield":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_ember":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_frost":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_storm":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_verdant":{"id":null,"v":1,"api":1,"kind":"json"},"gear.sword":{"id":null,"v":1,"api":1,"kind":"json"},"gear.tinderbox":{"id":null,"v":1,"api":1,"kind":"json"},"gear.torch":{"id":null,"v":1,"api":1,"kind":"json"},"item.bones":{"id":null,"v":1,"api":1,"kind":"json"},"item.bread":{"id":null,"v":1,"api":1,"kind":"json"},"item.chanterelle":{"id":null,"v":1,"api":1,"kind":"json"},"item.chicken":{"id":null,"v":1,"api":1,"kind":"json"},"item.coins":{"id":null,"v":1,"api":1,"kind":"json"},"item.fish":{"id":null,"v":1,"api":1,"kind":"json"},"item.lobster":{"id":null,"v":1,"api":1,"kind":"json"},"item.logs":{"id":null,"v":1,"api":1,"kind":"json"},"item.manoomin":{"id":null,"v":1,"api":1,"kind":"json"},"item.mouse":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_fly":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_glow":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_porcini":{"id":null,"v":1,"api":1,"kind":"json"},"item.note":{"id":null,"v":1,"api":1,"kind":"json"},"item.ore":{"id":null,"v":1,"api":1,"kind":"json"},"item.pelt":{"id":null,"v":1,"api":1,"kind":"json"},"item.potion":{"id":null,"v":1,"api":1,"kind":"json"},"item.ring":{"id":null,"v":1,"api":1,"kind":"json"},"item.ring_angels":{"id":null,"v":1,"api":1,"kind":"json"},"item.rosary":{"id":null,"v":1,"api":1,"kind":"json"},"item.sapling":{"id":null,"v":1,"api":1,"kind":"json"},"item.shrimp":{"id":null,"v":1,"api":1,"kind":"json"},"item.stone":{"id":null,"v":1,"api":1,"kind":"json"},"palette":{"id":null,"v":1,"api":1,"kind":"json"}}},"lazy":{"zones":{"village":{"id":null,"v":2,"api":1,"kind":"json"},"whisperwood":{"id":null,"v":2,"api":1,"kind":"json"},"saltmere":{"id":null,"v":3,"api":1,"kind":"json"},"wolfden":{"id":null,"v":1,"api":1,"kind":"json"},"cavemouth":{"id":null,"v":1,"api":1,"kind":"json"},"spidercave":{"id":null,"v":1,"api":1,"kind":"json"},"ancientchapel":{"id":null,"v":1,"api":1,"kind":"json"},"evengrove":{"id":null,"v":1,"api":1,"kind":"json"},"ziibiing":{"id":null,"v":1,"api":1,"kind":"json"},"lodges":{"id":null,"v":1,"api":1,"kind":"json"},"ricelake":{"id":null,"v":1,"api":1,"kind":"json"}}}}, registryUrl: window.ASH3D_REGISTRY_URL || null, content: false }).then(function (m) { return m.engine.openStore().then(function (st) { window.ASH = m.engine.start(document.getElementById('ash'), { report: m.$report, store: st }); }); }).catch(function (e) { console.error(e); var d = document.getElementById('ash'); d.innerHTML = '<div style="color:#fff;padding:24px;font:16px sans-serif">ASHVALE could not start: ' + String(e && e.message || e).replace(/</g, '&lt;') + '</div>'; });
+ASH3D.boot({ baked: {"ashvale3d":"registry","version":1,"loader":1,"modules":{"three":{"id":null,"v":"0.160.0","api":160,"kind":"esm"},"netretry":{"id":null,"v":"3","api":1,"kind":"js"},"net":{"id":null,"v":"3","api":2,"kind":"js"},"trade":{"id":null,"v":"2","api":1,"kind":"js"},"wallet":{"id":null,"v":"1","api":1,"kind":"js"},"trip":{"id":null,"v":"2","api":1,"kind":"js"},"globe":{"id":null,"v":"V","api":1,"kind":"js"},"wg_geo":{"id":null,"v":1,"api":1,"kind":"js"},"wg_terrain":{"id":null,"v":1,"api":1,"kind":"js"},"wg_paths":{"id":null,"v":1,"api":1,"kind":"js"},"wg_sites":{"id":null,"v":1,"api":1,"kind":"js"},"wg_tiles":{"id":null,"v":1,"api":1,"kind":"js"},"worldgen":{"id":null,"v":1,"api":1,"kind":"js"},"world":{"id":null,"v":"V","api":1,"kind":"js"},"core":{"id":null,"v":"1","api":1,"kind":"js"},"audit":{"id":null,"v":"1","api":1,"kind":"js"},"scene":{"id":null,"v":"1","api":2,"kind":"js"},"hudart":{"id":null,"v":"1","api":1,"kind":"js"},"hudpanels":{"id":null,"v":"1","api":1,"kind":"js"},"hudshop":{"id":null,"v":"1","api":1,"kind":"js"},"hudchest":{"id":null,"v":"2","api":1,"kind":"js"},"huddrag":{"id":null,"v":"1","api":1,"kind":"js"},"hudcreator":{"id":null,"v":"1","api":1,"kind":"js"},"hud":{"id":null,"v":"2","api":1,"kind":"js"},"models":{"id":null,"v":"1","api":1,"kind":"js"},"gamepad":{"id":null,"v":"1","api":1,"kind":"js"},"weather":{"id":null,"v":"1","api":1,"kind":"js"},"seasons":{"id":null,"v":"1","api":1,"kind":"js"},"fog":{"id":null,"v":"1","api":1,"kind":"js"},"engine":{"id":null,"v":"2","api":1,"kind":"js"},"data":{"items":{"id":null,"v":4,"api":1,"kind":"json"},"monsters":{"id":null,"v":1,"api":1,"kind":"json"},"shops":{"id":null,"v":3,"api":1,"kind":"json"},"quests":{"id":null,"v":2,"api":1,"kind":"json"},"rules":{"id":null,"v":3,"api":1,"kind":"json"},"globecfg":{"id":null,"v":1,"api":1,"kind":"json"},"assets":{"id":null,"v":1,"api":1,"kind":"json"},"housekit":{"id":null,"v":1,"api":1,"kind":"json"},"wg_tables":{"id":null,"v":2,"api":1,"kind":"json"},"zoneindex":{"id":null,"v":1,"api":1,"kind":"json"}},"parts":{"body.human":{"id":null,"v":1,"api":1,"kind":"json"},"char.aldous":{"id":null,"v":1,"api":1,"kind":"json"},"char.animikii":{"id":null,"v":1,"api":1,"kind":"json"},"char.ash_knight":{"id":null,"v":1,"api":1,"kind":"json"},"char.auditor":{"id":null,"v":1,"api":1,"kind":"json"},"char.bandit":{"id":null,"v":1,"api":1,"kind":"json"},"char.bandit_leader":{"id":null,"v":1,"api":1,"kind":"json"},"char.bela":{"id":null,"v":1,"api":1,"kind":"json"},"char.boar":{"id":null,"v":1,"api":1,"kind":"json"},"char.bramble":{"id":null,"v":1,"api":1,"kind":"json"},"char.brannoc":{"id":null,"v":1,"api":1,"kind":"json"},"char.bryce":{"id":null,"v":1,"api":1,"kind":"json"},"char.calder":{"id":null,"v":1,"api":1,"kind":"json"},"char.chest":{"id":null,"v":1,"api":1,"kind":"json"},"char.chicken":{"id":null,"v":1,"api":1,"kind":"json"},"char.cobb":{"id":null,"v":1,"api":1,"kind":"json"},"char.deer":{"id":null,"v":1,"api":1,"kind":"json"},"char.edric_ghost":{"id":null,"v":1,"api":1,"kind":"json"},"char.edric_skel":{"id":null,"v":1,"api":1,"kind":"json"},"char.fenn":{"id":null,"v":1,"api":1,"kind":"json"},"char.gale":{"id":null,"v":1,"api":1,"kind":"json"},"char.garrick":{"id":null,"v":1,"api":1,"kind":"json"},"char.giant_rat":{"id":null,"v":1,"api":1,"kind":"json"},"char.giant_spider":{"id":null,"v":1,"api":1,"kind":"json"},"char.goat":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin_chief":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin_shaman":{"id":null,"v":1,"api":1,"kind":"json"},"char.hale":{"id":null,"v":1,"api":1,"kind":"json"},"char.hare":{"id":null,"v":1,"api":1,"kind":"json"},"char.hawk":{"id":null,"v":1,"api":1,"kind":"json"},"char.hen_brown":{"id":null,"v":1,"api":1,"kind":"json"},"char.hob":{"id":null,"v":1,"api":1,"kind":"json"},"char.hollis":{"id":null,"v":1,"api":1,"kind":"json"},"char.iria":{"id":null,"v":1,"api":1,"kind":"json"},"char.keel":{"id":null,"v":1,"api":1,"kind":"json"},"char.latency":{"id":null,"v":1,"api":1,"kind":"json"},"char.lich":{"id":null,"v":1,"api":1,"kind":"json"},"char.lizard":{"id":null,"v":1,"api":1,"kind":"json"},"char.mabb":{"id":null,"v":1,"api":1,"kind":"json"},"char.maiingan":{"id":null,"v":1,"api":1,"kind":"json"},"char.makak":{"id":null,"v":1,"api":1,"kind":"json"},"char.makwa":{"id":null,"v":1,"api":1,"kind":"json"},"char.maren":{"id":null,"v":1,"api":1,"kind":"json"},"char.marta":{"id":null,"v":1,"api":1,"kind":"json"},"char.migizi":{"id":null,"v":1,"api":1,"kind":"json"},"char.mishoomis":{"id":null,"v":1,"api":1,"kind":"json"},"char.modulus":{"id":null,"v":1,"api":1,"kind":"json"},"char.nessa":{"id":null,"v":1,"api":1,"kind":"json"},"char.nettie":{"id":null,"v":1,"api":1,"kind":"json"},"char.nookomis":{"id":null,"v":1,"api":1,"kind":"json"},"char.odric":{"id":null,"v":1,"api":1,"kind":"json"},"char.orin":{"id":null,"v":1,"api":1,"kind":"json"},"char.pax":{"id":null,"v":1,"api":1,"kind":"json"},"char.perla":{"id":null,"v":1,"api":1,"kind":"json"},"char.pike":{"id":null,"v":1,"api":1,"kind":"json"},"char.pip":{"id":null,"v":1,"api":1,"kind":"json"},"char.portal":{"id":null,"v":1,"api":1,"kind":"json"},"char.rat":{"id":null,"v":1,"api":1,"kind":"json"},"char.rowan":{"id":null,"v":1,"api":1,"kind":"json"},"char.sela":{"id":null,"v":1,"api":1,"kind":"json"},"char.silas":{"id":null,"v":1,"api":1,"kind":"json"},"char.snow_hare":{"id":null,"v":1,"api":1,"kind":"json"},"char.spider":{"id":null,"v":1,"api":1,"kind":"json"},"char.spider_queen":{"id":null,"v":1,"api":1,"kind":"json"},"char.swamp_monster":{"id":null,"v":1,"api":1,"kind":"json"},"char.symmetry":{"id":null,"v":1,"api":1,"kind":"json"},"char.tam":{"id":null,"v":1,"api":1,"kind":"json"},"char.timber_wolf":{"id":null,"v":1,"api":1,"kind":"json"},"char.tolly":{"id":null,"v":1,"api":1,"kind":"json"},"char.vael":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan_acolyte":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan_reader":{"id":null,"v":1,"api":1,"kind":"json"},"char.voss":{"id":null,"v":1,"api":1,"kind":"json"},"char.waabigwan":{"id":null,"v":1,"api":1,"kind":"json"},"char.wagon":{"id":null,"v":1,"api":1,"kind":"json"},"char.wenna":{"id":null,"v":1,"api":1,"kind":"json"},"char.wolf":{"id":null,"v":1,"api":1,"kind":"json"},"char.wraith":{"id":null,"v":1,"api":1,"kind":"json"},"char.wren":{"id":null,"v":1,"api":1,"kind":"json"},"char.ziigwan":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.apron":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_full":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_goatee":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_moustache":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_stubble":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.belt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.boots":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.cape":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.gloves":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_bald":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_braids":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_bun":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_curly":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_long":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_mohawk":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_ponytail":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_short":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_ashcrown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_ashshard":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bandana":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_beadband":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bigchief":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bonewrap":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_cap":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_crown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_feather":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_featherband":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_hood":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_otterturban":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_shroud":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_spidercrown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_verdant":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_wizard":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_jingle":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_ribbonskirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_shorts":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_skirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_trousers":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_beadvest":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_jingle":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_ribbon":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_shirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_tunic":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_vest":{"id":null,"v":1,"api":1,"kind":"json"},"gear.angel_wings":{"id":null,"v":1,"api":1,"kind":"json"},"gear.arrows":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bandolier":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bow":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bow_snare":{"id":null,"v":1,"api":1,"kind":"json"},"gear.chainbody":{"id":null,"v":1,"api":1,"kind":"json"},"gear.dagger":{"id":null,"v":1,"api":1,"kind":"json"},"gear.dagger_venom":{"id":null,"v":1,"api":1,"kind":"json"},"gear.fishing_rod":{"id":null,"v":1,"api":1,"kind":"json"},"gear.ghostlight":{"id":null,"v":1,"api":1,"kind":"json"},"gear.hammer":{"id":null,"v":1,"api":1,"kind":"json"},"gear.handdrum":{"id":null,"v":1,"api":1,"kind":"json"},"gear.hatchet":{"id":null,"v":1,"api":1,"kind":"json"},"gear.helmet":{"id":null,"v":1,"api":1,"kind":"json"},"gear.lobster_pot":{"id":null,"v":1,"api":1,"kind":"json"},"gear.longsword":{"id":null,"v":1,"api":1,"kind":"json"},"gear.mace":{"id":null,"v":1,"api":1,"kind":"json"},"gear.net":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pack":{"id":null,"v":1,"api":1,"kind":"json"},"gear.paddle":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pickaxe":{"id":null,"v":1,"api":1,"kind":"json"},"gear.platebody":{"id":null,"v":1,"api":1,"kind":"json"},"gear.platelegs":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pushpole":{"id":null,"v":1,"api":1,"kind":"json"},"gear.ricesticks":{"id":null,"v":1,"api":1,"kind":"json"},"gear.robe":{"id":null,"v":1,"api":1,"kind":"json"},"gear.shield":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_ember":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_frost":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_storm":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_verdant":{"id":null,"v":1,"api":1,"kind":"json"},"gear.sword":{"id":null,"v":1,"api":1,"kind":"json"},"gear.tinderbox":{"id":null,"v":1,"api":1,"kind":"json"},"gear.torch":{"id":null,"v":1,"api":1,"kind":"json"},"item.bones":{"id":null,"v":1,"api":1,"kind":"json"},"item.bread":{"id":null,"v":1,"api":1,"kind":"json"},"item.chanterelle":{"id":null,"v":1,"api":1,"kind":"json"},"item.chicken":{"id":null,"v":1,"api":1,"kind":"json"},"item.coins":{"id":null,"v":1,"api":1,"kind":"json"},"item.fish":{"id":null,"v":1,"api":1,"kind":"json"},"item.lobster":{"id":null,"v":1,"api":1,"kind":"json"},"item.logs":{"id":null,"v":1,"api":1,"kind":"json"},"item.manoomin":{"id":null,"v":1,"api":1,"kind":"json"},"item.mouse":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_fly":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_glow":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_porcini":{"id":null,"v":1,"api":1,"kind":"json"},"item.note":{"id":null,"v":1,"api":1,"kind":"json"},"item.ore":{"id":null,"v":1,"api":1,"kind":"json"},"item.pelt":{"id":null,"v":1,"api":1,"kind":"json"},"item.potion":{"id":null,"v":1,"api":1,"kind":"json"},"item.ring":{"id":null,"v":1,"api":1,"kind":"json"},"item.ring_angels":{"id":null,"v":1,"api":1,"kind":"json"},"item.rosary":{"id":null,"v":1,"api":1,"kind":"json"},"item.sapling":{"id":null,"v":1,"api":1,"kind":"json"},"item.shrimp":{"id":null,"v":1,"api":1,"kind":"json"},"item.stone":{"id":null,"v":1,"api":1,"kind":"json"},"palette":{"id":null,"v":1,"api":1,"kind":"json"}}},"lazy":{"zones":{"village":{"id":null,"v":2,"api":1,"kind":"json"},"whisperwood":{"id":null,"v":2,"api":1,"kind":"json"},"saltmere":{"id":null,"v":3,"api":1,"kind":"json"},"wolfden":{"id":null,"v":1,"api":1,"kind":"json"},"cavemouth":{"id":null,"v":1,"api":1,"kind":"json"},"spidercave":{"id":null,"v":1,"api":1,"kind":"json"},"ancientchapel":{"id":null,"v":1,"api":1,"kind":"json"},"evengrove":{"id":null,"v":1,"api":1,"kind":"json"},"ziibiing":{"id":null,"v":1,"api":1,"kind":"json"},"lodges":{"id":null,"v":1,"api":1,"kind":"json"},"ricelake":{"id":null,"v":1,"api":1,"kind":"json"}}}}, registryUrl: window.ASH3D_REGISTRY_URL || null, content: false }).then(function (m) { return m.engine.openStore().then(function (st) { window.ASH = m.engine.start(document.getElementById('ash'), { report: m.$report, store: st }); }); }).catch(function (e) { console.error(e); var d = document.getElementById('ash'); d.innerHTML = '<div style="color:#fff;padding:24px;font:16px sans-serif">ASHVALE could not start: ' + String(e && e.message || e).replace(/</g, '&lt;') + '</div>'; });
 
 </script>
