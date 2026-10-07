@@ -609,7 +609,7 @@ class Bot:
             if need > self.BAG_FOOD_MAX * max(best[2], f.get('avg', 2)) + hp_spare:
                 # more food than a bag holds: not this monster yet (2026-10-06: the bandit leader asked for 57 meals)
                 if not hasattr(self, 'absent'): self.absent = {}
-                self.absent[key] = time.time() + 1200
+                self.absent[key] = time.time() + 1200; self._block_current('%s not around or not ready for' % key)
                 log('%s needs about %d healing, more than a bag of food gives: other quests and training first' % (key, need))
                 return False
             want = int(-(-max(0, need - f.get('tot', 0) - max(0, f.get('hp', 0) - f.get('max', 1) * 0.34)) // max(1, f.get('avg', 3))))
@@ -727,6 +727,12 @@ class Bot:
         self.mem.loot('pile at %s' % (at,), got, left)
         if not left or not got: self.mem.pile(clear=True)   # all back, or nothing of it there any more
         self.wear(); self.upgrade(); self.walk(RETREAT[0], RETREAT[1], 4)
+    def _block_current(self, why: str, seconds: float = 1200) -> None:
+        qid = getattr(self, 'current_qid', None)
+        if qid:
+            if not hasattr(self, 'blocked'): self.blocked = {}
+            self.blocked[qid] = (time.time() + seconds, why)
+
     def fight(self, key, n=1):
         """kill n of key near its spawns; returns kills. Eats; retreats to restock when out of food"""
         if not hasattr(self, 'absent'): self.absent = {}
@@ -735,7 +741,14 @@ class Bot:
         spawn = self.r("const m = nearest(%r); return m && [m.x, m.y, m.dist]" % key)
         if not spawn or spawn[2] > 40:   # monsters load as you come near: walk to where they live first
             sp = spawns_of(key)
-            if not sp: bug('fight', 'no %s spawns in any zone (wild herds only?) - a quest cannot send players to it without saying where' % key); return 0
+            if not sp:
+                if spawn:   # no fixed place, but one is in sight (2026-10-07: a boar was there, 40+ tiles off): go to it
+                    log('no fixed place for %s, but there is one at %s: going there' % (key, spawn[:2]))
+                    self.walk(spawn[0], spawn[1], 6); self.r("await wait(2000); return 1")
+                    spawn = self.r("const m = nearest(%r); return m && [m.x, m.y, m.dist]" % key)
+                if not spawn:
+                    bug('fight', 'no %s spawns in any zone (wild herds only?) - a quest cannot send players to it without saying where' % key); return 0
+                sp = [spawn[:2]]
             log('walking to the', key, 'grounds', sp[0]); self.walk(sp[0][0], sp[0][1] + 1, 6); self.r("await wait(3000); return 1")
             spawn = self.r("const m = nearest(%r); return m && [m.x, m.y, m.dist]" % key)
             if not spawn: log('reached the %s grounds at %s but none are there' % (key, sp[0])); self.leave_zone(key, sp[0]); return 0
@@ -764,7 +777,7 @@ class Bot:
                     self.leave_zone(key, sp[0])
                     if misses > 3:   # 2026-10-06: ten fruitless trips for an absent bandit leader -- note it, move on
                         bug('fight', 'left and came back to the %s grounds at %s %d times and found none' % (key, sp[0], misses))
-                        self.absent[key] = time.time() + 1200
+                        self.absent[key] = time.time() + 1200; self._block_current('%s not around or not ready for' % key)
                         log('no %s to be found: on to other quests, back in 20 minutes' % key); return kills
                 log('back to the', key, 'grounds', sp[0]); self.walk(sp[0][0], sp[0][1] + 1, 6); self.r("await wait(3000); return 1")
                 continue
@@ -804,7 +817,7 @@ class Bot:
         if self.blocked.get(qid, (0, ''))[0] > time.time():
             # 2026-10-07: five minutes a round went on walking to givers of quests known to be stuck
             log('skip %s for now: %s' % (Q['name'], self.blocked[qid][1])); return False
-        log('=== quest', Q['name'])
+        log('=== quest', Q['name']); self.current_qid = qid
         self.fetch_pile()   # what a death left on the ground comes back before anything else (cheap when there is none)
         g = self.npc(giver)
         if not g: bug(qid, 'giver %s is not in the world' % giver); return False
