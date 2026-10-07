@@ -59,7 +59,7 @@
   },
   "wg_paths": {
    "id": null,
-   "v": 1,
+   "v": 3,
    "api": 1,
    "kind": "js"
   },
@@ -1116,7 +1116,7 @@
   "zones": {
    "village": {
     "id": null,
-    "v": 2,
+    "v": 3,
     "api": 1,
     "kind": "json"
    },
@@ -1128,7 +1128,7 @@
    },
    "saltmere": {
     "id": null,
-    "v": 2,
+    "v": 3,
     "api": 1,
     "kind": "json"
    },

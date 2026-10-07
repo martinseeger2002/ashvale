@@ -194,6 +194,10 @@ const props = [
   { k: 'torch', x: 3490, y: 1832 }, { k: 'torch', x: 3490, y: 1848 }, { k: 'torch', x: 3490, y: 1864 },
   { k: 'torch', x: 3450, y: 1818 }, { k: 'torch', x: 3420, y: 1819 }, { k: 'torch', x: 3400, y: 1818 },
   { k: 'torch', x: 3430, y: 1830 }, { k: 'torch', x: 3460, y: 1840 },
+  /* the west road in from Ashvale: posts on the verges every eight paces */
+  { k: 'torch', x: 3392, y: 1817 }, { k: 'torch', x: 3400, y: 1820 }, { k: 'torch', x: 3408, y: 1817 }, { k: 'torch', x: 3416, y: 1820 },
+  { k: 'torch', x: 3424, y: 1817 }, { k: 'torch', x: 3432, y: 1820 }, { k: 'torch', x: 3440, y: 1817 }, { k: 'torch', x: 3448, y: 1820 },
+  { k: 'torch', x: 3396, y: 1817 }, { k: 'torch', x: 3412, y: 1820 },
   /* inside the tap room */
   { k: 'counter', x: 3468, y: 1823, w: 2, h: 1 }, { k: 'table', x: 3471, y: 1824 }, { k: 'chair', x: 3472, y: 1824 },
   { k: 'barrel', x: 3472, y: 1822 }, { k: 'fireplace', x: 3466, y: 1826, face: 'n' },
@@ -324,7 +328,7 @@ if (process.argv.includes('--map')) {
   console.log('sea side ' + ['east', 'west', 'north', 'south'][K] + ', 1 char = 1 m, x ' + BX + '..' + (BX + WSX) + '  y ' + BY + '..' + (BY + WSY));
   wrows.forEach((r, v) => console.log(String(BY + v).padStart(5) + ' ' + r.join('')));
 } else {
-  const out = { ashvale3d: 'module', name: 'zone.saltmere', api: 1, v: 2, data: zone };
+  const out = { ashvale3d: 'module', name: 'zone.saltmere', api: 1, v: 3, data: zone };
   fs.writeFileSync(path.join(ROOT, 'data/zone.saltmere.json'), JSON.stringify(out));
   console.log('wrote data/zone.saltmere.json  (' + WSX + ' x ' + WSY + ' tiles at ' + BX + ',' + BY + ', sea ' + ['east', 'west', 'north', 'south'][K] + ', harbour ' + hx + ',' + hy + ')');
 }
