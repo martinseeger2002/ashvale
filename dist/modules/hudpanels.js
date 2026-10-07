@@ -13,7 +13,7 @@
       if (!ST.tab) return;
       if (ST.tab === 'inv') {
         panel.innerHTML = weightBar(p) + '<div class="inv"></div>'; const g = panel.querySelector('.inv');
-        p.inv.forEach((it, i) => { const s = K.el('slot', g, K.slotHtml(it)); s.dataset.i = i; if (it) K.invPointer(s, i); });
+        p.inv.forEach((it, i) => { const s = K.el('slot', g, K.slotHtml(it)); s.dataset.i = i; if (p.using && p.using.slot === i && it && it.id === p.using.id) s.classList.add('aim'); if (it) K.invPointer(s, i); });
       } else if (ST.tab === 'equip') {
         let h = '<h4>Worn Equipment</h4><div class="equip">';
         for (const k of A.EQ_LAYOUT) h += k ? '<div class="slot ' + (p.eq[k] ? '' : 'empty ') + (A.EQ_ACTIVE[k] ? '' : 'off') + '" data-k="' + k + '" data-l="' + k + '">' + K.slotHtml(p.eq[k]) + '</div>' : '<div></div>';

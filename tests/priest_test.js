@@ -55,7 +55,7 @@ const slot = p.inv.findIndex(s => s && s.id === 'monk_robe');
 ok(slot >= 0, "she gives you the Monk's robe");
 ok(evs.some(e => e.e === 'reward' && e.id === 'monk_robe' && e.collection === 'ASHVALE The Wayside Prayer'), 'the Bank mints it into "ASHVALE The Wayside Prayer"');
 d = talk('aldous'); ok(/chapel in Saltmere is open/.test(d.lines[0]), 'afterwards Aldous has the done lines');
-d = talk('wenna'); ok(/chapel in Saltmere is open|Eleven years/.test(d.lines[0]) && Q().step === 4, 'afterwards Wenna does not give it again');
+d = talk('wenna'); ok(Q().step === 4 && p.quests.red_pyre && /Pike|bandit|gate|Bright Three/.test(d.lines.join(' ')), 'afterwards Wenna sends you to the gated lookout (The Red Pyre)');
 ok(p.inv.filter(s => s && s.id === 'monk_robe').length === 1, 'still one robe');
 
 /* the robe */

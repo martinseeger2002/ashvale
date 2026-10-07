@@ -29,7 +29,8 @@
        than 2 m nearer the camera than the avatar dissolves, fading over 1.5 m with a dither. The engine sets the uniforms each frame (SCENE.see). */
     /* gas street lamps (2026-10-07): one shared glass material, lit warm at night and dull by day (engine: lampGlow) */
     const LAMPG = new THREE.MeshBasicMaterial({ color: 0x8a8670 }), LAMP_OFF = new THREE.Color(0x8a8670), LAMP_ON = new THREE.Color(0xffd27a);
-    const lampGlow = k => LAMPG.color.copy(LAMP_OFF).lerp(LAMP_ON, Math.min(1, Math.max(0, k)));
+    let NIGHTK = 0;
+    const lampGlow = k => { const t = Math.min(1, Math.max(0, k)); LAMPG.color.copy(LAMP_OFF).lerp(LAMP_ON, t); NIGHTK = t; };
     const SEE = { uSeeP: { value: new THREE.Vector2(-1e4, -1e4) }, uSeeR: { value: 0 }, uSeeD: { value: 0 }, uSeeY: { value: -1e9 } };   /* uSeeY: the avatar's feet - the floor and ground you stand on never dissolve (the operator: upstairs it looked like standing outside the house) */
     function seeThrough(m) {
       m.onBeforeCompile = (sh) => {
@@ -387,7 +388,7 @@
       }
       const stumpGeo = new THREE.CylinderGeometry(0.16, 0.2, 0.28, 7).translate(0, 0.14, 0);
       const allTreeTiles = [].concat(treeList.T, treeList.P, treeList.O, treeList.W, treeList.M, treeList.Y, treeList.U).filter(t => t.i >= 0);
-      const stumps = new THREE.InstancedMesh(stumpGeo, lam(0x7a5a36), Math.max(1, allTreeTiles.length)); stumps.castShadow = true;
+      const stumps = new THREE.InstancedMesh(stumpGeo, lam(0x7a5a36), Math.max(1, allTreeTiles.length)); stumps.castShadow = true; stumps.frustumCulled = false;
       const ZERO = new THREE.Matrix4().makeScale(0, 0, 0), treeAt = new Map(), C = new THREE.Color();
       allTreeTiles.forEach((t, k) => { stumps.setMatrixAt(k, ZERO); t.stump = k; });
       group.add(stumps);
@@ -580,6 +581,33 @@
         const x = o.x + (o.w || 1) / 2, z = o.y + (o.h || 1) / 2; let y = heightAt(x, z);
         switch (o.k) {
           case 'house': case 'shop': case 'smithy': case 'church': building(o); break;
+          case 'ruin': {
+            const STN = 0x8d8880, RUB = 0x6a655e, w = o.w || 7, h = o.h || 6, x0 = o.x, z0 = o.y;
+            B.add('box', 0xb0aa9e, x0 + w / 2, y + 0.05, z0 + h / 2, w - 0.15, 0.1, h - 0.15);
+            B.add('box', STN, x0 + 0.16, y + 1.15, z0 + h / 2, 0.32, 2.3, h - 0.2);
+            B.add('box', STN, x0 + w - 0.16, y + 0.72, z0 + h * 0.42, 0.32, 1.44, h * 0.55);
+            B.add('box', RUB, x0 + w - 0.2, y + 0.28, z0 + h * 0.78, 0.5, 0.4, h * 0.28);
+            B.add('box', STN, x0 + w / 2, y + 0.85, z0 + 0.16, w - 0.3, 1.7, 0.32);
+            const dx = (o.door && o.door[0]) || (x0 + 3);
+            B.add('box', STN, x0 + (dx - x0) * 0.45, y + 1.35, z0 + h - 0.16, Math.max(0.6, dx - x0 - 0.2), 2.5, 0.34);
+            B.add('box', STN, dx + 1.15 + Math.max(0, x0 + w - dx - 2) * 0.35, y + 0.7, z0 + h - 0.16, Math.max(0.6, x0 + w - dx - 1.3), 1.35, 0.34);
+            B.add('box', RUB, x0 + 1.4, y + 0.18, z0 + 1.5, 0.8, 0.28, 0.55);
+            B.add('box', 0x5a564e, x0 + 2.4, y + 0.32, z0 + 1.1, 0.45, 0.48, 0.36);
+            B.add('box', RUB, x0 + w - 1.8, y + 0.16, z0 + 2.2, 0.7, 0.26, 0.5);
+            if (o.sign) { const sg = new THREE.Group(); group.add(sg); hangSign(sg, o.sign, x0 + w / 2, y + 2.55, z0 + h - 0.2, [0, 1]); }
+            break;
+          }
+          case 'rope': {
+            const x1 = o.x + 0.5, z1 = o.y + 0.5, x2 = (o.x2 == null ? o.x : o.x2) + 0.5, z2 = (o.y2 == null ? o.y : o.y2) + 0.5, N = 16;
+            for (let i = 0; i <= N; i++) {
+              const t = i / N, px = x1 + (x2 - x1) * t, pz = z1 + (z2 - z1) * t, sag = Math.sin(Math.PI * t) * 0.55;
+              B.add('box', 0xd2c4a2, px, heightAt(px, pz) + 2.05 - sag, pz, 0.05, 0.035, 0.34);
+            }
+            const gy = heightAt(x2, z2);
+            B.add('cyl', 0x5a3a22, x2, gy + 1.35, z2, 0.16, 2.7, 0.16);
+            group.add(mesh(new THREE.ConeGeometry(0.95, 2.3, 7), 0x2c6a34, x2, gy + 3.15, z2));
+            break;
+          }
           case 'cwall': if (CK) CK.wall(o); break;
           case 'ctower': if (CK) CK.tower(o); break;
           case 'cgate': if (CK) CK.gate(o); break;
@@ -607,7 +635,7 @@
             B.add('box', 0x2a2a2a, x, y + 1.22, z, 0.2, 0.08, 0.2);
             const f = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.32, 5), new THREE.MeshBasicMaterial({ color: 0xffa030 })); f.position.set(x, y + 1.42, z); group.add(f);
             const f2 = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.2, 5), new THREE.MeshBasicMaterial({ color: 0xfff0a0 })); f2.position.set(x, y + 1.36, z); group.add(f2);
-            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x, y, z });
+            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x, y, z, night: !!o.night });
             break;
           }
           case 'lamp': {   /* a gas street lamp on the verge of a trail (2026-10-07): iron post, glass lantern, pyramid cap */
@@ -632,7 +660,25 @@
             { const [a, b, c] = at(0.34); B.add('cyl', 0x2a1f16, a, b, c, 0.09, 0.08, 0.09, ry, TL); }
             const f = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.24, 5), new THREE.MeshBasicMaterial({ color: 0xffa030 })), f2 = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.15, 5), new THREE.MeshBasicMaterial({ color: 0xfff0a0 }));
             for (const [m, d] of [[f, 0.48], [f2, 0.44]]) { m.position.set(...at(d)); m.rotation.set(TL, ry, 0, 'YXZ'); group.add(m); }
-            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x: wx, y, z: wz });
+            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x: wx, y, z: wz, night: !!o.night });
+            break;
+          }
+          case 'iwall': {   /* a room divider inside a walk-in building (2026-10-07: Saltmere town hall) */
+            const face = o.face || 'w', WH = 1.8, TH = 0.14, col = 0xcfc4aa, x0 = o.x, z0 = o.y, w = o.w || 1, h = o.h || 1;
+            const fl = floorY(o, heightAt(x0 + 0.5, z0 + 0.5)), door = o.door, skip = (x, y) => door && x === door[0] && y === door[1];
+            if (face === 'w' || face === 'e') {
+              const px = face === 'w' ? x0 : x0 + w;
+              for (let zz = z0; zz < z0 + h; zz++) {
+                if (skip(face === 'w' ? x0 : x0 + w - 1, zz)) { B.add('box', col, px, fl + 1.55, zz + 0.5, TH, 0.5, 1.02); continue; }
+                B.add('box', col, px, fl + WH / 2, zz + 0.5, TH, WH, 1.02);
+              }
+            } else {
+              const pz = face === 'n' ? z0 : z0 + h;
+              for (let xx = x0; xx < x0 + w; xx++) {
+                if (skip(xx, face === 'n' ? z0 : z0 + h - 1)) { B.add('box', col, xx + 0.5, fl + 1.55, pz, 1.02, 0.5, TH); continue; }
+                B.add('box', col, xx + 0.5, fl + WH / 2, pz, 1.02, WH, TH);
+              }
+            }
             break;
           }
           /* the Spider Cave (2026-10-07): the mouth up top, the ways out below, webs and glowing mushrooms inside */
@@ -726,6 +772,36 @@
           case 'barrel': y = floorY(o, y); B.add('cyl', 0x8a5a30, x, y + 0.4, z, 0.6, 0.8, 0.6); B.add('cyl', 0x3a3a3a, x, y + 0.2, z, 0.62, 0.06, 0.62); B.add('cyl', 0x3a3a3a, x, y + 0.6, z, 0.62, 0.06, 0.62); break;
           case 'crate': B.add('box', 0xa07a48, x, y + 0.32, z, 0.65, 0.65, 0.65, hash2(o.x, o.y)); B.add('box', 0x7a5a30, x, y + 0.66, z, 0.68, 0.04, 0.68, hash2(o.x, o.y)); break;
           case 'tent': { const t = mesh(new THREE.ConeGeometry(1.25, 1.6, 4), hash2(o.x, o.y) < 0.5 ? 0x8a7a50 : 0x6a7a40, x, y + 0.8, z); t.rotation.y = Math.PI / 4; group.add(t); B.add('box', 0x2a2015, x, y + 0.4, z + 0.86, 0.4, 0.8, 0.05); break; }
+          case 'gate': {
+            /* a closed gate in the palisade: posted leaves, iron bands, a latch. span "ns" = the fence runs
+               north-south and you walk east through it; "ew" = the fence runs east-west and you walk north. */
+            const ns = o.span === 'ns', POST = 0x3e2916, PLANK = 0x8d6234, WOOD = 0x6a4424, IRON = 0x2a2a2e, RAIL = 0x8a6a40;
+            const post = (px, pz) => { B.add('box', POST, px, y + 1.22, pz, 0.2, 2.44, 0.2); B.add('pyr', POST, px, y + 2.56, pz, 0.3, 0.34, 0.3); };
+            if (ns) {
+              post(x, z - 0.46); post(x, z + 0.46);
+              B.add('box', POST, x, y + 2.28, z, 0.16, 0.12, 1.12);
+              for (const sz of [-0.30, -0.16, 0.02, 0.16, 0.30]) B.add('box', sz < 0 ? PLANK : WOOD, x, y + 1.08, z + sz, 0.07, 1.92, 0.12);
+              B.add('box', 0x5c3c1e, x + 0.04, y + 1.08, z - 0.16, 0.03, 1.4, 0.045, 0, 0.55, 0);
+              B.add('box', 0x5c3c1e, x + 0.04, y + 1.08, z + 0.16, 0.03, 1.4, 0.045, 0, -0.55, 0);
+              for (const hy of [0.48, 1.12, 1.76]) B.add('box', IRON, x + 0.05, y + hy, z, 0.02, 0.04, 0.72);
+              B.add('box', IRON, x + 0.07, y + 1.18, z, 0.04, 0.08, 0.18);
+              for (const sz of [-0.4, 0.4]) for (const hy of [0.55, 1.72]) B.add('box', IRON, x, y + hy, z + sz, 0.1, 0.045, 0.08);
+              for (const dir of [-1, 1]) for (const hy of [0.32, 0.62]) B.add('box', RAIL, x, y + hy, z + dir * 0.74, 0.05, 0.07, 0.48);
+            } else {
+              post(x - 0.46, z); post(x + 0.46, z);
+              B.add('box', POST, x, y + 2.28, z, 1.12, 0.12, 0.16);
+              for (const sx of [-0.30, -0.16, 0.02, 0.16, 0.30]) B.add('box', sx < 0 ? PLANK : WOOD, x + sx, y + 1.08, z, 0.12, 1.92, 0.07);
+              B.add('box', 0x5c3c1e, x - 0.16, y + 1.08, z + 0.04, 0.045, 1.4, 0.03, 0.55, 0, 0);
+              B.add('box', 0x5c3c1e, x + 0.16, y + 1.08, z + 0.04, 0.045, 1.4, 0.03, -0.55, 0, 0);
+              for (const hy of [0.48, 1.12, 1.76]) B.add('box', IRON, x, y + hy, z + 0.05, 0.72, 0.04, 0.02);
+              B.add('box', IRON, x, y + 1.18, z + 0.07, 0.18, 0.08, 0.04);
+              for (const sx of [-0.4, 0.4]) for (const hy of [0.55, 1.72]) B.add('box', IRON, x + sx, y + hy, z, 0.08, 0.045, 0.1);
+              for (const dir of [-1, 1]) for (const hy of [0.32, 0.62]) B.add('box', RAIL, x + dir * 0.74, y + hy, z, 0.48, 0.07, 0.05);
+            }
+            const pk = new THREE.Mesh(new THREE.BoxGeometry(ns ? 0.7 : 1.3, 2.4, ns ? 1.3 : 0.7), new THREE.MeshBasicMaterial({ visible: false }));
+            pk.position.set(x, y + 1.15, z); pk.userData.pick = { kind: 'passage', x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
+            break;
+          }
           case 'campfire': {
             for (let k = 0; k < 4; k++) B.add('box', 0x5a3c24, x, y + 0.08, z, 0.7, 0.1, 0.1, k * Math.PI / 4);
             for (let k = 0; k < 6; k++) B.add('box', 0x6a6a6a, x + Math.cos(k) * 0.45, y + 0.07, z + Math.sin(k) * 0.45, 0.16, 0.14, 0.16, k);
@@ -734,13 +810,15 @@
           }
         }
       }
-      /* fences: a post on every F tile, rails to F neighbours east and south */
+      /* fences: a post on every F tile, rails to F neighbours east and south. A gate tile is the opening. */
+      const gateTiles = new Set();
+      for (const o of map.objects || []) if (o.k === 'gate') gateTiles.add(o.x + ',' + o.y);
       for (let y = Y0; y < Y1; y++) for (let x = X0; x < X1; x++) {
-        if (at(x, y) !== 'F' || !mine(x, y)) continue;
+        if (at(x, y) !== 'F' || !mine(x, y) || gateTiles.has(x + ',' + y)) continue;
         const px = x + 0.5, pz = y + 0.5, py = heightAt(px, pz);
         B.add('box', 0x6a4a2a, px, py + 0.38, pz, 0.12, 0.76, 0.12);
-        if (at(x + 1, y) === 'F') for (const ry of [0.28, 0.58]) B.add('box', 0x8a6a40, px + 0.5, py + ry, pz, 1.0, 0.07, 0.05);
-        if (at(x, y + 1) === 'F') for (const ry of [0.28, 0.58]) B.add('box', 0x8a6a40, px, py + ry, pz + 0.5, 0.05, 0.07, 1.0);
+        if (at(x + 1, y) === 'F' && !gateTiles.has((x + 1) + ',' + y)) for (const ry of [0.28, 0.58]) B.add('box', 0x8a6a40, px + 0.5, py + ry, pz, 1.0, 0.07, 0.05);
+        if (at(x, y + 1) === 'F' && !gateTiles.has(x + ',' + (y + 1))) for (const ry of [0.28, 0.58]) B.add('box', 0x8a6a40, px, py + ry, pz + 0.5, 0.05, 0.07, 1.0);
       }
       /* flowers, grass tufts and ferns */
       const FL = [0xe04040, 0xf0d040, 0xf4f4f4, 0xb060d0, 0xff8a3a];
@@ -791,11 +869,11 @@
         },
         setDepleted(i, on) {
           const t = treeAt.get(i);
-          if (t) { t.trunk.setMatrixAt(t.n, on ? ZERO : t.m); t.crown.setMatrixAt(t.n, on ? ZERO : t.m); t.trunk.instanceMatrix.needsUpdate = t.crown.instanceMatrix.needsUpdate = true; stumps.setMatrixAt(t.stump, on ? t.sm : ZERO); stumps.instanceMatrix.needsUpdate = true; return; }
+          if (t) { t.trunk.setMatrixAt(t.n, on ? ZERO : t.m); t.crown.setMatrixAt(t.n, on ? ZERO : t.m); t.trunk.instanceMatrix.needsUpdate = t.crown.instanceMatrix.needsUpdate = true; stumps.setMatrixAt(t.stump, on ? t.sm : ZERO); stumps.instanceMatrix.needsUpdate = true; if (stumps.computeBoundingSphere) stumps.computeBoundingSphere(); return; }
           const r = rockAt.get(i); if (r) r.ore.visible = !on;
         },
         update(dt, time) {
-          for (const t of torches) { const s = 0.85 + 0.15 * Math.sin(time * 13 + t.ph) + 0.08 * Math.sin(time * 31 + t.ph * 2); t.f.scale.set(1, s, 1); if (t.f2) t.f2.scale.set(1, s, 1); }
+          for (const t of torches) { const s = 0.85 + 0.15 * Math.sin(time * 13 + t.ph) + 0.08 * Math.sin(time * 31 + t.ph * 2); if (t.night) { const on = NIGHTK > 0.04; t.f.visible = on; if (t.f2) t.f2.visible = on; } t.f.scale.set(1, s, 1); if (t.f2) t.f2.scale.set(1, s, 1); }
           for (const L of lights) L.intensity = 2.6 + Math.sin(time * 11 + L.position.x) * 0.4;
           for (const s of spots) s.rings.forEach((r, k) => { const p = ((time * 0.6 + s.ph + k / 3) % 1); r.scale.setScalar(0.6 + p * 2.2); r.material.opacity = 0.75 * (1 - p); });
           if (waterMesh) waterMesh.material.emissive.setHSL(0.58, 0.6, 0.08 + 0.02 * Math.sin(time * 1.5));

@@ -374,7 +374,7 @@
         const px = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, Math.max(0.6, h * 0.95), 8), proxyMat); px.position.y = Math.max(0.3, h * 0.47); px.userData.pick = pick; px.userData.ent = e; e.root.add(px); e.proxy = px; proxies.push(px);
         e.blob = new THREE.Mesh(blobGeo, blobMat); e.blob.position.y = 0.03; e.blob.visible = !settings.shadows; e.root.add(e.blob);
         H.object.traverse(o => { if (o.isMesh) o.castShadow = true; });
-        H.onEvent((type, name) => { if (type === 'impact') onImpact(e, name); else if (type === 'done' && name !== 'death') e.oneShot = false; });
+        H.onEvent((type, name) => { if (type === 'impact') onImpact(e, name); else if (type === 'done' && name !== 'death' && name !== 'sprawl') e.oneShot = false; });
         ents.set(key, e); return e;
       }
       function removeEnt(e) { if (e.bub) e.bub.el.remove(); scene.remove(e.root); const i = proxies.indexOf(e.proxy); if (i >= 0) proxies.splice(i, 1); e.H.dispose && e.H.dispose(); for (const s of e.splats) s.el.remove(); if (e.bar) e.bar.remove(); if (e.tag) e.tag.remove(); if (e.ohd) e.ohd.remove(); ents.delete(e.key); }
@@ -414,7 +414,19 @@
         }
         return yaw;
       }
-      function npcEnt(n) { const e = makeEnt('n:' + n.id, MOD.npc(n.look || n.id), { kind: 'npc', id: n.id }); place(e, n.x, n.y); e.homeYaw = homeYaw(n); e.yaw = e.tyaw = e.homeYaw; NPCN[n.id] = n; if (n.gear && e.H && e.H.setGear) e.H.setGear(n.gear); return e; }
+      function npcShown(n) {
+        if (n.goneFlag && core.hasFlag(me, n.goneFlag)) return false;
+        return !n.hideFlag || core.hasFlag(me, n.hideFlag);
+      }
+      /* a corpse: splay the limbs, then tip the rig onto its back so the body rests on the floor */
+      function layDead(e) {
+        e.prone = true; e.oneShot = true; e.loco = 'sprawl';
+        if (e.H && e.H.play) { e.H.play('sprawl'); e.H.update(1); }
+        e.H.object.rotation.x = -Math.PI / 2;
+        e.H.object.position.set(0, 0.16, 0.55);
+        if (e.proxy) { e.proxy.position.set(0, 0.22, 0.05); e.proxy.scale.set(1.5, 0.22, 1.15); }
+      }
+      function npcEnt(n) { const e = makeEnt('n:' + n.id, MOD.npc(n.look || n.id), { kind: 'npc', id: n.id }); place(e, n.x, n.y); e.homeYaw = homeYaw(n); e.yaw = e.tyaw = e.homeYaw; NPCN[n.id] = n; if (n.gear && e.H && e.H.setGear) e.H.setGear(n.gear); if (n.lie) layDead(e); else if (n.rope) { e.alt = +n.rope || 1.5; e.held = true; if (e.blob) e.blob.visible = false; if (e.H && e.H.play) e.H.play('balance', { loop: true }); } e.root.visible = npcShown(n); return e; }
       for (const n of core.M.npcs) npcEnt(n);   /* gear: what an NPC carries (the castle's watchmen hold bows) */
       /* monsters get a model while they are within MOB_NEAR tiles (seeded land wakes camps everywhere you have been) */
       const MOB_NEAR = 60, MOB_FAR = 90;
@@ -512,7 +524,11 @@
           const tl = skAnim === 'chop' || skAnim === 'mine' || skAnim === 'fish' ? p.toolId || (sk === 'chop' ? 'hatchet' : sk === 'mine' ? 'pickaxe' : 'net') : null;
           if (skAnim !== e.skill || tl !== e.toolId) { e.skill = skAnim; e.toolId = tl; e.H.setTool && e.H.setTool(tl); }
         }
-        for (const n of core.M.npcs) if (n.patrol || n.guard) { const e = ents.get('n:' + n.id); if (e && moveTo(e, n.x, n.y, stamp)) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); }   /* a watchman walking his round, a guard answering the call to arms */
+        for (const n of core.M.npcs) {
+          const e = ents.get('n:' + n.id); if (!e) continue;
+          e.root.visible = npcShown(n);
+          if (n.patrol || n.guard) { if (moveTo(e, n.x, n.y, stamp)) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); }
+        }   /* a watchman walking his round, a guard answering the call to arms; hidden NPCs stay unseen until their flag */
         syncMobEnts();
         for (const m of core.S.mobs) {
           const e = ents.get('m:' + m.uid); if (!e || m.dead) continue;   /* (syncMobEnts runs right before) */
@@ -582,6 +598,7 @@
           case 'level': if (mine) { hud.levelUp(e.skill, e.lvl); sfx('level'); burst(myEnt.root.position, 0xffd040); netGear(); } break;   /* others see the new total level */
           case 'equip': { const t = ents.get('p:' + e.p); if (t) { const g = gearOf(core.S.players[e.p]); t.H.setGear(g); hawkify(t, g.ring); } if (mine) { dirty.eq = 1; sfx('equip'); netGear(); } break; }
           case 'quest': if (mine) syncMounts();   /* falls through */
+          case 'using':
           case 'inv': case 'take': case 'trade': case 'eat': case 'style': case 'run': case 'burden': case 'start':
             if (mine) { dirty.inv = 1; if (e.e === 'take') sfx(e.id === 'coins' ? 'coins' : 'pickup'); if (e.e === 'eat') { sfx('eat'); playOnce(myEnt, 'eat'); } if (e.e === 'take') playOnce(myEnt, 'pickup', 1.6); }
             break;
@@ -608,14 +625,44 @@
           case 'mobeat': { const t = ents.get('m:' + e.mob); if (t && !t.dead) { playOnce(t, 'eat'); sfx('eat', t); } break; }
           case 'tailor': if (mine) { faceNpc(e.npc); openWardrobe(false); } break;
           case 'look': if (mine) { if (me.look && myEnt.H.setOutfit) myEnt.H.setOutfit(me.look); netGear(); } break;
-          case 'dialog': if (mine) { hud.dialog(e.name, e.lines); faceNpc(e.npc); sfx('click'); } break;
+          case 'dialog': if (mine) {
+            const n = e.npc && NPCN[e.npc];
+            const after = (n && n.vanish) || e.axe ? () => {
+              if (n && n.vanish) {
+                if (n.goneFlag) { me.flags = me.flags || {}; if (!me.flags[n.goneFlag]) me.flags[n.goneFlag] = (core.S && core.S.t) || 1; }
+                const t = ents.get('n:' + n.id); if (t) t.root.visible = false;
+              }
+              if (e.axe) hud.confirm('An axe', 'Vael asks if you need an axe. Take the bronze hatchet?', 'Take it', 'I have one', () => send({ c: 'takeaxe' }));
+            } : null;
+            hud.dialog(e.name, e.lines, after);
+            faceNpc(e.npc); sfx('click');
+          } break;
+          case 'unhide': { const t = ents.get('n:' + e.npc); if (t) t.root.visible = true; break; }
           case 'weather': if (e.zone === core.weatherZone(zoneHere())) { if (e.say) hud.chat(e.say, 'sys'); showWeather(); } break;
           case 'fire': addFire(e.fire, e.x, e.y); if (e.p === PID || !e.p) sfx('sizzle', e.p === PID ? null : { x: e.x, y: e.y }); break;
           case 'fireout': removeFire(e.fire); break;
           case 'fx': { const t = ents.get('m:' + e.mob); if (!t) break; t.fx = t.fx || {}; t.fx[e.fx] = 1; applyTint(t); const el = hud.fxSplat(e.fx); if (el) t.splats.push({ el, t: performance.now(), k: t.splats.length }); if (e.fx === 'freeze') sfx('freeze', t); break; }
           case 'fxend': { const t = ents.get('m:' + e.mob); if (!t || !t.fx) break; delete t.fx[e.fx]; applyTint(t); break; }
-          case 'deplete': for (const r of regions) if (r.built) r.built.setDepleted(e.node, true); if (e.forever && mine) fellTell(e.x, e.y); break;
-          case 'regrow': for (const r of regions) if (r.built) r.built.setDepleted(e.node, false); break;
+          case 'deplete': {
+            for (const r of regions) if (r.built) r.built.setDepleted(e.node, true);
+            let x = e.x, y = e.y;
+            if (x == null && e.node != null && core.M.kx) { x = core.M.kx(e.node); y = core.M.ky(e.node); }
+            if (x != null) removeGrown(x, y);
+            const nd = e.node != null && core.nodeAt(e.node);
+            if (nd && core.nodeDef(nd).skill === 'woodcutting') addStump(nd.x, nd.y);
+            if (e.forever && mine) fellTell(x, y);
+            break;
+          }
+          case 'regrow': {
+            for (const r of regions) if (r.built) r.built.setDepleted(e.node, false);
+            if (e.x != null) removeStump(e.x, e.y);
+            else if (e.node != null && core.M.kx) removeStump(core.M.kx(e.node), core.M.ky(e.node));
+            break;
+          }
+          case 'clear': removeStump(e.x, e.y); addGrass(e.x, e.y); break;
+          case 'plant': addSprout(e.x, e.y); break;
+          case 'unplant': removeSprout(e.x, e.y); break;
+          case 'grow': removeGrass(e.x, e.y); addGrown(e.x, e.y); break;
           case 'gather': if (mine && e.ok && e.item) dirty.inv = 1; if (mine && e.ok && !e.item) dirty.inv = 1; break;
           case 'drop': break;
           case 'pfx': { const t = ents.get('p:' + e.p); if (t && e.on) { const el = hud.fxSplat(e.fx); if (el) t.splats.push({ el, t: performance.now(), k: t.splats.length }); } if (mine && e.on) sfx('freeze'); break; }
@@ -693,7 +740,7 @@
          bluish moon, opposite it, casts the shadows. */
       const SUN_EPOCH = 1791353761, DAY_S = 7200;
       const SUNL = { dark: 0, dir: [-0.45, 0.8, 0.3], key: '', b: null, lonA: null, base: new THREE.Color(SKY), col: new THREE.Color(), night: new THREE.Color() };
-      const NEW_SKY = new THREE.Color(0x020306), NIGHT_SKY = new THREE.Color(0x0b1426), DUSK_SKY = new THREE.Color(0xd8865a), SUNC = new THREE.Color(0xfff0d6), DUSKC = new THREE.Color(0xffa060), MOONC = new THREE.Color(0x9fb4ff);
+      const NEW_SKY = new THREE.Color(0x1a2434), NIGHT_SKY = new THREE.Color(0x2a3a52), DUSK_SKY = new THREE.Color(0xd8865a), SUNC = new THREE.Color(0xfff0d6), DUSKC = new THREE.Color(0xffa060), MOONC = new THREE.Color(0x9fb4ff);
       function sphereAt(x, y) { const WG = D.wg, C = DATA.globecfg; if (!WG || !WG.toSphere || !C || !C.origin) return null; const fx = x + C.origin[0] + 0.5, fy = -(y + C.origin[1]) - 0.5; return [WG.toSphere(C.face, fx, fy), WG.toSphere(C.face, fx + 1, fy), WG.toSphere(C.face, fx, fy - 1)]; }
       function sunAt(tms) {   /* the sun's direction from the planet's centre */
         if (SUNL.lonA == null) { const a = sphereAt(22, 52); SUNL.lonA = a ? Math.atan2(a[0][1], a[0][0]) : 0; }   /* Ashvale's longitude (by the well) */
@@ -712,16 +759,14 @@
         const B = SUNL.b; if (!B) return;
         const now = Date.now(), s = sunAt(now), up = dot3(s, B.u), ex = dot3(s, B.e), so = dot3(s, B.s);
         const day = Math.min(1, Math.max(0, (up + 0.08) / 0.2)), dusk = Math.max(0, 1 - Math.abs(up) / 0.18);   /* 1 by day, 0 by night; dusk near the horizon */
-        /* THE MOON (2026-10-07: "the amount of light that you have right now should be the amount of light for a full moon
-           and the moon fullness should follow the real moon cycle ... a new moon should create no illumination"): its phase is
-           the real one; it stands that far east of the sun (opposite at full, beside it at new), so it rises and sets like the
-           real moon, and only lights the night while it is up, by how full it is */
+        /* the moon follows the real cycle and adds light when it is up. A moonless night stays dim, but not black:
+           enough to make out the ground (2026-10-07) */
         const M = moonAt(now, s), mup = dot3(M.v, B.u), moonK = M.lit * Math.min(1, Math.max(0, (mup + 0.03) / 0.15));
         const lit = up > -0.02, d = lit ? [ex, Math.max(up, 0.06), so] : [dot3(M.v, B.e), Math.max(mup, 0.2), dot3(M.v, B.s)];
         const l = Math.hypot(d[0], d[1], d[2]); SUNL.dir = [d[0] / l, d[1] / l, d[2] / l];
-        sun.intensity = lit ? 0.5 + 1.8 * day : 0.22 * moonK; sun.color.copy(lit ? SUNC : MOONC); if (lit && dusk > 0) sun.color.lerp(DUSKC, dusk * 0.8);
-        hemi.intensity = 1.7 * day + 0.13 * moonK * (1 - day); SUNL.dark = 1 - day;
-        if (SCENE.lampGlow) SCENE.lampGlow((SUNL.dark - 0.3) / 0.4);   /* the street lamps are lit from dusk */   /* a moonless night has no light at all: torches and fires carry it */
+        sun.intensity = lit ? 0.5 + 1.8 * day : 0.2 + 0.22 * moonK; sun.color.copy(lit ? SUNC : MOONC); if (lit && dusk > 0) sun.color.lerp(DUSKC, dusk * 0.8);
+        hemi.intensity = 1.7 * day + (0.42 + 0.16 * moonK) * (1 - day); SUNL.dark = 1 - day;
+        if (SCENE.lampGlow) SCENE.lampGlow((SUNL.dark - 0.3) / 0.4);   /* the street lamps are lit from dusk */   /* night stays dim, but light enough to see the ground */
         /* the sky: the weather's colour (the weather module repaints it every frame), toward dusk orange and the night's blue
            (a moonlit night's deep blue, a moonless one near black) */
         const base = wxMod ? scene.background : SUNL.base;
@@ -770,6 +815,61 @@
         g.position.set(x + 0.5, gy, y + 0.5); g.userData = { f1, f2, px, ph: uid * 1.7 }; scene.add(g); fires.set(uid, g);
       }
       function removeFire(uid) { const g = fires.get(uid); if (!g) return; scene.remove(g); const i = proxies.indexOf(g.userData.px); if (i >= 0) proxies.splice(i, 1); fires.delete(uid); burstSmall(g.position.clone().add(new THREE.Vector3(0, 0.3, 0)), 0x777777); }
+      const grassTiles = new Map();
+      function addGrass(x, y) {
+        const k = x + ',' + y; if (grassTiles.has(k)) return;
+        const gy = heightAt(x + 0.5, y + 0.5);
+        const m = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.06, 0.98), new THREE.MeshLambertMaterial({ color: 0x5f9e3f }));
+        m.position.set(x + 0.5, gy + 0.03, y + 0.5); m.receiveShadow = true; scene.add(m); grassTiles.set(k, m);
+      }
+      function removeGrass(x, y) {
+        const k = x + ',' + y, m = grassTiles.get(k); if (!m) return;
+        scene.remove(m); grassTiles.delete(k);
+      }
+      const felledStumps = new Map();
+      function addStump(x, y) {
+        const k = x + ',' + y; if (felledStumps.has(k)) return;
+        const g = new THREE.Group(), gy = heightAt(x + 0.5, y + 0.5);
+        const wood = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.46, 0.46, 8), new THREE.MeshLambertMaterial({ color: 0x7a5a36, flatShading: true }));
+        wood.position.y = 0.22; wood.castShadow = true; g.add(wood);
+        const px = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.9, 8), proxyMat); px.position.y = 0.4; px.userData.pick = { kind: 'stump', x, y }; g.add(px); g.userData.px = px; proxies.push(px);
+        g.position.set(x + 0.5, gy, y + 0.5); scene.add(g); felledStumps.set(k, g);
+      }
+      function removeStump(x, y) {
+        const k = x + ',' + y, g = felledStumps.get(k); if (!g) return;
+        scene.remove(g); const i = proxies.indexOf(g.userData.px); if (i >= 0) proxies.splice(i, 1); felledStumps.delete(k);
+      }
+      const sprouts = new Map();
+      function addSprout(x, y) {
+        const k = x + ',' + y; if (sprouts.has(k)) return;
+        const g = new THREE.Group(), gy = heightAt(x + 0.5, y + 0.5);
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.7, 6), new THREE.MeshLambertMaterial({ color: 0x6a4a28, flatShading: true }));
+        trunk.position.y = 0.35; g.add(trunk);
+        const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.7, 6), new THREE.MeshLambertMaterial({ color: 0x2f8a34, flatShading: true }));
+        leaf.position.y = 0.85; g.add(leaf);
+        const px = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 1.1, 6), proxyMat); px.position.y = 0.55; px.userData.pick = { kind: 'plant', x, y }; g.add(px); g.userData.px = px; proxies.push(px);
+        g.position.set(x + 0.5, gy, y + 0.5); scene.add(g); sprouts.set(k, g);
+      }
+      function removeSprout(x, y) {
+        const k = x + ',' + y, g = sprouts.get(k); if (!g) return;
+        scene.remove(g); const i = proxies.indexOf(g.userData.px); if (i >= 0) proxies.splice(i, 1); sprouts.delete(k);
+      }
+      const grownTrees = new Map();
+      function addGrown(x, y) {
+        removeSprout(x, y);
+        const k = x + ',' + y; if (grownTrees.has(k)) return;
+        const g = new THREE.Group(), gy = heightAt(x + 0.5, y + 0.5);
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 2.4, 6), new THREE.MeshLambertMaterial({ color: 0x5a3a22, flatShading: true }));
+        trunk.position.y = 1.2; g.add(trunk);
+        const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.95, 2.6, 7), new THREE.MeshLambertMaterial({ color: 0x2c6a34, flatShading: true }));
+        leaf.position.y = 3.1; g.add(leaf);
+        const px = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 3.2, 6), proxyMat); px.position.y = 1.6; px.userData.pick = { kind: 'node', i: core.idx(x, y) }; g.add(px); g.userData.px = px; proxies.push(px);
+        g.position.set(x + 0.5, gy, y + 0.5); scene.add(g); grownTrees.set(k, g);
+      }
+      function removeGrown(x, y) {
+        const k = x + ',' + y, g = grownTrees.get(k); if (!g) return;
+        scene.remove(g); const i = proxies.indexOf(g.userData.px); if (i >= 0) proxies.splice(i, 1); grownTrees.delete(k);
+      }
       const TINT = { freeze: ['#9fd8ff', 0.55], stun: ['#fff3a0', 0.35], poison: ['#7fd36a', 0.35], burn: ['#ff8a3a', 0.35], slow: ['#b0b0ff', 0.25] };
       function applyTint(t) {
         const ks = Object.keys(t.fx || {}), k = ks.find(x => x === 'freeze') || ks[0], tc = k && TINT[k];
@@ -788,7 +888,7 @@
       let floorKey = '';
       function climbFromBar(dir) { const bi = core.M.buildingAt ? core.M.buildingAt(me.x, me.y) : -1; if (bi < 0) return; const B = core.M.buildings[bi], lv = me.lv || 0; if ((dir < 0 && lv <= 0) || (dir > 0 && lv >= B.floors - 1)) return; send({ c: 'climb', dir, x: B.stairs[0], y: B.stairs[1] }); }
       floorBar.querySelectorAll('[data-d]').forEach(b => { b.onclick = (e) => { e.stopPropagation(); climbFromBar(+b.dataset.d); }; b.onpointerdown = (e) => e.stopPropagation(); });
-      window.addEventListener('keydown', e => { if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return; if (e.key === 'PageDown') { climbFromBar(-1); e.preventDefault(); } else if (e.key === 'PageUp') { climbFromBar(1); e.preventDefault(); } });
+      window.addEventListener('keydown', e => { if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return; if (e.key === 'Escape' && me.using) { send({ c: 'unuse' }); e.preventDefault(); } else if (e.key === 'PageDown') { climbFromBar(-1); e.preventDefault(); } else if (e.key === 'PageUp') { climbFromBar(1); e.preventDefault(); } });
       function floorBarCheck() {
         const bi = core.M.buildingAt ? core.M.buildingAt(me.x, me.y) : -1, B = bi >= 0 ? core.M.buildings[bi] : null, lv = me.lv || 0;
         const key = B ? bi + ':' + lv : '';
@@ -939,24 +1039,39 @@
         return out;
       }
       function lvColor(l) { const d = l - core.combatLevel(me); return d > 9 ? '#ff0000' : d > 6 ? '#ff3000' : d > 3 ? '#ff7000' : d > 0 ? '#ffb000' : d === 0 ? '#ffff00' : d > -4 ? '#c0ff00' : d > -7 ? '#80ff00' : '#40ff00'; }
-      function optionsFor(t) {
+      function optionsForRaw(t) {
         const esc = s => String(s).replace(/</g, '&lt;');
-        if (t.kind === 'mob') { const m = core.mobByUid(t.uid), d = D.monsters[m.key], cb = core.mobCombat(d); const nm = '<span class="y">' + esc(d.name) + '</span> <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>'; return [{ html: 'Attack ' + nm, act: { c: 'attack', uid: t.uid }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(d.name + ': combat ' + cb + ' (' + (cb > core.combatLevel(me) ? 'stronger than you' : cb === core.combatLevel(me) ? 'evenly matched' : 'weaker than you') + '), ' + d.hp + ' hitpoints, hits up to ' + d.max + '.' + (d.aggro ? ' Aggressive.' : ''), 'sys') }]; }
-        if (t.kind === 'npc') { const n = NPCN[t.id], nm = '<span class="y">' + esc(n.name) + '</span>'; const o = []; if (n.tailor) { o.push({ html: 'Change-look ' + nm, act: { c: 'npc', id: n.id }, red: 1 }); o.push({ html: 'Trade ' + nm, act: { c: 'npc', id: n.id, trade: 1 }, red: 1 }); }
+        if (t.kind === 'mob') { const m = core.mobByUid(t.uid), d = D.monsters[m.key], cb = core.mobCombat(d); const nm = '<span class="y">' + esc(d.name) + '</span> <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>'; return [{ html: 'Attack ' + nm, act: { c: 'attack', uid: t.uid }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(d.name + ': combat ' + cb + ' (' + (cb > core.combatLevel(me) ? 'stronger than you' : cb === core.combatLevel(me) ? 'evenly matched' : 'weaker than you') + '), ' + d.hp + ' hitpoints, hits up to ' + d.max + '.' + (d.aggro ? ' Aggressive.' : '') + (d.hint ? ' ' + d.hint : ''), 'sys') }]; }
+        if (t.kind === 'npc') { const n = NPCN[t.id]; if (!n || !npcShown(n)) return []; const nm = '<span class="y">' + esc(n.name) + '</span>'; const o = []; if (n.tailor) { o.push({ html: 'Change-look ' + nm, act: { c: 'npc', id: n.id }, red: 1 }); o.push({ html: 'Trade ' + nm, act: { c: 'npc', id: n.id, trade: 1 }, red: 1 }); }
           else if (n.chest) o.push({ html: 'Open ' + nm, act: { c: 'npc', id: n.id }, red: 1 });
           else if (n.portal) o.push({ html: 'Use ' + nm, act: { c: 'npc', id: n.id }, red: 1 });
-          else if (n.shop) o.push({ html: 'Trade ' + nm, act: { c: 'npc', id: n.id }, red: 1 }); else o.push({ html: (n.verb || 'Talk-to') + ' ' + nm, act: { c: 'npc', id: n.id }, red: 1 }); o.push({ html: 'Examine ' + nm, fn: () => hud.chat(n.shop ? n.name + ' runs the ' + core.shop(n.shop).name + '.' : (n.examine || n.name + ', the village elder.'), 'sys') }); return o; }
+          else if (n.shop) o.push({ html: 'Trade ' + nm, act: { c: 'npc', id: n.id }, red: 1 });
+          else o.push({ html: (n.verb || 'Talk-to') + ' ' + nm, act: { c: 'npc', id: n.id }, red: 1 });
+          if (n.escape && core.searchOpen(me, n)) o.push({ html: 'Escape cave', fn: () => hud.confirm('Leave the cave?', 'Climb back out to the mouth of the Spider Cave?', 'Leave', 'Stay', () => send({ c: 'escape', id: n.id })) });
+          o.push({ html: 'Examine ' + nm, fn: () => {
+            if (n.search && !core.searchOpen(me, n)) hud.chat('We should probably leave him alone.', 'sys');
+            else hud.chat(n.shop ? n.name + ' runs the ' + core.shop(n.shop).name + '.' : (n.examine || n.name + ', the village elder.'), 'sys');
+          } }); return o; }
         if (t.kind === 'item') { const g = core.S.ground.find(q2 => q2.uid === t.uid); if (!g) return []; const d = core.item(g.id), nm = '<span class="o">' + esc(d.name) + (g.n > 1 ? ' (' + g.n + ')' : '') + '</span>'; return [{ html: 'Take ' + nm, act: { c: 'take', uid: g.uid }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(hud.examine(g.id, g.n), 'sys') }]; }
         if (t.kind === 'node' && core.isHawk(me)) { const n = core.nodeAt(t.i); if (n && core.nodeDef(n).skill === 'woodcutting') {
           const hp = t.hp || [n.x + 0.5, n.y + 0.5], dx = hp[0] - (n.x + 0.5), dy = hp[1] - (n.y + 0.5), sx = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0, sy = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
           return [{ html: 'Perch in <span class="c">tree</span>', act: { c: 'perch', x: n.x, y: n.y, sx: sx || 1, sy } }]; } }
-        if (t.kind === 'node') { const n = core.nodeAt(t.i); if (!n) return []; const nd = core.nodeDef(n), verb = n.kind === 'altar' ? 'Pray-at' : n.kind === 'range' || n.kind === 'fire' ? 'Cook-at' : nd.skill === 'woodcutting' ? 'Chop down' : nd.skill === 'mining' ? 'Mine' : 'Net', nm = '<span class="c">' + nd.name + '</span>'; return [{ html: verb + ' ' + nm, act: { c: 'gather', x: n.x, y: n.y }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(nd.name + (nd.req ? ': needs ' + nd.skill + ' level ' + nd.req + '.' : '.'), 'sys') }]; }
+        if (t.kind === 'node') {
+          const n = core.nodeAt(t.i); if (!n) return [];
+          const nd = core.nodeDef(n), verb = n.kind === 'altar' ? 'Pray-at' : n.kind === 'range' || n.kind === 'fire' ? 'Cook-at' : nd.skill === 'woodcutting' ? 'Chop down' : nd.skill === 'mining' ? 'Mine' : 'Net', nm = '<span class="c">' + nd.name + '</span>';
+          const o = [{ html: verb + ' ' + nm, act: { c: 'gather', x: n.x, y: n.y }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(nd.name + (nd.req ? ': needs ' + nd.skill + ' level ' + nd.req + '.' : '.'), 'sys') }];
+          if (n.chapel === 'ancient') {
+            const q = me.quests && me.quests.even_grove, Q = D.quests && D.quests.quests.even_grove;
+            if (q && Q && q.step > Q.steps.length) o.push({ html: 'Offer <span class="c">logs and bones</span>', act: { c: 'offer', x: n.x, y: n.y } });
+          }
+          return o;
+        }
         if (t.kind === 'caveout') {   /* the cave's way out, up top: it only goes up (2026-10-07: "it should inform them in the chat that there is no way down") */
           const nm = '<span class="c">Cave opening</span>', say = () => hud.chat("The shaft drops away steep and narrow into the dark. There's no way down from here.", 'sys');
           return [{ html: 'Enter ' + nm, fn: say, act: null }, { html: 'Examine ' + nm, fn: () => hud.chat('A narrow opening in the rock. A cold draught breathes up out of it.', 'sys') }]; }
-        if (t.kind === 'passage') { const o = core.passageAt(t.x, t.y); if (!o) return []; const nm = '<span class="c">' + esc(o.name || (o.k === 'cavemouth' ? 'Cave' : 'Way out')) + '</span>';
+        if (t.kind === 'passage') { const o = core.passageAt(t.x, t.y); if (!o) return []; const nm = '<span class="c">' + esc(o.name || (o.k === 'cavemouth' ? 'Cave' : o.k === 'gate' ? 'Gate' : 'Way out')) + '</span>';
           return [{ html: esc(o.label || 'Go through'), act: { c: 'enter', x: o.x, y: o.y }, red: 1 },
-                  { html: 'Examine ' + nm, fn: () => hud.chat(o.k === 'cavemouth' ? 'A dark opening in the rock. Webs hang just inside, and the air smells of damp and old fur.' : 'A ladder up to a shaft of daylight.', 'sys') }]; }
+                  { html: 'Examine ' + nm, fn: () => hud.chat(o.k === 'cavemouth' ? 'A dark opening in the rock. Webs hang just inside, and the air smells of damp and old fur.' : o.k === 'gate' ? 'A barred wooden gate in a palisade. The lookout has the latch.' : 'A ladder up to a shaft of daylight.', 'sys') }]; }
         if (t.kind === 'remote') {
           const r = remotes.get(t.id); if (!r) return [];
           /* the combat level next to the name, coloured like a monster's (2026-10-06) */
@@ -996,7 +1111,41 @@
           out.push({ html: 'Walk here', act: { c: 'walk', x: t.x, y: t.y } });
           return out;
         }
+        if (t.kind === 'stump') {
+          const young = core.plantYoung && core.plantYoung(t.x, t.y);
+          if (young) return [{ html: 'Pick up <span class="c">sapling</span>', act: { c: 'unplant', x: t.x, y: t.y }, red: 1 }, { html: 'Examine <span class="c">stump</span>', fn: () => hud.chat('A sapling set in a stump. You can take it back for an hour. After that, the tree stands again.', 'sys') }];
+          if (core.canPlant(me, t.x, t.y)) return [{ html: 'Plant <span class="c">sapling</span>', act: { c: 'plant', x: t.x, y: t.y }, red: 1 }, { html: 'Examine <span class="c">stump</span>', fn: () => hud.chat('A felled tree. A sapling set here grows back into the tree.', 'sys') }];
+          return [{ html: 'Examine <span class="c">stump</span>', fn: () => hud.chat('A felled tree.', 'sys') }];
+        }
+        if (t.kind === 'plant') {
+          const young = core.plantYoung && core.plantYoung(t.x, t.y);
+          if (young) return [{ html: 'Pick up <span class="c">sapling</span>', act: { c: 'unplant', x: t.x, y: t.y }, red: 1 }, { html: 'Examine <span class="c">sapling</span>', fn: () => hud.chat('A sapling, not yet rooted. You can pick it up for an hour. In grass, after that, it grows into a tree and stays.', 'sys') }];
+          return [{ html: 'Examine <span class="c">sapling</span>', fn: () => hud.chat('The shoot has rooted.', 'sys') }];
+        }
         return [];
+      }
+      function aimAct(t) {
+        const u = me.using, it = u && me.inv[u.slot];
+        if (!it || it.id !== u.id) return null;
+        const d = core.item(it.id), esc = s => String(s).replace(/</g, '&lt;');
+        let x = null, y = null;
+        if (t.kind === 'ground' || t.kind === 'plant' || t.kind === 'passage' || t.kind === 'stump') { x = t.x; y = t.y; }
+        else if (t.kind === 'node') { const n = core.nodeAt(t.i); if (n) { x = n.x; y = n.y; } }
+        else if (t.kind === 'npc') { const n = NPCN[t.id]; if (n) { x = n.x; y = n.y; } }
+        else if (t.kind === 'mob') { const m = core.mobByUid(t.uid); if (m) { x = m.x; y = m.y; } }
+        else if (t.kind === 'item') { const g = core.S.ground.find(q => q.uid === t.uid); if (g) { x = g.x; y = g.y; } }
+        if (x == null) return null;
+        if (it.id === 'sapling') {
+          if (core.plantYoung && core.plantYoung(x, y)) return { html: 'Pick up <span class="c">sapling</span>', act: { c: 'unplant', x, y }, red: 1 };
+          return { html: 'Plant <span class="c">sapling</span>', act: { c: 'plant', x, y }, red: 1 };
+        }
+        if (d.tool && t.kind === 'node') return { html: 'Use <span class="o">' + esc(d.name) + '</span>', act: { c: 'gather', x, y }, red: 1 };
+        return { html: 'Use <span class="o">' + esc(d.name) + '</span>', act: { c: 'useon', x, y }, red: 1 };
+      }
+      function optionsFor(t) {
+        const opts = optionsForRaw(t), a = aimAct(t);
+        if (!a) return opts;
+        return [a].concat(opts.filter(o => !o.act || (o.act.c !== 'plant' && o.act.c !== 'unplant' && o.act.c !== a.act.c)));
       }
       function doAct(o, sx, sy) { if (o.act) { send(o.act); if (sx != null) { const r = host.getBoundingClientRect(); hud.marker(sx - r.left, sy - r.top, o.red); } if (o.act.c === 'walk') flag = [o.act.x, o.act.y]; else flag = null; } else if (o.fn) o.fn(); }
       let flag = null;
@@ -1980,7 +2129,7 @@
           if (!e.dead || a < 1) { e.root.position.lerpVectors(e.from, e.to, a); e.root.position.y = heightAt(e.root.position.x, e.root.position.z) + liftOf(e, a) + hawkAlt(e); }   /* on an upper floor; a hawk over the trees */
           let d = e.tyaw - e.yaw; d = ((d + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI; e.yaw += d * Math.min(1, dt * 12); e.root.rotation.y = e.yaw;
           const moving = a < 1 && e.from.distanceToSquared(e.to) > 1e-4;
-          if (!e.dead && !e.oneShot) { const want = moving ? (e.running ? 'run' : 'walk') : (e.skill || 'idle'); if (want !== e.loco) { e.loco = want; e.H.play(want, { loop: true }); } }
+          if (!e.dead && !e.oneShot && !e.prone && !e.held) { const want = moving ? (e.running ? 'run' : 'walk') : (e.skill || 'idle'); if (want !== e.loco) { e.loco = want; e.H.play(want, { loop: true }); } }
           if (e.oneShot && e.oneT && now - e.oneT > 2500 && !e.dead) e.oneShot = false;
           for (const rec of e.impacts) if (!rec.fired && now - rec.t > 850) { fireImpact(e, rec); break; }
           if (e.dead && e.key.charAt(0) === 'm') { const k = (now - e.deadT) / 1000; if (k > 1.3 && k < 2.2 && e.H.setOpacity) e.H.setOpacity(Math.max(0, 1 - (k - 1.3) / 0.8)); if (k >= 2.2) e.root.visible = false; }

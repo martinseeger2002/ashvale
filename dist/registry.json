@@ -288,6 +288,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.bramble": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.brannoc": {
     "id": null,
     "v": 1,
@@ -295,6 +301,12 @@
     "kind": "json"
    },
    "char.bryce": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.calder": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -324,7 +336,25 @@
     "api": 1,
     "kind": "json"
    },
+   "char.edric_ghost": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.edric_skel": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.fenn": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.gale": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -414,6 +444,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.keel": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.latency": {
     "id": null,
     "v": 1,
@@ -487,6 +523,12 @@
     "kind": "json"
    },
    "char.perla": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.pike": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -571,6 +613,30 @@
     "kind": "json"
    },
    "char.tolly": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.vael": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.vorthan": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.vorthan_acolyte": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.vorthan_reader": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -780,6 +846,12 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.hat_verdant": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.hat_wizard": {
     "id": null,
     "v": 1,
@@ -805,6 +877,12 @@
     "kind": "json"
    },
    "cloth.pants_trousers": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "cloth.robe": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1092,6 +1170,12 @@
     "api": 1,
     "kind": "json"
    },
+   "item.sapling": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.shrimp": {
     "id": null,
     "v": 1,
@@ -1105,12 +1189,6 @@
     "kind": "json"
    },
    "palette": {
-    "id": null,
-    "v": 1,
-    "api": 1,
-    "kind": "json"
-   },
-   "cloth.robe": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1151,6 +1229,18 @@
     "kind": "json"
    },
    "spidercave": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "ancientchapel": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "evengrove": {
     "id": null,
     "v": 1,
     "api": 1,

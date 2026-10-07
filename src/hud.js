@@ -18,7 +18,7 @@
     let xyKey = '';
     function setPos(x, y) { const k = x + ', ' + y; if (k === xyKey) return; xyKey = k; xy.textContent = k; }
     const mmBox = el('mm ui', ui), mmCanvas = el('', mmBox, null, 'canvas'); mmCanvas.width = mmCanvas.height = 300;
-    const compass = el('compass', ui, '<i class="ui" title="North - tap to face north"></i>');   /* a dot that orbits the minimap's rim, pointing to true north */
+    const compass = el('compass ui', ui, '<div class="face"><b>N</b><b>E</b><b>S</b><b>W</b><i></i></div>'); compass.title = 'North. Tap to face north.';   /* a rose beside the minimap; N follows true north */
     const orbs = el('orbs ui', ui), hpOrb = el('orb hp', orbs, '<i></i><b></b>'), runOrb = el('orb run', orbs, '<i></i><b></b>'), prayOrb = el('orb pray', orbs, '<i></i><b></b>');
     const tabs = el('tabs ui', ui), panel = el('panel stone ui', ui);
     const chatw = el('chatw ui', ui), chat = el('chat', chatw), sayRow = el('say', chatw, '<input maxlength="120" enterkeyhint="send" placeholder="Say something to players here"><button>Say</button>'), sayIn = sayRow.firstChild;
@@ -89,6 +89,7 @@
       if (d.rstr) b.push('Ranged strength +' + d.rstr);
       if (d.prayer) b.push('Prayer +' + d.prayer);
       if (d.prayerSec) b.push('+' + d.prayerSec + 's per prayer point');
+      if (d.ppHold) b.push('+' + d.ppHold + 's before each point, for every Prayer point you still hold');
       if (d.heal) b.push('Heals ' + d.heal); if (d.healPct) b.push('Heals ' + d.healPct + '% of your hitpoints');
       const req = d.req ? Object.keys(d.req).filter(k => d.req[k] > 1).map(k => A.cap(k) + ' ' + d.req[k]).join(', ') : '';
       if (d.weight) b.push((d.weight * Math.max(1, n || 1) / 1000).toFixed(d.weight * (n || 1) < 1000 ? 2 : 1) + ' kg');
@@ -103,7 +104,7 @@
       const e = Math.floor(p.energy / 100); runOrb.firstChild.style.height = e + '%'; runOrb.lastChild.textContent = e; runOrb.classList.toggle('off', !p.runNow); runOrb.title = 'Run energy. Double-tap (or double-click) where you want to go to run there.';
       const pm = core.maxPp ? core.maxPp(p) : 1, pv = p.pp | 0, on = !!(p.pray && Object.keys(p.pray).length), oh = core.overhead && core.overhead(p), q = oh && core.prayer(oh);
       const pk = pv + '|' + pm + '|' + (oh || on);
-      if (prayOrb.dataset.k !== pk) { prayOrb.dataset.k = pk; prayOrb.firstChild.style.height = (100 * pv / Math.max(1, pm)) + '%'; prayOrb.lastChild.innerHTML = (q ? A.prayIcon(q) : '') + pv; prayOrb.classList.toggle('on', on); if (st.tab === 'prayer') K.refresh('prayer'); prayOrb.title = 'Prayer points ' + pv + '/' + pm + (on ? '. Tap to switch your prayers off.' : '. Tap to open your prayers.'); }
+      if (prayOrb.dataset.k !== pk) { prayOrb.dataset.k = pk; prayOrb.firstChild.style.height = Math.min(100, 100 * pv / Math.max(1, pm)) + '%'; prayOrb.lastChild.innerHTML = (q ? A.prayIcon(q) : '') + pv; prayOrb.classList.toggle('on', on); if (st.tab === 'prayer') K.refresh('prayer'); prayOrb.title = 'Prayer points ' + pv + '/' + pm + (on ? '. Tap to switch your prayers off.' : '. Tap to open your prayers.'); }
     }
     runOrb.onclick = () => chatLine(api.isTouch ? 'To run, double-tap where you want to go. Running uses this energy.' : 'To run, double-click where you want to go. Running uses this energy.', 'sys');
     hpOrb.onclick = () => { const p = P(); const i = p.inv.findIndex(s => s && core.item(s.id).edible); if (i >= 0) api.cmd({ c: 'eat', slot: i }); else chatLine('You have no food. The General Store sells bread.', 'warn'); };
@@ -134,11 +135,27 @@
     host.addEventListener('pointerdown', e => { if (ctx.style.display === 'block' && !ctx.contains(e.target) && performance.now() - menuOpenT > 200) hideMenu(); }, true);
 
     /* ---------- NPC dialogue */
-    function dialog(name, linesIn) { dlgQ = { name, lines: linesIn.slice(), i: 0 }; drawDlg(); }
-    function drawDlg() { if (!dlgQ || dlgQ.i >= dlgQ.lines.length) { dlg.style.display = 'none'; dlgQ = null; return; } dlg.style.display = 'block'; dlg.innerHTML = '<div class="nm">' + A.esc(dlgQ.name) + '</div><div class="ln">' + A.esc(dlgQ.lines[dlgQ.i]) + '</div><div class="go">' + (dlgQ.i < dlgQ.lines.length - 1 ? 'Tap here to continue' : 'Tap here to close') + '</div>'; }
+    function dialog(name, linesIn, onClose) {
+      if (dlgQ && dlgQ.onClose) { const prev = dlgQ.onClose; dlgQ.onClose = null; prev(); }
+      dlgQ = { name, lines: (linesIn || []).slice(), i: 0, onClose: onClose || null }; drawDlg();
+    }
+    function drawDlg() {
+      if (!dlgQ || dlgQ.i >= dlgQ.lines.length) {
+        const done = dlgQ && dlgQ.onClose; dlg.style.display = 'none'; dlgQ = null; if (done) done(); return;
+      }
+      dlg.style.display = 'block'; dlg.innerHTML = '<div class="nm">' + A.esc(dlgQ.name) + '</div><div class="ln">' + A.esc(dlgQ.lines[dlgQ.i]) + '</div><div class="go">' + (dlgQ.i < dlgQ.lines.length - 1 ? 'Tap here to continue' : 'Tap here to close') + '</div>';
+    }
     dlg.onclick = () => { if (dlgQ) { dlgQ.i++; drawDlg(); K.refresh('quest'); } };
 
     /* ---------- another player's stats (long-press / right-click > View stats): their own levels as their game sent them */
+    function confirm(title, body, yesLabel, noLabel, onYes) {
+      help.innerHTML = '<h3>' + A.esc(title) + '</h3><p style="margin:0 0 10px;line-height:1.45">' + A.esc(body) + '</p>' +
+        '<button class="btn" data-a="yes">' + A.esc(yesLabel || 'Yes') + '</button>' +
+        '<button class="btn" data-a="no">' + A.esc(noLabel || 'No') + '</button>';
+      help.style.display = 'block';
+      help.querySelector('[data-a=yes]').onclick = () => { help.style.display = 'none'; onYes && onYes(); };
+      help.querySelector('[data-a=no]').onclick = () => { help.style.display = 'none'; };
+    }
     function playerStats(name, sk, cb) {
       let tot = 0, h = '<h3>' + A.esc(name) + '</h3><div class="skills">';
       for (const s of A.SKILL_ORDER) { const L = sk[s] | 0 || 1; tot += L; h += '<div class="sk">' + A.SKI[s] + A.cap(s) + '<span>' + L + '</span></div>'; }
@@ -279,7 +296,7 @@
     { const r0 = K.refresh; K.refresh = w => { r0(w); if (st.chest) K.drawChest(); }; }   /* the chest window follows the bag and the wallet */
     setTab(st.tab);
     return {
-      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => K.openChest(), closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
+      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => K.openChest(), closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };

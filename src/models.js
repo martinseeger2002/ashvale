@@ -245,7 +245,10 @@ export function createModels(THREE, opts) {
       const hatI = info(gear.head), capeI = info(gear.cape), bodyI = info(gear.body);
       if (hatI.slot === 'hat') O.hat = { style: hatI.part.style, color: hatI.color };
       if (capeI.slot === 'cape') O.cape = capeI.color;
-      if (bodyI.slot === 'robe') { O.shirt = { style: 'robe', color: bodyI.color }; O.pants = { style: 'robe', color: bodyI.color }; }
+      if (bodyI.slot === 'robe') {
+        O.shirt = { style: 'robe', color: bodyI.color }; O.pants = { style: 'robe', color: bodyI.color };
+        if (gear.body === 'vorthan_robe') O.hat = { style: 'hood', color: bodyI.color };
+      }
       const C = { skin: O.skin, hair: O.hairColor, beard: O.beardColor || O.hairColor, eyes: O.eyes, brow: O.hair === 'bald' ? shade(O.skin, 0.75) : O.hairColor };
       /* what's worn decides what's hidden */
       const pieces = [];   /* [part, colour] */
@@ -370,6 +373,17 @@ export function createModels(THREE, opts) {
     hit: { dur: 0.4, fn: K(0, {}, 0.3, { torso: [-0.25], neck: [-0.3], shL: [-0.3, 0, 0.4], shR: [-0.3, 0, -0.4] }, 1, {}) },
     death: { dur: 1.1, hold: true, fn: K(0, {}, 0.25, { torso: [-0.3], neck: [-0.3], shL: [-0.5, 0, 0.5], shR: [-0.5, 0, -0.5], kneeL: [0.6], kneeR: [0.6], hipL: [-0.4], hipR: [-0.4] },
       1, { fall: [-1.5], torso: [-0.1], neck: [0.2], shL: [-2.6, 0, 0.6], shR: [-2.6, 0, -0.6], hipL: [-0.25], hipR: [0.1], kneeL: [0.1], kneeR: [0.2], elL: [-0.3], elR: [-0.3] }) },
+    /* already dead: arms flung, one knee bent, head lolling. The engine tips the whole rig onto the floor. */
+    sprawl: { dur: 0.01, hold: true, fn: (t, b) => withBase(b, {
+      neck: [0.55, 0.75, 0.25], torso: [0.04, 0, 0.16],
+      shL: [0.2, 0.15, 1.5], shR: [-0.25, -0.1, -1.6], elL: [-0.2], elR: [-1.2],
+      hipL: [0.15, 0, 0.55], hipR: [-0.1, 0, -0.42], kneeL: [0.15], kneeR: [0.9]
+    }) },
+    balance: { loop: true, dur: 2.6, fn: (t, b) => { const s = Math.sin(TAU * t); return withBase(b, {
+      shL: [0.2, 0, 1.4], shR: [0.2, 0, -1.4], elL: [-0.2], elR: [-0.15],
+      torso: [0.06, 0, 0.1 * s], neck: [-0.05, 0.15 * s, -0.08 * s],
+      hipL: [0.08, 0, 0.12], hipR: [-0.06, 0, -0.1], kneeL: [0.18], kneeR: [0.28]
+    }); } },
     bow: { dur: 1, impact: 0.62, fn: K(0, {}, 0.35, { shL: [-1.55, 0.1, 0], elL: [0], shR: [-1.55, -0.15, 0], elR: [-0.4], torso: [0, 0.5, 0], neck: [0, -0.5, 0] },
       0.6, { shL: [-1.55, 0.1, 0], elL: [0], shR: [-1.45, -0.55, -0.25], elR: [-2.4], torso: [0, 0.6, 0], neck: [0, -0.6, 0] },
       0.68, { shL: [-1.55, 0.1, 0], elL: [0], shR: [-1.3, -0.3, -0.7], elR: [-1], torso: [0, 0.6, 0], neck: [0, -0.6, 0] }, 1, {}) },

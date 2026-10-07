@@ -33,7 +33,7 @@ if os.path.exists(os.path.join(SRC, 'worldgen.js')):
     JS_MODULES[JS_MODULES.index('world'):JS_MODULES.index('world')] = ['globe', 'wg_geo', 'wg_terrain', 'wg_paths', 'wg_sites', 'wg_tiles', 'worldgen']
     DATA_MODULES.append('wg_tables')
 DATA_PATHS = {'wg_tables': 'atlas/wg_tables'}   # data modules that live in a subfolder of data/
-ZONES = ['village', 'whisperwood', 'saltmere', 'castle', 'wolfden', 'cavemouth', 'spidercave']   # castle: the lake castle 4 km out (tools/castle/make_castle.js)
+ZONES = ['village', 'whisperwood', 'saltmere', 'castle', 'wolfden', 'cavemouth', 'spidercave', 'ancientchapel', 'evengrove']   # castle: the lake castle 4 km out (tools/castle/make_castle.js)
 ZONES = ZONES   # saltmere: the second town, on the sea shore 3.4 km east (tools/make_zone_saltmere.mjs)
 if os.environ.get('ASH_NO_CASTLE') == '1':   # 2026-10-05: "forget about this castle for now" - a release without it
     ZONES = [z for z in ZONES if z != 'castle']

@@ -1395,6 +1395,22 @@ building('crate', 26, 3, 1, 1)
 building('barrel', 33, 3, 1, 1)
 for (x, y) in [(22, 2), (26, 2), (16, 9), (26, 12), (16, 12), (34, 12), (22, 19)]:
     building('torch', x, y, 1, 1)
+# one wall torch on every NPC-occupied building, lit from dusk (2026-10-07)
+def wall_sconce(o):
+    dx, dy = o['door']
+    x0, y0, w, h = o['x'], o['y'], o['w'], o['h']
+    if dy == y0 + h - 1:
+        face, sx, sy = 's', (dx + 1 if dx + 1 < x0 + w else dx - 1), dy
+    elif dy == y0:
+        face, sx, sy = 'n', (dx + 1 if dx + 1 < x0 + w else dx - 1), dy
+    elif dx == x0:
+        face, sx, sy = 'w', dx, (dy + 1 if dy + 1 < y0 + h else dy - 1)
+    else:
+        face, sx, sy = 'e', dx, (dy + 1 if dy + 1 < y0 + h else dy - 1)
+    objs.append({"k": "sconce", "x": sx, "y": sy, "w": 1, "h": 1, "face": face, "night": True})
+for o in list(objs):
+    if o.get('enter') and o.get('door') and o.get('k') in ('house', 'shop', 'smithy', 'church'):
+        wall_sconce(o)
 for (x, y) in [(6, 10), (7, 10), (12, 11), (13, 11), (30, 11 - 1), (17, 18), (18, 18), (9, 19), (31, 19), (32, 19), (5, 3)]:
     if vg[y][x] == '.':
         vg[y][x] = 'f'
