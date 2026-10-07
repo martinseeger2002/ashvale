@@ -137,7 +137,8 @@
             if (qx < gx0) gx0 = qx; if (qx > gx1) gx1 = qx; if (qy < gy0) gy0 = qy; if (qy > gy1) gy1 = qy;
           }
           const add = (o, fish) => {
-            const qx = o.x + o.w / 2, qy = -o.y - o.h / 2;
+            /* the middle of the thing: a footprint (x, y, w, h), a run of tiles (x, y to x2, y2: a castle wall), or one tile */
+            const qx = o.x2 != null ? (o.x + o.x2 + 1) / 2 : o.w != null ? o.x + o.w / 2 : o.x + 0.5, qy = -(o.y2 != null ? (o.y + o.y2 + 1) / 2 : o.h != null ? o.y + o.h / 2 : o.y + 0.5);
             const ax = pass < 0 ? qx : c * (qx - tx) + s * (qy - ty), ay = pass < 0 ? qy : -s * (qx - tx) + c * (qy - ty);
             if (ax < x0 || ax >= x1 || ay < y0 || ay >= y1) return;
             const r = Object.assign({}, o, { x: ax, y: ay, c, s: -s, face: gf, gx: o.x, gy: o.y });
@@ -171,7 +172,7 @@
         const belt = (popts && popts.belt) || {}, links = (popts && popts.links) || [];   /* links: [[fromId, toId]] trails between pieces */
         return zones.map(z => {
           const ox = z.origin[0], oy = z.origin[1], w = z.size[0], h = z.size[1];
-          const objs = (z.objects || []).filter(o => o.x >= ox && o.y >= oy && o.x < ox + w && o.y < oy + h).map(o => Object.assign({}, o, { x: o.x + gx, y: o.y + gy }));
+          const objs = (z.objects || []).filter(o => o.x >= ox && o.y >= oy && o.x < ox + w && o.y < oy + h).map(o => Object.assign({}, o, { x: o.x + gx, y: o.y + gy }, o.x2 != null ? { x2: o.x2 + gx, y2: o.y2 + gy } : null));   /* a run (a castle wall) moves both ends */
           return { id: z.id, face, x: gx + ox, y: gy + oy, w, h, tiles: decks(z), objects: objs, belt: belt[z.id] || 0, links: links.filter(l => l[0] === z.id).map(l => l[1]) };
         });
       }

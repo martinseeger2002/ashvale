@@ -24,6 +24,27 @@
     const chatw = el('chatw ui', ui), chat = el('chat', chatw), sayRow = el('say', chatw, '<input maxlength="120" enterkeyhint="send" placeholder="Say something to players here"><button>Say</button>'), sayIn = sayRow.firstChild;
     const doSay = () => { const t = sayIn.value; sayIn.value = ''; if (t.trim()) api.say(t); };
     sayIn.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { doSay(); if (!api.isTouch) sayIn.blur(); } else if (e.key === 'Escape') sayIn.blur(); });
+    /* on a phone the text box rides above the keyboard while it is open and goes back down when it closes (the operator
+       2026-10-06). The game runs inside the arcade's page, so the keyboard may or may not shrink what this page sees:
+       when the visible area shrinks, the box sits just above it; when nothing changes (an iframe the keyboard covers
+       without telling it), it goes to the top of the screen, which the keyboard never covers. The keyboard closing
+       (the visible area growing back) puts it down again, as does leaving the box. */
+    const KB = { on: false, base: 0, seen: false, t: 0 };
+    const vvBottom = () => { const v = G.visualViewport; return v ? v.height + v.offsetTop : G.innerHeight; };
+    function kbPlace() {
+      if (!KB.on) return;
+      const lift = KB.base - vvBottom(), cover = G.innerHeight - vvBottom();
+      if (lift > 80) { KB.seen = true; sayRow.classList.add('kb'); sayRow.style.top = 'auto'; sayRow.style.bottom = Math.max(6, cover + 6) + 'px'; }
+      else if (KB.seen) { sayIn.blur(); }   /* it was open and closed again: down it goes */
+      else if (performance.now() - KB.t > 650) { sayRow.classList.add('kb'); sayRow.style.bottom = 'auto'; sayRow.style.top = 'max(8px, env(safe-area-inset-top))'; }
+    }
+    function kbDown() { KB.on = false; KB.seen = false; sayRow.classList.remove('kb'); sayRow.style.top = sayRow.style.bottom = ''; }
+    if (api.isTouch) {
+      sayIn.addEventListener('focus', () => { KB.on = true; KB.seen = false; KB.base = Math.max(G.innerHeight, vvBottom()); KB.t = performance.now(); for (const ms of [120, 350, 700, 1000]) setTimeout(kbPlace, ms); });
+      sayIn.addEventListener('blur', kbDown);
+      if (G.visualViewport) { G.visualViewport.addEventListener('resize', kbPlace); G.visualViewport.addEventListener('scroll', kbPlace); }
+      G.addEventListener('resize', kbPlace);
+    }
     sayRow.lastChild.onclick = doSay;
     const xpd = el('xpd', ui), banner = el('banner stone t', ui), dead = el('dead', ui, 'Oh dear, you are dead!');
     const dlg = el('dlg stone ui', ui), ctx = el('ctx ui', ui), shopEl = el('shop stone ui', ui), help = el('help stone ui', ui), err = el('err ui', ui);
