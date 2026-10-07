@@ -836,7 +836,9 @@ if __name__ == '__main__':
               const p = ASH.me, C = ASH.core; if (!p || p.dead) return;
               const meal = p.inv.find(q => q && (C.item(q.id) || {}).edible); if (!meal) return;
               const heal = (C.item(meal.id).heal || 2), max = C.maxHp(p);
-              if (max - p.hp < heal || Date.now() - (window.__ateAt || 0) < 1800) return;
+              // below three-quarters, and missing at least a meal's worth: small knocks heal by themselves, and every
+              // bread bought is a trip away from the quest (2026-10-07: eight bread trips in fifteen minutes)
+              if (p.hp > max * 0.75 || max - p.hp < heal || Date.now() - (window.__ateAt || 0) < 1800) return;
               const orb = document.querySelector('.orb.hp');
               if (orb) orb.click(); else C.cmd('me', { c: 'eat', slot: p.inv.indexOf(meal) });
               window.__ateAt = Date.now(); window.__ate = (window.__ate || 0) + 1;
