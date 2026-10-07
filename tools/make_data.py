@@ -171,6 +171,11 @@ for k, nm, v in [("cap", "Red cap", 15), ("bandana", "Bandana", 15), ("hood", "H
     items["hat_" + k] = {"name": nm, "kind": "hat", "eq": "head", "value": v, "defence": 0}
 for k, v in [("red", 50), ("blue", 50), ("green", 50), ("purple", 50), ("black", 50), ("gold", 250)]:
     items["cape_" + k] = {"name": k.capitalize() + " cape", "kind": "cape", "eq": "cape", "value": v}
+# 2026-10-06: "Inscribe the headdress call it big chief headdress and send it to @Apple. It should be a one of one. There is
+# no way to earn it or buy it." No shop stocks it and no monster drops it; Edition "1 of 1" keeps shops from buying it and the
+# @ashvale Bank from ever minting another (tools/bank/bank.py unique()).
+items["hat_bigchief"] = {"name": "Big Chief Headdress", "kind": "hat", "eq": "head", "value": 10000, "defence": 0, "edition": "1 of 1",
+                         "nft": {"copies": 1, "key": "hat_bigchief"}}
 # packs (worn on the back, eq 'pack'): add carry capacity, never slots (28 stay 28). t4-t5 only drop. No nft key yet
 # (the operator decides what gets minted).
 for t, (nm, carry, w, v) in enumerate([("Leather satchel", 10, 0.8, 40), ("Canvas pack", 20, 1.5, 150), ("Reinforced pack", 35, 2.5, 500),
@@ -225,7 +230,7 @@ TRAIT = [("attack", "Attack", 1), ("strength", "Strength", 1), ("defence", "Defe
          ("rstr", "Ranged strength", 1), ("speed", "Speed", 1), ("range", "Range", 1), ("carry", "Carry", 0.001), ("heal", "Heal", 1),
          ("healPct", "Heal %", 1), ("cooks", "Cooks into", None), ("burns", "Burns into", None), ("cookReq", "Cooking level", 1),
          ("cookXp", "Cooking XP", 1), ("fireReq", "Firemaking level", 1), ("burnTicks", "Burn ticks", 1), ("fireXp", "Firemaking XP", 1),
-         ("form", "Form", None), ("teleport", "Teleport", None), ("cooldown", "Cooldown ticks", 1), ("arms", "Call to arms", 1), ("effect", "Effect", None), ("effectTicks", "Effect ticks", 1), ("effectChance", "Effect chance", 1), ("effectDamage", "Effect damage", 1)]
+         ("form", "Form", None), ("teleport", "Teleport", None), ("cooldown", "Cooldown ticks", 1), ("arms", "Call to arms", 1), ("effect", "Effect", None), ("effectTicks", "Effect ticks", 1), ("effectChance", "Effect chance", 1), ("effectDamage", "Effect damage", 1), ("edition", "Edition", None)]
 ARMOURY = "ASHVALE Armoury"
 MEAT_BASES = {'chicken', 'rat_meat', 'hare', 'goat', 'venison', 'boar'}
 def category_of(k, d):
@@ -1451,7 +1456,7 @@ module('rules', 3, {
                     "mace": {"class": "melee", "anim": "crush"}, "bow": {"class": "ranged", "anim": "bow", "twoHanded": True}, "staff": {"class": "magic", "anim": "cast"}},
         "tools": {"hatchet": "woodcutting", "pickaxe": "mining", "net": "fishing", "rod": "fishing", "pot": "fishing", "tinderbox": "firemaking"},
         "edible": ["food", "potion"], "drink": ["potion"],
-        "traits": {"Form": "form", "Teleport": "teleport", "Cooldown ticks": "cooldown", "Call to arms": "arms", "Attack": "attack", "Strength": "strength", "Defence": "defence", "Ranged": "ranged", "Magic": "magic", "Ranged strength": "rstr",
+        "traits": {"Edition": "edition", "Form": "form", "Teleport": "teleport", "Cooldown ticks": "cooldown", "Call to arms": "arms", "Attack": "attack", "Strength": "strength", "Defence": "defence", "Ranged": "ranged", "Magic": "magic", "Ranged strength": "rstr",
                    "Speed": "speed", "Range": "range", "Carry": ["carry", 1000], "Heal": "heal", "Heal %": "healPct", "Cooks into": "cooks",
                    "Burns into": "burns", "Cooking level": "cookReq", "Cooking XP": "cookXp", "Firemaking level": "fireReq", "Burn ticks": "burnTicks",
                    "Firemaking XP": "fireXp", "Effect": "effect", "Effect ticks": "effectTicks", "Effect chance": "effectChance", "Effect damage": "effectDamage"},

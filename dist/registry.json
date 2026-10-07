@@ -666,6 +666,12 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.hat_bigchief": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.hat_bonewrap": {
     "id": null,
     "v": 1,

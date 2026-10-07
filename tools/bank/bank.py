@@ -37,6 +37,7 @@ def assets(): return load_json('data/assets.json')['data']['items']
 def token_ids():
     t = load_json('chain/resource_tokens.json') if os.path.exists(os.path.join(HERE, 'chain/resource_tokens.json')) else {}
     t['coins'] = 26; return t
+def unique(k): return any(isinstance(a, dict) and a.get('trait_type') == 'Edition' for a in (ITEMS.get(k) or {}).get('attributes', []))   # a one-of-one: never minted again (2026-10-06)
 def magical(k): return bool((ITEMS.get(k) or {}).get('form')) or any(a.get('trait_type') == 'Form' for a in (ITEMS.get(k) or {}).get('attributes', []) if isinstance(a, dict))
 
 def db():
@@ -312,7 +313,8 @@ class Deliverer:
             piece = job['want']
         elif job['coll']: piece = None   # a quest reward is always a fresh copy in the quest's collection
         else: piece = self.stock_for(c, k)
-        if not piece and magical(k): raise RuntimeError('a magical item is never minted: waiting for a dropped one to come back to @ashvale')   # (the operator's Hawk ring, 2026-10-04)
+        if not piece and magical(k): raise RuntimeError('a magical item is never minted: waiting for a dropped one to come back to @ashvale')
+        if not piece and unique(k): raise RuntimeError('a one-of-one is never minted: only the inscribed piece exists')   # (the operator's Hawk ring, 2026-10-04)
         piece = piece or self.mint(c, k, job['coll'])
         c.execute('insert or replace into given values(?,?,?,?)', (piece, addr, k, time.time())); c.commit()
         r = self.W.nft_send(piece, addr)
