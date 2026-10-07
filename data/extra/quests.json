@@ -227,6 +227,41 @@
    "done": [
     "The chapel in Saltmere is open again, and Odric is home with a new axle. Go well, {name}."
    ]
+  },
+  "manoomin": {
+   "name": "Manoomin",
+   "giver": "mishoomis",
+   "steps": [
+    {
+     "id": 1,
+     "zone": "lodges",
+     "goal": {
+      "bring": "wild_rice",
+      "n": 20
+     },
+     "ends": "mishoomis",
+     "reward": "dried_mouse",
+     "talk": [
+      "Boozhoo (hello), {name}. Sit, sit. My knees have not stood up since the last ricing moon.",
+      "Manoominike-giizis (the ricing moon) is here. Out on the zaaga'igan (lake) down the ziibi (river) the manoomin (wild rice) stands ripe, and my old arms cannot knock it.",
+      "It takes two in the jiimaan (canoe). One stands in the back with the gaandakii'iganaak (push pole) and moves her through the stalks. The other sits forward with the bawa'iganaakoog (ricing sticks): bend the stalks over with one, knock them with the other, and the rice falls in.",
+      "Find a friend, take the canoe from the landing, and bring me twenty handfuls of manoomin.",
+      "Do this, and I have a really special gift for you. Something I have kept a long time. You will see when you come back."
+     ],
+     "progress": [
+      "Twenty handfuls of manoomin (wild rice), {name}. {left} more. Two in the jiimaan (canoe): one poles, one knocks. The rice lake is down the ziibi (river) from the landing."
+     ],
+     "complete": [
+      "Miigwech (thank you), {name}! Look at it, dark as a winter night. This will feed the whole village through biboon (winter).",
+      "Now. I promised you something really special. Close your hand around this.",
+      "A waawaabiganoojiinh (mouse). Dried. I found him in the rice basket three winters ago and I could not bring myself to throw him out. Now he is yours. Take him."
+     ]
+    }
+   ],
+   "done": [
+    "Boozhoo, {name}. The manoomin (wild rice) is drying on the birch bark. Sit by the fire a while.",
+    "Are you keeping the waawaabiganoojiinh (mouse) somewhere safe? A gift like that does not come twice."
+   ]
   }
  }
 }

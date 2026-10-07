@@ -1620,4 +1620,4 @@ module('rules', 3, {
 # then to the coast of one of two continents on a mostly-ocean globe (2026-10-03 evening): face 19, Saltmere's shore parcel next door.
 module('globecfg', 1, {"seed": "ashvale", "n": 128, "radius_m": 36110, "face": 19, "origin": [8811, -3368], "grid": [8619, -3560],
                        "chunk": 64, "area": 128, "region": 512, "belt": {"whisperwood": 90, "village": 30},
-                       "links": [["village", "saltmere"]]})   # the trail from Ashvale down to Saltmere (2026-10-03)
+                       "links": [["village", "saltmere"], ["ziibiing", "village", "trail"]]})   # + the skinny trail up from Ziibiing (2026-10-07)   # the trail from Ashvale down to Saltmere (2026-10-03)

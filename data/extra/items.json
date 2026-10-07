@@ -95,6 +95,30 @@
     "copies": 25,
     "key": "monk_robe"
    }
+  },
+  "wild_rice": {
+   "name": "Wild rice",
+   "description": "Manoomin, wild rice, resource grain. Knocked from the stalks into a canoe on the lake below Ziibiing. From the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "grain",
+   "weight": 50,
+   "model": "item.manoomin",
+   "value": 6,
+   "attributes": []
+  },
+  "dried_mouse": {
+   "name": "Dried mouse",
+   "description": "Waawaabiganoojiinh, a dried mouse. Mishoomis's really special gift for twenty handfuls of manoomin. Nobody knows what it is for. From the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "curio",
+   "weight": 30,
+   "model": "item.mouse",
+   "value": 1,
+   "attributes": []
   }
  }
 }

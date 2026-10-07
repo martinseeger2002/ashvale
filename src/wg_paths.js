@@ -119,7 +119,7 @@
         }
       }
       for (const sp of (list || [])) {
-        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, links: sp.links || [] };
+        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, links: sp.links || [], linkStyles: sp.linkStyles || {} };
         pc.px0 = pc.x; pc.px1 = pc.x + pc.w; pc.py0 = -(pc.y + pc.h); pc.py1 = -pc.y;
         PIECES.push(pc); ctx.PIECE_BY_ID.set(pc.id, pc);
       }
@@ -250,7 +250,8 @@
         const near = (list, p) => { let b = null, bd = 1e18; for (const e of list) if (!e.kind) { const d = (e.x + 0.5 - p[0]) ** 2 + (-e.y - 0.5 - p[1]) ** 2; if (d < bd) { bd = d; b = e; } } return b; };
         const ea = near(A.ex, cb), eb = near(Bp.ex, ca); if (!ea || !eb) continue;
         let x = ea.x + 0.5, y = -ea.y - 0.5; const tx = eb.x + 0.5, ty = -eb.y - 0.5, hv = g.hash3(g.hashStr(A.id), g.hashStr(Bp.id), ctx.S.pa);
-        const D0 = Math.hypot(tx - x, ty - y), w0 = Math.max(1.4, PT.halfMin, Math.min(PT.halfMax, ea.w / 2));   /* a road is wider than a footpath */
+        const trail = A.linkStyles[bid] === 'trail', RK = trail ? 0 : 3;   /* a trail (2026-10-07: "a skinny trail running from the village to Ashvale"): dirt, narrow, no lamps */
+        const D0 = Math.hypot(tx - x, ty - y), w0 = trail ? PT.halfMin : Math.max(1.4, PT.halfMin, Math.min(PT.halfMax, ea.w / 2));   /* a road is wider than a footpath */
         /* the route goes AROUND water (the operator): a search on a 4 m grid over the ground between the two gates, water,
            rock and other set pieces closed, a little extra cost for slopes so it keeps to the easy ground; the trail is
            laid along it. Only if there is no way round at all does it fall back to a straight line with bridges. */
@@ -289,9 +290,9 @@
           const pts = []; for (let k = tk; k >= 0; k = from[k]) { const i = k % GW, j = (k - i) / GW; pts.push([gx0 + i * CS, gy0 + j * CS]); if (k === sk) break; }
           pts.reverse(); pts[0] = [x, y]; pts[pts.length - 1] = [tx, ty];
           let px0 = pts[0][0], py0 = pts[0][1];
-          for (let k = 2; k < pts.length; k += 2) { const q = pts[Math.min(k, pts.length - 1)]; segs.push(A.face, px0, py0, q[0], q[1], w0, 3, A.hb - 0.75); px0 = q[0]; py0 = q[1]; }
-          segs.push(A.face, px0, py0, tx, ty, w0, 3, A.hb - 0.75);
-          lightTrail(A.face, pts, w0);
+          for (let k = 2; k < pts.length; k += 2) { const q = pts[Math.min(k, pts.length - 1)]; segs.push(A.face, px0, py0, q[0], q[1], w0, RK, A.hb - 0.75); px0 = q[0]; py0 = q[1]; }
+          segs.push(A.face, px0, py0, tx, ty, w0, RK, A.hb - 0.75);
+          if (!trail) lightTrail(A.face, pts, w0);
         } else {
           const pts = [[x, y]];
           for (let k = 0, d = 0; d < D0 * 2.5 && Math.hypot(tx - x, ty - y) > PT.step; k++, d += PT.step) {
@@ -299,11 +300,11 @@
             const nx = x + g.ccos(a) * PT.step, ny = y + g.csin(a) * PT.step;
             ctx.foldInto(A.face, nx, ny, SB);
             const s = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false);
-            segs.push(A.face, x, y, nx, ny, w0, s.h < ctx.WATER ? 2 : 3, A.hb - 0.75);
+            segs.push(A.face, x, y, nx, ny, w0, s.h < ctx.WATER ? 2 : RK, A.hb - 0.75);
             x = nx; y = ny; pts.push([x, y]);
           }
-          segs.push(A.face, x, y, tx, ty, w0, 3, A.hb - 0.75);
-          pts.push([tx, ty]); lightTrail(A.face, pts, w0);
+          segs.push(A.face, x, y, tx, ty, w0, RK, A.hb - 0.75);
+          pts.push([tx, ty]); if (!trail) lightTrail(A.face, pts, w0);
         }
       }
       SEG = segs;
