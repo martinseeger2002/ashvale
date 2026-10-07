@@ -131,7 +131,8 @@ const c5 = AshCore.create(D, { seed: 'q' }); const p5 = c5.addPlayer('p1'); let 
 c5.cmd('p1', { c: 'npc', id: 'maren' }); for (let i = 0; i < 40 && !dlg; i++) for (const e of c5.tick()) if (e.e === 'dialog') dlg = e;
 ok(dlg && /wolves/i.test(dlg.lines.join(' ')) && p5.quests.ashen_crown.step === 1, 'Elder Maren gives the wolf quest');
 // ---------- the Ghost Devs live in Ashvale (2026-10-03): villagers whose one job is to talk
-for (const nd of D.zones.find(z => z.id === 'village').npcs.filter(n => n.lines)) {
+const VZ = D.zones.find(z => z.id === 'village'), inVillage = n => n.x >= VZ.origin[0] && n.x < VZ.origin[0] + VZ.size[0] && n.y >= VZ.origin[1] && n.y < VZ.origin[1] + VZ.size[1];
+for (const nd of VZ.npcs.filter(n => n.lines && inVillage(n))) {   /* Odric and his wagon stand out on the road (priest_test talks to them) */
   ok(!nd.shop && !nd.quest && !nd.tailor, nd.id + ' is met by talking, not at a shop or a quest');
   ok(fs.existsSync(path.join(DD, 'parts', 'char.' + nd.look + '.json')), nd.id + ' has a body of its own (char.' + nd.look + ')');
   const cd = AshCore.create(D, { seed: 'dev-' + nd.id }); cd.addPlayer('p1'); let dd = null;
@@ -159,7 +160,7 @@ for (const [qid, Q] of Object.entries(D.quests.quests)) {
                     : s.goal.bring ? (D.items[s.goal.bring] && many(s.goal.n) && (!s.goal.with || D.items[s.goal.with]))
                     : s.goal.talk ? !!keeperZone(s.goal.talk) : false),
      qid + ': every reachable step wants something that exists');
-  ok(live.every(s => !s.reward || (s.reward.indexOf('xp:') === 0 ? D.rules.skills.indexOf(s.reward.split(':')[1]) >= 0 : !!D.items[s.reward])),
+  ok(live.every(s => !s.reward || (s.reward.indexOf('xp:') === 0 ? D.rules.skills.indexOf(s.reward.split(':')[1]) >= 0 : s.reward.indexOf('flag:') === 0 ? !!(D.rules.flags || {})[s.reward.slice(5)] : !!D.items[s.reward])),
      qid + ': every reachable step pays in XP and items that exist');
   ok(live.every(s => (s.talk || []).length > 1 && (s.complete || []).length > 0 && (s.progress || []).length > 0),
      qid + ': every reachable step says something when it starts, while it goes, and when it ends');
@@ -268,6 +269,7 @@ for (const S of Object.values(D.shops.shops)) {
       if (!g.kill && !g.bring && !g.talk) ok(false, where + ' has a goal the panel cannot describe: ' + JSON.stringify(g));
       const r = s.reward;
       if (typeof r === 'string' && r.startsWith('xp:')) { const [, sk] = r.split(':'); ok(D.rules.skills.indexOf(sk) >= 0 || sk === 'hitpoints', where + ' pays ' + r + ' in a skill the game has'); }
+      else if (typeof r === 'string' && r.startsWith('flag:')) ok(!!(D.rules.flags || {})[r.slice(5)], where + ' leaves the ' + r.slice(5) + ' flag, which the rules define');
       else if (typeof r === 'string' && !r.startsWith('coins')) { const it = D.items[r]; if (!it) nameless(where + ' pays ' + r + ', which is not an item'); else ok(true, where + ' pays ' + it.name); }
     }
     for (const l of q.done || []) ok(!/undefined/.test(l), q.name + "'s last word names everything it says");

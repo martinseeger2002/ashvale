@@ -1,0 +1,198 @@
+{
+ "npcs": [
+  {
+   "id": "iria",
+   "name": "Iria",
+   "look": "iria",
+   "x": 24,
+   "y": 35,
+   "talk": "quest",
+   "quests": [
+    "iria_supper",
+    "angel_gift"
+   ],
+   "examine": "Iria, pale as the well-mist, with two low wings folded at her back. She stands on the main path, well south of the pond."
+  }
+ ],
+ "spawns": [
+  {
+   "m": "rat",
+   "x": 32,
+   "y": 33
+  },
+  {
+   "m": "rat",
+   "x": 25,
+   "y": 29
+  },
+  {
+   "m": "rat",
+   "x": 30,
+   "y": 33
+  },
+  {
+   "m": "rat",
+   "x": 30,
+   "y": 31
+  },
+  {
+   "m": "rat",
+   "x": 16,
+   "y": 35
+  },
+  {
+   "m": "rat",
+   "x": 17,
+   "y": 28
+  },
+  {
+   "m": "rat",
+   "x": 17,
+   "y": 36
+  },
+  {
+   "m": "rat",
+   "x": 33,
+   "y": 36
+  },
+  {
+   "m": "rat",
+   "x": 32,
+   "y": 35
+  },
+  {
+   "m": "rat",
+   "x": 18,
+   "y": 31
+  },
+  {
+   "m": "wolf",
+   "x": 19,
+   "y": 13
+  },
+  {
+   "m": "wolf",
+   "x": 20,
+   "y": 14
+  },
+  {
+   "m": "wolf",
+   "x": 19,
+   "y": 16
+  },
+  {
+   "m": "wolf",
+   "x": 17,
+   "y": 21
+  },
+  {
+   "m": "wolf",
+   "x": 15,
+   "y": 14
+  },
+  {
+   "m": "wolf",
+   "x": 17,
+   "y": 17
+  },
+  {
+   "m": "wolf",
+   "x": 26,
+   "y": 19
+  },
+  {
+   "m": "wolf",
+   "x": 27,
+   "y": 20
+  },
+  {
+   "m": "bandit",
+   "x": 25,
+   "y": 9,
+   "carry": {
+    "arrows_t1": 12
+   }
+  },
+  {
+   "m": "bandit",
+   "x": 20,
+   "y": 12
+  },
+  {
+   "m": "bandit",
+   "x": 25,
+   "y": 3
+  },
+  {
+   "m": "bandit",
+   "x": 4,
+   "y": 10
+  },
+  {
+   "m": "bandit",
+   "x": 3,
+   "y": 1,
+   "carry": {
+    "arrows_t1": 10
+   }
+  },
+  {
+   "m": "bandit",
+   "x": 30,
+   "y": 15
+  },
+  {
+   "m": "bandit_leader",
+   "x": 14,
+   "y": 3,
+   "carry": {
+    "potion": 1
+   }
+  },
+  {
+   "m": "goblin",
+   "x": 38,
+   "y": 24
+  },
+  {
+   "m": "goblin",
+   "x": 42,
+   "y": 27
+  },
+  {
+   "m": "goblin",
+   "x": 45,
+   "y": 24
+  },
+  {
+   "m": "goblin",
+   "x": 41,
+   "y": 20
+  },
+  {
+   "m": "goblin_chief",
+   "x": 43,
+   "y": 23
+  },
+  {
+   "m": "timber_wolf",
+   "x": 5,
+   "y": 6
+  },
+  {
+   "m": "timber_wolf",
+   "x": 8,
+   "y": 5
+  },
+  {
+   "m": "timber_wolf",
+   "x": 6,
+   "y": 8
+  },
+  {
+   "m": "timber_wolf",
+   "x": 10,
+   "y": 6
+  }
+ ]
+}

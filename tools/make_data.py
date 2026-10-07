@@ -17,8 +17,65 @@ WORLD = json.load(open(os.path.expanduser('~/ashvale/world.json')))
 DATA_API = 1          # bump only when a field's MEANING changes (adding fields is fine without a bump)
 
 
+def overlay(base, extra):
+    """data/extra/<module>.json is merged over what this script makes (hand-written additions, e.g. a collaborator's
+    NPC, quests and items from GitHub, kept so a rerun does not wipe them): dicts merge, lists of {id: ...} merge by id,
+    any other value (and any other list) is replaced."""
+    if isinstance(base, dict) and isinstance(extra, dict):
+        for k, v in extra.items(): base[k] = overlay(base[k], v) if k in base else v
+        return base
+    if isinstance(base, list) and isinstance(extra, list) and extra and all(isinstance(x, dict) and 'id' in x for x in base + extra):
+        at = {x['id']: i for i, x in enumerate(base)}
+        for x in extra:
+            if x['id'] in at: base[at[x['id']]] = overlay(base[at[x['id']]], x)
+            else: base.append(x)
+        return base
+    return extra
+
+
+TREES = 'TPOWMY'   # the tree letters; the rest of the blocking letters (water, rock, fences, graves, walls) are never cleared
+BLOCKS = 'TPORNIr~FHXWMYCGA^K'
+def open_ways(tiles):
+    """No walled-in ground in a drawn area (2026-10-06: "Animals keep getting stuck in the woods because there's no way
+    out or through ... no encapsulated tiles"; Whisperwood had 125 such tiles, one of Iria's wolf dens among them). Walking is
+    4-connected, so every open tile is joined to the area's edge (where it meets the rest of the world) by clearing the
+    fewest trees (a 0-1 search: open costs 0, a tree 1); a cleared tree is forest floor. Fences, water, rock, graves and
+    walls are never touched, so a pen stays a pen. The same rule src/wg_tiles.js applies to the generated land."""
+    H, W = len(tiles), len(tiles[0]); g = [list(r) for r in tiles]
+    kind = lambda x, y: 0 if g[y][x] not in BLOCKS else 1 if g[y][x] in TREES else 2
+    from collections import deque
+    INF = 10 ** 9; dist = [[INF] * W for _ in range(H)]; came = [[None] * W for _ in range(H)]; q = deque()
+    for y in range(H):
+        for x in range(W):
+            if (x in (0, W - 1) or y in (0, H - 1)) and kind(x, y) != 2:
+                d = kind(x, y); dist[y][x] = d; (q.appendleft if d == 0 else q.append)((x, y))
+    while q:
+        x, y = q.popleft()
+        for a, b in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if not (0 <= a < W and 0 <= b < H): continue
+            k = kind(a, b)
+            if k == 2: continue
+            d = dist[y][x] + k
+            if d < dist[b][a]: dist[b][a] = d; came[b][a] = (x, y); (q.append if k else q.appendleft)((a, b))
+    cleared = 0
+    for y in range(H):
+        for x in range(W):
+            if kind(x, y) == 0 and 0 < dist[y][x] < INF:
+                c = (x, y)
+                while c and dist[c[1]][c[0]] > 0:
+                    cx, cy = c
+                    if g[cy][cx] in TREES: g[cy][cx] = ','; cleared += 1
+                    dist[cy][cx] = 0; c = came[cy][cx]
+                if c and g[c[1]][c[0]] in TREES: g[c[1]][c[0]] = ','; cleared += 1   # an edge tree it started from
+    return [''.join(r) for r in g], cleared
+
 def module(name, v, data):
     os.makedirs(OUT, exist_ok=True)
+    if name.startswith('zone.') and isinstance(data, dict) and data.get('tiles'):
+        data['tiles'], n = open_ways(data['tiles'])
+        if n: print('%-26s %d trees cleared so no ground is walled in' % (name, n))
+    xp = os.path.join(OUT, 'extra', name + '.json')
+    if os.path.exists(xp): data = overlay(data, json.load(open(xp)))
     m = {"ashvale3d": "module", "name": name, "api": DATA_API, "v": v, "data": data}
     path = os.path.join(OUT, name + '.json')
     with open(path, 'w') as f:
@@ -171,6 +228,15 @@ for k, nm, v in [("cap", "Red cap", 15), ("bandana", "Bandana", 15), ("hood", "H
     items["hat_" + k] = {"name": nm, "kind": "hat", "eq": "head", "value": v, "defence": 0}
 for k, v in [("red", 50), ("blue", 50), ("green", 50), ("purple", 50), ("black", 50), ("gold", 250)]:
     items["cape_" + k] = {"name": k.capitalize() + " cape", "kind": "cape", "eq": "cape", "value": v}
+# 2026-10-06: "Inscribe the headdress call it big chief headdress and send it to @Apple. It should be a one of one. There is
+# no way to earn it or buy it." No shop stocks it and no monster drops it; Edition "1 of 1" keeps shops from buying it and the
+# @ashvale Bank from ever minting another (tools/bank/bank.py unique()).
+items["hat_bigchief"] = {"name": "Big Chief Headdress", "kind": "hat", "eq": "head", "value": 10000, "defence": 0, "edition": "1 of 1",
+                         "nft": {"copies": 1, "key": "hat_bigchief"}}
+# 2026-10-06: "Make a 20 of the headbands. It should be a collection of 20 only. Send all to @Apple." Like the headdress:
+# not sold, not dropped; Edition 20 keeps shops from buying it and the Bank from minting a 21st.
+items["hat_featherband"] = {"name": "Feather Headband", "kind": "hat", "eq": "head", "value": 1500, "defence": 0, "edition": "20",
+                            "nft": {"copies": 20, "key": "hat_featherband"}}
 # packs (worn on the back, eq 'pack'): add carry capacity, never slots (28 stay 28). t4-t5 only drop. No nft key yet
 # (the operator decides what gets minted).
 for t, (nm, carry, w, v) in enumerate([("Leather satchel", 10, 0.8, 40), ("Canvas pack", 20, 1.5, 150), ("Reinforced pack", 35, 2.5, 500),
@@ -225,7 +291,7 @@ TRAIT = [("attack", "Attack", 1), ("strength", "Strength", 1), ("defence", "Defe
          ("rstr", "Ranged strength", 1), ("speed", "Speed", 1), ("range", "Range", 1), ("carry", "Carry", 0.001), ("heal", "Heal", 1),
          ("healPct", "Heal %", 1), ("cooks", "Cooks into", None), ("burns", "Burns into", None), ("cookReq", "Cooking level", 1),
          ("cookXp", "Cooking XP", 1), ("fireReq", "Firemaking level", 1), ("burnTicks", "Burn ticks", 1), ("fireXp", "Firemaking XP", 1),
-         ("form", "Form", None), ("teleport", "Teleport", None), ("cooldown", "Cooldown ticks", 1), ("arms", "Call to arms", 1), ("effect", "Effect", None), ("effectTicks", "Effect ticks", 1), ("effectChance", "Effect chance", 1), ("effectDamage", "Effect damage", 1)]
+         ("form", "Form", None), ("teleport", "Teleport", None), ("cooldown", "Cooldown ticks", 1), ("arms", "Call to arms", 1), ("effect", "Effect", None), ("effectTicks", "Effect ticks", 1), ("effectChance", "Effect chance", 1), ("effectDamage", "Effect damage", 1), ("edition", "Edition", None)]
 ARMOURY = "ASHVALE Armoury"
 MEAT_BASES = {'chicken', 'rat_meat', 'hare', 'goat', 'venison', 'boar'}
 def category_of(k, d):
@@ -1108,7 +1174,7 @@ R = random.Random(20260930)
 
 # the tile legend, in one place: which letters stop you walking, and which stop you seeing. scene.js
 # draws the same letters (trees, rocks with ore), rules.json ships this same set.
-T_BLOCK = "TPORNIr~FHXWMYCGA"
+T_BLOCK = "TPORNIr~FHXWMYCGAU"   # U: a desert cactus (blocks the way, not the view)
 T_LOS = "TPORNIrHXWMYCGA"
 T_TREE = "TPOMWY"
 T_ROCK = "RNICGA"
@@ -1451,7 +1517,7 @@ module('rules', 3, {
                     "mace": {"class": "melee", "anim": "crush"}, "bow": {"class": "ranged", "anim": "bow", "twoHanded": True}, "staff": {"class": "magic", "anim": "cast"}},
         "tools": {"hatchet": "woodcutting", "pickaxe": "mining", "net": "fishing", "rod": "fishing", "pot": "fishing", "tinderbox": "firemaking"},
         "edible": ["food", "potion"], "drink": ["potion"],
-        "traits": {"Form": "form", "Teleport": "teleport", "Cooldown ticks": "cooldown", "Call to arms": "arms", "Attack": "attack", "Strength": "strength", "Defence": "defence", "Ranged": "ranged", "Magic": "magic", "Ranged strength": "rstr",
+        "traits": {"Edition": "edition", "Form": "form", "Teleport": "teleport", "Cooldown ticks": "cooldown", "Call to arms": "arms", "Attack": "attack", "Strength": "strength", "Defence": "defence", "Ranged": "ranged", "Magic": "magic", "Ranged strength": "rstr",
                    "Speed": "speed", "Range": "range", "Carry": ["carry", 1000], "Heal": "heal", "Heal %": "healPct", "Cooks into": "cooks",
                    "Burns into": "burns", "Cooking level": "cookReq", "Cooking XP": "cookXp", "Firemaking level": "fireReq", "Burn ticks": "burnTicks",
                    "Firemaking XP": "fireXp", "Effect": "effect", "Effect ticks": "effectTicks", "Effect chance": "effectChance", "Effect damage": "effectDamage"},

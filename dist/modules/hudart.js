@@ -15,7 +15,9 @@
 .ash .t{text-shadow:1px 1px 0 #000}
 .ash .mm{position:absolute;right:calc(var(--tab) + 14px);top:8px;width:var(--mm);height:var(--mm);border-radius:50%;border:3px solid #1b1610;box-shadow:0 0 0 2px #6b5d48,0 3px 8px #000a;background:#111;overflow:hidden}
 .ash .mm canvas{width:100%;height:100%;display:block}
-.ash .compass{position:absolute;right:calc(var(--tab) + 14px + var(--mm) - 22px);top:4px;width:28px;height:28px;border-radius:50%;background:#2a241c;border:2px solid #6b5d48;display:flex;align-items:center;justify-content:center;font-size:11px;color:#e33;cursor:pointer}
+.ash .compass{position:absolute;right:calc(var(--tab) + 14px);top:8px;width:var(--mm);height:var(--mm);pointer-events:none;z-index:2}
+.ash .compass i{position:absolute;left:50%;top:-7px;width:12px;height:12px;margin-left:-6px;border-radius:50%;background:#e33;border:2px solid #fff;box-shadow:0 0 0 1px #000a,0 0 6px #e33;pointer-events:auto;cursor:pointer}
+.ash .compass i::after{content:'';position:absolute;left:-10px;top:-10px;right:-10px;bottom:-10px}
 .ash .orbs{position:absolute;right:calc(var(--tab) + 22px + var(--mm));top:10px;display:flex;flex-direction:column;gap:6px}
 .ash .orb{width:calc(var(--mm)*.36);height:calc(var(--mm)*.36);min-width:34px;min-height:34px;border-radius:50%;border:2px solid #1b1610;box-shadow:0 0 0 1px #6b5d48;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;cursor:pointer;position:relative;overflow:hidden;background:#222}
 .ash .orb i{position:absolute;left:0;right:0;bottom:0;display:block}
@@ -62,6 +64,7 @@
 .ash .btn small{display:block;color:#c8b48a;font-size:10px;font-weight:400}
 .ash .chatw{position:absolute;left:8px;bottom:8px;width:min(46vw,440px)}
 .ash .say{display:none;gap:4px;margin-top:4px}.ash .say.on{display:flex}
+.ash .say.kb{position:fixed;left:8px;right:8px;z-index:36;margin:0;padding:6px;border-radius:8px;background:#1b1610f0;box-shadow:0 0 0 1px #6b5d48,0 6px 18px #000a}
 .ash .say input{flex:1;min-width:0;font-size:16px;padding:3px 8px;border-radius:5px;border:1px solid #6b5d48;background:#000a;color:#fff}
 .ash .say button{font:inherit;padding:0 10px;border-radius:5px;border:1px solid #1b1610;background:linear-gradient(#5a4c3a,#433829);color:#ffcf3f;cursor:pointer}
 .ash .chat .player{color:#7cf}
@@ -143,6 +146,21 @@
 .ash .netlost{position:absolute;left:50%;top:max(8px,env(safe-area-inset-top));transform:translateX(-50%);width:min(560px,calc(100vw - 24px));z-index:18;display:none;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:10px;background:#5a1414f0;box-shadow:0 0 0 2px #e05a4a,0 6px 20px #000a;color:#fde9e4;font:14px/1.35 system-ui,sans-serif}
 .ash .netlost b{color:#fff}
 .ash .netlost .btn{flex:none;margin:0;padding:8px 14px}
+.ash .newver{position:absolute;left:50%;top:max(8px,env(safe-area-inset-top));transform:translateX(-50%);width:min(560px,calc(100vw - 24px));z-index:17;display:none;padding:10px 14px;border-radius:10px;background:#3b2c08f2;box-shadow:0 0 0 2px #e8b33a,0 6px 20px #000a;color:#fbefcf;font:14px/1.35 system-ui,sans-serif}
+.ash .newver b{color:#ffd76a}
+.ash .elsewhere{position:absolute;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:#0b0907e8;padding:16px}
+.ash .elsewhere>div{max-width:420px;padding:20px 22px;border-radius:12px;background:#231d14;box-shadow:0 0 0 2px #8a6a2c;color:#f3e7cc;font:15px/1.45 system-ui,sans-serif;text-align:center}
+.ash .elsewhere b{display:block;font-size:18px;margin-bottom:8px;color:#ffd76a}
+.ash .elsewhere .btn{margin:14px auto 0;padding:9px 18px}
+.ash .numpad{position:absolute;inset:0;z-index:35;display:none;align-items:center;justify-content:center;background:#0006}
+.ash .numpad .np{width:min(280px,calc(100vw - 32px));padding:12px;display:flex;flex-direction:column;gap:10px}
+.ash .numpad .t{color:#ffcf3f;font-weight:700;text-align:center;font-size:15px}
+.ash .numpad .scr{display:flex;align-items:baseline;justify-content:flex-end;gap:8px;padding:8px 12px;border-radius:6px;background:#0d1a0d;box-shadow:inset 0 0 0 2px #2d4a2a,inset 0 2px 8px #000;color:#9cff8a;font:700 28px/1.1 ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.ash .numpad .scr small{font-size:12px;color:#6fae64;font-weight:400}
+.ash .numpad .keys{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.ash .numpad .keys .btn,.ash .numpad .row .btn{margin:0;padding:12px 0;font-size:18px;touch-action:manipulation}
+.ash .numpad .row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.ash .numpad .row .ok:disabled{opacity:.45}
 .ash .travel{position:absolute;inset:0;z-index:19;display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#05070d;overflow:hidden;pointer-events:auto;touch-action:none}
 .ash .travel .sw{position:absolute;left:50%;top:50%;width:170vmax;height:170vmax;margin:-85vmax 0 0 -85vmax;border-radius:50%;background:repeating-conic-gradient(from 0deg,#1b4f9a00 0deg,#3d8ff0aa 14deg,#9fd0ff55 22deg,#1b4f9a00 40deg),radial-gradient(circle,#bfe4ff 0,#5fa8ff 7%,#1d4c9c 22%,#0b1a3a 46%,#05070d 70%);animation:ashsw 2.4s linear infinite}
 .ash .travel .sw2{position:absolute;left:50%;top:50%;width:46vmin;height:46vmin;margin:-23vmin 0 0 -23vmin;border-radius:50%;border:2.2vmin solid #8fd0ff;box-shadow:0 0 6vmin #4aa3ff,inset 0 0 6vmin #4aa3ff;animation:ashsw2 1.6s ease-in-out infinite alternate}

@@ -97,6 +97,26 @@
               .replace('#include <begin_vertex>', 'vec3 transformed = position * (uR + lv * uEx + 1.5 + uEx * 1.5);'); };
           riverLines = new THREE.LineSegments(g, rm); riverLines.matrixAutoUpdate = false; riverLines.frustumCulled = false; scene.add(riverLines);
         } }
+      /* the EQUATOR (2026-10-06: "the Atlas should show the equator and the poles marked"): a gold line round the
+         planet at latitude 0, lying on the ground and the sea like the rivers do (unit vectors + the ground height there,
+         lifted by the same exaggeration in the shader). Built once its ground heights are known (toPlanar is defined below). */
+      let equatorLine = null;
+      const EQW = { value: 0 };   /* the band's half width on the unit sphere, set each frame from the altitude */
+      function buildEquator() {   /* a gold band round the planet (a 1-pixel line is lost from orbit), on the ground like the rivers */
+        const NQ = 2048, pos = new Float32Array((NQ + 1) * 6), lv = new Float32Array((NQ + 1) * 2), side = new Float32Array((NQ + 1) * 2), idx = [];
+        for (let k = 0; k <= NQ; k++) {
+          const a = k / NQ * 2 * Math.PI, u = [Math.cos(a), Math.sin(a), 0], pl = toPlanar(u), h = Math.max(W.WATER, W.sample(pl.face, pl.x, pl.y).h);
+          pos.set(u, k * 6); pos.set(u, k * 6 + 3); lv[k * 2] = lv[k * 2 + 1] = h; side[k * 2] = -1; side[k * 2 + 1] = 1;
+          if (k < NQ) idx.push(k * 2, k * 2 + 1, k * 2 + 2, k * 2 + 1, k * 2 + 3, k * 2 + 2);
+        }
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('lv', new THREE.BufferAttribute(lv, 1)); g.setAttribute('sd', new THREE.BufferAttribute(side, 1)); g.setIndex(idx);
+        g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), R * 1.2);
+        const m = new THREE.MeshBasicMaterial({ color: 0xffcf3f, transparent: true, opacity: 0.7, depthWrite: false, fog: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+        m.onBeforeCompile = (sh) => { Object.assign(sh.uniforms, { uEx: U.uEx, uR: { value: R }, uW: EQW });
+          sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float lv;\nattribute float sd;\nuniform float uEx;\nuniform float uR;\nuniform float uW;')
+            .replace('#include <begin_vertex>', 'vec3 transformed = normalize(position + vec3(0.0, 0.0, sd * uW)) * (uR + lv * uEx + 2.0 + uEx * 2.0);'); };
+        equatorLine = new THREE.Mesh(g, m); equatorLine.matrixAutoUpdate = false; equatorLine.frustumCulled = false; scene.add(equatorLine);
+      }
 
       /* ---- the terrain quadtree ---- */
       const FC = []; for (let f = 0; f < 20; f++) FC.push(W.faceCorners(f));
@@ -200,9 +220,12 @@
       const exAt = alt => 1 + 2 * Math.min(1, Math.max(0, (Math.log10(alt) - 3.3) / 1.5));   /* at most 3x from orbit (the operator: the mountains looked out of scale) */
       const tiltAt = alt => { const t = Math.min(1, Math.max(0, (Math.log10(alt) - 1.6) / 2.2)); return 0.62 + (1.5 - 0.62) * t; };
       const PLACES = {};
+      /* a game tile (the x, y a character stands on) -> the sphere direction and the planar point, the same mapping as the places */
+      const gameAt = (vx, vy) => { if (!CFG.origin) return null; const fx = vx + CFG.origin[0] + 0.5, fy = -(vy + CFG.origin[1]) - 0.5; return { u: W.toSphere(CFG.face, fx, fy), face: CFG.face, x: fx, y: fy }; };
       { const at = (vx, vy) => { const fx = vx + CFG.origin[0] + 0.5, fy = -(vy + CFG.origin[1]) - 0.5; return W.toSphere(CFG.face, fx, fy); };
         if (CFG.origin) PLACES.ashvale = { u: at(22, 52), alt: 60 };
-        const sz = zones.find(z => z.id === 'saltmere'); if (sz && CFG.origin) PLACES.saltmere = { u: at(sz.origin[0] + (sz.size[0] >> 1), sz.origin[1] + (sz.size[1] >> 1)), alt: 160 }; }
+        /* every area is a place (?at=<zone id>): over its middle, high enough to see the whole of it */
+        if (CFG.origin) for (const z of zones) if (z && z.id && z.origin && z.size && !PLACES[z.id]) PLACES[z.id] = { u: at(z.origin[0] + (z.size[0] >> 1), z.origin[1] + (z.size[1] >> 1)), alt: Math.max(160, Math.round(Math.max(z.size[0], z.size[1]) * 1.4)) }; }
       let groundH = 0, tP = null;
       function updateCamera() {
         const u = cam.u; frameAt(u);
@@ -363,9 +386,10 @@
         chunkTick(Math.max(2, budget - (performance.now() - t0)));
         placeChunks();
         if (riverLines) { riverLines.matrix.makeTranslation(-camW[0], -camW[1], -camW[2]); riverLines.matrixWorld.copy(riverLines.matrix); const k2 = Math.min(1, Math.max(0, (cam.alt - 25) / 60)); riverLines.visible = k2 > 0.02; riverLines.material.opacity = k2; }
+        if (equatorLine) { EQW.value = Math.max(1.2, cam.alt * 0.004) / R; equatorLine.matrix.makeTranslation(-camW[0], -camW[1], -camW[2]); equatorLine.matrixWorld.copy(equatorLine.matrix); }
         if (frame % 60 === 0) prune();
         renderer.render(scene, camera);
-        hudTick();
+        youTick(); marksTick(); hudTick();
         requestAnimationFrame(tick);
       }
 
@@ -463,15 +487,95 @@
         '.ea .t{position:absolute;left:12px;top:max(10px,env(safe-area-inset-top));padding:7px 10px;background:rgba(30,24,16,.82);border:1px solid #8a7550;border-radius:6px}' +
         '.ea .t small{display:block;color:#e8d9b4;font-weight:400}.ea .b{position:absolute;right:12px;bottom:max(12px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:6px}' +
         '.ea button{pointer-events:auto;min-width:44px;min-height:38px;padding:6px 10px;background:linear-gradient(#5a4c3a,#433829);border:1px solid #8a7550;border-radius:5px;color:#ffcf3f;font:inherit;cursor:pointer}' +
-        '.ea button:focus-visible{outline:2px solid #fff}.ea button.on{background:linear-gradient(#7a6a3a,#5a4a29)}</style>' +
-        '<div class="ea"><div class="t">ASHVALE Atlas<small id="ea-alt">-</small></div><div class="b">' +
-        '<button id="ea-ash">Ashvale</button><button id="ea-salt">Saltmere</button><button id="ea-in">+</button><button id="ea-out">&minus;</button>' +
+        '.ea button:focus-visible{outline:2px solid #fff}.ea button.on{background:linear-gradient(#7a6a3a,#5a4a29)}' +
+        '.ea .you{position:absolute;left:0;top:0;display:none;transform:translate(-50%,-50%);pointer-events:none}' +
+        '.ea .you i{display:block;width:14px;height:14px;border-radius:50%;background:#2fd3ff;border:2px solid #fff;box-shadow:0 0 0 3px #0a2a3a99,0 0 10px #2fd3ff}' +
+        '.ea .you i::after{content:"";position:absolute;left:50%;top:7px;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;border:2px solid #2fd3ff;animation:eaPing 1.8s ease-out infinite}' +
+        '.ea .you b{position:absolute;left:50%;top:18px;transform:translateX(-50%);padding:1px 6px;border-radius:4px;background:rgba(10,30,40,.85);color:#bff1ff;font-size:12px;white-space:nowrap}' +
+        '@keyframes eaPing{from{transform:scale(1);opacity:.9}to{transform:scale(3.2);opacity:0}}' +
+        '.ea .rose{position:absolute;left:14px;bottom:max(14px,env(safe-area-inset-bottom));width:min(26vmin,150px);height:min(26vmin,150px);opacity:.5;pointer-events:auto;cursor:pointer;transition:opacity .2s}.ea .rose:hover{opacity:.8}' +
+        '.ea .rose svg{width:100%;height:100%;display:block;overflow:visible}' +
+        '.ea .lbl{position:absolute;left:0;top:0;display:none;transform:translate(-50%,-100%);pointer-events:none;color:#ffe9a8;font-size:12px;text-shadow:0 1px 2px #000,0 0 4px #000;white-space:nowrap;text-align:center}' +
+        '.ea .lbl i{display:block;width:9px;height:9px;margin:2px auto 0;border-radius:50%;background:#ffcf3f;border:2px solid #fff}</style>' +
+        '<div class="ea"><div class="lbl" id="ea-np">North Pole<i></i></div><div class="lbl" id="ea-sp">South Pole<i></i></div><div class="lbl" id="ea-eq" style="transform:translate(-50%,-130%)">Equator</div>' +
+        '<div class="rose" id="ea-rose" title="North - tap to face north"><svg viewBox="-60 -60 120 120"><g id="ea-rose-g">' +
+        '<circle r="44" fill="rgba(20,16,10,.35)" stroke="#ffcf3f" stroke-width="1.5"/><circle r="30" fill="none" stroke="#e8d9b4" stroke-width=".8" stroke-dasharray="2 3"/>' +
+        '<path d="M0-42L7-7 0 0-7-7Z" fill="#e33"/><path d="M0 42L7 7 0 0-7 7Z" fill="#e8d9b4"/><path d="M42 0L7-7 0 0 7 7Z" fill="#e8d9b4"/><path d="M-42 0L-7-7 0 0-7 7Z" fill="#e8d9b4"/>' +
+        '<path d="M0-42L7-7 0 0Z" fill="#a11"/><path d="M42 0L7 7 0 0Z" fill="#b9a983"/><path d="M0 42L-7 7 0 0Z" fill="#b9a983"/><path d="M-42 0L-7-7 0 0Z" fill="#b9a983"/>' +
+        '<text y="-47" text-anchor="middle" font-size="13" font-weight="700" fill="#ff5a4a">N</text><text y="56" text-anchor="middle" font-size="11" fill="#e8d9b4">S</text>' +
+        '<text x="52" y="4" text-anchor="middle" font-size="11" fill="#e8d9b4">E</text><text x="-52" y="4" text-anchor="middle" font-size="11" fill="#e8d9b4">W</text></g></svg></div>' +
+        '<div class="you" id="ea-you"><i></i><b>You</b></div><div class="t">ASHVALE Atlas<small id="ea-alt">-</small><small id="ea-note" hidden></small></div><div class="b">' +
+        '<button id="ea-me" hidden>You</button><button id="ea-ash">Ashvale</button><button id="ea-salt">Saltmere</button><button id="ea-in">+</button><button id="ea-out">&minus;</button>' +
         '<button id="ea-globe">Globe</button><button id="ea-par">Parcels</button></div></div>';
       host.appendChild(hud);
       const $ = id => hud.querySelector('#' + id), altEl = $('ea-alt');
       $('ea-ash').onclick = () => flyTo('ashvale'); $('ea-salt').onclick = () => flyTo('saltmere'); $('ea-globe').onclick = () => flyTo('globe');
       $('ea-in').onclick = () => zoom(0.45); $('ea-out').onclick = () => zoom(2.2);
       $('ea-par').onclick = () => { U.uParcel.value = U.uParcel.value ? 0 : 0.75; $('ea-par').classList.toggle('on', !!U.uParcel.value); };
+      /* ---- YOU ARE HERE (2026-10-06: players open the Atlas from the Games tab and should see a dot where they are).
+         The game tells the @ashvale Bank where its player stands as it saves; here we ask the Bank, in the same realtime
+         room the game uses, for our own player's spot (the arcade stamps who is asking, so each player only learns their
+         own). A blue dot marks it at every height, and the You button flies there. Outside the arcade, or signed out, or
+         a player who never played: no dot, nothing else changes. */
+      const youEl = $('ea-you'), meBtn = $('ea-me'), vYou = new THREE.Vector3();
+      const YOU = { at: null, asked: 0, state: 'off' };
+      function setYou(x, y) {
+        const g = gameAt(x, y); if (!g) return;
+        YOU.at = Object.assign(g, { gx: x, gy: y }); YOU.state = 'shown'; $('ea-note').hidden = true;
+        PLACES.you = { u: g.u, alt: 90 }; meBtn.hidden = false;
+      }
+      /* ---- the compass rose turns with the view: its N points to the planet's north (the camera's heading cam.hd is
+         measured from north, toward east); tap it to face north. Pole and equator labels sit on the ground there. */
+      const roseG = hud.querySelector('#ea-rose-g'), npEl = $('ea-np'), spEl = $('ea-sp'), eqEl = $('ea-eq'), vL = new THREE.Vector3();
+      $('ea-rose').onclick = () => { cam.hd = Math.round(cam.hd / (2 * Math.PI)) * 2 * Math.PI; };
+      function screenOf(u, lift) {   /* a point on the ground at direction u -> [x, y] on screen, or null behind the planet / off screen */
+        const pl = toPlanar(u), h = Math.max(W.WATER, W.sample(pl.face, pl.x, pl.y).h) * U.uEx.value, rr = R + h + (lift || 0);
+        const px = u[0] * rr, py = u[1] * rr, pz = u[2] * rr;
+        if ((camW[0] - px) * u[0] + (camW[1] - py) * u[1] + (camW[2] - pz) * u[2] <= 0) return null;
+        vL.set(px - camW[0], py - camW[1], pz - camW[2]).project(camera);
+        if (vL.z > 1 || Math.abs(vL.x) > 1.05 || Math.abs(vL.y) > 1.05) return null;
+        return [(vL.x + 1) / 2 * (canvas.clientWidth || innerWidth), (1 - vL.y) / 2 * (canvas.clientHeight || innerHeight)];
+      }
+      const place = (el, s) => { if (!s) { el.style.display = 'none'; return; } el.style.display = 'block'; el.style.left = s[0] + 'px'; el.style.top = s[1] + 'px'; };
+      let markT = 0;
+      function marksTick() {
+        roseG.setAttribute('transform', 'rotate(' + (-cam.hd * 180 / Math.PI).toFixed(2) + ')');
+        if (frame - markT < 2) return; markT = frame;
+        place(npEl, screenOf([0, 0, 1], 2)); place(spEl, screenOf([0, 0, -1], 2));
+        const l = Math.hypot(cam.u[0], cam.u[1]); place(eqEl, l > 1e-6 ? screenOf([cam.u[0] / l, cam.u[1] / l, 0], 2) : null);
+      }
+      function youTick() {
+        if (!YOU.at) return;
+        const u = YOU.at.u, h = Math.max(W.WATER, W.sample(YOU.at.face, YOU.at.x, YOU.at.y).h) * U.uEx.value, rr = R + h + 1.5;
+        const px = u[0] * rr, py = u[1] * rr, pz = u[2] * rr;
+        /* on our side of the planet: the camera is above the dot's horizon */
+        const up = (camW[0] - px) * u[0] + (camW[1] - py) * u[1] + (camW[2] - pz) * u[2];
+        vYou.set(px - camW[0], py - camW[1], pz - camW[2]).project(camera);
+        if (up <= 0 || vYou.z > 1 || Math.abs(vYou.x) > 1.2 || Math.abs(vYou.y) > 1.2) { youEl.style.display = 'none'; return; }
+        const w = canvas.clientWidth || innerWidth, hh = canvas.clientHeight || innerHeight;
+        youEl.style.display = 'block'; youEl.style.left = ((vYou.x + 1) / 2 * w) + 'px'; youEl.style.top = ((1 - vYou.y) / 2 * hh) + 'px';
+      }
+      async function findMe() {
+        const RT0 = () => window.arcade && window.arcade.realtime;
+        if (!/^https?:/.test(location.protocol) || !window.parent || window.parent === window) return;
+        if (!RT0()) await new Promise(ok => { const s = document.createElement('script'); s.src = '/r/realtime.js'; s.onload = s.onerror = () => ok(); document.head.appendChild(s); setTimeout(ok, 8000); });
+        if (!RT0()) return;
+        YOU.state = 'asking';
+        const room = await RT0().join('bank', { game: 'ashvale' });
+        if (!room || !room.online || !room.me || room.me.guest || !room.me.address) { YOU.state = 'signed-out'; return; }
+        const BANK = 'nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c';   /* @ashvale: only its answers count */
+        let done = false;
+        room.on('message', (m, p) => {
+          if (done || !m || m.t !== 'where' || m.to !== room.me.address || !p || p.address !== BANK) return;
+          done = true; if (m.none) { YOU.state = 'never-played'; const n = $('ea-note'); n.textContent = 'Play ASHVALE once and your spot shows here.'; n.hidden = false; } else setYou(m.x, m.y);
+          setTimeout(() => room.leave(), 500);
+        });
+        for (let k = 0; k < 4 && !done; k++) { YOU.asked++; room.send({ t: 'where?', v: 1 }); await new Promise(ok => setTimeout(ok, 6000)); }
+        if (!done) { YOU.state = 'no-answer'; room.leave(); }
+      }
+      meBtn.onclick = () => { if (PLACES.you) flyTo('you'); };
+      setTimeout(() => { try { buildEquator(); } catch (e) { console.warn('Atlas: no equator line', e && e.message); } }, 300);
+      setTimeout(() => findMe().catch(e => { YOU.state = 'error'; console.warn('Atlas: could not find you', e && e.message); }), 1500);
       let hudT = 0;
       function hudTick() {
         if (frame - hudT < 10) return; hudT = frame;
@@ -491,6 +595,7 @@
         state: () => ({ lat: uToLL(cam.u)[0], lon: uToLL(cam.u)[1], alt: cam.alt, hd: cam.hd, tilt: cam.tilt, flying: !!cam.fly, ex: U.uEx.value, ground: groundH, face: tP && tP.face }),
         stats: () => ({ patches: drawn.length, built, live, queue: buildQ.size, chunks: chunks.size, chunksBuilt: Array.from(chunks.values()).filter(c => c.mesh).length, frame }),
         places: PLACES, W, G,
+        you: (x, y) => { if (x != null) setYou(x, y); return { state: YOU.state, asked: YOU.asked, at: YOU.at && [YOU.at.gx, YOU.at.gy], shown: youEl.style.display === 'block' }; },
         /* the world editor (the operator: "edit the terrain raising and lowering and region type" in the Atlas) */
         pick: (x, y) => groundUnder(x, y),
         setEdits: (list, near) => {

@@ -430,7 +430,7 @@
       const projs = [];
       function entOf(id) { return typeof id === 'number' ? ents.get('m:' + id) : id === PID ? ents.get('p:' + id) : typeof id === 'string' && id.indexOf('n:') === 0 ? ents.get(id) : ents.get('r:' + id); }   /* n:<id> = an NPC fighting (the castle guard) */
       function onImpact(e, name) {
-        if (/chop|mine|fish|cook/.test(name)) { sfx(name === 'mine' ? 'mine' : name === 'chop' ? 'chop' : name === 'fish' ? 'splash' : 'sizzle'); return; }
+        if (/chop|mine|fish|cook/.test(name)) { sfx(name === 'mine' ? 'mine' : name === 'chop' ? 'chop' : name === 'fish' ? 'splash' : 'sizzle', e); return; }
         const rec = e.impacts.find(r => !r.fired); if (!rec) return;
         fireImpact(e, rec);
       }
@@ -444,14 +444,14 @@
         obj.position.copy(from); obj.userData.isProjectile = true; scene.add(obj);
         const left = Math.max(0.28, rec.delay * TICK / 1000 - (performance.now() - rec.t) / 1000);
         projs.push({ obj, from, tgt, t: 0, dur: rec.hit ? 0.3 : left, hit: rec.hit, src: rec.src, dst: rec.dst, kind: rec.cls, arrived: false });
-        sfx(rec.cls === 'ranged' ? 'bow' : 'cast');
+        sfx(rec.cls === 'ranged' ? 'bow' : 'cast', e);
       }
       function showHit(h) {
         const t = entOf(h.dst); if (!t) return;
         const el = hud.splat(h.dmg); t.splats.push({ el, t: performance.now(), k: t.splats.length });
         t.hpT = performance.now(); t.hp = h.hp; t.max = h.max;
         if (!t.oneShot && !t.dead && h.hp > 0) { if (h.blocked) playOnce(t, 'block'); else if (h.dmg > 0) playOnce(t, 'hit'); }
-        sfx(h.dmg > 0 ? 'hit' : 'miss');
+        sfx(h.dmg > 0 ? 'hit' : 'miss', t);
         if (h.dst === PID || h.src === PID) lastOpp = { uid: h.dst === PID ? h.src : h.dst, t: performance.now() };
         if (h.dst === PID) hud.refresh('orbs');
       }
@@ -525,7 +525,7 @@
             const sp = Math.max(1, 0.75 / (TICK / 1000 * 1.0));
             playOnce(src, anim, e.cls === 'melee' ? 1.15 : 1);
             src.impacts.push({ dst: e.dst, src: e.src, cls: e.cls, tier: e.ammo ? +String(e.ammo).slice(-1) : 1, spell: e.spell, delay: e.delay, t: now, hit: null, fired: false });
-            if (e.cls === 'melee') sfx('swing');
+            if (e.cls === 'melee') sfx('swing', src);
             void sp; break;
           }
           case 'hit': {
@@ -541,7 +541,7 @@
           }
           case 'die': {
             const t = e.mob != null ? ents.get('m:' + e.mob) : ents.get('p:' + e.p); if (!t) break;
-            t.dead = true; t.deadT = now; t.oneShot = true; t.H.play('death', { loop: false }); sfx(e.p === PID ? 'die' : 'mobdie');
+            t.dead = true; t.deadT = now; t.oneShot = true; t.H.play('death', { loop: false }); sfx(e.p === PID ? 'die' : 'mobdie', e.p === PID ? null : t);
             if (e.p === PID) setTimeout(() => hud.death(true), 700);
             break;
           }
@@ -568,14 +568,14 @@
           case 'zoneadd': zoneArrived(e, now); break;
           case 'chest': if (mine) { const c = ents.get('n:' + e.npc); if (c) c.H.play('open'); hud.openChest(); } break;   /* the town chest */
           case 'shopclose': if (mine) hud.closeShop(); break;
-          case 'mobeat': { const t = ents.get('m:' + e.mob); if (t && !t.dead) { playOnce(t, 'eat'); sfx('eat'); } break; }
+          case 'mobeat': { const t = ents.get('m:' + e.mob); if (t && !t.dead) { playOnce(t, 'eat'); sfx('eat', t); } break; }
           case 'tailor': if (mine) { faceNpc(e.npc); openWardrobe(false); } break;
           case 'look': if (mine) { if (me.look && myEnt.H.setOutfit) myEnt.H.setOutfit(me.look); netGear(); } break;
           case 'dialog': if (mine) { hud.dialog(e.name, e.lines); faceNpc(e.npc); sfx('click'); } break;
           case 'weather': if (e.zone === core.weatherZone(zoneHere())) { if (e.say) hud.chat(e.say, 'sys'); showWeather(); } break;
-          case 'fire': addFire(e.fire, e.x, e.y); if (e.p === PID || !e.p) sfx('sizzle'); break;
+          case 'fire': addFire(e.fire, e.x, e.y); if (e.p === PID || !e.p) sfx('sizzle', e.p === PID ? null : { x: e.x, y: e.y }); break;
           case 'fireout': removeFire(e.fire); break;
-          case 'fx': { const t = ents.get('m:' + e.mob); if (!t) break; t.fx = t.fx || {}; t.fx[e.fx] = 1; applyTint(t); const el = hud.fxSplat(e.fx); if (el) t.splats.push({ el, t: performance.now(), k: t.splats.length }); if (e.fx === 'freeze') sfx('freeze'); break; }
+          case 'fx': { const t = ents.get('m:' + e.mob); if (!t) break; t.fx = t.fx || {}; t.fx[e.fx] = 1; applyTint(t); const el = hud.fxSplat(e.fx); if (el) t.splats.push({ el, t: performance.now(), k: t.splats.length }); if (e.fx === 'freeze') sfx('freeze', t); break; }
           case 'fxend': { const t = ents.get('m:' + e.mob); if (!t || !t.fx) break; delete t.fx[e.fx]; applyTint(t); break; }
           case 'deplete': for (const r of regions) if (r.built) r.built.setDepleted(e.node, true); if (e.forever && mine) fellTell(e.x, e.y); break;
           case 'regrow': for (const r of regions) if (r.built) r.built.setDepleted(e.node, false); break;
@@ -677,10 +677,20 @@
 
       /* ---------- sound: tiny WebAudio synth (no files) */
       let ac = null;
-      function sfx(name) {
+      /* 2026-10-06: "Sounds should not be heard everywhere they should only be heard in the surrounding 15 tiles."
+         A sound with a place (an entity, or a tile {x, y}) plays at full volume within HEAR_FULL tiles of you, fades out to
+         silence at HEAR tiles and is not played beyond; your own sounds (no place) always play. */
+      const HEAR = 15, HEAR_FULL = 8;
+      function sfx(name, at) {
         if (!settings.sound) return;
+        let vol = 1;
+        if (at && myEnt) {
+          const P0 = myEnt.root.position, px = at.root ? at.root.position.x : at.x + 0.5, pz = at.root ? at.root.position.z : at.y + 0.5;
+          const d = Math.hypot(px - P0.x, pz - P0.z); if (d > HEAR) return;
+          vol = d <= HEAR_FULL ? 1 : 1 - (d - HEAR_FULL) / (HEAR - HEAR_FULL);
+        }
         try { if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch (e) { return; }
-        const t = ac.currentTime, out = ac.createGain(); out.gain.value = 0.22; out.connect(ac.destination);
+        const t = ac.currentTime, out = ac.createGain(); out.gain.value = 0.22 * vol; out.connect(ac.destination);
         const tone = (f, d, type, v, f2, at) => { const o = ac.createOscillator(), g = ac.createGain(); o.type = type || 'sine'; o.frequency.setValueAtTime(f, t + (at || 0)); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + (at || 0) + d); g.gain.setValueAtTime(v || 0.5, t + (at || 0)); g.gain.exponentialRampToValueAtTime(0.001, t + (at || 0) + d); o.connect(g); g.connect(out); o.start(t + (at || 0)); o.stop(t + (at || 0) + d + 0.02); };
         const noise = (d, freq, v, q2) => { const n = ac.createBufferSource(), b = ac.createBuffer(1, Math.max(1, ac.sampleRate * d | 0), ac.sampleRate), a = b.getChannelData(0); for (let i = 0; i < a.length; i++) a[i] = Math.random() * 2 - 1; n.buffer = b; const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q2 || 1; const g = ac.createGain(); g.gain.setValueAtTime(v || 0.6, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); n.connect(f); f.connect(g); g.connect(out); n.start(t); };
         switch (name) {
@@ -960,6 +970,50 @@
         const mob = typeof e.src === 'number' && e.dst === PID ? e.src : e.src === PID && typeof e.dst === 'number' ? e.dst : null;
         if (mob == null) return; const m = core.mobByUid(mob); if (m) lastCombat = { zone: m.zone, t: performance.now() };
       }
+      /* ONE DEVICE AT A TIME (2026-10-06: the same player on two devices showed one character jumping between two
+         spots). Every game of a signed-in player also joins the room 'one.<address>'; the arcade stamps each sender's
+         address, so only that player's own games can speak there. A game that opens says 'claim' with its session id:
+         every OLDER game of that player that hears it stops (no saves, no network, a notice with Play here instead).
+         Heartbeats every 15 s cover a lost claim: of two sessions that hear each other, the one that started later wins.
+         Same-id messages are let through (two devices may share an id) and our own echo is told apart by the session. */
+      const ONE = { sid: Math.random().toString(36).slice(2, 10) + Date.now().toString(36), at: Date.now(), room: null, addr: null, t: 0, said: 0 };
+      function evicted() {
+        if (stopped) return;
+        stopped = true; hud.showHelp && hud.showHelp(false); hud.hideMenu && hud.hideMenu(); hud.elsewhere && hud.elsewhere();
+        const R = room; room = null; dropRemotes(); hud.setOnline(false); if (R) R.leave();
+        if (nb) nb.update([], []);
+        if (bank.room) { try { bank.room.leave(); } catch (e) { /* gone */ } bank.room = null; }
+        if (ONE.room) { ONE.room.leave(); ONE.room = null; } clearInterval(ONE.t);
+      }
+      async function oneDevice(who) {
+        if (!who || who.guest || !who.address || ONE.addr === who.address) return;
+        ONE.addr = who.address;
+        const res = await net.join('one.' + who.address, { game: 'ashvale', loopback: q.has('loopback') });
+        if (!res || !res.online || stopped) return;
+        const R = ONE.room = res.room;
+        const say = claim => { if (ONE.room === R && !stopped) { ONE.said = Date.now(); R.send({ t: 'dev', s: ONE.sid, at: ONE.at, claim: !!claim }); } };
+        R.on('message', ev => {
+          const m = ev.data || {};
+          if (stopped || m.t !== 'dev' || m.s === ONE.sid || !ev.from || ev.from.address !== who.address) return;
+          if (m.claim || m.at > ONE.at || (m.at === ONE.at && String(m.s) > ONE.sid)) evicted();
+          else if (Date.now() - ONE.said > 3000) say(false);   /* the other is older: make sure it hears us */
+        }, { self: true });
+        R.on('join', () => say(false));
+        say(true); ONE.t = setInterval(() => say(false), 15000);
+      }
+      /* NEW VERSION (2026-10-06): every 3 minutes look up the newest registry, by the launcher's own rule (newest
+         @ashvale registry this loader can run). A newer one than ours: save now and tell the player to leave, refresh the
+         Games tab and come back in. */
+      const VER = { mine: ((G.ASH3D && G.ASH3D._values && G.ASH3D._values.$registry) || {}).version | 0, told: 0 };
+      async function versionCheck() {
+        if (stopped || !VER.mine || VER.told || !/^https?:/.test(location.protocol)) return;
+        try {
+          const L = await (await fetch('/r/inscriptions?creator=nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c&limit=10')).json();
+          let v = 0; for (const x of L || []) { const j = x && x.json; if (j && j.ashvale3d === 'registry' && (j.loader || 1) <= (G.ASH3D.LOADER || 1)) v = Math.max(v, j.version | 0); }
+          if (v > VER.mine) { VER.told = v; persist(); hud.newVersion && hud.newVersion(v); hud.chat('A new version of ASHVALE is out. Leave the game, refresh your Games tab and open ASHVALE again.', 'sys'); }
+        } catch (e) { /* offline for now: the next check */ }
+      }
+      if (VER.mine) setInterval(versionCheck, 180000);
       async function netRoom() {
         const z = core.regionOf(me.x, me.y); if ((z === roomZone && (room || performance.now() < retryAt)) || joining) return;
         joining = true; roomZone = z;
@@ -972,7 +1026,7 @@
           if (res && res.online) { NW.heard = performance.now(); NW.fails = 0; NW.was = true; NW.quietTry = false; if (NW.lost) { NW.lost = false; hud.netLost && hud.netLost(false); hud.chat('Back in touch with other players.', 'sys'); } }
           else if (NW.was && (NW.lost || NW.quietTry)) { NW.quietTry = false; NW.tries++; if (!NW.lost) NW.lost = true; hud.netLost && hud.netLost(true, 'net', 'the arcade is not answering' + (NW.tries > 2 ? ': reload the page' : ', still trying')); }
           if (res && res.online && core.regionOf(me.x, me.y) === z) {
-            const R = res.room; room = R; myNetId = R.me.id; netStatus = res.backend + ' as ' + (R.me.tag ? '@' + R.me.tag : 'guest');
+            const R = res.room; room = R; myNetId = R.me.id; oneDevice(R.me); netStatus = res.backend + ' as ' + (R.me.tag ? '@' + R.me.tag : 'guest');
             { let h = 2166136261; for (let i = 0; i < myNetId.length; i++) h = Math.imul(h ^ myNetId.charCodeAt(i), 16777619) >>> 0; core.uidSpace(1 + h % 4095); }   /* my own uid space for things I create as a host */
             R.on('message', ev => { if (room === R) onNet(ev); });
             R.on('message', () => { if (room === R) NW.heard = performance.now(); }); R.on('join', () => { if (room === R) NW.heard = performance.now(); }); R.on('leave', () => { if (room === R) NW.heard = performance.now(); });
@@ -1819,20 +1873,47 @@
         if (flag && me.x === flag[0] && me.y === flag[1]) flag = null;
         minimapFor();
         if (mmO[0] || mmO[1]) for (const d of dots) { d.x -= mmO[0]; d.y -= mmO[1]; }
-        hud.drawMinimap(mmImg, { x: p.x - mmO[0], y: p.z - mmO[1], yaw: cam.yaw, dots, flag: flag ? [flag[0] + 0.5 - mmO[0], flag[1] + 0.5 - mmO[1]] : null });
+        hud.drawMinimap(mmImg, { x: p.x - mmO[0], y: p.z - mmO[1], yaw: cam.yaw, north: trueNorth(me.x, me.y), dots, flag: flag ? [flag[0] + 0.5 - mmO[0], flag[1] + 0.5 - mmO[1]] : null });
+      }
+      /* TRUE NORTH (2026-10-06: the compass is a dot on the minimap's rim that always points north, and "make sure
+         that north in the game matches in the Atlas" - the planet's north pole). The game's grid is laid on a face of the
+         globe, so map-up is not north: near Ashvale the pole lies ~42 degrees left of it. From the worldgen projection: the
+         pole's direction on the ground where you stand, as a game vector [x east, y south]. Recomputed every 16 tiles. */
+      const TN = { key: '', v: [0, -1] };
+      function trueNorth(x, y) {
+        const WG = D.wg, C = DATA.globecfg; if (!WG || !WG.toSphere || !C || !C.origin) return TN.v;
+        const key = (x >> 4) + ':' + (y >> 4); if (key === TN.key) return TN.v; TN.key = key;
+        const fx = x + C.origin[0] + 0.5, fy = -(y + C.origin[1]) - 0.5, u = WG.toSphere(C.face, fx, fy), un = WG.toSphere(C.face, fx, fy + 1), ue = WG.toSphere(C.face, fx + 1, fy);
+        const d = [un[0] - u[0], un[1] - u[1], un[2] - u[2]], e = [ue[0] - u[0], ue[1] - u[1], ue[2] - u[2]], N = [-u[0] * u[2], -u[1] * u[2], 1 - u[2] * u[2]];
+        const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], dd = dot(d, d), de = dot(d, e), ee = dot(e, e), nd = dot(N, d), ne = dot(N, e), det = dd * ee - de * de;
+        if (!(Math.abs(det) > 0)) return TN.v;
+        const a = (nd * ee - ne * de) / det, b = (dd * ne - de * nd) / det, gx = b, gy = -a, l = Math.hypot(gx, gy) || 1;   /* N = a*(game north) + b*(game east) */
+        TN.v = [gx / l, gy / l]; return TN.v;
       }
       function resize() { const w = host.clientWidth || innerWidth, h = host.clientHeight || innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = w / h < 1.2 ? 55 : 45; camera.updateProjectionMatrix(); }
       if (window.ResizeObserver) new ResizeObserver(resize).observe(host); window.addEventListener('resize', resize); resize();
       let saveFails = 0;
-      function persist() {
+      /* where you stand, for the Atlas's "you are here" (2026-10-06): the @ashvale Bank keeps each player's last spot
+         and tells the Atlas (Games tab) when it asks. Said as we save, when we moved 6+ tiles or 2 minutes went by, and as
+         we leave; only a signed-in player (the mesh stamps the address, so nobody can move someone else's dot). */
+      const HERE = { x: null, y: null, t: 0 };
+      function tellHere(force) {
+        if (!walletState.address && !hintedAddr) return;
+        const now = Date.now(), moved = HERE.x == null || Math.abs(me.x - HERE.x) + Math.abs(me.y - HERE.y) >= 6;
+        if (!force && !moved && now - HERE.t < 120000) return;
+        HERE.x = me.x; HERE.y = me.y; HERE.t = now;
+        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'here', v: 1, x: me.x, y: me.y }); });
+      }
+      function persist(leaving) {
         if (stopped) return;
+        try { tellHere(leaving === true); } catch (e) { /* the Bank is out of reach: the next save */ }
         Promise.resolve(store.set(SAVE, JSON.stringify(core.exportPlayer(PID)))).then(ok => {   /* false: the arcade did not take it */
           if (ok === false) { if (++saveFails === 2) hud.netLost && hud.netLost(true, 'save'); }
           else { if (saveFails >= 2) { hud.netLost && hud.netLost(false, 'save'); hud.chat('Your progress is saving again.', 'sys'); } saveFails = 0; }
         });
       }   /* stopped: New character cleared the save; the reload's visibilitychange must not write the old one back */
-      document.addEventListener('visibilitychange', () => { if (document.hidden) persist(); else { lastTick = performance.now(); } });
-      window.addEventListener('pagehide', persist);
+      document.addEventListener('visibilitychange', () => { if (document.hidden) persist(true); else { lastTick = performance.now(); } });
+      window.addEventListener('pagehide', () => persist(true));
 
       function hudApi() {
         return {
@@ -1847,7 +1928,7 @@
           settings: () => settings,
           toggle: k => { settings[k] = !settings[k]; store.set(SET, JSON.stringify(settings)); if (k === 'shadows') { sun.castShadow = settings.shadows; for (const e of ents.values()) e.blob.visible = !settings.shadows && !e.hawk; renderer.shadowMap.needsUpdate = true; scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); } },
           resetCamera: () => { cam.tyaw = PI * 0.12; cam.tpitch = 0.92; cam.tdist = isPhone ? 9 : 11; },
-          faceNorth: () => { cam.tyaw = Math.round(cam.tyaw / (2 * PI)) * 2 * PI; },
+          faceNorth: () => { const v = trueNorth(me.x, me.y), want = -PI / 2 - Math.atan2(v[1], v[0]); cam.tyaw = want + Math.round((cam.tyaw - want) / (2 * PI)) * 2 * PI; },   /* true north up, the short way round */
           newGame: () => { stopped = true; store.set(SAVE, '').then(() => location.reload(), () => location.reload()); },
           helpSeen: () => store.set('ashvale3d.help', '1'),
           savesHere: () => store.backend,
@@ -1892,7 +1973,9 @@
         chestEventForTest: chestEvent,
         chest: { state: chestState, take: chestTake, store: chestStore, promise: paid => { const L = ledgerFor(walletState.address); for (const k in paid) L.pend[k] = (L.pend[k] || 0) + paid[k]; ledgerSave(); },
           paidForTest: paid => { const L = ledgerFor(walletState.address); for (const k in paid) { const toChest = Math.min(paid[k], L.lchest[k] || 0); L.lchest[k] -= toChest; L.pchest[k] = (L.pchest[k] || 0) + toChest; L.pend[k] = (L.pend[k] || 0) + paid[k] - toChest; } ledgerSave(); } },   /* tests */ trip: () => TRIP && TRIP.state(), trade: () => trade, peers: () => Array.from(remotes.values()).map(r => r.from), _remIds: () => Array.from(remotes.keys()), optionsAt: (cx, cy) => { const L = []; for (const t of targetsAt(cx, cy)) for (const o of optionsFor(t)) L.push(o.html.replace(/<[^>]+>/g, '')); return L; }, _remAnim: () => JSON.stringify(Array.from(remotes.values()).map(r => [r.anim, r.buf.length, r.buf.length && r.buf[r.buf.length - 1].a])),
-        stop() { stopped = true; }
+        stop() { stopped = true; },
+        sfxAt: (n, at) => sfx(n, at),
+        versionCheck, oneDevice: () => ({ sid: ONE.sid, at: ONE.at, room: !!ONE.room, addr: ONE.addr, stopped, version: VER.mine, told: VER.told })
       };
       void _handle;
       return game;

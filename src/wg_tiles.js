@@ -32,7 +32,9 @@
       }
       return false;
     }
-    function tileTrue(f, gx, gy) {
+    let FOREST_HIT = false;   /* set by baseTile: this tree came from the forest dice (only those may be cleared for a way through) */
+    function baseTile(f, gx, gy) {
+      FOREST_HIT = false;
       const PI = ctx.PIECES;
       for (let k = 0; k < PI.length; k++) if (PI[k].face === f) { const L = ctx.pieceTile(PI[k], gx, gy); if (L) {
         /* a coastal town's ground letters follow the Atlas ground: water below sea level, a drawn '~' on dry land is beach */
@@ -57,12 +59,17 @@
       if (h < WATER - 0.05) return pd < 0 && ctx.bridgeDist(f, cx, cy) < 0 ? 'B' : '~';   /* a bridge: wg_paths lays one only across a stream */
       if (TF[3] > 0.1) return '^';
       if (pd < 0) return 'p';
-      if (TF[2] > 0.5 || (TF[2] > 0.3 && h < WATER + 0.3)) return 's';
+      if (TF[2] > 0.5 || (TF[2] > 0.3 && h < WATER + 0.3)) {
+        /* the open desert: sand with a saguaro here and there (2026-10-06), never on a beach or a path */
+        if (CMT && CMT.cactus && pd >= CLEAR && ctx.climOf(TF[15], TF[14]) === 3 && g.u01(g.hash3(gx, gy, (f * 7919) ^ ctx.S.tl ^ 0x5a17)) < CMT.cactus) { FOREST_HIT = true; return 'U'; }
+        return 's';
+      }
       const hv = g.hash3(gx, gy, (f * 104729) ^ ctx.S.tl), r1 = g.u01(hv), r2 = g.u01(g.mix32(hv ^ 0x68e31da4));
       const clear = pd < CLEAR || TF[5] > 0.3;
       const forest = TF[1] + LONE * (1 - TF[9]);
       if (!clear && r1 < forest) {
-        if (PI.length) { ctx.pieceFlora(f, cx, cy, PFL); if (PFL.sp && g.u01(g.mix32(hv ^ 0x3c6ef372)) >= PFL.k) return PFL.sp[Math.floor(r2 * PFL.sp.length)]; }
+        FOREST_HIT = true;
+        if (PI.length) { ctx.pieceFlora(f, cx, cy, PFL); if (PFL.sp && g.u01(g.mix32(hv ^ 0x3c6ef372)) >= PFL.k) { FOREST_HIT = false; return PFL.sp[Math.floor(r2 * PFL.sp.length)]; } }
         if (TF[4] > 0.02 || TF[2] > 0.12 || (TF[9] > 0.12 && r2 < 0.5)) return TR.wet;
         /* the climate's own trees: pines in the taiga, broadleaf mixes in the rainforest (2026-10-03) */
         const zt = CMT ? CMT.trees[ctx.climOf(TF[15], TF[14])] : '';
@@ -77,6 +84,61 @@
       if (zg !== '.') return zg;   /* dry grass on the steppe and savanna, sand in the desert, bare tundra */
       if (TF[7] > FL.core && r2 < FL.chance && g.vnoise(cx * FL.patchFreq, cy * FL.patchFreq, f, ctx.S.fl) > FL.patch) return 'f';
       return '.';
+    }
+    /* NO WALLED-IN GROUND (2026-10-06: "Animals keep getting stuck in the woods because there's no way out or
+       through ... no encapsulated tiles"). Measured before: ~2,700 pockets of open ground fully ringed by trees around
+       Ashvale alone. Walking is 4-connected (a diagonal step needs both side tiles open), so the land is cut into
+       WAY x WAY cells of each face; each cell has a gate on each side (nearest the middle, where both cells are free of
+       rock and water at the border), shared with the next cell.
+       Every open tile of a cell is joined to its gates by clearing the fewest forest trees (0-1 search: open costs 0, a
+       forest tree 1); since neighbouring cells meet at their gates, all of it joins up. Only trees from the forest dice
+       are ever cleared - never water, rock, a set piece's own trees, a camp - and a cleared tree is forest floor (,).
+       Pure and deterministic: a cell is worked out from its own tiles only, cached, and only a forest tree asks. */
+    const WAY = 16, WAYS = new Map(), WAY_MAX = 4096;
+    function wayCell(f, cx, cy) {
+      const key = f + ':' + cx + ':' + cy; let m = WAYS.get(key);
+      if (m) return m;
+      const N = WAY, x0 = cx * N, y0 = cy * N, kind = new Uint8Array(N * N);   /* 0 open, 1 forest tree, 2 other block */
+      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const L = baseTile(f, x0 + i, y0 + j); kind[j * N + i] = BLOCK.indexOf(L) < 0 ? 0 : FOREST_HIT ? 1 : 2; }
+      const clear = new Uint8Array(N * N), H = N >> 1, gates = [];
+      /* a side's gate: the tile nearest its middle where neither this cell nor the next has rock, water or a set piece on its
+         side of the border (both cells look at the same two rows, so they pick the same gate); a forest tree there is cleared */
+      const hard = (gx, gy) => BLOCK.indexOf(baseTile(f, gx, gy)) >= 0 && !FOREST_HIT;
+      for (const [vert, at, out] of [[false, 0, -1], [false, N - 1, N], [true, 0, -1], [true, N - 1, N]]) {
+        for (let s = 0; s < N; s++) {
+          const k = H + (s & 1 ? -((s + 1) >> 1) : s >> 1); if (k < 0 || k >= N) continue;
+          const i = vert ? at : k, j = vert ? k : at, c = j * N + i;
+          if (kind[c] === 2 || hard(x0 + (vert ? out : k), y0 + (vert ? k : out))) continue;
+          if (kind[c] === 1) { kind[c] = 0; clear[c] = 1; }
+          gates.push(c); break;
+        }
+      }
+      const dist = new Int32Array(N * N).fill(1e9), from = new Int32Array(N * N).fill(-1), dq = new Int32Array(4 * N * N);
+      function grow(seed) {   /* 0-1 search from seed (open 0, forest tree 1), then clear the cheapest way to every open tile it can reach */
+        let h = 2 * N * N, tl = h; dist[seed] = 0; from[seed] = -1; dq[tl++] = seed;
+        while (h < tl) {
+          const c = dq[h++], x = c % N, y = (c / N) | 0;
+          for (let k = 0; k < 4; k++) {
+            const a = x + (k === 0 ? 1 : k === 1 ? -1 : 0), b = y + (k === 2 ? 1 : k === 3 ? -1 : 0); if (a < 0 || b < 0 || a >= N || b >= N) continue;
+            const n = b * N + a, w = kind[n]; if (w === 2) continue;
+            const d = dist[c] + w; if (d >= dist[n]) continue;
+            dist[n] = d; from[n] = c; if (w) dq[tl++] = n; else dq[--h] = n;
+          }
+        }
+        for (let c = 0; c < N * N; c++) if (kind[c] === 0 && dist[c] > 0 && dist[c] < 1e9)
+          for (let n = c; n >= 0 && dist[n] > 0; n = from[n]) { if (kind[n] === 1) { kind[n] = 0; clear[n] = 1; } dist[n] = 0; }
+      }
+      /* from the first gate; a gate that water or rock keeps apart from it starts its own (a lake can cut a cell in two) */
+      for (const gt of gates) if (dist[gt] >= 1e9) grow(gt);
+      if (!gates.length) for (let c = 0; c < N * N; c++) if (kind[c] === 0) { grow(c); break; }   /* gates all in water/rock: join the cell to its first open tile */
+      if (WAYS.size >= WAY_MAX) WAYS.delete(WAYS.keys().next().value);
+      WAYS.set(key, clear); return clear;
+    }
+    function tileTrue(f, gx, gy) {
+      const L = baseTile(f, gx, gy);
+      if (!FOREST_HIT) return L;
+      const cx = Math.floor(gx / WAY), cy = Math.floor(gy / WAY);
+      return wayCell(f, cx, cy)[(gy - cy * WAY) * WAY + (gx - cx * WAY)] ? (L === 'U' ? 's' : ',') : L;   /* a cleared cactus is sand again */
     }
     function tileAt(face, gx, gy) {
       ctx.foldInto(face, gx + 0.5, -gy - 0.5, FB);

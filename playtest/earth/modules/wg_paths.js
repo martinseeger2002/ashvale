@@ -16,7 +16,7 @@
 (function (root) {
   'use strict';
   const META = { api: 1, v: 2, needs: { wg_geo: 1 } };
-  const TREES = 'TPOWMY';
+  const TREES = 'TPOWMYU';
   function attach(ctx) {
     const g = ctx.geo, T = ctx.T, PT = T.paths, PC = T.pieces, BK = 32;
     const bkey = (f, bx, by) => (f * 8192 + (bx + 4096)) * 8192 + (by + 4096);
@@ -118,11 +118,13 @@
       for (const pc of PIECES) {
         pc.pads = [];
         for (const o of pc.objects) {
-          if (!o.w || !o.h || (o.w < 3 && o.h < 3) || !/^(house|shop|smithy|furnace|well)$/.test(o.k)) continue;
+          if (!o.w || !o.h || (o.w < 3 && o.h < 3) || !/^(house|shop|smithy|furnace|well|cpad)$/.test(o.k)) continue;
           const cx = o.x + o.w / 2, cy = -(o.y + o.h / 2);
           ctx.foldInto(pc.face, cx, cy, SB);
           const hh = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false).h;
-          pc.pads.push([o.x, -(o.y + o.h), o.x + o.w, -o.y, Math.max(ctx.WATER + 0.4, hh)]);
+          /* cpad: a raised platform (the lake castle - the operator: "rather than drop the terrain ... raise the terrain"): its
+             top is o.top when that is higher than the land */
+          pc.pads.push([o.x, -(o.y + o.h), o.x + o.w, -o.y, Math.max(ctx.WATER + 0.4, hh, o.k === 'cpad' && o.top != null ? o.top : -1e9)]);
         }
       }
       /* exits: runs of 'p' (paths) and '~' (streams) on outer edges, plus explicit exits */

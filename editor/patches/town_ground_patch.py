@@ -8,6 +8,7 @@ sea (a basin), while the Atlas had its own coast - two shapes that disagreed. No
 An inland town's pond (Ashvale's fishing pond) is unchanged. Applied to the editor's preview now, the game after v0.8.4."""
 import os, sys
 H = sys.argv[1] if len(sys.argv) > 1 else '/home/you/ashvale3d'
+if "a coastal town's ground letters follow the Atlas ground" in open(os.path.join(H, 'src/wg_tiles.js')).read(): print('town_ground_patch already in the game:', H); sys.exit()   # merged into the game since
 def edit(p, a, b):
     p = os.path.join(H, p); s = open(p).read()
     if b in s: return

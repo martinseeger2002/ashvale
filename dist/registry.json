@@ -125,7 +125,7 @@
   },
   "hudchest": {
    "id": null,
-   "v": "1",
+   "v": "2",
    "api": 1,
    "kind": "js"
   },
@@ -696,6 +696,12 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.hat_bigchief": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.hat_bonewrap": {
     "id": null,
     "v": 1,
@@ -715,6 +721,12 @@
     "kind": "json"
    },
    "cloth.hat_feather": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "cloth.hat_featherband": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1075,6 +1087,12 @@
    "saltmere": {
     "id": null,
     "v": 2,
+    "api": 1,
+    "kind": "json"
+   },
+   "wolfden": {
+    "id": null,
+    "v": 1,
     "api": 1,
     "kind": "json"
    }

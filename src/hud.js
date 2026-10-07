@@ -18,12 +18,33 @@
     let xyKey = '';
     function setPos(x, y) { const k = x + ', ' + y; if (k === xyKey) return; xyKey = k; xy.textContent = k; }
     const mmBox = el('mm ui', ui), mmCanvas = el('', mmBox, null, 'canvas'); mmCanvas.width = mmCanvas.height = 300;
-    const compass = el('compass ui t', ui, 'N');
+    const compass = el('compass', ui, '<i class="ui" title="North - tap to face north"></i>');   /* a dot that orbits the minimap's rim, pointing to true north */
     const orbs = el('orbs ui', ui), hpOrb = el('orb hp', orbs, '<i></i><b></b>'), runOrb = el('orb run', orbs, '<i></i><b></b>'), prayOrb = el('orb pray', orbs, '<i></i><b></b>');
     const tabs = el('tabs ui', ui), panel = el('panel stone ui', ui);
     const chatw = el('chatw ui', ui), chat = el('chat', chatw), sayRow = el('say', chatw, '<input maxlength="120" enterkeyhint="send" placeholder="Say something to players here"><button>Say</button>'), sayIn = sayRow.firstChild;
     const doSay = () => { const t = sayIn.value; sayIn.value = ''; if (t.trim()) api.say(t); };
     sayIn.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { doSay(); if (!api.isTouch) sayIn.blur(); } else if (e.key === 'Escape') sayIn.blur(); });
+    /* on a phone the text box rides above the keyboard while it is open and goes back down when it closes (the operator
+       2026-10-06). The game runs inside the arcade's page, so the keyboard may or may not shrink what this page sees:
+       when the visible area shrinks, the box sits just above it; when nothing changes (an iframe the keyboard covers
+       without telling it), it goes to the top of the screen, which the keyboard never covers. The keyboard closing
+       (the visible area growing back) puts it down again, as does leaving the box. */
+    const KB = { on: false, base: 0, seen: false, t: 0 };
+    const vvBottom = () => { const v = G.visualViewport; return v ? v.height + v.offsetTop : G.innerHeight; };
+    function kbPlace() {
+      if (!KB.on) return;
+      const lift = KB.base - vvBottom(), cover = G.innerHeight - vvBottom();
+      if (lift > 80) { KB.seen = true; sayRow.classList.add('kb'); sayRow.style.top = 'auto'; sayRow.style.bottom = Math.max(6, cover + 6) + 'px'; }
+      else if (KB.seen) { sayIn.blur(); }   /* it was open and closed again: down it goes */
+      else if (performance.now() - KB.t > 650) { sayRow.classList.add('kb'); sayRow.style.bottom = 'auto'; sayRow.style.top = 'max(8px, env(safe-area-inset-top))'; }
+    }
+    function kbDown() { KB.on = false; KB.seen = false; sayRow.classList.remove('kb'); sayRow.style.top = sayRow.style.bottom = ''; }
+    if (api.isTouch) {
+      sayIn.addEventListener('focus', () => { KB.on = true; KB.seen = false; KB.base = Math.max(G.innerHeight, vvBottom()); KB.t = performance.now(); for (const ms of [120, 350, 700, 1000]) setTimeout(kbPlace, ms); });
+      sayIn.addEventListener('blur', kbDown);
+      if (G.visualViewport) { G.visualViewport.addEventListener('resize', kbPlace); G.visualViewport.addEventListener('scroll', kbPlace); }
+      G.addEventListener('resize', kbPlace);
+    }
     sayRow.lastChild.onclick = doSay;
     const xpd = el('xpd', ui), banner = el('banner stone t', ui), dead = el('dead', ui, 'Oh dear, you are dead!');
     const dlg = el('dlg stone ui', ui), ctx = el('ctx ui', ui), shopEl = el('shop stone ui', ui), help = el('help stone ui', ui), err = el('err ui', ui);
@@ -163,7 +184,7 @@
     /* the connection banner (2026-10-06: a player who lost the server is told, so they don't play on a broken one):
        kind 'net' = the shared world is not reachable (others can't see you; the game reconnects by itself), 'save' = progress
        is not being saved. Stays until the engine says it's back; Reload is always there. */
-    const nl = el('netlost', ui), NL = { net: null, save: null };
+    const nl = el('netlost ui', ui), NL = { net: null, save: null };
     function netLost(on, kind, why) {
       kind = kind || 'net'; NL[kind] = on ? (why || '') : null;
       const k = NL.save != null ? 'save' : NL.net != null ? 'net' : null;
@@ -173,6 +194,22 @@
                       : 'Other players can\'t see you and the shared world isn\'t updating' + (NL.net ? ' (' + A.esc(NL.net) + ')' : '') + '. Reconnecting\u2026') +
         '</div><button class="btn">Reload</button>';
       nl.style.display = 'flex'; nl.querySelector('.btn').onclick = () => location.reload();
+    }
+    /* a new release is out (2026-10-06: players are told to leave, refresh their Games tab and come back in).
+       The engine has saved before this shows; it stays up, the game keeps running until they go. */
+    const nv = el('newver', ui);
+    function newVersion(v) {
+      nv.innerHTML = '<b>A new version of ASHVALE is out' + (v ? ' (v' + A.esc(String(v)) + ')' : '') + '.</b> Your progress is saved. ' +
+        'Leave the game, refresh your Games tab and open ASHVALE again to play the new version.';
+      nv.style.display = 'block';
+    }
+    /* this character was opened on another device (2026-10-06: one device at a time). The newest game wins;
+       this one has stopped (no saves, no network). Play here reloads, which makes this the newest. */
+    const ew = el('elsewhere ui', ui);
+    function elsewhere() {
+      ew.innerHTML = '<div><b>ASHVALE is open on another device</b>Your character can only be in one place, so the game has stopped here. ' +
+        'Your progress is kept by the game you opened last.<button class="btn">Play here instead</button></div>';
+      ew.style.display = 'flex'; ew.querySelector('.btn').onclick = () => location.reload();
     }
     /* the portal swirl (2026-10-06): shown while the town you are travelling to is still loading (engine arriveCheck) */
     const trav = el('travel', ui); trav.innerHTML = '<div class="sw"></div><div class="sw2"></div><div class="tt"></div><div class="pb"><i></i></div>';
@@ -193,7 +230,8 @@
       if (st.flag) { g.fillStyle = '#f22'; g.fillRect((st.flag[0] - st.x) * 4 - 1, (st.flag[1] - st.y) * 4 - 6, 2, 8); g.fillRect((st.flag[0] - st.x) * 4, (st.flag[1] - st.y) * 4 - 6, 5, 3); }
       g.restore();
       g.fillStyle = '#fff'; g.fillRect(S / 2 - 4, S / 2 - 4, 8, 8);
-      compass.style.transform = 'rotate(' + st.yaw + 'rad)';
+      const nv = st.north || [0, -1], sx = nv[0] * Math.cos(st.yaw) - nv[1] * Math.sin(st.yaw), sy = nv[0] * Math.sin(st.yaw) + nv[1] * Math.cos(st.yaw);   /* the map turns by yaw: so does north */
+      compass.style.transform = 'rotate(' + Math.atan2(sx, -sy) + 'rad)';
     }
     mmBox.addEventListener('pointerup', e => {
       const r = mmBox.getBoundingClientRect(), dx = (e.clientX - r.left - r.width / 2) / r.width * 300, dy = (e.clientY - r.top - r.height / 2) / r.height * 300;
@@ -234,7 +272,7 @@
     { const r0 = K.refresh; K.refresh = w => { r0(w); if (st.chest) K.drawChest(); }; }   /* the chest window follows the bag and the wallet */
     setTab(st.tab);
     return {
-      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, playerStats, travel, netLost, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => K.openChest(), closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, overhead, setPos, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
+      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => K.openChest(), closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };
