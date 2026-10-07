@@ -653,6 +653,7 @@
         const B = SUNL.b; if (!B) return;
         const s = sunAt(Date.now()), up = dot3(s, B.u), ex = dot3(s, B.e), so = dot3(s, B.s);
         const day = Math.min(1, Math.max(0, (up + 0.08) / 0.2)), dusk = Math.max(0, 1 - Math.abs(up) / 0.18);   /* 1 by day, 0 by night; dusk near the horizon */
+        SUNL.day = day;
         const lit = up > -0.02, d = lit ? [ex, Math.max(up, 0.06), so] : [-ex, Math.max(-up, 0.25), -so];        /* the moon: opposite the sun */
         const l = Math.hypot(d[0], d[1], d[2]); SUNL.dir = [d[0] / l, d[1] / l, d[2] / l];
         sun.intensity = lit ? 0.5 + 1.8 * day : 0.22; sun.color.copy(lit ? SUNC : MOONC); if (lit && dusk > 0) sun.color.lerp(DUSKC, dusk * 0.8);
@@ -676,6 +677,25 @@
         const near = []; for (const r of remotes.values()) { const g = r.e && r.e.H && r.e.H.gear; if (!g) continue; const [rr, cc] = lightOf(Object.values(g)); if (rr) near.push([r, rr, Math.hypot(r.e.root.position.x - P0.x, r.e.root.position.z - P0.z), cc]); }
         near.sort((a, b) => a[2] - b[2]);
         TORCH.pool.forEach((L, k) => { const n = near[k]; if (!n || n[2] > 30) { L.intensity = 0; return; } const q = n[0].e.root.position; L.position.set(q.x - 0.3, q.y + 1.7, q.z); L.distance = n[1] + 1; L.color.setHex(n[3]); L.intensity = 2.8 * flick; });
+      }
+      /* roadside posts (the road to Saltmere): at night the four nearest world torches carry a pool of lights */
+      const LAMP = { pool: [], t: 0 };
+      function lampTick(now) {
+        if (!LAMP.pool.length) for (let k = 0; k < 4; k++) { const L = new THREE.PointLight(0xffa040, 0, 11, 1.3); scene.add(L); LAMP.pool.push(L); }
+        if (CAVE.on || (SUNL.day != null && SUNL.day > 0.42)) { for (const L of LAMP.pool) L.intensity = 0; return; }
+        const flick = 1 + Math.sin(now * 0.014) * 0.1 + Math.sin(now * 0.037) * 0.05;
+        if (now - LAMP.t > 400) {
+          LAMP.t = now;
+          const near = [];
+          const add = o => { if (!o || o.k !== 'torch') return; const d = Math.hypot((o.x + 0.5) - me.x, (o.y + 0.5) - me.y); if (d < 18) near.push([d, o]); };
+          for (const o of core.M.objects || []) add(o);
+          if (core.M.roadTorchesIn) for (const o of core.M.roadTorchesIn(me.x - 18, me.y - 18, me.x + 18, me.y + 18)) add(o);
+          near.sort((a, b) => a[0] - b[0]); LAMP.near = near;
+        }
+        LAMP.pool.forEach((L, k) => {
+          const n = (LAMP.near || [])[k]; if (!n) { L.intensity = 0; return; }
+          const o = n[1]; L.position.set(o.x + 0.5, heightAt(o.x + 0.5, o.y + 0.5) + 1.55, o.y + 0.5); L.intensity = 2.7 * flick;
+        });
       }
       /* ---------- weather visuals: the weather module (src/weather.js, its own inscription) when it is loaded, else scene fog */
       let wxShown = '', wxMod = null;
@@ -1891,7 +1911,7 @@
       function frame(rafNow) {
         if (stopped) return;
         requestAnimationFrame(frame);
-        caveTick(performance.now()); torchTick(performance.now());
+        caveTick(performance.now()); torchTick(performance.now()); lampTick(performance.now());
         /* One clock. The tick loop keeps lastTick on performance.now() and stamps each stride with the tick's own
            time (see doTick), but the rAF argument is the frame's START time, which trails performance.now() by
            however long the callback waits - on a

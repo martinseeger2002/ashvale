@@ -571,7 +571,7 @@
       const mounts = [];   /* items hung on walls: {obj, item, quest, untilStep} */
       const torches = [];
       const floorY = (o, y) => { const f = floor[o.y * W + o.x]; return isNaN(f) ? y : f; };
-      const siteObjs = chunk ? [].concat(...map.sitesIn(X0, Y0, X1 - 1, Y1 - 1).map(st => st.objects)) : [];   /* tents and campfires of seeded camps */
+      const siteObjs = chunk ? [].concat(...map.sitesIn(X0, Y0, X1 - 1, Y1 - 1).map(st => st.objects), ...(map.roadTorchesIn ? map.roadTorchesIn(X0, Y0, X1 - 1, Y1 - 1) : [])) : [];   /* tents, campfires, and lit posts along the town roads */
       const objs = (chunk ? siteObjs : map.objects.filter(o => inR(o.x, o.y))).sort((a, b) => (b.enter ? 1 : 0) - (a.enter ? 1 : 0));
       for (const o of objs) {
         const x = o.x + (o.w || 1) / 2, z = o.y + (o.h || 1) / 2; let y = heightAt(x, z);
