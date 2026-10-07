@@ -59,7 +59,7 @@
   },
   "wg_paths": {
    "id": null,
-   "v": 3,
+   "v": 1,
    "api": 1,
    "kind": "js"
   },
@@ -198,7 +198,7 @@
    },
    "quests": {
     "id": null,
-    "v": 3,
+    "v": 2,
     "api": 1,
     "kind": "json"
    },
@@ -1116,13 +1116,13 @@
   "zones": {
    "village": {
     "id": null,
-    "v": 3,
+    "v": 2,
     "api": 1,
     "kind": "json"
    },
    "whisperwood": {
     "id": null,
-    "v": 3,
+    "v": 2,
     "api": 1,
     "kind": "json"
    },

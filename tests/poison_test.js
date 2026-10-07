@@ -30,4 +30,7 @@ ok(!p.poison && !p.inv.some(s => s && s.id === 'antidote'), 'an antidote cures i
 c.S.players.p1.poison = { until: c.S.t + 6, dmg: 1, next: c.S.t + 3 }; ev = [];
 for (let i = 0; i < 8; i++) { c.tick(); ev = ev.concat(c.S.ev); }
 ok(!p.poison && ev.some(e => e.e === 'poison' && e.on === false), 'and left alone it wears off');
+p.inv[5] = { id: 'antidote', n: 1 }; const hpA = p.hp; c.cmd('p1', { c: 'eat', slot: 5 }); c.tick();
+ok(Number.isFinite(p.hp) && p.hp === hpA, 'drinking an antidote leaves hitpoints a number (it made them NaN: ' + p.hp + ')');
+p.hp = NaN; c.tick(); ok(p.hp === c.maxHp(p), 'hitpoints that are NaN come back to full on the next tick');
 process.exit(fails ? 1 : 0);

@@ -221,12 +221,21 @@
          chunks around you (globe P2), built with the same scene code so they look the same, at most one per tick unless
          it is close (the fog hides the far edge) */
       const regions = zones.map(z => ({ id: z.id, rect: [z.origin[0], z.origin[1], z.size[0], z.size[1]], built: null }));
-      const LOAD_D = 40, DROP_D = 70, SEEDED = !!core.M.seeded, CH_LOAD = isPhone ? 52 : 60, CH_NEAR = 30, CH_DROP = 110, TREE_R = isPhone ? 46 : 54;   /* the fog ends at about 52 m */
+      /* how far you see and what is built for it (2026-10-07: "stuff isn't loading out far enough so you can see it loading
+         when you're moving. It should be loaded before you get there"): the fog is measured from YOU, not from the camera (see
+         FOGV in frame()), it ends VIEW m out (a hawk sees HAWK_VIEW times as far), and towns, chunks and trees are built a margin
+         beyond it, so nothing is ever made where you can see it */
+      const VIEW = 52, HAWK_VIEW = 1.8, VIEWS = { me: null }, viewR = () => VIEW * (VIEWS.me && VIEWS.me.hawk ? HAWK_VIEW : 1);
+      const SEEDED = !!core.M.seeded, CH_NEAR = 30;
+      let LOAD_D = 0, DROP_D = 0, CH_LOAD = 0, CH_DROP = 0, TREE_R = 0;
+      function setReach() { const v = viewR(); LOAD_D = v + 24; DROP_D = v + 60; CH_LOAD = v + 24; CH_DROP = v + 80; TREE_R = v + 12; }
+      setReach();
       const heightAt = SCENE.heights ? SCENE.heights(core.M) : (x, z) => 0;
       const chunkRegs = new Map();
       function regionDist(r, x, y) { const dx = Math.max(r.rect[0] - x, 0, x - (r.rect[0] + r.rect[2])), dy = Math.max(r.rect[1] - y, 0, y - (r.rect[1] + r.rect[3])); return Math.max(dx, dy); }
       function addBuilt(r, opt) { r.built = SCENE.build(core.M, opt); scene.add(r.built.group); for (const k in core.S.dep) r.built.setDepleted(+k, true); }
       function streamRegions(force) {
+        setReach();
         for (const r of regions) {
           if (r.chunk) continue;
           const d = regionDist(r, me.x, me.y);
@@ -234,15 +243,15 @@
           else if (r.built && d > DROP_D) { scene.remove(r.built.group); r.built.dispose(); r.built = null; }
         }
         if (!SEEDED) return;
-        const pcx = me.x >> 6, pcy = me.y >> 6; let built = 0;
+        const pcx = me.x >> 6, pcy = me.y >> 6, CR = Math.ceil(CH_LOAD / 64) + 1; let built = 0;
         const want = [];
-        for (let cy = pcy - 2; cy <= pcy + 2; cy++) for (let cx = pcx - 2; cx <= pcx + 2; cx++) {
+        for (let cy = pcy - CR; cy <= pcy + CR; cy++) for (let cx = pcx - CR; cx <= pcx + CR; cx++) {
           const k = cx + ',' + cy, rect = [cx * 64, cy * 64, 64, 64], d = regionDist({ rect }, me.x, me.y);
           if (d <= CH_LOAD && !chunkRegs.has(k)) want.push([d, k, rect]);
         }
         want.sort((a, b) => a[0] - b[0]);
         for (const [d, k, rect] of want) {
-          if (!force && built && d > CH_NEAR) break;   /* one far chunk per call; anything close is built at once */
+          if (!force && built >= 2 && d > Math.max(CH_NEAR, viewR())) break;   /* two far chunks per call; anything you could see is built at once */
           const r = { id: 'c:' + k, rect, built: null, chunk: true }; addBuilt(r, { rect, chunk: true }); chunkRegs.set(k, r); regions.push(r); built++;
         }
         for (const [k, r] of chunkRegs) if (regionDist(r, me.x, me.y) > CH_DROP) { scene.remove(r.built.group); r.built.dispose(); chunkRegs.delete(k); regions.splice(regions.indexOf(r), 1); }
@@ -380,6 +389,7 @@
       function playOnce(e, name, speed) { e.oneShot = true; e.lastOne = name; e.oneT = performance.now(); e.H.play(name, { loop: false, speed: speed || 1 }); }
 
       const myEnt = makeEnt('p:' + PID, MOD.humanoid({ skin: '#e0b48c', hair: '#4a2c18', shirt: '#3d6a9a', pants: '#5a4632', shoes: '#3a2a1a' }), { kind: 'self' });
+      VIEWS.me = myEnt;
       myEnt.H.setGear(gearOf(me)); place(myEnt, me.x, me.y); setTimeout(() => hawkify(myEnt, me.eq.ring && me.eq.ring.id), 0);
       if (me.look && myEnt.H.setOutfit) myEnt.H.setOutfit(me.look);
       const NPCN = {};
@@ -418,20 +428,31 @@
       syncMobEnts();
 
       /* ---------- ground items */
-      const gItems = new Map();
+      const gItems = new Map(), gFlames = [];
+      /* a dropped torch is stuck in the ground, upright and burning, the same as the torches set about the world (the operator
+         2026-10-07); the light pool (caveTick) lights round it */
+      function standingTorch() {
+        const t = new THREE.Group(), lm = c => new THREE.MeshLambertMaterial({ color: c, flatShading: true });
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.2, 0.1), lm(0x4a3220)); post.position.y = 0.6; t.add(post);
+        const cup = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, 0.2), lm(0x2a2a2a)); cup.position.y = 1.22; t.add(cup);
+        const f = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.32, 5), new THREE.MeshBasicMaterial({ color: 0xffa030 })); f.position.y = 1.42; t.add(f);
+        const f2 = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.2, 5), new THREE.MeshBasicMaterial({ color: 0xfff0a0 })); f2.position.y = 1.36; t.add(f2);
+        t.userData.flame = { f, f2, ph: Math.random() * 10 }; gFlames.push(t.userData.flame);
+        return t;
+      }
       function syncGround() {
         const seen = new Set(), perTile = {};
         for (const g of core.S.ground) {
           seen.add(g.uid); const k = g.x + ',' + g.y, n = perTile[k] = (perTile[k] || 0) + 1;
           if (gItems.has(g.uid)) continue;
-          const o = new THREE.Group(), m = MOD.item(g.id); m.scale.setScalar(1.0); o.add(m);
+          const o = new THREE.Group(), m = g.id === 'torch' ? standingTorch() : MOD.item(g.id); if (g.id !== 'torch') m.scale.setScalar(1.0); o.add(m);
           const a = (g.uid * 2.39996) % (2 * PI), r = n > 1 ? 0.22 : 0;
           o.position.set(g.x + 0.5 + Math.cos(a) * r, 0, g.y + 0.5 + Math.sin(a) * r); o.position.y = heightAt(o.position.x, o.position.z) + 0.02; o.rotation.y = a;
           m.traverse(c => { if (c.isMesh) c.castShadow = true; });
           const px = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.5, 0.75), proxyMat); px.position.y = 0.2; px.userData.pick = { kind: 'item', uid: g.uid }; o.add(px); proxies.push(px);
           o.userData.px = px; o.userData.born = performance.now(); scene.add(o); gItems.set(g.uid, o);
         }
-        for (const [uid, o] of gItems) if (!seen.has(uid)) { scene.remove(o); proxies.splice(proxies.indexOf(o.userData.px), 1); gItems.delete(uid); }
+        for (const [uid, o] of gItems) if (!seen.has(uid)) { const fl = o.children[0] && o.children[0].userData.flame; if (fl) gFlames.splice(gFlames.indexOf(fl), 1); scene.remove(o); proxies.splice(proxies.indexOf(o.userData.px), 1); gItems.delete(uid); }
       }
 
       /* ---------- combat presentation: impacts, projectiles, splats */
@@ -605,6 +626,24 @@
       /* ---------- UNDERGROUND (2026-10-07: the Spider Cave, "dim with torches"): while you stand in an area flagged
          `under` the sky goes black, the fog closes in to ~13 tiles, the daylight dims to a cave's, a warm light goes with
          you and the three torches nearest you really light the rock (a small pool of point lights, moved every second). */
+      /* GLOW: a soft pool of light on the ground under each lamp, torch and fire beyond the few real lights - one instanced
+         draw, so a whole lit road shows from far off at night without the cost of a light each (2026-10-07) */
+      const GLOW = { mesh: null, max: 96 };
+      function glowAt(list) {
+        if (!GLOW.mesh) {
+          const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'), g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+          g.addColorStop(0, 'rgba(255,255,255,0.38)'); g.addColorStop(0.35, 'rgba(255,255,255,0.16)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+          const geo = new THREE.PlaneGeometry(1, 1); geo.rotateX(-Math.PI / 2);
+          GLOW.mesh = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4 }), GLOW.max);
+          GLOW.mesh.frustumCulled = false; GLOW.mesh.renderOrder = 2; scene.add(GLOW.mesh); GLOW.m = new THREE.Matrix4(); GLOW.c = new THREE.Color();
+        }
+        const n = Math.min(list.length, GLOW.max);
+        for (let k = 0; k < n; k++) {
+          const o = list[k], sz = o[4] ? 13 : 10, x = o[0] + 0.5, z = o[1] + 0.5;
+          GLOW.m.makeScale(sz, 1, sz).setPosition(x, heightAt(x, z) + 0.08, z); GLOW.mesh.setMatrixAt(k, GLOW.m); GLOW.mesh.setColorAt(k, GLOW.c.setHex(o[3]));
+        }
+        GLOW.mesh.count = n; GLOW.mesh.instanceMatrix.needsUpdate = true; if (GLOW.mesh.instanceColor) GLOW.mesh.instanceColor.needsUpdate = true;
+      }
       const CAVE = { on: false, t: 0, me: null, pool: [], keep: null };
       function caveTick(now) {
         const inCave = !!(core.M && core.M.underAt && core.M.underAt(me.x, me.y) != null);
@@ -615,7 +654,7 @@
             if (wxMod && wxMod.set) try { wxMod.set('clear', 0, { instant: true }); } catch (e) { /* weather module */ }
             scene.background.setHex(0x030303); scene.fog.color.setHex(0x030303); scene.fog.near = 5; scene.fog.far = 16; hemi.intensity = 0.14; sun.intensity = 0.04;
             /* no light of your own (2026-10-07: "The player should not give off any light. The only light should be coming from the torches") */
-            if (!CAVE.pool.length) for (let k = 0; k < 4; k++) { const L = new THREE.PointLight(0xff9a3c, 0, 10, 1.2); scene.add(L); CAVE.pool.push(L); }
+            if (!CAVE.pool.length) for (let k = 0; k < (isPhone ? 4 : 6); k++) { const L = new THREE.PointLight(0xff9a3c, 0, 10, 1.2); scene.add(L); CAVE.pool.push(L); }
             for (const L of CAVE.pool) L.visible = true;
           } else {
             const K = CAVE.keep || {}; scene.background.setHex(K.bg != null ? K.bg : SKY); scene.fog.color.setHex(K.fc != null ? K.fc : SKY); scene.fog.near = K.fn || 24; scene.fog.far = K.ff || 52;
@@ -623,44 +662,71 @@
             wxShown = ''; showWeather(true);
           }
         }
-        if (!inCave || !CAVE.pool.length) return;
-        if (now - CAVE.t > 1000) {   /* the torches nearest you get the lights */
+        /* the four torches, ranges and campfires nearest you really light their surroundings - underground always, up top while
+           it is dark (a moonless night has no other light: 2026-10-07) */
+        const darkUp = !inCave && SUNL.dark > 0.3;
+        if (!CAVE.pool.length && darkUp) for (let k = 0; k < (isPhone ? 4 : 6); k++) { const L = new THREE.PointLight(0xff9a3c, 0, 10, 1.2); scene.add(L); CAVE.pool.push(L); }
+        if (GLOW.mesh) { GLOW.mesh.visible = inCave || darkUp; GLOW.mesh.material.opacity = inCave ? 1 : Math.min(1, Math.max(0, (SUNL.dark - 0.3) / 0.4)); }
+        if ((!inCave && !darkUp) || !CAVE.pool.length) { if (!inCave) for (const L of CAVE.pool) L.intensity = 0; return; }
+        if (now - CAVE.t > 1000) {
           CAVE.t = now;
-          const near = (core.M.objects || []).filter(o => o.k === 'torch' && Math.abs(o.x - me.x) < 16 && Math.abs(o.y - me.y) < 16).sort((a, b) => Math.hypot(a.x - me.x, a.y - me.y) - Math.hypot(b.x - me.x, b.y - me.y));
-          CAVE.pool.forEach((L, k) => { const o = near[k]; if (!o) { L.intensity = 0; return; } L.position.set(o.x + 0.5, heightAt(o.x + 0.5, o.y + 0.5) + 1.6, o.y + 0.5); L.intensity = 3.2; });
+          /* [x, y, height of the flame, colour, steady]: torches, the cave's wall torches, gas street lamps (in towns and along the
+             trails between them, sadfrog 2026-10-07), ranges, campfires, and torches dropped on the ground (2026-10-07) */
+          /* every light out to the edge of what you can see (2026-10-07: "The light from the illumination should load
+             farther out"): the nearest few are real lights, every one of them gets a pool of light on the ground (GLOW) */
+          const R = inCave ? 18 : Math.min(viewR(), 90), LT = { torch: 1.6, sconce: 1.5, lamp: 2.6, range: 0.9 }, near = [], add = o => { if (LT[o.k] && Math.abs(o.x - me.x) < R && Math.abs(o.y - me.y) < R) near.push([o.x, o.y, LT[o.k], o.k === 'lamp' ? 0xffd27a : 0xff9a3c, o.k === 'lamp']); };
+          for (const o of core.M.objects || []) add(o);
+          if (!inCave && core.M.roadTorchesIn) for (const o of core.M.roadTorchesIn(me.x - R, me.y - R, me.x + R, me.y + R)) add(o);
+          for (const f of fires.values()) { const q = f.position; if (Math.abs(q.x - me.x) < R && Math.abs(q.z - me.y) < R) near.push([q.x - 0.5, q.z - 0.5, 0.8, 0xff9a3c]); }
+          for (const g of core.S.ground) if (g.id === 'torch' && Math.abs(g.x - me.x) < R && Math.abs(g.y - me.y) < R) near.push([g.x, g.y, 1.6, 0xff9a3c]);
+          near.sort((a, b) => Math.hypot(a[0] - me.x, a[1] - me.y) - Math.hypot(b[0] - me.x, b[1] - me.y));
+          glowAt(near.slice(CAVE.pool.length));
+          CAVE.pool.forEach((L, k) => { const o = near[k]; L.visible = true; if (!o) { L.intensity = 0; return; } L.position.set(o[0] + 0.5, heightAt(o[0] + 0.5, o[1] + 0.5) + o[2], o[1] + 0.5); L.color.setHex(o[3]); L.distance = o[4] ? 12 : 10; L.userData.steady = !!o[4]; L.intensity = 3.2; });
         }
-        for (const L of CAVE.pool) if (L.intensity > 0) L.intensity = 3.0 + Math.sin(now * 0.013 + L.position.x) * 0.3 + Math.sin(now * 0.031 + L.position.z) * 0.18;   /* flicker */
+        for (const L of CAVE.pool) if (L.intensity > 0) L.intensity = L.userData.steady ? 3.2 : 3.0 + Math.sin(now * 0.013 + L.position.x) * 0.3 + Math.sin(now * 0.031 + L.position.z) * 0.18;   /* flames flicker, gas burns steady */
       }
       /* ---------- DAY AND NIGHT (2026-10-07: "Add an orbiting sun that orbits the globe once every 24 hours make it dark
-         ashvale as of one hour ago is sunset"; then "change the day night cycle to every 2 hours"). The sun circles the planet's
-         equator once every two hours of real time; at SUN_EPOCH it set over Ashvale (90 degrees west of it) and it moves west
-         360 degrees a cycle - the Atlas uses the same rule (src/earth.js). Where you stand: its height above your horizon sets
-         the daylight, the sky and the light's colour, and the light (with the shadows) comes from its direction; under the
-         horizon a faint bluish moon, opposite it, casts the shadows. */
-      const SUN_EPOCH = 1791353761, DAY_S = 7200;
-      const SUNL = { dir: [-0.45, 0.8, 0.3], key: '', b: null, lonA: null, base: new THREE.Color(SKY), col: new THREE.Color() };
-      const NIGHT_SKY = new THREE.Color(0x0b1426), DUSK_SKY = new THREE.Color(0xd8865a), SUNC = new THREE.Color(0xfff0d6), DUSKC = new THREE.Color(0xffa060), MOONC = new THREE.Color(0x9fb4ff);
+         ashvale as of one hour ago is sunset"; "Have the sun create the shadows on the ground"). The sun circles the planet's
+         equator once a day of real time; at SUN_EPOCH it set over Ashvale (90 degrees west of it) and it moves west 360 degrees a
+         day - the Atlas uses the same rule (src/earth.js). Where you stand: its height above your horizon sets the daylight,
+         the sky and the light's colour, and the light (with the shadows) comes from its direction; under the horizon a faint
+         bluish moon, opposite it, casts the shadows. */
+      const SUN_EPOCH = 1791353761, DAY_S = 86400;
+      const SUNL = { dark: 0, dir: [-0.45, 0.8, 0.3], key: '', b: null, lonA: null, base: new THREE.Color(SKY), col: new THREE.Color(), night: new THREE.Color() };
+      const NEW_SKY = new THREE.Color(0x020306), NIGHT_SKY = new THREE.Color(0x0b1426), DUSK_SKY = new THREE.Color(0xd8865a), SUNC = new THREE.Color(0xfff0d6), DUSKC = new THREE.Color(0xffa060), MOONC = new THREE.Color(0x9fb4ff);
       function sphereAt(x, y) { const WG = D.wg, C = DATA.globecfg; if (!WG || !WG.toSphere || !C || !C.origin) return null; const fx = x + C.origin[0] + 0.5, fy = -(y + C.origin[1]) - 0.5; return [WG.toSphere(C.face, fx, fy), WG.toSphere(C.face, fx + 1, fy), WG.toSphere(C.face, fx, fy - 1)]; }
       function sunAt(tms) {   /* the sun's direction from the planet's centre */
         if (SUNL.lonA == null) { const a = sphereAt(22, 52); SUNL.lonA = a ? Math.atan2(a[0][1], a[0][0]) : 0; }   /* Ashvale's longitude (by the well) */
         const L = SUNL.lonA - Math.PI / 2 - 2 * Math.PI * ((tms / 1000 - SUN_EPOCH) / DAY_S);
         return [Math.cos(L), Math.sin(L), 0];
       }
+      const MOON_P = 29.530588853, MOON_NEW = 947182440;   /* the synodic month; a new moon: 2000-01-06 18:14 UTC */
+      function moonAt(tms, s) {   /* {v: its direction, lit: 0 at new moon .. 1 at full} */
+        const ph = (((tms / 1000 - MOON_NEW) / 86400) % MOON_P) / MOON_P, a = 2 * Math.PI * ph, c = Math.cos(a), si = Math.sin(a);
+        return { v: [s[0] * c - s[1] * si, s[0] * si + s[1] * c, 0], lit: (1 - c) / 2, phase: ph };   /* s turned east by the phase */
+      }
       const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], nrm3 = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
       function dayTick() {
         const key = (me.x >> 3) + ':' + (me.y >> 3);
         if (key !== SUNL.key) { const a = sphereAt(me.x, me.y); SUNL.key = key; SUNL.b = a ? { u: nrm3(a[0]), e: nrm3(sub3(a[1], a[0])), s: nrm3(sub3(a[2], a[0])) } : null; }   /* up, game east (+x), game south (+y) */
         const B = SUNL.b; if (!B) return;
-        const s = sunAt(Date.now()), up = dot3(s, B.u), ex = dot3(s, B.e), so = dot3(s, B.s);
+        const now = Date.now(), s = sunAt(now), up = dot3(s, B.u), ex = dot3(s, B.e), so = dot3(s, B.s);
         const day = Math.min(1, Math.max(0, (up + 0.08) / 0.2)), dusk = Math.max(0, 1 - Math.abs(up) / 0.18);   /* 1 by day, 0 by night; dusk near the horizon */
-        SUNL.day = day;
-        const lit = up > -0.02, d = lit ? [ex, Math.max(up, 0.06), so] : [-ex, Math.max(-up, 0.25), -so];        /* the moon: opposite the sun */
+        /* THE MOON (2026-10-07: "the amount of light that you have right now should be the amount of light for a full moon
+           and the moon fullness should follow the real moon cycle ... a new moon should create no illumination"): its phase is
+           the real one; it stands that far east of the sun (opposite at full, beside it at new), so it rises and sets like the
+           real moon, and only lights the night while it is up, by how full it is */
+        const M = moonAt(now, s), mup = dot3(M.v, B.u), moonK = M.lit * Math.min(1, Math.max(0, (mup + 0.03) / 0.15));
+        const lit = up > -0.02, d = lit ? [ex, Math.max(up, 0.06), so] : [dot3(M.v, B.e), Math.max(mup, 0.2), dot3(M.v, B.s)];
         const l = Math.hypot(d[0], d[1], d[2]); SUNL.dir = [d[0] / l, d[1] / l, d[2] / l];
-        sun.intensity = lit ? 0.5 + 1.8 * day : 0.22; sun.color.copy(lit ? SUNC : MOONC); if (lit && dusk > 0) sun.color.lerp(DUSKC, dusk * 0.8);
-        hemi.intensity = 0.13 + 1.57 * day;   /* dark at night (the operator: "make it dark"): torches and fires carry it */
-        /* the sky: the weather's colour (the weather module repaints it every frame), toward dusk orange and the night's blue */
+        sun.intensity = lit ? 0.5 + 1.8 * day : 0.22 * moonK; sun.color.copy(lit ? SUNC : MOONC); if (lit && dusk > 0) sun.color.lerp(DUSKC, dusk * 0.8);
+        hemi.intensity = 1.7 * day + 0.13 * moonK * (1 - day); SUNL.dark = 1 - day;
+        if (SCENE.lampGlow) SCENE.lampGlow((SUNL.dark - 0.3) / 0.4);   /* the street lamps are lit from dusk */   /* a moonless night has no light at all: torches and fires carry it */
+        /* the sky: the weather's colour (the weather module repaints it every frame), toward dusk orange and the night's blue
+           (a moonlit night's deep blue, a moonless one near black) */
         const base = wxMod ? scene.background : SUNL.base;
-        SUNL.col.copy(base).lerp(DUSK_SKY, dusk * 0.45 * day + dusk * 0.25).lerp(NIGHT_SKY, 1 - day);
+        SUNL.night.copy(NEW_SKY).lerp(NIGHT_SKY, moonK);
+        SUNL.col.copy(base).lerp(DUSK_SKY, dusk * 0.45 * day + dusk * 0.25).lerp(SUNL.night, 1 - day);
         scene.background.copy(SUNL.col); scene.fog.color.copy(SUNL.col);
       }
       /* ---------- HAND TORCHES (2026-10-07: "a torch ... hold it at night and illuminate his surroundings"): whoever holds
@@ -677,25 +743,6 @@
         const near = []; for (const r of remotes.values()) { const g = r.e && r.e.H && r.e.H.gear; if (!g) continue; const [rr, cc] = lightOf(Object.values(g)); if (rr) near.push([r, rr, Math.hypot(r.e.root.position.x - P0.x, r.e.root.position.z - P0.z), cc]); }
         near.sort((a, b) => a[2] - b[2]);
         TORCH.pool.forEach((L, k) => { const n = near[k]; if (!n || n[2] > 30) { L.intensity = 0; return; } const q = n[0].e.root.position; L.position.set(q.x - 0.3, q.y + 1.7, q.z); L.distance = n[1] + 1; L.color.setHex(n[3]); L.intensity = 2.8 * flick; });
-      }
-      /* roadside posts (the road to Saltmere): at night the four nearest world torches carry a pool of lights */
-      const LAMP = { pool: [], t: 0 };
-      function lampTick(now) {
-        if (!LAMP.pool.length) for (let k = 0; k < 4; k++) { const L = new THREE.PointLight(0xffa040, 0, 11, 1.3); scene.add(L); LAMP.pool.push(L); }
-        if (CAVE.on || (SUNL.day != null && SUNL.day > 0.42)) { for (const L of LAMP.pool) L.intensity = 0; return; }
-        const flick = 1 + Math.sin(now * 0.014) * 0.1 + Math.sin(now * 0.037) * 0.05;
-        if (now - LAMP.t > 400) {
-          LAMP.t = now;
-          const near = [];
-          const add = o => { if (!o || o.k !== 'torch') return; const d = Math.hypot((o.x + 0.5) - me.x, (o.y + 0.5) - me.y); if (d < 18) near.push([d, o]); };
-          for (const o of core.M.objects || []) add(o);
-          if (core.M.roadTorchesIn) for (const o of core.M.roadTorchesIn(me.x - 18, me.y - 18, me.x + 18, me.y + 18)) add(o);
-          near.sort((a, b) => a[0] - b[0]); LAMP.near = near;
-        }
-        LAMP.pool.forEach((L, k) => {
-          const n = (LAMP.near || [])[k]; if (!n) { L.intensity = 0; return; }
-          const o = n[1]; L.position.set(o.x + 0.5, heightAt(o.x + 0.5, o.y + 0.5) + 1.55, o.y + 0.5); L.intensity = 2.7 * flick;
-        });
       }
       /* ---------- weather visuals: the weather module (src/weather.js, its own inscription) when it is loaded, else scene fog */
       let wxShown = '', wxMod = null;
@@ -1911,7 +1958,8 @@
       function frame(rafNow) {
         if (stopped) return;
         requestAnimationFrame(frame);
-        caveTick(performance.now()); torchTick(performance.now()); lampTick(performance.now());
+        caveTick(performance.now()); torchTick(performance.now());
+        for (const t of gFlames) { const q = performance.now() / 1000, k = 0.85 + 0.15 * Math.sin(q * 13 + t.ph) + 0.08 * Math.sin(q * 31 + t.ph * 2); t.f.scale.set(1, k, 1); t.f2.scale.set(1, k, 1); }
         /* One clock. The tick loop keeps lastTick on performance.now() and stamps each stride with the tick's own
            time (see doTick), but the rAF argument is the frame's START time, which trails performance.now() by
            however long the callback waits - on a
@@ -2002,7 +2050,14 @@
           const sz = renderer.getDrawingBufferSize(_seeS);
           if (hp.z > -1 && hp.z < 1 && settings.seeThrough !== false) { S.uSeeP.value.set((hp.x + 1) / 2 * sz.x, (hp.y + 1) / 2 * sz.y); S.uSeeR.value = sz.y * 0.13; S.uSeeD.value = d - 2.0; if (S.uSeeY) S.uSeeY.value = myEnt.root.position.y + 0.25; } else S.uSeeR.value = 0;
         }
+        /* FOGV: the fog's distances are meant from the player; three measures them from the camera, which stands cam.dist
+           behind - so they are pushed out by that much for the draw (and a hawk sees further), then put back for whoever
+           set them (the weather module, the cave, the plain fog) */
+        const fn0 = scene.fog.near, ff0 = scene.fog.far, fk = CAVE.on ? 1 : viewR() / VIEW, back = cam.dist;
+        scene.fog.near = fn0 * fk + back; scene.fog.far = ff0 * fk + back;
+        { const cf = Math.max(90, scene.fog.far + 8); if (Math.abs(camera.far - cf) > 2) { camera.far = cf; camera.updateProjectionMatrix(); } }
         renderer.render(scene, camera);
+        scene.fog.near = fn0; scene.fog.far = ff0;
       }
       const arrivedProjs = [];
       function burstSmall(pos, color) { for (let k = 0; k < 8; k++) { const m = new THREE.Mesh(burstGeo, new THREE.MeshBasicMaterial({ color })); m.position.copy(pos); const a = k / 8 * 2 * PI; m.userData.v = new THREE.Vector3(Math.cos(a) * 1.2, 1 + (k % 2), Math.sin(a) * 1.2); m.userData.t = 0; m.userData.life = 0.45; scene.add(m); bursts.push(m); } }
@@ -2143,7 +2198,7 @@
         chest: { state: chestState, take: chestTake, store: chestStore, promise: paid => { const L = ledgerFor(walletState.address); for (const k in paid) L.pend[k] = (L.pend[k] || 0) + paid[k]; ledgerSave(); },
           paidForTest: paid => { const L = ledgerFor(walletState.address); for (const k in paid) { const toChest = Math.min(paid[k], L.lchest[k] || 0); L.lchest[k] -= toChest; L.pchest[k] = (L.pchest[k] || 0) + toChest; L.pend[k] = (L.pend[k] || 0) + paid[k] - toChest; } ledgerSave(); } },   /* tests */ trip: () => TRIP && TRIP.state(), trade: () => trade, peers: () => Array.from(remotes.values()).map(r => r.from), _remIds: () => Array.from(remotes.keys()), optionsAt: (cx, cy) => { const L = []; for (const t of targetsAt(cx, cy)) for (const o of optionsFor(t)) L.push(o.html.replace(/<[^>]+>/g, '')); return L; }, _remAnim: () => JSON.stringify(Array.from(remotes.values()).map(r => [r.anim, r.buf.length, r.buf.length && r.buf[r.buf.length - 1].a])),
         stop() { stopped = true; },
-        sfxAt: (n, at) => sfx(n, at), sky: () => { const B = SUNL.b, s = sunAt(Date.now()); return B ? { up: dot3(s, B.u), dir: SUNL.dir, sun: sun.intensity, hemi: hemi.intensity } : null; },
+        sfxAt: (n, at) => sfx(n, at), sky: () => { const B = SUNL.b, s = sunAt(Date.now()), M = moonAt(Date.now(), s); return B ? { up: dot3(s, B.u), moonUp: dot3(M.v, B.u), moonLit: M.lit, dir: SUNL.dir, sun: sun.intensity, hemi: hemi.intensity } : null; },
         versionCheck, oneDevice: () => ({ sid: ONE.sid, at: ONE.at, room: !!ONE.room, addr: ONE.addr, stopped, version: VER.mine, told: VER.told })
       };
       void _handle;

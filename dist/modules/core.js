@@ -382,7 +382,7 @@
       for (const [id2, n] of RU.start.inv) addItem(p, id2, n);
       if (save) importInto(p, save);
       if (save) placeFrom(p, save);
-      p.hp = Math.min(p.hp, maxHp(p)); if (p.hp <= 0) p.hp = maxHp(p);
+      p.hp = Math.min(p.hp, maxHp(p)); if (!(p.hp > 0)) p.hp = maxHp(p);   /* also a save that kept NaN (stored as null) */
       p.pray = {}; p.pd = 0; p.pp = save && Number.isInteger(save.pp) ? Math.max(0, Math.min(maxPp(p), save.pp)) : maxPp(p);
       return p;
     }
@@ -710,7 +710,7 @@
     }
     function eat(p, slot) {
       const s = p.inv[slot]; if (!s) return; const d = IT[s.id]; if (!d.edible) return;
-      const mx = maxHp(p), heal = d.healPct ? Math.floor(mx * d.healPct / 100) : d.heal;
+      const mx = maxHp(p), heal = d.healPct ? Math.floor(mx * d.healPct / 100) : (d.heal | 0);   /* an antidote heals nothing: 0, never undefined (it made hitpoints NaN, 2026-10-07) */
       removeItem(p, s.id, 1);
       const before = p.hp; p.hp = Math.min(mx, p.hp + heal);
       p.atk = Math.max(p.atk, 0) + 3;
@@ -1255,6 +1255,7 @@
     }
     function playerTick(p) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); try { playerTick0(p); } finally { LV_LIMIT = -1; FLY = false; } }
     function playerTick0(p) {
+      if (!(p.hp >= 0)) p.hp = maxHp(p);   /* hitpoints that are not a number (the antidote bug, 2026-10-07): back to full */
       if (!p.dead) townCheck(p);
       if (p.poison) poisonTick(p);
       if (p.puppet) return puppetTick(p);

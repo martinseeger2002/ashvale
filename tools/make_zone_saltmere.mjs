@@ -190,14 +190,13 @@ const props = [
   /* a range by the store, so the catch can be cooked where it lands */
   { k: 'range', x: 3476, y: 1843 },
   /* torches: the whole quay, and the high street after dark */
-  { k: 'torch', x: 3490, y: 1784 }, { k: 'torch', x: 3490, y: 1800 }, { k: 'torch', x: 3490, y: 1816 },
-  { k: 'torch', x: 3490, y: 1832 }, { k: 'torch', x: 3490, y: 1848 }, { k: 'torch', x: 3490, y: 1864 },
-  { k: 'torch', x: 3450, y: 1818 }, { k: 'torch', x: 3420, y: 1819 }, { k: 'torch', x: 3400, y: 1818 },
-  { k: 'torch', x: 3430, y: 1830 }, { k: 'torch', x: 3460, y: 1840 },
-  /* the west road in from Ashvale: posts on the verges every eight paces */
-  { k: 'torch', x: 3392, y: 1817 }, { k: 'torch', x: 3400, y: 1820 }, { k: 'torch', x: 3408, y: 1817 }, { k: 'torch', x: 3416, y: 1820 },
-  { k: 'torch', x: 3424, y: 1817 }, { k: 'torch', x: 3432, y: 1820 }, { k: 'torch', x: 3440, y: 1817 }, { k: 'torch', x: 3448, y: 1820 },
-  { k: 'torch', x: 3396, y: 1817 }, { k: 'torch', x: 3412, y: 1820 },
+  /* torches on the verge of the street, not in it (2026-10-07) */
+  { k: 'torch', x: 3489, y: 1784 }, { k: 'torch', x: 3489, y: 1800 }, { k: 'torch', x: 3489, y: 1816 },
+  { k: 'torch', x: 3489, y: 1832 }, { k: 'torch', x: 3489, y: 1848 }, { k: 'torch', x: 3489, y: 1864 },
+  { k: 'torch', x: 3429, y: 1830 }, { k: 'torch', x: 3459, y: 1840 },
+  /* the west road in from Ashvale: gas street lamps on the verges, every eight paces, sides alternating (sadfrog, 2026-10-07) */
+  { k: 'lamp', x: 3392, y: 1817 }, { k: 'lamp', x: 3400, y: 1820 }, { k: 'lamp', x: 3408, y: 1817 }, { k: 'lamp', x: 3416, y: 1820 },
+  { k: 'lamp', x: 3424, y: 1817 }, { k: 'lamp', x: 3432, y: 1820 }, { k: 'lamp', x: 3440, y: 1817 }, { k: 'lamp', x: 3448, y: 1820 }, { k: 'lamp', x: 3456, y: 1817 },
   /* inside the tap room */
   { k: 'counter', x: 3468, y: 1823, w: 2, h: 1 }, { k: 'table', x: 3471, y: 1824 }, { k: 'chair', x: 3472, y: 1824 },
   { k: 'barrel', x: 3472, y: 1822 }, { k: 'fireplace', x: 3466, y: 1826, face: 'n' },

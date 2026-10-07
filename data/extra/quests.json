@@ -1,1 +1,232 @@
-{"quests":{"iria_supper":{"name":"A Meal for Iria","giver":"iria","steps":[{"id":1,"zone":"whisperwood","goal":{"cook":"chicken_cooked","n":1},"talk":["You are on the main path. I came down here, away from the pond. I am Iria.","Cook me a chicken. A raw one, on a range or a campfire, until it is cooked through and not burnt. The chickens run in Ashvale village, and Hob's range stands by the houses there. There is a campfire in the eastern tents of this wood if you would rather not walk back.","Bring me word when it is done. I will know if the fire took it."],"progress":["The chicken is not cooked yet, {name}. Kill one of the village chickens for the raw meat, then cook it on Hob's range or on the campfire in the eastern tents. A burnt one does not count."],"complete":["Cooked, and the smell is honest. I asked for a chicken. What I wanted was a sandwich."]},{"id":2,"zone":"whisperwood","goal":{"bring":"bread","n":1,"with":"chicken_cooked"},"talk":["A chicken on its own is a poor meal. Buy me a loaf of bread and bring it with that cooked chicken. Tam sells bread at the general store in Ashvale.","Then I can make the sandwich I meant from the start."],"progress":["I still need the loaf, and the cooked chicken with it. Tam, at the Ashvale general store. {left} loaf left to buy."],"complete":["Now it is a sandwich. Thank you. The plate is not finished."]},{"id":3,"zone":"whisperwood","goal":{"bring":"lobster","n":1},"talk":["A lobster on the side. I do not keep them here.","Hollis sells lobster at the Saltmere Tap. Saltmere is the harbour east of the valley, along the coast. Ask for Hollis."],"progress":["One lobster, {name}. Hollis, at the Saltmere Tap. The harbour is east."],"complete":["That will do for supper. You have fed me. The ring is another matter."]},{"id":4,"zone":"whisperwood","goal":{"kill":"timber_wolf","n":1,"bring":"timber_wolf_pelt"},"reward":"ring_angels","talk":["The Ring of Angels is not payment for a meal. Kill one timber wolf and bring me its pelt. They den in the trees west of the north pond, well off this path, and further out in the woods.","Do both, and the ring is yours. Wear it. If a blow leaves you below a fifth of your life, it carries you home to Ashvale. It rests for an hour before it can do so again."],"progress":["One timber wolf slain, and its pelt in your bag. So far: {n} of {goal} slain. The pelt comes off the beast. West of the north pond, off the path."],"complete":["The pelt is honest. Take the Ring of Angels. Wear it, and if a blow leaves you below a fifth of your life it will carry you home. It rests an hour between saves.","Come back if you want that hour made short."]}],"done":["The ring is yours. Speak to me again if you would have it watch over you more often."]},"angel_gift":{"name":"The Gift of Angels","giver":"iria","steps":[{"id":1,"zone":"whisperwood","goal":{"kill":"timber_wolf","n":3,"bring":"timber_wolf_pelt"},"reward":"flag:gift_of_angels","talk":["The hour is long. Kill three timber wolves and bring me their pelts. The same dens, west of the north pond, off this path, and out in the woods.","Do that and I will give you the Gift of Angels. The ring will rest ten minutes, not an hour."],"progress":["Three timber wolves, and three pelts. So far: {n} of {goal} slain. Bring every pelt. One wolf, one skin."],"complete":["Three pelts. The Gift of Angels is yours: it rests on you, not in your bag. The ring hears it now: ten minutes between saves, and no less."]}],"done":["The gift is yours. The ring rests ten minutes, then it can carry you home again."]},"ashen_crown":{"steps":[{"id":4,"zone":"spidercave","talk":["The crown was the old king's, burned with him when the Keep fell. What was left of it was carried down into the dark: into the Spider Cave, in the woods west of Whisperwood, at the end of the trail that leaves its west road.","Its pieces have been calling things out of that dark ever since. Three wraiths drift through the tunnels past the flooded grotto. Lay them to rest."],"progress":["{left} more wraiths. The cold you feel down in that cave isn't the damp."],"complete":["Three wraiths at rest. Something deeper will know they're gone. Go when you're ready, and not a moment before."]},{"id":5,"zone":"spidercave","talk":["Past the wraiths, at the narrow way into the deepest chamber, the Ash Knight still stands guard, as he once guarded a king long dead. He was the best of them, once."]},{"id":6,"zone":"spidercave","talk":["Beyond the Spider Queen's lair, at the very end of the cave, waits the one who wears the rest of the crown: the Lich of Ashvale. End it, and the valley remembers what it was."]}]}}}
+{
+ "quests": {
+  "iria_supper": {
+   "name": "A Meal for Iria",
+   "giver": "iria",
+   "steps": [
+    {
+     "id": 1,
+     "zone": "whisperwood",
+     "goal": {
+      "cook": "chicken_cooked",
+      "n": 1
+     },
+     "talk": [
+      "You are on the main path. I came down here, away from the pond. I am Iria.",
+      "Cook me a chicken. A raw one, on a range or a campfire, until it is cooked through and not burnt. The chickens run in Ashvale village, and Hob's range stands by the houses there. There is a campfire in the eastern tents of this wood if you would rather not walk back.",
+      "Bring me word when it is done. I will know if the fire took it."
+     ],
+     "progress": [
+      "The chicken is not cooked yet, {name}. Kill one of the village chickens for the raw meat, then cook it on Hob's range or on the campfire in the eastern tents. A burnt one does not count."
+     ],
+     "complete": [
+      "Cooked, and the smell is honest. I asked for a chicken. What I wanted was a sandwich."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "whisperwood",
+     "goal": {
+      "bring": "bread",
+      "n": 1,
+      "with": "chicken_cooked"
+     },
+     "talk": [
+      "A chicken on its own is a poor meal. Buy me a loaf of bread and bring it with that cooked chicken. Tam sells bread at the general store in Ashvale.",
+      "Then I can make the sandwich I meant from the start."
+     ],
+     "progress": [
+      "I still need the loaf, and the cooked chicken with it. Tam, at the Ashvale general store. {left} loaf left to buy."
+     ],
+     "complete": [
+      "Now it is a sandwich. Thank you. The plate is not finished."
+     ]
+    },
+    {
+     "id": 3,
+     "zone": "whisperwood",
+     "goal": {
+      "bring": "lobster",
+      "n": 1
+     },
+     "talk": [
+      "A lobster on the side. I do not keep them here.",
+      "Hollis sells lobster at the Saltmere Tap. Saltmere is the harbour east of the valley, along the coast. Ask for Hollis."
+     ],
+     "progress": [
+      "One lobster, {name}. Hollis, at the Saltmere Tap. The harbour is east."
+     ],
+     "complete": [
+      "That will do for supper. You have fed me. The ring is another matter."
+     ]
+    },
+    {
+     "id": 4,
+     "zone": "whisperwood",
+     "goal": {
+      "kill": "timber_wolf",
+      "n": 1,
+      "bring": "timber_wolf_pelt"
+     },
+     "reward": "ring_angels",
+     "talk": [
+      "The Ring of Angels is not payment for a meal. Kill one timber wolf and bring me its pelt. They den in the trees west of the north pond, well off this path, and further out in the woods.",
+      "Do both, and the ring is yours. Wear it. If a blow leaves you below a fifth of your life, it carries you home to Ashvale. It rests for an hour before it can do so again."
+     ],
+     "progress": [
+      "One timber wolf slain, and its pelt in your bag. So far: {n} of {goal} slain. The pelt comes off the beast. West of the north pond, off the path."
+     ],
+     "complete": [
+      "The pelt is honest. Take the Ring of Angels. Wear it, and if a blow leaves you below a fifth of your life it will carry you home. It rests an hour between saves.",
+      "Come back if you want that hour made short."
+     ]
+    }
+   ],
+   "done": [
+    "The ring is yours. Speak to me again if you would have it watch over you more often."
+   ]
+  },
+  "angel_gift": {
+   "name": "The Gift of Angels",
+   "giver": "iria",
+   "steps": [
+    {
+     "id": 1,
+     "zone": "whisperwood",
+     "goal": {
+      "kill": "timber_wolf",
+      "n": 3,
+      "bring": "timber_wolf_pelt"
+     },
+     "reward": "flag:gift_of_angels",
+     "talk": [
+      "The hour is long. Kill three timber wolves and bring me their pelts. The same dens, west of the north pond, off this path, and out in the woods.",
+      "Do that and I will give you the Gift of Angels. The ring will rest ten minutes, not an hour."
+     ],
+     "progress": [
+      "Three timber wolves, and three pelts. So far: {n} of {goal} slain. Bring every pelt. One wolf, one skin."
+     ],
+     "complete": [
+      "Three pelts. The Gift of Angels is yours: it rests on you, not in your bag. The ring hears it now: ten minutes between saves, and no less."
+     ]
+    }
+   ],
+   "done": [
+    "The gift is yours. The ring rests ten minutes, then it can carry you home again."
+   ]
+  },
+  "ashen_crown": {
+   "steps": [
+    {
+     "id": 4,
+     "zone": "spidercave",
+     "talk": [
+      "The crown was the old king's, burned with him when the Keep fell. What was left of it was carried down into the dark: into the Spider Cave, in the woods west of Whisperwood, at the end of the trail that leaves its west road.",
+      "Its pieces have been calling things out of that dark ever since. Three wraiths drift through the tunnels past the flooded grotto. Lay them to rest."
+     ],
+     "progress": [
+      "{left} more wraiths. The cold you feel down in that cave isn't the damp."
+     ],
+     "complete": [
+      "Three wraiths at rest. Something deeper will know they're gone. Go when you're ready, and not a moment before."
+     ]
+    },
+    {
+     "id": 5,
+     "zone": "spidercave",
+     "talk": [
+      "Past the wraiths, at the narrow way into the deepest chamber, the Ash Knight still stands guard, as he once guarded a king long dead. He was the best of them, once."
+     ]
+    },
+    {
+     "id": 6,
+     "zone": "spidercave",
+     "talk": [
+      "Beyond the Spider Queen's lair, at the very end of the cave, waits the one who wears the rest of the crown: the Lich of Ashvale. End it, and the valley remembers what it was."
+     ]
+    }
+   ]
+  },
+  "wayside_prayer": {
+   "name": "The Wayside Prayer",
+   "giver": "aldous",
+   "steps": [
+    {
+     "id": 1,
+     "zone": "village",
+     "goal": {
+      "talk": "symmetry"
+     },
+     "reward": "xp:prayer:100",
+     "talk": [
+      "Peace be with you, {name}. Mind the pews - the left one rocks.",
+      "I am Father Aldous. This little church is all Ashvale has, but Saltmere had a chapel once, and it has stood empty since the fever years.",
+      "I mean to light its altar again. For that I need the old chapel's blessing-roll, the list of every hand that was ever blessed there. Symmetry keeps the village's old things in her house by the lake.",
+      "Ask her for it, would you? She will know the one I mean: a grey scroll with a salt stain."
+     ],
+     "say": [
+      "The blessing-roll? Oh, the grey thing with the stain. It ruined the line of my shelf for years.",
+      "I gave it to Odric the merchant last month. He was taking candles and cloth down to Saltmere for the chapel and said he'd carry the roll as well.",
+      "Tell Father Aldous it is on the road, not lost. I would never lose anything. I only move it where it looks right."
+     ],
+     "progress": [
+      "Symmetry lives by the lake, south of the well. Ask her about the blessing-roll."
+     ],
+     "complete": [
+      "With Odric? Then it has been on the road for a month. Odric does the trip to Saltmere in four days.",
+      "Something has happened to him."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "village",
+     "goal": {
+      "talk": "odric"
+     },
+     "reward": "xp:prayer:250",
+     "talk": [
+      "Take the east road out of the village, the old trail towards Saltmere. Odric drives a covered wagon with a grey horse; you cannot miss it.",
+      "Find him, {name}. Then come back and tell me what you found - do not go on to Saltmere yet. If he is hurt I will need to know first."
+     ],
+     "say": [
+      "Thank the stars, a face! I've been sat by this wreck four days. The axle went on a rut and the whole wagon went over.",
+      "The horse bolted for Saltmere and I've no legs for the walk on this ankle. The candles are in the grass, the cloth's torn... but the roll! The blessing-roll's safe, here in my coat.",
+      "Don't go on to Saltmere on my account. Go back to Ashvale and tell Father Aldous - he'll send help, and he'll know what to do with this."
+     ],
+     "progress": [
+      "East out of the village, along the trail to Saltmere. Odric will be somewhere on the road.",
+      "Come back and tell me what you find."
+     ],
+     "complete": [
+      "An overturned wagon, and Odric sat by it four days on a bad ankle? I will send Rowan with his cart at first light.",
+      "And the roll is safe. Then the chapel can be blessed after all."
+     ]
+    },
+    {
+     "id": 3,
+     "zone": "saltmere",
+     "goal": {
+      "talk": "wenna"
+     },
+     "ends": "wenna",
+     "reward": "monk_robe",
+     "talk": [
+      "Now go on to Saltmere, {name}. The chapel stands at the west end of the town, the first house past the trail, with a little steeple on it.",
+      "Mother Wenna has kept it swept all these years with nobody to pray in it. Tell her the roll is found and Odric is coming. She will take it from there."
+     ],
+     "progress": [
+      "The Saltmere chapel is at the west end of the town, where the trail comes in. Mother Wenna will be inside."
+     ],
+     "complete": [
+      "Aldous sent you? And the roll is found - and Odric alive on the road? Then the chapel opens again. I have waited eleven years to say that.",
+      "You walked the whole road for an old woman's church, {name}. Take this robe. It was sewn for the first monk of this chapel, and it has never been worn.",
+      "Wear it when you pray. It steadies the mind: you will find your prayers hold a good while longer."
+     ]
+    }
+   ],
+   "done": [
+    "The chapel in Saltmere is open again, and Odric is home with a new axle. Go well, {name}."
+   ]
+  }
+ }
+}

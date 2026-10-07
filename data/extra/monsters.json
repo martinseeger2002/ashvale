@@ -1,0 +1,41 @@
+{
+ "monsters": {
+  "bandit_leader": {
+   "bones": "big_bones"
+  },
+  "goblin_chief": {
+   "bones": "big_bones"
+  },
+  "boar": {
+   "bones": "big_bones"
+  },
+  "timber_wolf": {
+   "bones": "big_bones"
+  },
+  "wraith": {
+   "anim": "cast",
+   "drops": [
+    {
+     "item": "staff_t1",
+     "one_in": 8
+    }
+   ],
+   "cast": {
+    "name": "Shadow bolt",
+    "range": 5,
+    "att": 16,
+    "attb": 14,
+    "max": 4,
+    "fx": "bind",
+    "fxTicks": 5,
+    "fxChance": 3
+   },
+   "ai": {
+    "kind": "humanoid",
+    "faction": "wraith",
+    "rally": 0,
+    "leash": 10
+   }
+  }
+ }
+}

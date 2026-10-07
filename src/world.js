@@ -255,7 +255,7 @@
         const mv = o => Object.assign({}, o, { x: o.x - OX, y: o.y - OY });
         return WG.sites(FACE, x0 + OX, y0 + OY, x1 + OX, y1 + OY).map(st => Object.assign({}, st, { x: st.x - OX, y: st.y - OY, spawns: st.spawns.map(mv), objects: st.objects.map(mv), fishing: st.fishing.map(mv), nodes: st.nodes.map(mv) }));
       },
-      roadTorchesIn(x0, y0, x1, y1) {
+      roadTorchesIn(x0, y0, x1, y1) {   /* lamps along the trails between towns (sadfrog 2026-10-07) */
         if (!WG || !WG.roadObjects) return [];
         return WG.roadObjects(FACE, x0 + OX, y0 + OY, x1 + OX, y1 + OY).map(o => Object.assign({}, o, { x: o.x - OX, y: o.y - OY }));
       },

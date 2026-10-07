@@ -27,6 +27,9 @@
     /* see-through (2026-10-05: "anything that gets in the way of the camera view of the avatar become transparent"):
        across the whole view (the operator: "the see-through circle should definitely be the entire viewport"), everything more
        than 2 m nearer the camera than the avatar dissolves, fading over 1.5 m with a dither. The engine sets the uniforms each frame (SCENE.see). */
+    /* gas street lamps (2026-10-07): one shared glass material, lit warm at night and dull by day (engine: lampGlow) */
+    const LAMPG = new THREE.MeshBasicMaterial({ color: 0x8a8670 }), LAMP_OFF = new THREE.Color(0x8a8670), LAMP_ON = new THREE.Color(0xffd27a);
+    const lampGlow = k => LAMPG.color.copy(LAMP_OFF).lerp(LAMP_ON, Math.min(1, Math.max(0, k)));
     const SEE = { uSeeP: { value: new THREE.Vector2(-1e4, -1e4) }, uSeeR: { value: 0 }, uSeeD: { value: 0 }, uSeeY: { value: -1e9 } };   /* uSeeY: the avatar's feet - the floor and ground you stand on never dissolve (the operator: upstairs it looked like standing outside the house) */
     function seeThrough(m) {
       m.onBeforeCompile = (sh) => {
@@ -607,6 +610,31 @@
             torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x, y, z });
             break;
           }
+          case 'lamp': {   /* a gas street lamp on the verge of a trail (2026-10-07): iron post, glass lantern, pyramid cap */
+            const IR = 0x23272b;
+            B.add('box', IR, x, y + 0.14, z, 0.3, 0.28, 0.3);
+            B.add('cyl', IR, x, y + 1.3, z, 0.11, 2.1, 0.11);
+            B.add('cyl', IR, x, y + 2.38, z, 0.22, 0.08, 0.22);
+            const gl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.3), LAMPG); gl.position.set(x, y + 2.62, z); group.add(gl);
+            for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) B.add('box', IR, x + dx * 0.16, y + 2.62, z + dz * 0.16, 0.035, 0.44, 0.035);
+            B.add('box', IR, x, y + 2.41, z, 0.36, 0.04, 0.36);
+            const cap = mesh(new THREE.ConeGeometry(0.29, 0.24, 4), IR, x, y + 2.96, z); cap.rotation.y = Math.PI / 4; group.add(cap);
+            B.add('box', IR, x, y + 3.12, z, 0.05, 0.1, 0.05);
+            break;
+          }
+          case 'sconce': {   /* the cave's small wall torch (2026-10-07): an iron bracket in the rock, the torch leaning out of the wall at an angle */
+            const F = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] }[o.face || 'n'], ax = -F[0], az = -F[1], wx = x + F[0] * 0.48, wz = z + F[1] * 0.48, wy = y + 1.35;
+            const ry = Math.atan2(ax, az), TL = 0.55, ux = ax * Math.sin(TL), uy = Math.cos(TL), uz = az * Math.sin(TL);   /* the torch's axis: up, tipped away from the wall */
+            const px = wx + ax * 0.16, py = wy - 0.08, pz = wz + az * 0.16, at = d => [px + ux * d, py + uy * d, pz + uz * d];
+            B.add('box', 0x2a2622, wx, wy, wz, 0.16, 0.2, 0.05, ry);
+            B.add('box', 0x2a2622, wx + ax * 0.09, wy - 0.06, wz + az * 0.09, 0.05, 0.05, 0.18, ry);
+            { const [a, b, c] = at(0.12); B.add('cyl6', 0x5a3a20, a, b, c, 0.055, 0.42, 0.055, ry, TL); }
+            { const [a, b, c] = at(0.34); B.add('cyl', 0x2a1f16, a, b, c, 0.09, 0.08, 0.09, ry, TL); }
+            const f = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.24, 5), new THREE.MeshBasicMaterial({ color: 0xffa030 })), f2 = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.15, 5), new THREE.MeshBasicMaterial({ color: 0xfff0a0 }));
+            for (const [m, d] of [[f, 0.48], [f2, 0.44]]) { m.position.set(...at(d)); m.rotation.set(TL, ry, 0, 'YXZ'); group.add(m); }
+            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x: wx, y, z: wz });
+            break;
+          }
           /* the Spider Cave (2026-10-07): the mouth up top, the ways out below, webs and glowing mushrooms inside */
           case 'cavemouth': case 'caveout': {   /* a rock outcrop with a cave opening in its south face (2026-10-07); caveout: the way out up top, not a way in */
             const RK = [[0, -0.6, 3.2, 2.6, 2.6, 0x6b675f], [-1.4, -0.2, 2.0, 2.0, 2.2, 0x75716a], [1.45, -0.1, 2.1, 1.8, 2.0, 0x625e57], [-0.6, -1.5, 2.4, 2.2, 2.2, 0x5d5a54],
@@ -790,7 +818,7 @@
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, WATER_Y, see: SEE };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, WATER_Y, see: SEE, lampGlow };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

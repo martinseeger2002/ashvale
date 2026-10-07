@@ -34,7 +34,7 @@
     if (p.creator === ISSUER) return true;
     if (!EXTRA.has(p.creator) || !ashvaleFlag(p.json)) return false;
     const ct = String(p.contenttype || p.content_type || '');
-    return !ct || ct === 'application/json' || ct === 'image/png';
+    return !ct || ct === 'application/json';   /* JSON pieces only, no PNGs (2026-10-07) */
   };
   const CSS = '.ash-trade{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:rgba(10,8,5,.5);font:13px/1.35 system-ui,sans-serif;color:#f3e6c4}'
     + '.ash-trade[hidden]{display:none}'

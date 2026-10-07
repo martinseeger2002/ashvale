@@ -111,7 +111,7 @@
             if (s0.h < ctx.WATER + 0.2 || s0.peakS > 0.08) continue;
             const gx = Math.floor(px + nx * off * side), gy = Math.floor(-(py + ny * off * side)), k = gx + ',' + gy;
             if (seen.has(k) || inPiece(face, gx, gy)) continue;
-            seen.add(k); ROAD.push({ k: 'torch', x: gx, y: gy, w: 1, h: 1, face });
+            seen.add(k); ROAD.push({ k: 'lamp', x: gx, y: gy, w: 1, h: 1, face });
           }
           acc += L - d;
         }
@@ -301,6 +301,8 @@
         const by0 = Math.floor((Math.min(SEG[o + 2], SEG[o + 4]) - m) / BK), by1 = Math.floor((Math.max(SEG[o + 2], SEG[o + 4]) + m) / BK);
         for (let by = by0; by <= by1; by++) for (let bx = bx0; bx <= bx1; bx++) { const kk = bkey(f, bx, by); if (!BUCKET.has(kk)) BUCKET.set(kk, []); BUCKET.get(kk).push(k); }
       }
+      /* a lamp stands on the verge, never on a path: where trails meet or bend, drop any that came to stand on one (2026-10-07) */
+      ctx.ROAD_OBJ = ROAD.filter(o => pathDist(o.face, o.x + 0.5, -(o.y + 0.5)) > 0.3);
       if (ctx.clearCaches) ctx.clearCaches();
       return PIECES.map(p => ({ id: p.id, face: p.face, x: p.x, y: p.y, w: p.w, h: p.h, hb: p.hb }));
     }
