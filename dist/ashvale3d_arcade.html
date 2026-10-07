@@ -8883,7 +8883,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
          day - the Atlas uses the same rule (src/earth.js). Where you stand: its height above your horizon sets the daylight,
          the sky and the light's colour, and the light (with the shadows) comes from its direction; under the horizon a faint
          bluish moon, opposite it, casts the shadows. */
-      const SUN_EPOCH = 1791353761, DAY_S = 86400;
+      const SUN_EPOCH = 1791353761, DAY_S = 7200;
       const SUNL = { dark: 0, dir: [-0.45, 0.8, 0.3], key: '', b: null, lonA: null, base: new THREE.Color(SKY), col: new THREE.Color(), night: new THREE.Color() };
       const NEW_SKY = new THREE.Color(0x020306), NIGHT_SKY = new THREE.Color(0x0b1426), DUSK_SKY = new THREE.Color(0xd8865a), SUNC = new THREE.Color(0xfff0d6), DUSKC = new THREE.Color(0xffa060), MOONC = new THREE.Color(0x9fb4ff);
       function sphereAt(x, y) { const WG = D.wg, C = DATA.globecfg; if (!WG || !WG.toSphere || !C || !C.origin) return null; const fx = x + C.origin[0] + 0.5, fy = -(y + C.origin[1]) - 0.5; return [WG.toSphere(C.face, fx, fy), WG.toSphere(C.face, fx + 1, fy), WG.toSphere(C.face, fx, fy - 1)]; }

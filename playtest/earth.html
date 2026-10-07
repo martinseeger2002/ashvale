@@ -6505,7 +6505,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       const exAt = alt => 1 + 2 * Math.min(1, Math.max(0, (Math.log10(alt) - 3.3) / 1.5));   /* at most 3x from orbit (the operator: the mountains looked out of scale) */
       const tiltAt = alt => { const t = Math.min(1, Math.max(0, (Math.log10(alt) - 1.6) / 2.2)); return 0.62 + (1.5 - 0.62) * t; };
       const PLACES = {};
-      const SUN_EPOCH = 1791353761, DAY_S = 86400;
+      const SUN_EPOCH = 1791353761, DAY_S = 7200;
       let sunLon = null, sunBall = null, moonBall = null;
       { const g = new THREE.Group(), core = new THREE.Mesh(new THREE.SphereGeometry(R * 0.32, 24, 16), new THREE.MeshBasicMaterial({ color: 0xfff4c0, fog: false }));
         const halo = new THREE.Mesh(new THREE.SphereGeometry(R * 0.62, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffd36a, transparent: true, opacity: 0.18, depthWrite: false, fog: false }));
