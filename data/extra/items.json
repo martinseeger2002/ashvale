@@ -264,7 +264,7 @@
   },
   "verdant_wreath": {
    "name": "Verdant wreath",
-   "description": "A circlet of living leaves. For every Prayer point you still hold, the next one stays a second longer.",
+   "description": "A circlet of living leaves, worn on the crown. Magic +1, Prayer +3. Adds a full second to each prayer point, the same blessing as a monk's robe.",
    "collection": "ASHVALE The Even Guard",
    "game": "ashvale",
    "category": "cosmetic",
@@ -275,7 +275,15 @@
    "value": 240,
    "attributes": [
     {
-     "trait_type": "Prayer hold",
+     "trait_type": "Magic",
+     "value": 1
+    },
+    {
+     "trait_type": "Prayer",
+     "value": 3
+    },
+    {
+     "trait_type": "Prayer seconds",
      "value": 1
     }
    ],

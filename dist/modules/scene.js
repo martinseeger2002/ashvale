@@ -15,6 +15,7 @@
       W: 0x4a7a3a, M: 0x4c7030, Y: 0x36612a, U: 0xc9b47c, C: 0x74716e, G: 0x7e7a6a, A: 0x767a82, '^': 0x74716a, K: 0x6f8f4a };
     const ORE = { R: 0xc8702c, N: 0xd8d8d0, I: 0x8a4632, C: 0x33333c, G: 0xd9a930, A: 0x6f86c8 };
     const WATER_Y = -0.16;
+    let LAMPQ = null;   /* (x, y) -> whether a tended lamp or town torch is lit; the engine sets this from the guards */
     const SNOWC = new THREE.Color(0xf2f1ec);
 
     function hash2(x, y) { let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
@@ -674,7 +675,7 @@
       let CK = null; try { const CM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('castle'); if (CM && CM.create) CK = CM.create({ THREE, B, Batcher, KitBatch, kitData, heightAt, group, pickables }); } catch (e) { console.warn('castle module', e && e.message); }
       const surfOfMap = (tx, ty) => { const Hh = heightsOf(map); return Hh.surf ? Hh.surf(tx, ty) : heightAt(tx + 0.5, ty + 0.5); };
       const mounts = [];   /* items hung on walls: {obj, item, quest, untilStep} */
-      const torches = [];
+      const torches = [], street = [];
       const floorY = (o, y) => { const f = floor[o.y * W + o.x]; return isNaN(f) ? y : f; };
       const siteObjs = chunk ? [].concat(...map.sitesIn(X0, Y0, X1 - 1, Y1 - 1).map(st => st.objects), ...(map.roadTorchesIn ? map.roadTorchesIn(X0, Y0, X1 - 1, Y1 - 1) : [])) : [];   /* tents, campfires, and lit posts along the town roads */
       const objs = (chunk ? siteObjs : map.objects.filter(o => inR(o.x, o.y))).sort((a, b) => (b.enter ? 1 : 0) - (a.enter ? 1 : 0));
@@ -736,7 +737,7 @@
             B.add('box', 0x2a2a2a, x, y + 1.22, z, 0.2, 0.08, 0.2);
             const f = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.32, 5), new THREE.MeshBasicMaterial({ color: 0xffa030 })); f.position.set(x, y + 1.42, z); group.add(f);
             const f2 = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.2, 5), new THREE.MeshBasicMaterial({ color: 0xfff0a0 })); f2.position.set(x, y + 1.36, z); group.add(f2);
-            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x, y, z, night: !!o.night });
+            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x, y, z, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y });
             break;
           }
           case 'lamp': {   /* a gas street lamp on the verge of a trail (2026-10-07): iron post, glass lantern, pyramid cap */
@@ -744,7 +745,8 @@
             B.add('box', IR, x, y + 0.14, z, 0.3, 0.28, 0.3);
             B.add('cyl', IR, x, y + 1.3, z, 0.11, 2.1, 0.11);
             B.add('cyl', IR, x, y + 2.38, z, 0.22, 0.08, 0.22);
-            const gl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.3), LAMPG); gl.position.set(x, y + 2.62, z); group.add(gl);
+            const glMat = LAMPG.clone(), gl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.3), glMat); gl.position.set(x, y + 2.62, z); group.add(gl);
+            street.push({ mat: glMat, x: o.x, y: o.y });
             for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) B.add('box', IR, x + dx * 0.16, y + 2.62, z + dz * 0.16, 0.035, 0.44, 0.035);
             B.add('box', IR, x, y + 2.41, z, 0.36, 0.04, 0.36);
             const cap = mesh(new THREE.ConeGeometry(0.29, 0.24, 4), IR, x, y + 2.96, z); cap.rotation.y = Math.PI / 4; group.add(cap);
@@ -761,7 +763,7 @@
             { const [a, b, c] = at(0.34); B.add('cyl', 0x2a1f16, a, b, c, 0.09, 0.08, 0.09, ry, TL); }
             const f = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.24, 5), new THREE.MeshBasicMaterial({ color: 0xffa030 })), f2 = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.15, 5), new THREE.MeshBasicMaterial({ color: 0xfff0a0 }));
             for (const [m, d] of [[f, 0.48], [f2, 0.44]]) { m.position.set(...at(d)); m.rotation.set(TL, ry, 0, 'YXZ'); group.add(m); }
-            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x: wx, y, z: wz, night: !!o.night });
+            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x: wx, y, z: wz, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y });
             break;
           }
           case 'iwall': {   /* a room divider inside a walk-in building (2026-10-07: Saltmere town hall) */
@@ -1055,7 +1057,13 @@
           const r = rockAt.get(i); if (r) r.ore.visible = !on;
         },
         update(dt, time) {
-          for (const t of torches) { const s = 0.85 + 0.15 * Math.sin(time * 13 + t.ph) + 0.08 * Math.sin(time * 31 + t.ph * 2); if (t.night) { const on = NIGHTK > 0.04; t.f.visible = on; if (t.f2) t.f2.visible = on; } t.f.scale.set(1, s, 1); if (t.f2) t.f2.scale.set(1, s, 1); }
+          for (const t of torches) {
+            const s = 0.85 + 0.15 * Math.sin(time * 13 + t.ph) + 0.08 * Math.sin(time * 31 + t.ph * 2);
+            if (t.tend) { const on = LAMPQ ? !!LAMPQ(t.tx, t.ty) : true; t.f.visible = on; if (t.f2) t.f2.visible = on; }
+            else if (t.night) { const on = NIGHTK > 0.04; t.f.visible = on; if (t.f2) t.f2.visible = on; }
+            t.f.scale.set(1, s, 1); if (t.f2) t.f2.scale.set(1, s, 1);
+          }
+          for (const L of street) { const on = LAMPQ ? !!LAMPQ(L.x, L.y) : NIGHTK > 0.04; L.mat.color.copy(LAMP_OFF).lerp(LAMP_ON, on ? 1 : 0); }
           for (const L of lights) L.intensity = 2.6 + Math.sin(time * 11 + L.position.x) * 0.4;
           for (const s of spots) s.rings.forEach((r, k) => { const p = ((time * 0.6 + s.ph + k / 3) % 1); r.scale.setScalar(0.6 + p * 2.2); r.material.opacity = 0.75 * (1 - p); });
           if (waterMesh) waterMesh.material.emissive.setHSL(0.58, 0.6, 0.08 + 0.02 * Math.sin(time * 1.5));
@@ -1078,7 +1086,7 @@
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, canoeMesh, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, canoeMesh, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

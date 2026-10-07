@@ -123,7 +123,7 @@
     for (const P of PORTALS) if (!M.npcs.some(n => n.id === 'portal_' + P.id))
       M.npcs.push({ id: 'portal_' + P.id, name: 'Town portal', look: 'portal', x: P.x, y: P.y, portal: P.id, examine: 'A ring of standing stones, humming softly. Step through to travel to another town.' });
     const R = Rng(opts.seed == null ? 'ashvale3d' : opts.seed);
-    const S = { t: 0, uid: 1, players: {}, order: [], mobs: [], ground: [], dep: {}, fell: {}, cleared: {}, plants: {}, pending: [], ev: [], noAuth: {}, seen: {}, fires: [], weather: {}, salt: 0, dyn: 0 };
+    const S = { t: 0, uid: 1, players: {}, order: [], mobs: [], ground: [], dep: {}, fell: {}, cleared: {}, plants: {}, lit: {}, night: false, pending: [], ev: [], noAuth: {}, seen: {}, fires: [], weather: {}, salt: 0, dyn: 0 };
     const queue = [], log = [];
     const idx = M.key, kx = M.kx, ky = M.ky, inMap = M.inWorld;
     const cheb = (ax, ay, bx, by) => Math.max(Math.abs(ax - bx), Math.abs(ay - by));
@@ -622,7 +622,11 @@
           else { p.act = { k: 'climb', bi, dir: c.dir > 0 ? 1 : -1 }; p.path = findPath(p.x, p.y, (x, y) => cheb(x, y, B.stairs[0], B.stairs[1]) <= 1, B.stairs[0], B.stairs[1]); }
           break;
         }
-        case 'attack': { if (p.lv > 0) { msg(p, "You can't reach that from up here.", 'warn'); break; } const m = mobByUid(c.uid); if (m && !m.dead) { if (coverBlocks(p, m)) { msg(p, 'You dare not strike. One blow here would unmask you both.', 'warn'); break; } p.act = { k: 'attack', uid: m.uid }; p.skilling = null; p._stall = 0; closeShop(p); } break; }
+        case 'attack': {
+          if (p.lv > 0) { msg(p, "You can't reach that from up here.", 'warn'); break; }
+          if (c.id) { const n = M.npcs.find(q => q.id === c.id); if (n && n.watch && !n.down) { p.act = { k: 'attackn', id: n.id }; p.skilling = null; p._stall = 0; closeShop(p); } break; }
+          const m = mobByUid(c.uid); if (m && !m.dead) { if (coverBlocks(p, m)) { msg(p, 'You dare not strike. One blow here would unmask you both.', 'warn'); break; } p.act = { k: 'attack', uid: m.uid }; p.skilling = null; p._stall = 0; closeShop(p); } break;
+        }
         case 'escape': {
           const n = M.npcs.find(q => q.id === c.id);
           if (!n || !n.escape || p.dead) break;
@@ -790,7 +794,11 @@
       p.atk = Math.max(p.atk, 0) + 3;
       msg(p, (d.drink ? 'You drink the ' : 'You eat the ') + d.name.toLowerCase() + '.' + (p.hp > before ? ' It heals some health.' : ''));
       ev({ e: 'eat', p: p.id, id: s.id, heal: p.hp - before });
-      if (p.poison) curePoison(p, d.cures === 'poison' ? 'The antidote burns going down. The poison is gone.' : 'That settles your stomach. The poison fades.');
+      if (d.cures === 'poison') {
+        p.cd = p.cd || {}; p.cd.antidote = S.t + ANTIDOTE_TICKS;   /* three minutes, saved with the other cooldowns */
+        if (p.poison) curePoison(p, 'The antidote burns going down. The poison is gone, and it will not take for three minutes.');
+        else msg(p, 'The antidote will keep poison off you for three minutes.', 'info');
+      } else if (p.poison) curePoison(p, 'That settles your stomach. The poison fades.');
     }
     function shopOf(id) { return D.shops.shops[id]; }
     function nearKeeper(p, sh) { const n = M.npcs.find(q => q.id === sh.keeper); return n && cheb(p.x, p.y, n.x, n.y) <= 2; }
@@ -983,8 +991,9 @@
        they are poisoned other than just their health going down"): v.dmg every POISON_EVERY ticks for v.ticks ticks. A new
        bite while poisoned keeps the stronger dose and the later end. Food or an antidote cures it; death clears it. The
        engine shows it (event 'poison': the green Hitpoints orb and badge, green splats from cls 'poison' hits). */
-    const POISON_EVERY = 3;
+    const POISON_EVERY = 3, ANTIDOTE_TICKS = 300;   /* 300 ticks is three minutes (a tick is 0.6 s) */
     function poisonPlayer(p, v, by) {
+      if (p.cd && p.cd.antidote > S.t) { msg(p, 'The antidote is still in you. The poison does not take.', 'info'); return; }
       const was = !!p.poison, until = S.t + (v.ticks | 0), dmg = Math.max(1, v.dmg | 0);
       if (was) { p.poison.until = Math.max(p.poison.until, until); p.poison.dmg = Math.max(p.poison.dmg, dmg); return; }
       p.poison = { until, dmg, next: S.t + POISON_EVERY };
@@ -1590,6 +1599,146 @@
       p.lv = nl; p.bld = nl > 0 ? bi : -1; p.x = at[0]; p.y = at[1];
       msg(p, dir > 0 ? 'You climb up the stairs.' : 'You climb down the stairs.'); ev({ e: 'climb', p: p.id, lv: nl });
     }
+    /* town guards (2026-10-07): combat 33, they do not start a fight. Hit one and every guard of that
+       watch draws steel. At dusk they walk the town lamps and torches alight; at dawn they put the lamps out.
+       One guard walks the cobbles from Ashvale to Saltmere and tends the lamps along that road. */
+    const GSTAT = { hp: 40, att: 16, def: 16, attb: 12, defb: 12, max: 7, cb: 33 };
+    function isTended(o) {
+      if (!o) return false;
+      if (o.k === 'lamp') return true;
+      return (o.zone === 'village' || o.zone === 'saltmere') && (o.k === 'torch' || o.k === 'sconce');
+    }
+    function roadLamps() {
+      if (!M.roadTorchesIn) return [];
+      return M.roadTorchesIn(48, 10, 380, 70).filter(o => o.k === 'lamp').sort((a, b) => a.x - b.x || a.y - b.y);
+    }
+    let TEND = null;
+    function tendKeys() {
+      if (TEND) return TEND;
+      TEND = new Set();
+      for (const o of M.objects || []) if (isTended(o)) TEND.add(o.x + ',' + o.y);
+      for (const o of roadLamps()) TEND.add(o.x + ',' + o.y);
+      return TEND;
+    }
+    function lampLit(x, y) { const k = Math.floor(x) + ',' + Math.floor(y); return tendKeys().has(k) ? !!S.lit[k] : true; }
+    function townLights(zone) {
+      return (M.objects || []).filter(o => o.zone === zone && isTended(o)).map(o => ({ x: o.x, y: o.y })).sort((a, b) => a.x - b.x || a.y - b.y);
+    }
+    function stepNpc(n, tx, ty, reach) {
+      if (cheb(n.x, n.y, tx, ty) <= reach) return true;
+      if (!n.path || !n.path.length || S.t % 4 === 0) n.path = findPath(n.x, n.y, (x, y) => cheb(x, y, tx, ty) <= reach, tx, ty, 80);
+      const nx = n.path && n.path.shift(); if (nx == null) return false;
+      const x = kx(nx), y = ky(nx);
+      if (M.npcs.some(o => o !== n && !o.down && o.x === x && o.y === y)) { n.path = null; return false; }
+      n.x = x; n.y = y; return cheb(n.x, n.y, tx, ty) <= reach;
+    }
+    function rallyWatch(n, p) {
+      let first = true;
+      for (const g of M.npcs) if (g.watch === n.watch) { if (g.foe === p.id) first = false; g.foe = p.id; g.duty = null; }
+      if (first) msg(p, n.watch === 'road' ? 'The road guard draws his sword.' : 'The town guard draws steel. The whole watch comes for you.', 'warn');
+    }
+    function playerAttackGuard(p, n) {
+      if (n.hp == null) n.hp = GSTAT.hp;
+      const c = wclass(p), st = style(p), b = bonuses(p), w = weaponOf(p);
+      let A, max = maxHit(p), ammoId = null;
+      if (c === 'ranged') {
+        const ammo = p.eq.ammo; if (!ammo) { msg(p, 'There is no ammo left in your quiver.', 'warn'); p.act = null; return false; }
+        const ad = IT[ammo.id]; if (lv(p, 'ranged') < (ad.req ? ad.req.ranged || 1 : 1)) { msg(p, 'You need Ranged level ' + ad.req.ranged + ' to fire ' + ad.name.toLowerCase() + '.', 'warn'); p.act = null; return false; }
+        ammoId = ammo.id; ammo.n--; if (ammo.n <= 0) delete p.eq.ammo;
+        A = (eff(p, 'ranged') + (st.att || 0) + 8) * (b.ranged + 64);
+      } else if (c === 'magic') A = (eff(p, 'magic') + 8) * (b.magic + 64);
+      else A = (eff(p, 'attack') + (st.att || 0) + 8) * (b.attack + 64);
+      const Dr = (GSTAT.def + 9) * (GSTAT.defb + 64), hit = rollAttack(A, Dr), dmg = hit ? R.int(max + 1) : 0;
+      const dist = cheb(p.x, p.y, n.x, n.y), delay = c === 'ranged' ? 1 + Math.floor((3 + dist) / 6) : c === 'magic' ? 1 + Math.floor((1 + dist) / 3) : 0;
+      ev({ e: 'attack', src: p.id, dst: 'n:' + n.id, anim: w ? w.anim : 'punch', delay, cls: c, ammo: ammoId, spell: c === 'magic' ? spell(p)[2] : null, tier: w ? w.tier : 0 });
+      S.pending.push({ at: S.t + delay, src: p.id, guard: n.id, dmg, cls: c, xp: st.xp });
+      rallyWatch(n, p);
+      return true;
+    }
+    function landOnGuard(h) {
+      const n = M.npcs.find(q => q.id === h.guard), p = S.players[h.src]; if (!n || n.down) return;
+      if (n.hp == null) n.hp = GSTAT.hp;
+      const dmg = Math.min(h.dmg, n.hp); n.hp -= dmg;
+      ev({ e: 'hit', dst: 'n:' + n.id, src: h.src, dmg, max: GSTAT.hp, hp: n.hp, cls: h.cls });
+      if (p && !p.puppet) hitXp(p, h.cls, dmg, h.xp, false);
+      if (p) rallyWatch(n, p);
+      if (n.hp <= 0) {
+        n.down = S.t + 80; n.hp = 0; n.path = null; n.duty = null;
+        ev({ e: 'guard', id: n.id, up: false });
+        if (p) msg(p, 'The town guard falls. The rest of the watch does not.', 'warn');
+      }
+    }
+    function guardStrike(n, p) {
+      const b = bonuses(p), st = style(p);
+      const A = (GSTAT.att + 9) * (GSTAT.attb + 64), Dr = (eff(p, 'defence') + (st.def || 0) + 9) * (b.defence + 64);
+      if (airborne(p)) return;
+      const hit = rollAttack(A, Dr); let dmg = hit ? Math.min(R.int(GSTAT.max + 1), p.hp) : 0;
+      const prot = protects(p, 'melee'); if (prot) dmg = 0;
+      ev({ e: 'attack', src: 'n:' + n.id, dst: p.id, anim: 'slash', delay: 0, cls: 'melee' });
+      if (!p.puppet) p.hp -= dmg;
+      ev({ e: 'hit', dst: p.id, src: 'n:' + n.id, dmg, max: maxHp(p), hp: p.hp, cls: 'melee', blocked: !hit && !!p.eq.shield, prot: prot ? 1 : 0, raw: dmg });
+      if (p.retal && !p.act) p.act = { k: 'attackn', id: n.id };
+      if (!p.puppet && p.hp <= 0 && !angelSave(p)) killPlayer(p);
+    }
+    function setLit(x, y, on) {
+      const k = x + ',' + y; if (on) S.lit[k] = 1; else delete S.lit[k];
+      ev({ e: 'lamp', x, y, on: on ? 1 : 0 });
+    }
+    function watchPhase(night, boot) {
+      night = !!night; tendKeys();
+      if (boot) {
+        S.night = night;
+        if (night) for (const k of tendKeys()) S.lit[k] = 1;
+        return;
+      }
+      if (night === !!S.night) return;
+      S.night = night;
+      const groups = {};
+      for (const n of M.npcs) if (n.watch && !n.road) (groups[n.watch] = groups[n.watch] || []).push(n);
+      for (const zone in groups) {
+        const lights = townLights(zone), gs = groups[zone];
+        gs.forEach((n, i) => {
+          const mine = lights.filter((_, k) => k % gs.length === i);
+          if (n.hx == null) { n.hx = n.x; n.hy = n.y; }
+          n.duty = mine.length ? { on: night, i: 0, lamps: mine, home: false } : null;
+          n.path = null;
+        });
+      }
+    }
+    function watchTick() {
+      for (const n of M.npcs) {
+        if (!n.watch) continue;
+        if (n.hx == null) { n.hx = n.x; n.hy = n.y; }
+        if (n.down) {
+          if (S.t >= n.down) { n.down = 0; n.hp = GSTAT.hp; n.x = n.hx; n.y = n.hy; ev({ e: 'guard', id: n.id, up: true }); }
+          continue;
+        }
+        if (n.foe) {
+          const p = S.players[n.foe];
+          const gone = !p || p.dead || (n.watch !== 'road' && M.zoneAt && M.zoneAt(p.x, p.y) !== n.zone && cheb(p.x, p.y, n.x, n.y) > 18) || (n.watch === 'road' && cheb(p.x, p.y, n.x, n.y) > 18);
+          if (gone) { n.foe = null; n.path = null; continue; }
+          if (inReach(n.x, n.y, p.x, p.y, 1)) { if (S.t >= (n.atkT || 0)) { n.atkT = S.t + 4; guardStrike(n, p); } continue; }
+          stepNpc(n, p.x, p.y, 1); continue;
+        }
+        if (n.road) {
+          if (!n.route || !n.route.length) { n.route = roadLamps(); n.ri = 0; n.rd = 1; if (!n.route.length) continue; }
+          const L = n.route[n.ri]; if (!L) { n.ri = 0; continue; }
+          if (stepNpc(n, L.x, L.y, 1)) { setLit(L.x, L.y, !!S.night); let k = n.ri + n.rd; if (k < 0 || k >= n.route.length) { n.rd = -n.rd; k = n.ri + n.rd; } n.ri = k; n.path = null; }
+          continue;
+        }
+        if (n.duty) {
+          const L = n.duty.lamps[n.duty.i];
+          if (!L) {
+            if (n.x === n.hx && n.y === n.hy) n.duty = null;
+            else stepNpc(n, n.hx, n.hy, 0);
+            continue;
+          }
+          if (stepNpc(n, L.x, L.y, 1)) { setLit(L.x, L.y, !!n.duty.on); n.duty.i++; n.path = null; }
+          continue;
+        }
+        if (n.x !== n.hx || n.y !== n.hy) stepNpc(n, n.hx, n.hy, 0);
+      }
+    }
     /* NPCs with a round (o.patrol: tiles in order, e.g. a watchman on the wall walk): one tile every 3 ticks, there and back */
     function patrolTick() {
       if (S.t % 3) return;
@@ -1672,6 +1821,15 @@
       const a = p.act;
       if (a && a.k === 'light') { lightTick(p, a); }
       else if (a && a.k === 'climb') { const B = M.buildings[a.bi]; if (B && B.deck) { if (deckEnds(B, p).some(q => cheb(p.x, p.y, q[0], q[1]) <= 1)) climbNow(p, a.bi, a.dir); else if (p.path.length) stepPath(p); else p.act = null; } else if (B && (cheb(p.x, p.y, B.stairs[0], B.stairs[1]) <= 1 || (B.alt && cheb(p.x, p.y, B.alt[0], B.alt[1]) <= 1))) climbNow(p, a.bi, a.dir); else if (p.path.length) stepPath(p); else p.act = null; }
+      else if (a && a.k === 'attackn') {
+        const n = M.npcs.find(q => q.id === a.id);
+        if (!n || n.down) { p.act = null; }
+        else if (!inReach(p.x, p.y, n.x, n.y, 1)) {
+          p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, n.x, n.y, 1), n.x, n.y, 60);
+          if (!p.path.length) { msg(p, "I can't reach that!", 'warn'); p.act = null; }
+          else stepPath(p);
+        } else { p.path = []; p.face = faceTo(p.x, p.y, n.x, n.y); if (p.atk <= 0) { if (playerAttackGuard(p, n)) p.atk = attackSpeed(p); } }
+      }
       else if (a && a.k === 'attack') {
         const m = mobByUid(a.uid);
         if (!m || m.dead) { p.act = null; }
@@ -2075,8 +2233,8 @@
       for (const pid of S.order) playerTick(S.players[pid]);
       if (M.seeded) for (const pid of S.order) wake(S.players[pid]);
       for (const m of S.mobs) mobTick(m);
-      patrolTick(); guardTick();
-      for (let i = 0; i < S.pending.length;) { const h = S.pending[i]; if (h.at <= S.t) { S.pending.splice(i, 1); landOnMob(h); } else i++; }
+      patrolTick(); guardTick(); watchTick();
+      for (let i = 0; i < S.pending.length;) { const h = S.pending[i]; if (h.at <= S.t) { S.pending.splice(i, 1); if (h.guard) landOnGuard(h); else landOnMob(h); } else i++; }
       for (let i = 0; i < S.ground.length;) { const g = S.ground[i]; if (g.until <= S.t && isAuth(zoneOf(g.x, g.y))) { S.ground.splice(i, 1); ev({ e: 'vanish', g: g.uid, x: g.x, y: g.y }); } else i++; }
       const occ = {};
       for (const pid of S.order) { const p = S.players[pid]; if (!p.dead) occ[zoneOf(p.x, p.y)] = 1; }
@@ -2201,7 +2359,7 @@
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
-      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, EFFECTS: Object.keys(EFFECTS),
+      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
       applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, setFelled,
       hitXp: (pid, cls, dmg, dex) => { const p = S.players[pid]; if (p && !p.puppet) hitXp(p, cls, dmg, null, dex); },
       creditKill: (pid, key) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key); }

@@ -32,5 +32,12 @@ for (let i = 0; i < 8; i++) { c.tick(); ev = ev.concat(c.S.ev); }
 ok(!p.poison && ev.some(e => e.e === 'poison' && e.on === false), 'and left alone it wears off');
 p.inv[5] = { id: 'antidote', n: 1 }; const hpA = p.hp; c.cmd('p1', { c: 'eat', slot: 5 }); c.tick();
 ok(Number.isFinite(p.hp) && p.hp === hpA, 'drinking an antidote leaves hitpoints a number (it made them NaN: ' + p.hp + ')');
+ok(p.cd && p.cd.antidote >= c.S.t + 299, 'the antidote also wards poison for three minutes (' + ((p.cd && p.cd.antidote) - c.S.t) + ' ticks)');
+sp.dead = 0; sp.hp = 20; sp.x = 16; sp.y = 15; sp.tgt = 'p1'; sp.atk = 0;
+for (let i = 0; i < 24; i++) c.tick();
+ok(!p.poison, 'a bite during those three minutes does not poison');
+p.cd.antidote = c.S.t;
+for (let i = 0; i < 24 && !p.poison; i++) c.tick();
+ok(!!p.poison, 'once the three minutes are gone, poison takes again');
 p.hp = NaN; c.tick(); ok(p.hp === c.maxHp(p), 'hitpoints that are NaN come back to full on the next tick');
 process.exit(fails ? 1 : 0);

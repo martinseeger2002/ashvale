@@ -660,6 +660,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.town_guard": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.vael": {
     "id": null,
     "v": 1,
