@@ -10,7 +10,7 @@
   'use strict';
   function sceneFactory(deps) {
     const THREE = deps.three;
-    const TILE_COL = { i: 0x8a7a5a, '.': 0x5f9e3f, f: 0x62a242, F: 0x5c9a3e, ',': 0x4a7f34, T: 0x40702c, P: 0x3e6c2c, O: 0x43732e, p: 0xa98a5a, c: 0x8a857c, d: 0x8f7b5e, B: 0x7a5a36, g: 0xb8ac62, q: 0xa9b29c, v: 0x6a8a75, J: 0xd9e9f2,
+    const TILE_COL = { i: 0x8a7a5a, '.': 0x5f9e3f, f: 0x62a242, F: 0x5c9a3e, ',': 0x4a7f34, T: 0x40702c, P: 0x3e6c2c, O: 0x43732e, p: 0xa98a5a, c: 0x6c675f, d: 0x8f7b5e, B: 0x7a5a36, g: 0xb8ac62, q: 0xa9b29c, v: 0x6a8a75, J: 0xd9e9f2,
       s: 0xcdbb84, '~': 0x6a7a55, H: 0x8a7a5a, X: 0x7d8a52, R: 0x7e7a6a, N: 0x7e7a6a, I: 0x7e7a6a, r: 0x6f7a55,
       W: 0x4a7a3a, M: 0x4c7030, Y: 0x36612a, U: 0xc9b47c, C: 0x74716e, G: 0x7e7a6a, A: 0x767a82, '^': 0x74716a, K: 0x6f8f4a };
     const ORE = { R: 0xc8702c, N: 0xd8d8d0, I: 0x8a4632, C: 0x33333c, G: 0xd9a930, A: 0x6f86c8 };
@@ -102,7 +102,7 @@
 
     /* many boxes/cylinders of one colour -> one InstancedMesh each */
     function Batcher(group) {
-      const geos = { box: new THREE.BoxGeometry(1, 1, 1), cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 8), cyl6: new THREE.CylinderGeometry(0.5, 0.5, 1, 6), cyl12: new THREE.CylinderGeometry(0.5, 0.5, 1, 12), cyl32: new THREE.CylinderGeometry(0.5, 0.5, 1, 32), cone: new THREE.ConeGeometry(0.5, 1, 6), pyr: new THREE.ConeGeometry(0.5, 1, 4), rock: new THREE.DodecahedronGeometry(0.5, 0) };
+      const geos = { box: new THREE.BoxGeometry(1, 1, 1), cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 8), cyl6: new THREE.CylinderGeometry(0.5, 0.5, 1, 6), cyl12: new THREE.CylinderGeometry(0.5, 0.5, 1, 12), cyl32: new THREE.CylinderGeometry(0.5, 0.5, 1, 32), cone: new THREE.ConeGeometry(0.5, 1, 6), pyr: new THREE.ConeGeometry(0.5, 1, 4), rock: new THREE.DodecahedronGeometry(0.5, 0), cyl5: new THREE.CylinderGeometry(0.5, 0.5, 1, 5), cyl7: new THREE.CylinderGeometry(0.5, 0.5, 1, 7), stone: new THREE.IcosahedronGeometry(0.5, 0) };
       const sets = new Map();
       return {
         add(kind, color, x, y, z, sx, sy, sz, ry, rx, rz) {
@@ -748,9 +748,21 @@
         if (!mine(x, y)) continue;
         const c = at(x, y), r = hash2(x * 5 + 1, y * 7 + 2);
         if (c === 'K') { B.add('box', 0x8c897e, x + 0.5, heightAt(x + 0.5, y + 0.5) + 0.65, y + 0.5, 0.5, 1.3 + r * 0.9, 0.42, r * 6); continue; }   /* standing stones and ruin walls (seeded land) */
-        if (c === 'c') {   /* cobbles: a 3 x 3 set of rounded grey stones, each a little different (2026-10-07) */
-          for (let k = 0; k < 9; k++) { const sx = x + 0.17 + (k % 3) * 0.33 + (hash2(x * 3 + k, y) - 0.5) * 0.06, sz = y + 0.17 + ((k / 3) | 0) * 0.33 + (hash2(x, y * 3 + k) - 0.5) * 0.06, q = hash2(x + k * 13, y - k * 7);
-            B.add('cyl6', q < 0.33 ? 0x7a766e : q < 0.66 ? 0x8f8a80 : 0x9e988c, sx, heightAt(sx, sz) + 0.025, sz, 0.3, 0.06, 0.28, q * 6); }
+        if (c === 'c') {   /* cobbles laid by hand, not by a grid (2026-10-07: "too uniform ... use a seed to generate a random cobble
+          pattern and a handful of random shapes"): from the tile's own seed, 9 to 12 stones scattered by dart-throwing (kept apart,
+          spilling a little over the tile's edges), each one of a handful of shapes - five-, six- and seven-sided setts, a squared
+          slab, a flattened knobbly stone - with its own size, stretch, turn and shade. The same seed lays the same road for everyone */
+          const H = k => hash2(x * 7 + k * 131, y * 13 - k * 71), CS = [0x6e6a63, 0x7a766e, 0x858076, 0x8f8a80, 0x9a948a, 0x7f776a, 0x8a8478], SH = ['cyl5', 'cyl6', 'cyl7', 'box', 'stone', 'cyl6', 'stone'];
+          const n = 9 + Math.floor(H(0) * 4), pts = [];
+          for (let t = 1; pts.length < n && t < 80; t++) {
+            const px = -0.06 + H(t) * 1.12, pz = -0.06 + H(t + 50) * 1.12;
+            if (pts.every(q => (q[0] - px) ** 2 + (q[1] - pz) ** 2 > 0.05)) pts.push([px, pz, t]);
+          }
+          for (const [px, pz, t] of pts) {
+            const r = H(t + 100), sh = SH[Math.floor(H(t + 200) * SH.length)], w = 0.27 + r * 0.14, st = 0.8 + H(t + 300) * 0.4, sx = x + px, sz = y + pz;
+            const tall = sh === 'stone' ? 0.09 : 0.06;
+            B.add(sh, CS[Math.floor(H(t + 400) * CS.length)], sx, heightAt(sx, sz) + tall * 0.35, sz, w * st, tall, w / st, H(t + 500) * 6.283, sh === 'stone' ? (H(t + 600) - 0.5) * 0.3 : 0);
+          }
           continue;
         }
         if (c === '^' && map.underNear && map.underNear(x, y)) continue;   /* underground the rock is the raised ground itself */

@@ -852,6 +852,12 @@
     "api": 1,
     "kind": "json"
    },
+   "gear.bow_snare": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "gear.chainbody": {
     "id": null,
     "v": 1,
@@ -859,6 +865,12 @@
     "kind": "json"
    },
    "gear.dagger": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "gear.dagger_venom": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -960,7 +972,19 @@
     "api": 1,
     "kind": "json"
    },
+   "gear.staff_ember": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "gear.staff_frost": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "gear.staff_storm": {
     "id": null,
     "v": 1,
     "api": 1,

@@ -397,15 +397,16 @@ class Bot:
         self.keep_items = getattr(self, 'keep_items', set()) | {item}   # never sold while a quest wants it
         while have < need and time.time() - t0 < seconds and self.time_left():
             before = have
-            if not (self.r("return ASH.me.inv.filter(s => !s).length") or 0):
-                self.tidy()   # a full bag catches nothing (2026-10-07: "free: 0" at the pond, shrimp stalled at 7)
-                if not (self.r("return ASH.me.inv.filter(s => !s).length") or 0):
+            if (self.r("return ASH.me.inv.filter(s => !s).length") or 0) <= 2:
+                # a full bag catches nothing (2026-10-07: "free: 0" at the pond; at the trees a tidy freed one slot a time)
+                if True:
                     # still full: it is food (a meal is a slot each). Gathering is not fighting: keep 6, the rest to the chest
                     extra = self.r("""const keep = new Set(%s), out = {}; let n = 0;
                       for (const q of ASH.me.inv) { if (!q || !(ASH.core.item(q.id) || {}).edible || keep.has(q.id)) continue;
                         n += q.n || 1; if (n > 6) out[q.id] = (out[q.id] || 0) + (q.n || 1); } return out""" % json.dumps(sorted(self.quest_wants() | {item}))) or {}
                     for k, n in extra.items():
                         self.r("await talk('chest'); ASH.chest.store(%r, %d); return 1" % (k, n)); log('room to gather: put %d %s in the chest' % (n, k))
+                    self.tidy()
             for x, y in spots:
                 self.r("return await gatherAt(%d, %d, 30000)" % (x, y))
                 have = self.r("return bag()[%r] || 0" % item) or 0
@@ -698,7 +699,7 @@ class Bot:
         if getattr(self, '_armour_tried_at', None) == gold: return   # same GOLD as the trip that bought nothing
         got = self.r("""const out = [], sh = ASH.core.D.shops, stock = ((sh.shops || sh).armoury || {}).stock || [];
           const can = d => Object.entries(d.req || {}).every(([k, v]) => ASH.core.lv(ASH.me, k) >= v);
-          for (const slot of ['head', 'body', 'legs', 'shield']) {
+          for (const slot of ['head', 'body', 'legs', 'shield', 'pack']) {   // a pack carries more (2026-10-07: his was gone, always overloaded)
             const on = ASH.me.eq[slot], onv = on ? (ASH.core.item(on.id).value || 0) : 0;
             const fits = stock.map(k => [k, ASH.core.item(k)]).filter(([k, d]) => d && d.eq === slot && can(d) && (d.value || 0) > onv)
               .map(([k, d]) => [k, d, ASH.core.priceBuy('armoury', k, ASH.me)]);
