@@ -115,8 +115,7 @@
         panel.innerHTML = h;
         for (const el of panel.querySelectorAll('[data-q]')) el.onclick = () => K.questStory(el.dataset.q, who);
       } else if (ST.tab === 'prayer') {
-        /* the prayer book (2026-10-07): every prayer from RuneScape's standard book in level order; the overhead protections
-           work now, the rest are shown greyed as "coming soon". Tap one to switch it on or off. */
+        /* the prayer book (2026-10-07): the three overhead protections, melee 1 / missiles 4 / magic 15. Tap one to switch it on or off. */
         const L = core.lv(p, 'prayer'), mx = core.maxPp(p), pv = p.pp | 0;
         let h = '<h4>Prayer</h4><div class="info" style="text-align:center;margin:0">Prayer points <span class="y">' + pv + ' / ' + mx + '</span></div><div class="ppbar"><i style="width:' + (100 * pv / Math.max(1, mx)) + '%"></i></div><div class="prayers">';
         for (const q of core.prayers()) {
@@ -126,7 +125,7 @@
         const sq = ST.praySel && core.prayer(ST.praySel);
         const secs = (t) => { const v = Math.round(t * 0.6); return v >= 60 ? Math.floor(v / 60) + 'm ' + String(v % 60).padStart(2, '0') + 's' : v + 's'; };
         const left = core.prayTicks(p), full = core.prayTicks(p, mx, 12);
-        h += '</div><div class="info" style="text-align:center">' + (left != null ? 'Time left: <span class="y">' + secs(left) + '</span><br>' : '') + 'Prayer ' + L + ': a full bar holds a protection prayer for ' + secs(full) + '. Each level adds about 3s.' + (core.bonuses(p).prayer ? ' Prayer bonus <span class="g">+' + core.bonuses(p).prayer + '</span> from your gear makes it last longer.' : '') + '</div>';
+        h += '</div><div class="info" style="text-align:center">' + (left != null ? 'Time left: <span class="y">' + secs(left) + '</span><br>' : '') + 'Prayer ' + L + ': a full bar holds a protection prayer for ' + secs(full) + '. Each point lasts 5s; each level adds another point.' + (core.bonuses(p).prayer || core.bonuses(p).prayerSec ? ' Gear: ' + (core.bonuses(p).prayer ? 'Prayer bonus <span class="g">+' + core.bonuses(p).prayer + '</span>' : '') + (core.bonuses(p).prayer && core.bonuses(p).prayerSec ? ', ' : '') + (core.bonuses(p).prayerSec ? '<span class="g">+' + core.bonuses(p).prayerSec + 's</span> per point' : '') + '.' : '') + '</div>';
         h += '<div class="info">' + (sq ? '<span class="o">' + A.esc(sq.name) + '</span> (level ' + sq.level + ')' + (sq.soon ? ' <span class="r">coming soon</span>' : '') + '<br>' + A.esc(sq.desc || '') : 'Tap a prayer to switch it on. Points drain while it is on; recharge at the altar in the church.') + '</div>';
         panel.innerHTML = h;
         for (const b of panel.querySelectorAll('[data-p]')) b.onclick = () => {

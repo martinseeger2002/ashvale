@@ -28,7 +28,7 @@
 .ash .splat.poison{background:radial-gradient(circle,#4fcf3a 55%,#1d5a14 60%);border-radius:50%;color:#fff}
 .ash .orb.hp i{background:linear-gradient(#e33,#911)} .ash .orb.hp.hawk i{background:linear-gradient(#d8a04a,#7a4a1a)} .ash .orb.run i{background:linear-gradient(#e8d84a,#9a8a1a)} .ash .orb.run.off i{background:linear-gradient(#8a8a7a,#555)} .ash .orb.pray i{background:linear-gradient(#7fd8ff,#1f6aa8)} .ash .orb.pray.on{box-shadow:0 0 0 1px #6b5d48,0 0 8px 2px #8fe0ffcc}
 .ash .orb.pray b{display:flex;flex-direction:column;align-items:center;line-height:1}.ash .orb.pray b svg{width:14px;height:14px;margin-bottom:1px}
-.ash .prayers{display:grid;grid-template-columns:repeat(5,1fr);gap:3px}
+.ash .prayers{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
 .ash .pry{position:relative;aspect-ratio:1;border-radius:5px;background:#2c251c;box-shadow:inset 0 0 0 1px #4b4032;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .ash .pry svg{width:70%;height:70%}.ash .pry.soon svg,.ash .pry.low svg{opacity:.28;filter:grayscale(1)}
 .ash .pry.on{background:radial-gradient(#fff6c8,#e8c45a 55%,#8a6a20);box-shadow:inset 0 0 0 1px #fff3b0,0 0 6px #ffe48a}

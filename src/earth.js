@@ -221,12 +221,12 @@
       const exAt = alt => 1 + 2 * Math.min(1, Math.max(0, (Math.log10(alt) - 3.3) / 1.5));   /* at most 3x from orbit (the operator: the mountains looked out of scale) */
       const tiltAt = alt => { const t = Math.min(1, Math.max(0, (Math.log10(alt) - 1.6) / 2.2)); return 0.62 + (1.5 - 0.62) * t; };
       const PLACES = {};
-      const SUN_EPOCH = 1791353761, DAY_S = 86400;
+      const SUN_EPOCH = 1791353761, DAY_S = 7200;   /* two-hour day/night cycle, same as the game (src/engine.js) */
       let sunLon = null, sunBall = null;
       { const g = new THREE.Group(), core = new THREE.Mesh(new THREE.SphereGeometry(R * 0.32, 24, 16), new THREE.MeshBasicMaterial({ color: 0xfff4c0, fog: false }));
         const halo = new THREE.Mesh(new THREE.SphereGeometry(R * 0.62, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffd36a, transparent: true, opacity: 0.18, depthWrite: false, fog: false }));
         g.add(core, halo); g.frustumCulled = false; core.frustumCulled = halo.frustumCulled = false; scene.add(g); sunBall = g; }
-      function sunNow() {   /* the sun's direction from the planet's centre: over the equator, moving west 360 degrees a day */
+      function sunNow() {   /* the sun's direction from the planet's centre: over the equator, moving west 360 degrees a cycle */
         if (sunLon == null) { const a = PLACES.ashvale ? PLACES.ashvale.u : [1, 0, 0]; sunLon = Math.atan2(a[1], a[0]); }
         const L = sunLon - Math.PI / 2 - 2 * Math.PI * ((Date.now() / 1000 - SUN_EPOCH) / DAY_S);
         return [Math.cos(L), Math.sin(L), 0];

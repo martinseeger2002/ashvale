@@ -60,13 +60,13 @@ ok(p.inv.filter(s => s && s.id === 'monk_robe').length === 1, 'still one robe');
 
 /* the robe */
 const it = core.item('monk_robe');
-ok(it.eq === 'body' && it.magic === 1 && it.prayer === 3, "Monk's robe: body slot, Magic +1, Prayer +3");
+ok(it.eq === 'body' && it.magic === 1 && it.prayer === 3 && it.prayerSec === 1, "Monk's robe: body slot, Magic +1, Prayer +3, +1s per prayer point");
 const before = core.bonuses(p), tFull0 = core.prayTicks(p, 10, 12);
 core.cmd('p1', { c: 'equip', slot }); core.tick();
 const after = core.bonuses(p), tFull1 = core.prayTicks(p, 10, 12);
 ok(p.eq.body && p.eq.body.id === 'monk_robe', 'it can be worn');
-ok(after.magic - before.magic === 1 && after.prayer - before.prayer === 3, 'worn: Magic bonus +1, Prayer bonus +3');
-ok(tFull1 > tFull0, 'a full Prayer 10 bar holds a protection longer in the robe: ' + (tFull0 * 0.6).toFixed(1) + 's -> ' + (tFull1 * 0.6).toFixed(1) + 's');
+ok(after.magic - before.magic === 1 && after.prayer - before.prayer === 3 && after.prayerSec - before.prayerSec === 1, 'worn: Magic +1, Prayer +3, +1s per point');
+ok(tFull1 * 0.6 - tFull0 * 0.6 >= 10, 'the robe adds a full second per point on a 10-point bar: ' + (tFull0 * 0.6).toFixed(1) + 's -> ' + (tFull1 * 0.6).toFixed(1) + 's');
 /* the live drain agrees with the readout */
 p.pp = 10; p.pd = 0; core.cmd('p1', { c: 'pray', id: 'protect_from_melee', on: true }); core.tick();
 let n = 1; while (p.pray.protect_from_melee && n < 2000) { core.tick(); n++; }

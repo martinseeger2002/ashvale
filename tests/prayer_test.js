@@ -54,22 +54,36 @@ for (const prayer of [null, 'protect_from_melee', 'protect_from_missiles', 'prot
   core.cmd('p1', { c: 'pray', id: 'protect_from_magic', on: true }); core.tick();
   ok(Object.keys(p.pray).join() === 'protect_from_magic', 'and Magic replaced Missiles');
   core.cmd('p1', { c: 'pray', id: 'thick_skin', on: true }); core.tick();
-  ok(!p.pray.thick_skin, 'a "coming soon" prayer cannot be switched on');
+  ok(!p.pray.thick_skin && Object.keys(p.pray).join() === 'protect_from_magic', 'only the three overheads exist: thick skin does nothing');
+  ok(core.prayers().every(q => ['protect_from_melee', 'protect_from_missiles', 'protect_from_magic'].indexOf(q.id) >= 0) && core.prayers().length === 3, 'the prayer book is the three overheads');
+  ok(core.prayer('protect_from_melee').level === 1 && core.prayer('protect_from_missiles').level === 4 && core.prayer('protect_from_magic').level === 15, 'melee 1, missiles 4, magic 15');
+}
+{
+  const core = AshCore.create(D, { seed: 'lv' }), p = core.addPlayer('p1', { xp: { prayer: 0 } });
+  core.cmd('p1', { c: 'pray', id: 'protect_from_missiles', on: true }); core.tick();
+  ok(!p.pray.protect_from_missiles, 'Prayer 1 cannot use Protect from Missiles (needs 4)');
+  core.cmd('p1', { c: 'pray', id: 'protect_from_magic', on: true }); core.tick();
+  ok(!p.pray.protect_from_magic, 'Prayer 1 cannot use Protect from Magic (needs 15)');
+  const p4 = core.addPlayer('p2', { xp: { prayer: XP[4] * 10 } });
+  core.cmd('p2', { c: 'pray', id: 'protect_from_missiles', on: true }); core.tick();
+  ok(!!p4.pray.protect_from_missiles, 'Prayer 4 can use Protect from Missiles');
+  core.cmd('p2', { c: 'pray', id: 'protect_from_magic', on: true }); core.tick();
+  ok(!p4.pray.protect_from_magic, 'Prayer 4 cannot use Protect from Magic (needs 15)');
 }
 
-/* ---------- drain: points = level, a protection costs a point every 5 ticks, more levels last longer */
+/* ---------- drain: points = level, a protection spends a point about every 5 s, more levels last longer */
 {
   let last = 0;
   for (const L of [1, 10, 30, 70, 99]) {
     const core = AshCore.create(D, { seed: 'dr' + L }), p = core.addPlayer('p1', { xp: { prayer: L > 1 ? XP[L] * 10 : 0 } });
-    core.cmd('p1', { c: 'pray', id: 'protect_from_magic', on: true }); core.tick();
-    let t = 1; while (p.pray.protect_from_magic && t < 6000) { core.tick(); t++; }
-    ok(p.pp === 0 && !p.pray.protect_from_magic && t > last && t === core.prayTicks(core.S.players.p1, L, 12), 'Prayer ' + L + ': ' + L + ' points last ' + (t * 0.6).toFixed(1) + 's, then the prayer goes off');
+    core.cmd('p1', { c: 'pray', id: 'protect_from_melee', on: true }); core.tick();
+    let t = 1; while (p.pray.protect_from_melee && t < 6000) { core.tick(); t++; }
+    ok(p.pp === 0 && !p.pray.protect_from_melee && t > last && t === core.prayTicks(core.S.players.p1, L, 12), 'Prayer ' + L + ': ' + L + ' points last ' + (t * 0.6).toFixed(1) + 's, then the prayer goes off');
     last = t;
   }
   const core = AshCore.create(D, { seed: 'flick' }), p = core.addPlayer('p1', { xp: { prayer: XP[20] * 10 } });
   for (let i = 0; i < 100; i++) { core.cmd('p1', { c: 'pray', id: 'protect_from_melee', on: i % 2 === 0 }); core.tick(); }
-  ok(p.pp < 20 - 5, 'flicking a prayer off and on still drains (20 -> ' + p.pp + ' in 100 ticks)');
+  ok(p.pp < 20, 'flicking a prayer off and on still drains (20 -> ' + p.pp + ' in 100 ticks)');
   const sv = core.exportPlayer('p1'), c2 = AshCore.create(D, { seed: 'flick2' }), q = c2.addPlayer('p1', sv);
   ok(q.pp === p.pp && !Object.keys(q.pray).length, 'a reload keeps the drained points (' + q.pp + ') and no prayer on');
 }
