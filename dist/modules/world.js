@@ -92,7 +92,9 @@
     /* UNDERGROUND areas (zone flag `under`, 2026-10-07: the Spider Cave) lie outside the land, so nobody walks in from
        the surface; inside their rectangle you can walk (their own tiles decide where). Known from the zone index even
        before the area itself has loaded. */
-    const UNDER = ((D.zoneIndex && D.zoneIndex.zones) || D.zones || []).filter(z => z.under).map(z => [z.origin[0], z.origin[1], z.origin[0] + z.size[0], z.origin[1] + z.size[1], z.id]);
+    const UNDER = ((D.zoneIndex && D.zoneIndex.zones) || D.zones || []).filter(z => z.under).map(z => [z.origin[0], z.origin[1], z.origin[0] + z.size[0], z.origin[1] + z.size[1], z.id, z.style || null]);
+    /* an underground area's style: null for a cave, 'wigwam' for the lodges of Ziibiing (round rooms under a bark dome, no rock) */
+    const underStyle = (x, y) => { for (const u of UNDER) if (x >= u[0] && y >= u[1] && x < u[2] && y < u[3]) return u[5]; return null; };
     if (UNDER.length) { const land = inWorld; inWorld = (x, y) => land(x, y) || UNDER.some(u => x >= u[0] && y >= u[1] && x < u[2] && y < u[3]); }
     const underAt = (x, y) => { for (const u of UNDER) if (x >= u[0] && y >= u[1] && x < u[2] && y < u[3]) return u[4]; return null; };
     /* round an underground area: solid rock (32 tiles), so no sea or surface land shows beyond the cave's own walls */
@@ -284,7 +286,7 @@
       API, CH, cfg: CFG, key, kx, ky, W, H, pieces, npcs, spawns, objects, nodes, respawn: respawn || [Math.floor(W / 2), Math.floor(H / 2)],
       tileAt, blocked, losAt, wallAt, insideAt, zoneAt, nodeAt, inWorld, addZone, hasZone: (id) => pieces.some(P => P.id === id),
       regionOf: (x, y) => 'vale:' + FACE + ':' + Math.floor((x + GX) / REG) + ':' + Math.floor((y + GY) / REG),
-      seeded: !!WG, inPiece: (x, y) => !!chunkAt(x, y).zi[ci(x, y)], underAt, underNear,
+      seeded: !!WG, inPiece: (x, y) => !!chunkAt(x, y).zi[ci(x, y)], underAt, underNear, underStyle,
       /* seeded land, in the vale frame: sites (camps, ore, fishing; ids and monster uids from worldgen), the ground height
          at a tile corner relative to the set pieces' base height (so the old map keeps its own heights), the biome */
       sitesIn(x0, y0, x1, y1) {

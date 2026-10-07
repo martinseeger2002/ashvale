@@ -461,6 +461,45 @@ part('gear.staff_frost', 'gear', slot='weapon', items={"staff_frost": "#9fd8ff"}
              cone(0.045, 0.24, C, 0, 1.0, 0, seg=5, name="tip", glow=True),
              cone(0.028, 0.15, "$c:1.2", 0.05, 0.93, 0, seg=4, r=[0, 0, -0.45], mirror=True, glow=True),
              cone(0.026, 0.13, "$c:0.85", 0, 0.92, 0.05, seg=4, r=[0.45, 0, 0], glow=True)])
+# The Saltmere Enchantery's four (2026-10-07: they "come up as the default purple square" - no part listed them).
+# Each its own look, read apart from the tier weapons at a glance; their effects are data (items.json), the look only this.
+# Ember staff: charred blackwood, an iron collar, a burning tip - a hot core inside three licking flames.
+part('gear.staff_ember', 'gear', slot='weapon', items={"staff_ember": "#ff7a1a"}, attack='cast',
+     mount={"j": "handR"}, ground={"p": [0, 0.05, 0], "r": [-PI / 2, 0, 0]},
+     shapes=[cyl(0.025, 0.031, 1.5, "#2e2420", 0, 0.12, 0, seg=6), box(0.062, 0.1, 0.062, "#4a3a32", 0, 0.58, 0),
+             cyl(0.052, 0.032, 0.11, "#5d5a57", 0, 0.84, 0, seg=6),
+             cone(0.016, 0.09, "#5d5a57", 0.05, 0.9, 0, seg=4, r=[0, 0, -0.55], mirror=True),
+             sph(0.04, "#ffe08a", 0, 0.94, 0, 8, 6, glow=True, name="tip"),
+             cone(0.05, 0.2, C, 0, 1.0, 0, seg=6, glow=True),
+             cone(0.03, 0.13, "$c:1.2", 0.035, 0.97, 0.01, seg=5, r=[0, 0, -0.35], glow=True),
+             cone(0.028, 0.12, "$c:0.8", -0.03, 0.96, -0.02, seg=5, r=[0.2, 0, 0.35], glow=True)])
+# Storm staff: dark iron shaft, a brass cage of three prongs round a pale blue crackling crystal, a spark off each prong.
+part('gear.staff_storm', 'gear', slot='weapon', items={"staff_storm": "#8fc8ff"}, attack='cast',
+     mount={"j": "handR"}, ground={"p": [0, 0.05, 0], "r": [-PI / 2, 0, 0]},
+     shapes=[cyl(0.023, 0.03, 1.5, "#3d4148", 0, 0.12, 0, seg=6), box(0.058, 0.14, 0.058, "#c9a43a", 0, 0.6, 0),
+             cyl(0.05, 0.03, 0.09, "#c9a43a", 0, 0.83, 0, seg=6),
+             cone(0.012, 0.2, "#c9a43a", 0.05, 0.95, 0, seg=4, r=[0, 0, 0.18], mirror=True),
+             cone(0.012, 0.2, "#c9a43a", 0, 0.95, 0.05, seg=4, r=[-0.18, 0, 0]),
+             ico(0.06, C, 0, 0.96, 0, 0, name="tip", glow=True),
+             box(0.012, 0.07, 0.012, "#fff4a0", 0.085, 1.06, 0, r=[0, 0, 0.6], glow=True, shadow=False),
+             box(0.012, 0.06, 0.012, "#fff4a0", -0.08, 1.04, 0.02, r=[0, 0, -0.7], glow=True, shadow=False)])
+# Venom dagger: a dark grip bound in green, a curved guard, a leaf blade with a green fuller and a drop at its tip.
+part('gear.dagger_venom', 'gear', slot='weapon', items={"dagger_venom": "#5fd04a"}, attack='stab',
+     mount={"j": "handR", "r": [2.1, 0, 0]}, ground={"p": [0, 0.035, 0], "r": [-PI / 2, 0, 0]},
+     shapes=[box(0.04, 0.14, 0.04, "#2b2a24", 0, -0.04, 0), box(0.044, 0.02, 0.044, "#3f7a32", 0, -0.02, 0),
+             sph(0.03, "#3f7a32", 0, -0.12, 0, 7, 5),
+             box(0.16, 0.03, 0.05, "#55524a", 0, 0.045, 0), cone(0.02, 0.05, "#55524a", 0.08, 0.06, 0, seg=4, r=[0, 0, -0.9], mirror=True),
+             box(0.06, 0.3, 0.018, "#9ea6a0", 0, 0.21, 0), box(0.016, 0.24, 0.022, C, 0, 0.19, 0, glow=True),
+             cone(0.042, 0.08, "#9ea6a0", 0, 0.4, 0, seg=4), sph(0.016, C, 0, 0.45, 0.012, 6, 5, glow=True, name="tip")])
+# Snare bow: dark green-stained limbs bound with cord at four points, a barbed hook at each tip for the snare line.
+part('gear.bow_snare', 'gear', slot='weapon', items={"bow_snare": "#4d6b3a"}, attack='bow', twoHanded=True,
+     mount={"j": "handL"}, carry={"elL": [-1.25], "shL": [-0.15, 0, 0.05]}, ground={"p": [0, 0.06, 0], "r": [0, 0, PI / 2]},
+     shapes=[S('tube', [0.023], C, pts=[[0, 0.05, -0.52], [0, -0.27, 0], [0, 0.05, 0.52]]),
+             box(0.052, 0.052, 0.13, "$leather", 0, -0.105, 0), box(0.008, 0.008, 1.04, "$string", 0, 0.05, 0, shadow=False),
+             box(0.03, 0.03, 0.03, "#c8b98a", 0, -0.09, -0.28), box(0.03, 0.03, 0.03, "#c8b98a", 0, -0.09, 0.28),
+             box(0.028, 0.028, 0.028, "#c8b98a", 0, -0.01, -0.42), box(0.028, 0.028, 0.028, "#c8b98a", 0, -0.01, 0.42),
+             cone(0.016, 0.07, "#8a8f96", 0, 0.09, -0.52, seg=4, r=[0.6, 0, 0]), cone(0.016, 0.07, "#8a8f96", 0, 0.09, 0.52, seg=4, r=[-0.6, 0, 0]),
+             {"t": "group", "p": [0, 0.05, 0], "name": "tip"}])
 # Tinderbox (firemaking): a small tin box with a lid line and a flint on top.
 part('gear.tinderbox', 'gear', slot='tool', items=["tinderbox"], tool=True, mount={"j": "handR", "r": [1.6, 0, 0]}, ground={"p": [0, 0.03, 0], "r": [0, 0.4, 0]},
      shapes=[box(0.12, 0.05, 0.08, "#8a8f96", 0, 0.025, 0), box(0.124, 0.012, 0.084, "#5d6168", 0, 0.052, 0),

@@ -479,6 +479,10 @@
     let LV_LIMIT = -1;
     const LIFT_STEP = 2.3;   /* the most you can step up or down between two tiles of raised ground (stairs are 0.6 m a tile) */   /* while a player on an upper floor moves, the building they are in (they cannot step out of it) */
     let FLY = false;   /* while a hawk moves: every step is open (the operator's hawk ring) */
+    /* THE CANOE (2026-10-07, Ziibiing): while you sit in one, only water is open - rivers, lakes, the shallows, under a
+       bridge - and never across a corner of land */
+    let BOAT = false;
+    const isWet = (x, y) => { const t = M.tileAt(x, y); return t === '~' || t === 'v' || t === 'B'; };
     /* the hawk (2026-10-04): its own stats. hp 4; a strike every `strike` ticks with a hitPct % chance of hitDmg; a
        strike costs `energy` run energy (Dexterity) and leaves it open to a hit for those ticks; a third of the carrying
        capacity and `slots` bag slots; overburdened it lands and walks one step every groundEvery ticks */
@@ -489,6 +493,7 @@
     function canStep(x, y, dx, dy) {
       const nx = x + dx, ny = y + dy;
       if (FLY) return inMap(nx, ny);   /* a hawk flies over trees, walls and water */
+      if (BOAT) return inMap(nx, ny) && isWet(nx, ny) && (!dx || !dy || (isWet(x + dx, y) && isWet(x, y + dy)));
       if (M.lifts && LV_LIMIT < 0) {   /* raised ground (a castle's stairs and wall walk): heights decide, not the wall tiles */
         const la = M.liftAt(x, y), lb = M.liftAt(nx, ny);
         if (la || lb) {
@@ -572,7 +577,7 @@
 
     // ---------------- commands
     function cmd(pid, c) { if (!c || typeof c.c !== 'string') return; queue.push([pid, c]); log.push([S.t, pid, c]); }
-    function apply(p, c) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); try { apply0(p, c); } finally { LV_LIMIT = -1; FLY = false; } }
+    function apply(p, c) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); BOAT = !!p.boat && !FLY; try { apply0(p, c); } finally { LV_LIMIT = -1; FLY = false; BOAT = false; } }
     function apply0(p, c) {
       if (p.dead && c.c !== 'style' && c.c !== 'run' && c.c !== 'retal' && c.c !== 'look') return;
       if (isHawk(p) && ['npc', 'light', 'climb', 'buy', 'sell', 'trade', 'eat', 'use'].indexOf(c.c) >= 0 && !(c.c === 'use' && p.inv[c.slot | 0] && IT[p.inv[c.slot | 0].id].teleport)) { msg(p, 'A hawk can only fly, strike, fish and carry. Take off the ring over open ground to land.', 'warn'); return; }
@@ -580,7 +585,29 @@
       if (c.c !== 'perch') p.perch = null;
       if (c.c === 'walk' || c.c === 'attack' || c.c === 'take' || c.c === 'npc' || c.c === 'gather') { p.runNow = !!c.run; p._spread = 0; }   /* the operator: click = walk, double-click = run */
       switch (c.c) {
-        case 'walk': if (inMap(c.x | 0, c.y | 0)) { p.act = null; p.skilling = null; closeShop(p); p.path = findPath(p.x, p.y, (x, y) => x === (c.x | 0) && y === (c.y | 0), c.x | 0, c.y | 0); } break;
+        case 'walk': if (inMap(c.x | 0, c.y | 0)) {
+          p.act = null; p.skilling = null; closeShop(p);
+          const tx = c.x | 0, ty = c.y | 0;
+          if (p.boat === 2) {   /* riding: your partner steers; pointing at the shore beside the canoe gets you out */
+            if (!isWet(tx, ty) && cheb(p.x, p.y, tx, ty) <= 2 && !M.blocked(tx, ty)) { leaveRide(p, [tx, ty]); break; }
+            msg(p, "Your partner steers the jiimaan (canoe) with the gaandakii'iganaak (push pole). You knock the manoomin (wild rice) as you pass it - or point at the shore beside you to get out.", 'info'); break;
+          }
+          /* in a canoe: water - paddle there; land - paddle to the water nearest it, step out, walk on to it (2026-10-07) */
+          p.land = p.boat && !isWet(tx, ty) ? [tx, ty] : null;
+          p.path = findPath(p.x, p.y, (x, y) => x === tx && y === ty, tx, ty, p.boat ? 400 : undefined);
+          if (p.land && !p.path.length) disembark(p);
+        } break;
+        case 'ride': {   /* climb into a friend's canoe to knock rice (2026-10-07: "two people in the canoe, one with a push pole and one with a set of rice knockers") */
+          const t = S.players[c.pid];
+          if (!t || t === p || t.boat !== 1 || t.dead || p.boat || isHawk(p)) { msg(p, "There's no canoe to climb into there.", 'warn'); break; }
+          if (Object.values(S.players).some(q => q !== p && q.boat === 2 && q.ride === c.pid)) { msg(p, 'That canoe already has someone knocking rice in it.', 'warn'); break; }
+          p.act = { k: 'ride', pid: c.pid }; p.skilling = null; closeShop(p); break;
+        }
+        case 'board': {   /* get into a canoe at the landing */
+          const o = M.objects.find(q => q.k === 'canoe' && q.x === (c.x | 0) && q.y === (c.y | 0));
+          if (o && !p.dead && !p.boat && !isHawk(p) && p.lv === 0) { p.act = { k: 'board', x: o.x, y: o.y }; p.skilling = null; closeShop(p); }
+          break;
+        }
         case 'climb': {   /* the stairs of a multi-storey building: one floor up or down (the operator); walk there first if need be */
           const bi = M.buildingAt ? M.buildingAt(c.x != null ? c.x | 0 : p.x, c.y != null ? c.y | 0 : p.y) : -1, B = bi >= 0 ? M.buildings[bi] : null;
           if (!B) { msg(p, 'There are no stairs here.', 'warn'); break; }
@@ -714,7 +741,7 @@
     function passageAt(x, y) { for (const o of M.objects) if (o.to && o.x === x && o.y === y) return o; return null; }
     function teleport(p, P, text) {
       const ox = p.x, oy = p.y, passage = P.id === 'cavemouth' || P.id === 'caveexit';
-      p.x = P.to[0]; p.y = P.to[1]; p.path = []; p.act = null; p.skilling = null; p.lv = 0; p.bld = -1; closeShop(p);
+      p.x = P.to[0]; p.y = P.to[1]; p.path = []; p.act = null; p.skilling = null; p.lv = 0; p.bld = -1; closeShop(p); if (p.boat) { p.boat = 0; p.land = null; p.ride = null; ev({ e: 'boat', p: p.id, on: 0 }); }
       let k = 0;
       for (const m of S.mobs) if (m.tgt === p.id) {
         /* through a cave opening, the relentless ones close behind you come too, a few ticks apart (the operator: "Follow you up") */
@@ -1461,6 +1488,61 @@
     function faceTo(ax, ay, bx, by) { const dx = Math.sign(bx - ax), dy = Math.sign(by - ay); for (let k = 0; k < 8; k++) if (DIRS[k][0] === dx && DIRS[k][1] === dy) return k; return 2; }
 
     // ---------------- per-tick: players
+    /* RICING (2026-10-07): the knocker rides where the poler takes the canoe; every few ticks, from a clump of manoomin
+       within reach that has not been knocked lately, a handful of rice drops in. A clump rests a while once it is knocked. */
+    const RICE_CD = 300, RICED = {};
+    function rideTick(p) {
+      const t = S.players[p.ride];
+      if (!t || t.boat !== 1 || t.dead) { if (++p.rideMiss < 30) return; leaveRide(p, null); msg(p, 'Your partner has left the canoe, so you climb out onto the bank.', 'info'); return; }   /* a few ticks' grace: a late message is not a landing */
+      p.rideMiss = 0;
+      p.x = t.x; p.y = t.y; p.path = []; p.act = null;
+      if (S.t % 3) return;
+      let got = null;
+      for (const o of M.objects) if (o.k === 'rice' && cheb(o.x, o.y, p.x, p.y) <= 2 && !(RICED[o.x + ',' + o.y] > S.t)) { got = o; break; }
+      p.knocking = !!got;
+      if (!got) return;
+      RICED[got.x + ',' + got.y] = S.t + RICE_CD;
+      if (addItem(p, 'wild_rice', 1)) { msg(p, 'Your pack is full: no room for more manoomin (wild rice).', 'warn'); return; }
+      ev({ e: 'knock', p: p.id }); p.dirtyInv = 1;
+    }
+    function leaveRide(p, at) {   /* out of the bow onto the bank: where pointed, else the nearest dry ground */
+      p.boat = 0; p.ride = null; p.knocking = false; ev({ e: 'boat', p: p.id, on: 0 });
+      if (at) { p.x = at[0]; p.y = at[1]; return; }
+      for (let r = 1; r <= 40; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        const x = p.x + dx, y = p.y + dy; if (inMap(x, y) && !isWet(x, y) && !M.blocked(x, y)) { p.x = x; p.y = y; return; }
+      }
+    }
+    /* out of the canoe at the shore: onto the dry tile next to it that is nearest where you pointed, then walk on there */
+    function disembark(p) {
+      const T = p.land; let best = null, bd = 1e9;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const x = p.x + dx, y = p.y + dy; if ((!dx && !dy) || !inMap(x, y) || isWet(x, y) || M.blocked(x, y)) continue;
+        const d = (x - T[0]) ** 2 + (y - T[1]) ** 2; if (d < bd) { bd = d; best = [x, y]; }
+      }
+      if (!best) { if (p.land) msg(p, "There's no place to land here.", 'warn'); p.land = null; return; }
+      p.boat = 0; p.land = null; p.x = best[0]; p.y = best[1]; p.moved = 1;
+      ev({ e: 'boat', p: p.id, on: 0 }); msg(p, 'You step out of the canoe onto the bank.');
+      if (best[0] !== T[0] || best[1] !== T[1]) { BOAT = false; p.path = findPath(p.x, p.y, (x, y) => x === T[0] && y === T[1], T[0], T[1]); }
+    }
+    /* A CANOE DOES NOT SPIN (2026-10-07: "It should have to travel forward and backward in arcs to turn around"): it keeps a
+       heading (p.face). A step within an eighth of a turn of it is taken going forward, turning that eighth; a step straight
+       behind is taken in reverse, the heading kept; anything sharper is an arc - turn an eighth while moving forward (or, with
+       no water ahead, back), then find the way on from there. After a few arcs in a tight spot it may pivot once. */
+    const OCT = [0, 2, 4, 6, 1, 3, 5, 7], OCT_D = [0, 4, 1, 5, 2, 6, 3, 7];   /* DIRS index -> eighths clockwise from north, and back */
+    function canoeStep(p, nx, ny) {
+      const want = faceTo(p.x, p.y, nx, ny), h = OCT[p.face | 0], w = OCT[want], d = ((w - h + 12) % 8) - 4;
+      if (Math.abs(d) <= 1) { p.face = want; p.x = nx; p.y = ny; p.path.shift(); p.arcs = 0; return true; }
+      if (Math.abs(d) === 4) { p.x = nx; p.y = ny; p.path.shift(); return true; }   /* straight back: in reverse */
+      const goal = p.path[p.path.length - 1], gx = kx(goal), gy = ky(goal);
+      if ((p.arcs | 0) >= 6) { p.face = want; p.x = nx; p.y = ny; p.path.shift(); p.arcs = 0; return true; }   /* boxed in: pivot once */
+      const nh = OCT_D[(h + Math.sign(d) + 8) % 8], [fx, fy] = DIRS[nh], [bx, by] = DIRS[OCT_D[(h - Math.sign(d) + 12) % 8]];
+      p.arcs = (p.arcs | 0) + 1;
+      if (canStep(p.x, p.y, fx, fy)) { p.face = nh; p.x += fx; p.y += fy; }               /* arc forward, turning toward it */
+      else if (canStep(p.x, p.y, -bx, -by)) { p.face = OCT_D[(h - Math.sign(d) + 8) % 8]; p.x -= bx; p.y -= by; }   /* no room ahead: back up, the stern swinging the other way */
+      else { p.face = want; p.x = nx; p.y = ny; p.path.shift(); return true; }
+      p.path = findPath(p.x, p.y, (x, y) => x === gx && y === gy, gx, gy, 400);
+      return true;
+    }
     function stepPath(p) {
       if (!p.path.length) { p.moved = 0; return; }
       if (p.pfx && p.pfx.bind > S.t) { p.moved = 0; if (!p._bindMsg || S.t - p._bindMsg > 4) { p._bindMsg = S.t; msg(p, 'Shadowy chains hold your feet!', 'warn'); } return; }
@@ -1475,6 +1557,7 @@
       for (let s = 0; s < steps && p.path.length; s++) {
         const n = p.path[0], nx = kx(n), ny = ky(n);
         if (!canStep(p.x, p.y, nx - p.x, ny - p.y)) { p.path = []; break; }
+        if (p.boat === 1 && BOAT) { if (canoeStep(p, nx, ny)) moved++; else break; continue; }
         p.face = faceTo(p.x, p.y, nx, ny); p.x = nx; p.y = ny; p.path.shift(); moved++;
       }
       p.moved = moved;
@@ -1568,16 +1651,17 @@
         if (nx != null) { const x = kx(nx), y = ky(nx); if (!M.npcs.some(o => o !== n && o.escort && o.x === x && o.y === y)) { n.x = x; n.y = y; } }
       }
     }
-    function playerTick(p) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); try { playerTick0(p); } finally { LV_LIMIT = -1; FLY = false; } }
+    function playerTick(p) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); BOAT = !!p.boat && !FLY; try { playerTick0(p); } finally { LV_LIMIT = -1; FLY = false; BOAT = false; } }
     function playerTick0(p) {
-      if (!(p.hp >= 0)) p.hp = maxHp(p);   /* hitpoints that are not a number (the antidote bug, 2026-10-07): back to full */
+      if (!(p.hp >= 0)) p.hp = maxHp(p);
+      if (p.boat === 2 && !p.dead && !p.puppet) rideTick(p);   /* hitpoints that are not a number (the antidote bug, 2026-10-07): back to full */
       if (!p.dead) townCheck(p);
       if (p.poison) poisonTick(p);
       if (p.puppet) return puppetTick(p);
       if (p.dead) {
         if (S.t - p.dead >= 4) {
           const W0 = wakeSpot(p);
-          p.dead = 0; p.hp = maxHp(p); p.pp = maxPp(p); p.pd = 0; p.x = W0.at[0]; p.y = W0.at[1]; p.lv = 0; p.bld = -1; p.path = []; p.atk = 0; p.spawnT = S.t;
+          p.dead = 0; p.hp = maxHp(p); p.pp = maxPp(p); p.pd = 0; p.x = W0.at[0]; p.y = W0.at[1]; p.lv = 0; p.bld = -1; p.path = []; p.atk = 0; p.spawnT = S.t; p.boat = 0; p.land = null; p.ride = null;
           ev({ e: 'respawn', p: p.id }); msg(p, W0.name ? 'You wake up by the town portal in ' + W0.name + '.' : 'You wake up by the well in Ashvale village.'); burdenCheck(p);
         }
         return;
@@ -1634,6 +1718,14 @@
             p.act = null;
           }
         }
+      } else if (a && a.k === 'ride') {   /* step from the shore into the bow of a friend's canoe */
+        const t = S.players[a.pid];
+        if (!t || t.boat !== 1) { p.act = null; }
+        else if (cheb(p.x, p.y, t.x, t.y) <= 2) { p.act = null; p.path = []; p.boat = 2; p.ride = a.pid; p.rideMiss = 0; p.x = t.x; p.y = t.y; ev({ e: 'boat', p: p.id, on: 2 }); msg(p, "You climb into the bow with a paddle, and the bawa'iganaakoog (ricing sticks) at your feet. In the manoomin (wild rice) your partner stands with the gaandakii'iganaak (push pole) and you knock the rice in."); }
+        else { p.path = findPath(p.x, p.y, (x, y) => cheb(x, y, t.x, t.y) <= 2, t.x, t.y); stepPath(p); if (!p.path.length && cheb(p.x, p.y, t.x, t.y) > 2) { msg(p, "I can't reach that canoe from here.", 'warn'); p.act = null; } }
+      } else if (a && a.k === 'board') {   /* walk to the canoe, sit down in it: it floats where it lay */
+        if (inReach(p.x, p.y, a.x, a.y, 1)) { p.act = null; p.path = []; p.boat = 1; p.x = a.x; p.y = a.y; p.land = null; ev({ e: 'boat', p: p.id, on: 1 }); msg(p, 'You sit down in the canoe and take up the paddle. Point at the water to paddle there, or at the shore to land.'); }
+        else { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, a.x, a.y, 1), a.x, a.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, a.x, a.y, 1)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
       } else if (a && a.k === 'enter') {   /* walk up to a passage and go through: it takes you to its `to` */
         const o = passageAt(a.x, a.y);
         if (!o) p.act = null;
@@ -1660,7 +1752,7 @@
         if (!n) { p.act = null; p.skilling = null; }
         else if (inReach(p.x, p.y, n.x, n.y, 1) || (n.kind === 'fire' && p.x === n.x && p.y === n.y)) { p.path = []; p.moved = 0; gatherTick(p, n); }
         else { p.skilling = null; p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, n.x, n.y, 1), n.x, n.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, n.x, n.y, 1)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
-      } else stepPath(p);
+      } else { stepPath(p); if (p.boat && p.land && !p.path.length) disembark(p); }
       if (p.shop) { const sh = shopOf(p.shop); if (!nearKeeper(p, sh)) closeShop(p); }
       burdenCheck(p);
       if (!p.moved || !p.run) p.energy = Math.min(10000, p.energy + 15);
@@ -2001,12 +2093,17 @@
     const PUP_SKILLS = ['attack', 'strength', 'defence', 'hitpoints', 'ranged', 'magic', 'dexterity'];
     function setPuppet(id, st) {
       const p = S.players[id]; if (!p || !p.puppet) return;
-      if (Number.isInteger(st.x) && Number.isInteger(st.y) && inMap(st.x, st.y)) { p.x = st.x; p.y = st.y; }
+      if (Number.isInteger(st.x) && Number.isInteger(st.y) && inMap(st.x, st.y)) {
+        p.x = st.x; p.y = st.y;
+        for (const q of Object.values(S.players)) if (q.boat === 2 && q.ride === id && !q.puppet) { q.x = p.x; q.y = p.y; }   /* whoever rides in this canoe moves with it at once - even on the last word before it crosses into the next region */
+      }
       if (Number.isInteger(st.hp)) p.hp = st.hp;
       if (st.dead != null) { const was = p.dead; p.dead = st.dead ? (p.dead || S.t) : 0; if (st.dead && !was) { p.act = null; for (const m of S.mobs) if (m.tgt === id) { m.tgt = 0; m.back = 1; } } }
       if (Array.isArray(st.L)) PUP_SKILLS.forEach((k, i) => { const L = st.L[i] | 0; if (L >= 1 && L <= 99) p.xp[k] = XP[L] * 10; });
       if (st.g && typeof st.g === 'object') { p.eq = {}; for (const k of EQ_SLOTS) { const v = st.g[k]; if (v && IT[v] && IT[v].eq === k) p.eq[k] = { id: v, n: IT[v].stack ? 9999 : 1 }; } }
       if (st.st && typeof st.st === 'object') for (const k in p.styles) if (Number.isInteger(st.st[k])) p.styles[k] = st.st[k];
+      if (st.bt !== undefined) p.boat = st.bt | 0;   /* in a canoe: 1 poles it, 2 rides in it knocking rice */
+      if (st.rd !== undefined) p.ride = st.rd || null;
       if (st.pr !== undefined) p.pray = st.pr && PRAYERS[st.pr] && PRAYERS[st.pr].g === 'head' ? { [st.pr]: 1 } : {};
       if (st.act !== undefined) p.act = st.act && st.act.k === 'attack' && mobByUid(st.act.uid) ? { k: 'attack', uid: st.act.uid } : null;
     }

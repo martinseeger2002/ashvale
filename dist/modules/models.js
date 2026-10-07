@@ -403,6 +403,22 @@ function createModels(THREE, opts) {
       return K(0, k({ torso: [0.35], shR: [-1.75, 0, -0.1], elR: [-0.5] }), 0.3, k({ torso: [0.85], shR: [-0.65, 0, -0.05], elR: [0], lift: [-0.26] }),
         0.62, k({ torso: [0.9, -0.2, 0], shR: [-0.5, 0.3, -0.05], elR: [0], lift: [-0.26] }), 0.85, k({ torso: [0.45], shR: [-1.6, 0, -0.1], elR: [-0.4] }), 1, k({ torso: [0.35], shR: [-1.75, 0, -0.1], elR: [-0.5] }));
     })() },
+    /* in a canoe (2026-10-07): sitting low, legs forward; paddling swaps the stroke from side to side */
+    sit: { loop: true, dur: 3, fn: (t, b) => { const s = Math.sin(TAU * t);
+      return withBase(b, { lift: [-0.62], hipL: [-1.45], hipR: [-1.45], kneeL: [0.35], kneeR: [0.35], torso: [0.08 + 0.02 * s], shR: [-0.5, 0, -0.15], elR: [-0.9], shL: [-0.5, 0, 0.15], elL: [-0.9] }); } },
+    /* sitting on the floor cross-legged (the elder in his lodge, and you when you sit to listen to him) */
+    crosslegged: { loop: true, dur: 4, fn: (t, b) => { const s = Math.sin(TAU * t);
+      return withBase(b, { lift: [-0.74], hipL: [-1.35, 0, 0.75], hipR: [-1.35, 0, -0.75], kneeL: [2.35, 0, 0], kneeR: [2.35, 0, 0], torso: [0.04 + 0.015 * s], neck: [0.04],
+        shL: [-0.55, 0, 0.12], elL: [-0.95], shR: [-0.55, 0, -0.12], elR: [-0.95] }); } },
+    /* ricing (2026-10-07): the poler stands in the stern pushing the canoe on the pole; the knocker sits forward, one stick
+       bending the stalks in over the canoe, the other knocking the rice off them */
+    pole: { loop: true, dur: 2.2, fn: (t, b) => { const s = Math.sin(TAU * t), c = Math.cos(TAU * t);
+      return withBase(b, { hipL: [-0.2, 0, 0], hipR: [0.15], kneeL: [0.3], kneeR: [0.2], torso: [0.18 + 0.2 * Math.max(0, s)], shR: [-2.3 + 0.9 * Math.max(0, s), 0, -0.15], elR: [-0.35], shL: [-2.0 + 0.8 * Math.max(0, s), 0, 0.2], elL: [-0.5] }); } },
+    knock: { loop: true, dur: 1.1, fn: (t, b) => { const s = Math.sin(TAU * t), c = Math.cos(TAU * t);
+      return withBase(b, { lift: [-0.62], hipL: [-1.45], hipR: [-1.45], kneeL: [0.35], kneeR: [0.35], torso: [0.15 + 0.06 * s], shL: [-1.3 + 0.35 * c, 0, 0.55], elL: [-0.4], shR: [-1.6 + 0.8 * Math.max(0, s), 0, -0.35], elR: [-0.6 - 0.4 * Math.max(0, s)] }); } },
+    paddle: { loop: true, dur: 1.4, fn: (t, b) => { const s = Math.sin(TAU * t), c = Math.cos(TAU * t);
+      return withBase(b, { lift: [-0.62], hipL: [-1.45], hipR: [-1.45], kneeL: [0.35], kneeR: [0.35], torso: [0.12 + 0.08 * Math.max(0, s), 0.35 * c, 0],
+        shR: [-0.9 + 0.7 * s, 0, -0.25], elR: [-0.5], shL: [-1.3 - 0.4 * s, 0, 0.3], elL: [-0.7] }); } },
     cook: { loop: true, dur: 1.6, impact: 0.5, fn: (t, b) => { const s = Math.sin(TAU * t);
       return withBase(b, { lift: [-0.2], hipL: [-1], hipR: [-0.9], kneeL: [1.45], kneeR: [1.35], torso: [0.35], shR: [-1 + 0.1 * s, 0.15 * s, -0.1], elR: [-0.6], shL: [-0.9, 0, 0.15], elL: [-0.7] }); } },
     pickup: { dur: 0.6, impact: 0.5, fn: K(0, {}, 0.5, { torso: [0.9], neck: [0.2], shR: [-1, 0, -0.1], elR: [-0.2], hipL: [-0.4], hipR: [-0.4], kneeL: [0.6], kneeR: [0.6], lift: [-0.12] }, 1, {}) },
@@ -649,6 +665,28 @@ function createModels(THREE, opts) {
   function chest(o) {
     const S = o.size || 1, wood = o.color || '#7a4a24', band = o.band || '#3a3a40', gold = o.lock || '#d8b040';
     const root = group(), body = group(); root.add(body);
+    if (o.style === 'makak') {   /* the Ojibwe chest of Ziibiing (2026-10-07): a birch bark makak, stitched with spruce root, quill flowers on its side */
+      const bark = '#e2d3ae', dark = '#3a2a1e', root2 = '#8a6a3e', F = ['#d8344a', '#f2c641', '#f4f1ea', '#e87ab0', '#3f9a4a'];
+      body.add(box(0.9 * S, 0.5 * S, 0.6 * S, bark, 0, 0.25 * S, 0));
+      for (const y of [0.04, 0.47]) body.add(box(0.92 * S, 0.04 * S, 0.62 * S, root2, 0, y * S, 0));
+      for (const x of [-0.45, 0.45]) body.add(box(0.03 * S, 0.5 * S, 0.62 * S, dark, x * S, 0.25 * S, 0));
+      for (const fx of [-0.22, 0.22]) {   /* a flower each side of the front: petals round a centre, a stem */
+        body.add(box(0.05 * S, 0.05 * S, 0.02 * S, F[1], fx * S, 0.3 * S, 0.305 * S));
+        for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2; body.add(box(0.045 * S, 0.045 * S, 0.02 * S, fx < 0 ? F[0] : F[3], (fx + Math.cos(a) * 0.06) * S, (0.3 + Math.sin(a) * 0.06) * S, 0.304 * S)); }
+        body.add(box(0.02 * S, 0.14 * S, 0.02 * S, F[4], fx * S, 0.16 * S, 0.304 * S));
+      }
+      const lid = group(0, 0.5 * S, -0.3 * S); body.add(lid);
+      lid.add(box(0.95 * S, 0.1 * S, 0.65 * S, '#d6c69f', 0, 0.05 * S, 0.3 * S));
+      lid.add(box(0.97 * S, 0.03 * S, 0.67 * S, root2, 0, 0.0, 0.3 * S));
+      lid.add(box(0.3 * S, 0.04 * S, 0.06 * S, dark, 0, 0.12 * S, 0.3 * S));   /* the handle */
+      root.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+      const H = character(root, { lid: { kind: 'rot', o: lid, r0: [0, 0, 0] } }, CHEST);
+      H.setGear = () => H; H.setTool = () => H; H.attackAnim = () => 'idle';
+      H.muzzle = out => (out = out || new THREE.Vector3(), lid.getWorldPosition(out));
+      Object.defineProperty(H, 'height', { get: () => 0.62 * S * root.scale.y });
+      H.play('idle'); H.update(0);
+      return H;
+    }
     body.add(box(0.9 * S, 0.5 * S, 0.6 * S, wood, 0, 0.25 * S, 0));
     for (const x of [-0.32, 0.32]) body.add(box(0.06 * S, 0.52 * S, 0.62 * S, band, x * S, 0.25 * S, 0));
     const lid = group(0, 0.5 * S, -0.3 * S); body.add(lid);

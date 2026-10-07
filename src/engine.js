@@ -138,7 +138,65 @@
       /* while the wallet opens the save (that can take seconds), the zones around the spawn are already on their way: most
          characters stand there, and for the rest it is a few KB that warm the cache */
       if (ZINDEX && !G.ASH3D_LAZY_DELAY) { const r0 = (ZINDEX.find(z => z.respawn) || {}).respawn; if (r0) for (const id of zonesNear(r0[0], r0[1])) fetchZone(id).catch(() => {}); }   /* (not on a playtest page that shows a slow arrival) */
-      const st = await openStoreOnly(); try { await preloadZones(st); } catch (e) { console.warn('ASHVALE: zones', e && e.message); } return st;
+      const st = await openStoreOnly();
+      try { await cloudLoad(st); } catch (e) { console.warn('ASHVALE: cloud save', e && e.message); }
+      try { await preloadZones(st); } catch (e) { console.warn('ASHVALE: zones', e && e.message); } return st;
+    }
+    /* ---------- THE SAVE LIVES WITH THE BANK (2026-10-07: "the ashvale bank should hold game states instead of local storage
+       ... and stats and the rest of the game state. That way, anyone can login on their account from any device and being the
+       exact same game state. Make sure the game state save file is as lightweight as it can possibly be"). The whole save - bag,
+       worn gear, stats, quests, place, the chest ledger - is packed (empty fields dropped, deflated, base64) to about 1 KB and kept
+       by the @ashvale Bank under your wallet address, in pieces small enough for a room message. Starting, the game asks the Bank
+       first and takes its copy when it is newer than this device's; playing, it hands the Bank each new save (at most every 20 s,
+       and as you leave). The Bank keeps the newest per address and never reads inside it. */
+    const SAVE_KEY = 'ashvale3d.save.v1', CHUNK = 340;
+    const slim = v => {   /* drop what a save does not need to say: nulls and empty objects (every value kept exactly) */
+      if (Array.isArray(v)) return v.map(slim);
+      if (v && typeof v === 'object') { const o = {}; for (const k in v) { const x = slim(v[k]); if (x == null || (typeof x === 'object' && !Array.isArray(x) && !Object.keys(x).length)) continue; o[k] = x; } return o; }
+      return v;
+    };
+    async function packSave(json) {
+      const raw = new TextEncoder().encode(JSON.stringify(slim(JSON.parse(json))));
+      if (typeof CompressionStream === 'undefined') return 'j' + btoa(String.fromCharCode(...raw));
+      const z = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer());
+      let b = ''; for (let i = 0; i < z.length; i += 4096) b += String.fromCharCode.apply(null, z.subarray(i, i + 4096)); return 'z' + btoa(b);
+    }
+    async function unpackSave(s) {
+      const bin = Uint8Array.from(atob(s.slice(1)), ch => ch.charCodeAt(0));
+      if (s[0] === 'j') return new TextDecoder().decode(bin);
+      return new TextDecoder().decode(await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+    }
+    let CLOUD_OK = false;   /* the Bank answered at the start: only then may this game hand it saves (a stale device must never overwrite a newer one) */
+    const bankSays = from => from && (from.address === DATA.assets.issuer || from.address === YOURFIRST_ADDR || from.tag === 'yourfirstname');
+    function cloudLoad(st) {
+      if (!G.arcade || !net || !net.join) return Promise.resolve();
+      let local = null; try { local = JSON.parse(st.get(SAVE_KEY) || 'null'); } catch (e) { local = null; }
+      return new Promise(done => {
+        let R = null, fin = false; const parts = {};
+        const end = () => { if (fin) return; fin = true; clearTimeout(tm); try { R && R.leave(); } catch (e) { /* gone */ } done(); };
+        const tm = setTimeout(end, local ? 8000 : 20000);   /* no Bank in time: this device's save. With no save here (a new device) it waits longer - a cold sign-in takes the realtime room 10 s and more, and giving up would start a new character */
+        net.join('bank', { game: 'ashvale' }).then(res => {
+          if (fin || !res || !res.online) return end();
+          R = res.room; const me = R.me && R.me.address; if (!me) return end();
+          R.on('message', ({ from, data }) => {
+            if (!data || data.t !== 'ld' || data.to !== me || !bankSays(from)) return;
+            if (!data.n) { CLOUD_OK = true; return end(); }   /* the Bank holds no save for this address */
+            parts[data.i] = data.d;
+            if (Object.keys(parts).length < data.n) return;
+            const blob = Array.from({ length: data.n }, (_, i) => parts[i] || '').join('');
+            (blob ? unpackSave(blob) : Promise.resolve('')).then(json => {
+              const cloud = json ? JSON.parse(json) : null, at = +data.id || 0;
+              if (at > ((local && local.at) || 0)) {   /* newer than this device's: play that one ('' = a New character was made) */
+                console.info('ASHVALE: the save from the Bank (' + new Date(at).toISOString() + ') is newer than this device\'s');
+                return st.set(SAVE_KEY, cloud ? JSON.stringify(Object.assign(cloud, { at })) : '');
+              }
+            }).then(() => { CLOUD_OK = true; }, e => console.warn('ASHVALE: cloud save unreadable', e && e.message)).then(end);
+          });
+          /* ask again every 2.5 s until the Bank answers: on a cold start the first question, sent the moment the room opens,
+             is often lost (live test 2026-10-07: joined at 6.7 s, the Bank never heard it) */
+          const ask = () => { if (fin || Object.keys(parts).length) return; R.send({ t: 'ld?' }); setTimeout(ask, 2500); }; ask();
+        }, end);
+      });
     }
     async function openStoreOnly() {
       const A = G.arcade && G.arcade.storage, framed = !!(G.parent && G.parent !== G);
@@ -343,6 +401,26 @@
         }
         return up;
       }
+      /* THE CANOE (2026-10-07, Ziibiing): whoever sits in one rides the water's skin in a birch bark canoe, paddle in hand */
+      const SURF = SCENE.surface ? SCENE.surface(core.M) : null;
+      const waterY = (x, z) => { const h = heightAt(x, z); if (!SURF) return h; const s = SURF(Math.floor(x), Math.floor(z)); return s != null && s > h ? s : h; };
+      /* two in one canoe (ricing): the knocker sits in the bow, the canoe's length ahead of the poler, facing the way it goes */
+      function bowSeat(e, T, knocking) { const f = knocking ? 1.4 : 1.95;   /* knocking rice, the bow person sits in nearer the middle */   /* the bow seat: the stern paddler is 0.95 behind the canoe's middle, the bow one 1.0 ahead of it */ e.root.position.set(T.root.position.x + Math.sin(T.yaw) * f, T.root.position.y - 0.14, T.root.position.z + Math.cos(T.yaw) * f); e.yaw = e.tyaw = T.yaw; e.root.rotation.y = T.yaw; }
+      /* PADDLES OR POLE (2026-10-07: "a single person or two people should be able to navigate using the canoe as well just
+         using paddles"): a canoe is paddled, by one or by two; it is poled only for ricing - someone knocking in the bow and the
+         rice standing round the canoe - and then the one in the stern stands with the push pole */
+      const RICEQ = { t: 0, on: false };
+      function ricingNow() {
+        const now = performance.now(); if (now - RICEQ.t < 500) return RICEQ.on; RICEQ.t = now;
+        const rider = me.boat === 1 && [...remotes.values()].some(r => r.boat === 2 && r.ride === myNetId);
+        RICEQ.on = !!rider && (core.M.objects || []).some(o => o.k === 'rice' && Math.max(Math.abs(o.x - me.x), Math.abs(o.y - me.y)) <= 3);
+        return RICEQ.on;
+      }
+      function boatLook(e, on) {
+        if (!!e.canoe === on || !SCENE.canoeMesh) return;
+        if (on) { e.canoe = SCENE.canoeMesh(); e.canoe.position.y = 0.0; e.canoe.position.z = 0.95;   /* you sit in the stern: the canoe reaches ahead of you to the bow */ e.root.add(e.canoe); if (e.blob) e.blob.visible = false; }
+        else { e.root.remove(e.canoe); e.canoe = null; if (e.blob) e.blob.visible = !settings.shadows; }
+      }
       function hawkAlt(e) {
         if (!e.hawk) return e.alt || 0;
         if (e === myEnt) {
@@ -407,7 +485,7 @@
           for (let r = 1; r <= 5; r++) {
             const x = n.x + dx * r, y = n.y + dy * r;
             if (M.blocked(x, y) || (!!(M.insideAt && M.insideAt(x, y))) !== inside) break;
-            sc += (6 - r) * (M.tileAt(x, y) === 'p' ? 1.5 : 1);
+            sc += (6 - r) * ('pc'.indexOf(M.tileAt(x, y)) >= 0 ? 1.5 : 1);
           }
           sc += ((hv >>> (d * 3)) & 7) * 0.05;
           if (sc > best) { best = sc; yaw = Math.atan2(dx, dy); }
@@ -426,7 +504,7 @@
         e.H.object.position.set(0, 0.16, 0.55);
         if (e.proxy) { e.proxy.position.set(0, 0.22, 0.05); e.proxy.scale.set(1.5, 0.22, 1.15); }
       }
-      function npcEnt(n) { const e = makeEnt('n:' + n.id, MOD.npc(n.look || n.id), { kind: 'npc', id: n.id }); place(e, n.x, n.y); e.homeYaw = homeYaw(n); e.yaw = e.tyaw = e.homeYaw; NPCN[n.id] = n; if (n.gear && e.H && e.H.setGear) e.H.setGear(n.gear); if (n.lie) layDead(e); else if (n.rope) { e.alt = +n.rope || 1.5; e.held = true; if (e.blob) e.blob.visible = false; if (e.H && e.H.play) e.H.play('balance', { loop: true }); } e.root.visible = npcShown(n); return e; }
+      function npcEnt(n) { const e = makeEnt('n:' + n.id, MOD.npc(n.look || n.id), { kind: 'npc', id: n.id }); place(e, n.x, n.y); e.homeYaw = homeYaw(n); e.yaw = e.tyaw = e.homeYaw; NPCN[n.id] = n; if (n.gear && e.H && e.H.setGear) e.H.setGear(n.gear); if (n.lie) layDead(e); else if (n.rope) { e.alt = +n.rope || 1.5; e.held = true; if (e.blob) e.blob.visible = false; if (e.H && e.H.play) e.H.play('balance', { loop: true }); } else if (n.pose) e.skill = n.pose; e.root.visible = npcShown(n); return e; }   /* pose: an elder who sits cross-legged by his fire */
       for (const n of core.M.npcs) npcEnt(n);   /* gear: what an NPC carries (the castle's watchmen hold bows) */
       /* monsters get a model while they are within MOB_NEAR tiles (seeded land wakes camps everywhere you have been) */
       const MOB_NEAR = 60, MOB_FAR = 90;
@@ -519,9 +597,13 @@
           const p = core.S.players[pid], e = ents.get('p:' + pid); if (!e) continue;
           if (p.dead) continue;
           const mv = moveTo(e, p.x, p.y, stamp);
-          if (mv) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else e.tyaw = faceYaw(p.face);
+          if (mv && !p.boat) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else e.tyaw = faceYaw(p.face);   /* a canoe faces its heading, even backing up */
           const sk = p.skilling, skAnim = sk === 'chop' ? 'chop' : sk === 'mine' ? 'mine' : sk === 'fish' ? 'fish' : sk === 'cook' || sk === 'light' ? 'cook' : null;
-          const tl = skAnim === 'chop' || skAnim === 'mine' || skAnim === 'fish' ? p.toolId || (sk === 'chop' ? 'hatchet' : sk === 'mine' ? 'pickaxe' : 'net') : null;
+          const ric = e === myEnt ? ricingNow() : false; e.ricing = ric;
+          const tl = p.boat === 1 ? (ric ? 'push_pole' : 'paddle') : p.boat === 2 ? (p.knocking ? 'ricing_sticks' : 'paddle') : skAnim === 'chop' || skAnim === 'mine' || skAnim === 'fish' ? p.toolId || (sk === 'chop' ? 'hatchet' : sk === 'mine' ? 'pickaxe' : 'net') : null;
+          boatLook(e, p.boat === 1); e.boatRole = p.boat | 0; e.rideOf = p.boat === 2 ? p.ride : null; e.knocking = !!p.knocking;
+          if (p.path && p.path.length && e.restPose) e.restPose = null;   /* up off the floor once you walk */
+          if (e === myEnt && SCENE.docks) for (const c of SCENE.docks()) c.visible = !p.boat;   /* the landing's canoe is the one you are sitting in */
           if (skAnim !== e.skill || tl !== e.toolId) { e.skill = skAnim; e.toolId = tl; e.H.setTool && e.H.setTool(tl); }
         }
         for (const n of core.M.npcs) {
@@ -636,6 +718,7 @@
             } : null;
             hud.dialog(e.name, e.lines, after);
             faceNpc(e.npc); sfx('click');
+            if (n && n.pose) myEnt.restPose = n.pose;   /* sit down with him the same way (2026-10-07) */
           } break;
           case 'unhide': { const t = ents.get('n:' + e.npc); if (t) t.root.visible = true; break; }
           case 'weather': if (e.zone === core.weatherZone(zoneHere())) { if (e.say) hud.chat(e.say, 'sys'); showWeather(); } break;
@@ -667,6 +750,7 @@
           case 'drop': break;
           case 'pfx': { const t = ents.get('p:' + e.p); if (t && e.on) { const el = hud.fxSplat(e.fx); if (el) t.splats.push({ el, t: performance.now(), k: t.splats.length }); } if (mine && e.on) sfx('freeze'); break; }
           case 'pray': if (mine) { lastPosKey = ''; hud.refresh('prayer'); if (e.altar) { sfx('altar'); playOnce(myEnt, 'cast'); burst(myEnt.root.position, 0x8fd8ff); } else sfx(e.on ? 'pray' : 'prayoff'); } break;
+          case 'knock': if (mine) { dirty.inv = 1; sfx('splash', myEnt); } break;   /* a handful of manoomin into the canoe */
           case 'bury': if (mine) { dirty.inv = 1; sfx('bury'); playOnce(myEnt, 'pickup', 1.6); } break;
         }
       }
@@ -721,16 +805,32 @@
              trails between them, sadfrog 2026-10-07), ranges, campfires, and torches dropped on the ground (2026-10-07) */
           /* every light out to the edge of what you can see (2026-10-07: "The light from the illumination should load
              farther out"): the nearest few are real lights, every one of them gets a pool of light on the ground (GLOW) */
-          const R = inCave ? 18 : Math.min(viewR(), 90), LT = { torch: 1.6, sconce: 1.5, lamp: 2.6, range: 0.9 }, near = [], add = o => { if (LT[o.k] && Math.abs(o.x - me.x) < R && Math.abs(o.y - me.y) < R) near.push([o.x, o.y, LT[o.k], o.k === 'lamp' ? 0xffd27a : 0xff9a3c, o.k === 'lamp']); };
+          const R = inCave ? 18 : Math.min(viewR(), 90), LT = { torch: 1.6, sconce: 1.5, lamp: 2.6, range: 0.9, campfire: 0.9 }, near = [], add = o => { if (LT[o.k] && Math.abs(o.x - me.x) < R && Math.abs(o.y - me.y) < R) near.push([o.x, o.y, LT[o.k], o.k === 'lamp' ? 0xffd27a : 0xff9a3c, o.k === 'lamp']); };
           for (const o of core.M.objects || []) add(o);
           if (!inCave && core.M.roadTorchesIn) for (const o of core.M.roadTorchesIn(me.x - R, me.y - R, me.x + R, me.y + R)) add(o);
           for (const f of fires.values()) { const q = f.position; if (Math.abs(q.x - me.x) < R && Math.abs(q.z - me.y) < R) near.push([q.x - 0.5, q.z - 0.5, 0.8, 0xff9a3c]); }
           for (const g of core.S.ground) if (g.id === 'torch' && Math.abs(g.x - me.x) < R && Math.abs(g.y - me.y) < R) near.push([g.x, g.y, 1.6, 0xff9a3c]);
           near.sort((a, b) => Math.hypot(a[0] - me.x, a[1] - me.y) - Math.hypot(b[0] - me.x, b[1] - me.y));
-          glowAt(near.slice(CAVE.pool.length));
-          CAVE.pool.forEach((L, k) => { const o = near[k]; L.visible = true; if (!o) { L.intensity = 0; return; } L.position.set(o[0] + 0.5, heightAt(o[0] + 0.5, o[1] + 0.5) + o[2], o[1] + 0.5); L.color.setHex(o[3]); L.distance = o[4] ? 12 : 10; L.userData.steady = !!o[4]; L.intensity = 3.2; });
+          /* no hard swap between far and near (2026-10-07, via the Arcade session: the light "visibly changes as you
+             approach"): every light keeps its ground pool at any distance, and the few real lights stay on the same source while
+             it is among the nearest, easing in from 24 tiles to full at 12 and easing out when handed on - never popping */
+          glowAt(near);
+          const want = new Map(near.slice(0, CAVE.pool.length).map(o => [o[0] + ',' + o[1], o]));
+          for (const L of CAVE.pool) { const u = L.userData; if (!u.key) continue; if (want.has(u.key)) { want.delete(u.key); u.out = false; } else u.out = true; }   /* kept, or easing out */
+          for (const [key, o] of want) {
+            const L = CAVE.pool.find(L => !L.userData.key) || CAVE.pool.find(L => L.userData.out && L.intensity < 0.05); if (!L) break;
+            Object.assign(L.userData, { key, out: false, steady: !!o[4], x: o[0] + 0.5, y: o[1] + 0.5 }); L.intensity = 0; L.visible = true;
+            L.position.set(o[0] + 0.5, heightAt(o[0] + 0.5, o[1] + 0.5) + o[2], o[1] + 0.5); L.color.setHex(o[3]); L.distance = o[4] ? 12 : 10;
+          }
         }
-        for (const L of CAVE.pool) if (L.intensity > 0) L.intensity = L.userData.steady ? 3.2 : 3.0 + Math.sin(now * 0.013 + L.position.x) * 0.3 + Math.sin(now * 0.031 + L.position.z) * 0.18;   /* flames flicker, gas burns steady */
+        const RN = 12, RF = 24, ease = 0.08;
+        for (const L of CAVE.pool) {
+          const u = L.userData; if (!u.key) { L.intensity = 0; continue; }
+          const d = Math.hypot(u.x - me.x - 0.5, u.y - me.y - 0.5), near1 = u.out ? 0 : Math.min(1, Math.max(0, (RF - d) / (RF - RN)));
+          const base = (u.steady ? 2.6 : 2.4 + Math.sin(now * 0.013 + L.position.x) * 0.25 + Math.sin(now * 0.031 + L.position.z) * 0.15) * near1;   /* flames flicker, gas burns steady */
+          L.intensity += (base - L.intensity) * ease;
+          if (u.out && L.intensity < 0.05) { u.key = null; u.out = false; L.intensity = 0; }
+        }
       }
       /* ---------- DAY AND NIGHT (2026-10-07: "Add an orbiting sun that orbits the globe once every 24 hours make it dark
          ashvale as of one hour ago is sunset"; "Have the sun create the shadows on the ground"). The sun circles the planet's
@@ -1028,7 +1128,7 @@
           if (pt) { const g = { kind: 'ground', x: Math.floor(pt.x), y: Math.floor(pt.z) }; if (gi >= 0) out[gi] = g; else out.push(g); }
         }
         /* characters and loot win over trees in front of them (a canopy should not eat the click) */
-        const pri = t => t.kind === 'mob' || t.kind === 'npc' || t.kind === 'item' ? 0 : t.kind === 'node' || t.kind === 'remote' || t.kind === 'passage' || t.kind === 'caveout' ? 1 : 2;
+        const pri = t => t.kind === 'mob' || t.kind === 'npc' || t.kind === 'item' ? 0 : t.kind === 'node' || t.kind === 'remote' || t.kind === 'passage' || t.kind === 'caveout' || t.kind === 'canoe' ? 1 : 2;
         out.sort((a, b) => pri(a) - pri(b));
         /* phones: a tap close to a monster counts as tapping it */
         if (isTouch && !out.some(t => t.kind === 'mob' || t.kind === 'npc' || t.kind === 'item')) {
@@ -1069,11 +1169,15 @@
         if (t.kind === 'caveout') {   /* the cave's way out, up top: it only goes up (2026-10-07: "it should inform them in the chat that there is no way down") */
           const nm = '<span class="c">Cave opening</span>', say = () => hud.chat("The shaft drops away steep and narrow into the dark. There's no way down from here.", 'sys');
           return [{ html: 'Enter ' + nm, fn: say, act: null }, { html: 'Examine ' + nm, fn: () => hud.chat('A narrow opening in the rock. A cold draught breathes up out of it.', 'sys') }]; }
+        if (t.kind === 'canoe') { const nm = '<span class="c">Birch bark canoe</span>';
+          return [{ html: 'Get into the ' + nm, act: { c: 'board', x: t.x, y: t.y }, red: 1 },
+                  { html: 'Examine ' + nm, fn: () => hud.chat('A canoe of birch bark over cedar ribs, sewn with spruce root and sealed with pitch. It floats light as a leaf.', 'sys') }]; }
         if (t.kind === 'passage') { const o = core.passageAt(t.x, t.y); if (!o) return []; const nm = '<span class="c">' + esc(o.name || (o.k === 'cavemouth' ? 'Cave' : o.k === 'gate' ? 'Gate' : 'Way out')) + '</span>';
           return [{ html: esc(o.label || 'Go through'), act: { c: 'enter', x: o.x, y: o.y }, red: 1 },
                   { html: 'Examine ' + nm, fn: () => hud.chat(o.k === 'cavemouth' ? 'A dark opening in the rock. Webs hang just inside, and the air smells of damp and old fur.' : o.k === 'gate' ? 'A barred wooden gate in a palisade. The lookout has the latch.' : 'A ladder up to a shaft of daylight.', 'sys') }]; }
         if (t.kind === 'remote') {
           const r = remotes.get(t.id); if (!r) return [];
+          if (r.boat === 1 && !me.boat && !Object.values(core.S.players).some(q => q.boat === 2 && q.ride === t.id)) return [{ html: 'Climb in to knock rice <span class="c">(bawa\'iganaakoog)</span>', act: { c: 'ride', pid: t.id }, red: 1 }];   /* ricing: two in the canoe */
           /* the combat level next to the name, coloured like a monster's (2026-10-06) */
           const pp = core.S.players[t.id], cb = pp ? core.combatLevel(pp) : 0;
           const nm = '<span class="w">' + esc(label(r.name, r.from)) + '</span>' + (cb ? ' <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>' : ''), o = [];
@@ -1336,7 +1440,7 @@
         joining = true; roomZone = z;
         if (nb) { const ids = nb.rooms().map(R => R.id).filter(i => i !== z); nb.update([], ids); }   /* never in one room twice: the region we walk into stops being a neighbour */
         try {
-          if (room) { const old = room; room = null; dropRemotes(); hosts.clear(); applyAuth(); await old.leave(); }
+          if (room) { const old = room; room = null; try { const st = stateMsg(performance.now()); st.p = [me.x + 0.5, me.y + 0.5]; old.send(st); } catch (e) { /* gone */ } dropRemotes(); hosts.clear(); applyAuth(); await old.leave(); }   /* a last word where I am now: whoever rides in my canoe follows me across
           hosts.clear(); electedOnce = false; myJoin = Date.now(); joinedAt = performance.now(); passive = true; applyAuth();   /* passive until the hosts are known */
           const res = await net.join(z, { game: 'ashvale', loopback: q.has('loopback') });
           hud.setOnline(!!(res && res.online));
@@ -1479,7 +1583,12 @@
       const carriedOf = k => core.invCount(me, k) + Object.values(me.eq || {}).filter(q => q && q.id === k).length;
       function ledgerFor(addr) {
         if (ledger && ledger.addr === addr) return ledger;
-        let L = null; try { L = JSON.parse(G.localStorage.getItem(CKEY(addr)) || 'null'); } catch (e) { /* private window */ }
+        /* the ledger travels IN THE SAVE (2026-10-07, @cinderwalker's GOLD 251 -> 2708): the bag is saved with the arcade and
+           follows you to any browser, but this ledger lived only in this browser's storage - so a fresh browser, another device or
+           cleared site data forgot what was spent and the chest offered it all again. The save's copy goes with the bag it was
+           saved with, so it wins; this browser's copy is only for a save from before this change */
+        let L = save && save.chestLedger && save.chestLedger.addr === addr ? JSON.parse(JSON.stringify(save.chestLedger)) : null;
+        if (!L) try { L = JSON.parse(G.localStorage.getItem(CKEY(addr)) || 'null'); } catch (e) { /* private window */ }
         if (!L) {   /* first time for this wallet: what you already carry and the wallet holds counts as from the wallet */
           const w = walCounts(); L = { bag: {}, spent: {} };
           for (const k in w) { const c = carriedOf(k); if (c && w[k]) L.bag[k] = Math.min(c, w[k]); }
@@ -1487,7 +1596,8 @@
         L.bag = L.bag || {}; L.spent = L.spent || {}; L.pend = L.pend || {}; L.pspent = L.pspent || {}; L.gone = L.gone || {}; L.autoTake = L.autoTake || {}; L.pchest = L.pchest || {}; L.lchest = L.lchest || {};
         L.addr = addr; ledger = L; return L;
       }
-      const ledgerSave = () => { if (!ledger) return; try { G.localStorage.setItem(CKEY(ledger.addr), JSON.stringify({ bag: ledger.bag, spent: ledger.spent, pend: ledger.pend, pspent: ledger.pspent, out: ledger.out || {}, gone: ledger.gone || {}, autoTake: ledger.autoTake || {}, pchest: ledger.pchest || {}, lchest: ledger.lchest || {} })); } catch (e) { /* private window */ } };
+      const ledgerSnap = () => ledger && { addr: ledger.addr, bag: ledger.bag, spent: ledger.spent, pend: ledger.pend, pspent: ledger.pspent, out: ledger.out || {}, gone: ledger.gone || {}, autoTake: ledger.autoTake || {}, pchest: ledger.pchest || {}, lchest: ledger.lchest || {} };
+      const ledgerSave = () => { if (!ledger) return; try { G.localStorage.setItem(CKEY(ledger.addr), JSON.stringify(ledgerSnap())); } catch (e) { /* private window */ } };
       function chestState() {
         if (!walletState.data || !walletState.address) return { chest: {}, loose: {}, bank, arriving: bank.arriving };
         const L = ledgerFor(walletState.address), w = walCounts(), keys = new Set(Object.keys(w).concat(Object.keys(L.bag), Object.keys(L.spent), Object.keys(L.pend), Object.keys(L.pspent), Object.keys(L.gone), Object.keys(L.autoTake), Object.keys(L.pchest), Object.keys(L.lchest)));
@@ -1834,6 +1944,7 @@
       function stateMsg(now) {
         const p = myEnt.root.position;
         const m = { s: Math.round(now), p: [Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100], f: Math.round(myEnt.yaw * 100) / 100, a: myEnt.oneShot ? myEnt.lastOne || 'idle' : myEnt.loco || 'idle', j: myJoin, hp: me.hp, d: me.dead ? 1 : 0, k: myEnt.toolId || 0 };
+        if (me.boat) { m.bt = me.boat; if (me.boat === 2) m.rd = me.ride; }   /* in a canoe: 1 poling it, 2 riding in someone's bow (rd: whose) */
         const oh = core.overhead(me) || 0; if (oh || lastPr) { m.pr = oh; lastPr = oh; }   /* the overhead prayer, so hosts' monsters respect it and others see it */
         const cz = combatZone(); if (cz) m.c = cz;   /* the area I am fighting in, when it is not the one I stand in */
         if (now - gearRefT > 10000) { gearRefT = now; netSend({ g: gearOf(me), n: me.name }); if (myEnt.H.outfit) netSend({ o: myEnt.H.outfit }); }   /* a missed gear message left others drawn wrong, and a missed name left them called Adventurer: refresh both every 10 s, as their own small messages */
@@ -1857,6 +1968,7 @@
         if (d.g && typeof d.g === 'object' && sameSet(d.g, r.e.H.gear) === false) r.e.H.setGear(d.g);
         if (d.g && typeof d.g === 'object') hawkify(r.e, d.g.ring);   /* another player's hawk ring */
         if (d.o && typeof d.o === 'object' && r.e.H.setOutfit && sameSet(d.o, r.e.H.outfit || {}) === false) r.e.H.setOutfit(d.o);
+        if (Array.isArray(d.p) && typeof d.a === 'string') { r.boat = d.bt | 0; r.ride = d.rd || null; }
         if ('k' in d) { const tl = typeof d.k === 'string' && /^[a-z0-9_]{1,24}$/.test(d.k) ? d.k : null; if (tl !== r.tool) { r.tool = tl; r.e.H.setTool && r.e.H.setTool(tl); } }
         if (d.T != null) r.total = Math.max(0, Math.min(9999, d.T | 0));
         if (d.n || d.T != null) { if (d.n) r.name = cleanName(d.n); if (r.e.tag) setTag(r.e.tag, r.name, from, r.total); }
@@ -1869,7 +1981,7 @@
         if (!r.viewOnly) shared(id, r, d);
         if (Array.isArray(d.p) && d.p.length === 2 && isFinite(d.p[0]) && isFinite(d.p[1])) {
           if (typeof d.s === 'number') { if (d.s <= r.lastS && d.s > r.lastS - 60000) return; r.lastS = d.s; }   /* unordered delivery: drop older states */
-          if (core.S.players[id]) core.setPuppet(id, { x: Math.floor(+d.p[0]), y: Math.floor(+d.p[1]) });
+          if (core.S.players[id]) core.setPuppet(id, Object.assign({ x: Math.floor(+d.p[0]), y: Math.floor(+d.p[1]) }, typeof d.a === 'string' ? { bt: d.bt | 0, rd: d.rd || null } : {}));   /* only a full state says whether they are in a canoe */
           r.area = core.areaOf(Math.floor(+d.p[0]), Math.floor(+d.p[1])); r.carea = typeof d.c === 'string' ? d.c.slice(0, 40) : null;
           r.e.root.visible = true; r.buf.push({ t: performance.now(), x: +d.p[0], z: +d.p[1], f: +d.f || 0, a: typeof d.a === 'string' ? d.a.slice(0, 12) : 'idle' }); if (r.buf.length > 20) r.buf.shift();
         }
@@ -2093,9 +2205,11 @@
           const span = Math.max(1, Math.min(Bs.t - A.t, TICK));
           const k = Math.max(0, Math.min(1, (rt - A.t) / span));
           const x = A.x + (Bs.x - A.x) * k, z = A.z + (Bs.z - A.z) * k;
-          r.e.root.position.set(x, heightAt(x, z) + (r.e.alt || 0), z); r.e.tyaw = Bs.f;
-          const an = Bs.a; if (an !== r.anim) { r.anim = an; r.e.H.play(an, { loop: /idle|walk|run|chop|mine|fish|cook/.test(an) }); }
+          boatLook(r.e, r.boat === 1);
+          r.e.root.position.set(x, (r.e.canoe ? waterY(x, z) + (r.anim === 'pole' || r.anim === 'idle' ? 0.14 : 0) : heightAt(x, z)) + (r.e.alt || 0), z); r.e.tyaw = Bs.f;
+          const an = Bs.a; if (an !== r.anim) { r.anim = an; r.e.H.play(an, { loop: /idle|walk|run|chop|mine|fish|cook|sit|paddle|pole|knock|crosslegged/.test(an) }); }
           r.e.yaw += (((r.e.tyaw - r.e.yaw + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI) * Math.min(1, dt * 10); r.e.root.rotation.y = r.e.yaw;
+          if (r.boat === 2) { const T = r.ride === myNetId ? myEnt : (remotes.get(r.ride) || {}).e; if (T) { bowSeat(r.e, T, r.anim === 'knock'); } }
           r.e.H.update(dt); if (r.e.hawk) r.e.hawk.update(dt);
         }
       }
@@ -2126,10 +2240,11 @@
           if (e.fadeIn) { const k = (now - e.fadeIn) / 500; if (k >= 1) { e.H.setOpacity(1); e.fadeIn = 0; } else e.H.setOpacity(Math.max(0.02, k)); }   /* a person whose zone just arrived */
           if (e.key.charAt(0) === 'r') continue;
           const a = Math.min(1, (now - e.t0) / e.dur);
-          if (!e.dead || a < 1) { e.root.position.lerpVectors(e.from, e.to, a); e.root.position.y = heightAt(e.root.position.x, e.root.position.z) + liftOf(e, a) + hawkAlt(e); }   /* on an upper floor; a hawk over the trees */
+          if (!e.dead || a < 1) { e.root.position.lerpVectors(e.from, e.to, a); e.root.position.y = (e.canoe ? waterY(e.root.position.x, e.root.position.z) + (e.ricing ? 0.14 : 0) : heightAt(e.root.position.x, e.root.position.z) + liftOf(e, a)) + hawkAlt(e); }   /* the poler stands on the canoe's floor */   /* on an upper floor; a hawk over the trees */
           let d = e.tyaw - e.yaw; d = ((d + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI; e.yaw += d * Math.min(1, dt * 12); e.root.rotation.y = e.yaw;
           const moving = a < 1 && e.from.distanceToSquared(e.to) > 1e-4;
-          if (!e.dead && !e.oneShot && !e.prone && !e.held) { const want = moving ? (e.running ? 'run' : 'walk') : (e.skill || 'idle'); if (want !== e.loco) { e.loco = want; e.H.play(want, { loop: true }); } }
+          if (!e.dead && !e.oneShot && !e.prone && !e.held) { const want = e.boatRole === 2 ? (e.knocking ? 'knock' : moving ? 'paddle' : 'sit') : e.canoe ? (e.ricing ? (moving ? 'pole' : 'idle') : moving ? 'paddle' : 'sit') : moving ? (e.running ? 'run' : 'walk') : (e.restPose || e.skill || 'idle'); if (want !== e.loco) { e.loco = want; e.H.play(want, { loop: true }); } }
+          if (e.boatRole === 2 && e.rideOf != null) { const T = (remotes.get(e.rideOf) || {}).e; if (T) bowSeat(e, T, e.knocking); }
           if (e.oneShot && e.oneT && now - e.oneT > 2500 && !e.dead) e.oneShot = false;
           for (const rec of e.impacts) if (!rec.fired && now - rec.t > 850) { fireImpact(e, rec); break; }
           if (e.dead && e.key.charAt(0) === 'm') { const k = (now - e.deadT) / 1000; if (k > 1.3 && k < 2.2 && e.H.setOpacity) e.H.setOpacity(Math.max(0, 1 - (k - 1.3) / 0.8)); if (k >= 2.2) e.root.visible = false; }
@@ -2270,10 +2385,24 @@
         for (let i = 0; i < addrs.length; i += 10) { R.send({ t: 'book', v: 1, a: addrs.slice(i, i + 10) }); await new Promise(ok => setTimeout(ok, 400)); }
       }
       setTimeout(() => { reportBook().catch(() => {}); setInterval(() => reportBook().catch(() => {}), 600000); }, 15000);
+      /* the save to the Bank (cloudLoad above): only when it changed, at most every 20 s, at once when you leave */
+      const CLOUD = { last: null, at: (save && save.at) || 0, sent: '', t: 0 };
+      function cloudPush(json, now) {
+        if (!G.arcade || !CLOUD_OK || !json || json === CLOUD.sent || (!now && performance.now() - CLOUD.t < 20000)) return;
+        CLOUD.t = performance.now(); const at = CLOUD.at;
+        packSave(json).then(b => bankRoom().then(R => {
+          if (!R) return; const n = Math.max(1, Math.ceil(b.length / CHUNK));
+          if (n > 40) { console.warn('ASHVALE: the save is too big for the Bank (' + b.length + ' B)'); return; }
+          CLOUD.sent = json; for (let i = 0; i < n; i++) R.send({ t: 'sv', id: at, i, n, d: b.slice(i * CHUNK, (i + 1) * CHUNK) });
+        })).catch(e => console.warn('ASHVALE: cloud save', e && e.message));
+      }
       function persist(leaving) {
         if (stopped) return;
         try { tellHere(leaving === true); } catch (e) { /* the Bank is out of reach: the next save */ }
-        Promise.resolve(store.set(SAVE, JSON.stringify(core.exportPlayer(PID)))).then(ok => {   /* false: the arcade did not take it */
+        const P = core.exportPlayer(PID); if (P && ledger) P.chestLedger = ledgerSnap();   /* the chest ledger saves with the bag it describes */
+        const json = JSON.stringify(P); if (json !== CLOUD.last) { CLOUD.at = Date.now(); CLOUD.last = json; } if (P) P.at = CLOUD.at;
+        cloudPush(json, leaving === true);
+        Promise.resolve(store.set(SAVE, JSON.stringify(P))).then(ok => {   /* false: the arcade did not take it */
           if (ok === false) { if (++saveFails === 2) hud.netLost && hud.netLost(true, 'save'); }
           else { if (saveFails >= 2) { hud.netLost && hud.netLost(false, 'save'); hud.chat('Your progress is saving again.', 'sys'); } saveFails = 0; }
         });
@@ -2295,7 +2424,7 @@
           toggle: k => { settings[k] = !settings[k]; store.set(SET, JSON.stringify(settings)); if (k === 'shadows') { sun.castShadow = settings.shadows; for (const e of ents.values()) e.blob.visible = !settings.shadows && !e.hawk; renderer.shadowMap.needsUpdate = true; scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); } },
           resetCamera: () => { cam.tyaw = PI * 0.12; cam.tpitch = 0.92; cam.tdist = isPhone ? 9 : 11; },
           faceNorth: () => { const v = trueNorth(me.x, me.y), want = -PI / 2 - Math.atan2(v[1], v[0]); cam.tyaw = want + Math.round((cam.tyaw - want) / (2 * PI)) * 2 * PI; },   /* true north up, the short way round */
-          newGame: () => { stopped = true; store.set(SAVE, '').then(() => location.reload(), () => location.reload()); },
+          newGame: () => { stopped = true; const at = Date.now(); (CLOUD_OK ? bankRoom() : Promise.resolve(null)).then(R => R && R.send({ t: 'sv', id: at, i: 0, n: 1, d: '' })).catch(() => {}).then(() => store.set(SAVE, '')).then(() => location.reload(), () => location.reload()); },   /* the Bank's copy goes too: an empty save, newer than any */
           helpSeen: () => store.set('ashvale3d.help', '1'),
           savesHere: () => store.backend,
           modulesText: () => 'Players: ' + netStatus + '. Saves: ' + ({ arcade: 'on the arcade', browser: 'in this browser', memory: 'not saved (this session only)' }[store.backend] || store.backend) + '. Modules: ' + (opts.report || []).map(r => r[0] + ' v' + r[1]).join(', '),

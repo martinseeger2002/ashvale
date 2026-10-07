@@ -33,7 +33,7 @@ if os.path.exists(os.path.join(SRC, 'worldgen.js')):
     JS_MODULES[JS_MODULES.index('world'):JS_MODULES.index('world')] = ['globe', 'wg_geo', 'wg_terrain', 'wg_paths', 'wg_sites', 'wg_tiles', 'worldgen']
     DATA_MODULES.append('wg_tables')
 DATA_PATHS = {'wg_tables': 'atlas/wg_tables'}   # data modules that live in a subfolder of data/
-ZONES = ['village', 'whisperwood', 'saltmere', 'castle', 'wolfden', 'cavemouth', 'spidercave', 'ancientchapel', 'evengrove']   # castle: the lake castle 4 km out (tools/castle/make_castle.js)
+ZONES = ['village', 'whisperwood', 'saltmere', 'castle', 'wolfden', 'cavemouth', 'spidercave', 'ancientchapel', 'evengrove', 'ziibiing', 'lodges', 'ricelake']   # ziibiing + lodges: the Ojibwe village on the river and its wigwams' insides (tools/make_zone_ziibiing.py)   # castle: the lake castle 4 km out (tools/castle/make_castle.js)
 ZONES = ZONES   # saltmere: the second town, on the sea shore 3.4 km east (tools/make_zone_saltmere.mjs)
 if os.environ.get('ASH_NO_CASTLE') == '1':   # 2026-10-05: "forget about this castle for now" - a release without it
     ZONES = [z for z in ZONES if z != 'castle']
@@ -90,7 +90,7 @@ def zone_index(zones):
                 and ox <= o['x'] < ox + w and oy <= o['y'] < oy + h]
         e = {'id': zid, 'name': z.get('name', zid), 'origin': z['origin'], 'size': z['size'], 'stub': zone_stub_tiles(z), 'pads': pads,
              'npcs': [{'id': n['id'], 'name': n.get('name', n['id']), 'x': n['x'], 'y': n['y']} for n in z.get('npcs') or []]}
-        for k in ('level', 'ground', 'respawn', 'weather', 'under', 'surface', 'surfaceOffset'):   # under: a cave area outside the land (surface = its entrance up top)
+        for k in ('level', 'ground', 'respawn', 'weather', 'under', 'style', 'surface', 'surfaceOffset'):   # under: a cave area outside the land (surface = its entrance up top)
             if k in z: e[k] = z[k]
         out.append(e)
     return {"ashvale3d": "module", "name": "zoneindex", "api": 1, "v": 1, "data": {"zones": out}}
