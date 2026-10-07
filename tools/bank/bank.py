@@ -88,10 +88,17 @@ def handle_took(c, addr, msg):
     'ground?' no longer lists it), and the picker's deposit is paid THAT piece. The dropper taking back its own: just gone."""
     try: k, x, y = str(msg['id']), int(msg['x']), int(msg['y'])
     except (KeyError, TypeError, ValueError): return None
-    r = c.execute('select n, addr from drops where item=? and live=1 and taken_by is null and abs(x-?)<=2 and abs(y-?)<=2 order by abs(x-?)+abs(y-?), at limit 1',
+    r = c.execute('select n, addr, at, units from drops where item=? and live=1 and taken_by is null and abs(x-?)<=2 and abs(y-?)<=2 order by abs(x-?)+abs(y-?), at limit 1',
                   (k, x, y, x, y)).fetchone()
     if r:
         c.execute('update drops set taken_by=?, taken_at=?, paid=? where n=?', (addr, time.time(), 1 if r['addr'] == addr else 0, r['n'])); c.commit()
+        # TAKEN BACK BEFORE IT WENT HOME (2026-10-07, @tbuuol: "now he has two of his entire inventory"): a game sends a
+        # dropped thing back to @ashvale only after 90 s, so one picked up again sooner never left the wallet - it is still the
+        # player's own. Its units are noted like a ghost: the next deposit does not pay them out again.
+        if r['addr'] == addr and time.time() - (r['at'] or 0) < 150:
+            u = max(1, int(r['units'] or 1))
+            c.execute('insert into ghosts(addr,item,units,x,y,at,left) values(?,?,?,?,?,?,?)', (addr, k, u, x, y, time.time(), u)); c.commit()
+            log('OWN BACK', addr, k, u, x, y, 'drop', r['n'], '- still in the wallet, never paid out again')
         log('TOOK', addr, k, x, y, 'drop', r['n'], '(its own)' if r['addr'] == addr else '')
         return None
     # nothing untaken there, but a drop of it there was already taken by somebody: this was a GHOST (a copy an outdated game

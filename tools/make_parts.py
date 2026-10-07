@@ -234,6 +234,10 @@ CAPES = {"cape_red": "#8a2a2a", "cape_blue": "#2f4f8a", "cape_green": "#3f6a34",
 part('cloth.cape', 'cloth', slot='cape', style='cape', items=CAPES,
      shapes=[dict(box("0.44*W", 0.86, 0.025, C, 0, -0.43, 0), j="cape"), dict(box("0.46*W", 0.05, 0.05, "$c:0.7", 0, 0, 0.01), j="cape")],
      groundShapes=[box(0.42, 0.06, 0.34, C, 0, 0.03, 0), box(0.44, 0.03, 0.06, "$c:0.7", 0, 0.07, -0.15), box(0.4, 0.04, 0.3, "$c:1.12", 0, 0.075, 0.02)])
+# robes (cosmetic body gear, sold by Wren; worn they paint shirt+pants as the robe cut that used to sit in the creator)
+ROBES = {"robe_red": "#8a2a2a", "robe_blue": "#2f4f8a", "robe_green": "#3f6a34", "robe_purple": "#5b3a7a", "robe_gold": "#c8a040", "robe_black": "#262226", "robe_linen": "#d8d0bc"}
+part('cloth.robe', 'cloth', slot='robe', style='robe', items=ROBES,
+     groundShapes=[box(0.36, 0.05, 0.42, C, 0, 0.03, 0), box(0.32, 0.04, 0.38, "$c:0.9", 0, 0.075, 0.02), cyl(0.08, 0.09, 0.05, "$c:0.85", 0, 0.1, 0.12, seg=8)])
 
 # ---------------------------------------------------------------- gear (one file per type, all tiers inside)
 T = "$tier"; TD = "$tier:0.68"

@@ -71,9 +71,11 @@
       return { npcs: npcs.slice(n0), spawns: spawns.slice(s0), objects: objects.slice(o0) };
     }
     for (const z of D.zones) ingest(z);
-    const ranges = (objs) => { for (const o of objs) if (o.k === 'range' || o.k === 'altar') { const k = key(o.x, o.y); nodes.set(k, { kind: o.k, x: o.x, y: o.y }); fixed.add(k); } };
+    const ranges = (objs) => { for (const o of objs) if (o.k === 'range' || o.k === 'altar') { const k = key(o.x, o.y); nodes.set(k, { kind: o.k, x: o.x, y: o.y, chapel: o.chapel || null }); fixed.add(k); } };
     ranges(objects);
-    const B = opts.bounds || [0, 0, W, H];
+    let minX = 0, minY = 0;
+    for (const P of pieces) { if (P.x0 < minX) minX = P.x0; if (P.y0 < minY) minY = P.y0; }
+    const B = opts.bounds || [minX, minY, W - minX, H - minY];   /* set pieces may sit south or west of the old map's corner */
     let inWorld = (x, y) => x >= B[0] && y >= B[1] && x < B[0] + B[2] && y < B[1] + B[3];
     if (WG && !opts.bounds) {
       /* play is limited to the core face (decision for the first globe release, see handoff/globe_p2_status.md): its
@@ -134,6 +136,17 @@
       }
       for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) inside.add(key(x, y));   /* monsters never wander into buildings */
     }
+    /* interior walls (2026-10-07: Saltmere town hall rooms): thin edge walls with an optional door gap */
+    for (const o of objs) if (o.k === 'iwall') {
+      const face = o.face || 'w', x0 = o.x, y0 = o.y, w = o.w || 1, h = o.h || 1, dk = o.door ? o.door[0] + ',' + o.door[1] : '';
+      for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) {
+        if (x + ',' + y === dk) continue;
+        if (face === 'w') { wset(x, y, 8); wset(x - 1, y, 2); }
+        else if (face === 'e') { wset(x, y, 2); wset(x + 1, y, 8); }
+        else if (face === 'n') { wset(x, y, 1); wset(x, y - 1, 4); }
+        else { wset(x, y, 4); wset(x, y + 1, 1); }
+      }
+    }
     for (const n of npcList) open.add(key(n.x, n.y)); };   /* an NPC's own tile is never blocked */
     walls(objects, npcs);
     const HB = WG && WG.pieces().length ? WG.pieces()[0].hb : 0;
@@ -144,7 +157,31 @@
     for (const k of open) ext(k, 2, 0);
 
     /* ---- the chunk store */
-    const chunks = new Map(), fillFns = [];
+    const chunks = new Map(), fillFns = [], grown = new Map();
+    function stampGrown(c) {
+      for (const k of grown.keys()) {
+        const x = kx(k), y = ky(k);
+        if ((x >> SH) !== c.cx || (y >> SH) !== c.cy) continue;
+        const i = ci(x, y);
+        c.fl[i] |= 1 | (SEE['P'.charCodeAt(0)] << 1);
+        if (!nodes.has(k)) { const nd = NODE['P'.charCodeAt(0)]; if (nd) nodes.set(k, { kind: 'P', x, y, item: nd.item }); }
+      }
+    }
+    fillFns.push(stampGrown);
+    const cleared = new Map();
+    function stampCleared(c) {
+      for (const k of cleared.keys()) {
+        const x = kx(k), y = ky(k);
+        if ((x >> SH) !== c.cx || (y >> SH) !== c.cy) continue;
+        const i = ci(x, y);
+        c.t[i] = '.'.charCodeAt(0);
+        c.fl[i] = 0;
+        grown.delete(k);
+        const nd = nodes.get(k);
+        if (nd && 'TPOWMY'.indexOf(nd.kind) >= 0 && !fixed.has(k)) nodes.delete(k);
+      }
+    }
+    fillFns.push(stampCleared);
     let lcx = 0x7fffffff, lcy = 0x7fffffff, lc = null, clock = 0, filled = 0, dropped = 0;
     const areaId = (x, y) => FACE + ':' + Math.floor((x + GX) / AREA) + ':' + Math.floor((y + GY) / AREA);
     function fill(cx, cy) {
@@ -275,6 +312,15 @@
       coastAt: (x, y) => WG ? WG.field(FACE, x + OX + 0.5, -(y + OY + 0.5))[9] : 0,
       chunk: (cx, cy) => chunkAt(cx << SH, cy << SH),
       onFill(fn) { fillFns.push(fn); for (const c of chunks.values()) fn(c); },
+      /* a sapling that rooted in grass: the tile letter stays grass (so a rebuilt region does not also instance a tree)
+         but the tile blocks walking and carries a pine node. Re-applied whenever the chunk fills again. */
+      growTree(x, y) {
+        const k = key(x, y); cleared.delete(k); grown.set(k, 1); stampGrown(chunkAt(x, y)); return true;
+      },
+      /* a stump that has stood an hour: the tree is gone, the tile is open grass, and a sapling can go there */
+      clearTree(x, y) {
+        const k = key(x, y); cleared.set(k, 1); grown.delete(k); stampCleared(chunkAt(x, y)); return true;
+      },
       toFace: (x, y) => [FACE, x + OX, y + OY],
       fromFace: (f, gx, gy) => f === FACE ? [gx - OX, gy - OY] : null,
       stats: () => ({ chunks: chunks.size, filled, dropped, nodes: nodes.size })

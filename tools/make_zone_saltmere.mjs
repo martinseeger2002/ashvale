@@ -145,13 +145,15 @@ const buildings = [
 ];
 /* a city, not a village (the operator: "it should look a little more metropolitan"): terraced rows of tall houses on both
    sides of the high street, and storeys on everything - two or three, the inn and the harbour office three */
-for (const [x, w] of [[3394, 6], [3401, 6], [3408, 6], [3422, 6], [3433, 6], [3440, 6], [3447, 6], [3454, 5]])
+/* three empty terraces on the high street become the town hall (2026-10-07) */
+buildings.push({ k: 'house', x: 3394, y: 1811, w: 20, h: 5, door: [3403, 1815], sign: 'Town Hall', roof: '#2a3a52', wall: '#e8e0d0', enter: true, floors: 2, stairsAt: [3403, 1812] });
+for (const [x, w] of [[3422, 6], [3433, 6], [3440, 6], [3447, 6], [3454, 5]])
   buildings.push({ k: 'house', x, y: 1811, w, h: 5, door: [x + 2, 1815], roof: ['#5a3a2a', '#3f4a5a', '#6a4a3a', '#4a3a4a'][x % 4], wall: ['#e2d7bd', '#d6cbb2', '#cbc3b0', '#ded4bf'][(x >> 2) % 4] });
 for (const [x, w] of [[3400, 6], [3407, 6], [3422, 6]])
   buildings.push({ k: 'house', x, y: 1821, w, h: 4, door: [x + 2, 1821], roof: ['#3a4a3a', '#5a4a3a', '#4a3a3a'][x % 3], wall: ['#ddd2bb', '#e0d6c0', '#d8c9a3'][x % 3] });
 for (const b of buildings) {
   const hv = Math.imul(b.x * 31 + b.y, 2654435761) >>> 0;
-  b.floors = b.sign === 'The Saltmere Tap' || b.sign === 'Harbour Master' ? 3 : b.k === 'smithy' ? 1 : (hv % 3 === 0 ? 3 : 2);
+  b.floors = b.sign === 'Town Hall' ? 2 : b.sign === 'The Saltmere Tap' || b.sign === 'Harbour Master' ? 3 : b.k === 'smithy' ? 1 : (hv % 3 === 0 ? 3 : 2);
   if (b.floors > 1) b.enter = true;   /* every multi-storey building can be walked into and climbed (the operator) */
 }
 /* nothing stands in the river: a building or a prop on any river tile is left out */
@@ -219,10 +221,26 @@ const props = [
   { k: 'counter', x: 3476, y: 1796, w: 2, h: 1 }, { k: 'shelf', x: 3475, y: 1794, w: 3, h: 1 },
   { k: 'anvil', x: 3449, y: 1870 }, { k: 'furnace', x: 3451, y: 1871 },
   { k: 'crate', x: 3480, y: 1775 }, { k: 'crate', x: 3482, y: 1775 }, { k: 'barrel', x: 3486, y: 1776 },
-  { k: 'crate', x: 3480, y: 1876 }, { k: 'barrel', x: 3484, y: 1876 }, { k: 'crate', x: 3486, y: 1877 }
+  { k: 'crate', x: 3480, y: 1876 }, { k: 'barrel', x: 3484, y: 1876 }, { k: 'crate', x: 3486, y: 1877 },
+  /* town hall rooms: bank west, hall centre, mayor east */
+  { k: 'iwall', x: 3400, y: 1811, w: 1, h: 5, door: [3400, 1813], face: 'w' },
+  { k: 'iwall', x: 3407, y: 1811, w: 1, h: 5, door: [3407, 1813], face: 'w' },
+  { k: 'counter', x: 3395, y: 1813, w: 3, h: 1 }, { k: 'shelf', x: 3394, y: 1811, w: 2, h: 1 },
+  { k: 'counter', x: 3408, y: 1813, w: 3, h: 1 }, { k: 'chair', x: 3410, y: 1814 }, { k: 'table', x: 3403, y: 1813 }
 ];
 for (const p of props) { p.w = p.w || 1; p.h = p.h || 1; }
 for (const p of props) for (const [bx, by, bw, bh, dx, dy] of MOVED) if (p.x >= bx && p.y >= by && p.x < bx + bw && p.y < by + bh) { p.x += dx; p.y += dy; break; }   /* the furniture goes with its house */
+/* one wall torch on every NPC-occupied building, lit from dusk (2026-10-07) */
+const OCCUPIED = new Set(['The Saltmere Tap', 'Fish Store', 'Shipwright', 'Saltmere General Store', 'Saltmere Armoury', 'Saltmere Enchantery', 'Town Hall']);
+for (const b of buildings) {
+  if (!b.door || !OCCUPIED.has(b.sign)) continue;
+  const [dx, dy] = b.door, x0 = b.x, y0 = b.y, w = b.w, h = b.h; let face, sx, sy;
+  if (dy === y0 + h - 1) { face = 's'; sx = dx + 1 < x0 + w ? dx + 1 : dx - 1; sy = dy; }
+  else if (dy === y0) { face = 'n'; sx = dx + 1 < x0 + w ? dx + 1 : dx - 1; sy = dy; }
+  else if (dx === x0) { face = 'w'; sx = dx; sy = dy + 1 < y0 + h ? dy + 1 : dy - 1; }
+  else { face = 'e'; sx = dx; sy = dy + 1 < y0 + h ? dy + 1 : dy - 1; }
+  props.push({ k: 'sconce', x: sx, y: sy, w: 1, h: 1, face, night: true });
+}
 for (let i = props.length - 1; i >= 0; i--) { const p = props[i]; if (inRiver(p.x, p.y, p.w, p.h)) props.splice(i, 1); }
 /* the river is put back over the streets and the clearing: where a street crosses it, a plank bridge */
 for (let v = 0; v < NY; v++) for (let u = 0; u < 102; u++) if (RIVER[v][u]) rows[v][u] = rows[v][u] === 'p' || rows[v][u] === 'B' ? 'B' : RIV0[v][u];
@@ -262,6 +280,19 @@ const npcs = [
     examine: "Bryce the shipwright, half a lifetime of Saltmere hulls behind him and one rudder in front of him." },
   { id: 'nessa', name: 'Nessa the enchanter', look: 'nessa', x: 3426, y: 1865, shop: 'salt_magic',
     examine: "Nessa the enchanter, who learned her trade off the wreck of a wizard's chest that the sea gave back." },
+  { id: 'hall_bank', name: 'Town Hall bank', look: 'chest', x: 3396, y: 1812, chest: true,
+    examine: "The Town Hall bank. Same arcade wallet as the chest by the stones; this counter is just nearer the ledgers." },
+  { id: 'calder', name: 'Mayor Calder', look: 'calder', x: 3409, y: 1812,
+    examine: "Mayor Calder of Saltmere, chain of office and a stack of plans that are not yet a desk.",
+    lines: [
+      "Welcome to Saltmere's town hall. I am Mayor Calder. The west counter is the bank. This one is talk.",
+      "Ashvale is a living world on Dogecoin. You gather, fight, cook, bury bones for Prayer, and keep what you earn. Tam sells bread, Garrick smiths, Wren stitches hats and capes as tokens. The chest in each town is your arcade wallet - bag and bank are the same holdings.",
+      "Day and night here run on a two-hour wheel, not a real day. Follow the lamps after dark. Portals between towns remember you once you have touched the stones.",
+      "The tokens you hold are Omni assets. The Omni protocol writes them on Dogecoin itself, the same chain that carries the coin. They are not a costume the game invented. They are entries the chain can prove.",
+      "We mean to let those assets travel. Other chains, other protocols, markets outside this valley - wrap, bridge, list, swap. You will be able to trade an Ashvale piece where Ashvale is not running.",
+      "Whatever leaves can come home. Every ported token stays an Ashvale Omni game asset at heart, and it can always be reintegrated - brought back into this world with the same rights it had when it left. We will not mint a copy that strands the original.",
+      "None of that desk is built yet. When the bridges exist, you will hear it from this hall first."
+    ] },
 ];
 for (const n of npcs) if ('TPORNIr~FHXWMYCGA^K'.indexOf(g(n.x - OX, n.y - OY)) >= 0) put(n.x - OX, n.y - OY, '.');   /* an NPC's own tile must never be blocked */
 

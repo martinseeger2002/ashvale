@@ -1,17 +1,24 @@
 /* ASHVALE 3D HUD character creator and tailor's wardrobe, split out of hud.js (2026-10-02: "modularize the HUD").
-   install(K) adds K.creator(o) and K.creatorOpen(). */
+   install(K) adds K.creator(o) and K.creatorOpen(). Hats, capes and the robe cut are Wren's shop NFTs (right-click Trade). */
 (function (G) {
   'use strict';
   function install(K) {
     const { api, A } = K, esc = A.esc, cap = A.cap, SKI = A.SKI, START_SKILLS = A.START_SKILLS;
     const cc = K.ccEl;
     function creator(o) {
-      const L = JSON.parse(JSON.stringify(o.look)), ST = o.styles, PA = o.palette;
+      const L = JSON.parse(JSON.stringify(o.look)), PA = o.palette;
+      const ST = Object.assign({}, o.styles, {
+        shirt: (o.styles.shirt || []).filter(s => s !== 'robe'),
+        pants: (o.styles.pants || []).filter(s => s !== 'robe')
+      });
+      L.hat = null; L.cape = null;
+      if (L.shirt && L.shirt.style === 'robe') L.shirt = Object.assign({}, L.shirt, { style: ST.shirt[0] || 'tunic' });
+      if (L.pants && L.pants.style === 'robe') L.pants = Object.assign({}, L.pants, { style: ST.pants[0] || 'trousers' });
       let hairPicked = !o.first;
       if (!L.body) L.body = 'male';
       let name = o.name || '';
       const cycle = (k, list, d) => { const cur = typeof L[k] === 'object' && L[k] ? L[k].style : L[k]; let i = list.indexOf(cur == null ? null : cur); i = (i + d + list.length) % list.length; const v = list[i];
-        if (k === 'hat' || k === 'shirt' || k === 'pants') L[k] = v == null ? null : Object.assign({ color: (L[k] && L[k].color) || PA.cloth[i % PA.cloth.length] }, L[k] || {}, { style: v }); else L[k] = v; };
+        if (k === 'shirt' || k === 'pants') L[k] = v == null ? null : Object.assign({ color: (L[k] && L[k].color) || PA.cloth[i % PA.cloth.length] }, L[k] || {}, { style: v }); else L[k] = v; };
       const nice = v => v == null ? 'none' : String(v);
       function draw() {
         const sty = k => { const v = L[k]; return nice(v && typeof v === 'object' ? v.style : v); };
@@ -22,19 +29,18 @@
           '<div class="row"><span class="lab">Body</span><button class="btn body ' + (L.body !== 'female' ? 'on' : '') + '" data-body="male" style="width:auto;flex:1;margin:0">Male</button><button class="btn body ' + (L.body === 'female' ? 'on' : '') + '" data-body="female" style="width:auto;flex:1;margin:0">Female</button></div>' +
           '<div class="row"><span class="lab">Skin</span>' + sw('skin', PA.skin) + '</div>' +
           cyc('hair', 'Hair') + '<div class="row"><span class="lab"></span>' + sw('hairColor', PA.hair) + '</div>' +
-          cyc('beard', 'Beard') + cyc('hat', 'Hat') + (L.hat ? '<div class="row"><span class="lab"></span>' + sw('hat', PA.cloth, true) + '</div>' : '') +
+          cyc('beard', 'Beard') +
           cyc('shirt', 'Top') + '<div class="row"><span class="lab"></span>' + sw('shirt', PA.cloth, true) + '</div>' +
           cyc('pants', 'Legs') + '<div class="row"><span class="lab"></span>' + sw('pants', PA.cloth, true) + '</div>' +
           '<div class="row"><span class="lab">Boots</span>' + sw('boots', PA.cloth.slice(6).concat(PA.hair.slice(0, 3))) + '</div>' +
-          '<div class="row"><span class="lab">Cape</span>' + sw('cape', PA.cloth.slice(0, 6), false, true) + '</div>' +
           '<div class="btns"><button class="btn" data-a="rand">Random</button><button class="btn on" data-a="done">' + (o.first ? (o.startPoints ? 'Next: skills' : 'Start adventure') : 'Done') + '</button></div>';
         for (const b of cc.querySelectorAll('[data-body]')) b.onclick = () => { L.body = b.dataset.body; if (!hairPicked) { L.hair = L.body === 'female' ? 'long' : 'short'; if (L.body === 'female') L.beard = null; } changed(); };
         for (const b of cc.querySelectorAll('[data-cy]')) b.onclick = () => { if (b.dataset.cy === 'hair') hairPicked = true; cycle(b.dataset.cy, ST[b.dataset.cy], +b.dataset.d); changed(); };
         for (const b of cc.querySelectorAll('.sw')) b.onclick = () => { const k = b.dataset.k, c = b.dataset.c || null; if (b.dataset.o) L[k] = Object.assign({}, L[k] || {}, { color: c }); else L[k] = c; changed(); };
         const inp = cc.querySelector('input'); if (inp) inp.oninput = () => { name = inp.value; };
         cc.querySelector('[data-a=rand]').onclick = () => { const pick = a => a[Math.floor(Math.random() * a.length)];
-          L.body = Math.random() < 0.5 ? 'female' : 'male'; L.skin = pick(PA.skin); L.hair = pick(ST.hair); L.hairColor = pick(PA.hair); L.beard = L.body === 'female' ? null : pick(ST.beard); L.hat = Math.random() < 0.3 ? { style: pick(ST.hat.filter(Boolean)), color: pick(PA.cloth) } : null;
-          L.shirt = { style: pick(ST.shirt), color: pick(PA.cloth) }; L.pants = { style: pick(ST.pants), color: pick(PA.cloth) }; L.cape = Math.random() < 0.3 ? pick(PA.cloth) : null; changed(); };
+          L.body = Math.random() < 0.5 ? 'female' : 'male'; L.skin = pick(PA.skin); L.hair = pick(ST.hair); L.hairColor = pick(PA.hair); L.beard = L.body === 'female' ? null : pick(ST.beard); L.hat = null; L.cape = null;
+          L.shirt = { style: pick(ST.shirt), color: pick(PA.cloth) }; L.pants = { style: pick(ST.pants), color: pick(PA.cloth) }; changed(); };
         cc.querySelector('[data-a=done]').onclick = () => { if (o.first && o.startPoints) drawSkills(); else { cc.style.display = 'none'; o.onDone(L, name, null); } };
       }
       function changed() { o.onChange(JSON.parse(JSON.stringify(L))); draw(); api.sfx && api.sfx('click'); }
@@ -50,7 +56,7 @@
         cc.querySelector('[data-a=back]').onclick = () => draw();
         cc.querySelector('[data-a=go]').onclick = () => { cc.style.display = 'none'; o.onDone(L, name, Object.assign({}, pts)); };
       }
-      cc.style.display = 'block'; draw();
+      cc.style.display = 'block'; o.onChange(JSON.parse(JSON.stringify(L))); draw();
     }
     K.creator = creator; K.creatorOpen = () => cc.style.display === 'block';
   }

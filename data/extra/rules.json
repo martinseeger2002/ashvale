@@ -22,6 +22,11 @@
     "robe",
     "torch"
    ],
+   "cosmetic": [
+    "hat",
+    "cape",
+    "robe"
+   ],
    "resource": [
     "logs",
     "ore",
@@ -31,11 +36,14 @@
     "fish",
     "mushroom",
     "meat",
-    "bones"
+    "bones",
+    "note",
+    "sapling"
    ]
   },
   "slots": {
-   "armour/robe": "body"
+   "armour/robe": "body",
+   "cosmetic/robe": "body"
   },
   "traits": {
    "Prayer XP": [
@@ -43,7 +51,8 @@
     10
    ],
    "Prayer": "prayer",
-   "Prayer seconds": "prayerSec"
+   "Prayer seconds": "prayerSec",
+   "Prayer hold": "ppHold"
   },
   "limits": {
    "flat": {
@@ -56,6 +65,10 @@
      30
     ],
     "Prayer seconds": [
+     0,
+     30
+    ],
+    "Prayer hold": [
      0,
      30
     ]
@@ -140,6 +153,58 @@
    "quest": "angel_gift",
    "ringCooldown": 1000,
    "desc": "Iria's blessing is on you now: the Ring of Angels rests ten minutes between saves instead of an hour."
+  },
+  "vorth_gate": {
+   "name": "Pike's latch",
+   "quest": "red_pyre",
+   "desc": "Pike has opened the compound gate. You may enter and leave."
+  },
+  "vorth_bag": {
+   "name": "Edric's bag",
+   "quest": "red_pyre",
+   "desc": "You searched the bones in the Spider Cave."
+  },
+  "vorth_spoke": {
+   "name": "Edric's last word",
+   "quest": "red_pyre",
+   "desc": "Edric's shade has said his piece and gone."
+  },
+  "replant": {
+   "name": "Replanting",
+   "quest": "even_grove",
+   "desc": "You can set a sapling in any stump, anywhere a tree used to stand. The tree grows back."
   }
- }
+ },
+ "portals": [
+  {
+   "id": "ashvale",
+   "name": "Ashvale",
+   "x": 19,
+   "y": 55,
+   "to": [
+    19,
+    56
+   ]
+  },
+  {
+   "id": "saltmere",
+   "name": "Saltmere",
+   "x": 462,
+   "y": 28,
+   "to": [
+    462,
+    29
+   ]
+  },
+  {
+   "id": "spidercave",
+   "name": "the Spider Cave",
+   "x": -125,
+   "y": 8,
+   "to": [
+    -124,
+    10
+   ]
+  }
+ ]
 }

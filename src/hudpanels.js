@@ -13,7 +13,7 @@
       if (!ST.tab) return;
       if (ST.tab === 'inv') {
         panel.innerHTML = weightBar(p) + '<div class="inv"></div>'; const g = panel.querySelector('.inv');
-        p.inv.forEach((it, i) => { const s = K.el('slot', g, K.slotHtml(it)); s.dataset.i = i; if (it) K.invPointer(s, i); });
+        p.inv.forEach((it, i) => { const s = K.el('slot', g, K.slotHtml(it)); s.dataset.i = i; if (p.using && p.using.slot === i && it && it.id === p.using.id) s.classList.add('aim'); if (it) K.invPointer(s, i); });
       } else if (ST.tab === 'equip') {
         let h = '<h4>Worn Equipment</h4><div class="equip">';
         for (const k of A.EQ_LAYOUT) h += k ? '<div class="slot ' + (p.eq[k] ? '' : 'empty ') + (A.EQ_ACTIVE[k] ? '' : 'off') + '" data-k="' + k + '" data-l="' + k + '">' + K.slotHtml(p.eq[k]) + '</div>' : '<div></div>';
@@ -90,7 +90,8 @@
           h += '<div class="qrow"' + (q ? ' data-q="' + A.esc(id) + '" style="cursor:pointer"' : '') + '><div class="' + col + '" style="margin-bottom:4px">' + A.esc(Q[id].name) + (q ? ' <span style="opacity:.6">&#9656;</span>' : '') + '</div><div class="info" style="margin:0 0 8px">';
           const held = (iid) => { let c = 0; for (const s of p.inv || []) if (s && s.id === iid) c += s.n; return c; };
           const g = st && st.goal, need = g ? (g.n == null ? 1 : g.n) : 1;
-          const ready = !!(st && g && (!((g.kill || g.cook || g.talk) && (q.n | 0) < need)) && !(g.bring && held(g.bring) < (g.bn == null ? need : g.bn)) && !(g.with && held(g.with) < (g.wn == null ? 1 : g.wn)));
+          const killsLeft = (gg) => { let n = 0; for (const k in gg.kills || {}) n += Math.max(0, gg.kills[k] - ((q && q.kn && q.kn[k]) | 0)); return n; };
+          const ready = !!(st && g && (!((g.kill || g.cook || g.talk || g.plant) && (q.n | 0) < need)) && !(g.kills && killsLeft(g) > 0) && !(g.bring && held(g.bring) < (g.bn == null ? need : g.bn)) && !(g.with && held(g.with) < (g.wn == null ? 1 : g.wn)));
           if (!q) h += 'Speak to ' + who(Q[id].giver) + '.';
           else if (!st) { h += 'Completed!'; const FL = (core.D.rules && core.D.rules.flags) || {}; for (const k in FL) if (FL[k].quest === id && core.hasFlag(p, k)) h += '<br><span class="g">' + A.esc(A.cap(FL[k].name)) + '</span> is on you.' + (FL[k].desc ? ' ' + A.esc(FL[k].desc.replace(/^[^:]*: /, '')).replace(/^./, c => c.toUpperCase()) : ''); }
           else if (ready) h += 'Return to ' + who(st.ends || Q[id].giver) + '.';
@@ -108,6 +109,9 @@
               h += 'Step ' + q.step + ': bring ' + many(iname(g.bring), bn) + ' (' + held(g.bring) + '/' + bn + ')' + (g.with ? ' and ' + many(iname(g.with), g.wn == null ? 1 : g.wn) + ' (' + held(g.with) + '/' + (g.wn == null ? 1 : g.wn) + ')' : '') + '.';
             }
             else if (g.talk) h += 'Step ' + q.step + ': talk to ' + who(g.talk) + (need > 1 ? ' ' + need + ' times' : '') + '.';
+            /* sadfrog's Even Grove: plant saplings (on open ground, or on stumps); slay several named foes, each counted */
+            else if (g.plant) h += 'Step ' + q.step + ': plant ' + (need > 1 ? need + ' saplings' : 'a sapling') + (g.plant === 'stump' ? ' where trees were cut down' : ' on open ground') + ' (' + have + '/' + need + ').';
+            else if (g.kills) h += 'Step ' + q.step + ': slay ' + Object.keys(g.kills).map(k => { const m = core.D.monsters[k], n2 = g.kills[k]; return many(A.esc((m ? m.name : k).toLowerCase()), n2) + ' (' + Math.min(n2, (q.kn && q.kn[k]) | 0) + '/' + n2 + ')'; }).join(', ') + '.';
             else h += 'Step ' + q.step + ': ask ' + who(Q[id].giver) + ' what is left to do (' + have + '/' + need + ').';
           }
           h += '</div></div>';

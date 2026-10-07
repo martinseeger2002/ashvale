@@ -15,10 +15,16 @@
 .ash .t{text-shadow:1px 1px 0 #000}
 .ash .mm{position:absolute;right:calc(var(--tab) + 14px);top:8px;width:var(--mm);height:var(--mm);border-radius:50%;border:3px solid #1b1610;box-shadow:0 0 0 2px #6b5d48,0 3px 8px #000a;background:#111;overflow:hidden}
 .ash .mm canvas{width:100%;height:100%;display:block}
-.ash .compass{position:absolute;right:calc(var(--tab) + 14px);top:8px;width:var(--mm);height:var(--mm);pointer-events:none;z-index:2}
-.ash .compass i{position:absolute;left:50%;top:-7px;width:12px;height:12px;margin-left:-6px;border-radius:50%;background:#e33;border:2px solid #fff;box-shadow:0 0 0 1px #000a,0 0 6px #e33;pointer-events:auto;cursor:pointer}
-.ash .compass i::after{content:'';position:absolute;left:-10px;top:-10px;right:-10px;bottom:-10px}
-.ash .orbs{position:absolute;right:calc(var(--tab) + 22px + var(--mm));top:10px;display:flex;flex-direction:column;gap:6px}
+.ash .compass{position:absolute;right:calc(var(--tab) + 16px + var(--mm));top:10px;width:48px;height:48px;border-radius:50%;border:2px solid #1b1610;box-shadow:0 0 0 1px #6b5d48,0 2px 6px #000a;background:radial-gradient(circle at 50% 40%,#5c5040,#241e18 72%);z-index:3;cursor:pointer}
+.ash .compass .face{position:absolute;inset:0}
+.ash .compass b{position:absolute;font:700 11px/1 "Trebuchet MS",Verdana,sans-serif;color:#e8d7b0;text-shadow:1px 1px 0 #000}
+.ash .compass b:nth-child(1){left:50%;top:4px;margin-left:-4px;color:#ff4a3a}
+.ash .compass b:nth-child(2){right:4px;top:50%;margin-top:-5px}
+.ash .compass b:nth-child(3){left:50%;bottom:4px;margin-left:-3px}
+.ash .compass b:nth-child(4){left:4px;top:50%;margin-top:-5px}
+.ash .compass i{position:absolute;left:50%;top:15px;width:0;height:0;margin-left:-4px;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:12px solid #e23;filter:drop-shadow(0 0 1px #000)}
+.ash .compass i::after{content:'';position:absolute;left:-3px;top:9px;border-left:3px solid transparent;border-right:3px solid transparent;border-top:7px solid #f3ecdf}
+.ash .orbs{position:absolute;right:calc(var(--tab) + 22px + var(--mm) + 56px);top:10px;display:flex;flex-direction:column;gap:6px}
 .ash .orb{width:calc(var(--mm)*.36);height:calc(var(--mm)*.36);min-width:34px;min-height:34px;border-radius:50%;border:2px solid #1b1610;box-shadow:0 0 0 1px #6b5d48;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;cursor:pointer;position:relative;overflow:hidden;background:#222}
 .ash .orb i{position:absolute;left:0;right:0;bottom:0;display:block}
 .ash .orb b{position:relative;text-shadow:1px 1px 0 #000}
@@ -49,6 +55,7 @@
 .ash .slot .n{position:absolute;left:2px;top:0;font-size:10px;color:#ff0;text-shadow:1px 1px 0 #000;pointer-events:none}
 .ash .slot .n.k{color:#fff}.ash .slot .n.m{color:#0f8}
 .ash .slot.sel{box-shadow:inset 0 0 0 2px #fff}
+.ash .slot.aim{box-shadow:inset 0 0 0 2px #f07818}
 .ash .slot.ghost{opacity:.45}
 .ash .slot .fb{position:absolute;inset:4px;border-radius:3px;font-size:9px;color:#fff;display:flex;align-items:center;justify-content:center;text-align:center}
 .ash .equip{display:grid;grid-template-columns:repeat(3,var(--slot));grid-auto-rows:var(--slot);gap:6px;justify-content:center;margin:2px 0 8px}

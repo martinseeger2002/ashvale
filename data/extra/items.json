@@ -96,6 +96,194 @@
     "key": "monk_robe"
    }
   },
+  "robe_linen": {
+   "name": "Linen robe",
+   "description": "Linen robe, cosmetic robe. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "cosmetic",
+   "subcategory": "robe",
+   "weight": 1200,
+   "model": "cloth.robe",
+   "value": 35,
+   "attributes": []
+  },
+  "robe_red": {
+   "name": "Red robe",
+   "description": "Red robe, cosmetic robe. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "cosmetic",
+   "subcategory": "robe",
+   "weight": 1200,
+   "model": "cloth.robe",
+   "value": 40,
+   "attributes": []
+  },
+  "robe_blue": {
+   "name": "Blue robe",
+   "description": "Blue robe, cosmetic robe. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "cosmetic",
+   "subcategory": "robe",
+   "weight": 1200,
+   "model": "cloth.robe",
+   "value": 40,
+   "attributes": []
+  },
+  "robe_green": {
+   "name": "Green robe",
+   "description": "Green robe, cosmetic robe. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "cosmetic",
+   "subcategory": "robe",
+   "weight": 1200,
+   "model": "cloth.robe",
+   "value": 40,
+   "attributes": []
+  },
+  "robe_purple": {
+   "name": "Purple robe",
+   "description": "Purple robe, cosmetic robe. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "cosmetic",
+   "subcategory": "robe",
+   "weight": 1200,
+   "model": "cloth.robe",
+   "value": 40,
+   "attributes": []
+  },
+  "robe_black": {
+   "name": "Black robe",
+   "description": "Black robe, cosmetic robe. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "cosmetic",
+   "subcategory": "robe",
+   "weight": 1200,
+   "model": "cloth.robe",
+   "value": 40,
+   "attributes": []
+  },
+  "robe_gold": {
+   "name": "Gold robe",
+   "description": "Gold robe, cosmetic robe. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "cosmetic",
+   "subcategory": "robe",
+   "weight": 1200,
+   "model": "cloth.robe",
+   "value": 200,
+   "attributes": []
+  },
+  "vorthan_robe": {
+   "name": "Vorthan robe",
+   "description": "An orange hooded robe of the Red Pyre. Magic +2, Prayer +4. Adds two seconds to each prayer point on top of any other Prayer bonus. Found in the Spider Cave on Edric's bones.",
+   "collection": "ASHVALE The Red Pyre",
+   "game": "ashvale",
+   "category": "armour",
+   "subcategory": "robe",
+   "tier": 1,
+   "weight": 1500,
+   "req": {
+    "prayer": 1
+   },
+   "model": "gear.robe",
+   "value": 140,
+   "attributes": [
+    {
+     "trait_type": "Magic",
+     "value": 2
+    },
+    {
+     "trait_type": "Prayer",
+     "value": 4
+    },
+    {
+     "trait_type": "Prayer seconds",
+     "value": 2
+    }
+   ],
+   "nft": {
+    "copies": 25,
+    "key": "vorthan_robe"
+   }
+  },
+  "vorth_rosary": {
+   "name": "Vorth's rosary",
+   "description": "A string of burnt-orange beads. Used, it carries you to the mouth of the Spider Cave in the woods west of Whisperwood.",
+   "collection": "ASHVALE The Red Pyre",
+   "game": "ashvale",
+   "category": "jewellery",
+   "subcategory": "charm",
+   "weight": 80,
+   "model": "item.ring",
+   "value": 80,
+   "attributes": [
+    {
+     "trait_type": "Teleport",
+     "value": "spidercave"
+    },
+    {
+     "trait_type": "Cooldown ticks",
+     "value": 0
+    }
+   ],
+   "nft": {
+    "copies": 25,
+    "key": "vorth_rosary"
+   }
+  },
+  "edric_note": {
+   "name": "Edric's note",
+   "description": "A damp scrap in a Vorthan's hand. It names the Red Pyre, the rosary, and the cave. Mother Wenna of Saltmere is meant to read it.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "note",
+   "weight": 20,
+   "model": "item.bones",
+   "value": 1,
+   "attributes": []
+  },
+  "sapling": {
+   "name": "Sapling",
+   "description": "A young shoot. Plant it in open ground, or in a stump, and it will stand up as a tree.",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "sapling",
+   "weight": 200,
+   "model": "item.sapling",
+   "value": 1,
+   "stackable": true,
+   "attributes": []
+  },
+  "verdant_wreath": {
+   "name": "Verdant wreath",
+   "description": "A circlet of living leaves. For every Prayer point you still hold, the next one stays a second longer.",
+   "collection": "ASHVALE The Even Guard",
+   "game": "ashvale",
+   "category": "cosmetic",
+   "subcategory": "hat",
+   "tier": 1,
+   "weight": 200,
+   "model": "cloth.hat_verdant",
+   "value": 240,
+   "attributes": [
+    {
+     "trait_type": "Prayer hold",
+     "value": 1
+    }
+   ],
+   "nft": {
+    "copies": 1,
+    "key": "verdant_wreath"
+   }
+  },
   "wild_rice": {
    "name": "Wild rice",
    "description": "Manoomin, wild rice, resource grain. Knocked from the stalks into a canoe on the lake below Ziibiing. From the valley of Ashvale.",

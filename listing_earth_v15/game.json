@@ -1,0 +1,12 @@
+{
+ "game": {
+  "name": "ASHVALE Atlas",
+  "description": "New in Atlas 1.5: the sun now circles the planet every two hours, as day and night do in the game. In 1.4: the moon. It follows the real one - you can see it in space, lit by the sun so it shows its phase - and the night side of the planet is as bright as the moon is full. In 1.3 the sun. It circles the planet once a day, lighting one side while the other lies in night, and you can see it out in space. And your contacts. Players who have you in their address book, and you them, show as orange dots with their name while they play (the arcade asks you first; contact links are kept in memory only, never stored). In 1.2 a compass rose that turns with you (tap it to face north), the equator drawn round the planet and both poles marked, saguaro cactus in the deserts, and woods with a way through everywhere. In 1.1 you are here. Signed in, the Atlas shows a blue dot where your ASHVALE character last stood, and the You button flies you down to it. The whole ASHVALE planet in one view: start from orbit and zoom all the way down to the ground, seamlessly. Two continents in a wide ocean, island chains, rivers from mountain creeks to the sea, deserts, rainforest, taiga and snowy ranges, Ashvale village and the harbour town of Saltmere. Drag to pan, scroll or pinch to zoom, right-drag to turn.",
+  "version": "1.5",
+  "players": "Solo",
+  "multiplayer": false,
+  "family": "ashvale",
+  "genre": "explorer",
+  "play": "a4597d82acb371406e493f222061aecab2858d392355f74ea24e38ee8045e25d"
+ }
+}
