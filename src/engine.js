@@ -211,7 +211,7 @@
       let fogMod = null;
       try { const FM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('fog'); if (FM && FM.createFogShape) fogMod = FM.createFogShape(THREE); } catch (er) { console.warn('fog module', er && er.message); }
       const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 90);
-      scene.add(new THREE.HemisphereLight(0xe2efff, 0x4f5a34, 1.7));
+      const hemi = new THREE.HemisphereLight(0xe2efff, 0x4f5a34, 1.7); scene.add(hemi);
       const sun = new THREE.DirectionalLight(0xfff0d6, 2.3);
       sun.castShadow = settings.shadows; sun.shadow.mapSize.set(isPhone ? 1024 : 2048, isPhone ? 1024 : 2048);
       const sc = sun.shadow.camera; sc.left = -15; sc.right = 15; sc.top = 15; sc.bottom = -15; sc.near = 1; sc.far = 60; sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.03;
@@ -260,17 +260,24 @@
       function zoneAtIndex(x, y) { return ZINDEX ? ZINDEX.find(z => x >= z.origin[0] && y >= z.origin[1] && x < z.origin[0] + z.size[0] && y < z.origin[1] + z.size[1]) || null : null; }
       /* the portal swirl (2026-10-06): when you arrive (portal, runestone, waking after a death) in a town whose zone
          has not come yet, the screen stays on the swirl until it has, and at least TRAVEL_MS so it never just flickers */
-      const TRAVEL_MS = 900; let travelling = null;
+      const TRAVEL_MS = 900, CAVE_MS = 1400; let travelling = null, TRAVEL_KIND = null;
+      /* through a cave passage the screen is the cave's own (down into the dark, up into the daylight), every time - even when
+         the area there is already loaded - for at least CAVE_MS */
+      function caveTravel(kind, name) {
+        TRAVEL_KIND = kind; hud.travel && hud.travel(true, name, 0.2, kind);
+        const t0 = performance.now(), tick = () => { if (travelling) return; const f = (performance.now() - t0) / CAVE_MS; if (f >= 1) { TRAVEL_KIND = null; hud.travel && hud.travel(false); return; } hud.travel && hud.travel(true, name, 0.2 + 0.8 * f, kind); requestAnimationFrame(tick); };
+        requestAnimationFrame(tick);
+      }
       function arriveCheck() {
         if (!ZINDEX) return;
         const zi = zoneAtIndex(me.x, me.y); lazyTick(true);
         if (!zi || core.hasZone(zi.id) || travelling) return;
         const t0 = performance.now(), want = zi.id; travelling = want;
-        hud.travel && hud.travel(true, zi.name || zi.id);
+        hud.travel && hud.travel(true, zi.name || zi.id, 0, TRAVEL_KIND);
         let k = 0;
         const step = () => {
-          if (core.hasZone(want)) { const left = Math.max(0, TRAVEL_MS - (performance.now() - t0)); setTimeout(() => { travelling = null; streamRegions(true); cam.snap = true; hud.travel && hud.travel(false); }, left); return; }
-          hud.travel && hud.travel(true, zi.name || zi.id, Math.min(0.9, (performance.now() - t0) / 4000));
+          if (core.hasZone(want)) { const left = Math.max(0, (TRAVEL_KIND ? CAVE_MS : TRAVEL_MS) - (performance.now() - t0)); setTimeout(() => { travelling = null; TRAVEL_KIND = null; streamRegions(true); cam.snap = true; hud.travel && hud.travel(false); }, left); return; }
+          hud.travel && hud.travel(true, zi.name || zi.id, Math.min(0.9, (performance.now() - t0) / 4000), TRAVEL_KIND);
           fetchZone(want).then(z => { if (!core.hasZone(want)) coreCall(() => core.addZone(Object.assign({}, z))); step(); })
             .catch(e => { console.warn('ASHVALE: ' + e.message + ', trying again'); setTimeout(step, Math.min(8000, 800 * ++k)); });
         };
@@ -281,6 +288,7 @@
       function zoneArrived(e, now) {
         const z = (core.D.zones || []).find(q => q.id === e.zone); if (!z) return;
         const rect = [z.origin[0], z.origin[1], z.size[0], z.size[1]];
+        if (core.M._hgt && core.M._hgt.forget) core.M._hgt.forget(rect[0], rect[1], rect[2], rect[3]);   /* its ground was worked out without it */
         for (const [k, r] of Array.from(chunkRegs)) {
           if (r.rect[0] < rect[0] + rect[2] + 2 && r.rect[0] + r.rect[2] > rect[0] - 2 && r.rect[1] < rect[1] + rect[3] + 2 && r.rect[1] + r.rect[3] > rect[1] - 2) {
             scene.remove(r.built.group); r.built.dispose(); chunkRegs.delete(k); regions.splice(regions.indexOf(r), 1);
@@ -448,10 +456,10 @@
       }
       function showHit(h) {
         const t = entOf(h.dst); if (!t) return;
-        const el = hud.splat(h.dmg); t.splats.push({ el, t: performance.now(), k: t.splats.length });
+        const el = hud.splat(h.dmg, h.cls); t.splats.push({ el, t: performance.now(), k: t.splats.length });
         t.hpT = performance.now(); t.hp = h.hp; t.max = h.max;
-        if (!t.oneShot && !t.dead && h.hp > 0) { if (h.blocked) playOnce(t, 'block'); else if (h.dmg > 0) playOnce(t, 'hit'); }
-        sfx(h.dmg > 0 ? 'hit' : 'miss', t);
+        if (!t.oneShot && !t.dead && h.hp > 0 && h.cls !== 'poison') { if (h.blocked) playOnce(t, 'block'); else if (h.dmg > 0) playOnce(t, 'hit'); }
+        if (h.cls !== 'poison') sfx(h.dmg > 0 ? 'hit' : 'miss', t);
         if (h.dst === PID || h.src === PID) lastOpp = { uid: h.dst === PID ? h.src : h.dst, t: performance.now() };
         if (h.dst === PID) hud.refresh('orbs');
       }
@@ -499,7 +507,7 @@
         if (hud.tab === 'skills' || hud.tab === 'quest') hud.refresh(hud.tab);
         roofCheck(); showWeather();
         if (core.S.t % 25 === 0) persist();
-        if (SEEDED || core.S.t % 5 === 0) streamRegions();
+        if ((SEEDED || core.S.t % 5 === 0) && !CAVE.hold) streamRegions();
         lazyTick();
         netWatch();
         if (core.S.t % 4 === 0) npcsTurnBack();
@@ -564,10 +572,18 @@
             if ((e.unknown || []).length) hud.chat('Not yet attuned: ' + e.unknown.join(', ') + '.', 'sys');
           } break;
           case 'angels': { const t = ents.get('p:' + e.p); if (t) { angelFlare(t.root.position); if (t.H && t.H.play) t.H.play('cast', { loop: false }); } if (mine) sfx('level'); break; }
-          case 'teleport': if (mine) { place(myEnt, e.x, e.y); cam.snap = true; streamRegions(); sfx('equip'); arriveCheck(); } break;
+          case 'teleport': if (mine) {
+            if (e.to === 'cavemouth' || e.to === 'caveexit') {   /* the cave's own screen goes up FIRST and gets painted; the heavy part (building the cave or the land) follows behind it */
+              const uz = core.M.underAt && core.M.underAt(e.x, e.y), zi2 = uz && ZINDEX && ZINDEX.find(z => z.id === uz);
+              caveTravel(e.to === 'cavemouth' ? 'down' : 'up', zi2 ? zi2.name : (core.M.underAt && ZINDEX && (ZINDEX.find(z => z.under) || {}).name) || 'cave');
+              CAVE.hold = true; requestAnimationFrame(() => setTimeout(() => { CAVE.hold = false; place(myEnt, e.x, e.y); cam.snap = true; streamRegions(); sfx('equip'); arriveCheck(); }, 30));
+            } else { place(myEnt, e.x, e.y); cam.snap = true; streamRegions(); sfx('equip'); arriveCheck(); }
+          } break;
           case 'zoneadd': zoneArrived(e, now); break;
           case 'chest': if (mine) { const c = ents.get('n:' + e.npc); if (c) c.H.play('open'); hud.openChest(); } break;   /* the town chest */
           case 'shopclose': if (mine) hud.closeShop(); break;
+          case 'mobjump': { const t = ents.get('m:' + e.mob); if (t) { place(t, e.x, e.y); if (t.path) t.path = null; } break; }   /* came through a cave opening */
+          case 'poison': if (mine) { hud.setPoison && hud.setPoison(e.on); if (e.on) sfx('miss'); } break;   /* the green Hitpoints orb (2026-10-07) */
           case 'mobeat': { const t = ents.get('m:' + e.mob); if (t && !t.dead) { playOnce(t, 'eat'); sfx('eat', t); } break; }
           case 'tailor': if (mine) { faceNpc(e.npc); openWardrobe(false); } break;
           case 'look': if (mine) { if (me.look && myEnt.H.setOutfit) myEnt.H.setOutfit(me.look); netGear(); } break;
@@ -586,16 +602,92 @@
           case 'bury': if (mine) { dirty.inv = 1; sfx('bury'); playOnce(myEnt, 'pickup', 1.6); } break;
         }
       }
+      /* ---------- UNDERGROUND (2026-10-07: the Spider Cave, "dim with torches"): while you stand in an area flagged
+         `under` the sky goes black, the fog closes in to ~13 tiles, the daylight dims to a cave's, a warm light goes with
+         you and the three torches nearest you really light the rock (a small pool of point lights, moved every second). */
+      const CAVE = { on: false, t: 0, me: null, pool: [], keep: null };
+      function caveTick(now) {
+        const inCave = !!(core.M && core.M.underAt && core.M.underAt(me.x, me.y) != null);
+        if (inCave !== CAVE.on) {
+          CAVE.on = inCave;
+          if (inCave) {
+            CAVE.keep = { bg: scene.background.getHex(), fc: scene.fog.color.getHex(), fn: scene.fog.near, ff: scene.fog.far, hemi: hemi.intensity, sun: sun.intensity };
+            if (wxMod && wxMod.set) try { wxMod.set('clear', 0, { instant: true }); } catch (e) { /* weather module */ }
+            scene.background.setHex(0x030303); scene.fog.color.setHex(0x030303); scene.fog.near = 5; scene.fog.far = 16; hemi.intensity = 0.14; sun.intensity = 0.04;
+            /* no light of your own (2026-10-07: "The player should not give off any light. The only light should be coming from the torches") */
+            if (!CAVE.pool.length) for (let k = 0; k < 4; k++) { const L = new THREE.PointLight(0xff9a3c, 0, 10, 1.2); scene.add(L); CAVE.pool.push(L); }
+            for (const L of CAVE.pool) L.visible = true;
+          } else {
+            const K = CAVE.keep || {}; scene.background.setHex(K.bg != null ? K.bg : SKY); scene.fog.color.setHex(K.fc != null ? K.fc : SKY); scene.fog.near = K.fn || 24; scene.fog.far = K.ff || 52;
+            hemi.intensity = K.hemi || 1.7; sun.intensity = K.sun || 2.3; for (const L of CAVE.pool) L.visible = false;
+            wxShown = ''; showWeather(true);
+          }
+        }
+        if (!inCave || !CAVE.pool.length) return;
+        if (now - CAVE.t > 1000) {   /* the torches nearest you get the lights */
+          CAVE.t = now;
+          const near = (core.M.objects || []).filter(o => o.k === 'torch' && Math.abs(o.x - me.x) < 16 && Math.abs(o.y - me.y) < 16).sort((a, b) => Math.hypot(a.x - me.x, a.y - me.y) - Math.hypot(b.x - me.x, b.y - me.y));
+          CAVE.pool.forEach((L, k) => { const o = near[k]; if (!o) { L.intensity = 0; return; } L.position.set(o.x + 0.5, heightAt(o.x + 0.5, o.y + 0.5) + 1.6, o.y + 0.5); L.intensity = 3.2; });
+        }
+        for (const L of CAVE.pool) if (L.intensity > 0) L.intensity = 3.0 + Math.sin(now * 0.013 + L.position.x) * 0.3 + Math.sin(now * 0.031 + L.position.z) * 0.18;   /* flicker */
+      }
+      /* ---------- DAY AND NIGHT (2026-10-07: "Add an orbiting sun that orbits the globe once every 24 hours make it dark
+         ashvale as of one hour ago is sunset"; "Have the sun create the shadows on the ground"). The sun circles the planet's
+         equator once a day of real time; at SUN_EPOCH it set over Ashvale (90 degrees west of it) and it moves west 360 degrees a
+         day - the Atlas uses the same rule (src/earth.js). Where you stand: its height above your horizon sets the daylight,
+         the sky and the light's colour, and the light (with the shadows) comes from its direction; under the horizon a faint
+         bluish moon, opposite it, casts the shadows. */
+      const SUN_EPOCH = 1791353761, DAY_S = 86400;
+      const SUNL = { dir: [-0.45, 0.8, 0.3], key: '', b: null, lonA: null, base: new THREE.Color(SKY), col: new THREE.Color() };
+      const NIGHT_SKY = new THREE.Color(0x0b1426), DUSK_SKY = new THREE.Color(0xd8865a), SUNC = new THREE.Color(0xfff0d6), DUSKC = new THREE.Color(0xffa060), MOONC = new THREE.Color(0x9fb4ff);
+      function sphereAt(x, y) { const WG = D.wg, C = DATA.globecfg; if (!WG || !WG.toSphere || !C || !C.origin) return null; const fx = x + C.origin[0] + 0.5, fy = -(y + C.origin[1]) - 0.5; return [WG.toSphere(C.face, fx, fy), WG.toSphere(C.face, fx + 1, fy), WG.toSphere(C.face, fx, fy - 1)]; }
+      function sunAt(tms) {   /* the sun's direction from the planet's centre */
+        if (SUNL.lonA == null) { const a = sphereAt(22, 52); SUNL.lonA = a ? Math.atan2(a[0][1], a[0][0]) : 0; }   /* Ashvale's longitude (by the well) */
+        const L = SUNL.lonA - Math.PI / 2 - 2 * Math.PI * ((tms / 1000 - SUN_EPOCH) / DAY_S);
+        return [Math.cos(L), Math.sin(L), 0];
+      }
+      const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], nrm3 = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+      function dayTick() {
+        const key = (me.x >> 3) + ':' + (me.y >> 3);
+        if (key !== SUNL.key) { const a = sphereAt(me.x, me.y); SUNL.key = key; SUNL.b = a ? { u: nrm3(a[0]), e: nrm3(sub3(a[1], a[0])), s: nrm3(sub3(a[2], a[0])) } : null; }   /* up, game east (+x), game south (+y) */
+        const B = SUNL.b; if (!B) return;
+        const s = sunAt(Date.now()), up = dot3(s, B.u), ex = dot3(s, B.e), so = dot3(s, B.s);
+        const day = Math.min(1, Math.max(0, (up + 0.08) / 0.2)), dusk = Math.max(0, 1 - Math.abs(up) / 0.18);   /* 1 by day, 0 by night; dusk near the horizon */
+        const lit = up > -0.02, d = lit ? [ex, Math.max(up, 0.06), so] : [-ex, Math.max(-up, 0.25), -so];        /* the moon: opposite the sun */
+        const l = Math.hypot(d[0], d[1], d[2]); SUNL.dir = [d[0] / l, d[1] / l, d[2] / l];
+        sun.intensity = lit ? 0.5 + 1.8 * day : 0.22; sun.color.copy(lit ? SUNC : MOONC); if (lit && dusk > 0) sun.color.lerp(DUSKC, dusk * 0.8);
+        hemi.intensity = 0.13 + 1.57 * day;   /* dark at night (the operator: "make it dark"): torches and fires carry it */
+        /* the sky: the weather's colour (the weather module repaints it every frame), toward dusk orange and the night's blue */
+        const base = wxMod ? scene.background : SUNL.base;
+        SUNL.col.copy(base).lerp(DUSK_SKY, dusk * 0.45 * day + dusk * 0.25).lerp(NIGHT_SKY, 1 - day);
+        scene.background.copy(SUNL.col); scene.fog.color.copy(SUNL.col);
+      }
+      /* ---------- HAND TORCHES (2026-10-07: "a torch ... hold it at night and illuminate his surroundings"): whoever holds
+         one (the off hand) carries a warm flickering light of its Light radius - you, and up to three players near you */
+      const TORCH = { me: null, pool: [] };
+      /* any item worn or held with a Light value lights round you - a torch, a glowing helmet, the Spider Queen's Crown (the operator
+         2026-10-07: "Or other illuminating items ... the spider queen's crown should be illuminating"); the brightest counts */
+      const LIGHTC = { torch: 0xffa040 }, lightOf = ids => { let best = 0, col = 0xffa040; for (const id of ids) { const d = id && core.item(id); if (d && d.light > best) { best = d.light; col = d.id === 'hat_spidercrown' ? 0xc89aff : LIGHTC[d.id] || 0xffc070; } } return [best, col]; };
+      function torchTick(now) {
+        if (!TORCH.me) { TORCH.me = new THREE.PointLight(0xffa040, 0, 8, 1.3); scene.add(TORCH.me); for (let k = 0; k < 3; k++) { const L = new THREE.PointLight(0xffa040, 0, 8, 1.3); scene.add(L); TORCH.pool.push(L); } }
+        const flick = 1 + Math.sin(now * 0.017) * 0.08 + Math.sin(now * 0.041) * 0.05;
+        const [r0, c0] = lightOf(Object.values(me.eq || {}).map(s => s && s.id)), P0 = myEnt.root.position;
+        TORCH.me.intensity = r0 ? 2.8 * flick : 0; if (r0) { TORCH.me.distance = r0 + 1; TORCH.me.color.setHex(c0); TORCH.me.position.set(P0.x - 0.3, P0.y + 1.7, P0.z); }
+        const near = []; for (const r of remotes.values()) { const g = r.e && r.e.H && r.e.H.gear; if (!g) continue; const [rr, cc] = lightOf(Object.values(g)); if (rr) near.push([r, rr, Math.hypot(r.e.root.position.x - P0.x, r.e.root.position.z - P0.z), cc]); }
+        near.sort((a, b) => a[2] - b[2]);
+        TORCH.pool.forEach((L, k) => { const n = near[k]; if (!n || n[2] > 30) { L.intensity = 0; return; } const q = n[0].e.root.position; L.position.set(q.x - 0.3, q.y + 1.7, q.z); L.distance = n[1] + 1; L.color.setHex(n[3]); L.intensity = 2.8 * flick; });
+      }
       /* ---------- weather visuals: the weather module (src/weather.js, its own inscription) when it is loaded, else scene fog */
       let wxShown = '', wxMod = null;
       try { const W = G.ASH3D && G.ASH3D.get && G.ASH3D.get('weather'); if (W && W.createWeather) wxMod = W.createWeather(THREE, { scene, camera, quality: isPhone ? 'low' : 'high' }); } catch (er) { console.warn('weather module', er && er.message); }
       const WXLOOK = { clear: [SKY, 24, 52], fog: [0xb8bec4, 3, 16], rain: [0x7d8fa0, 14, 38], snow: [0xdfe6ec, 10, 30] };
       function showWeather(instant) {
+        if (CAVE.on) return;   /* underground there is no weather (caveTick puts it back on the way out) */
         const w = core.weatherOf(zoneHere()) || { kind: 'clear', intensity: 0 }, key = w.kind + ':' + w.intensity; if (key === wxShown) return; wxShown = key;
         if (wxMod) { wxMod.set(w.kind, w.intensity / 100, { instant: !!instant }); return; }
         const L = WXLOOK[w.kind] || WXLOOK.clear, C = WXLOOK.clear, k = w.kind === 'clear' ? 0 : w.intensity / 100;
         const col = new THREE.Color(C[0]).lerp(new THREE.Color(L[0]), k);
-        scene.fog.color.copy(col); scene.background.copy(col); scene.fog.near = C[1] + (L[1] - C[1]) * k; scene.fog.far = C[2] + (L[2] - C[2]) * k;
+        SUNL.base.copy(col); scene.fog.color.copy(col); scene.background.copy(col); scene.fog.near = C[1] + (L[1] - C[1]) * k; scene.fog.far = C[2] + (L[2] - C[2]) * k;
       }
       /* ---------- campfires (host-owned, shared) and status effects on monsters */
       const fires = new Map();
@@ -738,7 +830,7 @@
         camera.position.set(camT.x + Math.sin(cam.yaw) * Math.cos(cam.pitch) * cam.dist, camT.y + Math.sin(cam.pitch) * cam.dist, camT.z + Math.cos(cam.yaw) * Math.cos(cam.pitch) * cam.dist);
         const gy = heightAt(camera.position.x, camera.position.z) + 0.6; if (camera.position.y < gy) camera.position.y = gy;
         camera.lookAt(camT);
-        sun.position.set(camT.x - 9, camT.y + 16, camT.z + 6); sun.target.position.copy(camT);
+        sun.position.set(camT.x + SUNL.dir[0] * 20, camT.y + SUNL.dir[1] * 20, camT.z + SUNL.dir[2] * 20); sun.target.position.copy(camT);   /* from the real sun (or the moon) */
       }
 
       /* ---------- picking: what is under a screen point */
@@ -769,7 +861,7 @@
           if (pt) { const g = { kind: 'ground', x: Math.floor(pt.x), y: Math.floor(pt.z) }; if (gi >= 0) out[gi] = g; else out.push(g); }
         }
         /* characters and loot win over trees in front of them (a canopy should not eat the click) */
-        const pri = t => t.kind === 'mob' || t.kind === 'npc' || t.kind === 'item' ? 0 : t.kind === 'node' || t.kind === 'remote' ? 1 : 2;
+        const pri = t => t.kind === 'mob' || t.kind === 'npc' || t.kind === 'item' ? 0 : t.kind === 'node' || t.kind === 'remote' || t.kind === 'passage' || t.kind === 'caveout' ? 1 : 2;
         out.sort((a, b) => pri(a) - pri(b));
         /* phones: a tap close to a monster counts as tapping it */
         if (isTouch && !out.some(t => t.kind === 'mob' || t.kind === 'npc' || t.kind === 'item')) {
@@ -792,6 +884,12 @@
           const hp = t.hp || [n.x + 0.5, n.y + 0.5], dx = hp[0] - (n.x + 0.5), dy = hp[1] - (n.y + 0.5), sx = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0, sy = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
           return [{ html: 'Perch in <span class="c">tree</span>', act: { c: 'perch', x: n.x, y: n.y, sx: sx || 1, sy } }]; } }
         if (t.kind === 'node') { const n = core.nodeAt(t.i); if (!n) return []; const nd = core.nodeDef(n), verb = n.kind === 'altar' ? 'Pray-at' : n.kind === 'range' || n.kind === 'fire' ? 'Cook-at' : nd.skill === 'woodcutting' ? 'Chop down' : nd.skill === 'mining' ? 'Mine' : 'Net', nm = '<span class="c">' + nd.name + '</span>'; return [{ html: verb + ' ' + nm, act: { c: 'gather', x: n.x, y: n.y }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(nd.name + (nd.req ? ': needs ' + nd.skill + ' level ' + nd.req + '.' : '.'), 'sys') }]; }
+        if (t.kind === 'caveout') {   /* the cave's way out, up top: it only goes up (2026-10-07: "it should inform them in the chat that there is no way down") */
+          const nm = '<span class="c">Cave opening</span>', say = () => hud.chat("The shaft drops away steep and narrow into the dark. There's no way down from here.", 'sys');
+          return [{ html: 'Enter ' + nm, fn: say, act: null }, { html: 'Examine ' + nm, fn: () => hud.chat('A narrow opening in the rock. A cold draught breathes up out of it.', 'sys') }]; }
+        if (t.kind === 'passage') { const o = core.passageAt(t.x, t.y); if (!o) return []; const nm = '<span class="c">' + esc(o.name || (o.k === 'cavemouth' ? 'Cave' : 'Way out')) + '</span>';
+          return [{ html: esc(o.label || 'Go through'), act: { c: 'enter', x: o.x, y: o.y }, red: 1 },
+                  { html: 'Examine ' + nm, fn: () => hud.chat(o.k === 'cavemouth' ? 'A dark opening in the rock. Webs hang just inside, and the air smells of damp and old fur.' : 'A ladder up to a shaft of daylight.', 'sys') }]; }
         if (t.kind === 'remote') {
           const r = remotes.get(t.id); if (!r) return [];
           /* the combat level next to the name, coloured like a monster's (2026-10-06) */
@@ -994,6 +1092,9 @@
         const say = claim => { if (ONE.room === R && !stopped) { ONE.said = Date.now(); R.send({ t: 'dev', s: ONE.sid, at: ONE.at, claim: !!claim }); } };
         R.on('message', ev => {
           const m = ev.data || {};
+          if (!stopped && m.t === 'dm' && ev.from && ev.from.address && ev.from.address !== who.address && !ev.from.guest && typeof m.text === 'string') {   /* a direct message to us */
+            hud.chat('From ' + (ev.from.tag ? '@' + ev.from.tag : ev.from.address.slice(0, 8) + '...') + ': ' + m.text.slice(0, 120), 'dm'); sfx('click'); return;
+          }
           if (stopped || m.t !== 'dev' || m.s === ONE.sid || !ev.from || ev.from.address !== who.address) return;
           if (m.claim || m.at > ONE.at || (m.at === ONE.at && String(m.s) > ONE.sid)) evicted();
           else if (Date.now() - ONE.said > 3000) say(false);   /* the other is older: make sure it hears us */
@@ -1478,8 +1579,29 @@
         const now = performance.now(); while (sayTimes.length && now - sayTimes[0] > 10000) sayTimes.shift();
         if (sayTimes.length >= 5 || (sayTimes.length && now - sayTimes[sayTimes.length - 1] < 1200)) { hud.chat("You're talking too fast.", 'warn'); return; }
         sayTimes.push(now);
+        const dmTo = /^\/@([A-Za-z0-9_]{1,32})\s+(\S.*)$/.exec(text);   /* "/@tag message": a direct message, no distance limit */
+        if (dmTo) { sendDm(dmTo[1], dmTo[2]); return; }
+        if (text.startsWith('/@')) { hud.chat('To send a direct message: /@name your message', 'sys'); return; }
         hud.chat(me.name + ': ' + text, 'player'); speak(myEnt, text);
         if (!room) hud.chat('(Nobody else can hear you: you are playing solo.)', 'sys'); else netSend({ t: text });
+      }
+      /* DIRECT MESSAGES (2026-10-07: "If you /@<tag> a direct message should be sent to them in game chat no distance
+         limit"): into the recipient's own room 'one.<address>' - every signed-in game sits in it (the one-device rule) - so
+         it reaches them wherever they are. The arcade stamps the sender, so nobody can write as someone else. */
+      const DM = { addr: new Map(), rooms: new Map() };
+      async function sendDm(tag, text) {
+        tag = tag.toLowerCase();
+        if (!walletState.address && !(room && room.me && !room.me.guest)) { hud.chat('Sign in to the arcade to send direct messages.', 'warn'); return; }
+        let addr = DM.addr.get(tag);
+        if (!addr) { try { const j = await (await fetch('/r/tag/' + encodeURIComponent(tag))).json(); addr = j && j.address; } catch (e) { addr = null; } if (addr) DM.addr.set(tag, addr); }
+        if (!addr) { hud.chat('There is no @' + tag + ' on the arcade.', 'warn'); return; }
+        let R = DM.rooms.get(addr);
+        if (!R || !R.room) { const res = await net.join('one.' + addr, { game: 'ashvale', loopback: q.has('loopback') }); if (!res || !res.online) { hud.chat('Direct messages need the arcade connection, and it is not answering.', 'warn'); return; } R = { room: res.room, t: 0 }; DM.rooms.set(addr, R); await new Promise(ok => setTimeout(ok, 600)); }
+        R.t = Date.now(); setTimeout(() => { const r = DM.rooms.get(addr); if (r && Date.now() - r.t >= 290000) { DM.rooms.delete(addr); try { r.room.leave(); } catch (e) { /* gone */ } } }, 300000);
+        const here = (R.room.members ? R.room.members() : []).some(m => m.address === addr);
+        if (!here) { hud.chat('@' + tag + " isn't playing right now.", 'sys'); return; }
+        R.room.send({ t: 'dm', v: 1, text: String(text).slice(0, 120) });
+        hud.chat('To @' + tag + ': ' + String(text).slice(0, 120), 'dm');
       }
       function speak(e, text) { if (e.bub) e.bub.el.remove(); e.bub = { el: hud.bubble(text), t: performance.now() }; }
       const cleanName = n => String(n || '').replace(/[^\w -]/g, '').trim().slice(0, 12) || 'Adventurer';
@@ -1769,6 +1891,7 @@
       function frame(rafNow) {
         if (stopped) return;
         requestAnimationFrame(frame);
+        caveTick(performance.now()); torchTick(performance.now());
         /* One clock. The tick loop keeps lastTick on performance.now() and stamps each stride with the tick's own
            time (see doTick), but the rAF argument is the frame's START time, which trails performance.now() by
            however long the callback waits - on a
@@ -1797,7 +1920,8 @@
           if (e.root.visible) { e.H.update(dt); if (e.hawk) e.hawk.update(dt); }
         }
         for (const g of fires.values()) { const u = g.userData, sc = 0.8 + 0.25 * Math.sin(now / 70 + u.ph) + 0.1 * Math.sin(now / 23 + u.ph); u.f1.scale.set(1, sc, 1); u.f2.scale.set(1, 1.1 * sc, 1); }
-        if (wxMod && wxMod.update) wxMod.update(elapsed);
+        if (wxMod && wxMod.update && !CAVE.on) wxMod.update(elapsed);
+        if (!CAVE.on) dayTick();   /* day and night on top of the weather's sky */   /* underground the cave sets the fog and the sky */
         updateRemotes(now, dt);
         for (let i = projs.length - 1; i >= 0; i--) {
           const p = projs[i]; p.t += dt; const k = Math.min(1, p.t / p.dur);
@@ -1902,8 +2026,26 @@
         const now = Date.now(), moved = HERE.x == null || Math.abs(me.x - HERE.x) + Math.abs(me.y - HERE.y) >= 6;
         if (!force && !moved && now - HERE.t < 120000) return;
         HERE.x = me.x; HERE.y = me.y; HERE.t = now;
-        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'here', v: 1, x: me.x, y: me.y }); });
+        let at = [me.x, me.y];   /* underground (the Spider Cave): the Atlas shows you at the cave mouth up top */
+        const uz = core.M.underAt && core.M.underAt(me.x, me.y), ue = uz && ZINDEX && ZINDEX.find(z => z.id === uz);
+        if (ue && ue.surfaceOffset) at = [me.x + ue.surfaceOffset[0], me.y + ue.surfaceOffset[1]];   /* the land right above you (the cave lies under it tile for tile) */
+        else if (ue && ue.surface) at = ue.surface;
+        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'here', v: 1, x: at[0], y: at[1] }); });
       }
+      /* CONTACTS ON THE ATLAS (2026-10-07; mutual contacts only): tell the @ashvale Bank who is in this player's
+         arcade address book (arcade.contacts - the arcade asks the player first, and remembers the answer), a few at a
+         time. The Bank keeps these links in memory only and lets them lapse unless we say them again while we play. */
+      async function reportBook() {
+        if (!(G.parent && G.parent !== G) || !/^https?:/.test(location.protocol) || stopped) return;
+        if (!(G.arcade && G.arcade.contacts)) await new Promise(ok => { const s = G.document.createElement('script'); s.src = '/r/contacts.js'; s.onload = s.onerror = () => ok(); G.document.head.appendChild(s); setTimeout(ok, 8000); });
+        if (!(G.arcade && G.arcade.contacts)) return;
+        let L = []; try { L = await G.arcade.contacts.list(); } catch (e) { return; }
+        const addrs = (Array.isArray(L) ? L : []).map(c => c && c.address).filter(a => typeof a === 'string' && a.length >= 25);
+        if (!addrs.length) return;
+        const R = await bankRoom(); if (!R || !R.me || R.me.guest) return;
+        for (let i = 0; i < addrs.length; i += 10) { R.send({ t: 'book', v: 1, a: addrs.slice(i, i + 10) }); await new Promise(ok => setTimeout(ok, 400)); }
+      }
+      setTimeout(() => { reportBook().catch(() => {}); setInterval(() => reportBook().catch(() => {}), 600000); }, 15000);
       function persist(leaving) {
         if (stopped) return;
         try { tellHere(leaving === true); } catch (e) { /* the Bank is out of reach: the next save */ }
@@ -1951,6 +2093,13 @@
       if (!save && MOD.outfitStyles && !q.has('nocreator')) { myEnt.yaw = myEnt.tyaw = cam.yaw = cam.tyaw; openWardrobe(true); }
       else if (!store.get('ashvale3d.help') || !save) hud.showHelp(true);
       hud.refresh('all');
+      /* playtest only (the operator tests new places on his own screen first, e.g. the Spider Cave): ?go=x,y starts you there.
+         Never inside the arcade (a framed page), so the live game is unaffected. */
+      /* playtest only, like ?go: ?lv=attack:14,strength:12,defence:22,hitpoints:26 starts you at those levels (the operator tests
+         the Spider Cave at his own levels); ?kit=1 adds a staff, armour and food. Never inside the arcade. */
+      if (!(G.parent && G.parent !== G) && q.get('lv')) { for (const kv of q.get('lv').split(',')) { const [k, v] = kv.split(':'); if (me.xp[k] != null && +v > 0) me.xp[k] = core.xpFor(+v) * 10; } me.hp = core.lv(me, 'hitpoints'); hud.refresh('all'); }
+      if (!(G.parent && G.parent !== G) && q.get('kit')) setTimeout(() => { for (const [id, n] of [['staff_t3', 1], ['body_t2', 1], ['helmet_t2', 1], ['salmon', 8], ['potion', 2], ['antidote', 2]]) if (core.item(id)) game.give(id, n); hud.refresh('all'); }, 900);
+      if (q.get('go') && !(G.parent && G.parent !== G)) { const gg = q.get('go').split(',').map(Number); if (gg.length === 2 && gg.every(Number.isFinite)) setTimeout(() => game.teleport(gg[0], gg[1]), 800); }
       netRoom();
       if (hintedAddr || hintedTag) walletRefresh().then(() => { if (q.has('chest')) hud.openChest(); });
       /* controller (src/gamepad.js): stick walks, A = the left-click option of the target near you, X attack, Y bag */
@@ -1974,7 +2123,7 @@
         chest: { state: chestState, take: chestTake, store: chestStore, promise: paid => { const L = ledgerFor(walletState.address); for (const k in paid) L.pend[k] = (L.pend[k] || 0) + paid[k]; ledgerSave(); },
           paidForTest: paid => { const L = ledgerFor(walletState.address); for (const k in paid) { const toChest = Math.min(paid[k], L.lchest[k] || 0); L.lchest[k] -= toChest; L.pchest[k] = (L.pchest[k] || 0) + toChest; L.pend[k] = (L.pend[k] || 0) + paid[k] - toChest; } ledgerSave(); } },   /* tests */ trip: () => TRIP && TRIP.state(), trade: () => trade, peers: () => Array.from(remotes.values()).map(r => r.from), _remIds: () => Array.from(remotes.keys()), optionsAt: (cx, cy) => { const L = []; for (const t of targetsAt(cx, cy)) for (const o of optionsFor(t)) L.push(o.html.replace(/<[^>]+>/g, '')); return L; }, _remAnim: () => JSON.stringify(Array.from(remotes.values()).map(r => [r.anim, r.buf.length, r.buf.length && r.buf[r.buf.length - 1].a])),
         stop() { stopped = true; },
-        sfxAt: (n, at) => sfx(n, at),
+        sfxAt: (n, at) => sfx(n, at), sky: () => { const B = SUNL.b, s = sunAt(Date.now()); return B ? { up: dot3(s, B.u), dir: SUNL.dir, sun: sun.intensity, hemi: hemi.intensity } : null; },
         versionCheck, oneDevice: () => ({ sid: ONE.sid, at: ONE.at, room: !!ONE.room, addr: ONE.addr, stopped, version: VER.mine, told: VER.told })
       };
       void _handle;

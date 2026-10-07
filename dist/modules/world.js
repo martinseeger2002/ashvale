@@ -43,8 +43,8 @@
        fill every chunk outside the set pieces; without it the outside is the filler, as before. */
     const WG = D.wg || null;
     const fillFn = opts.fill || (WG ? (x0, y0, t, zi) => {
-      const rows = WG.tiles(FACE, x0 + OX, y0 + OY, CH, CH);
-      for (let y = 0; y < CH; y++) { const r = rows[y]; for (let x = 0; x < CH; x++) { const i = (y << SH) | x; if (!zi[i]) t[i] = r.charCodeAt(x); } }
+      const rows = WG.tiles(FACE, x0 + OX, y0 + OY, CH, CH), ROCK = 94;   /* '^' */
+      for (let y = 0; y < CH; y++) { const r = rows[y]; for (let x = 0; x < CH; x++) { const i = (y << SH) | x; if (!zi[i]) t[i] = underNear(x0 + x, y0 + y) ? ROCK : r.charCodeAt(x); } }
     } : null);
     const BLK = new Uint8Array(256), SEE = new Uint8Array(256), NODE = [];
     for (const c of RT.block) BLK[c.charCodeAt(0)] = 1;
@@ -87,6 +87,14 @@
       }
       inWorld = (x, y) => { const px = x + 0.5, py = y + 0.5; return E[0][0] * px + E[0][1] * py + E[0][2] >= 0 && E[1][0] * px + E[1][1] * py + E[1][2] >= 0 && E[2][0] * px + E[2][1] * py + E[2][2] >= 0; };
     }
+    /* UNDERGROUND areas (zone flag `under`, 2026-10-07: the Spider Cave) lie outside the land, so nobody walks in from
+       the surface; inside their rectangle you can walk (their own tiles decide where). Known from the zone index even
+       before the area itself has loaded. */
+    const UNDER = ((D.zoneIndex && D.zoneIndex.zones) || D.zones || []).filter(z => z.under).map(z => [z.origin[0], z.origin[1], z.origin[0] + z.size[0], z.origin[1] + z.size[1], z.id]);
+    if (UNDER.length) { const land = inWorld; inWorld = (x, y) => land(x, y) || UNDER.some(u => x >= u[0] && y >= u[1] && x < u[2] && y < u[3]); }
+    const underAt = (x, y) => { for (const u of UNDER) if (x >= u[0] && y >= u[1] && x < u[2] && y < u[3]) return u[4]; return null; };
+    /* round an underground area: solid rock (32 tiles), so no sea or surface land shows beyond the cave's own walls */
+    const UNDER_PAD = 32, underNear = (x, y) => { for (const u of UNDER) if (x >= u[0] - UNDER_PAD && y >= u[1] - UNDER_PAD && x < u[2] + UNDER_PAD && y < u[3] + UNDER_PAD) return true; return false; };
     /* walk-in buildings: walls stand on tile EDGES (bits N1 E2 S4 W8, set on both sides), the door edge is open;
        built once into sparse maps (inside the old map's rectangle, as before), then baked into each chunk as it fills */
     const wall = new Map(), inside = new Set(), open = new Set();
@@ -239,7 +247,7 @@
       API, CH, cfg: CFG, key, kx, ky, W, H, pieces, npcs, spawns, objects, nodes, respawn: respawn || [Math.floor(W / 2), Math.floor(H / 2)],
       tileAt, blocked, losAt, wallAt, insideAt, zoneAt, nodeAt, inWorld, addZone, hasZone: (id) => pieces.some(P => P.id === id),
       regionOf: (x, y) => 'vale:' + FACE + ':' + Math.floor((x + GX) / REG) + ':' + Math.floor((y + GY) / REG),
-      seeded: !!WG, inPiece: (x, y) => !!chunkAt(x, y).zi[ci(x, y)],
+      seeded: !!WG, inPiece: (x, y) => !!chunkAt(x, y).zi[ci(x, y)], underAt, underNear,
       /* seeded land, in the vale frame: sites (camps, ore, fishing; ids and monster uids from worldgen), the ground height
          at a tile corner relative to the set pieces' base height (so the old map keeps its own heights), the biome */
       sitesIn(x0, y0, x1, y1) {
@@ -280,13 +288,14 @@
      index, each as its full zone when it is loaded and as its stub (edge band + building pads) when not - worldgen reads
      nothing else outside a town, so the land around it is the same either way; without an index, the zones given */
   function pieceZones(D) {
-    const ZI = D.zoneIndex && D.zoneIndex.zones; if (!ZI) return D.zones;
+    const ZI = D.zoneIndex && D.zoneIndex.zones; if (!ZI) return (D.zones || []).filter(z => !z.under);
     const have = new Map((D.zones || []).map(z => [z.id, z]));
-    return ZI.map(e => have.get(e.id) || stubZone(e));
+    return ZI.filter(e => !e.under).map(e => have.get(e.id) || stubZone(e));   /* an underground area is not on the land */
   }
   function stubZone(e) { return { id: e.id, origin: e.origin, size: e.size, tiles: e.stub, objects: e.pads || [] }; }
   /* a zone that arrived after the world was made: worldgen gets its real inside (the stub's place in the list is kept) */
   function arriveWorldgen(W, D, z) {
+    if (z && z.under) return false;   /* an underground area is not on the land */
     const C = Object.assign({}, DEF_CFG, D.globecfg || {});
     const sp = W.piecesFromZones([z], C.face, C.origin[0], C.origin[1], { belt: C.belt || {}, links: C.links || [] })[0];
     return W.replacePiece ? W.replacePiece(sp) : false;

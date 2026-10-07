@@ -22,6 +22,10 @@
 .ash .orb{width:calc(var(--mm)*.36);height:calc(var(--mm)*.36);min-width:34px;min-height:34px;border-radius:50%;border:2px solid #1b1610;box-shadow:0 0 0 1px #6b5d48;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;cursor:pointer;position:relative;overflow:hidden;background:#222}
 .ash .orb i{position:absolute;left:0;right:0;bottom:0;display:block}
 .ash .orb b{position:relative;text-shadow:1px 1px 0 #000}
+.ash .orb.hp.poison{box-shadow:0 0 0 2px #3fbf3a,0 0 10px #3fbf3a}.ash .orb.hp.poison i{background:linear-gradient(#5fd84a,#2e8a26)!important}.ash .orb.hp.poison b{color:#e8ffd8}
+.ash .orb.hp.poison::after{content:'';position:absolute;right:-5px;top:-5px;width:13px;height:13px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#3fbf3a;border:2px solid #10300c;box-shadow:0 0 6px #3fbf3a;animation:ashDrip 1.2s ease-in-out infinite}
+@keyframes ashDrip{0%,100%{transform:rotate(-45deg) scale(1)}50%{transform:rotate(-45deg) scale(1.2)}}
+.ash .splat.poison{background:radial-gradient(circle,#4fcf3a 55%,#1d5a14 60%);border-radius:50%;color:#fff}
 .ash .orb.hp i{background:linear-gradient(#e33,#911)} .ash .orb.hp.hawk i{background:linear-gradient(#d8a04a,#7a4a1a)} .ash .orb.run i{background:linear-gradient(#e8d84a,#9a8a1a)} .ash .orb.run.off i{background:linear-gradient(#8a8a7a,#555)} .ash .orb.pray i{background:linear-gradient(#7fd8ff,#1f6aa8)} .ash .orb.pray.on{box-shadow:0 0 0 1px #6b5d48,0 0 8px 2px #8fe0ffcc}
 .ash .orb.pray b{display:flex;flex-direction:column;align-items:center;line-height:1}.ash .orb.pray b svg{width:14px;height:14px;margin-bottom:1px}
 .ash .prayers{display:grid;grid-template-columns:repeat(5,1fr);gap:3px}
@@ -73,7 +77,7 @@
 .ash .chat.big{max-height:min(60%,260px);background:#000b;overflow:auto;justify-content:flex-start}
 @media (max-height:520px){.ash .inv{gap:2px}.ash .panel{padding:5px 6px}.ash .panel h4{margin-bottom:3px}.ash .chat{max-height:calc(3*1.3em + 10px);font-size:11px}.ash .chatw{width:min(40vw,360px)}}
 .ash .chat div{margin:1px 0;text-shadow:1px 1px 0 #000}
-.ash .chat .warn{color:#ff6a5a}.ash .chat .level{color:#7fd0ff}.ash .chat .trade{color:#ffd77a}.ash .chat .quest{color:#d9a0ff}.ash .chat .npc{color:#9cf}.ash .chat .sys{color:#ffcf3f}
+.ash .chat .warn{color:#ff6a5a}.ash .chat .level{color:#7fd0ff}.ash .chat .trade{color:#ffd77a}.ash .chat .quest{color:#d9a0ff}.ash .chat .npc{color:#9cf}.ash .chat .sys{color:#ffcf3f}.ash .chat .dm{color:#ff9ce0}
 .ash .hover{position:absolute;left:8px;top:6px;font-size:13px;color:#fff;text-shadow:1px 1px 0 #000;pointer-events:none;white-space:nowrap}
 .ash .xy{position:absolute;right:8px;bottom:6px;font-size:11px;color:#c8b48a;text-shadow:1px 1px 0 #000;pointer-events:none}
 .ash .opp{position:absolute;left:8px;top:28px;padding:4px 8px;min-width:130px;display:none}
@@ -164,6 +168,16 @@
 .ash .travel{position:absolute;inset:0;z-index:19;display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#05070d;overflow:hidden;pointer-events:auto;touch-action:none}
 .ash .travel .sw{position:absolute;left:50%;top:50%;width:170vmax;height:170vmax;margin:-85vmax 0 0 -85vmax;border-radius:50%;background:repeating-conic-gradient(from 0deg,#1b4f9a00 0deg,#3d8ff0aa 14deg,#9fd0ff55 22deg,#1b4f9a00 40deg),radial-gradient(circle,#bfe4ff 0,#5fa8ff 7%,#1d4c9c 22%,#0b1a3a 46%,#05070d 70%);animation:ashsw 2.4s linear infinite}
 .ash .travel .sw2{position:absolute;left:50%;top:50%;width:46vmin;height:46vmin;margin:-23vmin 0 0 -23vmin;border-radius:50%;border:2.2vmin solid #8fd0ff;box-shadow:0 0 6vmin #4aa3ff,inset 0 0 6vmin #4aa3ff;animation:ashsw2 1.6s ease-in-out infinite alternate}
+.ash .travel.down{background:radial-gradient(ellipse at 50% 62%,#3a2412 0,#140c07 38%,#020101 72%)}
+.ash .travel.down .sw,.ash .travel.down .sw2,.ash .travel.up .sw,.ash .travel.up .sw2{display:none}
+.ash .travel.down::before{content:'';position:absolute;inset:-20% 0 0 0;background-image:radial-gradient(#a08868 1px,transparent 1.6px),radial-gradient(#6a5844 1px,transparent 1.5px);background-size:37px 53px,23px 41px;background-position:0 0,11px 17px;opacity:.55;animation:ashGrit 1.6s linear infinite}
+.ash .travel.down::after{content:'';position:absolute;left:50%;top:58%;width:70vmin;height:70vmin;margin:-35vmin 0 0 -35vmin;border-radius:50%;background:radial-gradient(circle,#ff9a3c55 0,#ff7a2018 35%,transparent 65%);animation:ashFlicker .9s ease-in-out infinite alternate}
+@keyframes ashGrit{from{transform:translateY(0)}to{transform:translateY(53px)}}
+@keyframes ashFlicker{0%{opacity:.7;transform:scale(1)}40%{opacity:1}60%{opacity:.8;transform:scale(1.04)}100%{opacity:.95;transform:scale(.98)}}
+.ash .travel.down .tt{color:#f3dcb8;text-shadow:0 0 14px #c06a20,2px 2px 0 #000}.ash .travel.down .pb{background:#1e1208cc;box-shadow:0 0 0 1px #a0602888}.ash .travel.down .pb i{background:linear-gradient(90deg,#a05a1c,#ffb050)!important}
+.ash .travel.up{background:linear-gradient(180deg,#fff4d8 0,#c8b48a 18%,#2a1c10 62%,#050302 100%);animation:ashDawn 1.6s ease-out forwards}
+@keyframes ashDawn{from{filter:brightness(.25)}to{filter:brightness(1)}}
+.ash .travel.up .tt{color:#2a1c10;text-shadow:0 0 10px #fff4d8}.ash .travel.up .pb{background:#00000033}.ash .travel.up .pb i{background:#7a5a2a!important}
 .ash .travel .tt{position:relative;font:700 24px Georgia,serif;color:#eef6ff;text-shadow:0 0 12px #2b6fd0,2px 2px 0 #000;text-align:center;padding:0 16px}
 .ash .travel .pb{position:relative;width:min(260px,70vw);height:8px;border-radius:4px;background:#0b1a3acc;box-shadow:0 0 0 1px #4aa3ff88;overflow:hidden}
 .ash .travel .pb i{display:block;height:100%;width:0;background:linear-gradient(90deg,#4aa3ff,#cfeaff);transition:width .3s}

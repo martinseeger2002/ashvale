@@ -336,6 +336,18 @@
     "api": 1,
     "kind": "json"
    },
+   "char.giant_rat": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.giant_spider": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.goat": {
     "id": null,
     "v": 1,
@@ -517,6 +529,24 @@
     "kind": "json"
    },
    "char.snow_hare": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.spider": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.spider_queen": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.swamp_monster": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -744,6 +774,12 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.hat_spidercrown": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.hat_wizard": {
     "id": null,
     "v": 1,
@@ -948,6 +984,12 @@
     "api": 1,
     "kind": "json"
    },
+   "gear.torch": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.bones": {
     "id": null,
     "v": 1,
@@ -1091,6 +1133,18 @@
     "kind": "json"
    },
    "wolfden": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "cavemouth": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "spidercave": {
     "id": null,
     "v": 1,
     "api": 1,

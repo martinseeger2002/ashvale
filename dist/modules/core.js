@@ -592,6 +592,7 @@
         }
         case 'attack': { if (p.lv > 0) { msg(p, "You can't reach that from up here.", 'warn'); break; } const m = mobByUid(c.uid); if (m && !m.dead) { p.act = { k: 'attack', uid: m.uid }; p.skilling = null; p._stall = 0; closeShop(p); } break; }
         case 'take': { const g = S.ground.find(q => q.uid === c.uid); if (g) { p.act = { k: 'take', uid: g.uid }; p.skilling = null; closeShop(p); } break; }
+        case 'enter': { const o = passageAt(c.x, c.y); if (o && !p.dead) { p.act = { k: 'enter', x: o.x, y: o.y }; p.skilling = null; closeShop(p); } break; }   /* a cave mouth, a way out */
         case 'npc': { const n = M.npcs.find(q => q.id === c.id); if (n) { p._trade = !!c.trade; p.act = { k: 'npc', id: n.id }; p.skilling = null; closeShop(p); } break; }
         case 'move': moveSlot(p, c.from | 0, c.to | 0); break;
         case 'light': { const s0 = p.inv[c.slot | 0]; if (s0 && IT[s0.id].burnTicks) { p.act = { k: 'light', slot: c.slot | 0, id: s0.id }; p.gT = 0; p.path = []; p.skilling = null; closeShop(p); } break; }
@@ -649,9 +650,26 @@
       else if (d.burnTicks) { p.act = { k: 'light', slot, id: s.id }; p.gT = 0; p.path = []; p.skilling = null; }   /* tap logs = light them (needs a tinderbox) */
       else msg(p, d.tool ? 'Use it on a ' + (d.tool === 'woodcutting' ? 'tree' : d.tool === 'mining' ? 'rock' : 'fishing spot') + ': just tap one while you carry it.' : 'Nothing interesting happens.');
     }
+    /* PASSAGES (2026-10-07, the Spider Cave): any object with a `to` [x, y] is a way through - a cave mouth up top, a
+       way out below. Use it from beside it and you are there (the engine shows the travel swirl while that area loads). */
+    function followThrough(m) {   /* out of the opening, onto the nearest free tile round where its target came out */
+      const F = m.follow; m.follow = null;
+      for (let r = 0; r <= 4; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const x = F.x + dx, y = F.y + dy; if (!inMap(x, y) || M.blocked(x, y) || occupied(x, y, m)) continue;
+        m.x = x; m.y = y; m.path = null; m.step = 0; ev({ e: 'mobjump', mob: m.uid, x, y }); return;
+      }
+    }
+    function passageAt(x, y) { for (const o of M.objects) if (o.to && o.x === x && o.y === y) return o; return null; }
     function teleport(p, P, text) {
+      const ox = p.x, oy = p.y, passage = P.id === 'cavemouth' || P.id === 'caveexit';
       p.x = P.to[0]; p.y = P.to[1]; p.path = []; p.act = null; p.skilling = null; p.lv = 0; p.bld = -1; closeShop(p);
-      for (const m of S.mobs) if (m.tgt === p.id) { m.tgt = 0; m.back = 1; }
+      let k = 0;
+      for (const m of S.mobs) if (m.tgt === p.id) {
+        /* through a cave opening, the relentless ones close behind you come too, a few ticks apart (the operator: "Follow you up") */
+        if (passage && !m.dead && MON[m.key].relentless && cheb(m.x, m.y, ox, oy) <= 12) { m.follow = { x: P.to[0], y: P.to[1], at: S.t + 4 + 2 * k++ }; continue; }
+        m.tgt = 0; m.back = 1;
+      }
       ev({ e: 'teleport', p: p.id, x: p.x, y: p.y, to: P.id }); if (text) msg(p, text, 'info');
     }
     function reqFail(p, d) {
@@ -694,6 +712,7 @@
       p.atk = Math.max(p.atk, 0) + 3;
       msg(p, (d.drink ? 'You drink the ' : 'You eat the ') + d.name.toLowerCase() + '.' + (p.hp > before ? ' It heals some health.' : ''));
       ev({ e: 'eat', p: p.id, id: s.id, heal: p.hp - before });
+      if (p.poison) curePoison(p, d.cures === 'poison' ? 'The antidote burns going down. The poison is gone.' : 'That settles your stomach. The poison fades.');
     }
     function shopOf(id) { return D.shops.shops[id]; }
     function nearKeeper(p, sh) { const n = M.npcs.find(q => q.id === sh.keeper); return n && cheb(p.x, p.y, n.x, n.y) <= 2; }
@@ -829,6 +848,7 @@
       if (p.puppet) return;
       if (fx) magicFx(p, fx, C.fxTicks || 5, md.name);
       if (dodged) msg(p, 'You dodge the ' + md.name.toLowerCase() + "'s attack.");
+      if (dmg > 0 && !hk && md.venom && p.hp > 0 && R.int(100) < (md.venom.chance | 0)) poisonPlayer(p, md.venom, md.name);
       if (p.retal && !p.act && !p.path.length) p.act = { k: 'attack', uid: m.uid };
       if (hk && p.hawkHp <= 0) hawkFalls(p);
       else if (angelSave(p)) { /* the ring carried them home */ }
@@ -871,7 +891,34 @@
       msg(p, 'You are hurt too badly to fly: you tumble out of the sky and land as yourself.', 'warn');
       ev({ e: 'equip', p: p.id }); ev({ e: 'inv', p: p.id }); burdenCheck(p);
     }
+    /* PLAYER POISON (2026-10-07, the Spider Cave: spiders poison; "there needs to be an indication to the player that
+       they are poisoned other than just their health going down"): v.dmg every POISON_EVERY ticks for v.ticks ticks. A new
+       bite while poisoned keeps the stronger dose and the later end. Food or an antidote cures it; death clears it. The
+       engine shows it (event 'poison': the green Hitpoints orb and badge, green splats from cls 'poison' hits). */
+    const POISON_EVERY = 3;
+    function poisonPlayer(p, v, by) {
+      const was = !!p.poison, until = S.t + (v.ticks | 0), dmg = Math.max(1, v.dmg | 0);
+      if (was) { p.poison.until = Math.max(p.poison.until, until); p.poison.dmg = Math.max(p.poison.dmg, dmg); return; }
+      p.poison = { until, dmg, next: S.t + POISON_EVERY };
+      msg(p, 'You have been poisoned' + (by ? ' by the ' + String(by).toLowerCase() : '') + '! Eat something or drink an antidote.', 'warn');
+      ev({ e: 'poison', p: p.id, on: true });
+    }
+    function curePoison(p, text) {
+      if (!p.poison) return false;
+      delete p.poison; if (text) msg(p, text, 'info'); ev({ e: 'poison', p: p.id, on: false }); return true;
+    }
+    function poisonTick(p) {
+      const P = p.poison; if (!P || p.dead) return;
+      if (S.t >= P.until) { curePoison(p, 'The poison wears off.'); return; }
+      if (S.t < P.next) return;
+      P.next = S.t + POISON_EVERY;
+      const dmg = Math.min(P.dmg, p.hp); p.hp -= dmg;
+      ev({ e: 'hit', dst: p.id, src: null, dmg, max: maxHp(p), hp: p.hp, cls: 'poison' });
+      if (angelSave(p)) { /* the ring carried them home - still poisoned */ }
+      else if (p.hp <= 0) killPlayer(p);
+    }
     function killPlayer(p) {
+      if (p.poison) { delete p.poison; ev({ e: 'poison', p: p.id, on: false }); }
       p.dead = S.t; p.act = null; p.path = []; p.skilling = null; closeShop(p); prayersOff(p); p.pfx = null;
       ev({ e: 'die', p: p.id });
       msg(p, 'Oh dear, you are dead!', 'warn');
@@ -1205,6 +1252,7 @@
     function playerTick(p) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); try { playerTick0(p); } finally { LV_LIMIT = -1; FLY = false; } }
     function playerTick0(p) {
       if (!p.dead) townCheck(p);
+      if (p.poison) poisonTick(p);
       if (p.puppet) return puppetTick(p);
       if (p.dead) {
         if (S.t - p.dead >= 4) {
@@ -1265,6 +1313,11 @@
             p.act = null;
           }
         }
+      } else if (a && a.k === 'enter') {   /* walk up to a passage and go through: it takes you to its `to` */
+        const o = passageAt(a.x, a.y);
+        if (!o) p.act = null;
+        else if (inReach(p.x, p.y, o.x, o.y, 1)) { teleport(p, { to: o.to, id: o.k }, o.say || (o.k === 'cavemouth' ? 'You climb down into the dark. Something skitters ahead.' : 'You climb back up into the daylight.')); }
+        else { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, o.x, o.y, 1), o.x, o.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, o.x, o.y, 1)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
       } else if (a && a.k === 'npc') {
         const n = M.npcs.find(q => q.id === a.id);
         if (inReach(p.x, p.y, n.x, n.y, 1)) { p.face = faceTo(p.x, p.y, n.x, n.y); p.act = null; p.path = []; talk(p, n); ev({ e: 'face', npc: n.id, x: p.x, y: p.y }); }
@@ -1490,9 +1543,15 @@
       /* a timid animal that is hit runs from whoever hit it, two steps a tick, instead of fighting back (the operator) */
       if (md.fleeHit && m.hurt && S.t - (m.hurtT || -1e9) <= 14) { const q = S.players[m.hurt]; if (q && !q.dead) { m.tgt = 0; m.wx = null; if (stepAway(m, q, 10)) stepAway(m, q, 10); return; } }
       if (comeStep(m)) { if (m.hp < md.hp && S.t % 10 === 0) m.hp++; return; }   /* someone is trying to hit us and cannot: come out to them, without attacking */
+      if (m.follow) { if (S.t < m.follow.at) return; followThrough(m); }   /* coming up (or down) through a cave opening after its target */
       let p = m.tgt ? S.players[m.tgt] : null;
-      m.crossing = retaliating(m, 10);
-      if (p && !(m.crossing && p.id === m.hurt) && (p.dead || cheb(m.x, m.y, m.sx, m.sy) > 10 || cheb(p.x, p.y, m.sx, m.sy) > 14)) { m.tgt = 0; m.back = 1; p = null; }
+      /* RELENTLESS (2026-10-07, the Spider Cave: "they should follow you out of their spawn zone indefinitely"): once it
+         has you it ignores its area and its leash, and only stops when you die (or leave the game) */
+      if (md.relentless) { m.crossing = !!p; if (p && p.dead) { m.tgt = 0; m.back = 1; p = null; } }
+      else {
+        m.crossing = retaliating(m, 10);
+        if (p && !(m.crossing && p.id === m.hurt) && (p.dead || cheb(m.x, m.y, m.sx, m.sy) > 10 || cheb(p.x, p.y, m.sx, m.sy) > 14)) { m.tgt = 0; m.back = 1; p = null; }
+      }
       if (!p && !m.back && md.aggro > 0) {
         for (const pid of S.order) { const q = S.players[pid]; if (!q.dead && !airborne(q) && S.t - q.spawnT > 8 && cheb(q.x, q.y, m.x, m.y) <= sightOf(m, md) && (md.hunter || combatLevel(q) <= mobCombat(md)) && M.zoneAt(q.x, q.y) === M.zoneAt(m.sx, m.sy)) { m.tgt = q.id; p = q; break; } }   /* hunters (timber wolves) take on anyone */
       }
@@ -1506,6 +1565,11 @@
       }
       if (p) {
         if (m.x === p.x && m.y === p.y) { for (const [dx, dy] of DIRS.slice(0, 4)) if (canStep(m.x, m.y, dx, dy) && !occupied(m.x + dx, m.y + dy, m)) { m.x += dx; m.y += dy; m.step = 1; break; } return; }
+        if (md.cast) {
+          const rng = md.cast.range || 5, d = cheb(m.x, m.y, p.x, p.y);
+          if (d <= rng && lineOfSight(m.x, m.y, p.x, p.y)) { m.face = faceTo(m.x, m.y, p.x, p.y); if (m.atk <= 0) { mobAttack(m, p, 'magic'); m.atk = md.speed; } return; }
+          if (mobPathStep(m, (x, y) => cheb(x, y, p.x, p.y) <= rng && lineOfSight(x, y, p.x, p.y) && !playerAt(x, y, null) && !mobAt(x, y, m), p.x, p.y, 18)) return;
+        }
         if (inReach(m.x, m.y, p.x, p.y, 1)) { m.face = faceTo(m.x, m.y, p.x, p.y); if (m.atk <= 0) { mobAttack(m, p); m.atk = md.speed; } }
         else mobStepToward(m, p.x, p.y);
         return;
@@ -1658,7 +1722,7 @@
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
       prayTicks(p, pts, drain) { let d = drain; if (d == null) { d = 0; for (const id in p.pray || {}) d += (PRAYERS[id] && PRAYERS[id].drain) || 0; } if (!d) return null; const n = pts == null ? (p.pp | 0) : pts, rs = resist(p); return n <= 0 ? 0 : Math.ceil(((n - 1) * rs + rs + 1 - (pts == null ? (p.pd | 0) : 0)) / d); },
-      isHawk, airborne, hasFlag, flag: (k) => FLAGS[k] || null, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf,
+      isHawk, passageAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf,
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,

@@ -318,6 +318,7 @@ export function createModels(THREE, opts) {
     if (!c) return null;
     if (c.body === 'beast') return beast(c.beast || {});
     if (c.body === 'bird') return bird(c.bird || {});
+    if (c.body === 'spider') return spider(c.spider || {});
     if (c.body === 'chest') return chest(c.chest || {});
     if (c.body === 'wagon') return wagon(c.wagon || {});
     if (c.body === 'portal') return portal(c.portal || {});
@@ -537,6 +538,57 @@ export function createModels(THREE, opts) {
     H.setGear = () => H; H.setTool = () => H; H.attackAnim = () => 'bite';
     H.muzzle = out => (out = out || new THREE.Vector3(), neck.getWorldPosition(out));
     Object.defineProperty(H, 'height', { get: () => (hipY + 0.42 * S) * root.scale.y });
+    H.play('idle'); H.update(0);
+    return H;
+  }
+
+  /* ---------- spiders (2026-10-07, the Spider Cave): a round abdomen behind a small head, eight jointed legs that
+     move in two alternating sets of four, fangs; the Queen wears a little crown. o: {size, color, belly, mark, eyes, crown} */
+  const SPIDER_A = [0, 3, 4, 7], SPIDER_B = [1, 2, 5, 6];   /* L1 R2 L3 R4 / R1 L2 R3 L4 */
+  const legs = (va, vb, lift) => { const o = {}, sd = i => (i % 2 ? 1 : -1);   /* swing (y) mirrored per side; a lifted leg rises (z, by side) */
+    for (const i of SPIDER_A) o['l' + i] = [0, -va * sd(i), lift ? sd(i) * lift * Math.max(0, va) : 0]; for (const i of SPIDER_B) o['l' + i] = [0, -vb * sd(i), lift ? sd(i) * lift * Math.max(0, vb) : 0]; return o; };
+  const SPIDER = {
+    idle: { loop: true, dur: 2.4, fn: t => Object.assign(legs(0.05 * Math.sin(TAU * t), -0.05 * Math.sin(TAU * t)), { lift: [0.01 * Math.sin(TAU * t)], abd: [0.06 * Math.sin(TAU * t)] }) },
+    walk: { loop: true, dur: 0.55, fn: t => { const s = Math.sin(TAU * t); return Object.assign(legs(0.35 * s, -0.35 * s, 0.6), { lift: [0.02 * Math.abs(s)] }); } },
+    run: { loop: true, dur: 0.32, fn: t => { const s = Math.sin(TAU * t); return Object.assign(legs(0.5 * s, -0.5 * s, 0.8), { lift: [0.03 * Math.abs(s)], pitch: [0.05 * s] }); } },
+    bite: { dur: 0.6, impact: 0.45, fn: K(0, {}, 0.3, Object.assign(legs(0, 0), { pitch: [0.25], dz: [-0.05], fangs: [0.5] }), 0.45, { pitch: [-0.2], dz: [0.16], fangs: [-0.3] }, 1, {}) },
+    hit: { dur: 0.4, fn: K(0, {}, 0.3, { pitch: [0.2], dz: [-0.06] }, 1, {}) },
+    death: { dur: 1, hold: true, fn: K(0, {}, 0.4, { lift: [0.1] }, 1, Object.assign({ roll: [3.0], lift: [0.04] }, (() => { const o = {}; for (let i = 0; i < 8; i++) o['l' + i] = [0, 0, (i % 2 ? -1 : 1) * 0.9]; return o; })())) }
+  };
+  SPIDER.slash = SPIDER.stab = SPIDER.crush = SPIDER.bite;
+  function spider(o) {
+    const S = o.size || 1, c = o.color || '#3a2f2a', dk = shade(c, 0.7), lg = shade(c, 0.85);
+    const root = group(), roll = group(), body = group(); root.add(roll); roll.add(body);
+    const hipY = 0.22 * S; body.position.y = hipY;
+    const trunk = group(); body.add(trunk);
+    trunk.add(ball(0.16 * S, c, 0, 0, 0.06 * S, 1));                                   /* the head and thorax */
+    const abd = group(0, 0.05 * S, -0.12 * S); trunk.add(abd);
+    const ab = ball(0.27 * S, dk, 0, 0.06 * S, -0.18 * S, 1); ab.scale.set(1, 0.85, 1.15); abd.add(ab);
+    if (o.mark) { const mk = ball(0.11 * S, o.mark, 0, 0.27 * S, -0.2 * S, 1); mk.scale.set(1, 0.3, 1.3); abd.add(mk); }
+    if (o.belly) { const bl = ball(0.18 * S, o.belly, 0, -0.06 * S, -0.16 * S, 1); bl.scale.set(1, 0.5, 1.1); abd.add(bl); }
+    for (const [x, y] of [[-0.05, 0.08], [0.05, 0.08], [-0.09, 0.05], [0.09, 0.05], [-0.03, 0.12], [0.03, 0.12]]) trunk.add(ball(0.022 * S, o.eyes || '#d02020', x * S, y * S, 0.2 * S));
+    const fangs = group(0, -0.04 * S, 0.2 * S); trunk.add(fangs);
+    fangs.add(cone(0.025 * S, 0.1 * S, '#d8d0b0', -0.04 * S, -0.04 * S, 0, 4), cone(0.025 * S, 0.1 * S, '#d8d0b0', 0.04 * S, -0.04 * S, 0, 4));
+    fangs.children.forEach(m => { m.rotation.x = Math.PI; });
+    if (o.crown) { const cr = group(0, 0.15 * S, 0.06 * S); trunk.add(cr); cr.add(box(0.2 * S, 0.04 * S, 0.16 * S, o.crown, 0, 0, 0)); for (let k = 0; k < 5; k++) cr.add(cone(0.025 * S, 0.08 * S, o.crown, (-0.08 + k * 0.04) * S, 0.06 * S, 0.06 * S, 4)); }
+    const LEGS = [];
+    for (let i = 0; i < 8; i++) {   /* 4 a side, front to back; each a hip (swings) with an upper and a lower segment */
+      const sd = i % 2 ? 1 : -1, row = i >> 1, z = (0.12 - row * 0.08) * S, a = (row - 1.5) * 0.45;
+      const hip = group(sd * 0.1 * S, 0, z); trunk.add(hip); hip.rotation.y = sd > 0 ? -a : a;
+      const up = group(); hip.add(up); up.rotation.z = sd * 0.75;                         /* the upper leg rises out to the side */
+      up.add(box(0.3 * S, 0.035 * S, 0.035 * S, lg, sd * 0.15 * S, 0, 0));
+      const knee = group(sd * 0.3 * S, 0, 0); up.add(knee); knee.rotation.z = -sd * 1.9;  /* and bends down at the knee */
+      knee.add(box(0.34 * S, 0.03 * S, 0.03 * S, dk, sd * 0.17 * S, 0, 0));
+      LEGS.push(hip);
+    }
+    root.traverse(m => { if (m.isMesh) m.castShadow = true; });
+    const rot = obj => ({ kind: 'rot', o: obj, r0: [obj.rotation.x, obj.rotation.y, obj.rotation.z] });
+    const joints = { abd: rot(abd), fangs: rot(fangs), lift: { kind: 'y', o: body, p0: hipY }, dz: { kind: 'z', o: trunk, p0: 0 }, pitch: { kind: 'rx', o: trunk }, roll: { kind: 'rz', o: roll } };
+    LEGS.forEach((h, i) => { joints['l' + i] = rot(h); });
+    const H = character(root, joints, SPIDER);
+    H.setGear = () => H; H.setTool = () => H; H.attackAnim = () => 'bite';
+    H.muzzle = out => (out = out || new THREE.Vector3(), fangs.getWorldPosition(out));
+    Object.defineProperty(H, 'height', { get: () => (hipY + 0.35 * S) * root.scale.y });
     H.play('idle'); H.update(0);
     return H;
   }
