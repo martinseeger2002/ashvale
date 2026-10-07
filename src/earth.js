@@ -21,7 +21,7 @@
       const PAL = DATA.atlas_palette;
       const G = deps.globe.createGlobe({ n: CFG.n, radius_m: CFG.radius_m, seed: CFG.seed });
       const W = deps.worldgen.createWorldgen(G, { seed: CFG.seed });
-      const zones = Object.keys(DATA).filter(k => k.indexOf('zone.') === 0).map(k => Object.assign({ id: k.slice(5) }, DATA[k]));
+      const zones = Object.keys(DATA).filter(k => k.indexOf('zone.') === 0).map(k => Object.assign({ id: k.slice(5) }, DATA[k])).filter(z => !z.under);   /* an underground area (the Spider Cave) is not on the land */
       if (zones.length && CFG.origin) W.setSetPieces(W.piecesFromZones(zones, CFG.face, CFG.origin[0], CFG.origin[1], { belt: CFG.belt || {}, links: CFG.links || [] }));
       const R = G.radius_m, CL = G.classes();
 
@@ -58,7 +58,8 @@
       host.appendChild(canvas);
       const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(50, 1, 0.1, 4e6);
       scene.add(camera);
-      const amb = new THREE.AmbientLight(0xffffff, 0.85), sun = new THREE.DirectionalLight(0xfff2dc, 1.9);
+      /* lit by the sun alone, with a little night-blue so the dark side is still faintly readable (2026-10-07) */
+      const amb = new THREE.AmbientLight(0x8fa4d8, 0.22), sun = new THREE.DirectionalLight(0xfff2dc, 2.5);
       scene.add(amb, sun, sun.target);
       const SPACE = new THREE.Color(0x05070d), SKY = new THREE.Color(PAL.sky || '#a7c8e6'), bg = new THREE.Color();
       scene.background = bg; scene.fog = new THREE.Fog(SKY.clone(), 1e6, 2e6);
@@ -220,6 +221,16 @@
       const exAt = alt => 1 + 2 * Math.min(1, Math.max(0, (Math.log10(alt) - 3.3) / 1.5));   /* at most 3x from orbit (the operator: the mountains looked out of scale) */
       const tiltAt = alt => { const t = Math.min(1, Math.max(0, (Math.log10(alt) - 1.6) / 2.2)); return 0.62 + (1.5 - 0.62) * t; };
       const PLACES = {};
+      const SUN_EPOCH = 1791353761, DAY_S = 86400;
+      let sunLon = null, sunBall = null;
+      { const g = new THREE.Group(), core = new THREE.Mesh(new THREE.SphereGeometry(R * 0.32, 24, 16), new THREE.MeshBasicMaterial({ color: 0xfff4c0, fog: false }));
+        const halo = new THREE.Mesh(new THREE.SphereGeometry(R * 0.62, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffd36a, transparent: true, opacity: 0.18, depthWrite: false, fog: false }));
+        g.add(core, halo); g.frustumCulled = false; core.frustumCulled = halo.frustumCulled = false; scene.add(g); sunBall = g; }
+      function sunNow() {   /* the sun's direction from the planet's centre: over the equator, moving west 360 degrees a day */
+        if (sunLon == null) { const a = PLACES.ashvale ? PLACES.ashvale.u : [1, 0, 0]; sunLon = Math.atan2(a[1], a[0]); }
+        const L = sunLon - Math.PI / 2 - 2 * Math.PI * ((Date.now() / 1000 - SUN_EPOCH) / DAY_S);
+        return [Math.cos(L), Math.sin(L), 0];
+      }
       /* a game tile (the x, y a character stands on) -> the sphere direction and the planar point, the same mapping as the places */
       const gameAt = (vx, vy) => { if (!CFG.origin) return null; const fx = vx + CFG.origin[0] + 0.5, fy = -(vy + CFG.origin[1]) - 0.5; return { u: W.toSphere(CFG.face, fx, fy), face: CFG.face, x: fx, y: fy }; };
       { const at = (vx, vy) => { const fx = vx + CFG.origin[0] + 0.5, fy = -(vy + CFG.origin[1]) - 0.5; return W.toSphere(CFG.face, fx, fy); };
@@ -249,7 +260,10 @@
         bg.copy(SKY).lerp(SPACE, k); stars.material.opacity = 0.85 * k;
         const fogOn = cam.alt < 25000;
         scene.fog.color.copy(bg); scene.fog.near = fogOn ? cam.alt * 3 + 400 : 1e7; scene.fog.far = fogOn ? cam.alt * 14 + 4000 : 2e7;
-        sun.position.set((up3[0] * 0.75 + E3[0] * 0.45 + N3[0] * 0.35) * 1000, (up3[1] * 0.75 + E3[1] * 0.45 + N3[1] * 0.35) * 1000, (up3[2] * 0.75 + E3[2] * 0.45 + N3[2] * 0.35) * 1000);
+        /* the real sun (2026-10-07: "an orbiting sun that orbits the globe once every 24 hours"; it set over Ashvale at
+           SUN_EPOCH - the game uses the same rule, src/engine.js): its light from its direction, the night side dark */
+        const S0 = sunNow(); sun.position.set(S0[0] * 1000, S0[1] * 1000, S0[2] * 1000);
+        if (sunBall) { const D = R * 7; sunBall.position.set(S0[0] * D - camW[0], S0[1] * D - camW[1], S0[2] * D - camW[2]); }
         sun.target.position.set(0, 0, 0);
       }
 
@@ -389,7 +403,7 @@
         if (equatorLine) { EQW.value = Math.max(1.2, cam.alt * 0.004) / R; equatorLine.matrix.makeTranslation(-camW[0], -camW[1], -camW[2]); equatorLine.matrixWorld.copy(equatorLine.matrix); }
         if (frame % 60 === 0) prune();
         renderer.render(scene, camera);
-        youTick(); marksTick(); hudTick();
+        youTick(); marksTick(); if (frame % 2 === 0) friendsTick(); hudTick();
         requestAnimationFrame(tick);
       }
 
@@ -493,6 +507,7 @@
         '.ea .you i::after{content:"";position:absolute;left:50%;top:7px;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;border:2px solid #2fd3ff;animation:eaPing 1.8s ease-out infinite}' +
         '.ea .you b{position:absolute;left:50%;top:18px;transform:translateX(-50%);padding:1px 6px;border-radius:4px;background:rgba(10,30,40,.85);color:#bff1ff;font-size:12px;white-space:nowrap}' +
         '@keyframes eaPing{from{transform:scale(1);opacity:.9}to{transform:scale(3.2);opacity:0}}' +
+        '.ea .you.fr i{background:#ff9a2e;box-shadow:0 0 0 3px #3a200899,0 0 10px #ff9a2e;width:12px;height:12px}.ea .you.fr i::after{display:none}.ea .you.fr b{background:rgba(50,26,6,.85);color:#ffd8a8}' +
         '.ea .rose{position:absolute;left:14px;bottom:max(14px,env(safe-area-inset-bottom));width:min(26vmin,150px);height:min(26vmin,150px);opacity:.5;pointer-events:auto;cursor:pointer;transition:opacity .2s}.ea .rose:hover{opacity:.8}' +
         '.ea .rose svg{width:100%;height:100%;display:block;overflow:visible}' +
         '.ea .lbl{position:absolute;left:0;top:0;display:none;transform:translate(-50%,-100%);pointer-events:none;color:#ffe9a8;font-size:12px;text-shadow:0 1px 2px #000,0 0 4px #000;white-space:nowrap;text-align:center}' +
@@ -568,10 +583,44 @@
         room.on('message', (m, p) => {
           if (done || !m || m.t !== 'where' || m.to !== room.me.address || !p || p.address !== BANK) return;
           done = true; if (m.none) { YOU.state = 'never-played'; const n = $('ea-note'); n.textContent = 'Play ASHVALE once and your spot shows here.'; n.hidden = false; } else setYou(m.x, m.y);
-          setTimeout(() => room.leave(), 500);
         });
+        friends(room, BANK).catch(e => console.warn('Atlas: contacts', e && e.message));
         for (let k = 0; k < 4 && !done; k++) { YOU.asked++; room.send({ t: 'where?', v: 1 }); await new Promise(ok => setTimeout(ok, 6000)); }
-        if (!done) { YOU.state = 'no-answer'; room.leave(); }
+        if (!done) YOU.state = 'no-answer';
+      }
+      /* CONTACTS (2026-10-07: "If a player is logged in and playing the game and in your address book, show their
+         location on the Atlas"; mutual contacts only). Your arcade address book (arcade.contacts - the arcade asks you first)
+         goes to the @ashvale Bank with the question; it answers only for contacts who also have you in their book and are
+         playing now. The Bank keeps contact links in memory only. Orange dots with their @name. */
+      const FR = new Map();   /* address -> {el, tag, at} */
+      async function friends(room, BANK) {
+        if (!(window.arcade && window.arcade.contacts)) await new Promise(ok => { const s = document.createElement('script'); s.src = '/r/contacts.js'; s.onload = s.onerror = () => ok(); document.head.appendChild(s); setTimeout(ok, 8000); });
+        if (!(window.arcade && window.arcade.contacts)) return;
+        const L = await window.arcade.contacts.list(), tags = new Map();
+        for (const c of Array.isArray(L) ? L : []) if (c && typeof c.address === 'string') tags.set(c.address, c.tag || '');
+        if (!tags.size) return;
+        let seen = new Set();
+        room.on('message', (m, p) => {
+          if (!m || m.t !== 'friends' || m.to !== room.me.address || !p || p.address !== BANK) return;
+          for (const [a, x, y] of m.f || []) {
+            const g = gameAt(x, y); if (!g || !tags.has(a)) continue; seen.add(a);
+            let F = FR.get(a); if (!F) { const el = document.createElement('div'); el.className = 'you fr'; el.innerHTML = '<i></i><b></b>'; hud.querySelector('.ea').appendChild(el); F = { el }; FR.set(a, F); }
+            F.tag = tags.get(a); F.el.querySelector('b').textContent = F.tag ? '@' + F.tag : a.slice(0, 6) + '...'; F.at = Object.assign(g, { gx: x, gy: y });
+          }
+        });
+        const ask = async () => {
+          for (const [a, F] of FR) if (!seen.has(a)) { F.el.remove(); FR.delete(a); }   /* stopped playing: the dot goes */
+          seen = new Set(); const all = Array.from(tags.keys());
+          for (let i = 0; i < all.length; i += 8) { room.send({ t: 'friends?', v: 1, a: all.slice(i, i + 8) }); await new Promise(ok => setTimeout(ok, 400)); }
+        };
+        ask(); setInterval(ask, 60000);
+      }
+      function friendsTick() {
+        for (const F of FR.values()) {
+          if (!F.at) continue;
+          const s = screenOf(F.at.u, 1.5); if (!s) { F.el.style.display = 'none'; continue; }
+          F.el.style.display = 'block'; F.el.style.left = s[0] + 'px'; F.el.style.top = s[1] + 'px';
+        }
       }
       meBtn.onclick = () => { if (PLACES.you) flyTo('you'); };
       setTimeout(() => { try { buildEquator(); } catch (e) { console.warn('Atlas: no equator line', e && e.message); } }, 300);
@@ -595,6 +644,7 @@
         state: () => ({ lat: uToLL(cam.u)[0], lon: uToLL(cam.u)[1], alt: cam.alt, hd: cam.hd, tilt: cam.tilt, flying: !!cam.fly, ex: U.uEx.value, ground: groundH, face: tP && tP.face }),
         stats: () => ({ patches: drawn.length, built, live, queue: buildQ.size, chunks: chunks.size, chunksBuilt: Array.from(chunks.values()).filter(c => c.mesh).length, frame }),
         places: PLACES, W, G,
+        friends: () => Array.from(FR.entries()).map(([a, F]) => ({ a, tag: F.tag, at: F.at && [F.at.gx, F.at.gy], shown: F.el.style.display === 'block' })),
         you: (x, y) => { if (x != null) setYou(x, y); return { state: YOU.state, asked: YOU.asked, at: YOU.at && [YOU.at.gx, YOU.at.gy], shown: youEl.style.display === 'block' }; },
         /* the world editor (the operator: "edit the terrain raising and lowering and region type" in the Atlas) */
         pick: (x, y) => groundUnder(x, y),

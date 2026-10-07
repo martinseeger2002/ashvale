@@ -213,6 +213,8 @@ items.update({
     "mithril_ore": {"name": "Mithril ore", "kind": "resource", "value": 70},
     "pelt": {"name": "Wolf pelt", "kind": "resource", "value": 30},        # 2026-10-01: animals drop only their pelt; pelts sell in town
     "rat_pelt": {"name": "Giant rat pelt", "kind": "resource", "value": 8},
+    "spider_silk": {"name": "Spider silk", "kind": "resource", "value": 25},   # the Spider Cave (2026-10-07): sells in town
+    "antidote": {"name": "Antidote", "kind": "food", "healPct": 0, "heal": 0, "value": 40, "drink": True, "cures": "poison"},   # cures spider poison
     # and its own hide (the operator: "a pelt that matches the animal")
     "hare_pelt": {"name": "Hare pelt", "kind": "resource", "value": 5},
     "snow_hare_pelt": {"name": "Snow hare pelt", "kind": "resource", "value": 7},
@@ -237,6 +239,14 @@ items["hat_bigchief"] = {"name": "Big Chief Headdress", "kind": "hat", "eq": "he
 # not sold, not dropped; Edition 20 keeps shops from buying it and the Bank from minting a 21st.
 items["hat_featherband"] = {"name": "Feather Headband", "kind": "hat", "eq": "head", "value": 1500, "defence": 0, "edition": "20",
                             "nft": {"copies": 20, "key": "hat_featherband"}}
+# the Spider Cave (2026-10-07): the Spider Queen's Crown - about one Queen in twenty drops one, minted fresh by the
+# Bank into its own collection and numbered #1, #2 ... (no edition cap: it is earned)
+# a hand torch (2026-10-07: "Add a torch to the general store so that a user can buy a torch and hold it at night and
+# illuminate his surroundings"): held in the off hand (the shield slot), it lights about 8 tiles round you
+items["torch"] = {"name": "Torch", "kind": "torch", "eq": "shield", "value": 6, "light": 8, "_kg": 0.6}
+items["hat_spidercrown"] = {"name": "Spider Queen's Crown", "kind": "hat", "eq": "head", "value": 2500, "defence": 2, "light": 6,   # it glows (2026-10-07)
+                           
+                            "collection": "ASHVALE Spider Queen's Crown", "nft": {"key": "hat_spidercrown"}}
 # packs (worn on the back, eq 'pack'): add carry capacity, never slots (28 stay 28). t4-t5 only drop. No nft key yet
 # (the operator decides what gets minted).
 for t, (nm, carry, w, v) in enumerate([("Leather satchel", 10, 0.8, 40), ("Canvas pack", 20, 1.5, 150), ("Reinforced pack", 35, 2.5, 500),
@@ -256,7 +266,7 @@ KG_ID = {"potion": 0.3, "bread": 0.4, "shrimp": 0.1, "trout": 0.4, "salmon": 1.0
          "willow_logs": 3, "maple_logs": 3.5, "yew_logs": 4, "pelt": 1.5, "rat_pelt": 0.3, "hatchet": 1.2, "pickaxe": 2.2, "net": 0.5,
          "fishing_rod": 0.4, "lobster_pot": 1.5, "tinderbox": 0.1, "ashvale_stone": 0.2, "saltmere_stone": 0.2, "castle_stone": 0.2, "chicken": 0.5, "chicken_cooked": 0.5,
          "rat_meat": 0.2, "rat_meat_cooked": 0.2, "hare": 0.4, "hare_cooked": 0.4, "goat": 0.8, "goat_cooked": 0.8, "venison": 0.8, "venison_cooked": 0.8, "boar": 1.0, "boar_cooked": 1.0,
-         "hare_pelt": 0.2, "snow_hare_pelt": 0.2, "goat_hide": 1.0, "deer_hide": 1.4, "boar_hide": 1.8, "timber_wolf_pelt": 1.8, "lizard_skin": 0.3}   # a chicken: raw, cooked or burnt
+         "hare_pelt": 0.2, "snow_hare_pelt": 0.2, "goat_hide": 1.0, "deer_hide": 1.4, "boar_hide": 1.8, "timber_wolf_pelt": 1.8, "lizard_skin": 0.3, "spider_silk": 0.1, "antidote": 0.3}   # a chicken: raw, cooked or burnt
 METAL_KINDS = {"dagger", "sword", "longsword", "mace", "shield", "helmet", "body", "chainbody", "legs"}
 METAL_F = [0, 1.1, 1.0, 1.0, 0.6, 1.05]
 for k, d in items.items():
@@ -276,22 +286,22 @@ for k, d in items.items():
 CAT = {  # internal kind -> (category, subcategory)
     "sword": ("weapon", "sword"), "dagger": ("weapon", "dagger"), "longsword": ("weapon", "longsword"), "mace": ("weapon", "mace"),
     "bow": ("weapon", "bow"), "staff": ("weapon", "staff"), "helmet": ("armour", "helmet"), "body": ("armour", "platebody"),
-    "chainbody": ("armour", "chainbody"), "legs": ("armour", "platelegs"), "shield": ("armour", "kiteshield"),
+    "chainbody": ("armour", "chainbody"), "legs": ("armour", "platelegs"), "shield": ("armour", "kiteshield"), "torch": ("armour", "torch"),
     "arrows": ("ammo", "arrow"), "coins": ("currency", "gold"), "hat": ("cosmetic", "hat"), "cape": ("cosmetic", "cape"),
     "pack": ("pack", "pack"), "ring": ("jewellery", "ring")}
-SUB_OF_ID = {"ashvale_stone": "stone", "saltmere_stone": "stone", "castle_stone": "stone", "tinderbox": "tinderbox", "hatchet": "hatchet", "pickaxe": "pickaxe", "net": "net", "fishing_rod": "rod", "lobster_pot": "pot", "bread": "bread", "coal": "coal"}
+SUB_OF_ID = {"spider_silk": "silk", "ashvale_stone": "stone", "saltmere_stone": "stone", "castle_stone": "stone", "tinderbox": "tinderbox", "hatchet": "hatchet", "pickaxe": "pickaxe", "net": "net", "fishing_rod": "rod", "lobster_pot": "pot", "bread": "bread", "coal": "coal"}
 MODEL = {"weapon": lambda sub, k: "gear." + sub, "armour": lambda sub, k: "gear." + {"kiteshield": "shield"}.get(sub, sub),
          "ammo": lambda sub, k: "gear.arrows", "pack": lambda sub, k: "gear.pack", "currency": lambda sub, k: "item.coins",
          "cosmetic": lambda sub, k: "cloth." + (k if sub == "hat" else "cape"),
          "tool": lambda sub, k: "item.stone" if sub == "stone" else "gear." + {"rod": "fishing_rod", "pot": "lobster_pot"}.get(sub, sub),
          "food": lambda sub, k: "item." + ("chicken" if sub == "meat" else "bread" if sub == "bread" else "lobster" if k.startswith("lobster") else "shrimp" if k.startswith("shrimp") else "fish"),
          "potion": lambda sub, k: "item.potion", "jewellery": lambda sub, k: "item.ring",
-         "resource": lambda sub, k: "item." + {"logs": "logs", "ore": "ore", "coal": "ore", "pelt": "pelt", "meat": "chicken"}.get(sub, "lobster" if k.startswith("lobster") else "shrimp" if k.startswith("shrimp") else "fish")}
+         "resource": lambda sub, k: "item." + {"logs": "logs", "ore": "ore", "coal": "ore", "pelt": "pelt", "silk": "pelt", "meat": "chicken"}.get(sub, "lobster" if k.startswith("lobster") else "shrimp" if k.startswith("shrimp") else "fish")}
 TRAIT = [("attack", "Attack", 1), ("strength", "Strength", 1), ("defence", "Defence", 1), ("ranged", "Ranged", 1), ("magic", "Magic", 1),
          ("rstr", "Ranged strength", 1), ("speed", "Speed", 1), ("range", "Range", 1), ("carry", "Carry", 0.001), ("heal", "Heal", 1),
          ("healPct", "Heal %", 1), ("cooks", "Cooks into", None), ("burns", "Burns into", None), ("cookReq", "Cooking level", 1),
          ("cookXp", "Cooking XP", 1), ("fireReq", "Firemaking level", 1), ("burnTicks", "Burn ticks", 1), ("fireXp", "Firemaking XP", 1),
-         ("form", "Form", None), ("teleport", "Teleport", None), ("cooldown", "Cooldown ticks", 1), ("arms", "Call to arms", 1), ("effect", "Effect", None), ("effectTicks", "Effect ticks", 1), ("effectChance", "Effect chance", 1), ("effectDamage", "Effect damage", 1), ("edition", "Edition", None)]
+         ("form", "Form", None), ("cures", "Cures", None), ("light", "Light", 1), ("teleport", "Teleport", None), ("cooldown", "Cooldown ticks", 1), ("arms", "Call to arms", 1), ("effect", "Effect", None), ("effectTicks", "Effect ticks", 1), ("effectChance", "Effect chance", 1), ("effectDamage", "Effect damage", 1), ("edition", "Edition", None)]
 ARMOURY = "ASHVALE Armoury"
 MEAT_BASES = {'chicken', 'rat_meat', 'hare', 'goat', 'venison', 'boar'}
 def category_of(k, d):
@@ -397,6 +407,44 @@ WILDLIFE['lizard']['drops'] = [{"item": "lizard_skin", "one_in": 2}]
 for k in ('chicken', 'hen'): WILDLIFE[k].update({"fleeHit": True, "roamEvery": 3})   # run when hit (the operator: "run from you when you try to fight them"), and potter about a lot
 for k in ('hare', 'snow_hare', 'deer', 'goat', 'lizard'): WILDLIFE[k]['fleeHit'] = True   # every timid animal runs when hit; boars and wolves fight back
 monsters.update(WILDLIFE)
+# THE SPIDER CAVE (2026-10-07: "giant rats, spiders, giant spiders, a spider queen, and a swamp monster"; "difficult but
+# beatable" for @apple at combat 26 - Attack 14, Strength 12, Defence 22, Hitpoints 26, Ranged 18, Magic 31). Rising through
+# the cave: rats 12 at the mouth, spiders 16, giant spiders 22, the swamp monster 28, the Queen 32 with two guards. Spiders
+# poison (venom: chance %, ticks it lasts, damage every 3 ticks); food or an antidote cures it. The Queen drops gold, silk,
+# potions and an antidote every time, and about one kill in twenty her crown (the operator chose "a collectible + loot").
+CAVE = {
+    "giant_rat": {"name": "Giant rat", "level": 12, "hp": 22, "att": 11, "def": 9, "attb": 4, "defb": 4, "max": 3, "speed": 4, "aggro": 4,
+                  "respawn": int(round(90 / 0.6)), "anim": "bite", "look": "giant_rat", "animal": True, "roam": 3, "gold": 0,
+                  "drops": [{"item": "rat_meat_raw", "one_in": 1}, {"item": "rat_pelt", "one_in": 1}]},
+    "spider": {"name": "Cave spider", "level": 16, "hp": 26, "att": 15, "def": 11, "attb": 8, "defb": 6, "max": 3, "speed": 3, "aggro": 5,
+               "respawn": int(round(90 / 0.6)), "anim": "bite", "look": "spider", "animal": True, "roam": 3, "gold": 0,
+               "venom": {"chance": 25, "ticks": 25, "dmg": 1}, "drops": [{"item": "spider_silk", "one_in": 1}]},
+    "giant_spider": {"name": "Giant spider", "level": 22, "hp": 40, "att": 20, "def": 16, "attb": 12, "defb": 10, "max": 5, "speed": 4, "aggro": 6,
+                     "respawn": int(round(120 / 0.6)), "anim": "bite", "look": "giant_spider", "animal": True, "roam": 3, "gold": 0,
+                     "venom": {"chance": 30, "ticks": 30, "dmg": 2}, "drops": [{"item": "spider_silk", "n": [2, 3], "one_in": 1}, {"item": "potion", "one_in": 6}]},
+    "swamp_monster": {"name": "Swamp monster", "level": 28, "hp": 70, "att": 24, "def": 22, "attb": 16, "defb": 16, "max": 7, "speed": 5, "aggro": 5,
+                      "respawn": int(round(300 / 0.6)), "anim": "crush", "look": "swamp_monster", "animal": False, "roam": 2, "gold": 60,
+                      "drops": [{"item": "potion", "one_in": 2}, {"item": "antidote", "one_in": 3}, {"item": "bread", "one_in": 2}]},
+    "spider_queen": {"name": "Spider Queen", "level": 32, "hp": 80, "att": 23, "def": 24, "attb": 16, "defb": 15, "max": 6, "speed": 4, "aggro": 7,
+                     "respawn": int(round(600 / 0.6)), "anim": "bite", "look": "spider_queen", "animal": True, "roam": 2, "gold": 120,
+                     "venom": {"chance": 35, "ticks": 30, "dmg": 1},
+                     "drops": [{"item": "spider_silk", "n": [5, 10], "one_in": 1}, {"item": "potion", "n": [2, 2], "one_in": 1}, {"item": "antidote", "one_in": 1},
+                               {"item": "hat_spidercrown", "one_in": 20}]},
+    # the end of the Ashen Crown, moved into the cave (2026-10-07: "Add wraiths ... so that the final quest from the ashen crown
+    # can be completed"; "all of it in the cave"): three wraiths, the Ash Knight at the way into the lair, the Lich at the very end
+    "wraith": {"name": "Wraith", "level": 24, "hp": 42, "att": 22, "def": 18, "attb": 14, "defb": 12, "max": 5, "speed": 4, "aggro": 6,
+               "respawn": int(round(180 / 0.6)), "anim": "slash", "look": "wraith", "animal": False, "roam": 3, "gold": 20,
+               "drops": [{"item": "potion", "one_in": 5}]},
+    "ash_knight": {"name": "Ash Knight", "level": 30, "hp": 80, "att": 26, "def": 24, "attb": 20, "defb": 20, "max": 6, "speed": 5, "aggro": 6,
+                   "respawn": int(round(600 / 0.6)), "anim": "slash", "look": "ash_knight", "animal": False, "roam": 1, "gold": 80,
+                   "drops": [{"item": "longsword_t3", "one_in": 3}, {"item": "potion", "one_in": 2}]},
+    "lich": {"name": "Lich of Ashvale", "level": 34, "hp": 100, "att": 28, "def": 24, "attb": 21, "defb": 17, "max": 6, "speed": 5, "aggro": 7,
+             "respawn": int(round(900 / 0.6)), "anim": "cast", "look": "lich", "animal": False, "roam": 1, "gold": 150,
+             "drops": [{"item": "potion", "n": [2, 2], "one_in": 1}, {"item": "antidote", "one_in": 1}]},
+}
+for m in CAVE.values():   # 2026-10-07: "All the monsters in the cave should automatically attack you and they should follow you
+    m.update({"hunter": True, "relentless": True, "aggro": max(m["aggro"], 6)})   # out of their spawn zone indefinitely" - and up through the opening ("Follow you up")
+monsters.update(CAVE)
 module('monsters', 1, {"monsters": monsters})
 
 # ---------------------------------------------------------------- shops
@@ -420,7 +468,7 @@ salt_armoury_stock = [k for k in armoury_stock if k != 'pack_t3'] + \
            key=lambda k: order.index(items[k]['kind'])) + ['pack_t3']
 shop0 = WORLD['shop']
 module('shops', 3, {"currency": "coins", "shops": {
-    "general": {"name": "Ashvale General Store", "keeper": "tam", "stock": ["bread", "potion", "tinderbox", "hatchet", "pickaxe", "net", "fishing_rod", "lobster_pot", "pack_t1", "pack_t2"],
+    "general": {"name": "Ashvale General Store", "keeper": "tam", "stock": ["bread", "potion", "antidote", "torch", "tinderbox", "hatchet", "pickaxe", "net", "fishing_rod", "lobster_pot", "pack_t1", "pack_t2"],
                 "buys": "any", "buyRate": 40, "sellRate": 100,
                 "greet": "Bread, potions and good honest tools. What'll it be?"},
     "tailor": {"name": "Wren's Tailoring", "keeper": "wren", "stock": ["hat_cap", "hat_bandana", "hat_hood", "hat_feather", "hat_wizard",
@@ -443,7 +491,7 @@ module('shops', 3, {"currency": "coins", "shops": {
     # Saltmere's two new shops (2026-10-05): a general store and an armoury, stocked a little better than
     # Ashvale's, because a harbour pays in ready coin and keeps the good steel for itself.
     "salt_general": {"name": "Saltmere General Store", "keeper": "bela",
-                     "stock": ["bread", "potion", "tinderbox", "hatchet", "pickaxe", "net", "fishing_rod", "lobster_pot",
+                     "stock": ["bread", "potion", "antidote", "torch", "tinderbox", "hatchet", "pickaxe", "net", "fishing_rod", "lobster_pot",
                                "pack_t2", "pack_t3"],
                      "buys": "any", "buyRate": 45, "sellRate": 100,
                      "greet": "Everything a ship needs and most of what a traveller needs. The land route is dearer, so I am cheaper."},
@@ -453,7 +501,7 @@ module('shops', 3, {"currency": "coins", "shops": {
     # the lake castle's three (2026-10-05: "whatever else the castle needs to be a full-blown town"); keepers in
     # data/zone.castle.json (tools/castle/make_castle.js)
     "castle_kitchen": {"name": "The Castle Kitchens", "keeper": "castle_cook", "stock": ["bread", "trout", "salmon", "potion"], "buys": ["food/fish", "food/meat"], "buyRate": 55, "sellRate": 100, "greet": "The range is hot and the bread is from this morning. Cook your own if you like; the range is for everyone."},
-    "castle_general": {"name": "Castle Stores", "keeper": "castle_qm", "stock": ["bread", "potion", "tinderbox", "hatchet", "pickaxe", "net", "fishing_rod", "lobster_pot", "pack_t2"], "buys": "any", "buyRate": 45, "sellRate": 100, "greet": "Rope, nets, tinderboxes, bread. If the castle needs it, I count it, and I sell what I can spare."},
+    "castle_general": {"name": "Castle Stores", "keeper": "castle_qm", "stock": ["bread", "potion", "antidote", "torch", "tinderbox", "hatchet", "pickaxe", "net", "fishing_rod", "lobster_pot", "pack_t2"], "buys": "any", "buyRate": 45, "sellRate": 100, "greet": "Rope, nets, tinderboxes, bread. If the castle needs it, I count it, and I sell what I can spare."},
     "castle_armoury": dict({"name": "The Castle Armoury", "keeper": "castle_armourer", "buys": ["weapon", "armour", "ammo", "pack"], "buyRate": 60, "sellRate": 100, "greet": "Steel for the watch, and for you if you can pay. The good bows go up the wall first."}, stock=salt_armoury_stock),
     # the magic store (2026-10-05). Nessa enchants; she does not deal in swords, so she buys staves only.
     "salt_magic": {"name": "Saltmere Enchantery", "keeper": "nessa",
@@ -1507,17 +1555,17 @@ module('rules', 3, {
               "points": 10, "maxPerSkill": 5,
               "skills": ["attack", "strength", "defence", "ranged", "magic", "hitpoints", "dexterity", "speechcraft"]},
     "items": {
-        "categories": {"weapon": ["sword", "dagger", "longsword", "mace", "bow", "staff"], "armour": ["helmet", "platebody", "chainbody", "platelegs", "kiteshield"],
+        "categories": {"weapon": ["sword", "dagger", "longsword", "mace", "bow", "staff"], "armour": ["helmet", "platebody", "chainbody", "platelegs", "kiteshield", "torch"],
                        "tool": ["hatchet", "pickaxe", "net", "rod", "pot", "tinderbox", "stone"], "pack": ["pack"], "cosmetic": ["hat", "cape"],
                        "resource": ["logs", "ore", "coal", "bar", "pelt", "fish", "mushroom", "meat"], "food": ["bread", "fish", "mushroom", "meat"], "potion": ["healing"],
                        "ammo": ["arrow"], "currency": ["gold"], "jewellery": ["ring"]},
         "slots": {"weapon": "weapon", "armour/helmet": "head", "armour/platebody": "body", "armour/chainbody": "body", "armour/platelegs": "legs",
-                  "armour/kiteshield": "shield", "ammo": "ammo", "pack": "pack", "cosmetic/hat": "head", "cosmetic/cape": "cape", "jewellery/ring": "ring"},
+                  "armour/kiteshield": "shield", "armour/torch": "shield", "ammo": "ammo", "pack": "pack", "cosmetic/hat": "head", "cosmetic/cape": "cape", "jewellery/ring": "ring"},
         "weapons": {"sword": {"class": "melee", "anim": "slash"}, "dagger": {"class": "melee", "anim": "stab"}, "longsword": {"class": "melee", "anim": "slash"},
                     "mace": {"class": "melee", "anim": "crush"}, "bow": {"class": "ranged", "anim": "bow", "twoHanded": True}, "staff": {"class": "magic", "anim": "cast"}},
         "tools": {"hatchet": "woodcutting", "pickaxe": "mining", "net": "fishing", "rod": "fishing", "pot": "fishing", "tinderbox": "firemaking"},
         "edible": ["food", "potion"], "drink": ["potion"],
-        "traits": {"Edition": "edition", "Form": "form", "Teleport": "teleport", "Cooldown ticks": "cooldown", "Call to arms": "arms", "Attack": "attack", "Strength": "strength", "Defence": "defence", "Ranged": "ranged", "Magic": "magic", "Ranged strength": "rstr",
+        "traits": {"Edition": "edition", "Cures": "cures", "Light": "light", "Form": "form", "Teleport": "teleport", "Cooldown ticks": "cooldown", "Call to arms": "arms", "Attack": "attack", "Strength": "strength", "Defence": "defence", "Ranged": "ranged", "Magic": "magic", "Ranged strength": "rstr",
                    "Speed": "speed", "Range": "range", "Carry": ["carry", 1000], "Heal": "heal", "Heal %": "healPct", "Cooks into": "cooks",
                    "Burns into": "burns", "Cooking level": "cookReq", "Cooking XP": "cookXp", "Firemaking level": "fireReq", "Burn ticks": "burnTicks",
                    "Firemaking XP": "fireXp", "Effect": "effect", "Effect ticks": "effectTicks", "Effect chance": "effectChance", "Effect damage": "effectDamage"},

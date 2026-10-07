@@ -114,6 +114,38 @@
    "done": [
     "The gift is yours. The ring rests ten minutes, then it can carry you home again."
    ]
+  },
+  "ashen_crown": {
+   "steps": [
+    {
+     "id": 4,
+     "zone": "spidercave",
+     "talk": [
+      "The crown was the old king's, burned with him when the Keep fell. What was left of it was carried down into the dark: into the Spider Cave, in the woods west of Whisperwood, at the end of the trail that leaves its west road.",
+      "Its pieces have been calling things out of that dark ever since. Three wraiths drift through the tunnels past the flooded grotto. Lay them to rest."
+     ],
+     "progress": [
+      "{left} more wraiths. The cold you feel down in that cave isn't the damp."
+     ],
+     "complete": [
+      "Three wraiths at rest. Something deeper will know they're gone. Go when you're ready, and not a moment before."
+     ]
+    },
+    {
+     "id": 5,
+     "zone": "spidercave",
+     "talk": [
+      "Past the wraiths, at the narrow way into the deepest chamber, the Ash Knight still stands guard, as he once guarded a king long dead. He was the best of them, once."
+     ]
+    },
+    {
+     "id": 6,
+     "zone": "spidercave",
+     "talk": [
+      "Beyond the Spider Queen's lair, at the very end of the cave, waits the one who wears the rest of the crown: the Lich of Ashvale. End it, and the valley remembers what it was."
+     ]
+    }
+   ]
   }
  }
 }

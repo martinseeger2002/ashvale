@@ -17,7 +17,7 @@ REGF = os.path.join(ROOT, 'playtest', 'earth', 'registry.json')
 JS = ['globe', 'wg_geo', 'wg_terrain', 'wg_paths', 'wg_sites', 'wg_tiles', 'worldgen', 'atlas_shapes', 'atlas_chunk', 'earth']
 DATA_MODS = [('wg_tables', os.path.join(DATA, 'atlas', 'wg_tables.json')), ('atlas_palette', os.path.join(DATA, 'atlas', 'atlas_palette.json')),
              ('globecfg', os.path.join(DATA, 'globecfg.json'))]
-ZONES = ['whisperwood', 'village', 'saltmere', 'wolfden']
+ZONES = ['whisperwood', 'village', 'saltmere', 'wolfden', 'cavemouth']   # spidercave is underground: not on the Atlas
 
 
 def main():

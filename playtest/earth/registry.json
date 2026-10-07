@@ -131,6 +131,13 @@
     "api": 1,
     "kind": "json",
     "file": "playtest/earth/modules/zone.wolfden.json"
+   },
+   "cavemouth": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/zone.cavemouth.json"
    }
   }
  }

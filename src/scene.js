@@ -99,7 +99,7 @@
 
     /* many boxes/cylinders of one colour -> one InstancedMesh each */
     function Batcher(group) {
-      const geos = { box: new THREE.BoxGeometry(1, 1, 1), cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 8), cyl6: new THREE.CylinderGeometry(0.5, 0.5, 1, 6), cyl12: new THREE.CylinderGeometry(0.5, 0.5, 1, 12), cyl32: new THREE.CylinderGeometry(0.5, 0.5, 1, 32), cone: new THREE.ConeGeometry(0.5, 1, 6), pyr: new THREE.ConeGeometry(0.5, 1, 4) };
+      const geos = { box: new THREE.BoxGeometry(1, 1, 1), cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 8), cyl6: new THREE.CylinderGeometry(0.5, 0.5, 1, 6), cyl12: new THREE.CylinderGeometry(0.5, 0.5, 1, 12), cyl32: new THREE.CylinderGeometry(0.5, 0.5, 1, 32), cone: new THREE.ConeGeometry(0.5, 1, 6), pyr: new THREE.ConeGeometry(0.5, 1, 4), rock: new THREE.DodecahedronGeometry(0.5, 0) };
       const sets = new Map();
       return {
         add(kind, color, x, y, z, sx, sy, sz, ry, rx, rz) {
@@ -157,6 +157,13 @@
         if (pt != null && !(at(cx - 1, cy - 1) === '~' && at(cx, cy - 1) === '~' && at(cx - 1, cy) === '~' && at(cx, cy) === '~')) return pt;
         let h = (vnoise(cx * 0.11, cy * 0.11) - 0.5) * 1.5 + (vnoise(cx * 0.37 + 9, cy * 0.37 + 3) - 0.5) * 0.35;
         const adj = [at(cx - 1, cy - 1), at(cx, cy - 1), at(cx - 1, cy), at(cx, cy)];
+        /* underground (the Spider Cave): rock rises into walls round a flat floor; wading water sits a little low */
+        if (map.underAt && map.underAt(cx, cy) != null) {
+          const rock = adj.filter(c => c === '^').length, wet = adj.filter(c => c === 'v' || c === '~').length;
+          if (rock === 4) return 3.2 + (vnoise(cx * 0.3, cy * 0.3) - 0.5) * 0.7;   /* the rock: walls rise straight up from the floor's edge */
+          if (rock) return 0.05 + (vnoise(cx * 0.5, cy * 0.5) - 0.5) * 0.15;
+          return wet ? -0.35 + (vnoise(cx * 0.4, cy * 0.4) - 0.5) * 0.1 : (vnoise(cx * 0.2, cy * 0.2) - 0.5) * 0.25;
+        }
         const z = zone(cx, cy);
         const flat = adj.some(c => 'pHXFfdi'.indexOf(c) >= 0) || (z === 'village' && adj.some(c => c === '.'));
         if (flat) h *= z === 'village' ? 0.12 : 0.45;
@@ -166,13 +173,13 @@
         else if (adj.some(c => c === 's')) h = Math.min(h, 0.02) * 0.5;
         return h;
       }
-      let corner, surfOf = () => WATER_Y;
+      let corner, surfOf = () => WATER_Y, chunks = null;
       if (!seeded) {
         const hc = new Float32Array((W + 1) * (H + 1));
         for (let cy = 0; cy <= H; cy++) for (let cx = 0; cx <= W; cx++) hc[cy * (W + 1) + cx] = own(cx, cy);
         corner = (cx, cy) => hc[Math.max(0, Math.min(H, cy)) * (W + 1) + Math.max(0, Math.min(W, cx))];
       } else {
-        const P = map.inPiece, chunks = new Map();
+        const P = map.inPiece; chunks = new Map();
         const depth = (cx, cy) => {   /* tiles from this corner to the nearest tile outside the set pieces (0 = on the edge, max 8) */
           for (let r = 1; r <= 8; r++) for (let y = cy - r; y < cy + r; y++) for (let x = cx - r; x < cx + r; x++) {
             if (y !== cy - r && y !== cy + r - 1 && x !== cx - r && x !== cx + r - 1) continue;
@@ -181,6 +188,7 @@
           return 8;
         };
         const fade = (cx, cy) => {   /* the ground as it will be drawn: worldgen outside the set pieces, own() inside them, mixed by distance to the piece edge */
+          if (map.underNear && map.underNear(cx, cy)) return map.underAt(cx, cy) != null ? own(cx, cy) : 3.1;   /* underground: the cave's own floor and walls, solid rock round it */
           const sh = map.groundH(cx, cy);
           if (!(P(cx - 1, cy - 1) || P(cx, cy - 1) || P(cx - 1, cy) || P(cx, cy))) return sh;
           const a0 = at(cx - 1, cy - 1), a1 = at(cx, cy - 1), a2 = at(cx - 1, cy), a3 = at(cx, cy);
@@ -190,6 +198,7 @@
         };
         const wLevel = map.waterH() - 0.05;
         surfOf = (tx, ty) => {   /* where the water's skin stands over this tile, the same curve build draws and rings ride */
+          if (map.underAt && map.underAt(tx, ty) != null) return -0.12;   /* underground: just over the wading floor */
           const bed = (fade(tx, ty) + fade(tx + 1, ty) + fade(tx, ty + 1) + fade(tx + 1, ty + 1)) / 4;
           const ws = map.waterSurf ? map.waterSurf(tx, ty) : null;   /* rivers and lakes stand at their own level, flat (2026-10-04: "the rivers are dry"; a hollow's water "follows the contour") */
           if (ws != null) return Math.max(wLevel, ws + 0.2);   /* one height for a whole lake: never the bed's */
@@ -239,7 +248,10 @@
         const a = corner(xi, zi), b = corner(xi + 1, zi), c = corner(xi, zi + 1), d = corner(xi + 1, zi + 1);
         return a * (1 - fx) * (1 - fz) + b * fx * (1 - fz) + c * (1 - fx) * fz + d * fx * fz;
       }
-      return (map._hgt = { corner, heightAt, floor, surf: (x, y) => surfOf(x, y) });
+      /* an area that arrives later (area loading) changes the ground under it: forget the cached corners there (they were worked
+         out from its stub, or for an underground area from solid rock) so the next build reads its real tiles */
+      const forget = (x0, y0, w, h) => { if (!chunks) return; for (let cy = (y0 - 2) >> 6; cy <= (y0 + h + 2) >> 6; cy++) for (let cx = (x0 - 2) >> 6; cx <= (x0 + w + 2) >> 6; cx++) chunks.delete(map.key(cx, cy)); };
+      return (map._hgt = { corner, heightAt, floor, surf: (x, y) => surfOf(x, y), forget });
     }
 
     function build(map, opts) {
@@ -586,6 +598,43 @@
             torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x, y, z });
             break;
           }
+          /* the Spider Cave (2026-10-07): the mouth up top, the ways out below, webs and glowing mushrooms inside */
+          case 'cavemouth': case 'caveout': {   /* a rock outcrop with a cave opening in its south face (2026-10-07); caveout: the way out up top, not a way in */
+            const RK = [[0, -0.6, 3.2, 2.6, 2.6, 0x6b675f], [-1.4, -0.2, 2.0, 2.0, 2.2, 0x75716a], [1.45, -0.1, 2.1, 1.8, 2.0, 0x625e57], [-0.6, -1.5, 2.4, 2.2, 2.2, 0x5d5a54],
+                        [0.9, -1.4, 2.0, 2.4, 1.8, 0x6f6b64], [-2.1, 0.6, 1.3, 1.0, 1.3, 0x7a766e], [2.1, 0.7, 1.2, 0.9, 1.1, 0x6a665f], [0, -0.3, 1.6, 1.0, 1.4, 0x67635c]];
+            for (const [dx, dz, sx, sy, sz, c] of RK) B.add('rock', c, x + dx, y + sy * 0.38, z + dz, sx, sy, sz, hash2(o.x + dx * 7, o.y + dz * 3) * 6);
+            const dark = new THREE.MeshBasicMaterial({ color: 0x040302, side: THREE.DoubleSide });
+            const hole = new THREE.Mesh(new THREE.CircleGeometry(0.75, 14, 0, Math.PI), dark); hole.scale.set(1, 1.25, 1); hole.position.set(x, y + 0.02, z + 0.62); group.add(hole);
+            const deep = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.1, 0.9), dark); deep.position.set(x, y + 0.5, z + 0.2); group.add(deep);
+            B.add('rock', 0x5f5b55, x - 0.85, y + 0.55, z + 0.55, 0.7, 1.3, 0.8, 1.1); B.add('rock', 0x6a665f, x + 0.85, y + 0.5, z + 0.55, 0.7, 1.2, 0.8, 2.3); B.add('rock', 0x625e57, x, y + 1.35, z + 0.5, 1.7, 0.7, 0.9, 0.4);
+            { const pk = new THREE.Mesh(new THREE.BoxGeometry(3, 2.4, 3), new THREE.MeshBasicMaterial({ visible: false })); pk.position.set(x, y + 1.2, z - 0.4); pk.userData.pick = o.k === 'cavemouth' ? { kind: 'passage', x: o.x, y: o.y } : { kind: 'caveout', x: o.x, y: o.y }; group.add(pk); pickables.push(pk); }
+            break;
+          }
+          case 'caveexit': {   /* underground: an opening in the rock with daylight beyond it - no ladder (2026-10-07) */
+            B.add('rock', 0x4e4b46, x - 0.75, y + 0.9, z - 0.2, 0.7, 1.9, 0.9, 0.7); B.add('rock', 0x55524c, x + 0.75, y + 0.85, z - 0.2, 0.7, 1.8, 0.9, 2.1);
+            B.add('rock', 0x4a4742, x, y + 1.85, z - 0.25, 2.2, 0.8, 1.0, 0.3);
+            const day = new THREE.Mesh(new THREE.CircleGeometry(0.62, 14, 0, Math.PI), new THREE.MeshBasicMaterial({ color: 0xfff1cc, side: THREE.DoubleSide }));
+            day.scale.set(1, 1.6, 1); day.position.set(x, y + 0.05, z - 0.3); group.add(day);
+            const glow = new THREE.Mesh(new THREE.ConeGeometry(1.4, 2.4, 14, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff2c8, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
+            glow.rotation.x = Math.PI / 2; glow.position.set(x, y + 0.8, z + 0.9); group.add(glow);
+            const pk = new THREE.Mesh(new THREE.BoxGeometry(1.8, 2.2, 1.2), new THREE.MeshBasicMaterial({ visible: false })); pk.position.set(x, y + 1.1, z); pk.userData.pick = { kind: 'passage', x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
+            break;
+          }
+          case 'web': {   /* spokes and rings of silk, hung upright */
+            const P = [], R0 = 0.8, n = 8;
+            for (let k = 0; k < n; k++) { const a = k / n * Math.PI * 2; P.push(0, 0, 0, Math.cos(a) * R0, Math.sin(a) * R0, 0); }
+            for (let r = 1; r <= 4; r++) { const rr = R0 * r / 4.4; for (let k = 0; k < n; k++) { const a = k / n * Math.PI * 2, b = (k + 1) / n * Math.PI * 2, sag = 0.9 + 0.1 * Math.sin(k * 3 + r); P.push(Math.cos(a) * rr * sag, Math.sin(a) * rr * sag, 0, Math.cos(b) * rr, Math.sin(b) * rr, 0); } }
+            const gg = new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+            const w = new THREE.LineSegments(gg, new THREE.LineBasicMaterial({ color: 0xe8eef0, transparent: true, opacity: 0.55 }));
+            w.position.set(x, y + 1.05, z); w.rotation.y = hash2(o.x, o.y) * 6.28; group.add(w);
+            break;
+          }
+          case 'shroom': {
+            const r = hash2(o.x, o.y), gm = new THREE.MeshBasicMaterial({ color: r < 0.5 ? 0x63e6d0 : 0x9ad84a });
+            for (let k = 0; k < 3; k++) { const a = k * 2.1 + r * 6, dx = Math.cos(a) * 0.22, dz = Math.sin(a) * 0.22, hh = 0.12 + 0.08 * k;
+              B.add('box', 0xd8d0b8, x + dx, y + hh / 2, z + dz, 0.04, hh, 0.04); const cap = new THREE.Mesh(new THREE.SphereGeometry(0.07 + 0.02 * k, 7, 4, 0, 6.29, 0, 1.6), gm); cap.position.set(x + dx, y + hh, z + dz); group.add(cap); }
+            break;
+          }
           case 'anvil': B.add('box', 0x3a3a3e, x, y + 0.25, z, 0.3, 0.5, 0.3); B.add('box', 0x45454a, x, y + 0.55, z, 0.7, 0.16, 0.32); B.add('cone', 0x45454a, x + 0.42, y + 0.55, z, 0.14, 0.3, 0.14, 0, 0, Math.PI / 2); B.add('box', 0x5a3c24, x, y + 0.06, z, 0.6, 0.12, 0.5); break;
           case 'rack': y = floorY(o, y); B.add('box', 0x5a3c24, x - 0.4, y + 0.6, z, 0.08, 1.2, 0.08); B.add('box', 0x5a3c24, x + 0.4, y + 0.6, z, 0.08, 1.2, 0.08); B.add('box', 0x5a3c24, x, y + 1.1, z, 0.9, 0.08, 0.08);
             for (let k = 0; k < 3; k++) { B.add('box', [0xb8763b, 0x77777a, 0xc4c8cf][k], x - 0.25 + k * 0.25, y + 0.62, z + 0.05, 0.05, 0.85, 0.02); B.add('box', 0x3a2410, x - 0.25 + k * 0.25, y + 0.22, z + 0.05, 0.16, 0.04, 0.06); }
@@ -652,6 +701,7 @@
         if (!mine(x, y)) continue;
         const c = at(x, y), r = hash2(x * 5 + 1, y * 7 + 2);
         if (c === 'K') { B.add('box', 0x8c897e, x + 0.5, heightAt(x + 0.5, y + 0.5) + 0.65, y + 0.5, 0.5, 1.3 + r * 0.9, 0.42, r * 6); continue; }   /* standing stones and ruin walls (seeded land) */
+        if (c === '^' && map.underNear && map.underNear(x, y)) continue;   /* underground the rock is the raised ground itself */
         if (c === '^') { if (r < 0.4) B.add('pyr', 0x76736b, x + 0.5, heightAt(x + 0.5, y + 0.5) + 0.5, y + 0.5, 1.4, 1 + r * 2, 1.4, r * 6); continue; }   /* mountain rock */
         if (c === 'f') for (let k = 0; k < 5; k++) { const fx = x + 0.2 + hash2(x + k, y) * 0.6, fz = y + 0.2 + hash2(x, y + k) * 0.6, fy = heightAt(fx, fz); B.add('box', 0x3a7a2a, fx, fy + 0.08, fz, 0.03, 0.16, 0.03); B.add('box', FL[(x + y + k) % 5], fx, fy + 0.18, fz, 0.09, 0.07, 0.09); }
         else if ((c === '.' || c === ',') && r < 0.28) { const fx = x + 0.2 + hash2(x, y + 2) * 0.6, fz = y + 0.2 + hash2(x + 2, y) * 0.6; B.add('cone', c === ',' ? 0x3a6a26 : 0x4a8a30, fx, heightAt(fx, fz) + 0.1, fz, 0.22, 0.22, 0.22, r * 9); }

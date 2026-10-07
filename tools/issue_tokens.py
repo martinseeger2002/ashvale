@@ -14,7 +14,9 @@ OUT = os.path.join(HERE, 'chain', 'resource_tokens.json')
 items = json.load(open(os.path.join(HERE, 'data', 'items.json')))['data']['items']
 assets = json.load(open(os.path.join(HERE, 'data', 'assets.json')))['data']['items']
 done = json.load(open(OUT)) if os.path.exists(OUT) else {}
-STACK = [(k, v) for k, v in items.items() if k != 'coins' and (assets.get(k) or {}).get('kind') != 'nft']
+XP = os.path.join(HERE, 'data', 'extra', 'assets.json')   # items kept in-game only (e.g. the Gift of Angels) get no token either
+SKIP = set((json.load(open(XP)) if os.path.exists(XP) else {}).get('skip', []))
+STACK = [(k, v) for k, v in items.items() if k != 'coins' and k not in SKIP and (assets.get(k) or {}).get('kind') != 'nft']
 todo = [(k, v) for k, v in STACK if k not in done]
 def tname(k, v): return ('ASHVALE ' + v.get('name', k)).upper()[:40]
 print(len(STACK), 'stackable items,', len(done), 'already issued,', len(todo), 'to issue:', ', '.join(k for k, _ in todo), flush=True)

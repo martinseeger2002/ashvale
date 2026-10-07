@@ -96,7 +96,7 @@
     function updateOrbs() {
       const p = P(); if (!p) return;
       const hk = core.isHawk && core.isHawk(p), mx = hk ? core.hawkMax() : core.maxHp(p), hv = hk ? (p.hawkHp == null ? mx : p.hawkHp) : p.hp;   /* a hawk has its own HP (2026-10-04) */
-      hpOrb.firstChild.style.height = (100 * hv / mx) + '%'; hpOrb.lastChild.textContent = hv; hpOrb.title = (hk ? 'Hawk HP ' : 'Hitpoints ') + hv + '/' + mx; hpOrb.classList.toggle('hawk', !!hk);
+      hpOrb.firstChild.style.height = (100 * hv / mx) + '%'; hpOrb.lastChild.textContent = hv; hpOrb.title = hpOrb.dataset.poison ? 'Poisoned! Eat something or drink an antidote.' : (hk ? 'Hawk HP ' : 'Hitpoints ') + hv + '/' + mx; hpOrb.classList.toggle('hawk', !!hk);
       const e = Math.floor(p.energy / 100); runOrb.firstChild.style.height = e + '%'; runOrb.lastChild.textContent = e; runOrb.classList.toggle('off', !p.runNow); runOrb.title = 'Run energy. Double-tap (or double-click) where you want to go to run there.';
     }
     runOrb.onclick = () => chatLine(api.isTouch ? 'To run, double-tap where you want to go. Running uses this energy.' : 'To run, double-click where you want to go. Running uses this energy.', 'sys');
@@ -164,7 +164,10 @@
       const f = FX_ICON[kind]; if (!f) return null;
       const s = el('splat fx', layer, ''); s.style.backgroundImage = 'url("data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="' + f[0] + '" stroke="' + f[1] + '" stroke-width="1.5"/><g stroke="' + f[1] + '" fill="' + f[1] + '">' + f[2] + '</g></svg>') + '")'; return s;
     }
-    function splat(dmg) { const s = el('splat' + (dmg ? '' : ' miss'), layer, String(dmg)); s.style.backgroundImage = 'url("' + (dmg ? A.SPLAT_RED : A.SPLAT_BLUE) + '")'; return s; }
+    function splat(dmg, kind) { const s = el('splat' + (dmg ? '' : ' miss') + (kind === 'poison' ? ' poison' : ''), layer, String(dmg)); s.style.backgroundImage = kind === 'poison' ? 'none' : 'url("' + (dmg ? A.SPLAT_RED : A.SPLAT_BLUE) + '")'; return s; }
+    /* poisoned (2026-10-07: "there needs to be an indication to the player that they are poisoned"): the Hitpoints orb goes green
+       with a drop badge, and its title says so */
+    function setPoison(on) { hpOrb.classList.toggle('poison', !!on); hpOrb.dataset.poison = on ? '1' : ''; if (on) hpOrb.title = 'Poisoned! Eat something or drink an antidote.'; }
     function hpBar() { return el('hpb', layer, '<i></i>'); }
     function bubble(text) { return el('bub', layer, A.esc(text)); }
     function tag(text) { return el('tag', layer, A.esc(text)); }
@@ -205,9 +208,12 @@
     }
     /* the portal swirl (2026-10-06): shown while the town you are travelling to is still loading (engine arriveCheck) */
     const trav = el('travel', ui); trav.innerHTML = '<div class="sw"></div><div class="sw2"></div><div class="tt"></div><div class="pb"><i></i></div>';
-    function travel(on, name, frac) {
+    /* kind: undefined = the portal swirl; 'down' = climbing into a cave (dark stone, a torch's flicker, grit falling), 'up' = out
+       into the daylight (2026-10-07: "Make the loading screen for entering a cave different than the town portal") */
+    function travel(on, name, frac, kind) {
       trav.style.display = on ? 'flex' : 'none'; if (!on) return;
-      trav.querySelector('.tt').textContent = 'Travelling to ' + (name || 'another town') + '\u2026';
+      trav.className = 'travel ui' + (kind ? ' ' + kind : '');
+      trav.querySelector('.tt').textContent = kind === 'down' ? 'Climbing down into the ' + (name || 'cave') + '\u2026' : kind === 'up' ? 'Climbing out into the daylight\u2026' : 'Travelling to ' + (name || 'another town') + '\u2026';
       trav.querySelector('.pb i').style.width = Math.round(Math.max(0.08, Math.min(1, frac || 0)) * 100) + '%';
     }
     function setOpp(o) { if (!o) { opp.style.display = 'none'; return; } opp.style.display = 'block'; opp.innerHTML = '<div class="y t">' + A.esc(o.name) + '</div><div class="bar"><i style="width:' + Math.max(0, Math.min(100, 100 * o.hp / o.max)) + '%"></i></div>'; }
@@ -264,7 +270,7 @@
     { const r0 = K.refresh; K.refresh = w => { r0(w); if (st.chest) K.drawChest(); }; }   /* the chest window follows the bag and the wallet */
     setTab(st.tab);
     return {
-      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, playerStats, travel, netLost, newVersion, elsewhere, setPos, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => K.openChest(), closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
+      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, playerStats, travel, netLost, newVersion, elsewhere, setPos, setPoison, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => K.openChest(), closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };

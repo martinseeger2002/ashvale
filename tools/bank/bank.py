@@ -183,6 +183,36 @@ def handle_where(c, addr, msg):
     r = c.execute('select x, y, at from wheres where addr=?', (addr,)).fetchone()
     log('WHERE?', addr, 'unknown' if not r else (r['x'], r['y']))
     return {'t': 'where', 'to': addr, 'x': r['x'], 'y': r['y'], 'at': int(r['at'])} if r else {'t': 'where', 'to': addr, 'none': 1}
+# CONTACTS ON THE ATLAS (2026-10-07: "If a player is logged in and playing the game and in your address book, show their
+# location on the Atlas"; mutual contacts only). Each game reports its player's address book (arcade.contacts, which asks the
+# player first) in small pieces; the Atlas asks with its own list. The links live in THIS PROCESS'S MEMORY ONLY - never written
+# to the database, a file or the log - and expire unless re-reported while the player plays (the Arcade session's point:
+# addresses are public, so a hashed graph on disk would still be the graph). A restart forgets them all.
+BOOK = {}          # address -> {contact address: last reported (time)}
+BOOK_TTL = 1800    # 30 min: the game re-reports every 10 min while it runs
+ONLINE = 600       # a contact is shown when their game said where they stand within 10 min
+def _addrs(msg):
+    a = msg.get('a') if isinstance(msg.get('a'), list) else []
+    return [x for x in a[:20] if isinstance(x, str) and 25 <= len(x) <= 40 and x.isalnum()]
+def handle_contacts(c, addr, msg):
+    now = time.time()
+    if msg.get('t') == 'book':
+        mine = BOOK.setdefault(addr, {})
+        for x in _addrs(msg):
+            if x != addr: mine[x] = now
+        for a in [a for a, m in BOOK.items() if not m or max(m.values()) < now - BOOK_TTL]: BOOK.pop(a, None)
+        for m in BOOK.values():
+            for x in [x for x, at in m.items() if at < now - BOOK_TTL]: m.pop(x, None)
+        return None
+    # 'friends?': which of these (the asker's contacts) have the asker in their book too, and are playing now
+    out = []
+    mine = BOOK.get(addr, {})
+    for x in _addrs(msg):
+        theirs = BOOK.get(x, {})
+        if addr not in theirs or theirs[addr] < now - BOOK_TTL: continue      # not mutual (or gone stale)
+        r = c.execute('select x, y, at from wheres where addr=?', (x,)).fetchone()
+        if r and r['at'] > now - ONLINE: out.append([x, r['x'], r['y']])
+    return {'t': 'friends', 'to': addr, 'q': str(msg.get('q') or '')[:12], 'f': out}
 def handle(c, addr, msg):
     """-> reply dict (or a list of them). Queues jobs; never touches the chain itself."""
     if msg.get('t') == 'drop': handle_drop(c, addr, msg); return None
@@ -190,6 +220,7 @@ def handle(c, addr, msg):
     if msg.get('t') == 'ground?': return handle_ground(c, addr, msg)
     if msg.get('t') in ('fell', 'felled?'): return handle_felled(c, addr, msg)
     if msg.get('t') in ('here', 'where?'): return handle_where(c, addr, msg)
+    if msg.get('t') in ('book', 'friends?'): return handle_contacts(c, addr, msg)
     rid = str(msg.get('id') or '')[:40]
     if not rid: return None
     old = c.execute('select paid from reqs where addr=? and id=?', (addr, rid)).fetchone()
@@ -388,7 +419,7 @@ def room_loop(stop):
                     if fr.evaluate("window.__bankClosed || null"): raise RuntimeError('room closed')
                     for m in fr.evaluate("window.__bankQ.splice(0)"):
                         d, f = m.get('data') or {}, m.get('from') or {}
-                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'took', 'ground?', 'here', 'where?'): continue
+                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?'): continue
                         if f.get('guest') or not f.get('address'): continue
                         try: rep = handle(c, f['address'], d)
                         except Exception: log('HANDLE ERROR', traceback.format_exc()[-400:]); rep = {'t': 'dep', 'id': d.get('id'), 'to': f['address'], 'ok': False, 'note': 'The bank hit an error; try again later.'}
