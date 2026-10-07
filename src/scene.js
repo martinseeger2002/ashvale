@@ -30,6 +30,85 @@
     /* gas street lamps (2026-10-07): one shared glass material, lit warm at night and dull by day (engine: lampGlow) */
     const LAMPG = new THREE.MeshBasicMaterial({ color: 0x8a8670 }), LAMP_OFF = new THREE.Color(0x8a8670), LAMP_ON = new THREE.Color(0xffd27a);
     const lampGlow = k => LAMPG.color.copy(LAMP_OFF).lerp(LAMP_ON, Math.min(1, Math.max(0, k)));
+    /* the birch bark canoe (jiimaan) of Ziibiing (2026-10-07): a bark hull over cedar, pitch on the seams, the ends
+       turned up; length along z (the way a rider faces). Its waterline is y 0. */
+    /* THE WIGWAM (2026-10-07: "a center cage of bent ironwood wrapped with square pieces of birch bark, mended with sinew
+       and birch bark tar"): a cage of ironwood saplings bent into arches both ways and tied to hoops; over it rows of square bark
+       panels, each overlapping the row below like shingles, sewn at the joins with sinew and sealed with dark birch bark tar (the
+       tar shows in every seam); binding hoops outside hold the bark down. The door (local +z) is a gap in the lowest rows.
+       One instanced mesh for the panels and one for the stitches, so a whole village stays cheap. */
+    const BARK = [0xe3d4b0, 0xd9c8a2, 0xece0c2, 0xcdb98f, 0xe0cfa6, 0xd4c29a];
+    function wigwamShell(R0, HT, inside, seed) {
+      const g = new THREE.Group(), rnd = k => hash2(seed * 7 + k, seed * 3 - k), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), V = (x, y, z) => new THREE.Vector3(x, y, z);
+      const rows = [[0.0, 0.3], [0.26, 0.58], [0.54, 0.86], [0.82, 1.12], [1.08, 1.34]], panels = [];
+      const at = (az, el, r = 1) => V(R0 * r * Math.cos(el) * Math.sin(az), HT * r * Math.sin(el), R0 * r * Math.cos(el) * Math.cos(az));
+      rows.forEach(([e0, e1], ri) => {
+        const em = (e0 + e1) / 2, n = Math.max(5, Math.round(2 * Math.PI * R0 * Math.cos(em) / 0.95)), h = at(0, e1).distanceTo(at(0, e0)) * 1.06;
+        for (let k = 0; k < n; k++) {
+          const az = (k + 0.5 * (ri % 2) + (rnd(ri * 50 + k) - 0.5) * 0.12) / n * 2 * Math.PI;
+          if (ri < 2 && Math.abs(Math.atan2(Math.sin(az), Math.cos(az))) < 0.36) continue;   /* the doorway */
+          const w = 2 * Math.PI * R0 * Math.cos(em) / n * 1.08, out = 1 + 0.012 * ri + (inside ? -0.0 : 0.004);
+          const pos = at(az, em, out), nrm = V(pos.x / (R0 * R0), pos.y / (HT * HT), pos.z / (R0 * R0)).normalize();
+          const up = V(0, 1, 0).sub(nrm.clone().multiplyScalar(nrm.y)).normalize(), xa = new THREE.Vector3().crossVectors(up, nrm).normalize();
+          if (inside) m4.makeBasis(xa.clone().negate(), up, nrm.clone().negate()); else m4.makeBasis(xa, up, nrm); q.setFromRotationMatrix(m4);   /* inside: the panels face in, one-sided, so the wall nearest the camera (outside the lodge) never hides the room */ q.multiply(new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), -0.06));   /* the lower edge out: shingled */
+          panels.push({ pos, q: q.clone(), w, h, c: BARK[Math.floor(rnd(ri * 90 + k) * BARK.length)], ri, k, xa, up, nrm });
+        }
+      });
+      const pm = seeThrough(new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true, side: inside ? THREE.FrontSide : THREE.DoubleSide })), GEO = () => inside ? new THREE.PlaneGeometry(1, 1) : new THREE.BoxGeometry(1, 1, 1);
+      const P = new THREE.InstancedMesh(GEO(), pm, panels.length), C = new THREE.Color(), one = V(1, 1, 1);
+      panels.forEach((p, i) => { m4.compose(p.pos, p.q, V(p.w, p.h, 0.035)); P.setMatrixAt(i, m4); P.setColorAt(i, C.setHex(p.c)); });
+      P.castShadow = !inside; P.receiveShadow = true; g.add(P);
+      /* the marks on the bark (dark lenticels across it), the sinew stitches at each panel's side, and tar along its top edge */
+      const marks = []; panels.forEach((p, i) => {
+        for (let k = 0; k < 2; k++) if (rnd(i * 7 + k) < 0.6) marks.push([p.pos.clone().add(p.up.clone().multiplyScalar((rnd(i + k * 31) - 0.5) * p.h * 0.6)).add(p.nrm.clone().multiplyScalar(inside ? -0.02 : 0.02)), p.q, V(p.w * (0.2 + 0.3 * rnd(i * 3 + k)), 0.012, 0.01), 0x4a3a2a]);
+        for (let k = -1; k <= 1; k++) marks.push([p.pos.clone().add(p.xa.clone().multiplyScalar(p.w * 0.47)).add(p.up.clone().multiplyScalar(k * p.h * 0.28)).add(p.nrm.clone().multiplyScalar(inside ? -0.022 : 0.022)), p.q, V(0.07, 0.014, 0.012), 0xcbb48a]);
+        marks.push([p.pos.clone().add(p.up.clone().multiplyScalar(p.h * 0.48)).add(p.nrm.clone().multiplyScalar(inside ? -0.02 : 0.02)), p.q, V(p.w * 0.98, 0.03, 0.012), 0x241a12]);
+      });
+      const M = new THREE.InstancedMesh(GEO(), seeThrough(new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true })), marks.length);
+      marks.forEach(([pos, qq, sc, c], i) => { m4.compose(pos, qq, sc); M.setMatrixAt(i, m4); M.setColorAt(i, C.setHex(c)); }); g.add(M);
+      /* the tar behind the seams: a dark skin just under the panels */
+      const tar = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2), lam(0x241a12, { side: inside ? THREE.BackSide : THREE.FrontSide })); const tr = inside ? 1.1 : 0.985; tar.scale.set(R0 * tr, HT * tr, R0 * tr); g.add(tar);
+      /* the ironwood cage: arches bent across both ways and tied to hoops (inside it shows in front of the bark) */
+      const wood = lam(0x5a4430), rr = inside ? 0.96 : 0.97;
+      for (let k = 0; k < 4; k++) for (const axis of [0, 1]) {
+        const off = (k - 1.5) * 0.42, pts = [];
+        for (let i = 0; i <= 14; i++) { const t = Math.PI * i / 14, cx = Math.cos(t), r2 = Math.sqrt(Math.max(0, 1 - off * off)); const a = V(cx * r2, Math.sin(t) * r2, off); pts.push(axis ? V(a.z * R0 * rr, a.y * HT * rr, a.x * R0 * rr) : V(a.x * R0 * rr, a.y * HT * rr, a.z * R0 * rr)); }
+        g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.035, 5), wood));
+      }
+      for (const hy of [0.35, 0.95, 1.6]) { const r2 = R0 * rr * Math.sqrt(1 - (hy / HT) ** 2); const h = new THREE.Mesh(new THREE.TorusGeometry(r2, 0.032, 4, 28), wood); h.rotation.x = Math.PI / 2; h.position.y = hy * rr; g.add(h); }
+      if (!inside) for (const hy of [0.6, 1.35]) {   /* the binding hoops outside, over the bark */
+        const r2 = R0 * 1.05 * Math.sqrt(1 - (hy / HT) ** 2) + 0.02; const h = new THREE.Mesh(new THREE.TorusGeometry(r2, 0.035, 4, 28), wood); h.rotation.x = Math.PI / 2; h.position.y = hy; h.castShadow = true; g.add(h);
+      }
+      return g;
+    }
+    const DOCKS = [];   /* the canoes lying at landings (the engine hides them while you have taken yours out) */
+    function canoeMesh() {   /* an Ojibwe birch bark canoe (jiimaan, 2026-10-07): bark white side in, the warm outer bark out, high ends that
+      curl up and over, gores sewn with spruce root and sealed black with pitch, root lashing round the gunwales, a winter-bark panel at the bow */
+      const g = new THREE.Group(), L = 2.15, outer = lam(0xa8743f), inner = lam(0xeadfc4, { side: THREE.BackSide }), gum = 0x1e160f, root = 0xd8c89a;
+      const geo = new THREE.SphereGeometry(1, 20, 7, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
+      for (const m of [outer, inner]) { const h = new THREE.Mesh(geo, m); h.scale.set(0.42, 0.34, L); h.position.y = 0.34; h.castShadow = m === outer; h.receiveShadow = true; g.add(h); }
+      const fl = new THREE.Mesh(new THREE.CircleGeometry(1, 18), lam(0xa27848)); fl.rotation.x = -Math.PI / 2; fl.scale.set(0.36, 1.86, 1); fl.position.y = 0.14; fl.receiveShadow = true; g.add(fl);   /* cedar sheathing over the waterline: no river in the boat */
+      for (let k = -6; k <= 6; k++) g.add(mesh(new THREE.BoxGeometry(0.66 * Math.sqrt(1 - (k / 7) ** 2), 0.012, 0.03), 0x8a6238, 0, 0.152, k * 0.27));   /* the cedar ribs */
+      for (const e of [-1, 1]) {
+        /* the end: the bark gore rises into a tall rounded end that curls back over (the Ojibwe high end) */
+        const sh = new THREE.Shape(); sh.moveTo(0, 0.02); sh.quadraticCurveTo(0.34, 0.06, 0.46, 0.42); sh.quadraticCurveTo(0.52, 0.78, 0.3, 0.84); sh.quadraticCurveTo(0.14, 0.86, 0.18, 0.7); sh.lineTo(0.0, 0.34); sh.lineTo(0, 0.02);
+        const end = new THREE.Mesh(new THREE.ShapeGeometry(sh, 10), lam(0x9a6838, { side: THREE.DoubleSide })); end.rotation.y = e > 0 ? -Math.PI / 2 : Math.PI / 2; end.position.set(0, 0.0, e * (L - 0.42)); end.castShadow = true; g.add(end);
+        const pts = []; for (let i = 0; i <= 12; i++) { const t = i / 12, a = t * Math.PI * 1.15; pts.push(new THREE.Vector3(0, 0.34 + 0.45 * Math.sin(Math.min(a, Math.PI / 2)) + (a > Math.PI / 2 ? 0.08 * Math.sin(a) : 0), e * (L - 0.42 + 0.36 * Math.sin(a * 0.75)))); }
+        g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.028, 5), lam(gum)));   /* the stem piece, sewn and pitched */
+        const wb = mesh(new THREE.BoxGeometry(0.02, 0.2, 0.42), 0x5a2a1a, 0, 0.34, e * (L - 0.75)); g.add(wb);   /* winter bark at the end, scraped with a design */
+        for (let k = 0; k < 3; k++) for (const sx of [-1, 1]) g.add(mesh(new THREE.BoxGeometry(0.012, 0.035, 0.07), 0xe0c890, sx * 0.012, 0.29 + k * 0.05, e * (L - 0.75 + (k - 1) * 0.12)));
+      }
+      for (const sx of [-1, 1]) {   /* the gunwales, along the hull's own curve, wrapped with root lashing */
+        const pts = []; for (let i = 0; i <= 16; i++) { const z = (i / 16 * 2 - 1) * (L - 0.2); pts.push(new THREE.Vector3(sx * 0.41 * Math.sqrt(Math.max(0, 1 - (z / L) ** 2)), 0.34 + 0.08 * (z / L) ** 4, z)); }
+        g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.03, 5), lam(0x6a4a2a)));
+        for (let k = -9; k <= 9; k += 1) { const z = k * 0.2; if (Math.abs(k) % 3 === 0) continue; g.add(mesh(new THREE.BoxGeometry(0.075, 0.075, 0.05), root, sx * 0.41 * Math.sqrt(Math.max(0, 1 - (z / L) ** 2)), 0.34 + 0.08 * (z / L) ** 4, z)); }
+      }
+      for (const z of [-0.8, 0, 0.8]) g.add(mesh(new THREE.BoxGeometry(0.8 * Math.sqrt(1 - (z / L) ** 2), 0.04, 0.07), 0x8a6a40, 0, 0.33, z));    /* the thwarts */
+      for (const z of [-1.45, -0.95, -0.45, 0.45, 0.95, 1.45]) for (const sx of [-1, 1]) {   /* the gores: black pitched seams down the sides */
+        const r = 0.42 * Math.sqrt(1 - (z / L) ** 2); g.add(mesh(new THREE.BoxGeometry(0.015, 0.3, 0.025), gum, sx * (r + 0.004), 0.2, z));
+      }
+      return g;
+    }
     const SEE = { uSeeP: { value: new THREE.Vector2(-1e4, -1e4) }, uSeeR: { value: 0 }, uSeeD: { value: 0 }, uSeeY: { value: -1e9 } };   /* uSeeY: the avatar's feet - the floor and ground you stand on never dissolve (the operator: upstairs it looked like standing outside the house) */
     function seeThrough(m) {
       m.onBeforeCompile = (sh) => {
@@ -162,6 +241,7 @@
         const adj = [at(cx - 1, cy - 1), at(cx, cy - 1), at(cx - 1, cy), at(cx, cy)];
         /* underground (the Spider Cave): rock rises into walls round a flat floor; wading water sits a little low */
         if (map.underAt && map.underAt(cx, cy) != null) {
+          if (map.underStyle && map.underStyle(cx, cy) === 'wigwam') return 0;   /* a wigwam's inside: a flat floor of mats; the bark dome is its wall */
           const rock = adj.filter(c => c === '^').length, wet = adj.filter(c => c === 'v' || c === '~').length;
           if (rock === 4) return 3.2 + (vnoise(cx * 0.3, cy * 0.3) - 0.5) * 0.7;   /* the rock: walls rise straight up from the floor's edge */
           if (rock) return 0.05 + (vnoise(cx * 0.5, cy * 0.5) - 0.5) * 0.15;
@@ -200,10 +280,29 @@
           return own(cx, cy) * w + sh * (1 - w);
         };
         const wLevel = map.waterH() - 0.05;
+        /* the level of the nearest river or lake water connected to this tile through water, within 24 m (cached per tile) */
+        const NS = new Map(), wetT = (x, y) => { const t = at(x, y); return t === '~' || t === 'v' || t === 'B'; };
+        const nearSurf = (tx, ty) => {
+          const k = tx + ',' + ty; if (NS.has(k)) return NS.get(k);
+          let res = null; if (wetT(tx, ty)) {
+            const seen = new Set([k]); let ring = [[tx, ty]];
+            for (let d = 0; d < 24 && ring.length && res == null; d++) {
+              const next = [];
+              for (const [x, y] of ring) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+                const nx = x + dx, ny = y + dy, nk = nx + ',' + ny; if (seen.has(nk) || !wetT(nx, ny)) continue; seen.add(nk);
+                const w = map.waterSurf(nx, ny); if (w != null) { res = res == null ? w : Math.max(res, w); continue; }
+                next.push([nx, ny]);
+              }
+              ring = next;
+            }
+          }
+          NS.set(k, res); return res;
+        };
         surfOf = (tx, ty) => {   /* where the water's skin stands over this tile, the same curve build draws and rings ride */
           if (map.underAt && map.underAt(tx, ty) != null) return -0.12;   /* underground: just over the wading floor */
           const bed = (fade(tx, ty) + fade(tx + 1, ty) + fade(tx, ty + 1) + fade(tx + 1, ty + 1)) / 4;
-          const ws = map.waterSurf ? map.waterSurf(tx, ty) : null;   /* rivers and lakes stand at their own level, flat (2026-10-04: "the rivers are dry"; a hollow's water "follows the contour") */
+          let ws = map.waterSurf ? map.waterSurf(tx, ty) : null;   /* rivers and lakes stand at their own level, flat (2026-10-04: "the rivers are dry"; a hollow's water "follows the contour") */
+          if (ws == null && map.waterSurf) ws = nearSurf(tx, ty);   /* water with no level of its own beside a river or lake (a side channel, a bay) is part of it: its level, not a step down (2026-10-07: "Fix the sinking water tiles") */
           if (ws != null) return Math.max(wLevel, ws + 0.2);   /* one height for a whole lake: never the bed's */
           /* a pond of the seeded land is a hollow dug below the world's water line, and its tiles are water exactly where the
              ground is below that line: its skin IS the line, flat, meeting the shore where the ground crosses it. Riding the
@@ -273,7 +372,8 @@
         for (let cy = Y0; cy <= Y1; cy++) for (let cx = X0; cx <= X1; cx++) {
           const i = (cy - Y0) * (RW + 1) + (cx - X0); pos[i * 3] = cx; pos[i * 3 + 1] = hAt(cx, cy); pos[i * 3 + 2] = cy;
           acc.setRGB(0, 0, 0);
-          for (const [dx, dy] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { C.setHex(TILE_COL[at(cx + dx, cy + dy)] || 0x5f9e3f); acc.r += C.r / 4; acc.g += C.g / 4; acc.b += C.b / 4; }
+          const wig = map.underStyle && map.underStyle(cx, cy) === 'wigwam';
+          for (const [dx, dy] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { C.setHex(wig ? 0x8a7650 : TILE_COL[at(cx + dx, cy + dy)] || 0x5f9e3f); acc.r += C.r / 4; acc.g += C.g / 4; acc.b += C.b / 4; }
           if (chunk && map.snowH < 1e8) {   /* a real mountain: alpine rock above the tree line, patchy snow on the tops */
             const hh = hAt(cx, cy), ra = Math.min(1, Math.max(0, (hh - map.snowH + 22) / 17)) * 0.85;
             if (ra > 0) { acc.r += (0.52 - acc.r) * ra; acc.g += (0.5 - acc.g) * ra; acc.b += (0.47 - acc.b) * ra; }
@@ -571,6 +671,7 @@
       }
       /* the castle kit lives in its own module (src/castle.js) so a castle change is a small inscription */
       let CK = null; try { const CM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('castle'); if (CM && CM.create) CK = CM.create({ THREE, B, Batcher, KitBatch, kitData, heightAt, group, pickables }); } catch (e) { console.warn('castle module', e && e.message); }
+      const surfOfMap = (tx, ty) => { const Hh = heightsOf(map); return Hh.surf ? Hh.surf(tx, ty) : heightAt(tx + 0.5, ty + 0.5); };
       const mounts = [];   /* items hung on walls: {obj, item, quest, untilStep} */
       const torches = [];
       const floorY = (o, y) => { const f = floor[o.y * W + o.x]; return isNaN(f) ? y : f; };
@@ -635,6 +736,69 @@
             torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x: wx, y, z: wz });
             break;
           }
+          /* ZIIBIING, the Ojibwe village on the river (2026-10-07) */
+          case 'wigwam': {   /* waaginogaan (2026-10-07): the bark-over-ironwood shell, its door east, a hide over it, the smoke hole */
+            const D = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] }[o.face || 'e'], ry = Math.atan2(D[0], D[1]), R0 = 1.45, HT = 2.15;
+            const g = wigwamShell(R0, HT, false, o.seed | 0); g.position.set(x, y, z); g.rotation.y = ry; group.add(g);
+            g.add(mesh(new THREE.BoxGeometry(0.72, 1.1, 0.3), 0x1a140e, 0, 0.55, R0 - 0.2));          /* the dark of the doorway */
+            const flap = mesh(new THREE.BoxGeometry(0.5, 1.05, 0.04), 0x8a6238, -0.48, 0.58, R0 + 0.03); flap.rotation.y = -0.35; g.add(flap);   /* the hide, tied back */
+            g.add(mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.05, 8), 0x1a140e, 0, HT * 1.06 - 0.01, 0));   /* the smoke hole */
+            anim.push({ smoke: true, x, y: y + HT + 0.15, z, parts: [] });
+            break;
+          }
+          case 'wigwamdoor': case 'wigwamout': {   /* the way in (the wigwam's own doorway, on its east side) and the way out (inside) */
+            const pk = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.6, 1.1), new THREE.MeshBasicMaterial({ visible: false })); pk.position.set(x, y + 0.8, z); pk.userData.pick = { kind: 'passage', x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
+            if (o.k === 'wigwamout') {   /* daylight through the door, and the hide tied back beside it */
+              const day = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.15), new THREE.MeshBasicMaterial({ color: 0xfff1cc, side: THREE.DoubleSide })); day.position.set(x + 0.4, y + 0.58, z); day.rotation.y = Math.PI / 2; group.add(day);
+              const fl = mesh(new THREE.BoxGeometry(0.04, 1.1, 0.5), 0x8a6238, x + 0.38, y + 0.56, z - 0.6); fl.rotation.y = 0.4; group.add(fl);
+            }
+            break;
+          }
+          case 'wigwamroom': {   /* inside the lodge: the same ironwood cage and bark from within, mats and blankets round the fire */
+            const R0 = o.r || 4.4, HT = 3.0, g = wigwamShell(R0, HT, true, (o.x * 13 + o.y) | 0); g.position.set(x, y, z); g.rotation.y = Math.PI / 2; group.add(g);   /* its doorway east */
+            const hole = new THREE.Mesh(new THREE.CircleGeometry(0.3, 10), new THREE.MeshBasicMaterial({ color: 0x9fb4d8, side: THREE.DoubleSide })); hole.rotation.x = Math.PI / 2; hole.position.y = HT * 1.05; g.add(hole);
+            const mats = [[-2.2, -1.2, 0.3, 0x8a3a2a], [-2.0, 1.4, -0.4, 0x2f4a6a], [0.4, 2.5, 1.5, 0x3f6a34], [0.6, -2.5, 1.6, 0x7a5a2a]];
+            for (const [mx, mz, ry, col] of mats) {   /* a rush mat, and a folded blanket on it */
+              const m1 = mesh(new THREE.BoxGeometry(1.8, 0.04, 1.0), 0xb8a070, mx, 0.03, mz); m1.rotation.y = ry; g.add(m1);
+              const m2 = mesh(new THREE.BoxGeometry(0.7, 0.12, 0.8), col, mx + Math.cos(ry) * 0.45, 0.1, mz - Math.sin(ry) * 0.45); m2.rotation.y = ry; g.add(m2);
+            }
+            break;
+          }
+          case 'canoe': case 'canoe_up': {   /* the landing's canoe, afloat in the shallows; a second turned over on the bank to dry */
+            const c = canoeMesh(); group.add(c);
+            if (o.k === 'canoe') {
+              DOCKS.push(c);   /* you paddle off in this one: the engine hides it while you are out on the water */
+              const sf = surfOfMap(o.x, o.y); c.position.set(x, sf - 0.02, z); c.rotation.y = 1.45 + hash2(o.x, o.y) * 0.2;
+              const pk = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.9, 4.4), new THREE.MeshBasicMaterial({ visible: false })); pk.position.copy(c.position); pk.rotation.y = c.rotation.y; pk.userData.pick = { kind: 'canoe', x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
+            } else {
+              c.position.set(x, y + 0.62, z); c.rotation.set(0, 0.4, Math.PI);
+              for (const e of [-1, 1]) B.add('cyl', 0x6a4a2a, x + Math.sin(0.4) * e * 1.1, y + 0.2, z + Math.cos(0.4) * e * 1.1, 0.22, 0.4, 0.22, 0, Math.PI / 2, 0);
+            }
+            break;
+          }
+          case 'fishrack': {   /* two crossed-pole ends and a rail, fish split and hung to dry over a smudge */
+            for (const e of [-0.9, 0.9]) { B.add('box', 0x5a4430, x + e, y + 0.7, z - 0.18, 0.06, 1.5, 0.06, 0, 0.25, 0); B.add('box', 0x5a4430, x + e, y + 0.7, z + 0.18, 0.06, 1.5, 0.06, 0, -0.25, 0); }
+            B.add('box', 0x5a4430, x, y + 1.3, z, 2.0, 0.05, 0.05);
+            for (let k = 0; k < 7; k++) { const fx = x - 0.75 + k * 0.25; B.add('box', k % 2 ? 0xb8a890 : 0xc9b48a, fx, y + 1.08, z, 0.12, 0.42, 0.03); B.add('box', 0x8a3a2a, fx, y + 1.1, z + 0.016, 0.07, 0.32, 0.005); }
+            break;
+          }
+          case 'rice': case 'reeds': {   /* manoomin (2026-10-07): thin grass out of the water, a slim drooping head like a wheat ear but dark burgundy; cattails at the edge */
+            const r0 = hash2(o.x * 3, o.y * 5), n = 6, sf = surfOfMap(o.x, o.y);
+            for (let k = 0; k < n; k++) {
+              const a = k * 2.4 + r0 * 6, rr = 0.12 + 0.36 * hash2(o.x + k, o.y - k), sx = x + Math.cos(a) * rr, sz = z + Math.sin(a) * rr, hh = (o.k === 'rice' ? 0.75 : 1.3) + 0.35 * hash2(o.x - k, o.y + k);
+              const lean = (hash2(o.x * k, o.y) - 0.5) * 0.3, base = o.k === 'rice' ? sf - 0.05 : Math.min(sf, y + 0.1);
+              B.add('box', o.k === 'rice' ? 0x6f8a3a : 0x5f7a34, sx, base + hh / 2, sz, 0.018, hh, 0.018, a, lean, 0);
+              if (o.k === 'rice') {
+                const tx = sx + Math.sin(a) * Math.sin(lean) * hh, tz = sz + Math.cos(a) * Math.sin(lean) * hh;
+                B.add('box', k % 3 ? 0x4a1626 : 0x5c1e2e, tx, base + hh + 0.09, tz, 0.035, 0.22, 0.03, a, lean + 0.35, 0);   /* the head, drooping a little */
+                B.add('box', 0x7d9a44, sx, base + hh * 0.4, sz, 0.12, 0.012, 0.02, a + 0.8, 0.9, 0);   /* a blade off the stalk */
+              } else if (k % 2 === 0) B.add('cyl6', 0x5a3a20, sx, base + hh - 0.1, sz, 0.06, 0.22, 0.06, a, lean, 0);
+            }
+            break;
+          }
+          case 'woodpile': for (let k = 0; k < 9; k++) { const row = k < 4 ? 0 : k < 7 ? 1 : 2, i = row === 0 ? k : row === 1 ? k - 4 : k - 7; B.add('cyl', k % 3 ? 0x7a5a3a : 0x8a6a46, x - 0.36 + i * 0.24 + row * 0.12, y + 0.1 + row * 0.19, z, 0.2, 0.9, 0.2, 0, Math.PI / 2, 0); } break;
+          case 'basket': B.add('cyl', 0xd8c49a, x, y + 0.18, z, 0.4, 0.36, 0.4); B.add('cyl', 0x5a3a24, x, y + 0.35, z, 0.42, 0.04, 0.42); B.add('cyl', 0x3a2a1e, x, y + 0.2, z, 0.41, 0.03, 0.41); break;
+          case 'ricebasket': B.add('cyl12', 0xd8c49a, x, y + 0.06, z, 1.0, 0.1, 0.8); B.add('cyl12', 0x6a5236, x, y + 0.115, z, 0.86, 0.02, 0.66); B.add('cyl12', 0x5a3a24, x, y + 0.11, z, 1.02, 0.03, 0.82); break;
           /* the Spider Cave (2026-10-07): the mouth up top, the ways out below, webs and glowing mushrooms inside */
           case 'cavemouth': case 'caveout': {   /* a rock outcrop with a cave opening in its south face (2026-10-07); caveout: the way out up top, not a way in */
             const RK = [[0, -0.6, 3.2, 2.6, 2.6, 0x6b675f], [-1.4, -0.2, 2.0, 2.0, 2.2, 0x75716a], [1.45, -0.1, 2.1, 1.8, 2.0, 0x625e57], [-0.6, -1.5, 2.4, 2.2, 2.2, 0x5d5a54],
@@ -729,6 +893,7 @@
           case 'campfire': {
             for (let k = 0; k < 4; k++) B.add('box', 0x5a3c24, x, y + 0.08, z, 0.7, 0.1, 0.1, k * Math.PI / 4);
             for (let k = 0; k < 6; k++) B.add('box', 0x6a6a6a, x + Math.cos(k) * 0.45, y + 0.07, z + Math.sin(k) * 0.45, 0.16, 0.14, 0.16, k);
+            if (o.smoke !== false) anim.push({ smoke: true, x, y: y + 0.8, z, parts: [] });   /* a camp's fire smokes */
             const f = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 6), new THREE.MeshBasicMaterial({ color: 0xff8a20 })); f.position.set(x, y + 0.35, z); group.add(f); torches.push({ f, ph: 1, x, y, z });
             break;
           }
@@ -835,7 +1000,7 @@
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, WATER_Y, see: SEE, lampGlow };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, canoeMesh, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

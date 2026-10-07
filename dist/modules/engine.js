@@ -401,6 +401,26 @@
         }
         return up;
       }
+      /* THE CANOE (2026-10-07, Ziibiing): whoever sits in one rides the water's skin in a birch bark canoe, paddle in hand */
+      const SURF = SCENE.surface ? SCENE.surface(core.M) : null;
+      const waterY = (x, z) => { const h = heightAt(x, z); if (!SURF) return h; const s = SURF(Math.floor(x), Math.floor(z)); return s != null && s > h ? s : h; };
+      /* two in one canoe (ricing): the knocker sits in the bow, the canoe's length ahead of the poler, facing the way it goes */
+      function bowSeat(e, T, knocking) { const f = knocking ? 1.4 : 1.95;   /* knocking rice, the bow person sits in nearer the middle */   /* the bow seat: the stern paddler is 0.95 behind the canoe's middle, the bow one 1.0 ahead of it */ e.root.position.set(T.root.position.x + Math.sin(T.yaw) * f, T.root.position.y - 0.14, T.root.position.z + Math.cos(T.yaw) * f); e.yaw = e.tyaw = T.yaw; e.root.rotation.y = T.yaw; }
+      /* PADDLES OR POLE (2026-10-07: "a single person or two people should be able to navigate using the canoe as well just
+         using paddles"): a canoe is paddled, by one or by two; it is poled only for ricing - someone knocking in the bow and the
+         rice standing round the canoe - and then the one in the stern stands with the push pole */
+      const RICEQ = { t: 0, on: false };
+      function ricingNow() {
+        const now = performance.now(); if (now - RICEQ.t < 500) return RICEQ.on; RICEQ.t = now;
+        const rider = me.boat === 1 && [...remotes.values()].some(r => r.boat === 2 && r.ride === myNetId);
+        RICEQ.on = !!rider && (core.M.objects || []).some(o => o.k === 'rice' && Math.max(Math.abs(o.x - me.x), Math.abs(o.y - me.y)) <= 3);
+        return RICEQ.on;
+      }
+      function boatLook(e, on) {
+        if (!!e.canoe === on || !SCENE.canoeMesh) return;
+        if (on) { e.canoe = SCENE.canoeMesh(); e.canoe.position.y = 0.0; e.canoe.position.z = 0.95;   /* you sit in the stern: the canoe reaches ahead of you to the bow */ e.root.add(e.canoe); if (e.blob) e.blob.visible = false; }
+        else { e.root.remove(e.canoe); e.canoe = null; if (e.blob) e.blob.visible = !settings.shadows; }
+      }
       function hawkAlt(e) {
         if (!e.hawk) return e.alt || 0;
         if (e === myEnt) {
@@ -472,7 +492,7 @@
         }
         return yaw;
       }
-      function npcEnt(n) { const e = makeEnt('n:' + n.id, MOD.npc(n.look || n.id), { kind: 'npc', id: n.id }); place(e, n.x, n.y); e.homeYaw = homeYaw(n); e.yaw = e.tyaw = e.homeYaw; NPCN[n.id] = n; if (n.gear && e.H && e.H.setGear) e.H.setGear(n.gear); return e; }
+      function npcEnt(n) { const e = makeEnt('n:' + n.id, MOD.npc(n.look || n.id), { kind: 'npc', id: n.id }); place(e, n.x, n.y); e.homeYaw = homeYaw(n); e.yaw = e.tyaw = e.homeYaw; NPCN[n.id] = n; if (n.gear && e.H && e.H.setGear) e.H.setGear(n.gear); if (n.pose) e.skill = n.pose; return e; }   /* pose: an elder who sits cross-legged by his fire */
       for (const n of core.M.npcs) npcEnt(n);   /* gear: what an NPC carries (the castle's watchmen hold bows) */
       /* monsters get a model while they are within MOB_NEAR tiles (seeded land wakes camps everywhere you have been) */
       const MOB_NEAR = 60, MOB_FAR = 90;
@@ -565,9 +585,13 @@
           const p = core.S.players[pid], e = ents.get('p:' + pid); if (!e) continue;
           if (p.dead) continue;
           const mv = moveTo(e, p.x, p.y, stamp);
-          if (mv) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else e.tyaw = faceYaw(p.face);
+          if (mv && !p.boat) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else e.tyaw = faceYaw(p.face);   /* a canoe faces its heading, even backing up */
           const sk = p.skilling, skAnim = sk === 'chop' ? 'chop' : sk === 'mine' ? 'mine' : sk === 'fish' ? 'fish' : sk === 'cook' || sk === 'light' ? 'cook' : null;
-          const tl = skAnim === 'chop' || skAnim === 'mine' || skAnim === 'fish' ? p.toolId || (sk === 'chop' ? 'hatchet' : sk === 'mine' ? 'pickaxe' : 'net') : null;
+          const ric = e === myEnt ? ricingNow() : false; e.ricing = ric;
+          const tl = p.boat === 1 ? (ric ? 'push_pole' : 'paddle') : p.boat === 2 ? (p.knocking ? 'ricing_sticks' : 'paddle') : skAnim === 'chop' || skAnim === 'mine' || skAnim === 'fish' ? p.toolId || (sk === 'chop' ? 'hatchet' : sk === 'mine' ? 'pickaxe' : 'net') : null;
+          boatLook(e, p.boat === 1); e.boatRole = p.boat | 0; e.rideOf = p.boat === 2 ? p.ride : null; e.knocking = !!p.knocking;
+          if (p.path && p.path.length && e.restPose) e.restPose = null;   /* up off the floor once you walk */
+          if (e === myEnt && SCENE.docks) for (const c of SCENE.docks()) c.visible = !p.boat;   /* the landing's canoe is the one you are sitting in */
           if (skAnim !== e.skill || tl !== e.toolId) { e.skill = skAnim; e.toolId = tl; e.H.setTool && e.H.setTool(tl); }
         }
         for (const n of core.M.npcs) if (n.patrol || n.guard) { const e = ents.get('n:' + n.id); if (e && moveTo(e, n.x, n.y, stamp)) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); }   /* a watchman walking his round, a guard answering the call to arms */
@@ -666,7 +690,7 @@
           case 'mobeat': { const t = ents.get('m:' + e.mob); if (t && !t.dead) { playOnce(t, 'eat'); sfx('eat', t); } break; }
           case 'tailor': if (mine) { faceNpc(e.npc); openWardrobe(false); } break;
           case 'look': if (mine) { if (me.look && myEnt.H.setOutfit) myEnt.H.setOutfit(me.look); netGear(); } break;
-          case 'dialog': if (mine) { hud.dialog(e.name, e.lines); faceNpc(e.npc); sfx('click'); } break;
+          case 'dialog': if (mine) { hud.dialog(e.name, e.lines); faceNpc(e.npc); sfx('click'); const N = NPCN[e.npc]; if (N && N.pose) myEnt.restPose = N.pose; } break;   /* sit down with him the same way (2026-10-07) */
           case 'weather': if (e.zone === core.weatherZone(zoneHere())) { if (e.say) hud.chat(e.say, 'sys'); showWeather(); } break;
           case 'fire': addFire(e.fire, e.x, e.y); if (e.p === PID || !e.p) sfx('sizzle', e.p === PID ? null : { x: e.x, y: e.y }); break;
           case 'fireout': removeFire(e.fire); break;
@@ -678,6 +702,7 @@
           case 'drop': break;
           case 'pfx': { const t = ents.get('p:' + e.p); if (t && e.on) { const el = hud.fxSplat(e.fx); if (el) t.splats.push({ el, t: performance.now(), k: t.splats.length }); } if (mine && e.on) sfx('freeze'); break; }
           case 'pray': if (mine) { lastPosKey = ''; hud.refresh('prayer'); if (e.altar) { sfx('altar'); playOnce(myEnt, 'cast'); burst(myEnt.root.position, 0x8fd8ff); } else sfx(e.on ? 'pray' : 'prayoff'); } break;
+          case 'knock': if (mine) { dirty.inv = 1; sfx('splash', myEnt); } break;   /* a handful of manoomin into the canoe */
           case 'bury': if (mine) { dirty.inv = 1; sfx('bury'); playOnce(myEnt, 'pickup', 1.6); } break;
         }
       }
@@ -732,7 +757,7 @@
              trails between them, sadfrog 2026-10-07), ranges, campfires, and torches dropped on the ground (2026-10-07) */
           /* every light out to the edge of what you can see (2026-10-07: "The light from the illumination should load
              farther out"): the nearest few are real lights, every one of them gets a pool of light on the ground (GLOW) */
-          const R = inCave ? 18 : Math.min(viewR(), 90), LT = { torch: 1.6, sconce: 1.5, lamp: 2.6, range: 0.9 }, near = [], add = o => { if (LT[o.k] && Math.abs(o.x - me.x) < R && Math.abs(o.y - me.y) < R) near.push([o.x, o.y, LT[o.k], o.k === 'lamp' ? 0xffd27a : 0xff9a3c, o.k === 'lamp']); };
+          const R = inCave ? 18 : Math.min(viewR(), 90), LT = { torch: 1.6, sconce: 1.5, lamp: 2.6, range: 0.9, campfire: 0.9 }, near = [], add = o => { if (LT[o.k] && Math.abs(o.x - me.x) < R && Math.abs(o.y - me.y) < R) near.push([o.x, o.y, LT[o.k], o.k === 'lamp' ? 0xffd27a : 0xff9a3c, o.k === 'lamp']); };
           for (const o of core.M.objects || []) add(o);
           if (!inCave && core.M.roadTorchesIn) for (const o of core.M.roadTorchesIn(me.x - R, me.y - R, me.x + R, me.y + R)) add(o);
           for (const f of fires.values()) { const q = f.position; if (Math.abs(q.x - me.x) < R && Math.abs(q.z - me.y) < R) near.push([q.x - 0.5, q.z - 0.5, 0.8, 0xff9a3c]); }
@@ -1002,7 +1027,7 @@
           if (pt) { const g = { kind: 'ground', x: Math.floor(pt.x), y: Math.floor(pt.z) }; if (gi >= 0) out[gi] = g; else out.push(g); }
         }
         /* characters and loot win over trees in front of them (a canopy should not eat the click) */
-        const pri = t => t.kind === 'mob' || t.kind === 'npc' || t.kind === 'item' ? 0 : t.kind === 'node' || t.kind === 'remote' || t.kind === 'passage' || t.kind === 'caveout' ? 1 : 2;
+        const pri = t => t.kind === 'mob' || t.kind === 'npc' || t.kind === 'item' ? 0 : t.kind === 'node' || t.kind === 'remote' || t.kind === 'passage' || t.kind === 'caveout' || t.kind === 'canoe' ? 1 : 2;
         out.sort((a, b) => pri(a) - pri(b));
         /* phones: a tap close to a monster counts as tapping it */
         if (isTouch && !out.some(t => t.kind === 'mob' || t.kind === 'npc' || t.kind === 'item')) {
@@ -1028,11 +1053,15 @@
         if (t.kind === 'caveout') {   /* the cave's way out, up top: it only goes up (2026-10-07: "it should inform them in the chat that there is no way down") */
           const nm = '<span class="c">Cave opening</span>', say = () => hud.chat("The shaft drops away steep and narrow into the dark. There's no way down from here.", 'sys');
           return [{ html: 'Enter ' + nm, fn: say, act: null }, { html: 'Examine ' + nm, fn: () => hud.chat('A narrow opening in the rock. A cold draught breathes up out of it.', 'sys') }]; }
+        if (t.kind === 'canoe') { const nm = '<span class="c">Birch bark canoe</span>';
+          return [{ html: 'Get into the ' + nm, act: { c: 'board', x: t.x, y: t.y }, red: 1 },
+                  { html: 'Examine ' + nm, fn: () => hud.chat('A canoe of birch bark over cedar ribs, sewn with spruce root and sealed with pitch. It floats light as a leaf.', 'sys') }]; }
         if (t.kind === 'passage') { const o = core.passageAt(t.x, t.y); if (!o) return []; const nm = '<span class="c">' + esc(o.name || (o.k === 'cavemouth' ? 'Cave' : 'Way out')) + '</span>';
           return [{ html: esc(o.label || 'Go through'), act: { c: 'enter', x: o.x, y: o.y }, red: 1 },
                   { html: 'Examine ' + nm, fn: () => hud.chat(o.k === 'cavemouth' ? 'A dark opening in the rock. Webs hang just inside, and the air smells of damp and old fur.' : 'A ladder up to a shaft of daylight.', 'sys') }]; }
         if (t.kind === 'remote') {
           const r = remotes.get(t.id); if (!r) return [];
+          if (r.boat === 1 && !me.boat && !Object.values(core.S.players).some(q => q.boat === 2 && q.ride === t.id)) return [{ html: 'Climb in to knock rice <span class="c">(bawa\'iganaakoog)</span>', act: { c: 'ride', pid: t.id }, red: 1 }];   /* ricing: two in the canoe */
           /* the combat level next to the name, coloured like a monster's (2026-10-06) */
           const pp = core.S.players[t.id], cb = pp ? core.combatLevel(pp) : 0;
           const nm = '<span class="w">' + esc(label(r.name, r.from)) + '</span>' + (cb ? ' <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>' : ''), o = [];
@@ -1261,7 +1290,7 @@
         joining = true; roomZone = z;
         if (nb) { const ids = nb.rooms().map(R => R.id).filter(i => i !== z); nb.update([], ids); }   /* never in one room twice: the region we walk into stops being a neighbour */
         try {
-          if (room) { const old = room; room = null; dropRemotes(); hosts.clear(); applyAuth(); await old.leave(); }
+          if (room) { const old = room; room = null; try { const st = stateMsg(performance.now()); st.p = [me.x + 0.5, me.y + 0.5]; old.send(st); } catch (e) { /* gone */ } dropRemotes(); hosts.clear(); applyAuth(); await old.leave(); }   /* a last word where I am now: whoever rides in my canoe follows me across
           hosts.clear(); electedOnce = false; myJoin = Date.now(); joinedAt = performance.now(); passive = true; applyAuth();   /* passive until the hosts are known */
           const res = await net.join(z, { game: 'ashvale', loopback: q.has('loopback') });
           hud.setOnline(!!(res && res.online));
@@ -1765,6 +1794,7 @@
       function stateMsg(now) {
         const p = myEnt.root.position;
         const m = { s: Math.round(now), p: [Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100], f: Math.round(myEnt.yaw * 100) / 100, a: myEnt.oneShot ? myEnt.lastOne || 'idle' : myEnt.loco || 'idle', j: myJoin, hp: me.hp, d: me.dead ? 1 : 0, k: myEnt.toolId || 0 };
+        if (me.boat) { m.bt = me.boat; if (me.boat === 2) m.rd = me.ride; }   /* in a canoe: 1 poling it, 2 riding in someone's bow (rd: whose) */
         const oh = core.overhead(me) || 0; if (oh || lastPr) { m.pr = oh; lastPr = oh; }   /* the overhead prayer, so hosts' monsters respect it and others see it */
         const cz = combatZone(); if (cz) m.c = cz;   /* the area I am fighting in, when it is not the one I stand in */
         if (now - gearRefT > 10000) { gearRefT = now; netSend({ g: gearOf(me), n: me.name }); if (myEnt.H.outfit) netSend({ o: myEnt.H.outfit }); }   /* a missed gear message left others drawn wrong, and a missed name left them called Adventurer: refresh both every 10 s, as their own small messages */
@@ -1788,6 +1818,7 @@
         if (d.g && typeof d.g === 'object' && sameSet(d.g, r.e.H.gear) === false) r.e.H.setGear(d.g);
         if (d.g && typeof d.g === 'object') hawkify(r.e, d.g.ring);   /* another player's hawk ring */
         if (d.o && typeof d.o === 'object' && r.e.H.setOutfit && sameSet(d.o, r.e.H.outfit || {}) === false) r.e.H.setOutfit(d.o);
+        if (Array.isArray(d.p) && typeof d.a === 'string') { r.boat = d.bt | 0; r.ride = d.rd || null; }
         if ('k' in d) { const tl = typeof d.k === 'string' && /^[a-z0-9_]{1,24}$/.test(d.k) ? d.k : null; if (tl !== r.tool) { r.tool = tl; r.e.H.setTool && r.e.H.setTool(tl); } }
         if (d.T != null) r.total = Math.max(0, Math.min(9999, d.T | 0));
         if (d.n || d.T != null) { if (d.n) r.name = cleanName(d.n); if (r.e.tag) setTag(r.e.tag, r.name, from, r.total); }
@@ -1800,7 +1831,7 @@
         if (!r.viewOnly) shared(id, r, d);
         if (Array.isArray(d.p) && d.p.length === 2 && isFinite(d.p[0]) && isFinite(d.p[1])) {
           if (typeof d.s === 'number') { if (d.s <= r.lastS && d.s > r.lastS - 60000) return; r.lastS = d.s; }   /* unordered delivery: drop older states */
-          if (core.S.players[id]) core.setPuppet(id, { x: Math.floor(+d.p[0]), y: Math.floor(+d.p[1]) });
+          if (core.S.players[id]) core.setPuppet(id, Object.assign({ x: Math.floor(+d.p[0]), y: Math.floor(+d.p[1]) }, typeof d.a === 'string' ? { bt: d.bt | 0, rd: d.rd || null } : {}));   /* only a full state says whether they are in a canoe */
           r.area = core.areaOf(Math.floor(+d.p[0]), Math.floor(+d.p[1])); r.carea = typeof d.c === 'string' ? d.c.slice(0, 40) : null;
           r.e.root.visible = true; r.buf.push({ t: performance.now(), x: +d.p[0], z: +d.p[1], f: +d.f || 0, a: typeof d.a === 'string' ? d.a.slice(0, 12) : 'idle' }); if (r.buf.length > 20) r.buf.shift();
         }
@@ -2024,9 +2055,11 @@
           const span = Math.max(1, Math.min(Bs.t - A.t, TICK));
           const k = Math.max(0, Math.min(1, (rt - A.t) / span));
           const x = A.x + (Bs.x - A.x) * k, z = A.z + (Bs.z - A.z) * k;
-          r.e.root.position.set(x, heightAt(x, z) + (r.e.alt || 0), z); r.e.tyaw = Bs.f;
-          const an = Bs.a; if (an !== r.anim) { r.anim = an; r.e.H.play(an, { loop: /idle|walk|run|chop|mine|fish|cook/.test(an) }); }
+          boatLook(r.e, r.boat === 1);
+          r.e.root.position.set(x, (r.e.canoe ? waterY(x, z) + (r.anim === 'pole' || r.anim === 'idle' ? 0.14 : 0) : heightAt(x, z)) + (r.e.alt || 0), z); r.e.tyaw = Bs.f;
+          const an = Bs.a; if (an !== r.anim) { r.anim = an; r.e.H.play(an, { loop: /idle|walk|run|chop|mine|fish|cook|sit|paddle|pole|knock|crosslegged/.test(an) }); }
           r.e.yaw += (((r.e.tyaw - r.e.yaw + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI) * Math.min(1, dt * 10); r.e.root.rotation.y = r.e.yaw;
+          if (r.boat === 2) { const T = r.ride === myNetId ? myEnt : (remotes.get(r.ride) || {}).e; if (T) { bowSeat(r.e, T, r.anim === 'knock'); } }
           r.e.H.update(dt); if (r.e.hawk) r.e.hawk.update(dt);
         }
       }
@@ -2057,10 +2090,11 @@
           if (e.fadeIn) { const k = (now - e.fadeIn) / 500; if (k >= 1) { e.H.setOpacity(1); e.fadeIn = 0; } else e.H.setOpacity(Math.max(0.02, k)); }   /* a person whose zone just arrived */
           if (e.key.charAt(0) === 'r') continue;
           const a = Math.min(1, (now - e.t0) / e.dur);
-          if (!e.dead || a < 1) { e.root.position.lerpVectors(e.from, e.to, a); e.root.position.y = heightAt(e.root.position.x, e.root.position.z) + liftOf(e, a) + hawkAlt(e); }   /* on an upper floor; a hawk over the trees */
+          if (!e.dead || a < 1) { e.root.position.lerpVectors(e.from, e.to, a); e.root.position.y = (e.canoe ? waterY(e.root.position.x, e.root.position.z) + (e.ricing ? 0.14 : 0) : heightAt(e.root.position.x, e.root.position.z) + liftOf(e, a)) + hawkAlt(e); }   /* the poler stands on the canoe's floor */   /* on an upper floor; a hawk over the trees */
           let d = e.tyaw - e.yaw; d = ((d + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI; e.yaw += d * Math.min(1, dt * 12); e.root.rotation.y = e.yaw;
           const moving = a < 1 && e.from.distanceToSquared(e.to) > 1e-4;
-          if (!e.dead && !e.oneShot) { const want = moving ? (e.running ? 'run' : 'walk') : (e.skill || 'idle'); if (want !== e.loco) { e.loco = want; e.H.play(want, { loop: true }); } }
+          if (!e.dead && !e.oneShot) { const want = e.boatRole === 2 ? (e.knocking ? 'knock' : moving ? 'paddle' : 'sit') : e.canoe ? (e.ricing ? (moving ? 'pole' : 'idle') : moving ? 'paddle' : 'sit') : moving ? (e.running ? 'run' : 'walk') : (e.restPose || e.skill || 'idle'); if (want !== e.loco) { e.loco = want; e.H.play(want, { loop: true }); } }
+          if (e.boatRole === 2 && e.rideOf != null) { const T = (remotes.get(e.rideOf) || {}).e; if (T) bowSeat(e, T, e.knocking); }
           if (e.oneShot && e.oneT && now - e.oneT > 2500 && !e.dead) e.oneShot = false;
           for (const rec of e.impacts) if (!rec.fired && now - rec.t > 850) { fireImpact(e, rec); break; }
           if (e.dead && e.key.charAt(0) === 'm') { const k = (now - e.deadT) / 1000; if (k > 1.3 && k < 2.2 && e.H.setOpacity) e.H.setOpacity(Math.max(0, 1 - (k - 1.3) / 0.8)); if (k >= 2.2) e.root.visible = false; }

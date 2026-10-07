@@ -40,7 +40,7 @@ function compare(label, inside) {
   ok(hdiff === 0, label + ': ' + hs + ' heights identical' + (hdiff ? ' (' + hdiff + ' differ, worst ' + worst.toFixed(3) + ' m)' : ''));
 }
 compare('outside the towns, ' + R + ' m around each', false);
-for (const z of zones) ok(AshWorld.arriveWorldgen(Wstub, base, z), z.id + ' arrives in worldgen');
+for (const z of zones) if (z.under) ok(!AshWorld.arriveWorldgen(Wstub, base, z), z.id + ' (underground) stays out of the land'); else ok(AshWorld.arriveWorldgen(Wstub, base, z), z.id + ' arrives in worldgen');
 compare('after every zone arrived, towns included', true);
 
 /* 2. the core: a lazy game that gets its zones one by one ends up with what an eager game has, in any order */

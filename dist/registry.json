@@ -252,6 +252,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.animikii": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.ash_knight": {
     "id": null,
     "v": 1,
@@ -438,6 +444,24 @@
     "api": 1,
     "kind": "json"
    },
+   "char.maiingan": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.makak": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.makwa": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.maren": {
     "id": null,
     "v": 1,
@@ -445,6 +469,18 @@
     "kind": "json"
    },
    "char.marta": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.migizi": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.mishoomis": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -463,6 +499,12 @@
     "kind": "json"
    },
    "char.nettie": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.nookomis": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -582,6 +624,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.waabigwan": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.wagon": {
     "id": null,
     "v": 1,
@@ -607,6 +655,12 @@
     "kind": "json"
    },
    "char.wren": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.ziigwan": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -672,6 +726,12 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.hair_braids": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.hair_bun": {
     "id": null,
     "v": 1,
@@ -726,6 +786,12 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.hat_beadband": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.hat_bigchief": {
     "id": null,
     "v": 1,
@@ -768,6 +834,12 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.hat_otterturban": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.hat_shroud": {
     "id": null,
     "v": 1,
@@ -781,6 +853,18 @@
     "kind": "json"
    },
    "cloth.hat_wizard": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "cloth.pants_jingle": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "cloth.pants_ribbonskirt": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -805,6 +889,24 @@
     "kind": "json"
    },
    "cloth.pants_trousers": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "cloth.shirt_beadvest": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "cloth.shirt_jingle": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "cloth.shirt_ribbon": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -841,6 +943,12 @@
     "kind": "json"
    },
    "gear.arrows": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "gear.bandolier": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -894,6 +1002,12 @@
     "api": 1,
     "kind": "json"
    },
+   "gear.handdrum": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "gear.hatchet": {
     "id": null,
     "v": 1,
@@ -936,6 +1050,12 @@
     "api": 1,
     "kind": "json"
    },
+   "gear.paddle": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "gear.pickaxe": {
     "id": null,
     "v": 1,
@@ -949,6 +1069,18 @@
     "kind": "json"
    },
    "gear.platelegs": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "gear.pushpole": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "gear.ricesticks": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1062,6 +1194,18 @@
     "api": 1,
     "kind": "json"
    },
+   "item.manoomin": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.mouse": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.mushroom": {
     "id": null,
     "v": 1,
@@ -1169,6 +1313,24 @@
     "kind": "json"
    },
    "spidercave": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "ziibiing": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "lodges": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "ricelake": {
     "id": null,
     "v": 1,
     "api": 1,
