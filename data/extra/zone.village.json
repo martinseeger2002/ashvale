@@ -371,6 +371,51 @@
    "y": 52,
    "w": 1,
    "h": 1
+  },
+  {
+   "k": "sconce",
+   "x": 11,
+   "y": 46,
+   "w": 1,
+   "h": 1,
+   "face": "s",
+   "night": true
+  },
+  {
+   "k": "sconce",
+   "x": 30,
+   "y": 46,
+   "w": 1,
+   "h": 1,
+   "face": "s",
+   "night": true
+  },
+  {
+   "k": "sconce",
+   "x": 9,
+   "y": 53,
+   "w": 1,
+   "h": 1,
+   "face": "n",
+   "night": true
+  },
+  {
+   "k": "sconce",
+   "x": 30,
+   "y": 54,
+   "w": 1,
+   "h": 1,
+   "face": "n",
+   "night": true
+  },
+  {
+   "k": "sconce",
+   "x": 15,
+   "y": 57,
+   "w": 1,
+   "h": 1,
+   "face": "n",
+   "night": true
   }
  ],
  "npcs": [
@@ -413,7 +458,7 @@
    "y": 46,
    "tailor": true,
    "shop": "tailor",
-   "greet": "Fancy a new look, love? Pick any cut and colour you like, no charge for the first fitting."
+   "greet": "Fancy a new look, love? Hair and clothes in the fitting room are free. Hats, capes and robes are on the counter - right-click me to trade."
   },
   {
    "id": "rowan",

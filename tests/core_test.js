@@ -158,7 +158,9 @@ for (const [qid, Q] of Object.entries(D.quests.quests)) {
   ok(live.every(s => s.goal.kill ? (D.monsters[s.goal.kill] && many(s.goal.n) && (!s.goal.bring || D.items[s.goal.bring]))
                     : s.goal.cook ? (D.items[s.goal.cook] && many(s.goal.n))
                     : s.goal.bring ? (D.items[s.goal.bring] && many(s.goal.n) && (!s.goal.with || D.items[s.goal.with]))
-                    : s.goal.talk ? !!keeperZone(s.goal.talk) : false),
+                    : s.goal.talk ? !!keeperZone(s.goal.talk)
+                    : s.goal.plant ? (s.goal.plant === 'open' || s.goal.plant === 'stump') && many(s.goal.n)   /* sadfrog's Even Grove: saplings on open ground or stumps */
+                    : s.goal.kills ? Object.keys(s.goal.kills).every(m => D.monsters[m]) && many(s.goal.n) : false),
      qid + ': every reachable step wants something that exists');
   ok(live.every(s => !s.reward || (s.reward.indexOf('xp:') === 0 ? D.rules.skills.indexOf(s.reward.split(':')[1]) >= 0 : s.reward.indexOf('flag:') === 0 ? !!(D.rules.flags || {})[s.reward.slice(5)] : !!D.items[s.reward])),
      qid + ': every reachable step pays in XP and items that exist');
@@ -266,7 +268,7 @@ for (const S of Object.values(D.shops.shops)) {
       if (g.kill) { const m = D.monsters[g.kill]; if (!m || !m.name) nameless(where + ' wants ' + (g.n || 1) + ' ' + g.kill + ', which is not in the monsters table' + (s.zone && !built.has(s.zone) ? ' (zone ' + s.zone + ' is not built)' : '')); else ok(true, where + ' slays ' + m.name); }
       if (g.bring) { const it = D.items[g.bring]; if (!it || !it.name) nameless(where + ' wants ' + (g.n || 1) + ' of ' + g.bring + ', which is not an item'); else ok(true, where + ' asks for ' + it.name); }
       if (g.talk) { if (!npcHere[g.talk]) nameless(where + ' sends you to ' + g.talk + ', who stands nowhere'); else ok(true, where + ' sends you to ' + g.talk + ' in ' + npcHere[g.talk]); }
-      if (!g.kill && !g.bring && !g.talk) ok(false, where + ' has a goal the panel cannot describe: ' + JSON.stringify(g));
+      if (!g.kill && !g.bring && !g.talk && !g.plant && !g.kills) ok(false, where + ' has a goal the panel cannot describe: ' + JSON.stringify(g));
       const r = s.reward;
       if (typeof r === 'string' && r.startsWith('xp:')) { const [, sk] = r.split(':'); ok(D.rules.skills.indexOf(sk) >= 0 || sk === 'hitpoints', where + ' pays ' + r + ' in a skill the game has'); }
       else if (typeof r === 'string' && r.startsWith('flag:')) ok(!!(D.rules.flags || {})[r.slice(5)], where + ' leaves the ' + r.slice(5) + ' flag, which the rules define');

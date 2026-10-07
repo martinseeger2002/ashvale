@@ -36,6 +36,131 @@
     "rally": 0,
     "leash": 10
    }
+  },
+  "vorthan": {
+   "name": "Vorthan",
+   "level": 14,
+   "hp": 28,
+   "att": 13,
+   "def": 11,
+   "attb": 10,
+   "defb": 10,
+   "max": 4,
+   "speed": 5,
+   "aggro": 0,
+   "respawn": 90,
+   "drops": [
+    {
+     "item": "vorth_rosary",
+     "one_in": 1
+    }
+   ],
+   "gold": 12,
+   "anim": "cast",
+   "look": "vorthan",
+   "animal": false,
+   "cover": {
+    "quest": "red_pyre",
+    "step": 3
+   },
+   "ai": {
+    "kind": "humanoid",
+    "faction": "vorthan",
+    "rally": 0,
+    "leash": 8
+   }
+  },
+  "bramble": {
+   "name": "Bramble",
+   "level": 16,
+   "hp": 32,
+   "att": 48,
+   "def": 10,
+   "attb": 40,
+   "defb": 8,
+   "max": 4,
+   "speed": 5,
+   "aggro": 0,
+   "respawn": 0,
+   "drops": [],
+   "gold": 0,
+   "bones": null,
+   "miss": 50,
+   "anim": "crush",
+   "look": "bramble",
+   "animal": false,
+   "hint": "Swings like a drunk tree: a normal blow, then none.",
+   "ai": {
+    "kind": "humanoid",
+    "faction": "balance",
+    "rally": 0,
+    "leash": 30
+   }
+  },
+  "keel": {
+   "name": "Keel",
+   "level": 18,
+   "hp": 30,
+   "att": 42,
+   "def": 12,
+   "attb": 36,
+   "defb": 10,
+   "max": 4,
+   "speed": 4,
+   "aggro": 0,
+   "respawn": 0,
+   "drops": [],
+   "gold": 0,
+   "bones": null,
+   "miss": 0,
+   "anim": "bow",
+   "look": "keel",
+   "animal": false,
+   "hint": "An ordinary arrow that keeps its time and does not miss the moment.",
+   "ai": {
+    "kind": "humanoid",
+    "faction": "balance",
+    "rally": 0,
+    "leash": 30,
+    "keep": [
+     4,
+     6
+    ]
+   }
+  },
+  "gale": {
+   "name": "Gale",
+   "level": 20,
+   "hp": 26,
+   "att": 20,
+   "def": 8,
+   "attb": 10,
+   "defb": 8,
+   "max": 4,
+   "speed": 5,
+   "aggro": 0,
+   "respawn": 0,
+   "drops": [],
+   "gold": 0,
+   "bones": null,
+   "miss": 0,
+   "anim": "cast",
+   "look": "gale",
+   "animal": false,
+   "hint": "Heavy magic, and it does not fidget.",
+   "cast": {
+    "name": "Gale bolt",
+    "range": 6,
+    "att": 90,
+    "attb": 90,
+    "max": 13
+   },
+   "ai": {
+    "kind": "humanoid",
+    "faction": "balance",
+    "rally": 0,
+    "leash": 30
+   }
   }
  }
 }

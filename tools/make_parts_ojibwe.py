@@ -155,4 +155,12 @@ char('mishoomis', 'Mishoomis', 'male', '#946038', 'braids', '#cfcac2', {"style":
      hat={"style": "otterturban", "color": "#4a3424"}, gear={"pack": "bandolier_bag"})
 # the village's chest: a birch bark makak (models.js chest(), style makak) - it opens the same chest as Ashvale's (2026-10-07)
 part('char.makak', 'char', role='npc', name='Ziibiing makak', body='chest', chest={"style": "makak", "size": 1.0})
+# two things of sadfrog's Red Pyre that had no look (they showed as the purple placeholder): Vorth's rosary, a loop of
+# burnt-orange beads with a pendant; Edric's note, a damp folded scrap
+part('item.rosary', 'item', items={"vorth_rosary": "#c4561e"},
+     shapes=[sph(0.018, C if k % 4 else '#3a2418', round(math.cos(k / 14 * 2 * PI) * 0.11, 3), 0.02, round(math.sin(k / 14 * 2 * PI) * 0.08, 3), 6, 4) for k in range(14)] +
+            [cyl(0.005, 0.005, 0.07, '#3a2418', 0, 0.02, 0.11, seg=4, r=[PI / 2, 0, 0]), box(0.05, 0.012, 0.07, '#d8a050', 0, 0.02, 0.165)])
+part('item.note', 'item', items={"edric_note": "#d8ccaa"},
+     shapes=[box(0.18, 0.008, 0.13, C, 0, 0.006, 0, r=[0, 0.3, 0]), box(0.17, 0.008, 0.12, C + ':0.9', 0.01, 0.014, 0.005, r=[0.08, 0.32, 0]),
+             box(0.12, 0.002, 0.008, '#4a3a2a', 0.0, 0.019, -0.02, r=[0, 0.3, 0]), box(0.1, 0.002, 0.008, '#4a3a2a', 0.0, 0.019, 0.01, r=[0, 0.3, 0])])
 print('wrote the Ziibiing parts')

@@ -15,7 +15,7 @@
    setSetPieces(list) -> [{id, face, x, y, w, h, hb}] */
 (function (root) {
   'use strict';
-  const META = { api: 1, v: 2, needs: { wg_geo: 1 } };
+  const META = { api: 1, v: 3, needs: { wg_geo: 1 } };
   const TREES = 'TPOWMYU';
   function attach(ctx) {
     const g = ctx.geo, T = ctx.T, PT = T.paths, PC = T.pieces, BK = 32;
@@ -23,7 +23,7 @@
     const BUCKET = new Map();
     let SEG = [];   /* per segment: face, x0, y0, x1, y1, halfWidth, kind (0 path, 1 water), carve height */
     const NS = 8, BRIDGE = 14;   /* the widest stream a path bridges, metres */
-    ctx.PIECES = []; ctx.PIECE_BY_ID = new Map();
+    ctx.PIECES = []; ctx.PIECE_BY_ID = new Map(); ctx.ROAD_OBJ = [];
     function pieceDist(pc, x, y) {
       const dx = Math.max(pc.px0 - x, 0, x - pc.px1), dy = Math.max(pc.py0 - y, 0, y - pc.py1);
       return Math.sqrt(dx * dx + dy * dy);
@@ -45,7 +45,9 @@
       }
       return bo < 0 ? null : [best, SEG[bo + 7]];
     }
-    function pathDist(f, x, y) { const r = segDist(f, x, y, 0), b = segDist(f, x, y, 2); return Math.min(r ? r[0] : 1e9, b ? b[0] : 1e9); }
+    function pathDist(f, x, y) { const r = segDist(f, x, y, 0), b = segDist(f, x, y, 2), c = segDist(f, x, y, 3); return Math.min(r ? r[0] : 1e9, b ? b[0] : 1e9, c ? c[0] : 1e9); }
+    /* kind 3: a cobbled road - the trails that link one town to another (2026-10-07: "a cobblestone road from Ashvale to Saltmere") */
+    function roadDist(f, x, y) { const c = segDist(f, x, y, 3); return c ? c[0] : 1e9; }
     function bridgeDist(f, x, y) { const b = segDist(f, x, y, 2); return b ? b[0] : 1e9; }
     /* a stream bed: the carve height (the piece's own wet-tile height) blended over 1.5 m banks, or null */
     function waterCarve(f, x, y, h) {
@@ -92,8 +94,32 @@
     function setSetPieces(list) {
       const PIECES = [], tmp = ctx.newSample();
       ctx.PIECES = PIECES; ctx.PIECE_BY_ID = new Map(); BUCKET.clear(); SEG = [];
+      const ROAD = []; ctx.ROAD_OBJ = ROAD;
+      const inPiece = (face, gx, gy) => PIECES.some(q => q.face === face && gx >= q.x && gy >= q.y && gx < q.x + q.w && gy < q.y + q.h);
+      function lightTrail(face, pts, w0) {   /* lit posts along a trail between towns (the road to Saltmere) */
+        if (!pts || pts.length < 2) return;
+        const SPACE = 8, off = Math.max(1.15, (w0 || 1) + 0.85), seen = new Set();
+        let acc = SPACE * 0.45, n = 0;
+        for (let i = 1; i < pts.length; i++) {
+          const ax = pts[i - 1][0], ay = pts[i - 1][1], bx = pts[i][0], by = pts[i][1];
+          const L = Math.hypot(bx - ax, by - ay); if (L < 0.05) continue;
+          const ux = (bx - ax) / L, uy = (by - ay) / L, nx = -uy, ny = ux;
+          let d = 0;
+          while (acc + (L - d) >= SPACE) {
+            const step = SPACE - acc; d += step; acc = 0;
+            const px = ax + ux * d, py = ay + uy * d, side = (n++ & 1) ? 1 : -1;
+            ctx.foldInto(face, px, py, SB);
+            const s0 = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false);
+            if (s0.h < ctx.WATER + 0.2 || s0.peakS > 0.08) continue;
+            const gx = Math.floor(px + nx * off * side), gy = Math.floor(-(py + ny * off * side)), k = gx + ',' + gy;
+            if (seen.has(k) || inPiece(face, gx, gy)) continue;
+            seen.add(k); ROAD.push({ k: 'lamp', x: gx, y: gy, w: 1, h: 1, face });
+          }
+          acc += L - d;
+        }
+      }
       for (const sp of (list || [])) {
-        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, links: sp.links || [] };
+        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, links: sp.links || [], linkStyles: sp.linkStyles || {} };
         pc.px0 = pc.x; pc.px1 = pc.x + pc.w; pc.py0 = -(pc.y + pc.h); pc.py1 = -pc.y;
         PIECES.push(pc); ctx.PIECE_BY_ID.set(pc.id, pc);
       }
@@ -127,7 +153,7 @@
           pc.pads.push([o.x, -(o.y + o.h), o.x + o.w, -o.y, Math.max(ctx.WATER + 0.4, hh, o.k === 'cpad' && o.top != null ? o.top : -1e9)]);
         }
       }
-      /* exits: runs of 'p' (paths) and '~' (streams) on outer edges, plus explicit exits */
+      /* exits: runs of 'p' (paths), 'c' (cobbled streets) and '~' (streams) on outer edges, plus explicit exits */
       const inOther = (pc, gx, gy) => PIECES.some(q => q !== pc && q.face === pc.face && gx >= q.x && gy >= q.y && gx < q.x + q.w && gy < q.y + q.h);
       const segs = [];
       function walk(pc, x, y, base, L, w0, kind, hv, depth) {
@@ -187,7 +213,7 @@
         const ex = [];
         const edges = [['n', k => [pc.x + k, pc.y], k => [pc.x + k, pc.y - 1], pc.w], ['s', k => [pc.x + k, pc.y + pc.h - 1], k => [pc.x + k, pc.y + pc.h], pc.w],
           ['w', k => [pc.x, pc.y + k], k => [pc.x - 1, pc.y + k], pc.h], ['e', k => [pc.x + pc.w - 1, pc.y + k], k => [pc.x + pc.w, pc.y + k], pc.h]];
-        for (const [dir, at, out, n] of edges) for (const want of ['p', '~']) {
+        for (const [dir, at, out, n] of edges) for (const want of ['p', 'c', '~']) {   /* 'c': a cobbled street leaves town too */
           let run = -1;
           for (let k = 0; k <= n; k++) {
             const on = k < n && pieceTile(pc, at(k)[0], at(k)[1]) === want && !inOther(pc, out(k)[0], out(k)[1]);
@@ -197,7 +223,17 @@
         }
         for (const e of pc.exits) ex.push({ x: e.x, y: e.y, dir: e.dir, w: e.w || 2, kind: 0 });
         pc.ex = ex;
-        ex.forEach((e, idx) => {
+      }
+      /* a gate the road to another town leaves from gets the road only, not a dirt path of its own beside it (the operator
+         2026-10-07, the cobbled road): mark the exits the trails between towns will use */
+      const nearEx = (list, p) => { let b = null, bd = 1e18; for (const e of list) if (!e.kind) { const d = (e.x + 0.5 - p[0]) ** 2 + (-e.y - 0.5 - p[1]) ** 2; if (d < bd) { bd = d; b = e; } } return b; };
+      for (const A of PIECES) for (const bid of A.links) {
+        const Bp = ctx.PIECE_BY_ID.get(String(bid)); if (!Bp || Bp.face !== A.face) continue;
+        const cen = (q) => [q.x + q.w / 2, -(q.y + q.h / 2)], ea = nearEx(A.ex, cen(Bp)), eb = nearEx(Bp.ex, cen(A)); if (ea && eb) ea.road = eb.road = true;
+      }
+      for (const pc of PIECES) {
+        pc.ex.forEach((e, idx) => {
+          if (e.road) return;
           const base = { n: 0.25, s: 0.75, e: 0, w: 0.5 }[e.dir] || 0, hv = g.hash3(idx, g.hashStr(pc.id), ctx.S.pa);
           /* a path must come out the far side of the piece's belt: inside it the woods are as dense as the piece's own
              edge (often a wall of trees), and the belt reaches up to 1.4 x its metres (pieceFlora) and then fades over
@@ -214,7 +250,8 @@
         const near = (list, p) => { let b = null, bd = 1e18; for (const e of list) if (!e.kind) { const d = (e.x + 0.5 - p[0]) ** 2 + (-e.y - 0.5 - p[1]) ** 2; if (d < bd) { bd = d; b = e; } } return b; };
         const ea = near(A.ex, cb), eb = near(Bp.ex, ca); if (!ea || !eb) continue;
         let x = ea.x + 0.5, y = -ea.y - 0.5; const tx = eb.x + 0.5, ty = -eb.y - 0.5, hv = g.hash3(g.hashStr(A.id), g.hashStr(Bp.id), ctx.S.pa);
-        const D0 = Math.hypot(tx - x, ty - y), w0 = Math.max(PT.halfMin, Math.min(PT.halfMax, ea.w / 2));
+        const trail = A.linkStyles[bid] === 'trail', RK = trail ? 0 : 3;   /* a trail (2026-10-07: "a skinny trail running from the village to Ashvale"): dirt, narrow, no lamps */
+        const D0 = Math.hypot(tx - x, ty - y), w0 = trail ? PT.halfMin : Math.max(1.4, PT.halfMin, Math.min(PT.halfMax, ea.w / 2));   /* a road is wider than a footpath */
         /* the route goes AROUND water (the operator): a search on a 4 m grid over the ground between the two gates, water,
            rock and other set pieces closed, a little extra cost for slopes so it keeps to the easy ground; the trail is
            laid along it. Only if there is no way round at all does it fall back to a straight line with bridges. */
@@ -253,18 +290,21 @@
           const pts = []; for (let k = tk; k >= 0; k = from[k]) { const i = k % GW, j = (k - i) / GW; pts.push([gx0 + i * CS, gy0 + j * CS]); if (k === sk) break; }
           pts.reverse(); pts[0] = [x, y]; pts[pts.length - 1] = [tx, ty];
           let px0 = pts[0][0], py0 = pts[0][1];
-          for (let k = 2; k < pts.length; k += 2) { const q = pts[Math.min(k, pts.length - 1)]; segs.push(A.face, px0, py0, q[0], q[1], w0, 0, A.hb - 0.75); px0 = q[0]; py0 = q[1]; }
-          segs.push(A.face, px0, py0, tx, ty, w0, 0, A.hb - 0.75);
+          for (let k = 2; k < pts.length; k += 2) { const q = pts[Math.min(k, pts.length - 1)]; segs.push(A.face, px0, py0, q[0], q[1], w0, RK, A.hb - 0.75); px0 = q[0]; py0 = q[1]; }
+          segs.push(A.face, px0, py0, tx, ty, w0, RK, A.hb - 0.75);
+          if (!trail) lightTrail(A.face, pts, w0);
         } else {
+          const pts = [[x, y]];
           for (let k = 0, d = 0; d < D0 * 2.5 && Math.hypot(tx - x, ty - y) > PT.step; k++, d += PT.step) {
             const aim = Math.atan2(ty - y, tx - x) / (2 * Math.PI), a = aim + (g.u01(g.mix32(hv + k * 7919)) - 0.5) * PT.turn * 0.8;
             const nx = x + g.ccos(a) * PT.step, ny = y + g.csin(a) * PT.step;
             ctx.foldInto(A.face, nx, ny, SB);
             const s = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false);
-            segs.push(A.face, x, y, nx, ny, w0, s.h < ctx.WATER ? 2 : 0, A.hb - 0.75);
-            x = nx; y = ny;
+            segs.push(A.face, x, y, nx, ny, w0, s.h < ctx.WATER ? 2 : RK, A.hb - 0.75);
+            x = nx; y = ny; pts.push([x, y]);
           }
-          segs.push(A.face, x, y, tx, ty, w0, 0, A.hb - 0.75);
+          segs.push(A.face, x, y, tx, ty, w0, RK, A.hb - 0.75);
+          pts.push([tx, ty]); if (!trail) lightTrail(A.face, pts, w0);
         }
       }
       SEG = segs;
@@ -274,10 +314,12 @@
         const by0 = Math.floor((Math.min(SEG[o + 2], SEG[o + 4]) - m) / BK), by1 = Math.floor((Math.max(SEG[o + 2], SEG[o + 4]) + m) / BK);
         for (let by = by0; by <= by1; by++) for (let bx = bx0; bx <= bx1; bx++) { const kk = bkey(f, bx, by); if (!BUCKET.has(kk)) BUCKET.set(kk, []); BUCKET.get(kk).push(k); }
       }
+      /* a lamp stands on the verge, never on a path: where trails meet or bend, drop any that came to stand on one (2026-10-07) */
+      ctx.ROAD_OBJ = ROAD.filter(o => pathDist(o.face, o.x + 0.5, -(o.y + 0.5)) > 0.3);
       if (ctx.clearCaches) ctx.clearCaches();
       return PIECES.map(p => ({ id: p.id, face: p.face, x: p.x, y: p.y, w: p.w, h: p.h, hb: p.hb }));
     }
-    Object.assign(ctx, { pieceDist, pieceTile, pathDist, bridgeDist, waterCarve, pieceFlora, setSetPieces, pathCount: () => SEG.length / NS });
+    Object.assign(ctx, { pieceDist, pieceTile, pathDist, roadDist, bridgeDist, waterCarve, pieceFlora, setSetPieces, pathCount: () => SEG.length / NS, roadObjects: () => ctx.ROAD_OBJ || [] });
     return ctx;
   }
   const api = { api: 1, attach };

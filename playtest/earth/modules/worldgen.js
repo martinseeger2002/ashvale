@@ -146,6 +146,7 @@
             out.push(r);
           };
           for (const pc of ctx.PIECES) if (pc.face === gf) for (const o of pc.objects) add(o);
+          for (const o of ctx.ROAD_OBJ || []) if (o.face === gf) add(o);   /* lit posts along town trails */
           const tg0 = Math.floor(gx0), tg1 = Math.floor(gx1), tgy0 = Math.floor(-gy1), tgy1 = Math.floor(-gy0);
           for (const r of ctx.sites(gf, tg0, tgy0, tg1, tgy1)) {
             for (const o of r.objects) add(o);
@@ -173,7 +174,7 @@
         return zones.map(z => {
           const ox = z.origin[0], oy = z.origin[1], w = z.size[0], h = z.size[1];
           const objs = (z.objects || []).filter(o => o.x >= ox && o.y >= oy && o.x < ox + w && o.y < oy + h).map(o => Object.assign({}, o, { x: o.x + gx, y: o.y + gy }, o.x2 != null ? { x2: o.x2 + gx, y2: o.y2 + gy } : null));   /* a run (a castle wall) moves both ends */
-          return { id: z.id, face, x: gx + ox, y: gy + oy, w, h, tiles: decks(z), objects: objs, belt: belt[z.id] || 0, links: links.filter(l => l[0] === z.id).map(l => l[1]) };
+          return { id: z.id, face, x: gx + ox, y: gy + oy, w, h, tiles: decks(z), objects: objs, belt: belt[z.id] || 0, links: links.filter(l => l[0] === z.id).map(l => l[1]), linkStyles: Object.fromEntries(links.filter(l => l[0] === z.id && l[2]).map(l => [l[1], l[2]])) };   /* a third word: 'trail' = a skinny dirt trail, no cobbles, no lamps */
         });
       }
       if (O.setPieces) { LASTPC = O.setPieces; ctx.setSetPieces(O.setPieces); }
@@ -182,6 +183,7 @@
         sample, newSample: ctx.newSample, field, lattice, height: (f, x, y) => sample(f, x, y, SMP).h,
         setEdits, edits: () => EDL,
         walkable: ctx.walkable, tileAt: ctx.tileAt, tiles: ctx.tiles, forTiles: ctx.forTiles, sites: ctx.sites, setSetPieces: (l) => { LASTPC = l; ctx.setSetPieces(l); }, piecesFromZones, objectsIn,
+        roadObjects: (face, gx0, gy0, gx1, gy1) => { const L = ctx.ROAD_OBJ || []; return face == null ? L.slice() : L.filter(o => o.face === face && o.x >= gx0 && o.x <= gx1 && o.y >= gy0 && o.y <= gy1); },
         /* area loading (handoff/area_loading.md): a town first placed as its index STUB (edge band + building pads, all that
            is read outside it) gets its real tiles and objects when its zone arrives. Paths, pads and edge profiles were made
            from the stub and are identical, so only the samples are dropped (the inside of the town reads the new tiles). */
