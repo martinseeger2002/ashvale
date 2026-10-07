@@ -5,7 +5,8 @@
 const fs = require('fs'), path = require('path');
 const AshCore = require('../src/core.js');
 const DD = path.join(__dirname, '..', 'data'), mod = (n) => JSON.parse(fs.readFileSync(path.join(DD, n + '.json'), 'utf8')).data;
-const zones = ['village', 'whisperwood', 'saltmere'].map(z => Object.assign({ id: z }, mod('zone.' + z)));
+const zones = ['village', 'whisperwood', 'saltmere'].map(z => Object.assign({ id: z }, JSON.parse(JSON.stringify(mod('zone.' + z)))));
+zones.find(z => z.id === 'whisperwood').spawns.push({ m: 'wraith', x: 26, y: 33 });   /* test-only caster; live Whisperwood has no wraith */
 const D = { items: mod('items').items, monsters: mod('monsters').monsters, shops: mod('shops'), quests: mod('quests'), rules: mod('rules'), zones, globecfg: mod('globecfg') };
 const XP = D.rules.xp, BIG = XP[60] * 10;
 let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'ok  ' : 'FAIL', m); };
