@@ -45,7 +45,9 @@
       }
       return bo < 0 ? null : [best, SEG[bo + 7]];
     }
-    function pathDist(f, x, y) { const r = segDist(f, x, y, 0), b = segDist(f, x, y, 2); return Math.min(r ? r[0] : 1e9, b ? b[0] : 1e9); }
+    function pathDist(f, x, y) { const r = segDist(f, x, y, 0), b = segDist(f, x, y, 2), c = segDist(f, x, y, 3); return Math.min(r ? r[0] : 1e9, b ? b[0] : 1e9, c ? c[0] : 1e9); }
+    /* kind 3: a cobbled road - the trails that link one town to another (2026-10-07: "a cobblestone road from Ashvale to Saltmere") */
+    function roadDist(f, x, y) { const c = segDist(f, x, y, 3); return c ? c[0] : 1e9; }
     function bridgeDist(f, x, y) { const b = segDist(f, x, y, 2); return b ? b[0] : 1e9; }
     /* a stream bed: the carve height (the piece's own wet-tile height) blended over 1.5 m banks, or null */
     function waterCarve(f, x, y, h) {
@@ -151,7 +153,7 @@
           pc.pads.push([o.x, -(o.y + o.h), o.x + o.w, -o.y, Math.max(ctx.WATER + 0.4, hh, o.k === 'cpad' && o.top != null ? o.top : -1e9)]);
         }
       }
-      /* exits: runs of 'p' (paths) and '~' (streams) on outer edges, plus explicit exits */
+      /* exits: runs of 'p' (paths), 'c' (cobbled streets) and '~' (streams) on outer edges, plus explicit exits */
       const inOther = (pc, gx, gy) => PIECES.some(q => q !== pc && q.face === pc.face && gx >= q.x && gy >= q.y && gx < q.x + q.w && gy < q.y + q.h);
       const segs = [];
       function walk(pc, x, y, base, L, w0, kind, hv, depth) {
@@ -211,7 +213,7 @@
         const ex = [];
         const edges = [['n', k => [pc.x + k, pc.y], k => [pc.x + k, pc.y - 1], pc.w], ['s', k => [pc.x + k, pc.y + pc.h - 1], k => [pc.x + k, pc.y + pc.h], pc.w],
           ['w', k => [pc.x, pc.y + k], k => [pc.x - 1, pc.y + k], pc.h], ['e', k => [pc.x + pc.w - 1, pc.y + k], k => [pc.x + pc.w, pc.y + k], pc.h]];
-        for (const [dir, at, out, n] of edges) for (const want of ['p', '~']) {
+        for (const [dir, at, out, n] of edges) for (const want of ['p', 'c', '~']) {   /* 'c': a cobbled street leaves town too */
           let run = -1;
           for (let k = 0; k <= n; k++) {
             const on = k < n && pieceTile(pc, at(k)[0], at(k)[1]) === want && !inOther(pc, out(k)[0], out(k)[1]);
@@ -221,7 +223,17 @@
         }
         for (const e of pc.exits) ex.push({ x: e.x, y: e.y, dir: e.dir, w: e.w || 2, kind: 0 });
         pc.ex = ex;
-        ex.forEach((e, idx) => {
+      }
+      /* a gate the road to another town leaves from gets the road only, not a dirt path of its own beside it (the operator
+         2026-10-07, the cobbled road): mark the exits the trails between towns will use */
+      const nearEx = (list, p) => { let b = null, bd = 1e18; for (const e of list) if (!e.kind) { const d = (e.x + 0.5 - p[0]) ** 2 + (-e.y - 0.5 - p[1]) ** 2; if (d < bd) { bd = d; b = e; } } return b; };
+      for (const A of PIECES) for (const bid of A.links) {
+        const Bp = ctx.PIECE_BY_ID.get(String(bid)); if (!Bp || Bp.face !== A.face) continue;
+        const cen = (q) => [q.x + q.w / 2, -(q.y + q.h / 2)], ea = nearEx(A.ex, cen(Bp)), eb = nearEx(Bp.ex, cen(A)); if (ea && eb) ea.road = eb.road = true;
+      }
+      for (const pc of PIECES) {
+        pc.ex.forEach((e, idx) => {
+          if (e.road) return;
           const base = { n: 0.25, s: 0.75, e: 0, w: 0.5 }[e.dir] || 0, hv = g.hash3(idx, g.hashStr(pc.id), ctx.S.pa);
           /* a path must come out the far side of the piece's belt: inside it the woods are as dense as the piece's own
              edge (often a wall of trees), and the belt reaches up to 1.4 x its metres (pieceFlora) and then fades over
@@ -238,7 +250,7 @@
         const near = (list, p) => { let b = null, bd = 1e18; for (const e of list) if (!e.kind) { const d = (e.x + 0.5 - p[0]) ** 2 + (-e.y - 0.5 - p[1]) ** 2; if (d < bd) { bd = d; b = e; } } return b; };
         const ea = near(A.ex, cb), eb = near(Bp.ex, ca); if (!ea || !eb) continue;
         let x = ea.x + 0.5, y = -ea.y - 0.5; const tx = eb.x + 0.5, ty = -eb.y - 0.5, hv = g.hash3(g.hashStr(A.id), g.hashStr(Bp.id), ctx.S.pa);
-        const D0 = Math.hypot(tx - x, ty - y), w0 = Math.max(PT.halfMin, Math.min(PT.halfMax, ea.w / 2));
+        const D0 = Math.hypot(tx - x, ty - y), w0 = Math.max(1.4, PT.halfMin, Math.min(PT.halfMax, ea.w / 2));   /* a road is wider than a footpath */
         /* the route goes AROUND water (the operator): a search on a 4 m grid over the ground between the two gates, water,
            rock and other set pieces closed, a little extra cost for slopes so it keeps to the easy ground; the trail is
            laid along it. Only if there is no way round at all does it fall back to a straight line with bridges. */
@@ -277,8 +289,8 @@
           const pts = []; for (let k = tk; k >= 0; k = from[k]) { const i = k % GW, j = (k - i) / GW; pts.push([gx0 + i * CS, gy0 + j * CS]); if (k === sk) break; }
           pts.reverse(); pts[0] = [x, y]; pts[pts.length - 1] = [tx, ty];
           let px0 = pts[0][0], py0 = pts[0][1];
-          for (let k = 2; k < pts.length; k += 2) { const q = pts[Math.min(k, pts.length - 1)]; segs.push(A.face, px0, py0, q[0], q[1], w0, 0, A.hb - 0.75); px0 = q[0]; py0 = q[1]; }
-          segs.push(A.face, px0, py0, tx, ty, w0, 0, A.hb - 0.75);
+          for (let k = 2; k < pts.length; k += 2) { const q = pts[Math.min(k, pts.length - 1)]; segs.push(A.face, px0, py0, q[0], q[1], w0, 3, A.hb - 0.75); px0 = q[0]; py0 = q[1]; }
+          segs.push(A.face, px0, py0, tx, ty, w0, 3, A.hb - 0.75);
           lightTrail(A.face, pts, w0);
         } else {
           const pts = [[x, y]];
@@ -287,10 +299,10 @@
             const nx = x + g.ccos(a) * PT.step, ny = y + g.csin(a) * PT.step;
             ctx.foldInto(A.face, nx, ny, SB);
             const s = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false);
-            segs.push(A.face, x, y, nx, ny, w0, s.h < ctx.WATER ? 2 : 0, A.hb - 0.75);
+            segs.push(A.face, x, y, nx, ny, w0, s.h < ctx.WATER ? 2 : 3, A.hb - 0.75);
             x = nx; y = ny; pts.push([x, y]);
           }
-          segs.push(A.face, x, y, tx, ty, w0, 0, A.hb - 0.75);
+          segs.push(A.face, x, y, tx, ty, w0, 3, A.hb - 0.75);
           pts.push([tx, ty]); lightTrail(A.face, pts, w0);
         }
       }
@@ -306,7 +318,7 @@
       if (ctx.clearCaches) ctx.clearCaches();
       return PIECES.map(p => ({ id: p.id, face: p.face, x: p.x, y: p.y, w: p.w, h: p.h, hb: p.hb }));
     }
-    Object.assign(ctx, { pieceDist, pieceTile, pathDist, bridgeDist, waterCarve, pieceFlora, setSetPieces, pathCount: () => SEG.length / NS, roadObjects: () => ctx.ROAD_OBJ || [] });
+    Object.assign(ctx, { pieceDist, pieceTile, pathDist, roadDist, bridgeDist, waterCarve, pieceFlora, setSetPieces, pathCount: () => SEG.length / NS, roadObjects: () => ctx.ROAD_OBJ || [] });
     return ctx;
   }
   const api = { api: 1, attach };

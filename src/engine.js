@@ -138,7 +138,65 @@
       /* while the wallet opens the save (that can take seconds), the zones around the spawn are already on their way: most
          characters stand there, and for the rest it is a few KB that warm the cache */
       if (ZINDEX && !G.ASH3D_LAZY_DELAY) { const r0 = (ZINDEX.find(z => z.respawn) || {}).respawn; if (r0) for (const id of zonesNear(r0[0], r0[1])) fetchZone(id).catch(() => {}); }   /* (not on a playtest page that shows a slow arrival) */
-      const st = await openStoreOnly(); try { await preloadZones(st); } catch (e) { console.warn('ASHVALE: zones', e && e.message); } return st;
+      const st = await openStoreOnly();
+      try { await cloudLoad(st); } catch (e) { console.warn('ASHVALE: cloud save', e && e.message); }
+      try { await preloadZones(st); } catch (e) { console.warn('ASHVALE: zones', e && e.message); } return st;
+    }
+    /* ---------- THE SAVE LIVES WITH THE BANK (2026-10-07: "the ashvale bank should hold game states instead of local storage
+       ... and stats and the rest of the game state. That way, anyone can login on their account from any device and being the
+       exact same game state. Make sure the game state save file is as lightweight as it can possibly be"). The whole save - bag,
+       worn gear, stats, quests, place, the chest ledger - is packed (empty fields dropped, deflated, base64) to about 1 KB and kept
+       by the @ashvale Bank under your wallet address, in pieces small enough for a room message. Starting, the game asks the Bank
+       first and takes its copy when it is newer than this device's; playing, it hands the Bank each new save (at most every 20 s,
+       and as you leave). The Bank keeps the newest per address and never reads inside it. */
+    const SAVE_KEY = 'ashvale3d.save.v1', CHUNK = 340;
+    const slim = v => {   /* drop what a save does not need to say: nulls and empty objects (every value kept exactly) */
+      if (Array.isArray(v)) return v.map(slim);
+      if (v && typeof v === 'object') { const o = {}; for (const k in v) { const x = slim(v[k]); if (x == null || (typeof x === 'object' && !Array.isArray(x) && !Object.keys(x).length)) continue; o[k] = x; } return o; }
+      return v;
+    };
+    async function packSave(json) {
+      const raw = new TextEncoder().encode(JSON.stringify(slim(JSON.parse(json))));
+      if (typeof CompressionStream === 'undefined') return 'j' + btoa(String.fromCharCode(...raw));
+      const z = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer());
+      let b = ''; for (let i = 0; i < z.length; i += 4096) b += String.fromCharCode.apply(null, z.subarray(i, i + 4096)); return 'z' + btoa(b);
+    }
+    async function unpackSave(s) {
+      const bin = Uint8Array.from(atob(s.slice(1)), ch => ch.charCodeAt(0));
+      if (s[0] === 'j') return new TextDecoder().decode(bin);
+      return new TextDecoder().decode(await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+    }
+    let CLOUD_OK = false;   /* the Bank answered at the start: only then may this game hand it saves (a stale device must never overwrite a newer one) */
+    const bankSays = from => from && (from.address === DATA.assets.issuer || from.address === YOURFIRST_ADDR || from.tag === 'yourfirstname');
+    function cloudLoad(st) {
+      if (!G.arcade || !net || !net.join) return Promise.resolve();
+      let local = null; try { local = JSON.parse(st.get(SAVE_KEY) || 'null'); } catch (e) { local = null; }
+      return new Promise(done => {
+        let R = null, fin = false; const parts = {};
+        const end = () => { if (fin) return; fin = true; clearTimeout(tm); try { R && R.leave(); } catch (e) { /* gone */ } done(); };
+        const tm = setTimeout(end, local ? 8000 : 20000);   /* no Bank in time: this device's save. With no save here (a new device) it waits longer - a cold sign-in takes the realtime room 10 s and more, and giving up would start a new character */
+        net.join('bank', { game: 'ashvale' }).then(res => {
+          if (fin || !res || !res.online) return end();
+          R = res.room; const me = R.me && R.me.address; if (!me) return end();
+          R.on('message', ({ from, data }) => {
+            if (!data || data.t !== 'ld' || data.to !== me || !bankSays(from)) return;
+            if (!data.n) { CLOUD_OK = true; return end(); }   /* the Bank holds no save for this address */
+            parts[data.i] = data.d;
+            if (Object.keys(parts).length < data.n) return;
+            const blob = Array.from({ length: data.n }, (_, i) => parts[i] || '').join('');
+            (blob ? unpackSave(blob) : Promise.resolve('')).then(json => {
+              const cloud = json ? JSON.parse(json) : null, at = +data.id || 0;
+              if (at > ((local && local.at) || 0)) {   /* newer than this device's: play that one ('' = a New character was made) */
+                console.info('ASHVALE: the save from the Bank (' + new Date(at).toISOString() + ') is newer than this device\'s');
+                return st.set(SAVE_KEY, cloud ? JSON.stringify(Object.assign(cloud, { at })) : '');
+              }
+            }).then(() => { CLOUD_OK = true; }, e => console.warn('ASHVALE: cloud save unreadable', e && e.message)).then(end);
+          });
+          /* ask again every 2.5 s until the Bank answers: on a cold start the first question, sent the moment the room opens,
+             is often lost (live test 2026-10-07: joined at 6.7 s, the Bank never heard it) */
+          const ask = () => { if (fin || Object.keys(parts).length) return; R.send({ t: 'ld?' }); setTimeout(ask, 2500); }; ask();
+        }, end);
+      });
     }
     async function openStoreOnly() {
       const A = G.arcade && G.arcade.storage, framed = !!(G.parent && G.parent !== G);
@@ -407,7 +465,7 @@
           for (let r = 1; r <= 5; r++) {
             const x = n.x + dx * r, y = n.y + dy * r;
             if (M.blocked(x, y) || (!!(M.insideAt && M.insideAt(x, y))) !== inside) break;
-            sc += (6 - r) * (M.tileAt(x, y) === 'p' ? 1.5 : 1);
+            sc += (6 - r) * ('pc'.indexOf(M.tileAt(x, y)) >= 0 ? 1.5 : 1);
           }
           sc += ((hv >>> (d * 3)) & 7) * 0.05;
           if (sc > best) { best = sc; yaw = Math.atan2(dx, dy); }
@@ -680,10 +738,26 @@
           for (const f of fires.values()) { const q = f.position; if (Math.abs(q.x - me.x) < R && Math.abs(q.z - me.y) < R) near.push([q.x - 0.5, q.z - 0.5, 0.8, 0xff9a3c]); }
           for (const g of core.S.ground) if (g.id === 'torch' && Math.abs(g.x - me.x) < R && Math.abs(g.y - me.y) < R) near.push([g.x, g.y, 1.6, 0xff9a3c]);
           near.sort((a, b) => Math.hypot(a[0] - me.x, a[1] - me.y) - Math.hypot(b[0] - me.x, b[1] - me.y));
-          glowAt(near.slice(CAVE.pool.length));
-          CAVE.pool.forEach((L, k) => { const o = near[k]; L.visible = true; if (!o) { L.intensity = 0; return; } L.position.set(o[0] + 0.5, heightAt(o[0] + 0.5, o[1] + 0.5) + o[2], o[1] + 0.5); L.color.setHex(o[3]); L.distance = o[4] ? 12 : 10; L.userData.steady = !!o[4]; L.intensity = 3.2; });
+          /* no hard swap between far and near (2026-10-07, via the Arcade session: the light "visibly changes as you
+             approach"): every light keeps its ground pool at any distance, and the few real lights stay on the same source while
+             it is among the nearest, easing in from 24 tiles to full at 12 and easing out when handed on - never popping */
+          glowAt(near);
+          const want = new Map(near.slice(0, CAVE.pool.length).map(o => [o[0] + ',' + o[1], o]));
+          for (const L of CAVE.pool) { const u = L.userData; if (!u.key) continue; if (want.has(u.key)) { want.delete(u.key); u.out = false; } else u.out = true; }   /* kept, or easing out */
+          for (const [key, o] of want) {
+            const L = CAVE.pool.find(L => !L.userData.key) || CAVE.pool.find(L => L.userData.out && L.intensity < 0.05); if (!L) break;
+            Object.assign(L.userData, { key, out: false, steady: !!o[4], x: o[0] + 0.5, y: o[1] + 0.5 }); L.intensity = 0; L.visible = true;
+            L.position.set(o[0] + 0.5, heightAt(o[0] + 0.5, o[1] + 0.5) + o[2], o[1] + 0.5); L.color.setHex(o[3]); L.distance = o[4] ? 12 : 10;
+          }
         }
-        for (const L of CAVE.pool) if (L.intensity > 0) L.intensity = L.userData.steady ? 3.2 : 3.0 + Math.sin(now * 0.013 + L.position.x) * 0.3 + Math.sin(now * 0.031 + L.position.z) * 0.18;   /* flames flicker, gas burns steady */
+        const RN = 12, RF = 24, ease = 0.08;
+        for (const L of CAVE.pool) {
+          const u = L.userData; if (!u.key) { L.intensity = 0; continue; }
+          const d = Math.hypot(u.x - me.x - 0.5, u.y - me.y - 0.5), near1 = u.out ? 0 : Math.min(1, Math.max(0, (RF - d) / (RF - RN)));
+          const base = (u.steady ? 2.6 : 2.4 + Math.sin(now * 0.013 + L.position.x) * 0.25 + Math.sin(now * 0.031 + L.position.z) * 0.15) * near1;   /* flames flicker, gas burns steady */
+          L.intensity += (base - L.intensity) * ease;
+          if (u.out && L.intensity < 0.05) { u.key = null; u.out = false; L.intensity = 0; }
+        }
       }
       /* ---------- DAY AND NIGHT (2026-10-07: "Add an orbiting sun that orbits the globe once every 24 hours make it dark
          ashvale as of one hour ago is sunset"; "Have the sun create the shadows on the ground"). The sun circles the planet's
@@ -1330,7 +1404,12 @@
       const carriedOf = k => core.invCount(me, k) + Object.values(me.eq || {}).filter(q => q && q.id === k).length;
       function ledgerFor(addr) {
         if (ledger && ledger.addr === addr) return ledger;
-        let L = null; try { L = JSON.parse(G.localStorage.getItem(CKEY(addr)) || 'null'); } catch (e) { /* private window */ }
+        /* the ledger travels IN THE SAVE (2026-10-07, @cinderwalker's GOLD 251 -> 2708): the bag is saved with the arcade and
+           follows you to any browser, but this ledger lived only in this browser's storage - so a fresh browser, another device or
+           cleared site data forgot what was spent and the chest offered it all again. The save's copy goes with the bag it was
+           saved with, so it wins; this browser's copy is only for a save from before this change */
+        let L = save && save.chestLedger && save.chestLedger.addr === addr ? JSON.parse(JSON.stringify(save.chestLedger)) : null;
+        if (!L) try { L = JSON.parse(G.localStorage.getItem(CKEY(addr)) || 'null'); } catch (e) { /* private window */ }
         if (!L) {   /* first time for this wallet: what you already carry and the wallet holds counts as from the wallet */
           const w = walCounts(); L = { bag: {}, spent: {} };
           for (const k in w) { const c = carriedOf(k); if (c && w[k]) L.bag[k] = Math.min(c, w[k]); }
@@ -1338,7 +1417,8 @@
         L.bag = L.bag || {}; L.spent = L.spent || {}; L.pend = L.pend || {}; L.pspent = L.pspent || {}; L.gone = L.gone || {}; L.autoTake = L.autoTake || {}; L.pchest = L.pchest || {}; L.lchest = L.lchest || {};
         L.addr = addr; ledger = L; return L;
       }
-      const ledgerSave = () => { if (!ledger) return; try { G.localStorage.setItem(CKEY(ledger.addr), JSON.stringify({ bag: ledger.bag, spent: ledger.spent, pend: ledger.pend, pspent: ledger.pspent, out: ledger.out || {}, gone: ledger.gone || {}, autoTake: ledger.autoTake || {}, pchest: ledger.pchest || {}, lchest: ledger.lchest || {} })); } catch (e) { /* private window */ } };
+      const ledgerSnap = () => ledger && { addr: ledger.addr, bag: ledger.bag, spent: ledger.spent, pend: ledger.pend, pspent: ledger.pspent, out: ledger.out || {}, gone: ledger.gone || {}, autoTake: ledger.autoTake || {}, pchest: ledger.pchest || {}, lchest: ledger.lchest || {} };
+      const ledgerSave = () => { if (!ledger) return; try { G.localStorage.setItem(CKEY(ledger.addr), JSON.stringify(ledgerSnap())); } catch (e) { /* private window */ } };
       function chestState() {
         if (!walletState.data || !walletState.address) return { chest: {}, loose: {}, bank, arriving: bank.arriving };
         const L = ledgerFor(walletState.address), w = walCounts(), keys = new Set(Object.keys(w).concat(Object.keys(L.bag), Object.keys(L.spent), Object.keys(L.pend), Object.keys(L.pspent), Object.keys(L.gone), Object.keys(L.autoTake), Object.keys(L.pchest), Object.keys(L.lchest)));
@@ -2121,10 +2201,24 @@
         for (let i = 0; i < addrs.length; i += 10) { R.send({ t: 'book', v: 1, a: addrs.slice(i, i + 10) }); await new Promise(ok => setTimeout(ok, 400)); }
       }
       setTimeout(() => { reportBook().catch(() => {}); setInterval(() => reportBook().catch(() => {}), 600000); }, 15000);
+      /* the save to the Bank (cloudLoad above): only when it changed, at most every 20 s, at once when you leave */
+      const CLOUD = { last: null, at: (save && save.at) || 0, sent: '', t: 0 };
+      function cloudPush(json, now) {
+        if (!G.arcade || !CLOUD_OK || !json || json === CLOUD.sent || (!now && performance.now() - CLOUD.t < 20000)) return;
+        CLOUD.t = performance.now(); const at = CLOUD.at;
+        packSave(json).then(b => bankRoom().then(R => {
+          if (!R) return; const n = Math.max(1, Math.ceil(b.length / CHUNK));
+          if (n > 40) { console.warn('ASHVALE: the save is too big for the Bank (' + b.length + ' B)'); return; }
+          CLOUD.sent = json; for (let i = 0; i < n; i++) R.send({ t: 'sv', id: at, i, n, d: b.slice(i * CHUNK, (i + 1) * CHUNK) });
+        })).catch(e => console.warn('ASHVALE: cloud save', e && e.message));
+      }
       function persist(leaving) {
         if (stopped) return;
         try { tellHere(leaving === true); } catch (e) { /* the Bank is out of reach: the next save */ }
-        Promise.resolve(store.set(SAVE, JSON.stringify(core.exportPlayer(PID)))).then(ok => {   /* false: the arcade did not take it */
+        const P = core.exportPlayer(PID); if (P && ledger) P.chestLedger = ledgerSnap();   /* the chest ledger saves with the bag it describes */
+        const json = JSON.stringify(P); if (json !== CLOUD.last) { CLOUD.at = Date.now(); CLOUD.last = json; } if (P) P.at = CLOUD.at;
+        cloudPush(json, leaving === true);
+        Promise.resolve(store.set(SAVE, JSON.stringify(P))).then(ok => {   /* false: the arcade did not take it */
           if (ok === false) { if (++saveFails === 2) hud.netLost && hud.netLost(true, 'save'); }
           else { if (saveFails >= 2) { hud.netLost && hud.netLost(false, 'save'); hud.chat('Your progress is saving again.', 'sys'); } saveFails = 0; }
         });
@@ -2146,7 +2240,7 @@
           toggle: k => { settings[k] = !settings[k]; store.set(SET, JSON.stringify(settings)); if (k === 'shadows') { sun.castShadow = settings.shadows; for (const e of ents.values()) e.blob.visible = !settings.shadows && !e.hawk; renderer.shadowMap.needsUpdate = true; scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); } },
           resetCamera: () => { cam.tyaw = PI * 0.12; cam.tpitch = 0.92; cam.tdist = isPhone ? 9 : 11; },
           faceNorth: () => { const v = trueNorth(me.x, me.y), want = -PI / 2 - Math.atan2(v[1], v[0]); cam.tyaw = want + Math.round((cam.tyaw - want) / (2 * PI)) * 2 * PI; },   /* true north up, the short way round */
-          newGame: () => { stopped = true; store.set(SAVE, '').then(() => location.reload(), () => location.reload()); },
+          newGame: () => { stopped = true; const at = Date.now(); (CLOUD_OK ? bankRoom() : Promise.resolve(null)).then(R => R && R.send({ t: 'sv', id: at, i: 0, n: 1, d: '' })).catch(() => {}).then(() => store.set(SAVE, '')).then(() => location.reload(), () => location.reload()); },   /* the Bank's copy goes too: an empty save, newer than any */
           helpSeen: () => store.set('ashvale3d.help', '1'),
           savesHere: () => store.backend,
           modulesText: () => 'Players: ' + netStatus + '. Saves: ' + ({ arcade: 'on the arcade', browser: 'in this browser', memory: 'not saved (this session only)' }[store.backend] || store.backend) + '. Modules: ' + (opts.report || []).map(r => r[0] + ' v' + r[1]).join(', '),

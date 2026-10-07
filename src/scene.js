@@ -10,7 +10,7 @@
   'use strict';
   function sceneFactory(deps) {
     const THREE = deps.three;
-    const TILE_COL = { i: 0x8a7a5a, '.': 0x5f9e3f, f: 0x62a242, F: 0x5c9a3e, ',': 0x4a7f34, T: 0x40702c, P: 0x3e6c2c, O: 0x43732e, p: 0xa98a5a, d: 0x8f7b5e, B: 0x7a5a36, g: 0xb8ac62, q: 0xa9b29c, v: 0x6a8a75, J: 0xd9e9f2,
+    const TILE_COL = { i: 0x8a7a5a, '.': 0x5f9e3f, f: 0x62a242, F: 0x5c9a3e, ',': 0x4a7f34, T: 0x40702c, P: 0x3e6c2c, O: 0x43732e, p: 0xa98a5a, c: 0x8a857c, d: 0x8f7b5e, B: 0x7a5a36, g: 0xb8ac62, q: 0xa9b29c, v: 0x6a8a75, J: 0xd9e9f2,
       s: 0xcdbb84, '~': 0x6a7a55, H: 0x8a7a5a, X: 0x7d8a52, R: 0x7e7a6a, N: 0x7e7a6a, I: 0x7e7a6a, r: 0x6f7a55,
       W: 0x4a7a3a, M: 0x4c7030, Y: 0x36612a, U: 0xc9b47c, C: 0x74716e, G: 0x7e7a6a, A: 0x767a82, '^': 0x74716a, K: 0x6f8f4a };
     const ORE = { R: 0xc8702c, N: 0xd8d8d0, I: 0x8a4632, C: 0x33333c, G: 0xd9a930, A: 0x6f86c8 };
@@ -168,7 +168,7 @@
           return wet ? -0.35 + (vnoise(cx * 0.4, cy * 0.4) - 0.5) * 0.1 : (vnoise(cx * 0.2, cy * 0.2) - 0.5) * 0.25;
         }
         const z = zone(cx, cy);
-        const flat = adj.some(c => 'pHXFfdi'.indexOf(c) >= 0) || (z === 'village' && adj.some(c => c === '.'));
+        const flat = adj.some(c => 'pcHXFfdi'.indexOf(c) >= 0) || (z === 'village' && adj.some(c => c === '.'));
         if (flat) h *= z === 'village' ? 0.12 : 0.45;
         if (adj.some(c => c === 'B')) return 0.06;   /* a pier or bridge deck: just above the water (which lies at -0.16) */
         const wet = adj.filter(c => c === '~').length;
@@ -748,6 +748,11 @@
         if (!mine(x, y)) continue;
         const c = at(x, y), r = hash2(x * 5 + 1, y * 7 + 2);
         if (c === 'K') { B.add('box', 0x8c897e, x + 0.5, heightAt(x + 0.5, y + 0.5) + 0.65, y + 0.5, 0.5, 1.3 + r * 0.9, 0.42, r * 6); continue; }   /* standing stones and ruin walls (seeded land) */
+        if (c === 'c') {   /* cobbles: a 3 x 3 set of rounded grey stones, each a little different (2026-10-07) */
+          for (let k = 0; k < 9; k++) { const sx = x + 0.17 + (k % 3) * 0.33 + (hash2(x * 3 + k, y) - 0.5) * 0.06, sz = y + 0.17 + ((k / 3) | 0) * 0.33 + (hash2(x, y * 3 + k) - 0.5) * 0.06, q = hash2(x + k * 13, y - k * 7);
+            B.add('cyl6', q < 0.33 ? 0x7a766e : q < 0.66 ? 0x8f8a80 : 0x9e988c, sx, heightAt(sx, sz) + 0.025, sz, 0.3, 0.06, 0.28, q * 6); }
+          continue;
+        }
         if (c === '^' && map.underNear && map.underNear(x, y)) continue;   /* underground the rock is the raised ground itself */
         if (c === '^') { if (r < 0.4) B.add('pyr', 0x76736b, x + 0.5, heightAt(x + 0.5, y + 0.5) + 0.5, y + 0.5, 1.4, 1 + r * 2, 1.4, r * 6); continue; }   /* mountain rock */
         if (c === 'f') for (let k = 0; k < 5; k++) { const fx = x + 0.2 + hash2(x + k, y) * 0.6, fz = y + 0.2 + hash2(x, y + k) * 0.6, fy = heightAt(fx, fz); B.add('box', 0x3a7a2a, fx, fy + 0.08, fz, 0.03, 0.16, 0.03); B.add('box', FL[(x + y + k) % 5], fx, fy + 0.18, fz, 0.09, 0.07, 0.09); }
@@ -812,7 +817,7 @@
       const RC = rect || [0, 0, map.W, map.H], X0 = RC[0], Y0 = RC[1], W = RC[2], H = RC[3], at = (x, y) => map.tileAt(x, y);
       const mm = document.createElement('canvas'); mm.width = W * 4; mm.height = H * 4;
       {
-        const g = mm.getContext('2d'), MC = { '.': '#4e8a32', f: '#4e8a32', F: '#6a4a2a', ',': '#3e7428', p: '#a08458', d: '#857254', B: '#6e4f2e', g: '#a99d58', q: '#9aa38d', v: '#3f7ab8', J: '#d4e6f0', s: '#c4b07a', '~': '#2f6aa8', H: '#8a6a50', X: '#7a6a5a', R: '#6a6a66', N: '#6a6a66', I: '#6a6a66', r: '#6a6a66', T: '#2a5a1e', P: '#22501e', O: '#2e5a1c', W: '#5d7f3a', M: '#8a5a26', Y: '#1f4722', U: '#c4b07a', C: '#4a4a52', G: '#8a7a4a', A: '#6a7488', '^': '#77736a', K: '#8a877c' };
+        const g = mm.getContext('2d'), MC = { '.': '#4e8a32', f: '#4e8a32', F: '#6a4a2a', ',': '#3e7428', p: '#a08458', c: '#8a857c', d: '#857254', B: '#6e4f2e', g: '#a99d58', q: '#9aa38d', v: '#3f7ab8', J: '#d4e6f0', s: '#c4b07a', '~': '#2f6aa8', H: '#8a6a50', X: '#7a6a5a', R: '#6a6a66', N: '#6a6a66', I: '#6a6a66', r: '#6a6a66', T: '#2a5a1e', P: '#22501e', O: '#2e5a1c', W: '#5d7f3a', M: '#8a5a26', Y: '#1f4722', U: '#c4b07a', C: '#4a4a52', G: '#8a7a4a', A: '#6a7488', '^': '#77736a', K: '#8a877c' };
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const c = at(X0 + x, Y0 + y); g.fillStyle = MC[c] || '#4e8a32'; g.fillRect(x * 4, y * 4, 4, 4); if ('TPOMWYU'.indexOf(c) >= 0) { g.fillStyle = c === 'U' ? '#3f6a2a' : '#183a12'; g.fillRect(x * 4 + 1, y * 4 + 1, 2, 2); } }
         for (const o of map.objects) if (o.k === 'house' || o.k === 'shop' || o.k === 'smithy' || o.k === 'church') { const ox = o.x - X0, oy = o.y - Y0; g.fillStyle = '#b8a890'; g.fillRect(ox * 4, oy * 4, o.w * 4, o.h * 4); g.strokeStyle = '#ffffff'; g.lineWidth = 1; g.strokeRect(ox * 4 + 0.5, oy * 4 + 0.5, o.w * 4 - 1, o.h * 4 - 1); }
       }
