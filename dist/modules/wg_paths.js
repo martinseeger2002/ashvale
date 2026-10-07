@@ -15,7 +15,7 @@
    setSetPieces(list) -> [{id, face, x, y, w, h, hb}] */
 (function (root) {
   'use strict';
-  const META = { api: 1, v: 2, needs: { wg_geo: 1 } };
+  const META = { api: 1, v: 3, needs: { wg_geo: 1 } };
   const TREES = 'TPOWMYU';
   function attach(ctx) {
     const g = ctx.geo, T = ctx.T, PT = T.paths, PC = T.pieces, BK = 32;
@@ -23,7 +23,7 @@
     const BUCKET = new Map();
     let SEG = [];   /* per segment: face, x0, y0, x1, y1, halfWidth, kind (0 path, 1 water), carve height */
     const NS = 8, BRIDGE = 14;   /* the widest stream a path bridges, metres */
-    ctx.PIECES = []; ctx.PIECE_BY_ID = new Map();
+    ctx.PIECES = []; ctx.PIECE_BY_ID = new Map(); ctx.ROAD_OBJ = [];
     function pieceDist(pc, x, y) {
       const dx = Math.max(pc.px0 - x, 0, x - pc.px1), dy = Math.max(pc.py0 - y, 0, y - pc.py1);
       return Math.sqrt(dx * dx + dy * dy);
@@ -92,6 +92,30 @@
     function setSetPieces(list) {
       const PIECES = [], tmp = ctx.newSample();
       ctx.PIECES = PIECES; ctx.PIECE_BY_ID = new Map(); BUCKET.clear(); SEG = [];
+      const ROAD = []; ctx.ROAD_OBJ = ROAD;
+      const inPiece = (face, gx, gy) => PIECES.some(q => q.face === face && gx >= q.x && gy >= q.y && gx < q.x + q.w && gy < q.y + q.h);
+      function lightTrail(face, pts, w0) {   /* lit posts along a trail between towns (the road to Saltmere) */
+        if (!pts || pts.length < 2) return;
+        const SPACE = 8, off = Math.max(1.15, (w0 || 1) + 0.85), seen = new Set();
+        let acc = SPACE * 0.45, n = 0;
+        for (let i = 1; i < pts.length; i++) {
+          const ax = pts[i - 1][0], ay = pts[i - 1][1], bx = pts[i][0], by = pts[i][1];
+          const L = Math.hypot(bx - ax, by - ay); if (L < 0.05) continue;
+          const ux = (bx - ax) / L, uy = (by - ay) / L, nx = -uy, ny = ux;
+          let d = 0;
+          while (acc + (L - d) >= SPACE) {
+            const step = SPACE - acc; d += step; acc = 0;
+            const px = ax + ux * d, py = ay + uy * d, side = (n++ & 1) ? 1 : -1;
+            ctx.foldInto(face, px, py, SB);
+            const s0 = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false);
+            if (s0.h < ctx.WATER + 0.2 || s0.peakS > 0.08) continue;
+            const gx = Math.floor(px + nx * off * side), gy = Math.floor(-(py + ny * off * side)), k = gx + ',' + gy;
+            if (seen.has(k) || inPiece(face, gx, gy)) continue;
+            seen.add(k); ROAD.push({ k: 'lamp', x: gx, y: gy, w: 1, h: 1, face });
+          }
+          acc += L - d;
+        }
+      }
       for (const sp of (list || [])) {
         const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, links: sp.links || [] };
         pc.px0 = pc.x; pc.px1 = pc.x + pc.w; pc.py0 = -(pc.y + pc.h); pc.py1 = -pc.y;
@@ -255,16 +279,19 @@
           let px0 = pts[0][0], py0 = pts[0][1];
           for (let k = 2; k < pts.length; k += 2) { const q = pts[Math.min(k, pts.length - 1)]; segs.push(A.face, px0, py0, q[0], q[1], w0, 0, A.hb - 0.75); px0 = q[0]; py0 = q[1]; }
           segs.push(A.face, px0, py0, tx, ty, w0, 0, A.hb - 0.75);
+          lightTrail(A.face, pts, w0);
         } else {
+          const pts = [[x, y]];
           for (let k = 0, d = 0; d < D0 * 2.5 && Math.hypot(tx - x, ty - y) > PT.step; k++, d += PT.step) {
             const aim = Math.atan2(ty - y, tx - x) / (2 * Math.PI), a = aim + (g.u01(g.mix32(hv + k * 7919)) - 0.5) * PT.turn * 0.8;
             const nx = x + g.ccos(a) * PT.step, ny = y + g.csin(a) * PT.step;
             ctx.foldInto(A.face, nx, ny, SB);
             const s = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false);
             segs.push(A.face, x, y, nx, ny, w0, s.h < ctx.WATER ? 2 : 0, A.hb - 0.75);
-            x = nx; y = ny;
+            x = nx; y = ny; pts.push([x, y]);
           }
           segs.push(A.face, x, y, tx, ty, w0, 0, A.hb - 0.75);
+          pts.push([tx, ty]); lightTrail(A.face, pts, w0);
         }
       }
       SEG = segs;
@@ -274,10 +301,12 @@
         const by0 = Math.floor((Math.min(SEG[o + 2], SEG[o + 4]) - m) / BK), by1 = Math.floor((Math.max(SEG[o + 2], SEG[o + 4]) + m) / BK);
         for (let by = by0; by <= by1; by++) for (let bx = bx0; bx <= bx1; bx++) { const kk = bkey(f, bx, by); if (!BUCKET.has(kk)) BUCKET.set(kk, []); BUCKET.get(kk).push(k); }
       }
+      /* a lamp stands on the verge, never on a path: where trails meet or bend, drop any that came to stand on one (2026-10-07) */
+      ctx.ROAD_OBJ = ROAD.filter(o => pathDist(o.face, o.x + 0.5, -(o.y + 0.5)) > 0.3);
       if (ctx.clearCaches) ctx.clearCaches();
       return PIECES.map(p => ({ id: p.id, face: p.face, x: p.x, y: p.y, w: p.w, h: p.h, hb: p.hb }));
     }
-    Object.assign(ctx, { pieceDist, pieceTile, pathDist, bridgeDist, waterCarve, pieceFlora, setSetPieces, pathCount: () => SEG.length / NS });
+    Object.assign(ctx, { pieceDist, pieceTile, pathDist, bridgeDist, waterCarve, pieceFlora, setSetPieces, pathCount: () => SEG.length / NS, roadObjects: () => ctx.ROAD_OBJ || [] });
     return ctx;
   }
   const api = { api: 1, attach };

@@ -10,6 +10,7 @@ const Q = mod('quests').quests.ashen_crown, cave = mod('zone.spidercave');
 ok(Q.steps.slice(3).every(s => s.zone === 'spidercave'), 'steps 4-6 are in the Spider Cave');
 const has = k => cave.spawns.filter(s => s.m === k).length;
 ok(has('wraith') === 3 && has('ash_knight') === 1 && has('lich') === 1, 'the cave holds 3 wraiths, the Ash Knight and the Lich');
+ok(!mod('zone.whisperwood').spawns.some(s => s.m === 'wraith'), 'Whisperwood has no wraith');
 const zones = ['village', 'whisperwood', 'spidercave'].map(z => Object.assign({ id: z }, mod('zone.' + z)));
 const D = { items: mod('items').items, monsters: mod('monsters').monsters, shops: mod('shops'), quests: mod('quests'), rules: mod('rules'), zones };
 const c = AshCore.create(D, { seed: 'crown' }), p = c.addPlayer('p1', null);

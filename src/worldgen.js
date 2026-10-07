@@ -146,6 +146,7 @@
             out.push(r);
           };
           for (const pc of ctx.PIECES) if (pc.face === gf) for (const o of pc.objects) add(o);
+          for (const o of ctx.ROAD_OBJ || []) if (o.face === gf) add(o);   /* lit posts along town trails */
           const tg0 = Math.floor(gx0), tg1 = Math.floor(gx1), tgy0 = Math.floor(-gy1), tgy1 = Math.floor(-gy0);
           for (const r of ctx.sites(gf, tg0, tgy0, tg1, tgy1)) {
             for (const o of r.objects) add(o);
@@ -182,6 +183,7 @@
         sample, newSample: ctx.newSample, field, lattice, height: (f, x, y) => sample(f, x, y, SMP).h,
         setEdits, edits: () => EDL,
         walkable: ctx.walkable, tileAt: ctx.tileAt, tiles: ctx.tiles, forTiles: ctx.forTiles, sites: ctx.sites, setSetPieces: (l) => { LASTPC = l; ctx.setSetPieces(l); }, piecesFromZones, objectsIn,
+        roadObjects: (face, gx0, gy0, gx1, gy1) => { const L = ctx.ROAD_OBJ || []; return face == null ? L.slice() : L.filter(o => o.face === face && o.x >= gx0 && o.x <= gx1 && o.y >= gy0 && o.y <= gy1); },
         /* area loading (handoff/area_loading.md): a town first placed as its index STUB (edge band + building pads, all that
            is read outside it) gets its real tiles and objects when its zone arrives. Paths, pads and edge profiles were made
            from the stub and are identical, so only the samples are dropped (the inside of the town reads the new tiles). */

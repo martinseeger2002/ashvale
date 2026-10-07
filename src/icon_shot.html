@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Item icon</title>
+<style>
+  body { margin: 0; background: #1a140e; color: #f3e6c4; font: 14px/1.3 Georgia, serif; padding: 18px; }
+  img { display: block; background: #0e0c14; border: 1px solid #5a4a34; image-rendering: pixelated; }
+  #err { color: #ffb4a8; }
+</style>
+</head>
+<body>
+<p id="err"></p>
+<img id="icon" width="128" height="128" alt="">
+<p id="cap"></p>
+<script type="module">
+import * as THREE from "./three.module.min.js";
+import { createModels } from "./models.js";
+
+const q = new URLSearchParams(location.search), key = q.get("key") || "ring_angels", size = +q.get("size") || 128;
+try {
+  const items = await fetch("../data/items.json").then(r => r.json());
+  const it = ((items.data || items).items || {})[key] || {};
+  const model = it.model || ("item." + key);
+  const files = ["palette", model];
+  const parts = {};
+  for (const id of files) parts[id] = await fetch("./parts/" + id + ".json").then(r => { if (!r.ok) throw new Error("no part " + id); return r.json(); });
+  const M = createModels(THREE, { parts });
+  const url = M.icon(key, size);
+  if (!url) throw new Error("no icon (WebGL?)");
+  document.getElementById("icon").src = url;
+  document.getElementById("cap").textContent = (it.name || key) + " — " + size + "px";
+  window.ICON = url;
+} catch (e) { document.getElementById("err").textContent = String(e); window.ICON = "error: " + e; }
+</script>
+</body>
+</html>

@@ -12,7 +12,134 @@
    "jewellery": [
     "ring",
     "charm"
+   ],
+   "armour": [
+    "helmet",
+    "platebody",
+    "chainbody",
+    "platelegs",
+    "kiteshield",
+    "robe",
+    "torch"
+   ],
+   "resource": [
+    "logs",
+    "ore",
+    "coal",
+    "bar",
+    "pelt",
+    "fish",
+    "mushroom",
+    "meat",
+    "bones"
    ]
+  },
+  "slots": {
+   "armour/robe": "body"
+  },
+  "traits": {
+   "Prayer XP": [
+    "buryXp",
+    10
+   ],
+   "Prayer": "prayer",
+   "Prayer seconds": "prayerSec"
+  },
+  "limits": {
+   "flat": {
+    "Prayer XP": [
+     0,
+     500
+    ],
+    "Prayer": [
+     0,
+     30
+    ],
+    "Prayer seconds": [
+     0,
+     30
+    ]
+   }
+  }
+ },
+ "nodes": {
+  "altar": {
+   "skill": "prayer",
+   "name": "Altar",
+   "speed": 2
+  }
+ },
+ "skills": [
+  "attack",
+  "strength",
+  "defence",
+  "hitpoints",
+  "ranged",
+  "magic",
+  "dexterity",
+  "speechcraft",
+  "woodcutting",
+  "mining",
+  "fishing",
+  "cooking",
+  "firemaking",
+  "prayer"
+ ],
+ "prayer": {
+  "resist": 100,
+  "buryTicks": 2,
+  "bones": "bones",
+  "list": [
+   {
+    "id": "protect_from_melee",
+    "name": "Protect from Melee",
+    "level": 1,
+    "drain": 12,
+    "kind": "protect",
+    "desc": "Protects you from melee attacks.",
+    "g": "head",
+    "x": [
+     "head"
+    ],
+    "protect": "melee",
+    "icon": "melee"
+   },
+   {
+    "id": "protect_from_missiles",
+    "name": "Protect from Missiles",
+    "level": 4,
+    "drain": 12,
+    "kind": "protect",
+    "desc": "Protects you from ranged attacks.",
+    "g": "head",
+    "x": [
+     "head"
+    ],
+    "protect": "ranged",
+    "icon": "missiles"
+   },
+   {
+    "id": "protect_from_magic",
+    "name": "Protect from Magic",
+    "level": 15,
+    "drain": 12,
+    "kind": "protect",
+    "desc": "Protects you from magic attacks.",
+    "g": "head",
+    "x": [
+     "head"
+    ],
+    "protect": "magic",
+    "icon": "magic"
+   }
+  ]
+ },
+ "flags": {
+  "gift_of_angels": {
+   "name": "the Gift of Angels",
+   "quest": "angel_gift",
+   "ringCooldown": 1000,
+   "desc": "Iria's blessing is on you now: the Ring of Angels rests ten minutes between saves instead of an hour."
   }
  }
 }

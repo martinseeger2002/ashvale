@@ -228,17 +228,80 @@
     function lv(p, s) { return lvlOf(p.xp[s] || 0); }
     function maxHp(p) { return lv(p, 'hitpoints'); }
     function combatLevel(p) {
-      const base = 250 * (lv(p, 'defence') + lv(p, 'hitpoints') + 0);
+      const base = 250 * (lv(p, 'defence') + lv(p, 'hitpoints') + Math.floor(lv(p, 'prayer') / 2));
       const mel = 325 * (lv(p, 'attack') + lv(p, 'strength')), rng = 325 * Math.floor(3 * lv(p, 'ranged') / 2), mag = 325 * Math.floor(3 * lv(p, 'magic') / 2);
       return Math.floor((base + Math.max(mel, rng, mag)) / 1000);
     }
     // A monster's standing on the same scale as combatLevel(p), and it is the number acquire() below
     // turns a monster away on - so it is also the number the game has to show for that monster.
     function mobCombat(md) { return md.level * 2; }
+    /* ---------------- prayer (2026-10-07, after Old School RuneScape): points = Prayer level, drained while prayers are
+       on (each tick the active prayers' drain is added to a counter; every `resist` of it costs a point), restored at an
+       altar and on respawn. Bones are buried for XP. rules.prayer.list is the three overhead protections. */
+    const PRAY = RU.prayer || { resist: 100, buryTicks: 2, list: [] }, PRAYERS = {};
+    /* account flags (rules "flags"): blessings a quest leaves on the character, e.g. the Gift of Angels */
+    const FLAGS = RU.flags || {};
+    function hasFlag(p, k) { return !!(p && p.flags && p.flags[k]); }
+    for (const q of PRAY.list || []) PRAYERS[q.id] = q;
+    function maxPp(p) { return lv(p, 'prayer'); }
+    function prayersOff(p, text) {
+      if (!p.pray || !Object.keys(p.pray).length) return;
+      p.pray = {}; ev({ e: 'pray', p: p.id }); if (text) msg(p, text, 'warn');
+    }
+    function protects(p, cls) { for (const id in p.pray || {}) { const q = PRAYERS[id]; if (q && q.protect === cls) return true; } return false; }
+    function overhead(p) { for (const id in p.pray || {}) { const q = PRAYERS[id]; if (q && q.g === 'head') return id; } return null; }
+    function boostOf(p, stat) { let k = 0; for (const id in p.pray || {}) { const q = PRAYERS[id]; if (q && q.boost && q.boost[stat]) k = Math.max(k, q.boost[stat]); } return k; }
+    function eff(p, stat) { const L = lv(p, stat), k = boostOf(p, stat); return k ? Math.floor(L * (1000 + k) / 1000) : L; }
+    /* what a monster's spell does to you besides its damage (2026-10-07): 'bind' holds you where you stand for some
+       ticks. Protect from Magic stops them landing, and switching it on breaks the ones already on you. */
+    function magicFx(p, fx, ticks, by) {
+      if (protects(p, 'magic')) return;
+      p.pfx = p.pfx || {}; p.pfx[fx] = S.t + ticks; if (fx === 'bind') p.path = [];
+      ev({ e: 'pfx', p: p.id, fx, on: 1 }); msg(p, fx === 'bind' ? 'The ' + (by || 'spell').toLowerCase() + "'s shadow bolt binds your feet!" : 'You are hit by ' + fx + '.', 'warn');
+    }
+    function clearMagicFx(p, text) {
+      if (!p.pfx) return; const had = Object.keys(p.pfx); p.pfx = null;
+      for (const fx of had) ev({ e: 'pfx', p: p.id, fx, on: 0 });
+      if (had.length && text) msg(p, text);
+    }
+    function fxTick(p) { if (!p.pfx) return; for (const fx in p.pfx) if (p.pfx[fx] <= S.t) { delete p.pfx[fx]; ev({ e: 'pfx', p: p.id, fx, on: 0 }); } if (!Object.keys(p.pfx).length) p.pfx = null; }
+    function setPrayer(p, id, on) {
+      const q = PRAYERS[id]; if (!q) return;
+      p.pray = p.pray || {};
+      if (!on) { if (p.pray[id]) { delete p.pray[id]; ev({ e: 'pray', p: p.id, id, on: 0 }); } return; }
+      if (q.soon) { msg(p, q.name + ' is coming soon.', 'warn'); return; }
+      if (lv(p, 'prayer') < q.level) { msg(p, 'You need a Prayer level of ' + q.level + ' to use ' + q.name + '.', 'warn'); return; }
+      if ((p.pp | 0) <= 0) { msg(p, 'You need to recharge your Prayer at an altar.', 'warn'); return; }
+      for (const a in p.pray) { const o = PRAYERS[a]; if (!o || (q.x || []).indexOf(o.g) >= 0) delete p.pray[a]; }
+      p.pray[id] = 1; ev({ e: 'pray', p: p.id, id, on: 1 });
+      if (q.protect === 'magic') clearMagicFx(p, 'The prayer breaks the shadow magic on you.');
+    }
+    function prayerTick(p) {
+      let d = 0; for (const id in p.pray || {}) d += (PRAYERS[id] && PRAYERS[id].drain) || 0;
+      if (!d) return;
+      p.pd = (p.pd | 0) + d; const rs = resist(p, d);
+      while (p.pd > rs && p.pp > 0) { p.pd -= rs; p.pp--; }
+      if (p.pp <= 0) { p.pp = 0; p.pd = 0; prayersOff(p, 'You have run out of Prayer points. You can recharge them at the altar in the church.'); }
+    }
+    function bury(p, slot) {
+      const s = p.inv[slot], d = s && IT[s.id]; if (!d || !d.buryXp) return;
+      if (S.t < (p.buryT || 0)) return;
+      p.buryT = S.t + (PRAY.buryTicks || 2); p.act = null; p.path = []; p.skilling = null;
+      if (s.n > 1) s.n--; else p.inv[slot] = null;
+      msg(p, 'You bury the ' + d.name.toLowerCase() + '.');
+      ev({ e: 'bury', p: p.id, id: s.id }); ev({ e: 'inv', p: p.id });
+      addXp(p, 'prayer', d.buryXp);
+    }
     function bonuses(p) {
-      const b = { attack: 0, strength: 0, defence: 0, ranged: 0, rstr: 0, magic: 0 };
+      const b = { attack: 0, strength: 0, defence: 0, ranged: 0, rstr: 0, magic: 0, prayer: 0, prayerSec: 0 };
       for (const s of EQ_SLOTS) { const e = p.eq[s]; if (!e) continue; const d = IT[e.id]; for (const k in b) b[k] += d[k] || 0; }
       return b;
+    }
+    /* one protection (drain 12) spends a point every 5 s. Prayer bonus from gear still lengthens that (OSRS: +2 resist
+       per bonus). Prayer seconds (the Monk's robe) add a full second per point on top, at whatever drain is running. */
+    function resist(p, drain) {
+      const b = bonuses(p), d = drain || 12;
+      return PRAY.resist + 2 * Math.max(0, b.prayer) + Math.max(0, b.prayerSec) * d / 0.6;
     }
     function weaponOf(p) { const w = p.eq.weapon; return w ? IT[w.id] : null; }
     function wclass(p) { const w = weaponOf(p); return w ? w.class : 'melee'; }
@@ -249,8 +312,8 @@
     function maxHit(p) {
       const c = wclass(p), st = style(p), b = bonuses(p);
       if (c === 'magic') return spell(p)[1];
-      if (c === 'ranged') { const e = lv(p, 'ranged') + (st.att || 0) + 8; return Math.floor((e * (b.rstr + 64) + 320) / 640); }
-      const e = lv(p, 'strength') + (st.str || 0) + 8; return Math.floor((e * (b.strength + 64) + 320) / 640);
+      if (c === 'ranged') { const e = eff(p, 'ranged') + (st.att || 0) + 8; return Math.floor((e * (b.rstr + 64) + 320) / 640); }
+      const e = eff(p, 'strength') + (st.str || 0) + 8; return Math.floor((e * (b.strength + 64) + 320) / 640);
     }
 
     /* ---------------- weight (integer grams) and carrying (2026-10-01) */
@@ -303,6 +366,7 @@
       ev({ e: 'xp', p: p.id, skill, n: x10 });
       if (after > before) {
         if (skill === 'hitpoints') p.hp += after - before;
+        if (skill === 'prayer') p.pp = (p.pp | 0) + after - before;
         ev({ e: 'level', p: p.id, skill, lvl: after });
         msg(p, 'Congratulations, you just advanced a ' + cap(skill) + ' level. Your ' + cap(skill) + ' level is now ' + after + '.', 'level');
       }
@@ -318,7 +382,8 @@
       for (const [id2, n] of RU.start.inv) addItem(p, id2, n);
       if (save) importInto(p, save);
       if (save) placeFrom(p, save);
-      p.hp = Math.min(p.hp, maxHp(p)); if (p.hp <= 0) p.hp = maxHp(p);
+      p.hp = Math.min(p.hp, maxHp(p)); if (!(p.hp > 0)) p.hp = maxHp(p);   /* also a save that kept NaN (stored as null) */
+      p.pray = {}; p.pd = 0; p.pp = save && Number.isInteger(save.pp) ? Math.max(0, Math.min(maxPp(p), save.pp)) : maxPp(p);
       return p;
     }
     function importInto(p, s) {
@@ -333,6 +398,11 @@
       if (typeof s.retal === 'boolean') p.retal = s.retal;
       if (s.quests) p.quests = JSON.parse(JSON.stringify(s.quests));
       if (s.gifts) p.gifts = JSON.parse(JSON.stringify(s.gifts));
+      if (s.flags && typeof s.flags === 'object') { p.flags = {}; for (const k in s.flags) if (FLAGS[k] && Number.isInteger(s.flags[k])) p.flags[k] = s.flags[k]; }
+      for (const k in FLAGS) {   /* characters who finished the quest before blessings were flags (it used to be an item) */
+        const F = FLAGS[k], Q = F.quest && D.quests.quests[F.quest], q = Q && p.quests[F.quest];
+        if (q && q.step > Q.steps.length && !(p.flags && p.flags[k])) { p.flags = p.flags || {}; p.flags[k] = 1; }
+      }
       if (s.attuned) p.attuned = JSON.parse(JSON.stringify(s.attuned));
       if (typeof s.town === 'string') p.town = s.town;
       if (s.hawkHp != null) p.hawkHp = s.hawkHp | 0;
@@ -391,7 +461,7 @@
     function exportPlayer(id) {
       const p = S.players[id]; if (!p) return null;
       const at = p.dead ? wakeSpot(p).at : [p.x, p.y];
-      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, lv: p.lv || 0, gifts: p.gifts || {}, attuned: p.attuned || {}, town: p.town || null, hawkHp: p.hawkHp == null ? null : p.hawkHp, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
+      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, town: p.town || null, hawkHp: p.hawkHp == null ? null : p.hawkHp, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
     }
 
     // ---------------- pathfinding: BFS over the tile grid, 8 directions, no corner cutting (RuneScape-style)
@@ -550,6 +620,7 @@
         /* "Remove from quest log" (2026-10-06): hides the quest in the log, keeps every bit of its progress; speaking
            to the one who gave it puts it back where you left off (talk() below) */
         case 'qhide': { const q = p.quests[c.id]; if (q && D.quests.quests[c.id]) { q.hid = 1; ev({ e: 'quest', p: p.id, q: c.id, step: q.step }); } break; }
+        case 'pray': setPrayer(p, String(c.id || ''), !!c.on); break;
         case 'close': closeShop(p); break;
         case 'start': startPoints(p, c.pts); break;
         case 'look': if (c.look) p.look = cleanLook(c.look); if (c.name) p.name = cleanName(c.name) || p.name; ev({ e: 'look', p: p.id }); break;
@@ -571,6 +642,7 @@
 
     function useItem(p, slot) {
       const s = p.inv[slot]; if (!s) return; const d = IT[s.id];
+      if (d.buryXp) { bury(p, slot); return; }
       if (d.eq) { equip(p, slot); return; }   /* a click wears gear; a ring's teleport fires only when its effect triggers */
       if (d.teleport) {   /* a town stone: home, as often as you like, once its cooldown has passed (30 minutes) */
         const P = portalOf(d.teleport); if (!P) { msg(p, 'Nothing happens.'); return; }
@@ -638,7 +710,7 @@
     }
     function eat(p, slot) {
       const s = p.inv[slot]; if (!s) return; const d = IT[s.id]; if (!d.edible) return;
-      const mx = maxHp(p), heal = d.healPct ? Math.floor(mx * d.healPct / 100) : d.heal;
+      const mx = maxHp(p), heal = d.healPct ? Math.floor(mx * d.healPct / 100) : (d.heal | 0);   /* an antidote heals nothing: 0, never undefined (it made hitpoints NaN, 2026-10-07) */
       removeItem(p, s.id, 1);
       const before = p.hp; p.hp = Math.min(mx, p.hp + heal);
       p.atk = Math.max(p.atk, 0) + 3;
@@ -694,10 +766,10 @@
         const ammo = p.eq.ammo; if (!ammo) { msg(p, 'There is no ammo left in your quiver.', 'warn'); p.act = null; return false; }
         const ad = IT[ammo.id]; if (lv(p, 'ranged') < (ad.req ? ad.req.ranged || 1 : 1)) { msg(p, 'You need Ranged level ' + ad.req.ranged + ' to fire ' + ad.name.toLowerCase() + '.', 'warn'); p.act = null; return false; }
         ammoId = ammo.id; ammo.n--; if (ammo.n <= 0) delete p.eq.ammo;
-        A = (lv(p, 'ranged') + (st.att || 0) + 8) * (b.ranged + 64);
+        A = (eff(p, 'ranged') + (st.att || 0) + 8) * (b.ranged + 64);
         if (R.int(2) === 0) p._arrowDrop = { id: ammo.id, x: m.x, y: m.y };
-      } else if (c === 'magic') A = (lv(p, 'magic') + 8) * (b.magic + 64);
-      else A = (lv(p, 'attack') + (st.att || 0) + 8) * (b.attack + 64);
+      } else if (c === 'magic') A = (eff(p, 'magic') + 8) * (b.magic + 64);
+      else A = (eff(p, 'attack') + (st.att || 0) + 8) * (b.attack + 64);
       let Dr = (md.def + 9) * (md.defb + 64), blocked = false;
       if (md.ai && md.ai.blockPct && R.int(100) < md.ai.blockPct) { Dr *= 2; blocked = true; }   /* shield up: harder to land a hit */
       const hit = rollAttack(A, Dr), dmg = hit ? R.int(max + 1) : 0;
@@ -756,20 +828,29 @@
     function mobDrops(m) {
       const md = MON[m.key], owner = m.killer;
       if (md.gold) dropGround('coins', md.gold, m.x, m.y, owner, 300);
+      const bn = md.bones === undefined ? PRAY.bones : md.bones; if (bn && IT[bn]) dropGround(bn, 1, m.x, m.y, owner, 300);   /* every monster leaves bones (2026-10-07) */
       for (const k in m.carry || {}) if (m.carry[k] > 0 && IT[k]) dropGround(k, m.carry[k], m.x, m.y, owner, 300);
       for (const d of md.drops) if (!(m.carry0 && d.item in m.carry0) && R.int(d.one_in) === 0) { const n = d.n ? d.n[0] + R.int(d.n[1] - d.n[0] + 1) : 1; dropGround(d.item, n, m.x, m.y, owner, 300); }
     }
-    function mobAttack(m, p, ranged) {
-      const md = MON[m.key], b = bonuses(p), st = style(p);
+    function mobAttack(m, p, mode) {
+      const md = MON[m.key], b = bonuses(p), st = style(p), magic = mode === 'magic', ranged = !!mode && !magic, cls = magic ? 'magic' : ranged ? 'ranged' : 'melee', C = magic ? md.cast || {} : null;
       if (ranged) { const ak = Object.keys(m.carry || {}).find(k => /^arrows_/.test(k) && m.carry[k] > 0); if (!ak) return; m.carry[ak]--; m._ammo = ak; }
-      const A = (md.att + 9) * (md.attb + 64), Dr = (lv(p, 'defence') + (st.def || 0) + 9) * (b.defence + 64);
+      /* a spell is rolled against magic defence as in RuneScape: 70% Magic, 30% Defence */
+      const A = magic ? ((C.att || md.att) + 9) * ((C.attb || md.attb) + 64) : (md.att + 9) * (md.attb + 64);
+      const Dr = magic ? (Math.floor(eff(p, 'magic') * 0.7 + eff(p, 'defence') * 0.3) + 9) * (b.defence + 64) : (eff(p, 'defence') + (st.def || 0) + 9) * (b.defence + 64);
       if (airborne(p)) return;   /* a hawk in the air: no land animal can touch it */
-      const hk = isHawk(p), hit = rollAttack(A, Dr); let dmg = hit ? Math.min(R.int(md.max + 1), hk ? p.hawkHp : p.hp) : 0, dodged = false;
+      const hk = isHawk(p), hit = rollAttack(A, Dr); let dmg = hit ? Math.min(R.int((magic && C.max != null ? C.max : md.max) + 1), hk ? p.hawkHp : p.hp) : 0, dodged = false;
       if (dmg > 0 && R.int(100) < Math.floor(lv(p, 'dexterity') / 10) * (DEX.dodgePerTenLevels || 1)) { dmg = 0; dodged = true; }   /* Dexterity: a dodge turns a hit into a 0 */
-      ev({ e: 'attack', src: m.uid, dst: p.id, anim: ranged ? 'bow' : md.anim, delay: ranged ? 1 : 0, cls: ranged ? 'ranged' : 'melee', ammo: ranged ? m._ammo : null });
+      /* an overhead protection prayer stops a monster's blows of its kind entirely, as in RuneScape; against a spell it
+         also stops what the spell would do to you. `raw` is the roll before the prayer, so a player whose prayer went out
+         between the host's roll and the hit still takes it (applyHit). */
+      const raw = dmg, prot = protects(p, cls); if (prot) dmg = 0;
+      const fx = magic && hit && C.fx && !prot && !hk && (!C.fxChance || R.int(C.fxChance) === 0) ? C.fx : null;
+      ev({ e: 'attack', src: m.uid, dst: p.id, anim: ranged ? 'bow' : magic ? 'cast' : md.anim, delay: ranged || magic ? 1 : 0, cls, ammo: ranged ? m._ammo : null, spell: magic ? C.name || 'Shadow bolt' : null });
       if (!p.puppet) { if (hk) p.hawkHp -= dmg; else p.hp -= dmg; }
-      ev({ e: 'hit', dst: p.id, src: m.uid, dmg, max: hk ? HK.hp : maxHp(p), hp: hk ? p.hawkHp : p.puppet ? Math.max(0, p.hp - dmg) : p.hp, hawk: hk ? 1 : 0, cls: ranged ? 'ranged' : 'melee', blocked: !hit && !!p.eq.shield, dodged });
+      ev({ e: 'hit', dst: p.id, src: m.uid, dmg, max: hk ? HK.hp : maxHp(p), hp: hk ? p.hawkHp : p.puppet ? Math.max(0, p.hp - dmg) : p.hp, hawk: hk ? 1 : 0, cls, blocked: !hit && !!p.eq.shield, dodged, prot: prot ? 1 : 0, raw, fx, fxt: fx ? C.fxTicks || 5 : 0 });
       if (p.puppet) return;
+      if (fx) magicFx(p, fx, C.fxTicks || 5, md.name);
       if (dodged) msg(p, 'You dodge the ' + md.name.toLowerCase() + "'s attack.");
       if (dmg > 0 && !hk && md.venom && p.hp > 0 && R.int(100) < (md.venom.chance | 0)) poisonPlayer(p, md.venom, md.name);
       if (p.retal && !p.act && !p.path.length) p.act = { k: 'attack', uid: m.uid };
@@ -779,9 +860,8 @@
     }
     function angelRest(p, d) {   /* an hour until Iria's second quest is done, then the Gift of Angels shortens it */
       const base = d.cooldown || 6000;
-      const Q = D.quests.quests.angel_gift, q = p.quests && p.quests.angel_gift, g = IT.gift_of_angels;
-      if (q && Q && q.step > Q.steps.length && g && g.cooldown) return g.cooldown;
-      return base;
+      const g = FLAGS.gift_of_angels;
+      return hasFlag(p, 'gift_of_angels') && g && g.ringCooldown ? g.ringCooldown : base;
     }
     function angelSave(p) {
       if (!p || p.dead || p.puppet || isHawk(p)) return false;
@@ -843,7 +923,7 @@
     }
     function killPlayer(p) {
       if (p.poison) { delete p.poison; ev({ e: 'poison', p: p.id, on: false }); }
-      p.dead = S.t; p.act = null; p.path = []; p.skilling = null; closeShop(p);
+      p.dead = S.t; p.act = null; p.path = []; p.skilling = null; closeShop(p); prayersOff(p); p.pfx = null;
       ev({ e: 'die', p: p.id });
       msg(p, 'Oh dear, you are dead!', 'warn');
       /* 2026-10-01: everything you carry and wear drops where you die; anyone may take it (no grace period) */
@@ -871,21 +951,26 @@
       /* a "go and speak to so-and-so" step is met by speaking to them, wherever they happen to stand (the operator
          2026-10-05: quest goals are data, not code). Checked before their shop or their own lines, so an errand
          registers whether or not the errand ends at a counter. */
+      let said = null, ends = null;
       for (const qid in p.quests) {
         const q = p.quests[qid], Q2 = D.quests.quests[qid], s2 = Q2 && Q2.steps[q.step - 1];
-        if (s2 && s2.goal.talk === n.id && !q.n) { q.n = 1; msg(p, Q2.name + ': you have said your piece to ' + n.name + '.', 'quest'); }
+        if (s2 && s2.goal.talk === n.id && !q.n) { q.n = 1; msg(p, Q2.name + ': you have said your piece to ' + n.name + '.', 'quest'); if (s2.say && s2.say.length && !s2.ends) said = s2.say; }
+        if (s2 && s2.ends === n.id && !ends) ends = qid;
       }
+      /* "say": what the errand's NPC tells you about it, instead of their usual lines. "ends": the step is handed in to
+         that NPC, not to the giver (the Wayside Prayer ends at the Saltmere chapel) */
+      if (said && !ends) { ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: said.map(l => String(l).replace(/\{name\}/g, p.name || 'traveller')) }); return; }
       if (n.gift && giftOk && IT[n.gift] && !(p.gifts && p.gifts[n.gift])) {   /* a gift, once per character (Elder Maren's Ashvale stone) */
         if (addItem(p, n.gift, 1)) { msg(p, 'Your bag is full: make room for what ' + n.name + ' wants to give you.', 'warn'); return; }
         p.gifts = p.gifts || {}; p.gifts[n.gift] = S.t; ev({ e: 'inv', p: p.id }); ev({ e: 'take', p: p.id, id: n.gift, n: 1 });
         msg(p, n.name + ': ' + String(n.giftLine || 'Take this.').replace('{name}', p.name || 'traveller'), 'npc'); msg(p, n.name + ' gives you ' + IT[n.gift].name + '.', 'info');
       }   /* the town chest: the engine opens the wallet view (2026-10-04) */
-      if (n.tailor && !(p._trade)) { ev({ e: 'tailor', p: p.id, npc: n.id }); msg(p, n.name + ': ' + (n.greet || 'Fancy a new look? Pick anything you like.'), 'npc'); return; }
-      if (n.shop) { const sh = shopOf(n.shop); p.shop = n.shop; ev({ e: 'shop', p: p.id, shop: n.shop, npc: n.id }); msg(p, n.name + ': ' + sh.greet, 'npc'); return; }
-      if (n.lines) { ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: n.lines }); return; }   /* dialogue straight off the zone data, checked after shop and quest */
+      if (n.tailor && !(p._trade) && !ends) { ev({ e: 'tailor', p: p.id, npc: n.id }); msg(p, n.name + ': ' + (n.greet || 'Fancy a new look? Pick anything you like.'), 'npc'); return; }
+      if (n.shop && !ends) { const sh = shopOf(n.shop); p.shop = n.shop; ev({ e: 'shop', p: p.id, shop: n.shop, npc: n.id }); msg(p, n.name + ': ' + sh.greet, 'npc'); return; }
+      if (n.lines && !ends) { ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: n.lines }); return; }   /* dialogue straight off the zone data, checked after shop and quest */
       /* an NPC may offer the next quest only after the one before it is finished (Iria's supper, then the Gift of Angels) */
-      let qid = n.quest;
-      if (n.quests && n.quests.length) {
+      let qid = ends || n.quest;
+      if (!ends && n.quests && n.quests.length) {
         qid = n.quests[n.quests.length - 1];
         for (const id of n.quests) {
           const Q0 = D.quests.quests[id], q0 = p.quests[id];
@@ -916,7 +1001,7 @@
           const st = Q.steps[q.step - 1];
           if (!st) lines = fill(Q.done, null);
           else if (!open(st)) { const prev = Q.steps[q.step - 2]; lines = prev && prev.locked && prev.locked.length ? fill(prev.locked, st) : ['The road to that place is not open yet. Come back another day.']; }
-          else if (met(st)) {
+          else if (met(st) && (!st.ends || st.ends === n.id)) {
             if (st.goal.bring) {   /* the goods change hands here, and only here: a step cannot be handed in twice */
               removeItem(p, st.goal.bring, bringN(st));
               msg(p, 'You hand over ' + bringN(st) + ' x ' + IT[st.goal.bring].name + '.', 'quest');
@@ -938,6 +1023,11 @@
     }
     function giveReward(p, r, giver, quest) {
       if (!r) return;
+      if (r.indexOf('flag:') === 0) {   /* a blessing on the character, not an item: nothing to carry, trade or mint */
+        const k = r.slice(5), F = FLAGS[k]; if (!F) return;
+        p.flags = p.flags || {}; if (!p.flags[k]) p.flags[k] = S.t || 1;
+        msg(p, 'You receive ' + F.name + '.' + (F.desc ? ' ' + F.desc : ''), 'quest'); ev({ e: 'flag', p: p.id, flag: k }); return;
+      }
       /* 2026-10-04: "anytime an item is awarded after a quest, it should be its own collection" - the engine passes this
          on with the deposit and the Bank mints the reward into the collection named after the quest */
       if (IT[r] && quest) ev({ e: 'reward', p: p.id, id: r, collection: 'ASHVALE ' + quest });
@@ -955,6 +1045,12 @@
     function gatherTick(p, n) {
       const nd = nodeDef(n), i = idx(n.x, n.y);
       if (S.dep[i]) { p.act = null; p.skilling = null; return; }
+      if (n.kind === 'altar') {
+        p.face = faceTo(p.x, p.y, n.x, n.y); p.act = null; p.skilling = null;
+        if ((p.pp | 0) >= maxPp(p)) { msg(p, 'You already have full Prayer points.'); return; }
+        p.pp = maxPp(p); p.pd = 0; msg(p, 'You kneel and pray at the altar. Your Prayer points are restored.');
+        ev({ e: 'pray', p: p.id, altar: 1, x: n.x, y: n.y }); return;
+      }
       if (n.kind === 'range' || n.kind === 'fire') {
         const raw = p.inv.findIndex(s => s && IT[s.id].cooks);
         if (raw < 0) { msg(p, 'You have nothing to cook. Raw fish come from the fishing spots by the lake.'); p.act = null; p.skilling = null; return; }
@@ -1052,6 +1148,7 @@
     // ---------------- per-tick: players
     function stepPath(p) {
       if (!p.path.length) { p.moved = 0; return; }
+      if (p.pfx && p.pfx.bind > S.t) { p.moved = 0; if (!p._bindMsg || S.t - p._bindMsg > 4) { p._bindMsg = S.t; msg(p, 'Shadowy chains hold your feet!', 'warn'); } return; }
       const bd = p.burden || 0;
       if (bd === 2) { p.moved = 0; if (!p._frozeMsg || S.t - p._frozeMsg > 8) { p._frozeMsg = S.t; msg(p, "You can't move: you are carrying far too much. Drop something.", 'warn'); } return; }
       if (bd === 1 && (S.t & 1)) { p.moved = 0; return; }   /* overburdened: a step every other tick, no running */
@@ -1158,18 +1255,20 @@
     }
     function playerTick(p) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); try { playerTick0(p); } finally { LV_LIMIT = -1; FLY = false; } }
     function playerTick0(p) {
+      if (!(p.hp >= 0)) p.hp = maxHp(p);   /* hitpoints that are not a number (the antidote bug, 2026-10-07): back to full */
       if (!p.dead) townCheck(p);
       if (p.poison) poisonTick(p);
       if (p.puppet) return puppetTick(p);
       if (p.dead) {
         if (S.t - p.dead >= 4) {
           const W0 = wakeSpot(p);
-          p.dead = 0; p.hp = maxHp(p); p.x = W0.at[0]; p.y = W0.at[1]; p.lv = 0; p.bld = -1; p.path = []; p.atk = 0; p.spawnT = S.t;
+          p.dead = 0; p.hp = maxHp(p); p.pp = maxPp(p); p.pd = 0; p.x = W0.at[0]; p.y = W0.at[1]; p.lv = 0; p.bld = -1; p.path = []; p.atk = 0; p.spawnT = S.t;
           ev({ e: 'respawn', p: p.id }); msg(p, W0.name ? 'You wake up by the town portal in ' + W0.name + '.' : 'You wake up by the well in Ashvale village.'); burdenCheck(p);
         }
         return;
       }
       if (p.atk > 0) p.atk--;
+      prayerTick(p); fxTick(p);
       if (p.hawkHp != null && p.hawkHp < HK.hp && S.t % HK.regenEvery === 0) p.hawkHp++;   /* a hawk's wounds mend slowly */
       const a = p.act;
       if (a && a.k === 'light') { lightTick(p, a); }
@@ -1237,7 +1336,7 @@
       if (p.shop) { const sh = shopOf(p.shop); if (!nearKeeper(p, sh)) closeShop(p); }
       burdenCheck(p);
       if (!p.moved || !p.run) p.energy = Math.min(10000, p.energy + 15);
-      if (S.t % 100 === 0 && p.hp < maxHp(p)) p.hp++;
+      if (S.t % (p.pray && p.pray.rapid_heal ? 50 : 100) === 0 && p.hp < maxHp(p)) p.hp++;
     }
 
     // ---------------- per-tick: monsters (RuneScape-style dumb pathing: step straight at the target, get stuck on trees)
@@ -1398,6 +1497,11 @@
           /* ... and draws the sword when cornered */
         }
         if (m.x === p.x && m.y === p.y) { stepAway(m, p, ai.leash + 2); return; }
+        if (md.cast) {   /* a caster (2026-10-07, the wraith): spells from up to cast.range tiles away, wherever it can see you */
+          const rng = md.cast.range || 5;
+          if (d <= rng && lineOfSight(m.x, m.y, p.x, p.y)) { m.face = faceTo(m.x, m.y, p.x, p.y); if (m.atk <= 0) { mobAttack(m, p, 'magic'); m.atk = md.speed; } return; }
+          if (mobPathStep(m, (x, y) => cheb(x, y, p.x, p.y) <= rng && lineOfSight(x, y, p.x, p.y) && !playerAt(x, y, null) && !mobAt(x, y, m), p.x, p.y, 18)) return;
+        }
         if (inReach(m.x, m.y, p.x, p.y, 1)) { m.face = faceTo(m.x, m.y, p.x, p.y); if (m.atk <= 0) { mobAttack(m, p); m.atk = md.speed; } return; }
         if (!mobPathStep(m, (x, y) => inReach(x, y, p.x, p.y, 1) && !playerAt(x, y, null) && !mobAt(x, y, m), p.x, p.y, 18)) mobStepToward(m, p.x, p.y);
         return;
@@ -1466,6 +1570,11 @@
       }
       if (p) {
         if (m.x === p.x && m.y === p.y) { for (const [dx, dy] of DIRS.slice(0, 4)) if (canStep(m.x, m.y, dx, dy) && !occupied(m.x + dx, m.y + dy, m)) { m.x += dx; m.y += dy; m.step = 1; break; } return; }
+        if (md.cast) {
+          const rng = md.cast.range || 5, d = cheb(m.x, m.y, p.x, p.y);
+          if (d <= rng && lineOfSight(m.x, m.y, p.x, p.y)) { m.face = faceTo(m.x, m.y, p.x, p.y); if (m.atk <= 0) { mobAttack(m, p, 'magic'); m.atk = md.speed; } return; }
+          if (mobPathStep(m, (x, y) => cheb(x, y, p.x, p.y) <= rng && lineOfSight(x, y, p.x, p.y) && !playerAt(x, y, null) && !mobAt(x, y, m), p.x, p.y, 18)) return;
+        }
         if (inReach(m.x, m.y, p.x, p.y, 1)) { m.face = faceTo(m.x, m.y, p.x, p.y); if (m.atk <= 0) { mobAttack(m, p); m.atk = md.speed; } }
         else mobStepToward(m, p.x, p.y);
         return;
@@ -1526,6 +1635,7 @@
       if (Array.isArray(st.L)) PUP_SKILLS.forEach((k, i) => { const L = st.L[i] | 0; if (L >= 1 && L <= 99) p.xp[k] = XP[L] * 10; });
       if (st.g && typeof st.g === 'object') { p.eq = {}; for (const k of EQ_SLOTS) { const v = st.g[k]; if (v && IT[v] && IT[v].eq === k) p.eq[k] = { id: v, n: IT[v].stack ? 9999 : 1 }; } }
       if (st.st && typeof st.st === 'object') for (const k in p.styles) if (Number.isInteger(st.st[k])) p.styles[k] = st.st[k];
+      if (st.pr !== undefined) p.pray = st.pr && PRAYERS[st.pr] && PRAYERS[st.pr].g === 'head' ? { [st.pr]: 1 } : {};
       if (st.act !== undefined) p.act = st.act && st.act.k === 'attack' && mobByUid(st.act.uid) ? { k: 'attack', uid: st.act.uid } : null;
     }
     function claim(pid, uid) {   /* first claim wins; the picker's own game adds the item when it hears the 'take' */
@@ -1579,7 +1689,7 @@
     }
     function groundFull(zone, list) { S.ground = S.ground.filter(g => zoneOf(g.x, g.y) !== zone || isAuth(zone) || g.bank != null);   /* the Bank's persisted drops stay: the Bank, not the host, says when they go */ for (const r of list) groundAdd(r[0], r[1], r[2], r[3], r[4], r[5]); }
     /* owner side: what the host resolved about OUR player */
-    function applyHit(pid, dmg) { const p = S.players[pid]; if (!p || p.puppet || p.dead) return; p.hp -= Math.min(dmg, p.hp); if (angelSave(p)) return; if (p.retal && !p.act && !p.path.length) { } if (p.hp <= 0) killPlayer(p); }
+    function applyHit(pid, dmg, cls, fromMob, fx, fxt) { const p = S.players[pid]; if (!p || p.puppet || p.dead) return; if (fromMob && cls && protects(p, cls)) dmg = 0; else if (fromMob && fx) magicFx(p, fx, fxt || 5); p.hp -= Math.min(dmg, p.hp); if (angelSave(p)) return; if (p.retal && !p.act && !p.path.length) { } if (p.hp <= 0) killPlayer(p); }
     function storeItem(pid, id, n) { const p = S.players[pid]; if (!p || !IT[id]) return 0; const had = invCount(p, id); removeItem(p, id, Math.min(n, had)); ev({ e: 'inv', p: pid }); return Math.min(n, had); }   /* into the town chest: it stays in the wallet, only out of the bag */
     function grantItem(pid, id, n) { const p = S.players[pid]; if (!p || !IT[id]) return; const left = addItem(p, id, n); if (left) dropGround(id, left, p.x, p.y, null, 300); ev({ e: 'take', p: pid, id, n: n - left }); }
     function addPlayer(id, save) {
@@ -1593,7 +1703,7 @@
     function hash() {
       let h = 2166136261 >>> 0; const mix = (v) => { h ^= v >>> 0; h = Math.imul(h, 16777619) >>> 0; };
       mix(S.t); mix(R.state); for (const z in S.weather) { mix(hashStr(S.weather[z].kind)); mix(S.weather[z].intensity); }
-      for (const pid of S.order) { const p = S.players[pid]; mix(p.x); mix(p.y); mix(p.hp); mix(p.lv || 0); for (const s of SK) mix(p.xp[s]); for (const it of p.inv) mix(it ? hashStr(it.id) + it.n : 7); }
+      for (const pid of S.order) { const p = S.players[pid]; mix(p.x); mix(p.y); mix(p.hp); mix(p.pp | 0); mix(p.lv || 0); for (const s of SK) mix(p.xp[s]); for (const it of p.inv) mix(it ? hashStr(it.id) + it.n : 7); }
       for (const m of S.mobs) { mix(m.x); mix(m.y); mix(m.hp); mix(m.dead); }
       for (const g of S.ground) { mix(g.x); mix(g.y); mix(g.n); mix(hashStr(g.id)); }
       return h >>> 0;
@@ -1614,7 +1724,10 @@
     return {
       API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       get rngState() { return R.state; },
-      isHawk, passageAt, airborne, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf,
+      prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
+      /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
+      prayTicks(p, pts, drain) { let d = drain; if (d == null) { d = 0; for (const id in p.pray || {}) d += (PRAYERS[id] && PRAYERS[id].drain) || 0; } if (!d) return null; const n = pts == null ? (p.pp | 0) : pts, rs = resist(p, d); return n <= 0 ? 0 : Math.ceil(((n - 1) * rs + rs + 1 - (pts == null ? (p.pd | 0) : 0)) / d); },
+      isHawk, passageAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf,
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,

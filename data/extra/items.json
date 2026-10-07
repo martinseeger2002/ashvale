@@ -2,7 +2,7 @@
  "items": {
   "ring_angels": {
    "name": "The Ring of Angels",
-   "description": "The Ring of Angels. Worn, it saves you when a hit leaves you below one fifth of your hitpoints, by carrying you to Ashvale. It rests for an hour between saves, or ten minutes once you hold the Gift of Angels.",
+   "description": "The Ring of Angels. Worn, it saves you when a hit leaves you below one fifth of your hitpoints, by carrying you to Ashvale. It rests for an hour between saves, or ten minutes once Iria has given you the Gift of Angels.",
    "collection": "ASHVALE Armoury",
    "game": "ashvale",
    "category": "jewellery",
@@ -25,26 +25,76 @@
     }
    ],
    "nft": {
-    "copies": 1,
+    "copies": 11,
     "key": "ring_angels"
    }
   },
-  "gift_of_angels": {
-   "name": "Gift of Angels",
-   "description": "Gift of Angels. Iria's blessing. While you have finished her second task, the Ring of Angels rests ten minutes between saves instead of an hour.",
-   "collection": "ASHVALE",
+  "bones": {
+   "name": "Bones",
+   "description": "Bones, resource bones. Bury them for Prayer XP. From the valley of Ashvale.",
+   "collection": "ASHVALE Items",
    "game": "ashvale",
-   "category": "jewellery",
-   "subcategory": "charm",
-   "weight": 10,
-   "model": "item.ring_angels",
-   "value": 0,
+   "category": "resource",
+   "subcategory": "bones",
+   "weight": 500,
+   "model": "item.bones",
+   "value": 5,
    "attributes": [
     {
-     "trait_type": "Cooldown ticks",
-     "value": 1000
+     "trait_type": "Prayer XP",
+     "value": 4.5
     }
    ]
+  },
+  "big_bones": {
+   "name": "Big bones",
+   "description": "Big bones, resource bones. Bury them for Prayer XP. From the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "bones",
+   "weight": 1500,
+   "model": "item.bones",
+   "value": 15,
+   "attributes": [
+    {
+     "trait_type": "Prayer XP",
+     "value": 15
+    }
+   ]
+  },
+  "monk_robe": {
+   "name": "Monk's robe",
+   "description": "A monk's robe of undyed wool, given by the chapel in Saltmere for the Wayside Prayer. Magic +1, Prayer +3. Adds a full second to each prayer point on top of any other Prayer bonus.",
+   "collection": "ASHVALE The Wayside Prayer",
+   "game": "ashvale",
+   "category": "armour",
+   "subcategory": "robe",
+   "tier": 1,
+   "weight": 1500,
+   "req": {
+    "prayer": 1
+   },
+   "model": "gear.robe",
+   "value": 120,
+   "attributes": [
+    {
+     "trait_type": "Magic",
+     "value": 1
+    },
+    {
+     "trait_type": "Prayer",
+     "value": 3
+    },
+    {
+     "trait_type": "Prayer seconds",
+     "value": 1
+    }
+   ],
+   "nft": {
+    "copies": 25,
+    "key": "monk_robe"
+   }
   }
  }
 }

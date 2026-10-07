@@ -246,6 +246,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.aldous": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.ash_knight": {
     "id": null,
     "v": 1,
@@ -462,6 +468,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.odric": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.orin": {
     "id": null,
     "v": 1,
@@ -565,6 +577,18 @@
     "kind": "json"
    },
    "char.voss": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.wagon": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.wenna": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -918,6 +942,12 @@
     "api": 1,
     "kind": "json"
    },
+   "gear.robe": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "gear.shield": {
     "id": null,
     "v": 1,
@@ -955,6 +985,12 @@
     "kind": "json"
    },
    "gear.torch": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.bones": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1092,7 +1128,7 @@
    },
    "saltmere": {
     "id": null,
-    "v": 2,
+    "v": 3,
     "api": 1,
     "kind": "json"
    },

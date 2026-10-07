@@ -18,7 +18,7 @@
         let h = '<h4>Worn Equipment</h4><div class="equip">';
         for (const k of A.EQ_LAYOUT) h += k ? '<div class="slot ' + (p.eq[k] ? '' : 'empty ') + (A.EQ_ACTIVE[k] ? '' : 'off') + '" data-k="' + k + '" data-l="' + k + '">' + K.slotHtml(p.eq[k]) + '</div>' : '<div></div>';
         const b = core.bonuses(p);
-        h += '</div><div class="bon">' + [['Attack', b.attack], ['Strength', b.strength], ['Defence', b.defence], ['Ranged', b.ranged], ['Ranged str', b.rstr], ['Magic', b.magic]].map(([k, v]) => k + '<b>' + (v >= 0 ? '+' : '') + v + '</b>').join('') + '</div><div class="info">' + (core.capacity ? 'Carrying ' + (core.carried(p) / 1000).toFixed(1) + ' / ' + (core.capacity(p) / 1000).toFixed(0) + ' kg<br>' : '') + 'Max hit ' + core.maxHit(p) + ' · ' + (core.attackSpeed(p) * 0.6).toFixed(1) + 's per attack</div>';
+        h += '</div><div class="bon">' + [['Attack', b.attack], ['Strength', b.strength], ['Defence', b.defence], ['Ranged', b.ranged], ['Ranged str', b.rstr], ['Magic', b.magic], ['Prayer', b.prayer]].map(([k, v]) => k + '<b>' + (v >= 0 ? '+' : '') + v + '</b>').join('') + '</div><div class="info">' + (core.capacity ? 'Carrying ' + (core.carried(p) / 1000).toFixed(1) + ' / ' + (core.capacity(p) / 1000).toFixed(0) + ' kg<br>' : '') + 'Max hit ' + core.maxHit(p) + ' · ' + (core.attackSpeed(p) * 0.6).toFixed(1) + 's per attack</div>';
         panel.innerHTML = h;
         for (const s of panel.querySelectorAll('.equip .slot[data-k]')) { const k = s.dataset.k; if (p.eq[k]) K.longPress(s, () => api.cmd({ c: 'unequip', eq: k }), (x, y) => K.menu(x, y, [{ html: 'Remove <span class="o">' + A.esc(core.item(p.eq[k].id).name) + '</span>', fn: () => api.cmd({ c: 'unequip', eq: k }) }, { html: 'Examine <span class="o">' + A.esc(core.item(p.eq[k].id).name) + '</span>', fn: () => K.chatLine(K.examine(p.eq[k].id, p.eq[k].n), 'sys') }])); }
       } else if (ST.tab === 'wallet') {
@@ -92,8 +92,8 @@
           const g = st && st.goal, need = g ? (g.n == null ? 1 : g.n) : 1;
           const ready = !!(st && g && (!((g.kill || g.cook || g.talk) && (q.n | 0) < need)) && !(g.bring && held(g.bring) < (g.bn == null ? need : g.bn)) && !(g.with && held(g.with) < (g.wn == null ? 1 : g.wn)));
           if (!q) h += 'Speak to ' + who(Q[id].giver) + '.';
-          else if (!st) h += 'Completed!';
-          else if (ready) h += 'Return to ' + who(Q[id].giver) + '.';
+          else if (!st) { h += 'Completed!'; const FL = (core.D.rules && core.D.rules.flags) || {}; for (const k in FL) if (FL[k].quest === id && core.hasFlag(p, k)) h += '<br><span class="g">' + A.esc(A.cap(FL[k].name)) + '</span> is on you.' + (FL[k].desc ? ' ' + A.esc(FL[k].desc.replace(/^[^:]*: /, '')).replace(/^./, c => c.toUpperCase()) : ''); }
+          else if (ready) h += 'Return to ' + who(st.ends || Q[id].giver) + '.';
           else {
             const have = q.n | 0;
             const iname = (iid) => { const it = core.item ? core.item(iid) : (core.D.items || {})[iid]; return A.esc((it && it.name ? it.name : iid).toLowerCase()); };
@@ -114,6 +114,28 @@
         }
         panel.innerHTML = h;
         for (const el of panel.querySelectorAll('[data-q]')) el.onclick = () => K.questStory(el.dataset.q, who);
+      } else if (ST.tab === 'prayer') {
+        /* the prayer book (2026-10-07): the three overhead protections, melee 1 / missiles 4 / magic 15. Tap one to switch it on or off. */
+        const L = core.lv(p, 'prayer'), mx = core.maxPp(p), pv = p.pp | 0;
+        let h = '<h4>Prayer</h4><div class="info" style="text-align:center;margin:0">Prayer points <span class="y">' + pv + ' / ' + mx + '</span></div><div class="ppbar"><i style="width:' + (100 * pv / Math.max(1, mx)) + '%"></i></div><div class="prayers">';
+        for (const q of core.prayers()) {
+          const on = !!(p.pray && p.pray[q.id]);
+          h += '<div class="pry' + (on ? ' on' : '') + (q.soon ? ' soon' : L < q.level ? ' low' : '') + (ST.praySel === q.id ? ' sel' : '') + '" data-p="' + q.id + '" title="' + A.esc(q.name) + '">' + A.prayIcon(q) + '<span class="lv">' + q.level + '</span></div>';
+        }
+        const sq = ST.praySel && core.prayer(ST.praySel);
+        const secs = (t) => { const v = Math.round(t * 0.6); return v >= 60 ? Math.floor(v / 60) + 'm ' + String(v % 60).padStart(2, '0') + 's' : v + 's'; };
+        const left = core.prayTicks(p), full = core.prayTicks(p, mx, 12);
+        h += '</div><div class="info" style="text-align:center">' + (left != null ? 'Time left: <span class="y">' + secs(left) + '</span><br>' : '') + 'Prayer ' + L + ': a full bar holds a protection prayer for ' + secs(full) + '. Each point lasts 5s; each level adds another point.' + (core.bonuses(p).prayer || core.bonuses(p).prayerSec ? ' Gear: ' + (core.bonuses(p).prayer ? 'Prayer bonus <span class="g">+' + core.bonuses(p).prayer + '</span>' : '') + (core.bonuses(p).prayer && core.bonuses(p).prayerSec ? ', ' : '') + (core.bonuses(p).prayerSec ? '<span class="g">+' + core.bonuses(p).prayerSec + 's</span> per point' : '') + '.' : '') + '</div>';
+        h += '<div class="info">' + (sq ? '<span class="o">' + A.esc(sq.name) + '</span> (level ' + sq.level + ')' + (sq.soon ? ' <span class="r">coming soon</span>' : '') + '<br>' + A.esc(sq.desc || '') : 'Tap a prayer to switch it on. Points drain while it is on; recharge at the altar in the church.') + '</div>';
+        panel.innerHTML = h;
+        for (const b of panel.querySelectorAll('[data-p]')) b.onclick = () => {
+          const id = b.dataset.p, q = core.prayer(id); ST.praySel = id;
+          if (q && !q.soon) api.cmd({ c: 'pray', id, on: !(p.pray && p.pray[id]) });
+          else if (q) K.chatLine(q.name + ' is coming soon.', 'sys');
+          refresh('prayer');
+        };
+      } else if (ST.tab === 'magic') {
+        panel.innerHTML = '<h4>Magic</h4><div class="soonbox">' + A.ICON.magic.replace('<svg ', '<svg style="width:42px;height:42px;display:block;margin:0 auto 8px" ') + 'Available soon<small>Spellbooks are on their way. Until then, a staff in hand casts its own spell (see Combat).</small></div>';
       } else if (ST.tab === 'settings') {
         const S = api.settings();
         panel.innerHTML = '<h4>Settings</h4>' +

@@ -115,8 +115,26 @@ def main():
     put('lich', idx['exit'][0], 1)                                                             # the very end, before the way out
     # torches all along the trail - the only light down there (2026-10-07: "The only light should be coming from the
     # torches maybe add more torches"); glowing mushrooms in the swamp and the last tunnel. No webs (the operator: "Remove the spiderwebs")
-    for i in range(0, n): x, y = free_near(*ctr[i]); objects.append({'k': 'torch', 'x': x + OX, 'y': y + OY})
-    for i in range(1, n - 1, 3): x, y = free_near((ctr[i][0] + ctr[i + 1][0]) / 2, (ctr[i][1] + ctr[i + 1][1]) / 2); objects.append({'k': 'torch', 'x': x + OX, 'y': y + OY})
+    # they are small torches set into the rock down both sides, leaning out at an angle (2026-10-07: "the torches should be
+    # arranged down the sides of the cave stuck into the wall at an angle"): from points along the trail, sides alternating, walk
+    # out square to the trail to the last floor tile before the wall; the sconce hangs on that wall (face = the wall's side)
+    def sconce(px, py, dx, dy, side):
+        L = math.hypot(dx, dy) or 1; nx, ny = -dy / L * side, dx / L * side
+        x, y = px, py; last = None
+        for _ in range(12):
+            xi, yi = int(x), int(y)
+            if not (0 <= xi < W and 0 <= yi < H) or g[yi][xi] not in 'dv': break
+            last = (xi, yi); x += nx * 0.5; y += ny * 0.5
+        if not last or last in used: return
+        xi, yi = last
+        for f, (ox, oy) in (('n', (0, -1)), ('s', (0, 1)), ('e', (1, 0)), ('w', (-1, 0))):   # the wall nearest the way it walked out
+            if abs(ox - nx) + abs(oy - ny) < 1.2 and not (0 <= xi + ox < W and 0 <= yi + oy < H and g[yi + oy][xi + ox] in 'dv'):
+                used.add(last); objects.append({'k': 'sconce', 'x': xi + OX, 'y': yi + OY, 'face': f}); return
+    side = 1
+    for i in range(0, n - 1):
+        (x0, y0), (x1, y1) = ctr[i], ctr[i + 1]
+        for t in (0.0, 0.5):
+            sconce(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, x1 - x0, y1 - y0, side); side = -side
     for i in idx['swamp'] + idx['tunnel']:
         for _ in range(2): x, y = free_near(ctr[i][0] + R.uniform(-3, 3), ctr[i][1] + R.uniform(-3, 3)); objects.append({'k': 'shroom', 'x': x + OX, 'y': y + OY})
     # TILE FOR TILE (2026-10-07: "the underground map is the same tile for tile as the above ground map so that where the
