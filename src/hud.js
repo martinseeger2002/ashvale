@@ -19,7 +19,7 @@
     function setPos(x, y) { const k = x + ', ' + y; if (k === xyKey) return; xyKey = k; xy.textContent = k; }
     const mmBox = el('mm ui', ui), mmCanvas = el('', mmBox, null, 'canvas'); mmCanvas.width = mmCanvas.height = 300;
     const compass = el('compass', ui, '<i class="ui" title="North - tap to face north"></i>');   /* a dot that orbits the minimap's rim, pointing to true north */
-    const orbs = el('orbs ui', ui), hpOrb = el('orb hp', orbs, '<i></i><b></b>'), runOrb = el('orb run', orbs, '<i></i><b></b>');
+    const orbs = el('orbs ui', ui), hpOrb = el('orb hp', orbs, '<i></i><b></b>'), runOrb = el('orb run', orbs, '<i></i><b></b>'), prayOrb = el('orb pray', orbs, '<i></i><b></b>');
     const tabs = el('tabs ui', ui), panel = el('panel stone ui', ui);
     const chatw = el('chatw ui', ui), chat = el('chat', chatw), sayRow = el('say', chatw, '<input maxlength="120" enterkeyhint="send" placeholder="Say something to players here"><button>Say</button>'), sayIn = sayRow.firstChild;
     const doSay = () => { const t = sayIn.value; sayIn.value = ''; if (t.trim()) api.say(t); };
@@ -50,7 +50,7 @@
     const dlg = el('dlg stone ui', ui), ctx = el('ctx ui', ui), shopEl = el('shop stone ui', ui), help = el('help stone ui', ui), err = el('err ui', ui);
     const st = { tab: api.isPhone ? null : 'inv', shopId: null, shopSel: null, skillSel: null, newGameArm: 0 };   /* shared with the hud parts */
     let lines = [], dlgQ = null;
-    const TABS = [['combat', 'Combat'], ['skills', 'Skills'], ['quest', 'Quests'], ['inv', 'Inventory'], ['equip', 'Equipment'], ['settings', 'Settings']];   /* no Wallet tab (2026-10-05: the chest shows your wallet) */
+    const TABS = [['combat', 'Combat'], ['skills', 'Skills'], ['quest', 'Quests'], ['inv', 'Inventory'], ['equip', 'Equipment'], ['prayer', 'Prayer'], ['magic', 'Magic'], ['settings', 'Settings']];   /* no Wallet tab (2026-10-05: the chest shows your wallet) */
     for (const [k, title] of TABS) { const b = el('tab stone', tabs, A.ICON[k], 'button'); b.title = title; b.dataset.k = k; b.onclick = () => { setTab(st.tab === k ? null : k); api.sfx && api.sfx('click'); }; }
     function setTab(k) { st.tab = k; for (const b of tabs.children) b.classList.toggle('on', b.dataset.k === k); panel.classList.toggle('open', !!k); K.refresh(k); }
 
@@ -75,7 +75,8 @@
       const d = core.item(it.id), nm = '<span class="o">' + A.esc(d.name) + '</span>', o = [];
       if (d.eq) o.push({ html: (d.eq === 'weapon' ? 'Wield ' : 'Wear ') + nm, fn: () => api.cmd({ c: 'equip', slot }) });
       if (d.edible) o.push({ html: (d.drink ? 'Drink ' : 'Eat ') + nm, fn: () => api.cmd({ c: 'eat', slot }) });
-      if (d.burnTicks) o.push({ html: 'Light ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
+      if (d.buryXp) o.push({ html: 'Bury ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
+      else if (d.burnTicks) o.push({ html: 'Light ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
       else if (!d.eq && !d.edible) o.push({ html: 'Use ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
       if (d.arms) { o.push({ html: 'Call to arms <span class="c">castle guard</span>', fn: () => api.cmd({ c: 'arms', on: true }) }); o.push({ html: 'Stand down <span class="c">castle guard</span>', fn: () => api.cmd({ c: 'arms', on: false }) }); }   /* the Lake Castle stone (2026-10-05) */
       o.push({ html: 'Drop ' + nm, fn: () => api.cmd({ c: 'drop', slot }) });
@@ -86,6 +87,7 @@
       const d = core.item(id), b = [];
       for (const k of ['attack', 'strength', 'defence', 'ranged', 'magic']) if (d[k]) b.push(A.cap(k) + ' +' + d[k]);
       if (d.rstr) b.push('Ranged strength +' + d.rstr);
+      if (d.prayer) b.push('Prayer +' + d.prayer);
       if (d.heal) b.push('Heals ' + d.heal); if (d.healPct) b.push('Heals ' + d.healPct + '% of your hitpoints');
       const req = d.req ? Object.keys(d.req).filter(k => d.req[k] > 1).map(k => A.cap(k) + ' ' + d.req[k]).join(', ') : '';
       if (d.weight) b.push((d.weight * Math.max(1, n || 1) / 1000).toFixed(d.weight * (n || 1) < 1000 ? 2 : 1) + ' kg');
@@ -98,9 +100,13 @@
       const hk = core.isHawk && core.isHawk(p), mx = hk ? core.hawkMax() : core.maxHp(p), hv = hk ? (p.hawkHp == null ? mx : p.hawkHp) : p.hp;   /* a hawk has its own HP (2026-10-04) */
       hpOrb.firstChild.style.height = (100 * hv / mx) + '%'; hpOrb.lastChild.textContent = hv; hpOrb.title = hpOrb.dataset.poison ? 'Poisoned! Eat something or drink an antidote.' : (hk ? 'Hawk HP ' : 'Hitpoints ') + hv + '/' + mx; hpOrb.classList.toggle('hawk', !!hk);
       const e = Math.floor(p.energy / 100); runOrb.firstChild.style.height = e + '%'; runOrb.lastChild.textContent = e; runOrb.classList.toggle('off', !p.runNow); runOrb.title = 'Run energy. Double-tap (or double-click) where you want to go to run there.';
+      const pm = core.maxPp ? core.maxPp(p) : 1, pv = p.pp | 0, on = !!(p.pray && Object.keys(p.pray).length), oh = core.overhead && core.overhead(p), q = oh && core.prayer(oh);
+      const pk = pv + '|' + pm + '|' + (oh || on);
+      if (prayOrb.dataset.k !== pk) { prayOrb.dataset.k = pk; prayOrb.firstChild.style.height = (100 * pv / Math.max(1, pm)) + '%'; prayOrb.lastChild.innerHTML = (q ? A.prayIcon(q) : '') + pv; prayOrb.classList.toggle('on', on); if (st.tab === 'prayer') K.refresh('prayer'); prayOrb.title = 'Prayer points ' + pv + '/' + pm + (on ? '. Tap to switch your prayers off.' : '. Tap to open your prayers.'); }
     }
     runOrb.onclick = () => chatLine(api.isTouch ? 'To run, double-tap where you want to go. Running uses this energy.' : 'To run, double-click where you want to go. Running uses this energy.', 'sys');
     hpOrb.onclick = () => { const p = P(); const i = p.inv.findIndex(s => s && core.item(s.id).edible); if (i >= 0) api.cmd({ c: 'eat', slot: i }); else chatLine('You have no food. The General Store sells bread.', 'warn'); };
+    prayOrb.onclick = () => { const p = P(); if (p.pray && Object.keys(p.pray).length) { for (const id in p.pray) api.cmd({ c: 'pray', id, on: false }); } else setTab('prayer'); };
     compass.onclick = () => api.faceNorth();
 
     /* ---------- chat */
@@ -148,7 +154,7 @@
       help.innerHTML = '<h3>Welcome to Ashvale</h3>' +
         (api.savesHere && api.savesHere() === 'memory' ? '<ul><li><span class="y">This window cannot keep your progress</span> - it ends when you close it. Open ASHVALE from the Games tab and press <b>Play</b> there to keep your character.</li></ul>' : '') +
         (api.isTouch ? '<ul><li><b>Tap</b> to walk, <b>double-tap</b> to run. Tap the ground to walk there, a monster to fight it, an item to pick it up, a person to talk or trade.</li><li><b>Drag</b> to turn the camera, <b>pinch</b> to zoom.</li><li><b>Press and hold</b> anything for more options.</li></ul>'
-          : '<ul><li><b>Click</b> to walk, <b>double-click</b> to run. Click the ground to walk there, a monster to fight, loot to pick it up, a person to talk or trade.</li><li><b>Right-click</b> for more options. <b>Arrow keys</b> or <b>middle-drag</b> (or left-drag) turn the camera, the <b>wheel</b> zooms.</li><li>Hold <b>Shift</b> while you click for the opposite of that click - walk with Run switched on, run with it off. Settings can keep running on so you do not have to double-click.</li><li>Keys: I inventory, E equipment, S skills, C combat, Q quests, Esc close.</li></ul>') +
+          : '<ul><li><b>Click</b> to walk, <b>double-click</b> to run. Click the ground to walk there, a monster to fight, loot to pick it up, a person to talk or trade.</li><li><b>Right-click</b> for more options. <b>Arrow keys</b> or <b>middle-drag</b> (or left-drag) turn the camera, the <b>wheel</b> zooms.</li><li>Hold <b>Shift</b> while you click for the opposite of that click - walk with Run switched on, run with it off. Settings can keep running on so you do not have to double-click.</li><li>Keys: I inventory, E equipment, S skills, C combat, Q quests, P prayer, M magic, Esc close.</li></ul>') +
         '<ul><li>Other players you see are real people on the arcade. Monsters are your own for now.' + (api.isTouch ? '' : ' Press <b>Enter</b> to talk to them.') + '</li><li>Talk to <span class="y">Elder Maren</span> by the well: wolves are taking the flock.</li><li>Buy weapons and armour from <span class="y">Garrick</span> (Armoury, north-east), food and tools from <span class="y">Tam</span> (General Store, north-west).</li><li>Seven others here built this village and never left it: <span class="y">Silas</span> by the well, <span class="y">Pip</span> on the street, <span class="y">Latency</span> at the north gate, the rest about the roads. Right-click one and talk.</li><li>Giant rats lurk where the path enters Whisperwood, wolves further north. Eat when your hitpoints run low.</li></ul>' +
         '<button class="btn">Play</button>';
       help.querySelector('.btn').onclick = () => { showHelp(false); api.helpSeen && api.helpSeen(); };
@@ -159,6 +165,7 @@
     /* ---------- in-world bits (positions come from the engine every frame) */
     const FX_ICON = { freeze: ['#dff6ff', '#4aa8e0', '<path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7" stroke-width="2.4" fill="none"/><path d="M9 4l3 2 3-2M9 20l3-2 3 2M3 10l3 1-1 3M21 14l-3-1 1-3M3 14l3-1-1-3M21 10l-3 1 1 3" stroke-width="1.6" fill="none"/>'],
       poison: ['#cff5c0', '#3a8a2a', '<circle cx="12" cy="13" r="6"/>'], burn: ['#ffe2c0', '#d0501a', '<path d="M12 3c3 4 6 6 6 10a6 6 0 01-12 0c0-3 3-6 6-10z"/>'],
+      bind: ['#e8d8ff', '#6a2aa8', '<path d="M4 9a3 3 0 016 0v6a3 3 0 01-6 0zM14 9a3 3 0 016 0v6a3 3 0 01-6 0zM8 12h8" stroke-width="2" fill="none"/>'],
       slow: ['#e0e0ff', '#6060c0', '<path d="M5 12h14M12 5v14"/>'], stun: ['#fff8c0', '#c0a020', '<path d="M12 3l2 6h6l-5 4 2 7-5-4-5 4 2-7-5-4h6z"/>'] };
     function fxSplat(kind) {
       const f = FX_ICON[kind]; if (!f) return null;
@@ -171,6 +178,7 @@
     function hpBar() { return el('hpb', layer, '<i></i>'); }
     function bubble(text) { return el('bub', layer, A.esc(text)); }
     function tag(text) { return el('tag', layer, A.esc(text)); }
+    function overhead(q) { const d = el('ohd', layer, ''); if (q) d.style.backgroundImage = 'url("data:image/svg+xml,' + encodeURIComponent(A.prayIcon(q).replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ')) + '")'; return d; }
     function marker(x, y, red) { const m = el('mark', layer, '&#x2715;'); m.style.left = x + 'px'; m.style.top = y + 'px'; m.style.color = red ? '#f22' : '#ff0'; setTimeout(() => m.remove(), 460); }
     function xpDrop(skill, n) { const d = el('', xpd, '+' + Math.floor(n / 10 * 10) / 10 + ' ' + A.cap(skill)); setTimeout(() => d.remove(), 1650); }
     let bannerT = 0;
@@ -237,7 +245,7 @@
     });
     window.addEventListener('keydown', e => {
       if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
-      const k = e.key.toLowerCase(), m = { i: 'inv', e: 'equip', s: 'skills', c: 'combat', q: 'quest' };
+      const k = e.key.toLowerCase(), m = { i: 'inv', e: 'equip', s: 'skills', c: 'combat', q: 'quest', p: 'prayer', m: 'magic' };
       if (e.key === 'Enter' && sayRow.classList.contains('on')) { e.preventDefault(); sayIn.focus(); return; }
       if (m[k]) setTab(st.tab === m[k] ? null : m[k]);
       else if (k === 'r') chatLine('To run, double-click where you want to go.', 'sys');
@@ -270,7 +278,7 @@
     { const r0 = K.refresh; K.refresh = w => { r0(w); if (st.chest) K.drawChest(); }; }   /* the chest window follows the bag and the wallet */
     setTab(st.tab);
     return {
-      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, playerStats, travel, netLost, newVersion, elsewhere, setPos, setPoison, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => K.openChest(), closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
+      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => K.openChest(), closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };

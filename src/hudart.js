@@ -26,7 +26,17 @@
 .ash .orb.hp.poison::after{content:'';position:absolute;right:-5px;top:-5px;width:13px;height:13px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#3fbf3a;border:2px solid #10300c;box-shadow:0 0 6px #3fbf3a;animation:ashDrip 1.2s ease-in-out infinite}
 @keyframes ashDrip{0%,100%{transform:rotate(-45deg) scale(1)}50%{transform:rotate(-45deg) scale(1.2)}}
 .ash .splat.poison{background:radial-gradient(circle,#4fcf3a 55%,#1d5a14 60%);border-radius:50%;color:#fff}
-.ash .orb.hp i{background:linear-gradient(#e33,#911)} .ash .orb.hp.hawk i{background:linear-gradient(#d8a04a,#7a4a1a)} .ash .orb.run i{background:linear-gradient(#e8d84a,#9a8a1a)} .ash .orb.run.off i{background:linear-gradient(#8a8a7a,#555)}
+.ash .orb.hp i{background:linear-gradient(#e33,#911)} .ash .orb.hp.hawk i{background:linear-gradient(#d8a04a,#7a4a1a)} .ash .orb.run i{background:linear-gradient(#e8d84a,#9a8a1a)} .ash .orb.run.off i{background:linear-gradient(#8a8a7a,#555)} .ash .orb.pray i{background:linear-gradient(#7fd8ff,#1f6aa8)} .ash .orb.pray.on{box-shadow:0 0 0 1px #6b5d48,0 0 8px 2px #8fe0ffcc}
+.ash .orb.pray b{display:flex;flex-direction:column;align-items:center;line-height:1}.ash .orb.pray b svg{width:14px;height:14px;margin-bottom:1px}
+.ash .prayers{display:grid;grid-template-columns:repeat(5,1fr);gap:3px}
+.ash .pry{position:relative;aspect-ratio:1;border-radius:5px;background:#2c251c;box-shadow:inset 0 0 0 1px #4b4032;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.ash .pry svg{width:70%;height:70%}.ash .pry.soon svg,.ash .pry.low svg{opacity:.28;filter:grayscale(1)}
+.ash .pry.on{background:radial-gradient(#fff6c8,#e8c45a 55%,#8a6a20);box-shadow:inset 0 0 0 1px #fff3b0,0 0 6px #ffe48a}
+.ash .pry .lv{position:absolute;right:2px;bottom:0;font-size:9px;color:#c8b48a;text-shadow:1px 1px 0 #000}
+.ash .pry.soon .lv{color:#8a7a60}.ash .pry.sel{outline:1px solid #fff}
+.ash .ppbar{height:8px;border-radius:4px;background:#1b1610;box-shadow:inset 0 0 0 1px #4b4032;overflow:hidden;margin:2px 0 6px}.ash .ppbar i{display:block;height:100%;background:linear-gradient(90deg,#1f6aa8,#7fd8ff)}
+.ash .soonbox{margin:10px 0;padding:16px 8px;border-radius:6px;background:#2c251c;box-shadow:inset 0 0 0 1px #4b4032;text-align:center;color:#ffcf3f;font-size:15px}.ash .soonbox small{display:block;margin-top:6px;color:#c8b48a;font-size:11px}
+.ash .ohd{position:absolute;width:30px;height:30px;transform:translate(-50%,-100%);pointer-events:none;background-size:contain;background-repeat:no-repeat;filter:drop-shadow(0 1px 1px #000)}
 .ash .tabs{position:absolute;right:6px;top:8px;display:flex;flex-direction:column;gap:4px}
 .ash .tab{width:var(--tab);height:var(--tab);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
 .ash .tab svg{width:62%;height:62%}
@@ -185,8 +195,20 @@
     wallet: SV('M3 7h16v12H3z M3 7l3-3h11v3 M15 12h4v3h-4z', '#e8b54a'),
     inv: SV('M7 7c0-3 2-4 5-4s5 1 5 4h2l1 14H4L5 7zm2 0h6c0-2-1-2-3-2S9 5 9 7z', '#b8874a'),
     equip: SV('M6 3h12l1 6-3 3v9H8v-9L5 9z', '#a9b0ba'),
-    settings: SV('M12 8a4 4 0 100 8 4 4 0 000-8zm-1-6h2l1 3 2 1 3-1 1 2-2 2v2l2 2-1 2-3-1-2 1-1 3h-2l-1-3-2-1-3 1-1-2 2-2v-2L3 9l1-2 3 1 2-1z', '#c8c0b0')
+    settings: SV('M12 8a4 4 0 100 8 4 4 0 000-8zm-1-6h2l1 3 2 1 3-1 1 2-2 2v2l2 2-1 2-3-1-2 1-1 3h-2l-1-3-2-1-3 1-1-2 2-2v-2L3 9l1-2 3 1 2-1z', '#c8c0b0'),
+    prayer: SV('M12 2l2 4h-1v3h4v2h-4v8l3 3H8l3-3v-8H7V9h4V6h-1z', '#8fd8ff'),
+    magic: SV('M4 20L15 9M14 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1zM19 10l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z', '#b48aff')
   };
+  /* the prayer book's pictures (2026-10-07): the three overheads have their own, the rest borrow the skill they boost */
+  const PRAY_ICON = {
+    magic: SV('M12 2l2.5 6.5L21 9l-5 4.5L17.5 21 12 17l-5.5 4L8 13.5 3 9l6.5-.5z', '#7ab8ff'),
+    missiles: SV('M3 21l12-12M15 9l-1-5 7-1-1 7-5-1zM3 21l1-4 3 3z', '#9ad070'),
+    melee: SV('M14 3l7 0 0 7-9 9-3-3-2 2 1 2-2 2-4-4 2-2 2 1 2-2-3-3z', '#e0e0ea'),
+    restore: SV('M12 3a9 9 0 109 9h-3a6 6 0 11-6-6v3l5-4.5L12 0z', '#c0e070'), item: SV('M5 10h14v11H5zM8 10V7a4 4 0 018 0v3', '#e8c060'),
+    retribution: SV('M12 2l3 7 7 1-5 5 2 7-7-4-7 4 2-7-5-5 7-1z', '#ff9040'), redemption: SV('M12 21l-8-8a5 5 0 017-7l1 1 1-1a5 5 0 017 7zM12 8v7M8.5 11.5h7', '#ffe070'),
+    smite: SV('M13 2L5 14h6l-2 8 10-13h-6l2-7z', '#d070ff')
+  };
+  const PRAY_FOR = { att: 'attack', str: 'strength', def: 'defence', rng: 'ranged', mag: 'magic', heal: 'hitpoints' };
   const SKI = {
     attack: SV('M3 21l4-1 11-11 2-6-6 2L3 16z', '#c8c8d0'), strength: SV('M5 12c0-4 3-7 7-7s5 2 5 5v4l3 2-1 4H7c-2 0-2-3-2-8z', '#d8a070'),
     defence: SV('M12 2l8 3v6c0 6-4 9-8 11-4-2-8-5-8-11V5z', '#7a8ad0'), hitpoints: SV('M12 21l-8-8a5 5 0 017-7l1 1 1-1a5 5 0 017 7z', '#e04040'),
@@ -194,12 +216,13 @@
     woodcutting: SV('M4 20l9-9M11 5l6-2 3 3-2 6-7-7z', '#a07a48'), mining: SV('M4 20l10-10M5 7c5-5 11-5 14-2-4-1-8 0-10 3z', '#9a9a9a'),
     dexterity: SV('M4 20c6-2 9-7 10-16 2 5 1 9-2 12l6 1-3 3H4z', '#9ad0b0'), speechcraft: SV('M3 4h18v12H9l-5 4v-4H3z', '#e8c8f0'),
     fishing: SV('M2 12c4-5 10-6 15-2l4-3v10l-4-3c-5 4-11 3-15-2z', '#60a0d0'), cooking: SV('M4 10h16v3c0 5-3 8-8 8s-8-3-8-8zm4-6c0 2 2 2 2 4m4-4c0 2 2 2 2 4', '#d0a040'),
-    firemaking: SV('M12 2c3 4 6 6 6 11a6 6 0 01-12 0c0-3 2-5 3-7 1 2 1 3 3 4 0-3-1-5 0-8z', '#ff8a30')
+    firemaking: SV('M12 2c3 4 6 6 6 11a6 6 0 01-12 0c0-3 2-5 3-7 1 2 1 3 3 4 0-3-1-5 0-8z', '#ff8a30'),
+    prayer: SV('M12 2l2 4h-1v3h4v2h-4v8l3 3H8l3-3v-8H7V9h4V6h-1z', '#8fd8ff')
   };
-  const SKILL_ORDER = ['attack', 'hitpoints', 'strength', 'ranged', 'defence', 'magic', 'dexterity', 'speechcraft', 'woodcutting', 'mining', 'fishing', 'cooking', 'firemaking'];
+  const SKILL_ORDER = ['attack', 'hitpoints', 'strength', 'ranged', 'defence', 'magic', 'prayer', 'dexterity', 'speechcraft', 'woodcutting', 'mining', 'fishing', 'cooking', 'firemaking'];
   const SKILL_INFO = { attack: 'Hit more often in melee. Trained by the Accurate style.', strength: 'Hit harder in melee and carry 1 kg more per level. Trained by the Aggressive style.',
     defence: 'Get hit less often by everything. Trained by the Defensive style (and Longrange or Defensive cast). Armour needs it.', hitpoints: 'Your health. Trained by every hit you land.',
-    ranged: 'Bows and arrows. Trained by hitting with a bow.', magic: 'Staffs and spells. Trained by casting.', dexterity: 'Run longer, dodge blows, faster daggers and bows at 50.',
+    ranged: 'Bows and arrows. Trained by hitting with a bow.', magic: 'Staffs and spells. Trained by casting.', prayer: 'Prayers that protect you from blows. Your Prayer points drain while one is on; pray at the church altar to recharge. Trained by burying bones.', dexterity: 'Run longer, dodge blows, faster daggers and bows at 50.',
     speechcraft: 'Better prices in every shop. Trained by trading and by talking quests through.', woodcutting: 'Chop trees with a hatchet.', mining: 'Mine rocks with a pickaxe.',
     fishing: 'Catch fish with a net, a rod or a lobster pot.', cooking: 'Cook raw fish on a range or a campfire; burn less as you level.',
     firemaking: 'Light campfires: a tinderbox on logs. Better logs need more levels and burn longer.' };
@@ -209,6 +232,7 @@
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const fmtN = n => n >= 1e7 ? [Math.floor(n / 1e6) + 'M', 'm'] : n >= 1e5 ? [Math.floor(n / 1e3) + 'K', 'k'] : [String(n), ''];
-  const art = { CSS, SPLAT_RED, SPLAT_BLUE, SV, ICON, SKI, SKILL_ORDER, SKILL_INFO, START_SKILLS, EQ_LAYOUT, EQ_ACTIVE, cap, esc, fmtN };
+  const prayIcon = (q) => PRAY_ICON[q.icon] || PRAY_ICON[q.id.replace(/^protect_/, '')] || (PRAY_FOR[q.g] && SKI[PRAY_FOR[q.g]]) || PRAY_ICON[q.g] || PRAY_ICON[q.id] || ICON.prayer;
+  const art = { CSS, SPLAT_RED, SPLAT_BLUE, SV, ICON, SKI, PRAY_ICON, prayIcon, SKILL_ORDER, SKILL_INFO, START_SKILLS, EQ_LAYOUT, EQ_ACTIVE, cap, esc, fmtN };
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('hudart', { api: 1, v: 1 }, () => art);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

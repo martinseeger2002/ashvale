@@ -71,7 +71,7 @@
       return { npcs: npcs.slice(n0), spawns: spawns.slice(s0), objects: objects.slice(o0) };
     }
     for (const z of D.zones) ingest(z);
-    const ranges = (objs) => { for (const o of objs) if (o.k === 'range') { const k = key(o.x, o.y); nodes.set(k, { kind: 'range', x: o.x, y: o.y }); fixed.add(k); } };
+    const ranges = (objs) => { for (const o of objs) if (o.k === 'range' || o.k === 'altar') { const k = key(o.x, o.y); nodes.set(k, { kind: o.k, x: o.x, y: o.y }); fixed.add(k); } };
     ranges(objects);
     const B = opts.bounds || [0, 0, W, H];
     let inWorld = (x, y) => x >= B[0] && y >= B[1] && x < B[0] + B[2] && y < B[1] + B[3];

@@ -55,10 +55,10 @@
       const extra = addr === YOURFIRST_ADDR || addr === '@yourfirstname' || addr === 'yourfirstname' || also.indexOf(addr) >= 0;
       if (!extra || !ashvaleFlag(a.json || a)) return false;
       const ct = String(a.contenttype || a.content_type || '');
-      return !ct || ct === 'application/json';
+      return !ct || ct === 'application/json' || ct === 'image/png';
     }
     const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0], [1, -1], [1, 1], [-1, 1], [-1, -1]];
-    const SPELL_COL = { Wind: '#e6f2ff', Water: '#3d8bff', Earth: '#7cc04a', Fire: '#ff6a1a' };
+    const SPELL_COL = { Wind: '#e6f2ff', Water: '#3d8bff', Earth: '#7cc04a', Fire: '#ff6a1a', Shadow: '#8a3ad0' };
 
     /* ---------- saves: arcade.storage inside an arcade viewer (inscribed pages have NO localStorage, it throws),
        else this browser's localStorage, else memory only. Reads come from a cache filled before start(); writes go
@@ -368,7 +368,7 @@
         H.onEvent((type, name) => { if (type === 'impact') onImpact(e, name); else if (type === 'done' && name !== 'death') e.oneShot = false; });
         ents.set(key, e); return e;
       }
-      function removeEnt(e) { if (e.bub) e.bub.el.remove(); scene.remove(e.root); const i = proxies.indexOf(e.proxy); if (i >= 0) proxies.splice(i, 1); e.H.dispose && e.H.dispose(); for (const s of e.splats) s.el.remove(); if (e.bar) e.bar.remove(); if (e.tag) e.tag.remove(); ents.delete(e.key); }
+      function removeEnt(e) { if (e.bub) e.bub.el.remove(); scene.remove(e.root); const i = proxies.indexOf(e.proxy); if (i >= 0) proxies.splice(i, 1); e.H.dispose && e.H.dispose(); for (const s of e.splats) s.el.remove(); if (e.bar) e.bar.remove(); if (e.tag) e.tag.remove(); if (e.ohd) e.ohd.remove(); ents.delete(e.key); }
       function place(e, x, y) { const v = new THREE.Vector3(x + 0.5, 0, y + 0.5); v.y = heightAt(v.x, v.z); e.from.copy(v); e.to.copy(v); e.root.position.copy(v); e.tx = x; e.ty = y; }
       function moveTo(e, x, y, now) {
         if (e.tx === x && e.ty === y) return false;
@@ -597,6 +597,9 @@
           case 'regrow': for (const r of regions) if (r.built) r.built.setDepleted(e.node, false); break;
           case 'gather': if (mine && e.ok && e.item) dirty.inv = 1; if (mine && e.ok && !e.item) dirty.inv = 1; break;
           case 'drop': break;
+          case 'pfx': { const t = ents.get('p:' + e.p); if (t && e.on) { const el = hud.fxSplat(e.fx); if (el) t.splats.push({ el, t: performance.now(), k: t.splats.length }); } if (mine && e.on) sfx('freeze'); break; }
+          case 'pray': if (mine) { lastPosKey = ''; hud.refresh('prayer'); if (e.altar) { sfx('altar'); playOnce(myEnt, 'cast'); burst(myEnt.root.position, 0x8fd8ff); } else sfx(e.on ? 'pray' : 'prayoff'); } break;
+          case 'bury': if (mine) { dirty.inv = 1; sfx('bury'); playOnce(myEnt, 'pickup', 1.6); } break;
         }
       }
       /* ---------- UNDERGROUND (2026-10-07: the Spider Cave, "dim with torches"): while you stand in an area flagged
@@ -801,6 +804,10 @@
           case 'mobdie': tone(200, 0.4, 'square', 0.15, 70); break;
           case 'click': tone(1200, 0.03, 'square', 0.06); break;
           case 'freeze': tone(1800, 0.25, 'sine', 0.2, 2600); noise(0.3, 6000, 0.15, 3); break;
+          case 'pray': tone(660, 0.35, 'sine', 0.25, 990); tone(990, 0.3, 'sine', 0.12, 0, 0.08); break;
+          case 'prayoff': tone(700, 0.25, 'sine', 0.2, 350); break;
+          case 'altar': [392, 523, 659, 784].forEach((f, i) => tone(f, 0.6, 'sine', 0.22, 0, i * 0.1)); break;
+          case 'bury': noise(0.12, 500, 0.6, 1.5); noise(0.1, 350, 0.4, 1.5); break;
         }
       }
 
@@ -871,12 +878,12 @@
         if (t.kind === 'npc') { const n = NPCN[t.id], nm = '<span class="y">' + esc(n.name) + '</span>'; const o = []; if (n.tailor) { o.push({ html: 'Change-look ' + nm, act: { c: 'npc', id: n.id }, red: 1 }); o.push({ html: 'Trade ' + nm, act: { c: 'npc', id: n.id, trade: 1 }, red: 1 }); }
           else if (n.chest) o.push({ html: 'Open ' + nm, act: { c: 'npc', id: n.id }, red: 1 });
           else if (n.portal) o.push({ html: 'Use ' + nm, act: { c: 'npc', id: n.id }, red: 1 });
-          else if (n.shop) o.push({ html: 'Trade ' + nm, act: { c: 'npc', id: n.id }, red: 1 }); else o.push({ html: 'Talk-to ' + nm, act: { c: 'npc', id: n.id }, red: 1 }); o.push({ html: 'Examine ' + nm, fn: () => hud.chat(n.shop ? n.name + ' runs the ' + core.shop(n.shop).name + '.' : (n.examine || n.name + ', the village elder.'), 'sys') }); return o; }
+          else if (n.shop) o.push({ html: 'Trade ' + nm, act: { c: 'npc', id: n.id }, red: 1 }); else o.push({ html: (n.verb || 'Talk-to') + ' ' + nm, act: { c: 'npc', id: n.id }, red: 1 }); o.push({ html: 'Examine ' + nm, fn: () => hud.chat(n.shop ? n.name + ' runs the ' + core.shop(n.shop).name + '.' : (n.examine || n.name + ', the village elder.'), 'sys') }); return o; }
         if (t.kind === 'item') { const g = core.S.ground.find(q2 => q2.uid === t.uid); if (!g) return []; const d = core.item(g.id), nm = '<span class="o">' + esc(d.name) + (g.n > 1 ? ' (' + g.n + ')' : '') + '</span>'; return [{ html: 'Take ' + nm, act: { c: 'take', uid: g.uid }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(hud.examine(g.id, g.n), 'sys') }]; }
         if (t.kind === 'node' && core.isHawk(me)) { const n = core.nodeAt(t.i); if (n && core.nodeDef(n).skill === 'woodcutting') {
           const hp = t.hp || [n.x + 0.5, n.y + 0.5], dx = hp[0] - (n.x + 0.5), dy = hp[1] - (n.y + 0.5), sx = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0, sy = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
           return [{ html: 'Perch in <span class="c">tree</span>', act: { c: 'perch', x: n.x, y: n.y, sx: sx || 1, sy } }]; } }
-        if (t.kind === 'node') { const n = core.nodeAt(t.i); if (!n) return []; const nd = core.nodeDef(n), verb = n.kind === 'range' || n.kind === 'fire' ? 'Cook-at' : nd.skill === 'woodcutting' ? 'Chop down' : nd.skill === 'mining' ? 'Mine' : 'Net', nm = '<span class="c">' + nd.name + '</span>'; return [{ html: verb + ' ' + nm, act: { c: 'gather', x: n.x, y: n.y }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(nd.name + (nd.req ? ': needs ' + nd.skill + ' level ' + nd.req + '.' : '.'), 'sys') }]; }
+        if (t.kind === 'node') { const n = core.nodeAt(t.i); if (!n) return []; const nd = core.nodeDef(n), verb = n.kind === 'altar' ? 'Pray-at' : n.kind === 'range' || n.kind === 'fire' ? 'Cook-at' : nd.skill === 'woodcutting' ? 'Chop down' : nd.skill === 'mining' ? 'Mine' : 'Net', nm = '<span class="c">' + nd.name + '</span>'; return [{ html: verb + ' ' + nm, act: { c: 'gather', x: n.x, y: n.y }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(nd.name + (nd.req ? ': needs ' + nd.skill + ' level ' + nd.req + '.' : '.'), 'sys') }]; }
         if (t.kind === 'caveout') {   /* the cave's way out, up top: it only goes up (2026-10-07: "it should inform them in the chat that there is no way down") */
           const nm = '<span class="c">Cave opening</span>', say = () => hud.chat("The shaft drops away steep and narrow into the dark. There's no way down from here.", 'sys');
           return [{ html: 'Enter ' + nm, fn: say, act: null }, { html: 'Examine ' + nm, fn: () => hud.chat('A narrow opening in the rock. A cold draught breathes up out of it.', 'sys') }]; }
@@ -1607,10 +1614,11 @@
         lastPosKey = key; netT = now;
         netSend(stateMsg(now));
       }
-      let gearRefT = 0;
+      let gearRefT = 0, lastPr = 0;
       function stateMsg(now) {
         const p = myEnt.root.position;
         const m = { s: Math.round(now), p: [Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100], f: Math.round(myEnt.yaw * 100) / 100, a: myEnt.oneShot ? myEnt.lastOne || 'idle' : myEnt.loco || 'idle', j: myJoin, hp: me.hp, d: me.dead ? 1 : 0, k: myEnt.toolId || 0 };
+        const oh = core.overhead(me) || 0; if (oh || lastPr) { m.pr = oh; lastPr = oh; }   /* the overhead prayer, so hosts' monsters respect it and others see it */
         const cz = combatZone(); if (cz) m.c = cz;   /* the area I am fighting in, when it is not the one I stand in */
         if (now - gearRefT > 10000) { gearRefT = now; netSend({ g: gearOf(me), n: me.name }); if (myEnt.H.outfit) netSend({ o: myEnt.H.outfit }); }   /* a missed gear message left others drawn wrong, and a missed name left them called Adventurer: refresh both every 10 s, as their own small messages */
         return m;
@@ -1724,7 +1732,7 @@
         const mobIn = u => iHost(mobArea(u)), fight = () => typeof e.src === 'number' ? mobIn(e.src) : typeof e.dst === 'number' ? mobIn(e.dst) : false;
         switch (e.e) {
           case 'attack': if (fight()) hostQ.push(['a', toNet(e.src), toNet(e.dst), e.anim || '', (e.cls || 'm')[0] === 'm' ? 'm' : e.cls === 'ranged' ? 'r' : 'g', e.delay || 0, e.ammo ? +String(e.ammo).slice(-1) : 0, e.spell || 0]); break;
-          case 'hit': if (fight()) hostQ.push(['h', toNet(e.src), toNet(e.dst), e.dmg, e.hp, (e.cls || 'm')[0] === 'm' ? 'm' : e.cls === 'ranged' ? 'r' : 'g', (e.blocked ? 1 : 0) | (e.dodged ? 2 : 0) | (e.dex ? 4 : 0)]); break;
+          case 'hit': if (fight()) hostQ.push(['h', toNet(e.src), toNet(e.dst), e.dmg, e.hp, (e.cls || 'm')[0] === 'm' ? 'm' : e.cls === 'ranged' ? 'r' : 'g', (e.blocked ? 1 : 0) | (e.dodged ? 2 : 0) | (e.dex ? 4 : 0) | (e.prot ? 8 : 0), e.prot ? e.raw | 0 : 0, e.fx || 0, e.fxt | 0]); break;
           case 'die': if (e.mob != null && mobIn(e.mob)) hostQ.push(['k', e.mob, e.killer ? toNet(e.killer) : 0]); break;
           case 'spawn': { const m = core.mobByUid(e.mob); if (m && iHost(m.zone)) hostQ.push(['s', m.uid, m.x, m.y, m.hp]); break; }
           case 'drop': if (iHostAt(e.x, e.y)) hostQ.push(['d', e.g, e.id, e.n, e.x, e.y, e.from ? toNet(e.from) : 0]); break;
@@ -1801,6 +1809,7 @@
         if (Array.isArray(d.L)) { pst.L = d.L; r.maxHp = d.L[3] | 0; }
         if (d.SK && typeof d.SK === 'object') { const sk = {}; for (const k in d.SK) if (/^[a-z]{1,20}$/.test(k)) { const L = d.SK[k] | 0; if (L >= 1 && L <= 99) sk[k] = L; } r.skills = sk; }
         if (d.st && typeof d.st === 'object') pst.st = d.st;
+        if (d.pr !== undefined) pst.pr = typeof d.pr === 'string' ? d.pr : 0;
         if (d.A !== undefined) pst.act = d.A ? { k: 'attack', uid: +d.A } : null;
         if (Object.keys(pst).length) core.setPuppet(id, pst);
         if (d.C != null) { const g = core.S.ground.find(q => q.uid === +d.C); if (g && iHostAt(g.x, g.y)) coreCall(() => core.claim(id, +d.C)); }
@@ -1831,10 +1840,10 @@
           case 'a': handle({ e: 'attack', src: fromNet(a[1]), dst: fromNet(a[2]), anim: a[3], cls: CLS[a[4]] || 'melee', delay: a[5] || 0, ammo: a[6] ? 'arrows_t' + a[6] : null, spell: a[7] || null }, now); break;
           case 'h': {
             const src = fromNet(a[1]), dst = fromNet(a[2]), dmg = a[3] | 0; let hp = a[4];
-            if (dst === PID) { core.applyHit(PID, dmg); hp = me.hp; }
+            if (dst === PID) { core.applyHit(PID, (a[6] & 8) ? a[7] | 0 : dmg, CLS[a[5]] || 'melee', typeof src === 'number', typeof a[8] === 'string' ? a[8] : null, a[9] | 0); hp = me.hp; }   /* the host's roll before my prayer: if it went out meanwhile, the blow lands */
             else if (typeof dst === 'number') { const m = core.mobByUid(dst); if (m && !core.isAuth(m.zone)) m.hp = Math.max(0, hp); }
             if (src === PID) core.hitXp(PID, CLS[a[5]] || 'melee', dmg, !!(a[6] & 4));
-            handle({ e: 'hit', src, dst, dmg, hp, max: maxOf(dst), cls: CLS[a[5]] || 'melee', blocked: !!(a[6] & 1), dodged: !!(a[6] & 2) }, now);
+            handle({ e: 'hit', src, dst, dmg, hp, max: maxOf(dst), cls: CLS[a[5]] || 'melee', blocked: !!(a[6] & 1), dodged: !!(a[6] & 2), prot: !!(a[6] & 8) }, now);
             break;
           }
           case 'k': { const m = core.mobByUid(a[1]); if (!m) break; core.applyMobs([[m.uid, m.x, m.y, 0, 1]]); if (fromNet(a[2]) === PID) core.creditKill(PID, m.key); for (const pid of core.S.order) { const o = core.S.players[pid]; if (o.act && o.act.k === 'attack' && o.act.uid === m.uid) o.act = null; } handle({ e: 'die', mob: m.uid }, now); break; }
@@ -1956,6 +1965,9 @@
             const s = e.root.visible ? toScreen(e.root.position, top + 0.45) : null; e.tag.style.display = s ? 'block' : 'none';
             if (s) { let y = s.y; for (let k = 0; k < 8 && tagSpots.some(q => Math.abs(q[0] - s.x) < 90 && Math.abs(q[1] - y) < 13); k++) y -= 14; tagSpots.push([s.x, y]); e.tag.style.left = s.x + 'px'; e.tag.style.top = y + 'px'; }   /* players on one tile: stack their name tags */
           }
+          const ok = e.proxy && e.proxy.userData.pick, opl = ok && ok.kind === 'self' ? me : ok && ok.kind === 'remote' ? core.S.players[ok.id] : null, oid = opl && !opl.dead && e.root.visible ? core.overhead(opl) : null;   /* the overhead prayer icon (2026-10-07) */
+          if (oid !== (e.ohId || null)) { if (e.ohd) { e.ohd.remove(); e.ohd = null; } e.ohId = oid; if (oid) e.ohd = hud.overhead(core.prayer(oid)); }
+          if (e.ohd) { const s = toScreen(e.root.position, top + (e.tag ? 0.75 : 0.62)); e.ohd.style.display = s ? 'block' : 'none'; if (s) { e.ohd.style.left = s.x + 'px'; e.ohd.style.top = (e.tag ? Math.min(s.y, parseFloat(e.tag.style.top) - 12) : s.y) + 'px'; } }
           if (e.bub) { const s = now - e.bub.t < 4000 && e.root.visible ? toScreen(e.root.position, top + (e.tag ? 0.85 : 0.5)) : null; if (now - e.bub.t >= 4000) { e.bub.el.remove(); e.bub = null; } else { e.bub.el.style.display = s ? 'block' : 'none'; if (s) { e.bub.el.style.left = s.x + 'px'; e.bub.el.style.top = s.y + 'px'; } } }
         }
         /* opponent box */

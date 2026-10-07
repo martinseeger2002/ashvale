@@ -43,8 +43,8 @@ ok(wolf.dead, 'killed a wolf in ' + (core.S.t - t0) + ' ticks, ' + hits + ' swin
 run(3);
 /* 2026-10-01: animals drop only their pelt (no GOLD, no weapons); pelts sell in town */
 const here = core.S.ground.filter(g => g.x === wolf.x && g.y === wolf.y && g.diedAt == null);
-ok(here.length === 1 && here[0].id === 'pelt', 'wolf dropped only its pelt: ' + here.map(g => g.id).join(','));
-const pelt = here[0], before = core.invCount(p, 'pelt');
+ok(here.map(g => g.id).sort().join(',') === 'bones,pelt', 'wolf dropped its pelt and its bones (2026-10-07: every monster leaves bones): ' + here.map(g => g.id).join(','));
+const pelt = here.find(g => g.id === 'pelt'), before = core.invCount(p, 'pelt');
 core.cmd('p1', { c: 'take', uid: pelt.uid }); run(5);
 ok(core.invCount(p, 'pelt') === before + 1, 'picked up the pelt');
 ok(p.xp.attack > save0.xp.attack, 'gained attack XP');
@@ -131,7 +131,8 @@ const c5 = AshCore.create(D, { seed: 'q' }); const p5 = c5.addPlayer('p1'); let 
 c5.cmd('p1', { c: 'npc', id: 'maren' }); for (let i = 0; i < 40 && !dlg; i++) for (const e of c5.tick()) if (e.e === 'dialog') dlg = e;
 ok(dlg && /wolves/i.test(dlg.lines.join(' ')) && p5.quests.ashen_crown.step === 1, 'Elder Maren gives the wolf quest');
 // ---------- the Ghost Devs live in Ashvale (2026-10-03): villagers whose one job is to talk
-for (const nd of D.zones.find(z => z.id === 'village').npcs.filter(n => n.lines)) {
+const VZ = D.zones.find(z => z.id === 'village'), inVillage = n => n.x >= VZ.origin[0] && n.x < VZ.origin[0] + VZ.size[0] && n.y >= VZ.origin[1] && n.y < VZ.origin[1] + VZ.size[1];
+for (const nd of VZ.npcs.filter(n => n.lines && inVillage(n))) {   /* Odric and his wagon stand out on the road (priest_test talks to them) */
   ok(!nd.shop && !nd.quest && !nd.tailor, nd.id + ' is met by talking, not at a shop or a quest');
   ok(fs.existsSync(path.join(DD, 'parts', 'char.' + nd.look + '.json')), nd.id + ' has a body of its own (char.' + nd.look + ')');
   const cd = AshCore.create(D, { seed: 'dev-' + nd.id }); cd.addPlayer('p1'); let dd = null;
@@ -148,16 +149,18 @@ const keeperZone = (id) => allZones.find(z => (z.npcs || []).some(v => v.id === 
 // Data-only quests, so the checks are that the data hangs together and that the core counts a kill for them.
 for (const [qid, Q] of Object.entries(D.quests.quests)) {
   const giver = D.zones.reduce((n, z) => n || (z.npcs || []).find(v => v.id === Q.giver), null);
-  ok(!!giver && giver.quest === qid, qid + ' is given by ' + Q.giver + ', who stands in a built zone');
+  ok(!!giver && (giver.quest === qid || (giver.quests || []).indexOf(qid) >= 0), qid + ' is given by ' + Q.giver + ', who stands in a built zone');
   ok(Q.steps.every((s, i) => s.id === i + 1), qid + ': its steps are numbered from 1');
   // a step whose zone is not in this build is not reachable yet, so its goal and its pay are not promised yet either
   const live = Q.steps.filter(s => !s.zone || D.zones.some(z => z.id === s.zone));
   ok(live.length > 0, qid + ': ' + live.length + ' of its ' + Q.steps.length + ' steps stand in built ground');
-  ok(live.every(s => s.goal.kill ? (D.monsters[s.goal.kill] && s.goal.n > 0)
-                    : s.goal.bring ? (D.items[s.goal.bring] && s.goal.n > 0)
+  const many = n => n == null || n > 0;
+  ok(live.every(s => s.goal.kill ? (D.monsters[s.goal.kill] && many(s.goal.n) && (!s.goal.bring || D.items[s.goal.bring]))
+                    : s.goal.cook ? (D.items[s.goal.cook] && many(s.goal.n))
+                    : s.goal.bring ? (D.items[s.goal.bring] && many(s.goal.n) && (!s.goal.with || D.items[s.goal.with]))
                     : s.goal.talk ? !!keeperZone(s.goal.talk) : false),
      qid + ': every reachable step wants something that exists');
-  ok(live.every(s => s.reward.indexOf('xp:') === 0 ? D.rules.skills.indexOf(s.reward.split(':')[1]) >= 0 : !!D.items[s.reward]),
+  ok(live.every(s => !s.reward || (s.reward.indexOf('xp:') === 0 ? D.rules.skills.indexOf(s.reward.split(':')[1]) >= 0 : s.reward.indexOf('flag:') === 0 ? !!(D.rules.flags || {})[s.reward.slice(5)] : !!D.items[s.reward])),
      qid + ': every reachable step pays in XP and items that exist');
   ok(live.every(s => (s.talk || []).length > 1 && (s.complete || []).length > 0 && (s.progress || []).length > 0),
      qid + ': every reachable step says something when it starts, while it goes, and when it ends');
@@ -266,6 +269,7 @@ for (const S of Object.values(D.shops.shops)) {
       if (!g.kill && !g.bring && !g.talk) ok(false, where + ' has a goal the panel cannot describe: ' + JSON.stringify(g));
       const r = s.reward;
       if (typeof r === 'string' && r.startsWith('xp:')) { const [, sk] = r.split(':'); ok(D.rules.skills.indexOf(sk) >= 0 || sk === 'hitpoints', where + ' pays ' + r + ' in a skill the game has'); }
+      else if (typeof r === 'string' && r.startsWith('flag:')) ok(!!(D.rules.flags || {})[r.slice(5)], where + ' leaves the ' + r.slice(5) + ' flag, which the rules define');
       else if (typeof r === 'string' && !r.startsWith('coins')) { const it = D.items[r]; if (!it) nameless(where + ' pays ' + r + ', which is not an item'); else ok(true, where + ' pays ' + it.name); }
     }
     for (const l of q.done || []) ok(!/undefined/.test(l), q.name + "'s last word names everything it says");
@@ -444,7 +448,7 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
     return m.dead ? c.S.ground.filter(g => g.x === m.x && g.y === m.y && g.diedAt == null) : null;
   };
   const rat = killDrops('rat', 'drops-rat');
-  ok(rat && rat.map(g => g.id).sort().join(',') === 'rat_meat_raw,rat_pelt', 'rat dropped its own meat and pelt (2026-10-04): ' + (rat || []).map(g => g.id).join(','));
+  ok(rat && rat.map(g => g.id).sort().join(',') === 'bones,rat_meat_raw,rat_pelt', 'rat dropped its own meat and pelt (2026-10-04), and bones (2026-10-07): ' + (rat || []).map(g => g.id).join(','));
   const ld = killDrops('bandit_leader', 'drops-leader'), ids = (ld || []).map(g => g.id);
   ok(ld && ['sword_t3', 'helmet_t2', 'body_t2'].every(i => ids.includes(i)), 'bandit leader dropped the gear he wears: ' + ids.join(','));
   ok(ld && ld.some(g => g.id === 'coins' && g.n === 27), 'bandit leader dropped his purse (27 GOLD)');

@@ -149,7 +149,7 @@ def holdings(addr):
             if p.get('creator') not in (ASHVALE, YOURFIRST) or p.get('held') is False or (p.get('owner') and p.get('owner') != addr): continue
             if p.get('creator') == YOURFIRST:
                 ct = str(p.get('contenttype') or p.get('content_type') or '')
-                if not _flagged(p.get('json') or {}) or (ct and ct != 'application/json'): continue
+                if not _flagged(p.get('json') or {}) or (ct and ct not in ('application/json', 'image/png')): continue
             j = p.get('json') or {}
             k = j.get('key') or next((a.get('value') for a in j.get('attributes', []) if a.get('trait_type') in ('Key', 'key')), None)
             if k: out[k] = out.get(k, 0) + 1
