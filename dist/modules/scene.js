@@ -193,6 +193,11 @@
           const bed = (fade(tx, ty) + fade(tx + 1, ty) + fade(tx, ty + 1) + fade(tx + 1, ty + 1)) / 4;
           const ws = map.waterSurf ? map.waterSurf(tx, ty) : null;   /* rivers and lakes stand at their own level, flat (2026-10-04: "the rivers are dry"; a hollow's water "follows the contour") */
           if (ws != null) return Math.max(wLevel, ws + 0.2);   /* one height for a whole lake: never the bed's */
+          /* a pond of the seeded land is a hollow dug below the world's water line, and its tiles are water exactly where the
+             ground is below that line: its skin IS the line, flat, meeting the shore where the ground crosses it. Riding the
+             bed (+0.6, capped at the old pond line) stepped the sheet tile by tile, floating at the rim and sunk in the middle
+             (2026-10-06: "fix this lake ... water floats / sinks", the pond at 270, 0). Drawn ponds keep their rule. */
+          if (!map.inPiece(tx, ty)) return wLevel;
           return Math.max(wLevel, Math.min(bed + 0.6, WATER_Y));
         };   /* the sea keeps the world's water line; rivers ride near their bed; ponds and wells stay at the old flat line, shallow and readable (2026-10-03: "the sea water looks bad") */
         const one = (cx, cy) => {

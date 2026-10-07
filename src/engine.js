@@ -430,7 +430,7 @@
       const projs = [];
       function entOf(id) { return typeof id === 'number' ? ents.get('m:' + id) : id === PID ? ents.get('p:' + id) : typeof id === 'string' && id.indexOf('n:') === 0 ? ents.get(id) : ents.get('r:' + id); }   /* n:<id> = an NPC fighting (the castle guard) */
       function onImpact(e, name) {
-        if (/chop|mine|fish|cook/.test(name)) { sfx(name === 'mine' ? 'mine' : name === 'chop' ? 'chop' : name === 'fish' ? 'splash' : 'sizzle'); return; }
+        if (/chop|mine|fish|cook/.test(name)) { sfx(name === 'mine' ? 'mine' : name === 'chop' ? 'chop' : name === 'fish' ? 'splash' : 'sizzle', e); return; }
         const rec = e.impacts.find(r => !r.fired); if (!rec) return;
         fireImpact(e, rec);
       }
@@ -444,14 +444,14 @@
         obj.position.copy(from); obj.userData.isProjectile = true; scene.add(obj);
         const left = Math.max(0.28, rec.delay * TICK / 1000 - (performance.now() - rec.t) / 1000);
         projs.push({ obj, from, tgt, t: 0, dur: rec.hit ? 0.3 : left, hit: rec.hit, src: rec.src, dst: rec.dst, kind: rec.cls, arrived: false });
-        sfx(rec.cls === 'ranged' ? 'bow' : 'cast');
+        sfx(rec.cls === 'ranged' ? 'bow' : 'cast', e);
       }
       function showHit(h) {
         const t = entOf(h.dst); if (!t) return;
         const el = hud.splat(h.dmg); t.splats.push({ el, t: performance.now(), k: t.splats.length });
         t.hpT = performance.now(); t.hp = h.hp; t.max = h.max;
         if (!t.oneShot && !t.dead && h.hp > 0) { if (h.blocked) playOnce(t, 'block'); else if (h.dmg > 0) playOnce(t, 'hit'); }
-        sfx(h.dmg > 0 ? 'hit' : 'miss');
+        sfx(h.dmg > 0 ? 'hit' : 'miss', t);
         if (h.dst === PID || h.src === PID) lastOpp = { uid: h.dst === PID ? h.src : h.dst, t: performance.now() };
         if (h.dst === PID) hud.refresh('orbs');
       }
@@ -525,7 +525,7 @@
             const sp = Math.max(1, 0.75 / (TICK / 1000 * 1.0));
             playOnce(src, anim, e.cls === 'melee' ? 1.15 : 1);
             src.impacts.push({ dst: e.dst, src: e.src, cls: e.cls, tier: e.ammo ? +String(e.ammo).slice(-1) : 1, spell: e.spell, delay: e.delay, t: now, hit: null, fired: false });
-            if (e.cls === 'melee') sfx('swing');
+            if (e.cls === 'melee') sfx('swing', src);
             void sp; break;
           }
           case 'hit': {
@@ -541,7 +541,7 @@
           }
           case 'die': {
             const t = e.mob != null ? ents.get('m:' + e.mob) : ents.get('p:' + e.p); if (!t) break;
-            t.dead = true; t.deadT = now; t.oneShot = true; t.H.play('death', { loop: false }); sfx(e.p === PID ? 'die' : 'mobdie');
+            t.dead = true; t.deadT = now; t.oneShot = true; t.H.play('death', { loop: false }); sfx(e.p === PID ? 'die' : 'mobdie', e.p === PID ? null : t);
             if (e.p === PID) setTimeout(() => hud.death(true), 700);
             break;
           }
@@ -568,14 +568,14 @@
           case 'zoneadd': zoneArrived(e, now); break;
           case 'chest': if (mine) { const c = ents.get('n:' + e.npc); if (c) c.H.play('open'); hud.openChest(); } break;   /* the town chest */
           case 'shopclose': if (mine) hud.closeShop(); break;
-          case 'mobeat': { const t = ents.get('m:' + e.mob); if (t && !t.dead) { playOnce(t, 'eat'); sfx('eat'); } break; }
+          case 'mobeat': { const t = ents.get('m:' + e.mob); if (t && !t.dead) { playOnce(t, 'eat'); sfx('eat', t); } break; }
           case 'tailor': if (mine) { faceNpc(e.npc); openWardrobe(false); } break;
           case 'look': if (mine) { if (me.look && myEnt.H.setOutfit) myEnt.H.setOutfit(me.look); netGear(); } break;
           case 'dialog': if (mine) { hud.dialog(e.name, e.lines); faceNpc(e.npc); sfx('click'); } break;
           case 'weather': if (e.zone === core.weatherZone(zoneHere())) { if (e.say) hud.chat(e.say, 'sys'); showWeather(); } break;
-          case 'fire': addFire(e.fire, e.x, e.y); if (e.p === PID || !e.p) sfx('sizzle'); break;
+          case 'fire': addFire(e.fire, e.x, e.y); if (e.p === PID || !e.p) sfx('sizzle', e.p === PID ? null : { x: e.x, y: e.y }); break;
           case 'fireout': removeFire(e.fire); break;
-          case 'fx': { const t = ents.get('m:' + e.mob); if (!t) break; t.fx = t.fx || {}; t.fx[e.fx] = 1; applyTint(t); const el = hud.fxSplat(e.fx); if (el) t.splats.push({ el, t: performance.now(), k: t.splats.length }); if (e.fx === 'freeze') sfx('freeze'); break; }
+          case 'fx': { const t = ents.get('m:' + e.mob); if (!t) break; t.fx = t.fx || {}; t.fx[e.fx] = 1; applyTint(t); const el = hud.fxSplat(e.fx); if (el) t.splats.push({ el, t: performance.now(), k: t.splats.length }); if (e.fx === 'freeze') sfx('freeze', t); break; }
           case 'fxend': { const t = ents.get('m:' + e.mob); if (!t || !t.fx) break; delete t.fx[e.fx]; applyTint(t); break; }
           case 'deplete': for (const r of regions) if (r.built) r.built.setDepleted(e.node, true); if (e.forever && mine) fellTell(e.x, e.y); break;
           case 'regrow': for (const r of regions) if (r.built) r.built.setDepleted(e.node, false); break;
@@ -674,10 +674,20 @@
 
       /* ---------- sound: tiny WebAudio synth (no files) */
       let ac = null;
-      function sfx(name) {
+      /* 2026-10-06: "Sounds should not be heard everywhere they should only be heard in the surrounding 15 tiles."
+         A sound with a place (an entity, or a tile {x, y}) plays at full volume within HEAR_FULL tiles of you, fades out to
+         silence at HEAR tiles and is not played beyond; your own sounds (no place) always play. */
+      const HEAR = 15, HEAR_FULL = 8;
+      function sfx(name, at) {
         if (!settings.sound) return;
+        let vol = 1;
+        if (at && myEnt) {
+          const P0 = myEnt.root.position, px = at.root ? at.root.position.x : at.x + 0.5, pz = at.root ? at.root.position.z : at.y + 0.5;
+          const d = Math.hypot(px - P0.x, pz - P0.z); if (d > HEAR) return;
+          vol = d <= HEAR_FULL ? 1 : 1 - (d - HEAR_FULL) / (HEAR - HEAR_FULL);
+        }
         try { if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch (e) { return; }
-        const t = ac.currentTime, out = ac.createGain(); out.gain.value = 0.22; out.connect(ac.destination);
+        const t = ac.currentTime, out = ac.createGain(); out.gain.value = 0.22 * vol; out.connect(ac.destination);
         const tone = (f, d, type, v, f2, at) => { const o = ac.createOscillator(), g = ac.createGain(); o.type = type || 'sine'; o.frequency.setValueAtTime(f, t + (at || 0)); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + (at || 0) + d); g.gain.setValueAtTime(v || 0.5, t + (at || 0)); g.gain.exponentialRampToValueAtTime(0.001, t + (at || 0) + d); o.connect(g); g.connect(out); o.start(t + (at || 0)); o.stop(t + (at || 0) + d + 0.02); };
         const noise = (d, freq, v, q2) => { const n = ac.createBufferSource(), b = ac.createBuffer(1, Math.max(1, ac.sampleRate * d | 0), ac.sampleRate), a = b.getChannelData(0); for (let i = 0; i < a.length; i++) a[i] = Math.random() * 2 - 1; n.buffer = b; const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q2 || 1; const g = ac.createGain(); g.gain.setValueAtTime(v || 0.6, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); n.connect(f); f.connect(g); g.connect(out); n.start(t); };
         switch (name) {
@@ -1952,6 +1962,7 @@
         chest: { state: chestState, take: chestTake, store: chestStore, promise: paid => { const L = ledgerFor(walletState.address); for (const k in paid) L.pend[k] = (L.pend[k] || 0) + paid[k]; ledgerSave(); },
           paidForTest: paid => { const L = ledgerFor(walletState.address); for (const k in paid) { const toChest = Math.min(paid[k], L.lchest[k] || 0); L.lchest[k] -= toChest; L.pchest[k] = (L.pchest[k] || 0) + toChest; L.pend[k] = (L.pend[k] || 0) + paid[k] - toChest; } ledgerSave(); } },   /* tests */ trip: () => TRIP && TRIP.state(), trade: () => trade, peers: () => Array.from(remotes.values()).map(r => r.from), _remIds: () => Array.from(remotes.keys()), optionsAt: (cx, cy) => { const L = []; for (const t of targetsAt(cx, cy)) for (const o of optionsFor(t)) L.push(o.html.replace(/<[^>]+>/g, '')); return L; }, _remAnim: () => JSON.stringify(Array.from(remotes.values()).map(r => [r.anim, r.buf.length, r.buf.length && r.buf[r.buf.length - 1].a])),
         stop() { stopped = true; },
+        sfxAt: (n, at) => sfx(n, at),
         versionCheck, oneDevice: () => ({ sid: ONE.sid, at: ONE.at, room: !!ONE.room, addr: ONE.addr, stopped, version: VER.mine, told: VER.told })
       };
       void _handle;
