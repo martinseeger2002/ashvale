@@ -161,7 +161,7 @@
      "talk": [
       "Peace be with you, {name}. Mind the pews - the left one rocks.",
       "I am Father Aldous. This little church is all Ashvale has, but Saltmere had a chapel once, and it has stood empty since the fever years.",
-      "I mean to light its altar again. For that I need the old chapel's blessing-roll, the list of every hand that was ever blessed there. Symmetry keeps the village's old things in her house by the lake.",
+      "I mean to light its altar again. For that I need the old chapel's blessing-roll, the list of every hand that was ever blessed there. Symmetry keeps the village's old things in the house with the green roof, west of the square.",
       "Ask her for it, would you? She will know the one I mean: a grey scroll with a salt stain."
      ],
      "say": [
@@ -170,7 +170,7 @@
       "Tell Father Aldous it is on the road, not lost. I would never lose anything. I only move it where it looks right."
      ],
      "progress": [
-      "Symmetry lives by the lake, south of the well. Ask her about the blessing-roll."
+      "Symmetry is in the house with the green roof, west of the square. Ask her about the blessing-roll."
      ],
      "complete": [
       "With Odric? Then it has been on the road for a month. Odric does the trip to Saltmere in four days.",
