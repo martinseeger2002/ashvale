@@ -49,7 +49,8 @@ def db():
             txid text, piece text, err text, at real, done_at real, req text);
         create table if not exists given(piece text primary key, addr text, item text, at real);
         create table if not exists felled(x integer, y integer, by text, at real, primary key(x, y));   -- trees felled for good, shared (2026-10-05)
-        create table if not exists wheres(addr text primary key, x integer, y integer, at real);   -- where each player last stood, for the Atlas (2026-10-06)
+        create table if not exists wheres(addr text primary key, x integer, y integer, at real);
+        create table if not exists saves(addr text primary key, id integer, blob text, at real);   -- each player's whole game, packed (2026-10-07)   -- where each player last stood, for the Atlas (2026-10-06)
         create table if not exists drops(n integer primary key, addr text, item text, piece text, x integer, y integer, at real, taken_by text, taken_at real);
         create table if not exists ghosts(n integer primary key, addr text, item text, units integer, x integer, y integer, at real, left integer);   -- picked-up copies of drops somebody else already took (2026-10-06)""")
     for col in ('want', 'coll'):   # want: the exact piece (a pickup of a drop); coll: a quest reward's own collection
@@ -213,6 +214,33 @@ def handle_contacts(c, addr, msg):
         r = c.execute('select x, y, at from wheres where addr=?', (x,)).fetchone()
         if r and r['at'] > now - ONLINE: out.append([x, r['x'], r['y']])
     return {'t': 'friends', 'to': addr, 'q': str(msg.get('q') or '')[:12], 'f': out}
+# THE SAVE (2026-10-07: "the ashvale bank should hold game states ... and stats and the rest of the game state. That way,
+# anyone can login on their account from any device and being the exact same game state"). The game packs its whole save
+# (about 1 KB) and sends it in pieces ('sv' {id, i, n, d}: id = when it was saved, in ms); the Bank keeps the newest per address
+# and never reads inside it. 'ld?': the game, starting, asks for its own; the pieces go back to that address only ('ld').
+SV_PART = {}       # address -> {id, n, parts} while the pieces of one save come in (memory only)
+SV_MAX = 48        # pieces: 48 x 340 B - ten times the biggest save today
+def handle_save(c, addr, msg):
+    if msg.get('t') == 'sv':
+        try: sid, i, n, d = int(msg['id']), int(msg['i']), int(msg['n']), str(msg.get('d') or '')
+        except (KeyError, TypeError, ValueError): return None
+        if not (0 < n <= SV_MAX and 0 <= i < n and len(d) <= 400 and 0 < sid < 10**14): return None
+        cur = SV_PART.get(addr)
+        if not cur or cur['id'] != sid or cur['n'] != n: cur = SV_PART[addr] = {'id': sid, 'n': n, 'parts': {}}
+        cur['parts'][i] = d
+        if len(cur['parts']) < n: return None
+        SV_PART.pop(addr, None)
+        blob = ''.join(cur['parts'][k] for k in range(n))
+        old = c.execute('select id from saves where addr=?', (addr,)).fetchone()
+        if old and old['id'] >= sid: return None      # an older save arriving late never wins
+        c.execute('insert into saves values(?,?,?,?) on conflict(addr) do update set id=excluded.id, blob=excluded.blob, at=excluded.at', (addr, sid, blob, time.time())); c.commit()
+        return None
+    r = c.execute('select id, blob from saves where addr=?', (addr,)).fetchone()
+    log('LOAD?', addr, 'none' if not r else '%d B' % len(r['blob']))
+    if not r: return {'t': 'ld', 'to': addr, 'n': 0}
+    b, N = r['blob'], 340
+    parts = [b[k:k + N] for k in range(0, len(b), N)] or ['']
+    return [{'t': 'ld', 'to': addr, 'id': r['id'], 'i': k, 'n': len(parts), 'd': p} for k, p in enumerate(parts)]
 def handle(c, addr, msg):
     """-> reply dict (or a list of them). Queues jobs; never touches the chain itself."""
     if msg.get('t') == 'drop': handle_drop(c, addr, msg); return None
@@ -221,6 +249,7 @@ def handle(c, addr, msg):
     if msg.get('t') in ('fell', 'felled?'): return handle_felled(c, addr, msg)
     if msg.get('t') in ('here', 'where?'): return handle_where(c, addr, msg)
     if msg.get('t') in ('book', 'friends?'): return handle_contacts(c, addr, msg)
+    if msg.get('t') in ('sv', 'ld?'): return handle_save(c, addr, msg)
     rid = str(msg.get('id') or '')[:40]
     if not rid: return None
     old = c.execute('select paid from reqs where addr=? and id=?', (addr, rid)).fetchone()
@@ -419,7 +448,7 @@ def room_loop(stop):
                     if fr.evaluate("window.__bankClosed || null"): raise RuntimeError('room closed')
                     for m in fr.evaluate("window.__bankQ.splice(0)"):
                         d, f = m.get('data') or {}, m.get('from') or {}
-                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?'): continue
+                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'sv', 'ld?'): continue
                         if f.get('guest') or not f.get('address'): continue
                         try: rep = handle(c, f['address'], d)
                         except Exception: log('HANDLE ERROR', traceback.format_exc()[-400:]); rep = {'t': 'dep', 'id': d.get('id'), 'to': f['address'], 'ok': False, 'note': 'The bank hit an error; try again later.'}

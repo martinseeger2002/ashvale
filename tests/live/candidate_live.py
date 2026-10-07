@@ -2,7 +2,7 @@
 the arcade's registry lookup (/r/inscriptions) is answered with dist/registry.json as a newer version, unchanged modules
 keep their live ids (chain/modules.json), changed ones are served from dist/modules under fake ids. So the launcher, the
 baked loader, netretry and the engine run exactly as they will after the release, before anything is inscribed.
-  python3 tests/live/candidate_live.py [--save-far] [--js 'expression to print']
+  python3 tests/live/candidate_live.py [--save-far] [--as TAG] [--js 'expression to print']
 Exit 0 = booted with the candidate registry and no console errors."""
 import sys, os, json, hashlib, time
 os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', '/home/you/.cache/ms-playwright')
@@ -40,7 +40,18 @@ FAR = "localStorage.setItem('x', '1')"
 ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
 js = sys.argv[sys.argv.index('--js') + 1] if '--js' in sys.argv else None
 with sync_playwright() as p:
-    b = p.chromium.launch(args=ARGS); ctx = b.new_context(viewport={'width': 1100, 'height': 650}); pg = ctx.new_page(); errs = []
+    AS = sys.argv[sys.argv.index('--as') + 1] if '--as' in sys.argv else None   # --as TAG: signed in as that test account (never ashvale), not a guest
+    if AS:
+        sys.path.insert(0, os.path.join(HERE, 'tools')); from live_play import PlayerBrowser
+        PB = PlayerBrowser(AS); PB._p = p; PB.b = b = p.chromium.launch(args=ARGS)
+        ctx = b.new_context(viewport={'width': 1100, 'height': 650}, storage_state=PB.state); pg = ctx.new_page(); pg.on('dialog', lambda d: d.accept())
+        pg.goto('https://app.dogecoinarcade.com/join'); pg.wait_for_timeout(3000)
+        if pg.locator('#in-tag').count() and pg.locator('#in-tag').is_visible():
+            pw = json.load(open('/home/you/cartoon-toolkit/ghost-devs/secret/accounts.json'))[AS]['password']
+            pg.fill('#in-tag', AS); pg.fill('#in-pw', pw); pg.click('#enter'); pg.wait_for_timeout(8000)
+        errs = []
+    else:
+        b = p.chromium.launch(args=ARGS); ctx = b.new_context(viewport={'width': 1100, 'height': 650}); pg = ctx.new_page(); errs = []
     pg.on('console', lambda m: m.type == 'error' and 'cloudflareinsights' not in m.text and errs.append(m.text[:200]))
     def lookup(route):
         r = route.fetch(); L = r.json()

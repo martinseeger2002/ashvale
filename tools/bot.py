@@ -22,6 +22,20 @@ LOG, BUGS = os.path.join(HERE, 'chain', 'bot.log'), os.path.join(HERE, 'handoff'
 D = lambda n: json.load(open(os.path.join(HERE, 'data', n + '.json')))['data']
 QUESTS, MONS, ITEMS, SHOPS = D('quests')['quests'], D('monsters')['monsters'], D('items')['items'], D('shops')
 SHOPS = SHOPS.get('shops', SHOPS)
+def node_spots(item):
+    """every place in the zone maps that gives `item` (rules.nodes letter -> world x, y = map + origin): where to go when
+    nothing gives it near him (2026-10-07: iron ore looked for at Saltmere, its only rocks are in the village)"""
+    letters = [k for k, n in (D('rules').get('nodes') or {}).items() if n.get('item') == item]
+    out = []
+    for z in ('village', 'whisperwood', 'saltmere'):
+        try: Z = D('zone.' + z)
+        except Exception: continue
+        ox, oy = (Z.get('origin') or [0, 0])[:2]
+        for y, row in enumerate(Z.get('map') or Z.get('tiles') or []):
+            if not isinstance(row, str): continue
+            for x, c in enumerate(row):
+                if c in letters: out.append((x + ox, y + oy))
+    return out
 def spawns_of(key):
     out = []
     for z in ('village', 'whisperwood', 'saltmere'):
@@ -258,11 +272,16 @@ class Bot:
         log('taking the portal to', w['there'], '(%d tiles away on foot)' % w['far'])
         return bool(self.r("return await travel(%r)" % w['there']))
     def walk(self, x, y, tries=8):
-        self.attune_here()
-        self.portal_hop(x, y)
+        t0, a0 = time.time(), self.st().get('at')
+        self.attune_here(); t1 = time.time()
+        hop = self.portal_hop(x, y); t2, a2 = time.time(), self.st().get('at')
+        ok = False
         for _ in range(tries):
-            if self.r("return await walkTo(%d, %d, 60000)" % (x, y)): self.attune_here(); return True
-        return False
+            if self.r("return await walkTo(%d, %d, 60000)" % (x, y)): self.attune_here(); ok = True; break
+        if time.time() - t0 > 120:   # where long trips go (2026-10-07: village -> Saltmere took 8-9 minutes, the other way 2)
+            log('slow walk %s -> %s: %ds attuning, %ds portal (%s, landed at %s), %ds on foot, burden %s, energy %s, %s' % (
+                a0, [x, y], t1 - t0, t2 - t1, hop, a2, time.time() - t2, self.r("return ASH.me.burden"), self.r("return ASH.me.energy"), 'arrived' if ok else 'did not arrive'))
+        return ok
     def chest_take_all(self, keys):
         self.r("await talk('chest'); return 1")
         return self.r("const c = ASH.chest.state().chest, got = {}; for (const k of %s) if (c[k]) { ASH.chest.take(k, c[k]); got[k] = c[k]; } return got;" % json.dumps(list(keys)))
@@ -284,7 +303,8 @@ class Bot:
         for qid, q in qs.items():
             Q = QUESTS.get(qid)
             if not Q or q.get('step', 1) > len(Q['steps']): continue
-            for st in Q['steps'][q.get('step', 1) - 1:]:
+            # the step he is on only: a later step's 12 copper ore hoarded from now on overloaded him (2026-10-07)
+            for st in Q['steps'][q.get('step', 1) - 1:q.get('step', 1)]:
                 g = st.get('goal') or {}
                 for key in ('bring', 'with', 'cook'):
                     if g.get(key): out.add(g[key])
@@ -351,6 +371,13 @@ class Bot:
             src['spots'] = list(self.SHRIMP); self.walk(self.SHRIMP[0][0], self.SHRIMP[0][1] + 1, 4)
         if src['skill'] != 'fishing':
             src['spots'] = self.r(LIVE_SPOTS_JS % (item, 90)) or []
+            known = node_spots(item)
+            if not src['spots'] and known and src.get('level', 0) >= src.get('req', 1):
+                at = self.st().get('at') or [0, 0]
+                k = min(known, key=lambda q: max(abs(q[0] - at[0]), abs(q[1] - at[1])))
+                log('no %s near here: going to the %s rocks/trees at %s' % (item, item, list(k)))
+                self.walk(k[0], k[1] + 1, 6)
+                src['spots'] = self.r(LIVE_SPOTS_JS % (item, 90)) or [list(q) for q in known]
         if src.get('level', 0) < src.get('req', 1):
             self.skill_gap[item] = (src['skill'], src['req']); self.mem.save(); return have
         if item in self.skill_gap: del self.skill_gap[item]; self.mem.save()
@@ -506,6 +533,7 @@ class Bot:
                      "if (C[k] > 0 && (k === 'coins' || d.edible || d.eq || d.tool || %s.includes(k))) { ASH.chest.take(k, C[k]); got[k] = C[k]; await wait(300); } } return got" % json.dumps(sorted(self.quest_wants()))) or {}
         self.unpacked = True
         if got: log('took from the chest', got); self.upgrade()
+        self.lighten()   # 2026-10-07: 12 copper ore (24 kg) carried round for an hour, every trip at half speed
     def prepare(self):
         """before quests: a weapon on, and food in the bag -- earned from rats when it has nothing"""
         self.unpack(); s = self.st()
@@ -631,7 +659,7 @@ class Bot:
         food to cook, tools and anything a quest wants"""
         self.upgrade()
         self.food_surplus()
-        keep = json.dumps(sorted(WANTED))
+        keep = json.dumps(sorted(self.quest_wants()))   # not every quest's wish list (WANTED): ore piled up to overloaded
         loose = self.r("const keep = new Set(%s), seen = new Set(), out = {}; for (const q of ASH.me.inv) { if (!q) continue; const d = ASH.core.item(q.id) || {}; "
                        "if (d.tool && !seen.has(q.id)) { seen.add(q.id); continue; } "   # one of each tool: spare nets took 2 slots (2026-10-07)
                        "if (keep.has(q.id) || d.edible || d.cooks || d.skill || q.id === 'coins') continue; out[q.id] = (out[q.id] || 0) + (q.n || 1); } return out" % keep) or {}
@@ -652,7 +680,17 @@ class Bot:
                 const w = (d.weight || 0) * (q.n || 1); if (w > bw) { bw = w; best = [q.id, q.n || 1]; } }
               return best""" % wanted)
             if not k: log('overburdened, and nothing left to put away'); return
-            self.r("await talk('chest'); ASH.chest.store(%r, %d); return 1" % (k[0], k[1])); log('too heavy to run: put %d %s in the chest' % (k[1], k[0]))
+            at = self.st().get('at') or [0, 0]
+            if max(abs(at[0] - 24), abs(at[1] - 53)) <= 60:   # the only chest is by Ashvale's well
+                self.r("await talk('chest'); ASH.chest.store(%r, %d); return 1" % (k[0], k[1])); log('too heavy to run: put %d %s in the chest' % (k[1], k[0])); continue
+            # far from it (Saltmere is 440 tiles away): sell it at the nearest general store, else leave it on the ground
+            keeper = min(('tam', 'bela'), key=lambda n: (lambda q: max(abs(q[0] - at[0]), abs(q[1] - at[1])) if q else 1e9)(self.npc(n)))
+            if self.r("return await sell(%r, %r, %d)" % (keeper, k[0], k[1])) and not self.r("return bag()[%r] || 0" % k[0]):
+                log('too heavy to run: sold %d %s to %s' % (k[1], k[0], keeper)); continue
+            self.r("""const i = ASH.me.inv.findIndex(q => q && q.id === %r); if (i < 0) return 0; ASH.core.cmd('me', { c: 'drop', slot: i }); await wait(800);
+                      window.__untakeable = window.__untakeable || new Set();
+                      for (const g of ASH.core.S.ground) if (g.id === %r && g.x === ASH.me.x && g.y === ASH.me.y) window.__untakeable.add(g.uid); return 1""" % (k[0], k[0]))
+            log('too heavy to run, far from the chest and no one buys it: left %d %s on the ground' % (k[1], k[0]))
     def best_armour(self):
         """each armour slot: the best piece the armoury sells that his levels allow, if it beats what he wears and he can
         afford it with 15 GOLD to spare"""
@@ -1013,6 +1051,7 @@ class Bot:
                 if not hasattr(self, 'absent'): self.absent = {}
                 if self.beyond_bag(G0['kill']): return False
         log('=== quest', Q['name']); self.current_qid = qid
+        if self.r("return ASH.me.burden || 0"): self.lighten()   # a trip on half-speed legs costs minutes
         self.r("window.__keepFood = %s; return 1" % json.dumps(sorted(self.quest_wants() - {'bread'})))
         self.fetch_pile()   # what a death left on the ground comes back before anything else (cheap when there is none)
         g = self.npc(giver)

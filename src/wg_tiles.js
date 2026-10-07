@@ -58,7 +58,7 @@
       }
       if (h < WATER - 0.05) return pd < 0 && ctx.bridgeDist(f, cx, cy) < 0 ? 'B' : '~';   /* a bridge: wg_paths lays one only across a stream */
       if (TF[3] > 0.1) return '^';
-      if (pd < 0) return 'p';
+      if (pd < 0) return ctx.roadDist && ctx.roadDist(f, cx, cy) < 0 ? 'c' : 'p';   /* 'c': cobbles on a road between towns */
       if (TF[2] > 0.5 || (TF[2] > 0.3 && h < WATER + 0.3)) {
         /* the open desert: sand with a saguaro here and there (2026-10-06), never on a beach or a path */
         if (CMT && CMT.cactus && pd >= CLEAR && ctx.climOf(TF[15], TF[14]) === 3 && g.u01(g.hash3(gx, gy, (f * 7919) ^ ctx.S.tl ^ 0x5a17)) < CMT.cactus) { FOREST_HIT = true; return 'U'; }
