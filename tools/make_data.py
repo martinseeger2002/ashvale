@@ -224,12 +224,14 @@ items.update({
     "timber_wolf_pelt": {"name": "Timber wolf pelt", "kind": "resource", "value": 45},
     "lizard_skin": {"name": "Sand lizard skin", "kind": "resource", "value": 12},
 })
-# hats and capes (cosmetic gear, sold by Wren the tailor; the models override the outfit's hat/cape while worn)
+# hats, capes and robes (cosmetic gear, sold by Wren the tailor; worn they override the outfit's hat/cape/robe)
 for k, nm, v in [("cap", "Red cap", 15), ("bandana", "Bandana", 15), ("hood", "Hood", 25), ("feather", "Feathered cap", 40),
                  ("wizard", "Wizard hat", 60), ("crown", "Gold crown", 1000)]:
     items["hat_" + k] = {"name": nm, "kind": "hat", "eq": "head", "value": v, "defence": 0}
 for k, v in [("red", 50), ("blue", 50), ("green", 50), ("purple", 50), ("black", 50), ("gold", 250)]:
     items["cape_" + k] = {"name": k.capitalize() + " cape", "kind": "cape", "eq": "cape", "value": v}
+for k, v in [("red", 40), ("blue", 40), ("green", 40), ("purple", 40), ("black", 40), ("gold", 200), ("linen", 35)]:
+    items["robe_" + k] = {"name": ("Linen robe" if k == "linen" else k.capitalize() + " robe"), "kind": "robe", "eq": "body", "value": v}
 # 2026-10-06: "Inscribe the headdress call it big chief headdress and send it to @Apple. It should be a one of one. There is
 # no way to earn it or buy it." No shop stocks it and no monster drops it; Edition "1 of 1" keeps shops from buying it and the
 # @ashvale Bank from ever minting another (tools/bank/bank.py unique()).
@@ -261,7 +263,7 @@ for t, (nm, carry, w, v) in enumerate([("Leather satchel", 10, 0.8, 40), ("Canva
 # kiteshield 4, helm 2, platebody 12, chainbody 9, platelegs 8, hats 0.2, capes 0.8, packs 0.8-3.5.
 # Metal gear x tier factor: bronze 1.1, iron 1.0, steel 1.0, mithril 0.6, adamant 1.05.
 KG_KIND = {"dagger": 0.4, "sword": 1.2, "longsword": 1.6, "mace": 1.8, "bow": 0.8, "staff": 1.5, "shield": 4, "helmet": 2,
-           "body": 12, "chainbody": 9, "legs": 8, "hat": 0.2, "cape": 0.8, "coins": 0.002, "arrows": 0.02, "ring": 0.01}
+           "body": 12, "chainbody": 9, "legs": 8, "hat": 0.2, "cape": 0.8, "robe": 1.2, "coins": 0.002, "arrows": 0.02, "ring": 0.01}
 KG_ID = {"potion": 0.3, "bread": 0.4, "shrimp": 0.1, "trout": 0.4, "salmon": 1.0, "lobster": 0.7, "logs": 3, "oak_logs": 3.5,
          "willow_logs": 3, "maple_logs": 3.5, "yew_logs": 4, "pelt": 1.5, "rat_pelt": 0.3, "hatchet": 1.2, "pickaxe": 2.2, "net": 0.5,
          "fishing_rod": 0.4, "lobster_pot": 1.5, "tinderbox": 0.1, "ashvale_stone": 0.2, "saltmere_stone": 0.2, "castle_stone": 0.2, "chicken": 0.5, "chicken_cooked": 0.5,
@@ -287,12 +289,12 @@ CAT = {  # internal kind -> (category, subcategory)
     "sword": ("weapon", "sword"), "dagger": ("weapon", "dagger"), "longsword": ("weapon", "longsword"), "mace": ("weapon", "mace"),
     "bow": ("weapon", "bow"), "staff": ("weapon", "staff"), "helmet": ("armour", "helmet"), "body": ("armour", "platebody"),
     "chainbody": ("armour", "chainbody"), "legs": ("armour", "platelegs"), "shield": ("armour", "kiteshield"), "torch": ("armour", "torch"),
-    "arrows": ("ammo", "arrow"), "coins": ("currency", "gold"), "hat": ("cosmetic", "hat"), "cape": ("cosmetic", "cape"),
+    "arrows": ("ammo", "arrow"), "coins": ("currency", "gold"), "hat": ("cosmetic", "hat"), "cape": ("cosmetic", "cape"), "robe": ("cosmetic", "robe"),
     "pack": ("pack", "pack"), "ring": ("jewellery", "ring")}
 SUB_OF_ID = {"spider_silk": "silk", "ashvale_stone": "stone", "saltmere_stone": "stone", "castle_stone": "stone", "tinderbox": "tinderbox", "hatchet": "hatchet", "pickaxe": "pickaxe", "net": "net", "fishing_rod": "rod", "lobster_pot": "pot", "bread": "bread", "coal": "coal"}
 MODEL = {"weapon": lambda sub, k: "gear." + sub, "armour": lambda sub, k: "gear." + {"kiteshield": "shield"}.get(sub, sub),
          "ammo": lambda sub, k: "gear.arrows", "pack": lambda sub, k: "gear.pack", "currency": lambda sub, k: "item.coins",
-         "cosmetic": lambda sub, k: "cloth." + (k if sub == "hat" else "cape"),
+         "cosmetic": lambda sub, k: "cloth." + (k if sub == "hat" else "robe" if sub == "robe" else "cape"),
          "tool": lambda sub, k: "item.stone" if sub == "stone" else "gear." + {"rod": "fishing_rod", "pot": "lobster_pot"}.get(sub, sub),
          "food": lambda sub, k: "item." + ("chicken" if sub == "meat" else "bread" if sub == "bread" else "lobster" if k.startswith("lobster") else "shrimp" if k.startswith("shrimp") else "fish"),
          "potion": lambda sub, k: "item.potion", "jewellery": lambda sub, k: "item.ring",
@@ -472,8 +474,9 @@ module('shops', 3, {"currency": "coins", "shops": {
                 "buys": "any", "buyRate": 40, "sellRate": 100,
                 "greet": "Bread, potions and good honest tools. What'll it be?"},
     "tailor": {"name": "Wren's Tailoring", "keeper": "wren", "stock": ["hat_cap", "hat_bandana", "hat_hood", "hat_feather", "hat_wizard",
-               "cape_red", "cape_blue", "cape_green", "cape_purple", "cape_black", "cape_gold", "hat_crown"],
-               "buys": ["cosmetic"], "buyRate": 50, "sellRate": 100, "greet": "Hats and capes, stitched this week. The fitting room is free."},
+               "cape_red", "cape_blue", "cape_green", "cape_purple", "cape_black", "cape_gold", "hat_crown",
+               "robe_linen", "robe_red", "robe_blue", "robe_green", "robe_purple", "robe_black", "robe_gold"],
+               "buys": ["cosmetic"], "buyRate": 50, "sellRate": 100, "greet": "Hats, capes and robes, stitched this week. Right-click to trade."},
     "armoury": {"name": "Garrick's Armoury", "keeper": "garrick", "stock": armoury_stock,
                 "buys": ["weapon", "armour", "ammo", "pack"],
                 "buyRate": 60, "sellRate": 100,
@@ -1556,11 +1559,11 @@ module('rules', 3, {
               "skills": ["attack", "strength", "defence", "ranged", "magic", "hitpoints", "dexterity", "speechcraft"]},
     "items": {
         "categories": {"weapon": ["sword", "dagger", "longsword", "mace", "bow", "staff"], "armour": ["helmet", "platebody", "chainbody", "platelegs", "kiteshield", "torch"],
-                       "tool": ["hatchet", "pickaxe", "net", "rod", "pot", "tinderbox", "stone"], "pack": ["pack"], "cosmetic": ["hat", "cape"],
+                       "tool": ["hatchet", "pickaxe", "net", "rod", "pot", "tinderbox", "stone"], "pack": ["pack"], "cosmetic": ["hat", "cape", "robe"],
                        "resource": ["logs", "ore", "coal", "bar", "pelt", "fish", "mushroom", "meat"], "food": ["bread", "fish", "mushroom", "meat"], "potion": ["healing"],
                        "ammo": ["arrow"], "currency": ["gold"], "jewellery": ["ring"]},
         "slots": {"weapon": "weapon", "armour/helmet": "head", "armour/platebody": "body", "armour/chainbody": "body", "armour/platelegs": "legs",
-                  "armour/kiteshield": "shield", "armour/torch": "shield", "ammo": "ammo", "pack": "pack", "cosmetic/hat": "head", "cosmetic/cape": "cape", "jewellery/ring": "ring"},
+                  "armour/kiteshield": "shield", "armour/torch": "shield", "ammo": "ammo", "pack": "pack", "cosmetic/hat": "head", "cosmetic/cape": "cape", "cosmetic/robe": "body", "jewellery/ring": "ring"},
         "weapons": {"sword": {"class": "melee", "anim": "slash"}, "dagger": {"class": "melee", "anim": "stab"}, "longsword": {"class": "melee", "anim": "slash"},
                     "mace": {"class": "melee", "anim": "crush"}, "bow": {"class": "ranged", "anim": "bow", "twoHanded": True}, "staff": {"class": "magic", "anim": "cast"}},
         "tools": {"hatchet": "woodcutting", "pickaxe": "mining", "net": "fishing", "rod": "fishing", "pot": "fishing", "tinderbox": "firemaking"},

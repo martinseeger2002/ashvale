@@ -22,6 +22,11 @@
     "robe",
     "torch"
    ],
+   "cosmetic": [
+    "hat",
+    "cape",
+    "robe"
+   ],
    "resource": [
     "logs",
     "ore",
@@ -35,7 +40,8 @@
    ]
   },
   "slots": {
-   "armour/robe": "body"
+   "armour/robe": "body",
+   "cosmetic/robe": "body"
   },
   "traits": {
    "Prayer XP": [

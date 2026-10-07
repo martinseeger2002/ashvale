@@ -19,8 +19,9 @@
    H (a character):
      H.object                      THREE.Group, origin at the feet, facing +Z; scale it freely (nothing assumes world size)
      H.height                      head-top height in the object's parent space (includes H.object.scale)
-     H.setGear({head, body, legs, weapon, shield, ammo, cape, pack})   item ids or null; the bow is two-handed (hides the shield);
-                                   head may be a helmet OR a hat item (hat_cap...), cape a cape item (cape_red...)
+                                   H.setGear({head, body, legs, weapon, shield, ammo, cape, pack})   item ids or null; the bow is two-handed (hides the shield);
+                                   head may be a helmet OR a hat item (hat_cap...), cape a cape item (cape_red...),
+                                   body a plate OR a cosmetic robe (robe_red...) that paints the shirt and pants as a robe
      H.setTool(id|null)            hatchet | pickaxe | net shown in hand instead of the weapon while skilling
      H.setOutfit(patch)            change or add outfit parts (hair, beard, hat, shirt, pants, boots, gloves, belt, cape...);
                                    H.outfit reads it back (save it with the player). M.outfitStyles / M.palette list choices
@@ -241,9 +242,10 @@ export function createModels(THREE, opts) {
       const fem = outfit.body === 'female' ? 1 : 0;
       if (fem !== V0.fem) { V0.fem = fem; placeJoints(); root.scale.setScalar(ev(body.rootScale || 1, V0)); joints.lift.p0 = J.hips.position.y; }
       const O = Object.assign({}, outfit);
-      const hatI = info(gear.head), capeI = info(gear.cape);
+      const hatI = info(gear.head), capeI = info(gear.cape), bodyI = info(gear.body);
       if (hatI.slot === 'hat') O.hat = { style: hatI.part.style, color: hatI.color };
       if (capeI.slot === 'cape') O.cape = capeI.color;
+      if (bodyI.slot === 'robe') { O.shirt = { style: 'robe', color: bodyI.color }; O.pants = { style: 'robe', color: bodyI.color }; }
       const C = { skin: O.skin, hair: O.hairColor, beard: O.beardColor || O.hairColor, eyes: O.eyes, brow: O.hair === 'bald' ? shade(O.skin, 0.75) : O.hairColor };
       /* what's worn decides what's hidden */
       const pieces = [];   /* [part, colour] */

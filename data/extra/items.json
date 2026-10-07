@@ -95,6 +95,90 @@
     "copies": 25,
     "key": "monk_robe"
    }
+  },
+  "robe_linen": {
+   "name": "Linen robe",
+   "description": "Linen robe, cosmetic robe. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "cosmetic",
+   "subcategory": "robe",
+   "weight": 1200,
+   "model": "cloth.robe",
+   "value": 35,
+   "attributes": []
+  },
+  "robe_red": {
+   "name": "Red robe",
+   "description": "Red robe, cosmetic robe. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "cosmetic",
+   "subcategory": "robe",
+   "weight": 1200,
+   "model": "cloth.robe",
+   "value": 40,
+   "attributes": []
+  },
+  "robe_blue": {
+   "name": "Blue robe",
+   "description": "Blue robe, cosmetic robe. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "cosmetic",
+   "subcategory": "robe",
+   "weight": 1200,
+   "model": "cloth.robe",
+   "value": 40,
+   "attributes": []
+  },
+  "robe_green": {
+   "name": "Green robe",
+   "description": "Green robe, cosmetic robe. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "cosmetic",
+   "subcategory": "robe",
+   "weight": 1200,
+   "model": "cloth.robe",
+   "value": 40,
+   "attributes": []
+  },
+  "robe_purple": {
+   "name": "Purple robe",
+   "description": "Purple robe, cosmetic robe. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "cosmetic",
+   "subcategory": "robe",
+   "weight": 1200,
+   "model": "cloth.robe",
+   "value": 40,
+   "attributes": []
+  },
+  "robe_black": {
+   "name": "Black robe",
+   "description": "Black robe, cosmetic robe. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "cosmetic",
+   "subcategory": "robe",
+   "weight": 1200,
+   "model": "cloth.robe",
+   "value": 40,
+   "attributes": []
+  },
+  "robe_gold": {
+   "name": "Gold robe",
+   "description": "Gold robe, cosmetic robe. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "cosmetic",
+   "subcategory": "robe",
+   "weight": 1200,
+   "model": "cloth.robe",
+   "value": 200,
+   "attributes": []
   }
  }
 }

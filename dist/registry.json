@@ -1109,6 +1109,12 @@
     "v": 1,
     "api": 1,
     "kind": "json"
+   },
+   "cloth.robe": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
    }
   }
  },

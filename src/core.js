@@ -417,7 +417,8 @@
       if (!l || typeof l !== 'object') return null; const o = {};
       for (const k of LOOK_KEYS) { if (!(k in l)) continue; const v = l[k];
         if (k === 'body') { if (v === 'male' || v === 'female') o.body = v; continue; }   /* the operator: male or female */
-        if (v && typeof v === 'object') { const st = cleanVal(v.style), co = cleanVal(v.color); if (st !== undefined && co !== undefined) o[k] = { style: st, color: co }; }
+        if (k === 'hat' || k === 'cape') continue;   /* hats and capes are worn items from Wren's shop, not a free look */
+        if (v && typeof v === 'object') { let st = cleanVal(v.style), co = cleanVal(v.color); if ((k === 'shirt' || k === 'pants') && st === 'robe') st = k === 'shirt' ? 'tunic' : 'trousers'; if (st !== undefined && co !== undefined) o[k] = { style: st, color: co }; }
         else { const c = cleanVal(v); if (c !== undefined) o[k] = c; } }
       return o;
     }
