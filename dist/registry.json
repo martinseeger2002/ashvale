@@ -696,6 +696,12 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.hat_featherband": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.hat_hood": {
     "id": null,
     "v": 1,

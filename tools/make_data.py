@@ -176,6 +176,10 @@ for k, v in [("red", 50), ("blue", 50), ("green", 50), ("purple", 50), ("black",
 # @ashvale Bank from ever minting another (tools/bank/bank.py unique()).
 items["hat_bigchief"] = {"name": "Big Chief Headdress", "kind": "hat", "eq": "head", "value": 10000, "defence": 0, "edition": "1 of 1",
                          "nft": {"copies": 1, "key": "hat_bigchief"}}
+# 2026-10-06: "Make a 20 of the headbands. It should be a collection of 20 only. Send all to @Apple." Like the headdress:
+# not sold, not dropped; Edition 20 keeps shops from buying it and the Bank from minting a 21st.
+items["hat_featherband"] = {"name": "Feather Headband", "kind": "hat", "eq": "head", "value": 1500, "defence": 0, "edition": "20",
+                            "nft": {"copies": 20, "key": "hat_featherband"}}
 # packs (worn on the back, eq 'pack'): add carry capacity, never slots (28 stay 28). t4-t5 only drop. No nft key yet
 # (the operator decides what gets minted).
 for t, (nm, carry, w, v) in enumerate([("Leather satchel", 10, 0.8, 40), ("Canvas pack", 20, 1.5, 150), ("Reinforced pack", 35, 2.5, 500),

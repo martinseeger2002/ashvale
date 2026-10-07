@@ -469,8 +469,8 @@ class Bot:
         zone has stood empty for rules.respawn.emptyTicks (30 s) and someone walks in again, or after 20 minutes with
         nobody near its spot -- so standing on the grounds waiting keeps them dead. Walk out of the zone, wait, come back."""
         here = self.r("return ASH.core.M.zoneAt(%d, %d)" % (post[0], post[1]))
-        spot = here and self.r("""const z = %s, me = ASH.me, P = ASH.core.M.npcs.filter(n => ASH.core.M.zoneAt(n.x, n.y) && ASH.core.M.zoneAt(n.x, n.y) !== z)
-            .sort((a, b) => Math.max(Math.abs(a.x - me.x), Math.abs(a.y - me.y)) - Math.max(Math.abs(b.x - me.x), Math.abs(b.y - me.y)))[0];
+        spot = here and self.r("""const z = %s, you = ASH.me, P = ASH.core.M.npcs.filter(n => ASH.core.M.zoneAt(n.x, n.y) && ASH.core.M.zoneAt(n.x, n.y) !== z)
+            .sort((a, b) => Math.max(Math.abs(a.x - you.x), Math.abs(a.y - you.y)) - Math.max(Math.abs(b.x - you.x), Math.abs(b.y - you.y)))[0];
             return P && [P.x, P.y + 2]""" % json.dumps(here))
         if not spot: spot = [22, 52]   # the village well: outside Whisperwood, where the rats are
         self.scavenge(12, settle=500)   # nothing left behind on the way out

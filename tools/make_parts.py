@@ -195,6 +195,26 @@ def _bigchief():
     return shapes
 part('cloth.hat_bigchief', 'cloth', slot='hat', style='bigchief', color='#a83224', hides=['hairCap'], items={'hat_bigchief': '#a83224'},
      shapes=[dict(sh, j='head') for sh in _bigchief()], ground={'p': [0, -0.1, 0]})
+# the Feather Headband (2026-10-06): the headdress's beaded band and one feather standing at the back; a collection of 20
+def _featherband():
+    R4 = lambda v: round(v, 4)
+    def _bx(w, h, d, c, p=(0, 0, 0), r=None): s = {"t": "box", "s": [w, h, d], "c": c, "p": [R4(x) for x in p]}; return dict(s, r=[R4(x) for x in r]) if r else s
+    def _cy(rt, rb, h, c, p=(0, 0, 0), seg=8, r=None): s = {"t": "cyl", "s": [rt, rb, h], "c": c, "p": [R4(x) for x in p], "seg": seg}; return dict(s, r=[R4(x) for x in r]) if r else s
+    def _gp(children, p=(0, 0, 0), r=(0, 0, 0)): return {"t": "group", "p": [R4(x) for x in p], "r": [R4(x) for x in r], "children": children}
+    WHITE, BLACK, RED, BLUE, YELLOW, WRAP = '#f2ede2', '#1d1a1c', '#a83224', '#2f5ea8', '#e3b33b', '#b8342a'
+    BAND_Y, BAND_R = 0.2, 0.158
+    shapes = [_cy(BAND_R + 0.006, BAND_R + 0.006, 0.045, RED, (0, BAND_Y, 0), seg=14)]
+    for i in range(24):   # beads all round the band
+        a = math.radians(i * 15); col = [WHITE, BLUE, YELLOW][i % 3]
+        shapes.append(_bx(0.02, 0.026, 0.006, col, (math.sin(a) * (BAND_R + 0.009), BAND_Y, math.cos(a) * (BAND_R + 0.009)), (0, a, 0)))
+    L = 0.36   # the feather: tucked into the band at the back, standing up, leaning back and a little to one side
+    feather = [_cy(0.011, 0.013, 0.05, WRAP, (0, 0.025, 0), seg=6), _bx(0.008, L, 0.008, WHITE, (0, L / 2, 0)),
+               _bx(0.066, L * 0.8, 0.005, WHITE, (0, L * 0.56, 0.004)), _bx(0.068, L * 0.22, 0.006, BLACK, (0, L * 0.85, 0.005)),
+               _bx(0.018, 0.035, 0.004, WHITE, (0, L + 0.012, 0.004))]
+    shapes.append(_gp(feather, (0.03, BAND_Y - 0.01, -BAND_R - 0.004), (-0.32, 0, -0.18)))
+    return shapes
+part('cloth.hat_featherband', 'cloth', slot='hat', style='featherband', color='#a83224', hides=[], items={'hat_featherband': '#a83224'},
+     shapes=[dict(sh, j='head') for sh in _featherband()], ground={'p': [0, -0.1, 0]})
 C = "$c"
 part('cloth.shirt_tunic', 'cloth', slot='shirt', style='tunic', paint={"torso": C, "bust": C, "shoulder": C, "upperArm": C},
      shapes=[dict(cyl("0.176*W*(1+0.16*fem)", "0.2*W*(1+0.18*fem)", 0.2, C, 0, -0.08, 0, seg=9, k=[1, 1, 0.72]), j="hips")])

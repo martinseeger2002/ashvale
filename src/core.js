@@ -217,7 +217,7 @@
         if (m.zone !== z) continue;
         const md = MON[m.key];
         if (m.dead) { m.dead = 0; m.dropAt = 0; m.x = m.sx; m.y = m.sy; ev({ e: 'spawn', mob: m.uid }); }
-        m.hp = md.hp; m.tgt = 0; m.back = 0; m.atk = 0; m.hurt = null; m.carry = m.carry0 ? Object.assign({}, m.carry0) : null; m.fx = null; m.drank = 0; m.fled = 0; m.fleeing = 0; m.path = null;
+        m.hp = md.hp; m.tgt = 0; m.back = 0; m.atk = 0; m.hurt = null; m.flight = null; m.homeAt = 0; if (m.home) { m.sx = m.home[0]; m.sy = m.home[1]; m.home = null; } m.carry = m.carry0 ? Object.assign({}, m.carry0) : null; m.fx = null; m.drank = 0; m.fled = 0; m.fleeing = 0; m.path = null;
       }
       ev({ e: 'repop', zone: z });
     }
@@ -649,6 +649,7 @@
       ev({ e: 'attack', src: p.id, dst: m.uid, anim: 'dive', delay: 1, cls: 'hawk' });
       S.pending.push({ at: S.t + 1, src: p.id, dst: m.uid, dmg, cls: 'melee', xp: ['dexterity'], dex: true });
       if (!m.tgt && !MON[m.key].fleeHit) { m.tgt = p.id; m.atk = Math.max(m.atk, 1); }
+      if (MON[m.key].fleeHit) stampede(m, p);
       return true;
     }
     function playerAttack(p, m) {
@@ -674,6 +675,7 @@
       S.pending.push({ at: S.t + delay, src: p.id, dst: m.uid, dmg, cls: c, xp: st.xp, blocked: blocked && !hit, dex: c === 'ranged' || (w && w.subcategory === 'dagger'), splash: c === 'magic' && !hit, arrow: p._arrowDrop || null });
       p._arrowDrop = null;
       if (!m.tgt && !MON[m.key].fleeHit) { m.tgt = p.id; m.atk = Math.max(m.atk, 1); }   /* a timid animal never squares up to you */
+      if (MON[m.key].fleeHit) stampede(m, p);   /* ...and its whole herd bolts */
       return true;
     }
     function landOnMob(h) {
@@ -1176,6 +1178,50 @@
       if (!canStep(m.x, m.y, nx - m.x, ny - m.y) || occupied(nx, ny, m) || M.insideAt(nx, ny) || (!m.crossing && M.zoneAt(nx, ny) !== m.zone)) { m.path = null; return false; }
       m.face = faceTo(m.x, m.y, nx, ny); m.x = nx; m.y = ny; m.path.shift(); m.step = 1; return true;
     }
+    /* STAMPEDE (2026-10-06: "I want game animals to all run if you attack one of the herd ... They all should run in the
+       same direction"). The first attack on a timid animal (hit or miss) sets off its whole herd - the animals of its worldgen
+       herd (m.site), or for those without one (yard birds) its own kind within 8 tiles - in ONE direction: away from the
+       attacker, measured from the herd's middle. Each runs about STAMPEDE.dist tiles that way, two steps a tick, round what is
+       in the way; where it stops it grazes (its new post); STAMPEDE.drift ticks later it walks back home. */
+    const STAMPEDE = Object.assign({ dist: 25, ticks: 30, drift: 300 }, RU.stampede || {});
+    function stampede(m, p) {
+      if (!p || m.dead || (m.flight && m.flight.run)) return;   /* already running */
+      const herd = S.mobs.filter(q => !q.dead && MON[q.key].fleeHit && q.zone === m.zone &&
+        (m.site ? q.site === m.site : (q.key === m.key && !q.site && cheb(q.x, q.y, m.x, m.y) <= 8)));
+      if (!herd.length) return;
+      const cx = herd.reduce((a, q) => a + q.x, 0) / herd.length, cy = herd.reduce((a, q) => a + q.y, 0) / herd.length;
+      let dx = cx - p.x, dy = cy - p.y; if (!dx && !dy) { dx = m.x - p.x; dy = m.y - p.y; } if (!dx && !dy) dx = 1;
+      const L = Math.sqrt(dx * dx + dy * dy); dx /= L; dy /= L;
+      for (const q of herd) {
+        if (!q.home) q.home = [q.sx, q.sy];
+        q.flight = { tx: q.x + Math.round(dx * STAMPEDE.dist), ty: q.y + Math.round(dy * STAMPEDE.dist), until: S.t + STAMPEDE.ticks, run: 1 };
+        q.tgt = 0; q.wx = null; q.path = null; q.homeAt = 0;
+      }
+      ev({ e: 'stampede', mob: m.uid, n: herd.length, dir: [Math.round(dx * 100) / 100, Math.round(dy * 100) / 100] });
+    }
+    /* one tick of a run (or of the walk home): up to 2 steps (1 walking) toward the target, round anything in the way, never
+       indoors, never out of its area. Arrived, out of time or stuck: it stops, and that spot is its post */
+    function flightTick(m) {
+      const F = m.flight;
+      for (let k = 0; k < (F.run ? 2 : 1); k++) {
+        const d0 = cheb(m.x, m.y, F.tx, F.ty); if (d0 === 0) break;
+        let best = null, bd = 1e9;
+        for (const [dx, dy] of DIRS) {
+          const nx = m.x + dx, ny = m.y + dy;
+          if (!canStep(m.x, m.y, dx, dy) || occupied(nx, ny, m) || M.insideAt(nx, ny) || M.zoneAt(nx, ny) !== m.zone) continue;
+          const d = Math.abs(nx - F.tx) + Math.abs(ny - F.ty); if (d < bd) { bd = d; best = [dx, dy]; }
+        }
+        if (!best || bd >= Math.abs(m.x - F.tx) + Math.abs(m.y - F.ty) + 1) break;   /* nowhere closer: it stops here */
+        m.face = faceTo(m.x, m.y, m.x + best[0], m.y + best[1]); m.x += best[0]; m.y += best[1]; m.step = 1;
+      }
+      const done = (m.x === F.tx && m.y === F.ty) || S.t >= F.until || (F.lx === m.x && F.ly === m.y);
+      F.lx = m.x; F.ly = m.y;
+      if (!done) return true;
+      m.flight = null; m.sx = m.x; m.sy = m.y;   /* where it stopped is where it grazes */
+      if (F.run) m.homeAt = S.t + STAMPEDE.drift;
+      else if (m.home && m.x === m.home[0] && m.y === m.home[1]) { m.home = null; m.homeAt = 0; }
+      return true;
+    }
     function stepAway(m, p, leash) {   /* the first of the 8 directions that increases the distance and stays near the post */
       const d0 = cheb(m.x, m.y, p.x, p.y); let best = null, bd = d0;
       for (const [dx, dy] of DIRS) {
@@ -1257,7 +1303,7 @@
           }
           if (!at && S.t - m.dead >= 2 * DEAD_TICKS && !occupied(m.sx, m.sy, m)) at = [m.sx, m.sy];
           if (!at) return;
-          m.dead = 0; m.x = at[0]; m.y = at[1]; m.hp = md.hp; m.tgt = 0; m.back = 0; m.atk = 0; m.hurt = null; m.carry = m.carry0 ? Object.assign({}, m.carry0) : null; m.fx = null; m.drank = 0; m.fled = 0; m.fleeing = 0; m.path = null;
+          m.dead = 0; m.x = at[0]; m.y = at[1]; m.hp = md.hp; m.tgt = 0; m.back = 0; m.atk = 0; m.hurt = null; m.flight = null; m.homeAt = 0; if (m.home) { m.sx = m.home[0]; m.sy = m.home[1]; m.home = null; } m.carry = m.carry0 ? Object.assign({}, m.carry0) : null; m.fx = null; m.drank = 0; m.fled = 0; m.fleeing = 0; m.path = null;
           ev({ e: 'spawn', mob: m.uid });
         }
         return;
@@ -1266,6 +1312,8 @@
       if (m.dead) return;
       if (md.ai && md.ai.kind === 'humanoid') return humanoidTick(m, md);
       if (m.atk > 0) m.atk--;
+      if (m.flight) { flightTick(m); return; }   /* stampeding with its herd (or walking home after) */
+      if (m.home && m.homeAt && S.t >= m.homeAt && !m.tgt) { m.flight = { tx: m.home[0], ty: m.home[1], until: S.t + 400, run: 0 }; m.homeAt = 0; }
       /* a timid animal that is hit runs from whoever hit it, two steps a tick, instead of fighting back (the operator) */
       if (md.fleeHit && m.hurt && S.t - (m.hurtT || -1e9) <= 14) { const q = S.players[m.hurt]; if (q && !q.dead) { m.tgt = 0; m.wx = null; if (stepAway(m, q, 10)) stepAway(m, q, 10); return; } }
       if (comeStep(m)) { if (m.hp < md.hp && S.t % 10 === 0) m.hp++; return; }   /* someone is trying to hit us and cannot: come out to them, without attacking */
