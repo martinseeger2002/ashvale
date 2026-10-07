@@ -5,6 +5,7 @@ the zone's own ground letters underneath are just the ground (water). The scene 
 Applied to the editor's preview now and to the game after v0.8.4 (with the zone data converted: editor/migrate_piers.py)."""
 import os, sys
 H = sys.argv[1] if len(sys.argv) > 1 else '/home/you/ashvale3d'
+if 'piers and bridges are assets' in open(os.path.join(H, 'src/world.js')).read(): print('pier_assets_patch already in the game:', H); sys.exit()   # merged into the game since
 def edit(p, a, b):
     p = os.path.join(H, p); s = open(p).read()
     if b in s: return

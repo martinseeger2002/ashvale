@@ -12,7 +12,7 @@ A = [("    const wset = (x, y, b) => { if (inOld(x, y)) { const k = key(x, y); w
       "    const wclr = (x, y, b) => { const k = key(x, y); wall.set(k, (wall.get(k) || 0) & ~b); };"),
      ("      for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (inOld(x, y)) inside.add(key(x, y));",
       "      for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) inside.add(key(x, y));")]
-if A[0][1] in s: print('walls patch already in', H); sys.exit()
+if A[0][1] in s or 'anywhere: not only the old map' in s: print('walls patch already in', H); sys.exit()
 for a, b in A:
     assert s.count(a) == 1, a[:70]; s = s.replace(a, b)
 open(p, 'w').write(s); print('walls patch applied to', H)

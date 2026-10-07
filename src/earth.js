@@ -202,7 +202,8 @@
       const PLACES = {};
       { const at = (vx, vy) => { const fx = vx + CFG.origin[0] + 0.5, fy = -(vy + CFG.origin[1]) - 0.5; return W.toSphere(CFG.face, fx, fy); };
         if (CFG.origin) PLACES.ashvale = { u: at(22, 52), alt: 60 };
-        const sz = zones.find(z => z.id === 'saltmere'); if (sz && CFG.origin) PLACES.saltmere = { u: at(sz.origin[0] + (sz.size[0] >> 1), sz.origin[1] + (sz.size[1] >> 1)), alt: 160 }; }
+        /* every area is a place (?at=<zone id>): over its middle, high enough to see the whole of it */
+        if (CFG.origin) for (const z of zones) if (z && z.id && z.origin && z.size && !PLACES[z.id]) PLACES[z.id] = { u: at(z.origin[0] + (z.size[0] >> 1), z.origin[1] + (z.size[1] >> 1)), alt: Math.max(160, Math.round(Math.max(z.size[0], z.size[1]) * 1.4)) }; }
       let groundH = 0, tP = null;
       function updateCamera() {
         const u = cam.u; frameAt(u);

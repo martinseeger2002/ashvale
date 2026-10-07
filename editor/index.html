@@ -498,7 +498,7 @@ $('prev3d').onclick = async () => {
           setTimeout(() => { try { A.setCam(null, 0.75, 16); } catch (e) {} }, 600); } catch (e) {} } else if (n++ < 60) setTimeout(go, 500); }; setTimeout(go, 1500); };
 };
 $('gameClose').onclick = () => { $('gameOv').classList.remove('show'); $('gameFr').src = 'about:blank'; };
-$('atlasBtn').onclick = async () => { await save(); await terrainLoad(); scSet('look'); const r = await preview(true); if (!r || !r.ok) return; $('atlasFr').src = r.atlas + '?at=' + (zid === 'saltmere' ? 'saltmere' : 'ashvale') + '&t=' + Date.now(); $('atlasOv').classList.add('show'); };
+$('atlasBtn').onclick = async () => { await save(); await terrainLoad(); scSet('look'); const r = await preview(true); if (!r || !r.ok) return; $('atlasFr').src = r.atlas + '?at=' + (zid === 'village' || !zid ? 'ashvale' : zid) + '&t=' + Date.now(); $('atlasOv').classList.add('show'); };
 $('atlasClose').onclick = () => { $('atlasOv').classList.remove('show'); $('atlasFr').src = 'about:blank'; setTimeout(loadHeights, 1000); };   /* the town shows the new ground */
 /* the Atlas camera's spot -> the area under it and the tile in it (the game's own projection, EARTH.W.toSphere) */
 function atlasAim() {
