@@ -527,6 +527,15 @@
           }
         }
         if (STONEK) { o._y0 = base; CK.keepTop(rg, o, base + WH * FL); }   /* the keep's battlements, banners and donjon are its roof: hidden while you are inside */
+        else if (o.k === 'church') {   /* the church's steeple (2026-10-07): a square bell tower over the door end, a slate spire and a gilt cross */
+          const tx = side === 'e' ? x1 - 0.9 : side === 'w' ? x0 + 0.9 : cx, tz = side === 'n' ? z0 + 0.9 : side === 's' ? z1 - 0.9 : cz, tb = base + WH * FL, th = rh + 1.5;
+          rg.add(mesh(new THREE.BoxGeometry(1.4, th, 1.4), wall, tx, tb + th / 2 - 0.1, tz));
+          rg.add(mesh(new THREE.BoxGeometry(1.56, 0.12, 1.56), 0x7c766c, tx, tb + th - 0.1, tz));
+          for (const [fx, fz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) rg.add(mesh(new THREE.BoxGeometry(fx ? 0.04 : 0.42, 0.62, fz ? 0.04 : 0.42), 0x1c1a18, tx + fx * 0.71, tb + th - 0.6, tz + fz * 0.71));
+          const bell = mesh(new THREE.ConeGeometry(0.24, 0.34, 8, 1, true), 0xc89a3a, tx, tb + th - 0.62, tz); rg.add(bell);
+          const sp = mesh(new THREE.ConeGeometry(1.08, 3.0, 4), roof, tx, tb + th + 1.4, tz); sp.rotation.y = Math.PI / 4; rg.add(sp);
+          rg.add(mesh(new THREE.BoxGeometry(0.08, 0.7, 0.08), 0xe8c050, tx, tb + th + 3.2, tz), mesh(new THREE.BoxGeometry(0.42, 0.08, 0.08), 0xe8c050, tx, tb + th + 3.3, tz));
+        }
         else if (o.k !== 'house' || hash2(o.x, o.y) < 0.6) {
           const chx = cx + (along ? o.w * 0.28 : S * 0.18), chz = cz + (along ? -S * 0.14 : o.h * 0.28);
           rg.add(mesh(new THREE.BoxGeometry(0.38, 1.4, 0.38), 0x6a625a, chx, base + WH * FL + rh * 0.55 + 0.25, chz));
@@ -544,7 +553,7 @@
       for (const o of objs) {
         const x = o.x + (o.w || 1) / 2, z = o.y + (o.h || 1) / 2; let y = heightAt(x, z);
         switch (o.k) {
-          case 'house': case 'shop': case 'smithy': building(o); break;
+          case 'house': case 'shop': case 'smithy': case 'church': building(o); break;
           case 'cwall': if (CK) CK.wall(o); break;
           case 'ctower': if (CK) CK.tower(o); break;
           case 'cgate': if (CK) CK.gate(o); break;
@@ -587,6 +596,16 @@
             anim.push({ smoke: true, x: x + 0.3, y: y + 1.7, z: z - 0.2, parts: [] });
             break;
           }
+          case 'altar': {   /* the church altar: pray at it to restore your Prayer points (world.js makes it a node) */
+            const fl = floorY(o, y);
+            B.add('box', 0x8a857a, x, fl + 0.45, z, 1.0, 0.9, 0.6); B.add('box', 0xa8a294, x, fl + 0.93, z, 1.12, 0.07, 0.7);
+            B.add('box', 0xf2eee0, x, fl + 0.97, z, 1.0, 0.02, 0.62); B.add('box', 0x6a3a8a, x, fl + 0.7, z - 0.31, 0.34, 0.5, 0.01);
+            B.add('box', 0xe8c050, x, fl + 1.2, z + 0.1, 0.05, 0.42, 0.05); B.add('box', 0xe8c050, x, fl + 1.3, z + 0.1, 0.26, 0.05, 0.05);
+            for (const sx of [-0.38, 0.38]) { B.add('cyl', 0xf4eccc, x + sx, fl + 1.07, z + 0.1, 0.05, 0.18, 0.05); const f = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.09, 5), new THREE.MeshBasicMaterial({ color: 0xffd060 })); f.position.set(x + sx, fl + 1.2, z + 0.1); group.add(f); torches.push({ f, ph: sx * 7, x: x + sx, y: fl + 1.2, z: z + 0.1 }); }
+            const p = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.4, 0.9), new THREE.MeshBasicMaterial({ visible: false })); p.position.set(x, fl + 0.7, z); p.userData.pick = { kind: 'node', i: K(o.x, o.y) }; group.add(p); pickables.push(p);
+            break;
+          }
+          case 'pew': { const fl = floorY(o, y), w = (o.w || 1) - 0.1; B.add('box', 0x6a4426, x, fl + 0.42, z + 0.05, w, 0.07, 0.42); B.add('box', 0x6a4426, x, fl + 0.72, z + 0.25, w, 0.55, 0.06); for (const sx of [-1, 1]) B.add('box', 0x5a3a1e, x + sx * (w / 2 - 0.05), fl + 0.4, z + 0.05, 0.07, 0.8, 0.5); break; }
           case 'shelf': { const w = o.w || 1, d = o.h || 1, lng = w >= d, ex = lng ? w : d; const zb = lng ? o.y + 0.25 : z, xb = lng ? x : o.x + 0.25, fl = floorY(o, y);
             B.add('box', 0x6a4a2a, xb, fl + 0.75, zb, lng ? ex - 0.1 : 0.4, 1.5, lng ? 0.4 : ex - 0.1);
             for (let k = 0; k < 3; k++) for (let n = 0; n < ex * 3; n++) { const t = (n + 0.5) / (ex * 3) - 0.5, col = [0xd29a52, 0xc84040, 0x8a5aa0, 0x6aa0d0, 0xe0c060][(n + k * 2 + o.x) % 5]; B.add('box', col, xb + (lng ? t * (ex - 0.2) : 0.05), fl + 0.35 + k * 0.45, zb + (lng ? 0.05 : t * (ex - 0.2)), 0.16, 0.18, 0.16); }
@@ -706,7 +725,7 @@
       {
         const g = mm.getContext('2d'), MC = { '.': '#4e8a32', f: '#4e8a32', F: '#6a4a2a', ',': '#3e7428', p: '#a08458', d: '#857254', B: '#6e4f2e', g: '#a99d58', q: '#9aa38d', v: '#3f7ab8', J: '#d4e6f0', s: '#c4b07a', '~': '#2f6aa8', H: '#8a6a50', X: '#7a6a5a', R: '#6a6a66', N: '#6a6a66', I: '#6a6a66', r: '#6a6a66', T: '#2a5a1e', P: '#22501e', O: '#2e5a1c', W: '#5d7f3a', M: '#8a5a26', Y: '#1f4722', C: '#4a4a52', G: '#8a7a4a', A: '#6a7488', '^': '#77736a', K: '#8a877c' };
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const c = at(X0 + x, Y0 + y); g.fillStyle = MC[c] || '#4e8a32'; g.fillRect(x * 4, y * 4, 4, 4); if ('TPOMWY'.indexOf(c) >= 0) { g.fillStyle = '#183a12'; g.fillRect(x * 4 + 1, y * 4 + 1, 2, 2); } }
-        for (const o of map.objects) if (o.k === 'house' || o.k === 'shop' || o.k === 'smithy') { const ox = o.x - X0, oy = o.y - Y0; g.fillStyle = '#b8a890'; g.fillRect(ox * 4, oy * 4, o.w * 4, o.h * 4); g.strokeStyle = '#ffffff'; g.lineWidth = 1; g.strokeRect(ox * 4 + 0.5, oy * 4 + 0.5, o.w * 4 - 1, o.h * 4 - 1); }
+        for (const o of map.objects) if (o.k === 'house' || o.k === 'shop' || o.k === 'smithy' || o.k === 'church') { const ox = o.x - X0, oy = o.y - Y0; g.fillStyle = '#b8a890'; g.fillRect(ox * 4, oy * 4, o.w * 4, o.h * 4); g.strokeStyle = '#ffffff'; g.lineWidth = 1; g.strokeRect(ox * 4 + 0.5, oy * 4 + 0.5, o.w * 4 - 1, o.h * 4 - 1); }
       }
       return mm;
     }

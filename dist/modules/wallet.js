@@ -29,7 +29,7 @@
       if (p.creator === A.issuer) return true;
       if (!extra.has(p.creator) || !ashvaleFlag(p.json)) return false;
       const ct = String(p.contenttype || p.content_type || '');
-      return !ct || ct === 'application/json';
+      return !ct || ct === 'application/json' || ct === 'image/png';
     }
     const base = (opts && opts.base) || '';
     const byKey = {}, byToken = {};

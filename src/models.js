@@ -319,6 +319,7 @@ export function createModels(THREE, opts) {
     if (c.body === 'beast') return beast(c.beast || {});
     if (c.body === 'bird') return bird(c.bird || {});
     if (c.body === 'chest') return chest(c.chest || {});
+    if (c.body === 'wagon') return wagon(c.wagon || {});
     if (c.body === 'portal') return portal(c.portal || {});
     const H = humanoid({ build: c.build, outfit: c.outfit, vars: c.vars, hide: c.hide, gearTint: c.gearTint });
     if (c.gear) H.setGear(c.gear);
@@ -591,6 +592,42 @@ export function createModels(THREE, opts) {
     H.setGear = () => H; H.setTool = () => H; H.attackAnim = () => 'idle';
     H.muzzle = out => (out = out || new THREE.Vector3(), lid.getWorldPosition(out));
     Object.defineProperty(H, 'height', { get: () => 0.7 * S * root.scale.y });
+    H.play('idle'); H.update(0);
+    return H;
+  }
+  /* a merchant's wagon gone over on the road (the Wayside Prayer): tipped bed, a wheel off, the load in the grass */
+  const WAGON = { idle: { loop: true, dur: 2, fn: () => ({}) } };
+  WAGON.walk = WAGON.run = WAGON.open = WAGON.idle;
+  function wagon(o) {
+    const S = o.size || 1, wood = o.color || '#8a5a30', dark = shade(wood, 0.7), iron = o.iron || '#3a3a40', cloth = o.cloth || '#d8cfb4';
+    const root = group(), body = group(); root.add(body);
+    const bed = group(0, 0.42 * S, 0); bed.rotation.z = 0.32; bed.rotation.y = 0.15; body.add(bed);
+    bed.add(box(1.5 * S, 0.08 * S, 0.9 * S, wood, 0, 0, 0));
+    for (const z of [-0.43, 0.43]) bed.add(box(1.5 * S, 0.3 * S, 0.05 * S, dark, 0, 0.18 * S, z * S));
+    bed.add(box(0.05 * S, 0.3 * S, 0.9 * S, dark, 0.73 * S, 0.18 * S, 0));
+    for (const x of [-0.5, 0, 0.5]) bed.add(box(0.05 * S, 0.34 * S, 0.94 * S, dark, x * S, 0.2 * S, 0));
+    for (const x of [-0.4, 0.35]) { const h = mesh(new THREE.TorusGeometry(0.45 * S, 0.025 * S, 4, 10, Math.PI), wood, x * S, 0.3 * S, 0); h.rotation.y = Math.PI / 2; bed.add(h); }
+    const cover = mesh(new THREE.CylinderGeometry(0.44 * S, 0.44 * S, 0.8 * S, 10, 1, true, 0, Math.PI), mat(cloth, { side: THREE.DoubleSide }), -0.02 * S, 0.3 * S, 0); cover.rotation.z = Math.PI / 2; bed.add(cover);
+    const wheel = (x, y, z, rx, rz, broken) => {
+      const w = group(x * S, y * S, z * S); w.rotation.set(rx, 0, rz); body.add(w);
+      w.add(mesh(new THREE.TorusGeometry(0.36 * S, 0.04 * S, 4, 12, broken ? Math.PI * 1.4 : Math.PI * 2), iron));
+      w.add(cyl(0.07 * S, 0.07 * S, 0.12 * S, dark, 0, 0, 0, 8).rotateX(Math.PI / 2));
+      for (let i = 0; i < (broken ? 4 : 6); i++) { const sp = box(0.03 * S, 0.66 * S, 0.03 * S, wood, 0, 0, 0); sp.rotation.z = i * Math.PI / 6; w.add(sp); }
+    };
+    wheel(-0.55, 0.36, 0.52, 0, 0.1, false);
+    wheel(0.45, 0.36, 0.52, 0, -0.2, false);
+    wheel(0.55, 0.04, -0.95, Math.PI / 2, 0, true);
+    const axle = box(0.08 * S, 0.08 * S, 1.1 * S, iron, -0.55 * S, 0.2 * S, -0.05 * S); axle.rotation.x = -0.3; body.add(axle);
+    const shaft = box(1.2 * S, 0.06 * S, 0.06 * S, wood, 1.3 * S, 0.05 * S, 0.25 * S); shaft.rotation.y = 0.4; body.add(shaft);
+    const crate = box(0.32 * S, 0.28 * S, 0.32 * S, shade(wood, 1.15), -1.05 * S, 0.14 * S, -0.55 * S); crate.rotation.y = 0.6; body.add(crate);
+    const crate2 = box(0.26 * S, 0.24 * S, 0.26 * S, shade(wood, 1.05), -1.25 * S, 0.12 * S, 0.1 * S); crate2.rotation.set(0.2, -0.3, 0.9); body.add(crate2);
+    body.add(ball(0.18 * S, '#c8b080', -0.7 * S, 0.12 * S, -0.95 * S, 1));
+    for (let i = 0; i < 5; i++) { const c = cyl(0.03 * S, 0.03 * S, 0.2 * S, '#f2ecd8', (-0.9 + i * 0.12) * S, 0.03 * S, (-1.1 + (i % 2) * 0.1) * S, 6); c.rotation.z = Math.PI / 2; c.rotation.y = i * 0.7; body.add(c); }
+    root.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+    const H = character(root, {}, WAGON);
+    H.setGear = () => H; H.setTool = () => H; H.attackAnim = () => 'idle';
+    H.muzzle = out => (out = out || new THREE.Vector3(), bed.getWorldPosition(out));
+    Object.defineProperty(H, 'height', { get: () => 1.0 * S * root.scale.y });
     H.play('idle'); H.update(0);
     return H;
   }

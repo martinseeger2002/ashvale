@@ -14,6 +14,7 @@ ok(c.S.ground.some(g => g.id === 'sword_t1') && c.S.ground.some(g => g.id === 'b
 ok(c.slotLimit(p) === 9, 'a hawk has 9 bag slots');
 ok(c.capacity(p) < 20000, 'a hawk carries a third (' + c.capacity(p) + ' g)');
 const w = c.S.mobs.find(q => q.key === 'wolf'); p.x = w.x + 1; p.y = w.y; w.tgt = 'p1';
+for (const o of c.S.mobs) if (o !== w && Math.max(Math.abs(o.x - w.x), Math.abs(o.y - w.y)) < 12) o.dead = 1e9;   /* this wolf's post is a tile from a bandit's: a stray arrow knocking the hawk down was down to the dice, not the hawk */
 let hits = [], strikes = [], wolfHits = 0, ticks = 0; p.energy = 10000;
 c.cmd('p1', { c: 'attack', uid: w.uid });
 for (let i = 0; i < 120 && !w.dead && c.isHawk(p); i++) { ticks++; p.hawkHp = 4; for (const e of c.tick()) { if (e.e === 'attack' && e.src === 'p1') strikes.push(c.S.t); if (e.e === 'hit' && e.src === 'p1') hits.push(e.dmg); if (e.e === 'hit' && e.dst === 'p1') wolfHits++; } w.hp = Math.max(w.hp, 10); }

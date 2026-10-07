@@ -104,7 +104,7 @@
       function objects() {
         for (const o of W.objectsIn(anchor, x0, y0, x0 + SIZE, y0 + SIZE)) {
           const lx = o.x - x0, lz = -(o.y - y0), y = hAt(o.x, o.y), rot = Math.atan2(o.s, o.c);
-          if (o.k === 'house' || o.k === 'shop' || o.k === 'smithy') add({ house: o }, lx, lz, y, 1, 1, rot, 255, 255, 255, 0);
+          if (o.k === 'house' || o.k === 'shop' || o.k === 'smithy' || o.k === 'church') add({ house: o }, lx, lz, y, 1, 1, rot, 255, 255, 255, 0);
           else if (o.k === 'tent') add('tent', lx, lz, y, 1, 1, rot, 255, 255, 255, 0);
           else if (o.k === 'campfire') add('campfire', lx, lz, y, 1, 1, rot, 255, 255, 255, 0);
           else if (o.k === 'well') add('well', lx, lz, y, 1, 1, rot, 255, 255, 255, 0);
