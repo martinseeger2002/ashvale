@@ -3,7 +3,54 @@ import * as THREE from '/vendor/three.module.min.js';
 import { createModels } from '/src/models.js';
 
 const $ = id => document.getElementById(id);
-const state = { catalog: null, cls: null, design: null, parts: {}, M: null, scene: null, cam: null, renderer: null, obj: null, pal: [] };
+const state = { catalog: null, cls: null, design: null, parts: {}, M: null, scene: null, cam: null, renderer: null, obj: null, pal: [], shapeI: 0, shapeMeshes: [] };
+const KINDS = ['box', 'cyl', 'cone', 'sphere', 'ico', 'torus', 'disc', 'capsule'];
+
+function num(v, d) {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && v.trim()) { const n = parseFloat(v); if (Number.isFinite(n)) return n; }
+  return d;
+}
+function vec3(a, d) { a = a || d; return [num(a[0], d[0]), num(a[1], d[1]), num(a[2], d[2])]; }
+function deg(r) { return Math.round((r || 0) * 180 / Math.PI * 10) / 10; }
+function rad(d) { return (+d || 0) * Math.PI / 180; }
+function sizeLabels(t) {
+  if (t === 'sphere' || t === 'ico' || t === 'disc') return ['radius'];
+  if (t === 'cone') return ['radius', 'height'];
+  if (t === 'torus') return ['ring', 'tube'];
+  if (t === 'capsule') return ['radius', 'length'];
+  if (t === 'cyl') return ['top', 'bottom', 'height'];
+  return ['width', 'height', 'depth'];
+}
+function defaultShape(t) {
+  const c = '#c8a040';
+  if (t === 'cyl') return { t, s: [0.03, 0.03, 0.1], c, p: [0, 0.05, 0], r: [0, 0, 0], seg: 7 };
+  if (t === 'cone') return { t, s: [0.04, 0.08], c, p: [0, 0.04, 0], r: [0, 0, 0], seg: 6 };
+  if (t === 'sphere') return { t, s: [0.04], c, p: [0, 0.04, 0], r: [0, 0, 0], seg: [8, 6] };
+  if (t === 'ico') return { t, s: [0.05], c, p: [0, 0.05, 0], r: [0, 0, 0] };
+  if (t === 'torus') return { t, s: [0.05, 0.012], c, p: [0, 0.02, 0], r: [1.5708, 0, 0], seg: [6, 14] };
+  if (t === 'disc') return { t, s: [0.05], c, p: [0, 0.01, 0], r: [-1.5708, 0, 0], ds: true };
+  if (t === 'capsule') return { t, s: [0.03, 0.08], c, p: [0, 0.05, 0], r: [0, 0, 0] };
+  return { t: 'box', s: [0.08, 0.08, 0.08], c, p: [0, 0.04, 0], r: [0, 0, 0] };
+}
+function bakeVec(a, d) { return vec3(a, d); }
+function cloneShape(s, dx) {
+  const o = JSON.parse(JSON.stringify(s || defaultShape('box')));
+  delete o.if;
+  o.p = bakeVec(o.p, [0, 0, 0]); o.r = bakeVec(o.r, [0, 0, 0]);
+  const n = sizeLabels(o.t || 'box').length, src = Array.isArray(o.s) ? o.s : [];
+  o.s = [];
+  for (let k = 0; k < n; k++) o.s[k] = num(src[k], 0.05);
+  if (dx) o.p[0] += dx;
+  return o;
+}
+function tagShapeMeshes(g) {
+  const inner = g && g.children && g.children[0];
+  const kids = inner && inner.children ? inner.children : [];
+  kids.forEach((o, i) => { o.userData.shapeI = i; });
+  state.shapeMeshes = kids;
+  highlightSel();
+}
 
 async function boot() {
   $('author').value = localStorage.getItem('ash.studio.author') || '';
@@ -41,14 +88,32 @@ function setupStage() {
   const cam = new THREE.PerspectiveCamera(40, 1, 0.05, 80);
   cam.position.set(2.4, 1.8, 4.2); cam.lookAt(0, 0.8, 0);
   state.scene = sc; state.cam = cam; state.renderer = r;
-  const drag = { on: false, x: 0, y: 0, yaw: 0.4, pitch: 0.35, dist: 5 };
+  const drag = { on: false, x: 0, y: 0, yaw: 0.4, pitch: 0.35, dist: 5, moved: false };
   state.orbit = drag;
-  host.addEventListener('pointerdown', e => { drag.on = true; drag.x = e.clientX; drag.y = e.clientY; host.setPointerCapture(e.pointerId); });
-  host.addEventListener('pointerup', () => { drag.on = false; });
+  state.ray = new THREE.Raycaster();
+  state.ptr = new THREE.Vector2();
+  host.addEventListener('pointerdown', e => { drag.on = true; drag.moved = false; drag.x = e.clientX; drag.y = e.clientY; host.setPointerCapture(e.pointerId); });
+  host.addEventListener('pointerup', e => {
+    if (drag.on && !drag.moved) pickShapeAt(e);
+    drag.on = false;
+  });
   host.addEventListener('pointermove', e => {
     if (!drag.on) return;
-    drag.yaw -= (e.clientX - drag.x) * 0.008; drag.pitch = Math.max(0.08, Math.min(1.3, drag.pitch + (e.clientY - drag.y) * 0.006));
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.hypot(dx, dy) > 3) drag.moved = true;
     drag.x = e.clientX; drag.y = e.clientY;
+    const sh = selectedShape();
+    if (sh && e.shiftKey) {   /* artists slide a piece in the view */
+      sh.p = bakeVec(sh.p, [0, 0, 0]);
+      sh.p[0] += dx * 0.0025; sh.p[1] -= dy * 0.0025;
+      applyLive(); fillShapeFields(); return;
+    }
+    if (sh && e.altKey) {   /* Alt-drag turns the selected piece */
+      sh.r = bakeVec(sh.r, [0, 0, 0]);
+      sh.r[1] += dx * 0.012; sh.r[0] += dy * 0.012;
+      applyLive(); fillShapeFields(); return;
+    }
+    drag.yaw -= dx * 0.008; drag.pitch = Math.max(0.08, Math.min(1.3, drag.pitch + dy * 0.006));
   });
   host.addEventListener('wheel', e => { drag.dist = Math.max(1.4, Math.min(18, drag.dist + e.deltaY * 0.01)); e.preventDefault(); }, { passive: false });
   function frame() {
@@ -175,6 +240,8 @@ function buildingTemplate(cls) {
 function pick(cls) {
   state.cls = cls;
   state.design = templates(cls);
+  state.shapeI = 0;
+  if (state.orbit) state.orbit.locked = false;
   drawNav();
   drawForm();
   preview();
@@ -240,14 +307,60 @@ function buildingFields(d) {
     '<div class="row"><div><label>wall</label><input id="wall" type="color" value="' + (b.wall || '#d5cab2') + '"></div>' +
     '<div><label>roof</label><input id="roof" type="color" value="' + (b.roof || '#6a4a2a') + '"></div></div>';
 }
+function selectedShape() {
+  const L = (state.design && state.design.part && state.design.part.shapes) || [];
+  if (!L.length) return null;
+  if (state.shapeI < 0 || state.shapeI >= L.length) state.shapeI = 0;
+  return L[state.shapeI];
+}
 function shapeEditor(part) {
   const L = (part && part.shapes) || [];
-  let h = '<label>shapes (' + L.length + ')</label><div class="shapes">';
+  if (L.length && (state.shapeI < 0 || state.shapeI >= L.length)) state.shapeI = 0;
+  let h = '<label>shapes (' + L.length + ') — click a row or the preview to select. Shift-drag moves it, Alt-drag turns it.</label><div class="shapes">';
   L.forEach((s, i) => {
-    h += '<div class="sh"><b>' + esc(s.t) + '</b><input data-i="' + i + '" data-f="c" type="color" value="' + hexOf(s.c) + '"><button class="btn" data-del="' + i + '">×</button></div>';
+    const on = i === state.shapeI;
+    h += '<div class="sh' + (on ? ' on' : '') + '" data-sel="' + i + '">';
+    h += '<div class="hd"><select data-i="' + i + '" data-f="t">' + KINDS.map(k => '<option' + (s.t === k ? ' selected' : '') + '>' + k + '</option>').join('') + '</select>';
+    h += '<input data-i="' + i + '" data-f="c" type="color" value="' + hexOf(s.c) + '" title="colour">';
+    h += '<button class="ico" data-dup="' + i + '" title="duplicate">⧉</button>';
+    h += '<button class="ico" data-up="' + i + '" title="earlier">↑</button>';
+    h += '<button class="ico" data-dn="' + i + '" title="later">↓</button>';
+    h += '<button class="ico" data-del="' + i + '" title="remove">×</button></div>';
+    if (on) h += shapeFields(s, i);
+    h += '</div>';
   });
-  h += '</div><button class="btn" id="addbox">Add box</button><button class="btn" id="addtorus">Add ring</button><button class="btn" id="addsphere">Add gem</button>';
+  h += '</div>';
+  h += '<div class="addrow">';
+  for (const t of KINDS) h += '<button class="btn" data-add="' + t + '">+ ' + t + '</button>';
+  h += '</div>';
+  const lib = Object.values(state.parts).filter(p => p.kind === 'item' || p.kind === 'gear').sort((a, b) => a.id.localeCompare(b.id));
+  h += '<label>add shapes from an existing part</label><div class="row">';
+  h += '<select id="borrow"><option value="">choose a part…</option>' + lib.map(p => '<option value="' + esc(p.id) + '">' + esc(p.id) + '</option>').join('') + '</select>';
+  h += '<button class="btn" id="borrowAdd">Add those shapes</button></div>';
   return h;
+}
+function shapeFields(s, i) {
+  const p = vec3(s.p, [0, 0, 0]), r = vec3(s.r, [0, 0, 0]), labs = sizeLabels(s.t || 'box');
+  const sdef = labs.map(() => 0.08);
+  const sz = vec3(s.s, sdef);
+  let h = '<div class="tri">';
+  h += xyz('p', i, ['x', 'y', 'z'], p, 0.005);
+  h += xyz('s', i, labs, sz, 0.005);
+  h += xyzDeg('r', i, r);
+  h += '</div>';
+  return h;
+}
+function xyz(f, i, labs, vals, step) {
+  let h = '';
+  labs.forEach((lab, k) => {
+    h += '<div><label>' + lab + '</label><input data-i="' + i + '" data-f="' + f + '" data-k="' + k + '" type="number" step="' + step + '" value="' + (+vals[k] || 0) + '"></div>';
+  });
+  return h;
+}
+function xyzDeg(f, i, r) {
+  return ['rot x°', 'rot y°', 'rot z°'].map((lab, k) =>
+    '<div><label>' + lab + '</label><input data-i="' + i + '" data-f="' + f + '" data-k="' + k + '" data-deg="1" type="number" step="5" value="' + deg(r[k]) + '"></div>'
+  ).join('');
 }
 function opts(list, cur) { return list.map(v => '<option' + (String(v) === String(cur) ? ' selected' : '') + '>' + esc(v) + '</option>').join(''); }
 function unique(a) { return [...new Set(a.filter(Boolean))]; }
@@ -301,19 +414,121 @@ function bindForm() {
   };
   sideListen(sync);
   $('form').querySelectorAll('#swatch i').forEach(i => i.onclick = () => { g('paint').value = i.dataset.c; sync(); });
-  $('form').querySelectorAll('[data-del]').forEach(b => b.onclick = () => { d.part.shapes.splice(+b.dataset.del, 1); drawForm(); preview(); });
-  $('form').querySelectorAll('input[data-f=c]').forEach(inp => inp.oninput = () => { d.part.shapes[+inp.dataset.i].c = inp.value; preview(); });
-  const add = (sh) => { d.part.shapes = d.part.shapes || []; d.part.shapes.push(sh); drawForm(); preview(); };
-  if (g('addbox')) g('addbox').onclick = () => add({ t: 'box', s: [0.08, 0.08, 0.08], c: '#c8a040', p: [0.08, 0.04, 0] });
-  if (g('addtorus')) g('addtorus').onclick = () => add({ t: 'torus', s: [0.05, 0.01], c: '#d9a930', p: [0, 0.05, 0], seg: [6, 14] });
-  if (g('addsphere')) g('addsphere').onclick = () => add({ t: 'sphere', s: [0.025], c: '#3a8aaa', p: [0, 0.08, 0], seg: [8, 6], glow: true });
+  bindShapes();
   g('save').onclick = saveDraft;
   g('suggest').onclick = suggestGh;
   setupDrop();
 }
+function bindShapes() {
+  const d = state.design;
+  if (!d.part) return;
+  const shapes = () => (d.part.shapes = d.part.shapes || []);
+  $('form').querySelectorAll('[data-sel]').forEach(row => {
+    row.addEventListener('click', e => {
+      if (e.target.closest('button, input, select')) return;
+      state.shapeI = +row.dataset.sel; drawForm(); preview();
+    });
+  });
+  $('form').querySelectorAll('[data-del]').forEach(b => b.onclick = ev => { ev.stopPropagation(); shapes().splice(+b.dataset.del, 1); state.shapeI = Math.max(0, shapes().length - 1); drawForm(); preview(); });
+  $('form').querySelectorAll('[data-dup]').forEach(b => b.onclick = ev => {
+    ev.stopPropagation();
+    const i = +b.dataset.dup, L = shapes();
+    L.splice(i + 1, 0, cloneShape(L[i], 0.04));
+    state.shapeI = i + 1; drawForm(); preview();
+  });
+  $('form').querySelectorAll('[data-up]').forEach(b => b.onclick = ev => {
+    ev.stopPropagation();
+    const i = +b.dataset.up, L = shapes();
+    if (i < 1) return;
+    [L[i - 1], L[i]] = [L[i], L[i - 1]]; state.shapeI = i - 1; drawForm(); preview();
+  });
+  $('form').querySelectorAll('[data-dn]').forEach(b => b.onclick = ev => {
+    ev.stopPropagation();
+    const i = +b.dataset.dn, L = shapes();
+    if (i >= L.length - 1) return;
+    [L[i], L[i + 1]] = [L[i + 1], L[i]]; state.shapeI = i + 1; drawForm(); preview();
+  });
+  $('form').querySelectorAll('[data-add]').forEach(b => b.onclick = () => {
+    const L = shapes(); L.push(defaultShape(b.dataset.add)); state.shapeI = L.length - 1; drawForm(); preview();
+  });
+  const borrowBtn = $('borrowAdd');
+  if (borrowBtn) borrowBtn.onclick = () => {
+    const id = $('borrow').value; if (!id || !state.parts[id]) return;
+    const extra = (state.parts[id].shapes || []).map(s => cloneShape(s, shapes().length ? 0.1 : 0));
+    if (!extra.length) { say('That part has no shapes to copy.', false); return; }
+    shapes().push(...extra); state.shapeI = shapes().length - extra.length; drawForm(); preview();
+    say('Added ' + extra.length + ' shapes from ' + id + '. Reorient them, then suggest.', true);
+  };
+  $('form').querySelectorAll('.shapes [data-f]').forEach(el => {
+    if (el.dataset.f === 't') { el.addEventListener('change', () => writeShapeField(el, true)); return; }
+    el.addEventListener('input', () => writeShapeField(el));
+  });
+}
+function writeShapeField(el, rebuild) {
+  const L = (state.design.part && state.design.part.shapes) || [];
+  const s = L[+el.dataset.i]; if (!s) return;
+  const f = el.dataset.f, k = el.dataset.k != null ? +el.dataset.k : null;
+  if (f === 't') { const neu = defaultShape(el.value); neu.c = s.c || neu.c; neu.p = bakeVec(s.p, neu.p); L[+el.dataset.i] = neu; state.shapeI = +el.dataset.i; drawForm(); preview(); return; }
+  if (f === 'c') { s.c = el.value; preview(); return; }
+  if (f === 'p' || f === 's' || f === 'r') {
+    const n = f === 's' ? Math.max(1, sizeLabels(s.t || 'box').length) : 3;
+    const def = f === 'r' ? [0, 0, 0] : f === 'p' ? [0, 0, 0] : [0.08, 0.08, 0.08];
+    const cur = vec3(s[f], def);
+    cur.length = n; cur[k] = el.dataset.deg ? rad(el.value) : +el.value;
+    s[f] = cur;
+    if (rebuild) { drawForm(); preview(); } else applyLive();
+  }
+}
+function fillShapeFields() {
+  const s = selectedShape(); if (!s || !$('form')) return;
+  $('form').querySelectorAll('.shapes .on [data-k]').forEach(el => {
+    const f = el.dataset.f, k = +el.dataset.k;
+    const cur = vec3(s[f], f === 'r' || f === 'p' ? [0, 0, 0] : [0.08, 0.08, 0.08]);
+    const v = el.dataset.deg ? deg(cur[k]) : cur[k];
+    if (document.activeElement !== el) el.value = v;
+  });
+}
+function applyLive() {
+  const s = selectedShape(), o = state.shapeMeshes && state.shapeMeshes[state.shapeI];
+  if (!s) return;
+  if (!o) { preview(); return; }
+  const p = vec3(s.p, [0, 0, 0]), r = vec3(s.r, [0, 0, 0]);
+  o.position.set(p[0], p[1], p[2]);
+  o.rotation.set(r[0], r[1], r[2]);
+  highlightSel();
+}
+function pickShapeAt(e) {
+  if (!state.cam || !state.shapeMeshes || !state.shapeMeshes.length) return;
+  const host = $('stage'), rect = host.getBoundingClientRect();
+  state.ptr.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  state.ptr.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  state.ray.setFromCamera(state.ptr, state.cam);
+  const hits = state.ray.intersectObjects(state.shapeMeshes, true);
+  if (!hits.length) return;
+  let o = hits[0].object;
+  while (o && o.userData.shapeI == null) o = o.parent;
+  if (!o) return;
+  state.shapeI = o.userData.shapeI;
+  drawForm(); highlightSel();
+}
+function highlightSel() {
+  const i = state.shapeI;
+  for (const o of state.shapeMeshes || []) {
+    o.traverse(m => {
+      if (!m.isMesh || !m.material) return;
+      const mats = [].concat(m.material);
+      for (const mat of mats) {
+        if (!mat.emissive) continue;
+        const on = o.userData.shapeI === i;
+        mat.emissive.setHex(on ? 0x885510 : 0x000000);
+        if (!m.userData.keepGlow) mat.emissiveIntensity = on ? 0.55 : 0;
+      }
+    });
+  }
+}
 function sideListen(sync) {
   $('form').querySelectorAll('input, textarea, select').forEach(el => {
-    if (el.type === 'file') return;
+    if (el.type === 'file' || el.closest('.shapes')) return;
     el.addEventListener('input', sync);
     el.addEventListener('change', sync);
   });
@@ -392,8 +607,9 @@ function preview() {
       state.M.addPart(d.part);
       const g = state.M.item(Object.keys(d.part.items || { [d.id]: 1 })[0] || d.id);
       g.position.set(0, 0, 0); state.scene.add(g); state.obj = g; state.lookY = 0.35;
-      if (state.orbit) state.orbit.dist = 3.2;
-      $('hint').textContent = d.name + ' · jewellery sits in the hand / on the ground as loot';
+      if (state.orbit && !state.orbit.locked) { state.orbit.dist = 3.2; state.orbit.locked = true; }
+      tagShapeMeshes(g);
+      $('hint').textContent = d.name + ' · click a piece, Shift-drag to move, Alt-drag to turn';
     } else if (state.cls.group === 'npc') {
       state.M.addPart(d.part);
       const key = (d.part.id || '').replace(/^char\./, '');
