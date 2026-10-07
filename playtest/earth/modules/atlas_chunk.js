@@ -108,6 +108,7 @@
           else if (o.k === 'tent') add('tent', lx, lz, y, 1, 1, rot, 255, 255, 255, 0);
           else if (o.k === 'campfire') add('campfire', lx, lz, y, 1, 1, rot, 255, 255, 255, 0);
           else if (o.k === 'well') add('well', lx, lz, y, 1, 1, rot, 255, 255, 255, 0);
+          else if ((o.k === 'cwall' || o.k === 'ctower' || o.k === 'ckeep' || o.k === 'cgate') && S.castle) add({ castle: o }, lx, lz, y, 1, 1, rot, 255, 255, 255, 0);
           else if (o.k === 'fish') add('ripple', lx, lz, 0.01, 1.6, 1, 0, 255, 255, 255, 0);
         }
       }
@@ -139,7 +140,7 @@
       function assemble() {
         const nF = feats.length / 11, shapes = new Array(nF);
         let nv = NV, ni = SEG * SEG * 6;
-        for (let k = 0; k < nF; k++) { const s = feats[k * 11]; const sh = typeof s === 'string' ? S.get(s) : S.house(s.house); shapes[k] = sh; nv += sh.p.length / 3; ni += sh.i.length; }
+        for (let k = 0; k < nF; k++) { const s = feats[k * 11]; const sh = typeof s === 'string' ? S.get(s) : s.castle ? S.castle(s.castle) : S.house(s.house); shapes[k] = sh; nv += sh.p.length / 3; ni += sh.i.length; }
         const pos = new Float32Array(nv * 3), col = new Uint8Array(nv * 3), idx = new Uint32Array(ni);
         for (let j = 0; j <= SEG; j++) for (let i = 0; i <= SEG; i++) { const k = j * (SEG + 1) + i; pos[k * 3] = 2 * i; pos[k * 3 + 1] = heights[k]; pos[k * 3 + 2] = -2 * j; }
         col.set(tcol);

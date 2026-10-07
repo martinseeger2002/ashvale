@@ -137,7 +137,8 @@
             if (qx < gx0) gx0 = qx; if (qx > gx1) gx1 = qx; if (qy < gy0) gy0 = qy; if (qy > gy1) gy1 = qy;
           }
           const add = (o, fish) => {
-            const qx = o.x + o.w / 2, qy = -o.y - o.h / 2;
+            /* the middle of the thing: a footprint (x, y, w, h), a run of tiles (x, y to x2, y2: a castle wall), or one tile */
+            const qx = o.x2 != null ? (o.x + o.x2 + 1) / 2 : o.w != null ? o.x + o.w / 2 : o.x + 0.5, qy = -(o.y2 != null ? (o.y + o.y2 + 1) / 2 : o.h != null ? o.y + o.h / 2 : o.y + 0.5);
             const ax = pass < 0 ? qx : c * (qx - tx) + s * (qy - ty), ay = pass < 0 ? qy : -s * (qx - tx) + c * (qy - ty);
             if (ax < x0 || ax >= x1 || ay < y0 || ay >= y1) return;
             const r = Object.assign({}, o, { x: ax, y: ay, c, s: -s, face: gf, gx: o.x, gy: o.y });
@@ -171,7 +172,7 @@
         const belt = (popts && popts.belt) || {}, links = (popts && popts.links) || [];   /* links: [[fromId, toId]] trails between pieces */
         return zones.map(z => {
           const ox = z.origin[0], oy = z.origin[1], w = z.size[0], h = z.size[1];
-          const objs = (z.objects || []).filter(o => o.x >= ox && o.y >= oy && o.x < ox + w && o.y < oy + h).map(o => Object.assign({}, o, { x: o.x + gx, y: o.y + gy }));
+          const objs = (z.objects || []).filter(o => o.x >= ox && o.y >= oy && o.x < ox + w && o.y < oy + h).map(o => Object.assign({}, o, { x: o.x + gx, y: o.y + gy }, o.x2 != null ? { x2: o.x2 + gx, y2: o.y2 + gy } : null));   /* a run (a castle wall) moves both ends */
           return { id: z.id, face, x: gx + ox, y: gy + oy, w, h, tiles: decks(z), objects: objs, belt: belt[z.id] || 0, links: links.filter(l => l[0] === z.id).map(l => l[1]) };
         });
       }
@@ -181,6 +182,15 @@
         sample, newSample: ctx.newSample, field, lattice, height: (f, x, y) => sample(f, x, y, SMP).h,
         setEdits, edits: () => EDL,
         walkable: ctx.walkable, tileAt: ctx.tileAt, tiles: ctx.tiles, forTiles: ctx.forTiles, sites: ctx.sites, setSetPieces: (l) => { LASTPC = l; ctx.setSetPieces(l); }, piecesFromZones, objectsIn,
+        /* area loading (handoff/area_loading.md): a town first placed as its index STUB (edge band + building pads, all that
+           is read outside it) gets its real tiles and objects when its zone arrives. Paths, pads and edge profiles were made
+           from the stub and are identical, so only the samples are dropped (the inside of the town reads the new tiles). */
+        replacePiece: (sp) => {
+          const pc = ctx.PIECE_BY_ID && ctx.PIECE_BY_ID.get(String(sp.id)); if (!pc) return false;
+          pc.tiles = sp.tiles || []; pc.objects = sp.objects || [];
+          if (LASTPC) LASTPC = LASTPC.map(q => String(q.id) === String(sp.id) ? sp : q);
+          ctx.clearCaches(); return true;
+        },
         parcelAt, fold, toSphere, xform: ctx.xform, coreSpawn, dCore,
         neighbourFace: (f, k) => ctx.ADJ[f * 3 + k], faceHeight: ctx.HGT, faceEdge: ctx.EDGE,
         faceCorners: f => [[ctx.FQ[f * 6], ctx.FQ[f * 6 + 1]], [ctx.FQ[f * 6 + 2], ctx.FQ[f * 6 + 3]], [ctx.FQ[f * 6 + 4], ctx.FQ[f * 6 + 5]]],

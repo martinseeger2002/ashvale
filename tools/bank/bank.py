@@ -49,6 +49,7 @@ def db():
             txid text, piece text, err text, at real, done_at real, req text);
         create table if not exists given(piece text primary key, addr text, item text, at real);
         create table if not exists felled(x integer, y integer, by text, at real, primary key(x, y));   -- trees felled for good, shared (2026-10-05)
+        create table if not exists wheres(addr text primary key, x integer, y integer, at real);   -- where each player last stood, for the Atlas (2026-10-06)
         create table if not exists drops(n integer primary key, addr text, item text, piece text, x integer, y integer, at real, taken_by text, taken_at real);
         create table if not exists ghosts(n integer primary key, addr text, item text, units integer, x integer, y integer, at real, left integer);   -- picked-up copies of drops somebody else already took (2026-10-06)""")
     for col in ('want', 'coll'):   # want: the exact piece (a pickup of a drop); coll: a quest reward's own collection
@@ -170,12 +171,25 @@ def handle_felled(c, addr, msg):
     if x1 - x0 > 400 or y1 - y0 > 400: return None
     cells = [[r['x'], r['y']] for r in c.execute('select x, y from felled where x between ? and ? and y between ? and ?', (x0, x1, y0, y1))]
     return [{'t': 'felled', 'to': addr, 'cells': cells[i:i + 30]} for i in range(0, len(cells), 30)]
+def handle_where(c, addr, msg):
+    """the Atlas's "you are here" (2026-10-06: players open the Atlas from the Games tab and should see a dot where they
+    are). 'here' {x, y}: the game says where this player stands (sent as it saves, when they have moved or every 2 minutes,
+    and as they leave). 'where?': the Atlas asks for its own player's spot; the answer goes to that address only."""
+    if msg.get('t') == 'here':
+        try: x, y = int(msg['x']), int(msg['y'])
+        except (KeyError, TypeError, ValueError): return None
+        if abs(x) > 10**7 or abs(y) > 10**7: return None
+        c.execute('insert into wheres values(?,?,?,?) on conflict(addr) do update set x=excluded.x, y=excluded.y, at=excluded.at', (addr, x, y, time.time())); c.commit(); return None
+    r = c.execute('select x, y, at from wheres where addr=?', (addr,)).fetchone()
+    log('WHERE?', addr, 'unknown' if not r else (r['x'], r['y']))
+    return {'t': 'where', 'to': addr, 'x': r['x'], 'y': r['y'], 'at': int(r['at'])} if r else {'t': 'where', 'to': addr, 'none': 1}
 def handle(c, addr, msg):
     """-> reply dict (or a list of them). Queues jobs; never touches the chain itself."""
     if msg.get('t') == 'drop': handle_drop(c, addr, msg); return None
     if msg.get('t') == 'took': return handle_took(c, addr, msg)
     if msg.get('t') == 'ground?': return handle_ground(c, addr, msg)
     if msg.get('t') in ('fell', 'felled?'): return handle_felled(c, addr, msg)
+    if msg.get('t') in ('here', 'where?'): return handle_where(c, addr, msg)
     rid = str(msg.get('id') or '')[:40]
     if not rid: return None
     old = c.execute('select paid from reqs where addr=? and id=?', (addr, rid)).fetchone()
@@ -374,7 +388,7 @@ def room_loop(stop):
                     if fr.evaluate("window.__bankClosed || null"): raise RuntimeError('room closed')
                     for m in fr.evaluate("window.__bankQ.splice(0)"):
                         d, f = m.get('data') or {}, m.get('from') or {}
-                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'took', 'ground?'): continue
+                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'took', 'ground?', 'here', 'where?'): continue
                         if f.get('guest') or not f.get('address'): continue
                         try: rep = handle(c, f['address'], d)
                         except Exception: log('HANDLE ERROR', traceback.format_exc()[-400:]); rep = {'t': 'dep', 'id': d.get('id'), 'to': f['address'], 'ok': False, 'note': 'The bank hit an error; try again later.'}

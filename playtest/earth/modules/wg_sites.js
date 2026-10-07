@@ -173,10 +173,12 @@
         for (const e of (W.near || [])) if (e.piece === nearId && near < e.within && near >= (e.from || 12) && (!e.ground || e.ground === ground) && roll < e.chance) { m = e.m; n = e.n[0] + Math.floor(r2 * e.n[1]); break; }
         if (!m && near < W.keepFromPieces) continue;
         if (!m) { const Z = (W.zones || {})[s.clim] || {}; for (const e of (Z[ground] || [])) if (roll < e[1]) { m = e[0]; n = e[2][0] + Math.floor(r2 * e[2][1]); break; } }
+        if (m && W.size && W.size[m]) { const S2 = W.size[m]; n = S2[0] + Math.floor(r2 * (S2[1] - S2[0] + 1)); }   /* the species' own group size: packs, herds, pairs, loners */
         if (!m || n < 1 || (W.keep && near < (W.keep[m] || 0))) continue;   /* hunters keep away from the towns */
         const id = 'w1:' + face + ':a' + qx + '.' + qy, out = { id, face, kind: 'herd', x: cx, y: cy, level: (CA.level || {})[m] || 1, cls: CLS[s.cls], monster: m, ground, clim: s.clim, spawns: [], objects: [], nodes: [], fishing: [] };
-        for (let k = 0, t = 0; t < 14 && out.spawns.length < n; t++) {
-          const a = t / 14 + r2 * 0.3, rr = 1 + 3 * u01(mix32(hv ^ (t * 2654435761))), gx = Math.floor(px + g.ccos(a) * rr), gy = Math.floor(-(py + g.csin(a) * rr));
+        const TRIES = Math.max(14, n * 3), SPREAD = Math.max(3, Math.sqrt(n) * 1.6);   /* a big herd spreads out */
+        for (let k = 0, t = 0; t < TRIES && out.spawns.length < n; t++) {
+          const a = t / 14 + r2 * 0.3, rr = 1 + SPREAD * u01(mix32(hv ^ (t * 2654435761))), gx = Math.floor(px + g.ccos(a) * rr), gy = Math.floor(-(py + g.csin(a) * rr));
           const L = ctx.tileTrue(face, gx, gy);
           if (L === '~' || L === 'v' || ctx.BLOCK.indexOf(L) >= 0 || out.spawns.some(q => q.x === gx && q.y === gy)) continue;
           out.spawns.push({ m, x: gx, y: gy, uid: id + ':' + k }); k++;

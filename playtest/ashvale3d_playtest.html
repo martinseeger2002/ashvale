@@ -13162,15 +13162,27 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       function resize() { const w = host.clientWidth || innerWidth, h = host.clientHeight || innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = w / h < 1.2 ? 55 : 45; camera.updateProjectionMatrix(); }
       if (window.ResizeObserver) new ResizeObserver(resize).observe(host); window.addEventListener('resize', resize); resize();
       let saveFails = 0;
-      function persist() {
+      /* where you stand, for the Atlas's "you are here" (2026-10-06): the @ashvale Bank keeps each player's last spot
+         and tells the Atlas (Games tab) when it asks. Said as we save, when we moved 6+ tiles or 2 minutes went by, and as
+         we leave; only a signed-in player (the mesh stamps the address, so nobody can move someone else's dot). */
+      const HERE = { x: null, y: null, t: 0 };
+      function tellHere(force) {
+        if (!walletState.address && !hintedAddr) return;
+        const now = Date.now(), moved = HERE.x == null || Math.abs(me.x - HERE.x) + Math.abs(me.y - HERE.y) >= 6;
+        if (!force && !moved && now - HERE.t < 120000) return;
+        HERE.x = me.x; HERE.y = me.y; HERE.t = now;
+        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'here', v: 1, x: me.x, y: me.y }); });
+      }
+      function persist(leaving) {
         if (stopped) return;
+        try { tellHere(leaving === true); } catch (e) { /* the Bank is out of reach: the next save */ }
         Promise.resolve(store.set(SAVE, JSON.stringify(core.exportPlayer(PID)))).then(ok => {   /* false: the arcade did not take it */
           if (ok === false) { if (++saveFails === 2) hud.netLost && hud.netLost(true, 'save'); }
           else { if (saveFails >= 2) { hud.netLost && hud.netLost(false, 'save'); hud.chat('Your progress is saving again.', 'sys'); } saveFails = 0; }
         });
       }   /* stopped: New character cleared the save; the reload's visibilitychange must not write the old one back */
-      document.addEventListener('visibilitychange', () => { if (document.hidden) persist(); else { lastTick = performance.now(); } });
-      window.addEventListener('pagehide', persist);
+      document.addEventListener('visibilitychange', () => { if (document.hidden) persist(true); else { lastTick = performance.now(); } });
+      window.addEventListener('pagehide', () => persist(true));
 
       function hudApi() {
         return {

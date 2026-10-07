@@ -236,6 +236,66 @@ class Bot:
         return s.get('gold', 0) >= want
     def cheapest_weapon(self):
         return min((self.r("return ASH.core.priceBuy('armoury', %r, ASH.me)" % k) or 9999) for k in ('dagger_t1', 'sword_t1'))
+    # --- earning, by whatever it has learned pays best (2026-10-06: "There are better ways to gather
+    #     resources than kill rats") ------------------------------------------------------------------------
+    ROCKS = [(38, 43), (42, 44), (40, 45), (41, 47), (40, 42), (44, 43), (38, 46)]   # copper and tin, village east
+    SHRIMP = [(37, 56), (40, 54), (44, 55), (38, 59)]                                # the village pond
+    ACTIVITY_TOOL = {'mine': 'pickaxe', 'fish': 'net'}
+
+    def has_tool(self, item):
+        return bool(self.r("return !!(ASH.me.inv.some(q => q && q.id === %r) || Object.values(ASH.me.eq || {}).some(q => q && q.id === %r))" % (item, item)))
+
+    def get_tool(self, item):
+        """from the chest if it is there, else from Tam's store (a pickaxe is 20 GOLD, a net 5)"""
+        if self.has_tool(item): return True
+        self.chest_take_all([item])
+        if self.has_tool(item): return True
+        if self.r("return await buy('tam', %r, 1)" % item) and self.has_tool(item):
+            log('bought a', item); return True
+        return False
+
+    def gather_round(self, spots, seconds=150):
+        """work the spots in turn for about `seconds`; a depleted rock regrows in seconds, so going round them keeps busy"""
+        t0, got = time.time(), {}
+        while time.time() - t0 < seconds and self.time_left():
+            for x, y in spots:
+                d = self.r("return await gatherAt(%d, %d, 20000)" % (x, y)) or {}
+                for k, v in d.items(): got[k] = got.get(k, 0) + v
+                if time.time() - t0 >= seconds: break
+                free = self.r("return ASH.me.inv.filter(s => !s).length") or 0
+                if free <= 1: return got                     # bag full: time to cook and sell
+        return got
+
+    def earn_by(self, how):
+        """one round of earning by `how`: rats, mine or fish. Then cook and sell what it brought."""
+        if how in self.ACTIVITY_TOOL and not self.get_tool(self.ACTIVITY_TOOL[how]):
+            log('cannot %s: no %s and not the GOLD for one' % (how, self.ACTIVITY_TOOL[how])); return False
+        if how == 'rats': self.fight('rat', 5); self.scavenge(12, settle=500)
+        elif how == 'mine': log('mining', self.gather_round(self.ROCKS))
+        elif how == 'fish': log('fishing', self.gather_round(self.SHRIMP))
+        self.cook(); self.money(10 ** 6)
+        return True
+
+    def pick_earning(self):
+        """what has paid best, measured; anything not tried yet is tried first, and every fourth round the
+        runner-up gets another go, so a slow start does not decide it for ever"""
+        rates = self.mem.d.setdefault('earning', {})
+        for how in ('mine', 'fish', 'rats'):
+            if how not in rates: return how
+        ranked = sorted(rates, key=lambda h: -rates[h]['rate'])
+        self._earn_n = getattr(self, '_earn_n', 0) + 1
+        return ranked[1] if self._earn_n % 4 == 0 and len(ranked) > 1 else ranked[0]
+
+    def learn_earning(self, how, gold0, food0, t0):
+        s = self.st()
+        worth = (s.get('gold', 0) - gold0) + 3 * max(0, s.get('bread', 0) - food0)   # a meal is worth ~3 GOLD
+        rate = worth * 60 / max(30.0, time.time() - t0)
+        e = self.mem.d.setdefault('earning', {}).setdefault(how, {'rate': rate, 'rounds': 0})
+        e['rate'] = rate if e['rounds'] == 0 else 0.6 * e['rate'] + 0.4 * rate
+        e['rounds'] += 1
+        self.mem.save()
+        log('earning by %s: %.1f GOLD a minute this round (%.1f on average)' % (how, rate, e['rate']))
+
     def earn(self, gold, food=3, rounds=12):
         """the way a new player starts (2026-10-05): kill rats, cook their meat at the range for food, sell their
         pelts for GOLD, and go round again until it has `gold` and `food`. Rats are weak enough to fight bare-handed."""
@@ -243,11 +303,13 @@ class Bot:
             if not self.time_left(): return False
             s = self.st()
             if s.get('gold', 0) >= gold and s.get('bread', 0) >= food: return True
-            log('earning: round', i + 1, 'gold %s/%s food %s/%s' % (s.get('gold'), gold, s.get('bread'), food))
-            self.fight('rat', 5)
-            self.scavenge(12, settle=500)   # sweep the grounds before the trip to cook and sell
-            self.cook()
-            self.money(gold)
+            how = self.pick_earning()
+            log('earning: round', i + 1, 'by', how, 'gold %s/%s food %s/%s' % (s.get('gold'), gold, s.get('bread'), food))
+            t0 = time.time()
+            if not self.earn_by(how) and how != 'rats':
+                self.mem.d.setdefault('earning', {})[how] = {'rate': -1, 'rounds': 1}   # no tool: last choice
+                continue
+            self.learn_earning(how, s.get('gold', 0), s.get('bread', 0), t0)
         s = self.st(); return s.get('gold', 0) >= gold and s.get('bread', 0) >= food
     def unpack(self):
         """what it owns is in the chest after a restart (gold, food, gear): take it back out and wear the gear"""
@@ -259,7 +321,7 @@ class Bot:
         """before quests: a weapon on, and food in the bag -- earned from rats when it has nothing"""
         self.unpack(); s = self.st()
         if s.get('weapon') and s.get('bread', 0) >= FIGHT_FOOD: return True
-        want = self.cheapest_weapon() + 15 if not s.get('weapon') else 15
+        want = self.cheapest_weapon() if not s.get('weapon') else 0   # the shortfall only: quests first
         log('preparing: weapon %s, food %s, gold %s -> earning %s GOLD and %d food' % (s.get('weapon'), s.get('bread'), s.get('gold'), want, FIGHT_FOOD + 1))
         self.earn(want, FIGHT_FOOD + 1, rounds=5); self.gear(); self.cook()   # a few rounds, not until rich: quests first
         s = self.st(); log('prepared: weapon %s, food %s, gold %s' % (s.get('weapon'), s.get('bread'), s.get('gold')))
@@ -437,7 +499,9 @@ class Bot:
             w2 = self.r("return { weapon: !!ASH.me.eq.weapon, armour: ['head', 'body', 'legs', 'shield'].filter(k => ASH.me.eq[k]).length }") or {}
             if w2 == w:   # bought nothing: earn only for a WEAPON (the operator: "He needs to get to finishing his quests") - armour comes when it is affordable
                 if w.get('weapon'): break
-                self.earn(self.cheapest_weapon() + 15, 3, rounds=4)
+                # only the shortfall for the cheapest weapon, then buy it (2026-10-06: "make cinderwalker do its
+                # quests" -- he looped 4 rounds at 34 of 39 GOLD for a 24-GOLD dagger)
+                self.earn(self.cheapest_weapon(), 0, rounds=4); self.gear()
         return bool(self.r("return !!ASH.me.eq.weapon"))
     def engage(self, key):
         """one fight with the nearest key. Strong monsters first lose the hostile company standing near them, one by one,
@@ -594,6 +658,7 @@ class Bot:
     def npc(self, nid): return self.r("const n = ASH.core.M.npcs.find(q => q.id === %r); return n && [n.x, n.y]" % nid)
     def quest(self, qid):
         Q = QUESTS[qid]; giver = Q['giver']; log('=== quest', Q['name'])
+        self.fetch_pile()   # what a death left on the ground comes back before anything else (cheap when there is none)
         g = self.npc(giver)
         if not g: bug(qid, 'giver %s is not in the world' % giver); return False
         self.walk(g[0], g[1]); said = self.r("return await talk(%r)" % giver); log('giver says', (said or [])[-3:])

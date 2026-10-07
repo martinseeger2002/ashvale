@@ -200,9 +200,12 @@
       const exAt = alt => 1 + 2 * Math.min(1, Math.max(0, (Math.log10(alt) - 3.3) / 1.5));   /* at most 3x from orbit (the operator: the mountains looked out of scale) */
       const tiltAt = alt => { const t = Math.min(1, Math.max(0, (Math.log10(alt) - 1.6) / 2.2)); return 0.62 + (1.5 - 0.62) * t; };
       const PLACES = {};
+      /* a game tile (the x, y a character stands on) -> the sphere direction and the planar point, the same mapping as the places */
+      const gameAt = (vx, vy) => { if (!CFG.origin) return null; const fx = vx + CFG.origin[0] + 0.5, fy = -(vy + CFG.origin[1]) - 0.5; return { u: W.toSphere(CFG.face, fx, fy), face: CFG.face, x: fx, y: fy }; };
       { const at = (vx, vy) => { const fx = vx + CFG.origin[0] + 0.5, fy = -(vy + CFG.origin[1]) - 0.5; return W.toSphere(CFG.face, fx, fy); };
         if (CFG.origin) PLACES.ashvale = { u: at(22, 52), alt: 60 };
-        const sz = zones.find(z => z.id === 'saltmere'); if (sz && CFG.origin) PLACES.saltmere = { u: at(sz.origin[0] + (sz.size[0] >> 1), sz.origin[1] + (sz.size[1] >> 1)), alt: 160 }; }
+        /* every area is a place (?at=<zone id>): over its middle, high enough to see the whole of it */
+        if (CFG.origin) for (const z of zones) if (z && z.id && z.origin && z.size && !PLACES[z.id]) PLACES[z.id] = { u: at(z.origin[0] + (z.size[0] >> 1), z.origin[1] + (z.size[1] >> 1)), alt: Math.max(160, Math.round(Math.max(z.size[0], z.size[1]) * 1.4)) }; }
       let groundH = 0, tP = null;
       function updateCamera() {
         const u = cam.u; frameAt(u);
@@ -365,7 +368,7 @@
         if (riverLines) { riverLines.matrix.makeTranslation(-camW[0], -camW[1], -camW[2]); riverLines.matrixWorld.copy(riverLines.matrix); const k2 = Math.min(1, Math.max(0, (cam.alt - 25) / 60)); riverLines.visible = k2 > 0.02; riverLines.material.opacity = k2; }
         if (frame % 60 === 0) prune();
         renderer.render(scene, camera);
-        hudTick();
+        youTick(); hudTick();
         requestAnimationFrame(tick);
       }
 
@@ -463,15 +466,63 @@
         '.ea .t{position:absolute;left:12px;top:max(10px,env(safe-area-inset-top));padding:7px 10px;background:rgba(30,24,16,.82);border:1px solid #8a7550;border-radius:6px}' +
         '.ea .t small{display:block;color:#e8d9b4;font-weight:400}.ea .b{position:absolute;right:12px;bottom:max(12px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:6px}' +
         '.ea button{pointer-events:auto;min-width:44px;min-height:38px;padding:6px 10px;background:linear-gradient(#5a4c3a,#433829);border:1px solid #8a7550;border-radius:5px;color:#ffcf3f;font:inherit;cursor:pointer}' +
-        '.ea button:focus-visible{outline:2px solid #fff}.ea button.on{background:linear-gradient(#7a6a3a,#5a4a29)}</style>' +
-        '<div class="ea"><div class="t">ASHVALE Atlas<small id="ea-alt">-</small></div><div class="b">' +
-        '<button id="ea-ash">Ashvale</button><button id="ea-salt">Saltmere</button><button id="ea-in">+</button><button id="ea-out">&minus;</button>' +
+        '.ea button:focus-visible{outline:2px solid #fff}.ea button.on{background:linear-gradient(#7a6a3a,#5a4a29)}' +
+        '.ea .you{position:absolute;left:0;top:0;display:none;transform:translate(-50%,-50%);pointer-events:none}' +
+        '.ea .you i{display:block;width:14px;height:14px;border-radius:50%;background:#2fd3ff;border:2px solid #fff;box-shadow:0 0 0 3px #0a2a3a99,0 0 10px #2fd3ff}' +
+        '.ea .you i::after{content:"";position:absolute;left:50%;top:7px;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;border:2px solid #2fd3ff;animation:eaPing 1.8s ease-out infinite}' +
+        '.ea .you b{position:absolute;left:50%;top:18px;transform:translateX(-50%);padding:1px 6px;border-radius:4px;background:rgba(10,30,40,.85);color:#bff1ff;font-size:12px;white-space:nowrap}' +
+        '@keyframes eaPing{from{transform:scale(1);opacity:.9}to{transform:scale(3.2);opacity:0}}</style>' +
+        '<div class="ea"><div class="you" id="ea-you"><i></i><b>You</b></div><div class="t">ASHVALE Atlas<small id="ea-alt">-</small></div><div class="b">' +
+        '<button id="ea-me" hidden>You</button><button id="ea-ash">Ashvale</button><button id="ea-salt">Saltmere</button><button id="ea-in">+</button><button id="ea-out">&minus;</button>' +
         '<button id="ea-globe">Globe</button><button id="ea-par">Parcels</button></div></div>';
       host.appendChild(hud);
       const $ = id => hud.querySelector('#' + id), altEl = $('ea-alt');
       $('ea-ash').onclick = () => flyTo('ashvale'); $('ea-salt').onclick = () => flyTo('saltmere'); $('ea-globe').onclick = () => flyTo('globe');
       $('ea-in').onclick = () => zoom(0.45); $('ea-out').onclick = () => zoom(2.2);
       $('ea-par').onclick = () => { U.uParcel.value = U.uParcel.value ? 0 : 0.75; $('ea-par').classList.toggle('on', !!U.uParcel.value); };
+      /* ---- YOU ARE HERE (2026-10-06: players open the Atlas from the Games tab and should see a dot where they are).
+         The game tells the @ashvale Bank where its player stands as it saves; here we ask the Bank, in the same realtime
+         room the game uses, for our own player's spot (the arcade stamps who is asking, so each player only learns their
+         own). A blue dot marks it at every height, and the You button flies there. Outside the arcade, or signed out, or
+         a player who never played: no dot, nothing else changes. */
+      const youEl = $('ea-you'), meBtn = $('ea-me'), vYou = new THREE.Vector3();
+      const YOU = { at: null, asked: 0, state: 'off' };
+      function setYou(x, y) {
+        const g = gameAt(x, y); if (!g) return;
+        YOU.at = Object.assign(g, { gx: x, gy: y }); YOU.state = 'shown';
+        PLACES.you = { u: g.u, alt: 90 }; meBtn.hidden = false;
+      }
+      function youTick() {
+        if (!YOU.at) return;
+        const u = YOU.at.u, h = Math.max(W.WATER, W.sample(YOU.at.face, YOU.at.x, YOU.at.y).h) * U.uEx.value, rr = R + h + 1.5;
+        const px = u[0] * rr, py = u[1] * rr, pz = u[2] * rr;
+        /* on our side of the planet: the camera is above the dot's horizon */
+        const up = (camW[0] - px) * u[0] + (camW[1] - py) * u[1] + (camW[2] - pz) * u[2];
+        vYou.set(px - camW[0], py - camW[1], pz - camW[2]).project(camera);
+        if (up <= 0 || vYou.z > 1 || Math.abs(vYou.x) > 1.2 || Math.abs(vYou.y) > 1.2) { youEl.style.display = 'none'; return; }
+        const w = canvas.clientWidth || innerWidth, hh = canvas.clientHeight || innerHeight;
+        youEl.style.display = 'block'; youEl.style.left = ((vYou.x + 1) / 2 * w) + 'px'; youEl.style.top = ((1 - vYou.y) / 2 * hh) + 'px';
+      }
+      async function findMe() {
+        const RT0 = () => window.arcade && window.arcade.realtime;
+        if (!/^https?:/.test(location.protocol) || !window.parent || window.parent === window) return;
+        if (!RT0()) await new Promise(ok => { const s = document.createElement('script'); s.src = '/r/realtime.js'; s.onload = s.onerror = () => ok(); document.head.appendChild(s); setTimeout(ok, 8000); });
+        if (!RT0()) return;
+        YOU.state = 'asking';
+        const room = await RT0().join('bank', { game: 'ashvale' });
+        if (!room || !room.online || !room.me || room.me.guest || !room.me.address) { YOU.state = 'signed-out'; return; }
+        const BANK = 'nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c';   /* @ashvale: only its answers count */
+        let done = false;
+        room.on('message', (m, p) => {
+          if (done || !m || m.t !== 'where' || m.to !== room.me.address || !p || p.address !== BANK) return;
+          done = true; if (m.none) YOU.state = 'never-played'; else setYou(m.x, m.y);
+          setTimeout(() => room.leave(), 500);
+        });
+        for (let k = 0; k < 4 && !done; k++) { YOU.asked++; room.send({ t: 'where?', v: 1 }); await new Promise(ok => setTimeout(ok, 6000)); }
+        if (!done) { YOU.state = 'no-answer'; room.leave(); }
+      }
+      meBtn.onclick = () => { if (PLACES.you) flyTo('you'); };
+      setTimeout(() => findMe().catch(e => { YOU.state = 'error'; console.warn('Atlas: could not find you', e && e.message); }), 1500);
       let hudT = 0;
       function hudTick() {
         if (frame - hudT < 10) return; hudT = frame;
@@ -491,6 +542,7 @@
         state: () => ({ lat: uToLL(cam.u)[0], lon: uToLL(cam.u)[1], alt: cam.alt, hd: cam.hd, tilt: cam.tilt, flying: !!cam.fly, ex: U.uEx.value, ground: groundH, face: tP && tP.face }),
         stats: () => ({ patches: drawn.length, built, live, queue: buildQ.size, chunks: chunks.size, chunksBuilt: Array.from(chunks.values()).filter(c => c.mesh).length, frame }),
         places: PLACES, W, G,
+        you: (x, y) => { if (x != null) setYou(x, y); return { state: YOU.state, asked: YOU.asked, at: YOU.at && [YOU.at.gx, YOU.at.gy], shown: youEl.style.display === 'block' }; },
         /* the world editor (the operator: "edit the terrain raising and lowering and region type" in the Atlas) */
         pick: (x, y) => groundUnder(x, y),
         setEdits: (list, near) => {

@@ -115,8 +115,43 @@
       const along = w >= d; roof(S, w, d, (along ? d : w) * 0.42 + 0.25, 0, WH + 0.2, 0, rf, along);
       return done(S);
     }
+    /* the lake castle's pieces (zone objects cwall ctower ckeep cgate, tools/castle/make_castle.js), at the sizes the game's
+       castle kit (src/castle.js) draws them, simplified for the Atlas: stone walls 4.6 m high and 1.5 m thick with merlons
+       on both edges, round towers with a turret and the red cone roof, the keep with corner turrets and its donjon, the
+       gatehouse with its dark arch. Stairs, decks and pads draw nothing. */
+    function castle(o) {
+      const S = Shape(), st = rgb('#a59f92'), cap = rgb('#b8b2a4'), dark = rgb('#26221e'), red = rgb('#8c3f2e'), WH = 4.6;
+      const merlons = (len, along, y, n) => { for (let t = -len / 2 + 0.5; t <= len / 2 - 0.4; t += 1.3) box(S, along ? 0.65 : 0.4, 0.75, along ? 0.4 : 0.65, along ? t : n, y, along ? n : t, cap); };
+      const tower = (r, h, rt, x, z, y0) => {
+        cyl(S, 14, r, r, WH, x, y0, z, st, 0, true);
+        for (let k = 0; k < 12; k++) { const a = k / 12 * Math.PI * 2; if (k % 2 === 0) box(S, 0.6, 0.75, 0.4, x + Math.sin(a) * (r - 0.2), y0 + WH, z + Math.cos(a) * (r - 0.2), cap, 0, a); }
+        if (h > WH + 0.5) cyl(S, 12, rt, rt, h - WH, x, y0 + WH, z, st, 0, true);
+        cone(S, 12, rt + 0.45, Math.max(2.2, rt * 1.6), x, y0 + Math.max(h, WH + 0.8), z, red);
+      };
+      if (o.k === 'cwall') {
+        const X = o.gx != null ? o.gx : o.x, Y = o.gy != null ? o.gy : o.y;   /* placed objects carry their tile position in gx, gy */
+        const along = Y === o.y2, len = Math.abs(along ? o.x2 - X : o.y2 - Y) + 1;
+        box(S, along ? len : 1.5, WH, along ? 1.5 : len, 0, -0.4, 0, st);
+        for (const n of [-0.55, 0.55]) merlons(len, along, WH - 0.4, n);
+      } else if (o.k === 'ctower') {
+        const r = o.r || 2.5, h = o.h || 8; tower(r, h, o.turret || Math.max(1.1, r - 1.2), 0, 0, -0.4);
+      } else if (o.k === 'ckeep') {
+        const w = o.w, d = o.h, H = Math.max(6, (o.floors || 3) * (o.lh || 3.2));
+        box(S, w, H, d, 0, -0.4, 0, st);
+        merlons(w, true, H - 0.4, -d / 2 + 0.2); merlons(w, true, H - 0.4, d / 2 - 0.2); merlons(d, false, H - 0.4, -w / 2 + 0.2); merlons(d, false, H - 0.4, w / 2 - 0.2);
+        for (let f = 1; f < (o.floors || 3); f++) for (let k = -2; k <= 2; k++) { box(S, 0.7, 1.1, 0.06, k * w / 5.5, f * (o.lh || 3.2), d / 2 + 0.02, dark); box(S, 0.7, 1.1, 0.06, k * w / 5.5, f * (o.lh || 3.2), -d / 2 - 0.02, dark); }
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) tower(1.5, H + 3, 1.2, sx * (w / 2 - 0.6), sz * (d / 2 - 0.6), H - WH - 0.4);
+        if (o.donjon) tower(o.donjon.r, o.donjon.h, Math.max(1.2, o.donjon.r - 1.4), 0, 0, H - 0.4);
+      } else if (o.k === 'cgate') {
+        const small = !!o.small, Wd = small ? 3.6 : 5.2, D = small ? 1.3 : 3.2, H = small ? 5.0 : 6.8, OP = small ? 1.7 : 1.9, OH = small ? 2.6 : 3.0, ns = o.dir === 'n' || o.dir === 's';
+        box(S, ns ? Wd : D, H, ns ? D : Wd, 0, -0.4, 0, st);
+        for (const sd of [-1, 1]) box(S, ns ? OP : 0.06, OH, ns ? 0.06 : OP, ns ? 0 : sd * (D / 2 + 0.02), -0.4, ns ? sd * (D / 2 + 0.02) : 0, dark);
+        merlons(ns ? Wd : D, true, H - 0.4, 0);
+      }
+      return done(S);
+    }
     function oneBox(w, h, d, c) { const S = Shape(); box(S, w, h, d, 0, 0, 0, rgb(c)); return done(S); }
-    return { api: 1, get: n => LIB[n], tris: n => LIB[n] ? LIB[n].tris : 0, names: Object.keys(LIB), house, box: oneBox, rgb };
+    return { api: 1, get: n => LIB[n], tris: n => LIB[n] ? LIB[n].tris : 0, names: Object.keys(LIB), house, castle, box: oneBox, rgb };
   }
   const api = { api: 1, create };
   if (root.ASH3D && root.ASH3D.define) root.ASH3D.define('atlas_shapes', META, () => api);
