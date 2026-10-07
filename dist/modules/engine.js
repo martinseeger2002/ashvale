@@ -632,12 +632,12 @@
         for (const L of CAVE.pool) if (L.intensity > 0) L.intensity = 3.0 + Math.sin(now * 0.013 + L.position.x) * 0.3 + Math.sin(now * 0.031 + L.position.z) * 0.18;   /* flicker */
       }
       /* ---------- DAY AND NIGHT (2026-10-07: "Add an orbiting sun that orbits the globe once every 24 hours make it dark
-         ashvale as of one hour ago is sunset"; "Have the sun create the shadows on the ground"). The sun circles the planet's
-         equator once a day of real time; at SUN_EPOCH it set over Ashvale (90 degrees west of it) and it moves west 360 degrees a
-         day - the Atlas uses the same rule (src/earth.js). Where you stand: its height above your horizon sets the daylight,
-         the sky and the light's colour, and the light (with the shadows) comes from its direction; under the horizon a faint
-         bluish moon, opposite it, casts the shadows. */
-      const SUN_EPOCH = 1791353761, DAY_S = 86400;
+         ashvale as of one hour ago is sunset"; then "change the day night cycle to every 2 hours"). The sun circles the planet's
+         equator once every two hours of real time; at SUN_EPOCH it set over Ashvale (90 degrees west of it) and it moves west
+         360 degrees a cycle - the Atlas uses the same rule (src/earth.js). Where you stand: its height above your horizon sets
+         the daylight, the sky and the light's colour, and the light (with the shadows) comes from its direction; under the
+         horizon a faint bluish moon, opposite it, casts the shadows. */
+      const SUN_EPOCH = 1791353761, DAY_S = 7200;
       const SUNL = { dir: [-0.45, 0.8, 0.3], key: '', b: null, lonA: null, base: new THREE.Color(SKY), col: new THREE.Color() };
       const NIGHT_SKY = new THREE.Color(0x0b1426), DUSK_SKY = new THREE.Color(0xd8865a), SUNC = new THREE.Color(0xfff0d6), DUSKC = new THREE.Color(0xffa060), MOONC = new THREE.Color(0x9fb4ff);
       function sphereAt(x, y) { const WG = D.wg, C = DATA.globecfg; if (!WG || !WG.toSphere || !C || !C.origin) return null; const fx = x + C.origin[0] + 0.5, fy = -(y + C.origin[1]) - 0.5; return [WG.toSphere(C.face, fx, fy), WG.toSphere(C.face, fx + 1, fy), WG.toSphere(C.face, fx, fy - 1)]; }

@@ -237,8 +237,8 @@
     function mobCombat(md) { return md.level * 2; }
     /* ---------------- prayer (2026-10-07, after Old School RuneScape): points = Prayer level, drained while prayers are
        on (each tick the active prayers' drain is added to a counter; every `resist` of it costs a point), restored at an
-       altar and on respawn. Bones are buried for XP. rules.prayer.list is the whole book; `soon` ones are shown, not usable. */
-    const PRAY = RU.prayer || { resist: 60, buryTicks: 2, list: [] }, PRAYERS = {};
+       altar and on respawn. Bones are buried for XP. rules.prayer.list is the three overhead protections. */
+    const PRAY = RU.prayer || { resist: 100, buryTicks: 2, list: [] }, PRAYERS = {};
     /* account flags (rules "flags"): blessings a quest leaves on the character, e.g. the Gift of Angels */
     const FLAGS = RU.flags || {};
     function hasFlag(p, k) { return !!(p && p.flags && p.flags[k]); }
@@ -279,7 +279,7 @@
     function prayerTick(p) {
       let d = 0; for (const id in p.pray || {}) d += (PRAYERS[id] && PRAYERS[id].drain) || 0;
       if (!d) return;
-      p.pd = (p.pd | 0) + d; const rs = resist(p);
+      p.pd = (p.pd | 0) + d; const rs = resist(p, d);
       while (p.pd > rs && p.pp > 0) { p.pd -= rs; p.pp--; }
       if (p.pp <= 0) { p.pp = 0; p.pd = 0; prayersOff(p, 'You have run out of Prayer points. You can recharge them at the altar in the church.'); }
     }
@@ -293,12 +293,16 @@
       addXp(p, 'prayer', d.buryXp);
     }
     function bonuses(p) {
-      const b = { attack: 0, strength: 0, defence: 0, ranged: 0, rstr: 0, magic: 0, prayer: 0 };
+      const b = { attack: 0, strength: 0, defence: 0, ranged: 0, rstr: 0, magic: 0, prayer: 0, prayerSec: 0 };
       for (const s of EQ_SLOTS) { const e = p.eq[s]; if (!e) continue; const d = IT[e.id]; for (const k in b) b[k] += d[k] || 0; }
       return b;
     }
-    /* drain needed per point: each point of Prayer bonus from gear makes prayers last longer (OSRS: 60 + 2 x bonus) */
-    function resist(p) { return PRAY.resist + 2 * Math.max(0, bonuses(p).prayer); }
+    /* one protection (drain 12) spends a point every 5 s. Prayer bonus from gear still lengthens that (OSRS: +2 resist
+       per bonus). Prayer seconds (the Monk's robe) add a full second per point on top, at whatever drain is running. */
+    function resist(p, drain) {
+      const b = bonuses(p), d = drain || 12;
+      return PRAY.resist + 2 * Math.max(0, b.prayer) + Math.max(0, b.prayerSec) * d / 0.6;
+    }
     function weaponOf(p) { const w = p.eq.weapon; return w ? IT[w.id] : null; }
     function wclass(p) { const w = weaponOf(p); return w ? w.class : 'melee'; }
     function style(p) { const c = wclass(p), L = STYLES[c]; return L[Math.min(p.styles[c] || 0, L.length - 1)]; }
@@ -1721,7 +1725,7 @@
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
-      prayTicks(p, pts, drain) { let d = drain; if (d == null) { d = 0; for (const id in p.pray || {}) d += (PRAYERS[id] && PRAYERS[id].drain) || 0; } if (!d) return null; const n = pts == null ? (p.pp | 0) : pts, rs = resist(p); return n <= 0 ? 0 : Math.ceil(((n - 1) * rs + rs + 1 - (pts == null ? (p.pd | 0) : 0)) / d); },
+      prayTicks(p, pts, drain) { let d = drain; if (d == null) { d = 0; for (const id in p.pray || {}) d += (PRAYERS[id] && PRAYERS[id].drain) || 0; } if (!d) return null; const n = pts == null ? (p.pp | 0) : pts, rs = resist(p, d); return n <= 0 ? 0 : Math.ceil(((n - 1) * rs + rs + 1 - (pts == null ? (p.pd | 0) : 0)) / d); },
       isHawk, passageAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf,
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,

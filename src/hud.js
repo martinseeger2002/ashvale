@@ -88,6 +88,7 @@
       for (const k of ['attack', 'strength', 'defence', 'ranged', 'magic']) if (d[k]) b.push(A.cap(k) + ' +' + d[k]);
       if (d.rstr) b.push('Ranged strength +' + d.rstr);
       if (d.prayer) b.push('Prayer +' + d.prayer);
+      if (d.prayerSec) b.push('+' + d.prayerSec + 's per prayer point');
       if (d.heal) b.push('Heals ' + d.heal); if (d.healPct) b.push('Heals ' + d.healPct + '% of your hitpoints');
       const req = d.req ? Object.keys(d.req).filter(k => d.req[k] > 1).map(k => A.cap(k) + ' ' + d.req[k]).join(', ') : '';
       if (d.weight) b.push((d.weight * Math.max(1, n || 1) / 1000).toFixed(d.weight * (n || 1) < 1000 ? 2 : 1) + ' kg');
