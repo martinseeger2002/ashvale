@@ -176,7 +176,19 @@ class Bot:
     def r(self, js):
         try: return self.g.run(js)
         except Exception as e: log('step error', str(e)[:160]); return None
-    def time_left(self): return not LiveGame.stopping and time.time() - self.t0 < self.limit
+    def time_left(self):
+        """False when the run is up - or when a new game release came out (chain/modules.json registry_version went up): the run
+        ends cleanly and tools/bot_loop.sh starts it again on the new release, so other players keep seeing him (the operator
+        2026-10-06: a run on an old release fell out of the players' rooms)"""
+        if LiveGame.stopping or time.time() - self.t0 >= self.limit: return False
+        if time.time() - getattr(self, '_relT', 0) > 180:
+            self._relT = time.time()
+            try:
+                v = json.load(open(os.path.join(HERE, 'chain', 'modules.json')))['registry_version']
+                if not hasattr(self, '_rel0'): self._rel0 = v
+                elif v > self._rel0: log('new release (registry v%d, the run started on v%d): ending this run so it restarts on it' % (v, self._rel0)); self.limit = 0; return False
+            except Exception: pass
+        return True
     def st(self): return self.r("return { at: [ASH.me.x, ASH.me.y], hp: ASH.me.hp, max: ASH.core.maxHp(ASH.me), cb: ASH.core.combatLevel(ASH.me), atk: ASH.core.lv(ASH.me, 'attack'), def: ASH.core.lv(ASH.me, 'defence'), gold: bag().coins || 0, bread: ASH.me.inv.filter(q => q && ASH.core.item(q.id).edible).reduce((a, q) => a + q.n, 0), raw: ASH.me.inv.filter(q => q && ASH.core.item(q.id).cooks).reduce((a, q) => a + q.n, 0), weapon: ASH.me.eq.weapon && ASH.me.eq.weapon.id, q: JSON.parse(JSON.stringify(ASH.me.quests || {})), dead: !!ASH.me.dead }") or {}
     def attune_here(self):
         """touch any town portal within reach it has not touched yet: touching attunes it, and an attuned portal can be
@@ -249,7 +261,7 @@ class Bot:
         if s.get('weapon') and s.get('bread', 0) >= FIGHT_FOOD: return True
         want = self.cheapest_weapon() + 15 if not s.get('weapon') else 15
         log('preparing: weapon %s, food %s, gold %s -> earning %s GOLD and %d food' % (s.get('weapon'), s.get('bread'), s.get('gold'), want, FIGHT_FOOD + 1))
-        self.earn(want, FIGHT_FOOD + 1); self.gear(); self.cook()
+        self.earn(want, FIGHT_FOOD + 1, rounds=5); self.gear(); self.cook()   # a few rounds, not until rich: quests first
         s = self.st(); log('prepared: weapon %s, food %s, gold %s' % (s.get('weapon'), s.get('bread'), s.get('gold')))
         return bool(s.get('weapon'))
     def cook(self):
@@ -419,12 +431,13 @@ class Bot:
         armor or a weapon"): earn the gold, buy the best it can afford, wear it"""
         for i in range(rounds):
             w = self.r("return { weapon: !!ASH.me.eq.weapon, armour: ['head', 'body', 'legs', 'shield'].filter(k => ASH.me.eq[k]).length }") or {}
-            if w.get('weapon') and w.get('armour', 0) >= 3: return True
+            if w.get('weapon') and (w.get('armour', 0) >= 3 or i > 0): return True   # one shopping trip for armour, then on with the quest
             log('gearing up: weapon %s, %d armour pieces worn' % (w.get('weapon'), w.get('armour', 0)))
             self.unpack(); self.money(10 ** 6); self.gear(); self.best_armour(); self.wear()
             w2 = self.r("return { weapon: !!ASH.me.eq.weapon, armour: ['head', 'body', 'legs', 'shield'].filter(k => ASH.me.eq[k]).length }") or {}
-            if w2 == w:   # bought nothing: not enough gold - earn some and try again
-                self.earn((self.cheapest_weapon() if not w.get('weapon') else 40) + 15, 3, rounds=6)
+            if w2 == w:   # bought nothing: earn only for a WEAPON (the operator: "He needs to get to finishing his quests") - armour comes when it is affordable
+                if w.get('weapon'): break
+                self.earn(self.cheapest_weapon() + 15, 3, rounds=4)
         return bool(self.r("return !!ASH.me.eq.weapon"))
     def engage(self, key):
         """one fight with the nearest key. Strong monsters first lose the hostile company standing near them, one by one,
