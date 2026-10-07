@@ -609,7 +609,7 @@
         for (const n of core.M.npcs) {
           const e = ents.get('n:' + n.id); if (!e) continue;
           e.root.visible = npcShown(n);
-          if (n.patrol || n.guard) { if (moveTo(e, n.x, n.y, stamp)) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); }
+          if (n.patrol || n.guard || n.watch) { if (moveTo(e, n.x, n.y, stamp)) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); }
         }   /* a watchman walking his round, a guard answering the call to arms; hidden NPCs stay unseen until their flag */
         syncMobEnts();
         for (const m of core.S.mobs) {
@@ -675,6 +675,7 @@
           case 'respawn': { const t = ents.get('p:' + e.p); if (!t) break; t.dead = false; t.oneShot = false; t.loco = null; t.H.setOpacity && t.H.setOpacity(1); t.root.visible = true; const p = core.S.players[e.p]; place(t, p.x, p.y); t.H.play('idle', { loop: true }); if (e.p === PID) { hud.death(false); cam.snap = true; arriveCheck(); } break; }
           case 'gone': { const t = ents.get('m:' + e.mob); if (t) { t.dead = true; t.deadT = now - 5000; t.oneShot = true; t.root.visible = false; } break; }   /* the host says it is dead: hide it at once (2026-10-02: frozen monsters after re-entering a zone) */
           case 'spawn': { const m = core.mobByUid(e.mob), t = ents.get('m:' + e.mob); if (!t) break; t.dead = false; t.oneShot = false; t.loco = null; t.root.visible = true; t.H.setOpacity && t.H.setOpacity(1); place(t, m.x, m.y); t.H.play('idle', { loop: true }); t.spawnT = now; t.hp = m.hp; break; }
+          case 'guard': { const t = ents.get('n:' + e.id); if (!t) break; if (e.up) { t.dead = false; t.oneShot = false; t.root.visible = true; t.H.setOpacity && t.H.setOpacity(1); t.H.play('idle', { loop: true }); } else { t.dead = true; t.oneShot = true; t.H.play('death', { loop: false }); } break; }
           case 'msg': if (mine) hud.chat(e.text, e.kind); break;
           case 'xp': if (mine) hud.xpDrop(e.skill, e.n); break;
           case 'level': if (mine) { hud.levelUp(e.skill, e.lvl); sfx('level'); burst(myEnt.root.position, 0xffd040); netGear(); } break;   /* others see the new total level */
@@ -805,7 +806,7 @@
              trails between them, sadfrog 2026-10-07), ranges, campfires, and torches dropped on the ground (2026-10-07) */
           /* every light out to the edge of what you can see (2026-10-07: "The light from the illumination should load
              farther out"): the nearest few are real lights, every one of them gets a pool of light on the ground (GLOW) */
-          const R = inCave ? 18 : Math.min(viewR(), 90), LT = { torch: 1.6, sconce: 1.5, lamp: 2.6, range: 0.9, campfire: 0.9 }, near = [], add = o => { if (LT[o.k] && Math.abs(o.x - me.x) < R && Math.abs(o.y - me.y) < R) near.push([o.x, o.y, LT[o.k], o.k === 'lamp' ? 0xffd27a : 0xff9a3c, o.k === 'lamp']); };
+          const R = inCave ? 18 : Math.min(viewR(), 90), LT = { torch: 1.6, sconce: 1.5, lamp: 2.6, range: 0.9, campfire: 0.9 }, near = [], add = o => { if (!LT[o.k] || Math.abs(o.x - me.x) >= R || Math.abs(o.y - me.y) >= R) return; if (core.lampLit && !core.lampLit(o.x, o.y)) return; near.push([o.x, o.y, LT[o.k], o.k === 'lamp' ? 0xffd27a : 0xff9a3c, o.k === 'lamp']); };
           for (const o of core.M.objects || []) add(o);
           if (!inCave && core.M.roadTorchesIn) for (const o of core.M.roadTorchesIn(me.x - R, me.y - R, me.x + R, me.y + R)) add(o);
           for (const f of fires.values()) { const q = f.position; if (Math.abs(q.x - me.x) < R && Math.abs(q.z - me.y) < R) near.push([q.x - 0.5, q.z - 0.5, 0.8, 0xff9a3c]); }
@@ -839,7 +840,8 @@
          the sky and the light's colour, and the light (with the shadows) comes from its direction; under the horizon a faint
          bluish moon, opposite it, casts the shadows. */
       const SUN_EPOCH = 1791353761, DAY_S = 7200;
-      const SUNL = { dark: 0, dir: [-0.45, 0.8, 0.3], key: '', b: null, lonA: null, base: new THREE.Color(SKY), col: new THREE.Color(), night: new THREE.Color() };
+      const SUNL = { dark: 0, dir: [-0.45, 0.8, 0.3], key: '', b: null, lonA: null, base: new THREE.Color(SKY), col: new THREE.Color(), night: new THREE.Color(), phase: null };
+      if (SCENE.lampQuery) SCENE.lampQuery((x, y) => core.lampLit ? core.lampLit(x, y) : true);
       const NEW_SKY = new THREE.Color(0x1a2434), NIGHT_SKY = new THREE.Color(0x2a3a52), DUSK_SKY = new THREE.Color(0xd8865a), SUNC = new THREE.Color(0xfff0d6), DUSKC = new THREE.Color(0xffa060), MOONC = new THREE.Color(0x9fb4ff);
       function sphereAt(x, y) { const WG = D.wg, C = DATA.globecfg; if (!WG || !WG.toSphere || !C || !C.origin) return null; const fx = x + C.origin[0] + 0.5, fy = -(y + C.origin[1]) - 0.5; return [WG.toSphere(C.face, fx, fy), WG.toSphere(C.face, fx + 1, fy), WG.toSphere(C.face, fx, fy - 1)]; }
       function sunAt(tms) {   /* the sun's direction from the planet's centre */
@@ -889,7 +891,8 @@
         sun.intensity = lit ? 0.5 + 1.8 * day : 0.04 + 0.22 * moonK; sun.color.copy(lit ? SUNC : MOONC); if (lit && dusk > 0) sun.color.lerp(DUSKC, dusk * 0.8);
         hemi.intensity = 1.7 * day + (0.08 + 0.13 * moonK) * (1 - day); SUNL.dark = 1 - day;
         starsAt(1 - day, moonK);
-        if (SCENE.lampGlow) SCENE.lampGlow((SUNL.dark - 0.3) / 0.4);   /* the street lamps are lit from dusk */
+        if (SCENE.lampGlow) SCENE.lampGlow((SUNL.dark - 0.3) / 0.4);   /* glass warms with the dark; each lamp still waits for its guard */
+        if (core.watchPhase) { const night = SUNL.dark >= 0.5; if (SUNL.phase == null) { SUNL.phase = night; core.watchPhase(night, true); } else if (SUNL.phase !== night) { SUNL.phase = night; core.watchPhase(night, false); } }
         /* the sky: the weather's colour (the weather module repaints it every frame), toward dusk orange and the night's blue
            (a moonlit night's deep blue, a moonless one near black) */
         const base = wxMod ? scene.background : SUNL.base;
@@ -1165,7 +1168,7 @@
       function optionsForRaw(t) {
         const esc = s => String(s).replace(/</g, '&lt;');
         if (t.kind === 'mob') { const m = core.mobByUid(t.uid), d = D.monsters[m.key], cb = core.mobCombat(d); const nm = '<span class="y">' + esc(d.name) + '</span> <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>'; return [{ html: 'Attack ' + nm, act: { c: 'attack', uid: t.uid }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(d.name + ': combat ' + cb + ' (' + (cb > core.combatLevel(me) ? 'stronger than you' : cb === core.combatLevel(me) ? 'evenly matched' : 'weaker than you') + '), ' + d.hp + ' hitpoints, hits up to ' + d.max + '.' + (d.aggro ? ' Aggressive.' : '') + (d.hint ? ' ' + d.hint : ''), 'sys') }]; }
-        if (t.kind === 'npc') { const n = NPCN[t.id]; if (!n || !npcShown(n)) return []; const nm = '<span class="y">' + esc(n.name) + '</span>'; const o = []; if (n.tailor) { o.push({ html: 'Change-look ' + nm, act: { c: 'npc', id: n.id }, red: 1 }); o.push({ html: 'Trade ' + nm, act: { c: 'npc', id: n.id, trade: 1 }, red: 1 }); }
+        if (t.kind === 'npc') { const n = NPCN[t.id]; if (!n || !npcShown(n)) return []; const cb = n.watch ? (core.guardCb || 33) : 0; const nm = '<span class="y">' + esc(n.name) + '</span>' + (cb ? ' <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>' : ''); const o = []; if (n.watch) o.push({ html: 'Attack ' + nm, act: { c: 'attack', id: n.id }, red: 1 }); if (n.tailor) { o.push({ html: 'Change-look ' + nm, act: { c: 'npc', id: n.id }, red: 1 }); o.push({ html: 'Trade ' + nm, act: { c: 'npc', id: n.id, trade: 1 }, red: 1 }); }
           else if (n.chest) o.push({ html: 'Open ' + nm, act: { c: 'npc', id: n.id }, red: 1 });
           else if (n.portal) o.push({ html: 'Use ' + nm, act: { c: 'npc', id: n.id }, red: 1 });
           else if (n.shop) o.push({ html: 'Trade ' + nm, act: { c: 'npc', id: n.id }, red: 1 });

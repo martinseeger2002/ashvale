@@ -607,6 +607,55 @@
     "The axle has snapped clean through. Candles and torn altar cloth lie in the grass where the load spilled."
    ],
    "verb": "Search"
+  },
+  {
+   "id": "guard_ash_1",
+   "name": "Town guard",
+   "look": "town_guard",
+   "x": 24,
+   "y": 50,
+   "watch": "village",
+   "examine": "A town guard. Combat level 33. He keeps the peace, and the lamps.",
+   "lines": [
+    "We keep the peace. When the day goes we light the lamps and the torches. When it comes back we put the lamps out."
+   ]
+  },
+  {
+   "id": "guard_ash_2",
+   "name": "Town guard",
+   "look": "town_guard",
+   "x": 12,
+   "y": 48,
+   "watch": "village",
+   "examine": "A town guard. Combat level 33. He keeps the peace, and the lamps.",
+   "lines": [
+    "Strike one of us and the whole watch answers."
+   ]
+  },
+  {
+   "id": "guard_ash_3",
+   "name": "Town guard",
+   "look": "town_guard",
+   "x": 28,
+   "y": 50,
+   "watch": "village",
+   "examine": "A town guard. Combat level 33. He keeps the peace, and the lamps.",
+   "lines": [
+    "The lamps along the street are our work, not the sun's."
+   ]
+  },
+  {
+   "id": "guard_road",
+   "name": "Town guard",
+   "look": "town_guard",
+   "x": 46,
+   "y": 51,
+   "watch": "road",
+   "road": true,
+   "examine": "A town guard. Combat level 33. He walks the cobbles from Ashvale to Saltmere and tends the lamps.",
+   "lines": [
+    "The cobbles run from Ashvale to Saltmere. I light those lamps at dusk and put them out at dawn."
+   ]
   }
  ]
 }
