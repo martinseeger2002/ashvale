@@ -14303,18 +14303,22 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
     }
     let CLOUD_OK = false;   /* the Bank answered at the start: only then may this game hand it saves (a stale device must never overwrite a newer one) */
     const bankSays = from => from && (from.address === DATA.assets.issuer || from.address === YOURFIRST_ADDR || from.tag === 'yourfirstname');
+    /* the 'bank' room the save was loaded through stays joined and is handed to bankRoom() (2026-10-08): leaving it and joining
+       again could hand back the room just left, which still sends but no longer hears - so the Bank's replies (svok, ground,
+       felled, boats) almost never arrived */
+    let BANK_LOAD_ROOM = null;
     function cloudLoad(st) {
       if (!G.arcade || !net || !net.join) return Promise.resolve();
       let local = null; try { local = JSON.parse(st.get(SAVE_KEY) || 'null'); } catch (e) { local = null; }
       return new Promise(done => {
         let R = null, fin = false; const parts = {};
-        const end = () => { if (fin) return; fin = true; clearTimeout(tm); try { R && R.leave(); } catch (e) { /* gone */ } done(); };
+        const end = () => { if (fin) return; fin = true; clearTimeout(tm); if (R) BANK_LOAD_ROOM = R; done(); };
         const tm = setTimeout(end, local ? 8000 : 20000);   /* no Bank in time: this device's save. With no save here (a new device) it waits longer - a cold sign-in takes the realtime room 10 s and more, and giving up would start a new character */
         net.join('bank', { game: 'ashvale' }).then(res => {
           if (fin || !res || !res.online) return end();
           R = res.room; const me = R.me && R.me.address; if (!me) return end();
           R.on('message', ({ from, data }) => {
-            if (!data || data.t !== 'ld' || data.to !== me || !bankSays(from)) return;
+            if (fin || !data || data.t !== 'ld' || data.to !== me || !bankSays(from)) return;
             if (!data.n) { CLOUD_OK = true; return end(); }   /* the Bank holds no save for this address */
             parts[data.i] = data.d;
             if (Object.keys(parts).length < data.n) return;
@@ -16344,7 +16348,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       setInterval(() => groundAsk(false), 10000); setTimeout(() => groundAsk(true), 9000);
       function bankRoom() {
         if (bank.room) return Promise.resolve(bank.room); if (bank.joining) return bank.joining;
-        bank.joining = net.join('bank', { game: 'ashvale' }).then(res => {
+        const kept = BANK_LOAD_ROOM; BANK_LOAD_ROOM = null;
+        bank.joining = (kept ? Promise.resolve({ online: true, room: kept }) : net.join('bank', { game: 'ashvale' })).then(res => {
           bank.joining = null;
           if (!res || !res.online) { bank.note = 'The @ashvale Bank cannot be reached from here' + (res && res.why ? ' (' + res.why + ')' : '') + '.'; return null; }
           const R = res.room; bank.room = R;
