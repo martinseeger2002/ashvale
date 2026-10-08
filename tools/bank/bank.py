@@ -253,7 +253,7 @@ def handle_save(c, addr, msg):
         except (KeyError, TypeError, ValueError): return None
         if not (0 < n <= SV_MAX and 0 <= i < n and len(d) <= 400 and 0 < sid < 10**14): return None
         cur = SV_PART.get(addr)
-        if not cur or cur['id'] != sid or cur['n'] != n: cur = SV_PART[addr] = {'id': sid, 'n': n, 'parts': {}, 'base': msg.get('base')}
+        if not cur or cur['id'] != sid or cur['n'] != n: cur = SV_PART[addr] = {'id': sid, 'n': n, 'parts': {}, 'base': msg.get('base'), 'mine': msg.get('mine')}
         cur['parts'][i] = d
         if len(cur['parts']) < n: return None
         SV_PART.pop(addr, None)
@@ -267,7 +267,11 @@ def handle_save(c, addr, msg):
         if old and base is not None:
             try: base = int(base)
             except (TypeError, ValueError): base = -1
-            if base != old['id'] and old['id'] != sid:
+            try: mine = int(cur.get('mine')) if cur.get('mine') is not None else None
+            except (TypeError, ValueError): mine = None
+            if base != old['id'] and old['id'] != sid and mine == old['id']:
+                log('SAVE CONTINUES OWN', addr, 'base', base, 'but its last save', mine, 'is the Bank\'s')   # our svok was lost: same game, no other device between
+            elif base != old['id'] and old['id'] != sid:
                 log('SAVE REFUSED', addr, 'continues', base, 'but the Bank has', old['id'])
                 return {'t': 'svx', 'to': addr, 'id': old['id']}
         elif old and old['id'] >= sid: return None      # an older save arriving late never wins

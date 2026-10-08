@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""make_zone_eastend.py - Eastend, Ashvale's new edge on the road to Saltmere (2026-10-08: "It's getting a little crowded in
+"""make_zone_eastend.py - West End (named Eastend until the operator renamed it 2026-10-08, once true north put it west of the square; the id stays 'eastend'), Ashvale's new edge on the road to Saltmere (2026-10-08: "It's getting a little crowded in
 the town of Ashvale. Right where @apple is standing put two more houses, one on either side of the road to Saltmere, add a new
 cross path, move some of the crowded NPCs from Ashvale into this new area as long as their storyline doesn't depend on them
 standing where they are").
@@ -50,7 +50,7 @@ objects += [{'k': 'bed', 'x': 57, 'y': 43}, {'k': 'table', 'x': 54, 'y': 43}, {'
             {'k': 'bed', 'x': 57, 'y': 56}, {'k': 'table', 'x': 54, 'y': 56}, {'k': 'chair', 'x': 55, 'y': 56}]
 # a gas lamp by the crossing, on the road's north side like the lamps all down the road (2026-10-08: one side, every other one gone)
 objects += [{'k': 'lamp', 'x': PX - 1, 'y': 49}]
-zone = {'name': 'Eastend', 'level': '1-5', 'origin': [OX, OY], 'size': [W, H], 'ground': 'grass',
+zone = {'name': 'West End', 'level': '1-5', 'origin': [OX, OY], 'size': [W, H], 'ground': 'grass',
         'tiles': [''.join(r) for r in rows], 'objects': objects, 'npcs': npcs, 'spawns': [], 'fishing': []}
 out = {'ashvale3d': 'module', 'name': 'zone.eastend', 'api': 1, 'v': 1, 'data': zone}
 open(os.path.join(HERE, 'data', 'zone.eastend.json'), 'w').write(json.dumps(out, separators=(',', ':')))
