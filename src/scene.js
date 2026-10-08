@@ -12,7 +12,7 @@
     const THREE = deps.three;
     const TILE_COL = { i: 0x8a7a5a, '.': 0x5f9e3f, f: 0x62a242, F: 0x5c9a3e, ',': 0x4a7f34, T: 0x40702c, P: 0x3e6c2c, O: 0x43732e, p: 0xa98a5a, c: 0x6c675f, d: 0x8f7b5e, B: 0x7a5a36, g: 0xb8ac62, q: 0xa9b29c, v: 0x6a8a75, J: 0xd9e9f2,
       s: 0xcdbb84, '~': 0x6a7a55, H: 0x8a7a5a, X: 0x7d8a52, R: 0x7e7a6a, N: 0x7e7a6a, I: 0x7e7a6a, r: 0x6f7a55,
-      W: 0x4a7a3a, M: 0x4c7030, Y: 0x36612a, U: 0xc9b47c, C: 0x74716e, G: 0x7e7a6a, A: 0x767a82, '^': 0x74716a, K: 0x6f8f4a };
+      W: 0x4a7a3a, M: 0x4c7030, Y: 0x36612a, U: 0xc9b47c, C: 0x74716e, G: 0x7e7a6a, A: 0x767a82, '^': 0x74716a, K: 0x6f8f4a, E: 0x5a8a3a };
     const ORE = { R: 0xc8702c, N: 0xd8d8d0, I: 0x8a4632, C: 0x33333c, G: 0xd9a930, A: 0x6f86c8 };
     const WATER_Y = -0.16;
     let LAMPQ = null;   /* (x, y) -> whether a tended lamp or town torch is lit; the engine sets this from the guards */
@@ -155,7 +155,7 @@
        Autumn: the crown keeps its full size while it turns, then each tree drops every leaf on its own day (its hash h in the
        couple-of-days window) - no shrinking. Spring: small clusters of leaf grow out from the end of every branch (bud), then
        the crown fills in round them (grow). A felled tree stays gone whatever the season. */
-    const TS_M = new THREE.Matrix4(), TS_S = new THREE.Matrix4(), TS_T = new THREE.Matrix4(), TS_T2 = new THREE.Matrix4(), CROWN_Y = { T: 1.3, O: 1.45, W: 1.42, M: 1.32 }, TS_Z = new THREE.Matrix4().makeScale(0, 0, 0), TS_C = new THREE.Color(), TS_B = new THREE.Color();
+    const TS_M = new THREE.Matrix4(), TS_S = new THREE.Matrix4(), TS_T = new THREE.Matrix4(), TS_T2 = new THREE.Matrix4(), CROWN_Y = { T: 1.3, O: 1.45, W: 1.42, M: 1.32, E: 1.6 }, TS_Z = new THREE.Matrix4().makeScale(0, 0, 0), TS_C = new THREE.Color(), TS_B = new THREE.Color();
     function treeSeason(reg) {
       const S = SEASON_CUR, L = SEASON_LIB; if (!S || !L) return;
       const dec = L.deciduous(reg.kind), lf = S.leaf, nb = BRANCH_TIPS.length;
@@ -509,7 +509,7 @@
         /* leaf litter lies only under the trees that drop their leaves (2026-10-07): each corner's share of broadleaf
            crowns within 2.6 m, from the tiles themselves so it runs on across chunk edges */
         const leafy = new Float32Array((RW + 1) * (RH + 1)), PAD = 3, GW = RW + 2 * PAD, dec = new Uint8Array(GW * (RH + 2 * PAD));
-        for (let y = 0; y < RH + 2 * PAD; y++) for (let x = 0; x < GW; x++) { const t = at(X0 - PAD + x, Y0 - PAD + y); dec[y * GW + x] = t === 'T' || t === 'O' || t === 'W' || t === 'M' ? 1 : 0; }
+        for (let y = 0; y < RH + 2 * PAD; y++) for (let x = 0; x < GW; x++) { const t = at(X0 - PAD + x, Y0 - PAD + y); dec[y * GW + x] = t === 'T' || t === 'O' || t === 'W' || t === 'M' || t === 'E' ? 1 : 0; }
         for (let cy = Y0; cy <= Y1; cy++) for (let cx = X0; cx <= X1; cx++) {
           let w = 0;
           for (let dy = -3; dy <= 2; dy++) for (let dx = -3; dx <= 2; dx++) { const gx = cx + dx - X0 + PAD, gy = cy + dy - Y0 + PAD; if (gx < 0 || gy < 0 || gx >= GW || gy >= RH + 2 * PAD || !dec[gy * GW + gx]) continue; const d = Math.hypot(dx + 0.5, dy + 0.5); if (d < 2.6) w += 1 - d / 2.6; }
@@ -603,6 +603,8 @@
         /* willow: a broad flat crown with curtains of twig hanging off it. maple: round and orange. yew: a dark column. */
         W: { trunk: mergeGeos([{ geo: new THREE.CylinderGeometry(0.1, 0.18, 1.15, 6), m: M4(0, 0.57, 0, 1) }]), crown: mergeGeos([{ geo: new THREE.IcosahedronGeometry(0.66, 0).scale(1.15, 0.55, 1.15), m: M4(0, 1.42, 0, 1) }].concat([[0.52, 0.16], [-0.5, 0.1], [0.14, -0.5], [-0.18, 0.48]].map(([dx, dz]) => ({ geo: new THREE.ConeGeometry(0.16, 0.62, 6).rotateX(Math.PI).translate(dx, 1.12, dz), m: M4(0, 0, 0, 1) })))), tc: 0x6b5a38, cc: 0x87a752 },
         M: { trunk: mergeGeos([{ geo: new THREE.CylinderGeometry(0.1, 0.16, 1.05, 6), m: M4(0, 0.52, 0, 1) }]), crown: mergeGeos([{ geo: new THREE.IcosahedronGeometry(0.68, 0), m: M4(0, 1.32, 0, 1, 0.92, 1) }, { geo: new THREE.IcosahedronGeometry(0.4, 0), m: M4(-0.34, 1.74, 0.16, 1) }]), tc: 0x6a4526, cc: 0xb8722c },
+        /* birch (wiigwaasaatig, 2026-10-08): a slender white trunk, a light airy crown high up */
+        E: { trunk: mergeGeos([{ geo: new THREE.CylinderGeometry(0.06, 0.1, 1.45, 6), m: M4(0, 0.72, 0, 1) }]), crown: mergeGeos([{ geo: new THREE.IcosahedronGeometry(0.46, 0), m: M4(0, 1.6, 0, 0.9, 1.15, 0.9) }, { geo: new THREE.IcosahedronGeometry(0.32, 0), m: M4(0.18, 2.02, -0.08, 1) }, { geo: new THREE.IcosahedronGeometry(0.28, 0), m: M4(-0.2, 1.35, 0.14, 1) }]), tc: 0xe6e1d4, cc: 0x6f9f3e },
         Y: { trunk: mergeGeos([{ geo: new THREE.CylinderGeometry(0.12, 0.2, 1.35, 6), m: M4(0, 0.67, 0, 1) }]), crown: mergeGeos([{ geo: new THREE.CylinderGeometry(0.5, 0.62, 0.6, 7), m: M4(0, 1.05, 0, 1) }, { geo: new THREE.ConeGeometry(0.55, 1.15, 7), m: M4(0, 1.5, 0, 1) }, { geo: new THREE.ConeGeometry(0.4, 0.95, 7), m: M4(0, 2.15, 0, 1) }]), tc: 0x4a3826, cc: 0x27502e },
         /* a saguaro for the desert (2026-10-06: "in the desert, we need to have cactuses not pine trees"): a ribbed
            column with two arms that turn up; it blocks the way like a tree but nothing chops it */
@@ -611,7 +613,7 @@
           { geo: new THREE.CylinderGeometry(0.1, 0.1, 0.36, 7).rotateZ(1.5708), m: M4(0.3, 1.05, 0, 1) }, { geo: new THREE.CylinderGeometry(0.1, 0.11, 0.55, 7), m: M4(0.46, 1.3, 0, 1) }, { geo: new THREE.SphereGeometry(0.1, 7, 4, 0, 6.29, 0, 1.6), m: M4(0.46, 1.57, 0, 1) },
           { geo: new THREE.CylinderGeometry(0.09, 0.09, 0.3, 7).rotateZ(1.5708), m: M4(-0.27, 1.4, 0, 1) }, { geo: new THREE.CylinderGeometry(0.09, 0.1, 0.42, 7), m: M4(-0.4, 1.6, 0, 1) }, { geo: new THREE.SphereGeometry(0.09, 7, 4, 0, 6.29, 0, 1.6), m: M4(-0.4, 1.81, 0, 1) }]), tc: 0x4f7a34, cc: 0x5f8f40 },
       };
-      const treeList = { T: [], P: [], O: [], W: [], M: [], Y: [], U: [] };
+      const treeList = { T: [], P: [], O: [], W: [], M: [], Y: [], U: [], E: [] };
       for (let y = Y0; y < Y1; y++) for (let x = X0; x < X1; x++) { const c = at(x, y); if (treeList[c] && mine(x, y)) treeList[c].push({ x, y, i: K(x, y) }); }
       if (!seeded) for (let y = -7; y < H + 7; y++) for (let x = -7; x < W + 7; x++) {   /* the wild woods beyond the map edge (belong to the nearest region); seeded land has real woods there */
         if (x >= 0 && y >= 0 && x < W && y < H) continue;
@@ -649,7 +651,7 @@
         /* winter: bare branches over the trunk (deciduous kinds), shown while the leaves are down */
         let branches = null;
         let buds = null;
-        if ('TOWM'.indexOf(k) >= 0) {
+        if ('TOWME'.indexOf(k) >= 0) {
           branches = new THREE.InstancedMesh(mergeGeos(BRANCH_GEO), snowyLam(0x4a3a2c, 0.2, 0.55), L.length); L.forEach((t, n) => branches.setMatrixAt(n, t.m)); branches.castShadow = true; group.add(branches); quads[q].push(branches);
           buds = new THREE.InstancedMesh(BUD_GEO, lam(0xffffff), L.length * BRANCH_TIPS.length); buds.visible = false; buds.castShadow = true; buds.receiveShadow = true; buds.setColorAt(0, C); group.add(buds); quads[q].push(buds);
           { const bt = new Float64Array(L.length * BRANCH_TIPS.length); for (let i = 0; i < bt.length; i++) bt[i] = tiles[Math.floor(i / BRANCH_TIPS.length)]; buds.userData.pick = { kind: 'tree', tiles: bt }; treeMeshes.push(buds); }   /* tap the leaves to chop, as the crown was */
@@ -1257,7 +1259,7 @@
       const RC = rect || [0, 0, map.W, map.H], X0 = RC[0], Y0 = RC[1], W = RC[2], H = RC[3], at = (x, y) => map.tileAt(x, y);
       const mm = document.createElement('canvas'); mm.width = W * 4; mm.height = H * 4;
       {
-        const g = mm.getContext('2d'), MC = { '.': '#4e8a32', f: '#4e8a32', F: '#6a4a2a', ',': '#3e7428', p: '#a08458', c: '#8a857c', d: '#857254', B: '#6e4f2e', g: '#a99d58', q: '#9aa38d', v: '#3f7ab8', J: '#d4e6f0', s: '#c4b07a', '~': '#2f6aa8', H: '#8a6a50', X: '#7a6a5a', R: '#6a6a66', N: '#6a6a66', I: '#6a6a66', r: '#6a6a66', T: '#2a5a1e', P: '#22501e', O: '#2e5a1c', W: '#5d7f3a', M: '#8a5a26', Y: '#1f4722', U: '#c4b07a', C: '#4a4a52', G: '#8a7a4a', A: '#6a7488', '^': '#77736a', K: '#8a877c' };
+        const g = mm.getContext('2d'), MC = { '.': '#4e8a32', f: '#4e8a32', F: '#6a4a2a', ',': '#3e7428', p: '#a08458', c: '#8a857c', d: '#857254', B: '#6e4f2e', g: '#a99d58', q: '#9aa38d', v: '#3f7ab8', J: '#d4e6f0', s: '#c4b07a', '~': '#2f6aa8', H: '#8a6a50', X: '#7a6a5a', R: '#6a6a66', N: '#6a6a66', I: '#6a6a66', r: '#6a6a66', T: '#2a5a1e', P: '#22501e', O: '#2e5a1c', W: '#5d7f3a', M: '#8a5a26', E: '#7fa457', Y: '#1f4722', U: '#c4b07a', C: '#4a4a52', G: '#8a7a4a', A: '#6a7488', '^': '#77736a', K: '#8a877c' };
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const c = at(X0 + x, Y0 + y); g.fillStyle = MC[c] || '#4e8a32'; g.fillRect(x * 4, y * 4, 4, 4); if ('TPOMWYU'.indexOf(c) >= 0) { g.fillStyle = c === 'U' ? '#3f6a2a' : '#183a12'; g.fillRect(x * 4 + 1, y * 4 + 1, 2, 2); } }
         for (const o of map.objects) if (o.k === 'house' || o.k === 'shop' || o.k === 'smithy' || o.k === 'church') { const ox = o.x - X0, oy = o.y - Y0; g.fillStyle = '#b8a890'; g.fillRect(ox * 4, oy * 4, o.w * 4, o.h * 4); g.strokeStyle = '#ffffff'; g.lineWidth = 1; g.strokeRect(ox * 4 + 0.5, oy * 4 + 0.5, o.w * 4 - 1, o.h * 4 - 1); }
       }

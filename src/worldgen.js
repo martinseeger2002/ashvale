@@ -41,7 +41,7 @@
   const API = 1, V = 1, WATER = 0;
   const META = { api: API, v: V, needs: { globe: 1, wg_geo: 1, wg_terrain: 1, wg_paths: 1, wg_sites: 1, wg_tiles: 1, wg_tables: 1 } };
   const BIOME = ['meadow', 'woods', 'deep woods', 'shore', 'shallows', 'deep water', 'rock', 'snow', 'site', 'hills', 'village'];
-  const BLOCK = 'TPORNIr~FHXWMYCGA^KU', LOS = 'TPORNIrHXWMYCGA^K';   /* U: a desert cactus blocks the way, not the view */
+  const BLOCK = 'TPORNIr~FHXWMYCGA^KUE', LOS = 'TPORNIrHXWMYCGA^KE';   /* E: a birch (2026-10-08) */   /* U: a desert cactus blocks the way, not the view */
 
   function make(deps) {
     const AG = deps.globe, geo = deps.wg_geo, T = deps.wg_tables;
@@ -174,7 +174,7 @@
         return zones.map(z => {
           const ox = z.origin[0], oy = z.origin[1], w = z.size[0], h = z.size[1];
           const objs = (z.objects || []).filter(o => o.x >= ox && o.y >= oy && o.x < ox + w && o.y < oy + h).map(o => Object.assign({}, o, { x: o.x + gx, y: o.y + gy }, o.x2 != null ? { x2: o.x2 + gx, y2: o.y2 + gy } : null));   /* a run (a castle wall) moves both ends */
-          return { id: z.id, face, x: gx + ox, y: gy + oy, w, h, tiles: decks(z), objects: objs, belt: belt[z.id] || 0, links: links.filter(l => l[0] === z.id).map(l => l[1]), linkStyles: Object.fromEntries(links.filter(l => l[0] === z.id && l[2]).map(l => [l[1], l[2]])) };   /* a third word: 'trail' = a skinny dirt trail, no cobbles, no lamps */
+          return { id: z.id, face, x: gx + ox, y: gy + oy, w, h, tiles: decks(z), objects: objs, belt: belt[z.id] || 0, groves: ((popts && popts.groves) || []).filter(q => q.piece === z.id).map(q => Object.assign({}, q, { x: q.x + gx, y: q.y + gy })), links: links.filter(l => l[0] === z.id).map(l => l[1]), linkStyles: Object.fromEntries(links.filter(l => l[0] === z.id && l[2]).map(l => [l[1], l[2]])) };   /* a third word: 'trail' = a skinny dirt trail, no cobbles, no lamps */
         });
       }
       if (O.setPieces) { LASTPC = O.setPieces; ctx.setSetPieces(O.setPieces); }

@@ -5450,6 +5450,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       /* next to a set piece its own woods continue (same density) and fade into the seeded land */
       forest = Math.min(T.forest.max || 1, forest);   /* the densest woods a little thinner (2026-10-06); a set piece's own woods still continue below */
       if (NP) { ctx.pieceFlora(f, x, y, PFL); if (PFL.k < 1) forest = PFL.dens * (1 - PFL.k) + forest * PFL.k; }
+      if (NP && ctx.groveAt) { const GV = ctx.groveAt(f, x, y); if (GV) forest += (GV.dens - forest) * GV.k; }   /* a grove's woods (maple and birch by Ziibiing) */
       forest *= clamp01((h - 0.35) * 2) * (1 - peakS) * (1 - pond) * (RG && RG.treeLine ? 1 - sstep(RG.treeLine[0], RG.treeLine[1], h) : 1);   /* the tree line: the woods thin out and stop (the operator: like a real mountain) */
       /* the climate (the operator: "a desert region and all kinds of regions, according to how the weather would flow"):
          the zone from temperature (latitude, height) and moisture (carried in from the sea by the prevailing winds,
@@ -5620,7 +5621,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
 (function (root) {
   'use strict';
   const META = { api: 1, v: 3, needs: { wg_geo: 1 } };
-  const TREES = 'TPOWMYU';
+  const TREES = 'TPOWMYUE';
   function attach(ctx) {
     const g = ctx.geo, T = ctx.T, PT = T.paths, PC = T.pieces, BK = 32;
     const bkey = (f, bx, by) => (f * 8192 + (bx + 4096)) * 8192 + (by + 4096);
@@ -5657,6 +5658,20 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
     function waterCarve(f, x, y, h) {
       const r = segDist(f, x, y, 1); if (!r || r[0] > 1.5) return h;
       const k = g.sstep(-0.6, 1.5, r[0]); return Math.min(h, r[1] * (1 - k) + h * k);
+    }
+    /* GROVES (2026-10-08: "a large deciduous forest with maple and birch" by Ziibiing): an ellipse of woods tied to a
+       piece (globecfg.groves: {piece, x, y, rx, ry, sp, dens, edge}, game tiles), its edge wandering with noise. Returns the
+       grove's species and density and k, how fully this spot is in it (0 outside .. 1 well inside), or null */
+    const GROVE = { k: 0, sp: '', dens: 0 };
+    function groveAt(f, x, y) {
+      const gx = x, gy = -y;
+      for (const pc of ctx.PIECES) if (pc.face === f && pc.groves && pc.groves.length) for (const q of pc.groves) {
+        const dx = (gx - q.x) / q.rx, dy = (gy - q.y) / q.ry, d = Math.sqrt(dx * dx + dy * dy) * (0.85 + 0.3 * g.vnoise(gx / 37, gy / 37, f, ctx.S.pa ^ 0x6b43));
+        if (d >= 1) continue;
+        const e = Math.max(0.05, (q.edge || 30) / Math.min(q.rx, q.ry)), t = Math.min(1, (1 - d) / e);
+        GROVE.k = t * t * (3 - 2 * t); GROVE.sp = q.sp || 'M'; GROVE.dens = q.dens == null ? 0.6 : q.dens; return GROVE;
+      }
+      return null;
     }
     /* flora near a piece: the profile of the nearest edge tile, and how far the seeded land has taken over */
     function pieceFlora(f, x, y, out) {
@@ -5723,7 +5738,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
         }
       }
       for (const sp of (list || [])) {
-        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, links: sp.links || [], linkStyles: sp.linkStyles || {} };
+        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, groves: sp.groves || [], links: sp.links || [], linkStyles: sp.linkStyles || {} };
         pc.px0 = pc.x; pc.px1 = pc.x + pc.w; pc.py0 = -(pc.y + pc.h); pc.py1 = -pc.y;
         PIECES.push(pc); ctx.PIECE_BY_ID.set(pc.id, pc);
       }
@@ -5934,7 +5949,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       if (ctx.clearCaches) ctx.clearCaches();
       return PIECES.map(p => ({ id: p.id, face: p.face, x: p.x, y: p.y, w: p.w, h: p.h, hb: p.hb }));
     }
-    Object.assign(ctx, { pieceDist, pieceTile, pathDist, roadDist, bridgeDist, waterCarve, pieceFlora, setSetPieces, pathCount: () => SEG.length / NS, roadObjects: () => ctx.ROAD_OBJ || [] });
+    Object.assign(ctx, { pieceDist, pieceTile, pathDist, roadDist, bridgeDist, waterCarve, pieceFlora, groveAt, setSetPieces, pathCount: () => SEG.length / NS, roadObjects: () => ctx.ROAD_OBJ || [] });
     return ctx;
   }
   const api = { api: 1, attach };
@@ -6215,6 +6230,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
         FOREST_HIT = true;
         if (PI.length) { ctx.pieceFlora(f, cx, cy, PFL); if (PFL.sp && g.u01(g.mix32(hv ^ 0x3c6ef372)) >= PFL.k) { FOREST_HIT = false; return PFL.sp[Math.floor(r2 * PFL.sp.length)]; } }
         if (TF[4] > 0.02 || TF[2] > 0.12 || (TF[9] > 0.12 && r2 < 0.5)) return TR.wet;
+        if (PI.length && ctx.groveAt) { const GV = ctx.groveAt(f, cx, cy); if (GV && g.u01(g.mix32(hv ^ 0x2545f491)) < GV.k) return GV.sp[Math.floor(r2 * GV.sp.length)]; }   /* in a grove: its own trees */
         /* the climate's own trees: pines in the taiga, broadleaf mixes in the rainforest (2026-10-03) */
         const zt = CMT ? CMT.trees[ctx.climOf(TF[15], TF[14])] : '';
         if (zt) return zt[Math.floor(r2 * zt.length)];
@@ -6377,7 +6393,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
   const API = 1, V = 1, WATER = 0;
   const META = { api: API, v: V, needs: { globe: 1, wg_geo: 1, wg_terrain: 1, wg_paths: 1, wg_sites: 1, wg_tiles: 1, wg_tables: 1 } };
   const BIOME = ['meadow', 'woods', 'deep woods', 'shore', 'shallows', 'deep water', 'rock', 'snow', 'site', 'hills', 'village'];
-  const BLOCK = 'TPORNIr~FHXWMYCGA^KU', LOS = 'TPORNIrHXWMYCGA^K';   /* U: a desert cactus blocks the way, not the view */
+  const BLOCK = 'TPORNIr~FHXWMYCGA^KUE', LOS = 'TPORNIrHXWMYCGA^KE';   /* E: a birch (2026-10-08) */   /* U: a desert cactus blocks the way, not the view */
 
   function make(deps) {
     const AG = deps.globe, geo = deps.wg_geo, T = deps.wg_tables;
@@ -6510,7 +6526,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
         return zones.map(z => {
           const ox = z.origin[0], oy = z.origin[1], w = z.size[0], h = z.size[1];
           const objs = (z.objects || []).filter(o => o.x >= ox && o.y >= oy && o.x < ox + w && o.y < oy + h).map(o => Object.assign({}, o, { x: o.x + gx, y: o.y + gy }, o.x2 != null ? { x2: o.x2 + gx, y2: o.y2 + gy } : null));   /* a run (a castle wall) moves both ends */
-          return { id: z.id, face, x: gx + ox, y: gy + oy, w, h, tiles: decks(z), objects: objs, belt: belt[z.id] || 0, links: links.filter(l => l[0] === z.id).map(l => l[1]), linkStyles: Object.fromEntries(links.filter(l => l[0] === z.id && l[2]).map(l => [l[1], l[2]])) };   /* a third word: 'trail' = a skinny dirt trail, no cobbles, no lamps */
+          return { id: z.id, face, x: gx + ox, y: gy + oy, w, h, tiles: decks(z), objects: objs, belt: belt[z.id] || 0, groves: ((popts && popts.groves) || []).filter(q => q.piece === z.id).map(q => Object.assign({}, q, { x: q.x + gx, y: q.y + gy })), links: links.filter(l => l[0] === z.id).map(l => l[1]), linkStyles: Object.fromEntries(links.filter(l => l[0] === z.id && l[2]).map(l => [l[1], l[2]])) };   /* a third word: 'trail' = a skinny dirt trail, no cobbles, no lamps */
         });
       }
       if (O.setPieces) { LASTPC = O.setPieces; ctx.setSetPieces(O.setPieces); }
@@ -6729,7 +6745,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
         c.fl[i] = 0;
         grown.delete(k);
         const nd = nodes.get(k);
-        if (nd && 'TPOWMY'.indexOf(nd.kind) >= 0 && !fixed.has(k)) nodes.delete(k);
+        if (nd && 'TPOWMYE'.indexOf(nd.kind) >= 0 && !fixed.has(k)) nodes.delete(k);
       }
     }
     fillFns.push(stampCleared);
@@ -6904,7 +6920,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
     const C = Object.assign({}, DEF_CFG, D.globecfg || {});
     const G = AG.createGlobe({ n: C.n, radius_m: C.radius_m, seed: C.seed });
     const W = WGM.createWorldgen(G, { seed: C.seed });
-    W.setSetPieces(W.piecesFromZones(pieceZones(D), C.face, C.origin[0], C.origin[1], { belt: C.belt || {}, links: C.links || [] }));
+    W.setSetPieces(W.piecesFromZones(pieceZones(D), C.face, C.origin[0], C.origin[1], { belt: C.belt || {}, links: C.links || [], groves: C.groves || [] }));
     return W;
   }
   /* the zones worldgen places, in a fixed order: with a zone index (area loading, handoff/area_loading.md) EVERY zone of the
@@ -6920,7 +6936,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
   function arriveWorldgen(W, D, z) {
     if (z && z.under) return false;   /* an underground area is not on the land */
     const C = Object.assign({}, DEF_CFG, D.globecfg || {});
-    const sp = W.piecesFromZones([z], C.face, C.origin[0], C.origin[1], { belt: C.belt || {}, links: C.links || [] })[0];
+    const sp = W.piecesFromZones([z], C.face, C.origin[0], C.origin[1], { belt: C.belt || {}, links: C.links || [], groves: C.groves || [] })[0];
     return W.replacePiece ? W.replacePiece(sp) : false;
   }
   const AshWorld = { API, V, CH, createWorld, seededWorldgen, pieceZones, stubZone, arriveWorldgen, key, kx, ky };
@@ -9915,7 +9931,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
     const THREE = deps.three;
     const TILE_COL = { i: 0x8a7a5a, '.': 0x5f9e3f, f: 0x62a242, F: 0x5c9a3e, ',': 0x4a7f34, T: 0x40702c, P: 0x3e6c2c, O: 0x43732e, p: 0xa98a5a, c: 0x6c675f, d: 0x8f7b5e, B: 0x7a5a36, g: 0xb8ac62, q: 0xa9b29c, v: 0x6a8a75, J: 0xd9e9f2,
       s: 0xcdbb84, '~': 0x6a7a55, H: 0x8a7a5a, X: 0x7d8a52, R: 0x7e7a6a, N: 0x7e7a6a, I: 0x7e7a6a, r: 0x6f7a55,
-      W: 0x4a7a3a, M: 0x4c7030, Y: 0x36612a, U: 0xc9b47c, C: 0x74716e, G: 0x7e7a6a, A: 0x767a82, '^': 0x74716a, K: 0x6f8f4a };
+      W: 0x4a7a3a, M: 0x4c7030, Y: 0x36612a, U: 0xc9b47c, C: 0x74716e, G: 0x7e7a6a, A: 0x767a82, '^': 0x74716a, K: 0x6f8f4a, E: 0x5a8a3a };
     const ORE = { R: 0xc8702c, N: 0xd8d8d0, I: 0x8a4632, C: 0x33333c, G: 0xd9a930, A: 0x6f86c8 };
     const WATER_Y = -0.16;
     let LAMPQ = null;   /* (x, y) -> whether a tended lamp or town torch is lit; the engine sets this from the guards */
@@ -10058,7 +10074,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
        Autumn: the crown keeps its full size while it turns, then each tree drops every leaf on its own day (its hash h in the
        couple-of-days window) - no shrinking. Spring: small clusters of leaf grow out from the end of every branch (bud), then
        the crown fills in round them (grow). A felled tree stays gone whatever the season. */
-    const TS_M = new THREE.Matrix4(), TS_S = new THREE.Matrix4(), TS_T = new THREE.Matrix4(), TS_T2 = new THREE.Matrix4(), CROWN_Y = { T: 1.3, O: 1.45, W: 1.42, M: 1.32 }, TS_Z = new THREE.Matrix4().makeScale(0, 0, 0), TS_C = new THREE.Color(), TS_B = new THREE.Color();
+    const TS_M = new THREE.Matrix4(), TS_S = new THREE.Matrix4(), TS_T = new THREE.Matrix4(), TS_T2 = new THREE.Matrix4(), CROWN_Y = { T: 1.3, O: 1.45, W: 1.42, M: 1.32, E: 1.6 }, TS_Z = new THREE.Matrix4().makeScale(0, 0, 0), TS_C = new THREE.Color(), TS_B = new THREE.Color();
     function treeSeason(reg) {
       const S = SEASON_CUR, L = SEASON_LIB; if (!S || !L) return;
       const dec = L.deciduous(reg.kind), lf = S.leaf, nb = BRANCH_TIPS.length;
@@ -10412,7 +10428,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
         /* leaf litter lies only under the trees that drop their leaves (2026-10-07): each corner's share of broadleaf
            crowns within 2.6 m, from the tiles themselves so it runs on across chunk edges */
         const leafy = new Float32Array((RW + 1) * (RH + 1)), PAD = 3, GW = RW + 2 * PAD, dec = new Uint8Array(GW * (RH + 2 * PAD));
-        for (let y = 0; y < RH + 2 * PAD; y++) for (let x = 0; x < GW; x++) { const t = at(X0 - PAD + x, Y0 - PAD + y); dec[y * GW + x] = t === 'T' || t === 'O' || t === 'W' || t === 'M' ? 1 : 0; }
+        for (let y = 0; y < RH + 2 * PAD; y++) for (let x = 0; x < GW; x++) { const t = at(X0 - PAD + x, Y0 - PAD + y); dec[y * GW + x] = t === 'T' || t === 'O' || t === 'W' || t === 'M' || t === 'E' ? 1 : 0; }
         for (let cy = Y0; cy <= Y1; cy++) for (let cx = X0; cx <= X1; cx++) {
           let w = 0;
           for (let dy = -3; dy <= 2; dy++) for (let dx = -3; dx <= 2; dx++) { const gx = cx + dx - X0 + PAD, gy = cy + dy - Y0 + PAD; if (gx < 0 || gy < 0 || gx >= GW || gy >= RH + 2 * PAD || !dec[gy * GW + gx]) continue; const d = Math.hypot(dx + 0.5, dy + 0.5); if (d < 2.6) w += 1 - d / 2.6; }
@@ -10506,6 +10522,8 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
         /* willow: a broad flat crown with curtains of twig hanging off it. maple: round and orange. yew: a dark column. */
         W: { trunk: mergeGeos([{ geo: new THREE.CylinderGeometry(0.1, 0.18, 1.15, 6), m: M4(0, 0.57, 0, 1) }]), crown: mergeGeos([{ geo: new THREE.IcosahedronGeometry(0.66, 0).scale(1.15, 0.55, 1.15), m: M4(0, 1.42, 0, 1) }].concat([[0.52, 0.16], [-0.5, 0.1], [0.14, -0.5], [-0.18, 0.48]].map(([dx, dz]) => ({ geo: new THREE.ConeGeometry(0.16, 0.62, 6).rotateX(Math.PI).translate(dx, 1.12, dz), m: M4(0, 0, 0, 1) })))), tc: 0x6b5a38, cc: 0x87a752 },
         M: { trunk: mergeGeos([{ geo: new THREE.CylinderGeometry(0.1, 0.16, 1.05, 6), m: M4(0, 0.52, 0, 1) }]), crown: mergeGeos([{ geo: new THREE.IcosahedronGeometry(0.68, 0), m: M4(0, 1.32, 0, 1, 0.92, 1) }, { geo: new THREE.IcosahedronGeometry(0.4, 0), m: M4(-0.34, 1.74, 0.16, 1) }]), tc: 0x6a4526, cc: 0xb8722c },
+        /* birch (wiigwaasaatig, 2026-10-08): a slender white trunk, a light airy crown high up */
+        E: { trunk: mergeGeos([{ geo: new THREE.CylinderGeometry(0.06, 0.1, 1.45, 6), m: M4(0, 0.72, 0, 1) }]), crown: mergeGeos([{ geo: new THREE.IcosahedronGeometry(0.46, 0), m: M4(0, 1.6, 0, 0.9, 1.15, 0.9) }, { geo: new THREE.IcosahedronGeometry(0.32, 0), m: M4(0.18, 2.02, -0.08, 1) }, { geo: new THREE.IcosahedronGeometry(0.28, 0), m: M4(-0.2, 1.35, 0.14, 1) }]), tc: 0xe6e1d4, cc: 0x6f9f3e },
         Y: { trunk: mergeGeos([{ geo: new THREE.CylinderGeometry(0.12, 0.2, 1.35, 6), m: M4(0, 0.67, 0, 1) }]), crown: mergeGeos([{ geo: new THREE.CylinderGeometry(0.5, 0.62, 0.6, 7), m: M4(0, 1.05, 0, 1) }, { geo: new THREE.ConeGeometry(0.55, 1.15, 7), m: M4(0, 1.5, 0, 1) }, { geo: new THREE.ConeGeometry(0.4, 0.95, 7), m: M4(0, 2.15, 0, 1) }]), tc: 0x4a3826, cc: 0x27502e },
         /* a saguaro for the desert (2026-10-06: "in the desert, we need to have cactuses not pine trees"): a ribbed
            column with two arms that turn up; it blocks the way like a tree but nothing chops it */
@@ -10514,7 +10532,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
           { geo: new THREE.CylinderGeometry(0.1, 0.1, 0.36, 7).rotateZ(1.5708), m: M4(0.3, 1.05, 0, 1) }, { geo: new THREE.CylinderGeometry(0.1, 0.11, 0.55, 7), m: M4(0.46, 1.3, 0, 1) }, { geo: new THREE.SphereGeometry(0.1, 7, 4, 0, 6.29, 0, 1.6), m: M4(0.46, 1.57, 0, 1) },
           { geo: new THREE.CylinderGeometry(0.09, 0.09, 0.3, 7).rotateZ(1.5708), m: M4(-0.27, 1.4, 0, 1) }, { geo: new THREE.CylinderGeometry(0.09, 0.1, 0.42, 7), m: M4(-0.4, 1.6, 0, 1) }, { geo: new THREE.SphereGeometry(0.09, 7, 4, 0, 6.29, 0, 1.6), m: M4(-0.4, 1.81, 0, 1) }]), tc: 0x4f7a34, cc: 0x5f8f40 },
       };
-      const treeList = { T: [], P: [], O: [], W: [], M: [], Y: [], U: [] };
+      const treeList = { T: [], P: [], O: [], W: [], M: [], Y: [], U: [], E: [] };
       for (let y = Y0; y < Y1; y++) for (let x = X0; x < X1; x++) { const c = at(x, y); if (treeList[c] && mine(x, y)) treeList[c].push({ x, y, i: K(x, y) }); }
       if (!seeded) for (let y = -7; y < H + 7; y++) for (let x = -7; x < W + 7; x++) {   /* the wild woods beyond the map edge (belong to the nearest region); seeded land has real woods there */
         if (x >= 0 && y >= 0 && x < W && y < H) continue;
@@ -10552,7 +10570,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
         /* winter: bare branches over the trunk (deciduous kinds), shown while the leaves are down */
         let branches = null;
         let buds = null;
-        if ('TOWM'.indexOf(k) >= 0) {
+        if ('TOWME'.indexOf(k) >= 0) {
           branches = new THREE.InstancedMesh(mergeGeos(BRANCH_GEO), snowyLam(0x4a3a2c, 0.2, 0.55), L.length); L.forEach((t, n) => branches.setMatrixAt(n, t.m)); branches.castShadow = true; group.add(branches); quads[q].push(branches);
           buds = new THREE.InstancedMesh(BUD_GEO, lam(0xffffff), L.length * BRANCH_TIPS.length); buds.visible = false; buds.castShadow = true; buds.receiveShadow = true; buds.setColorAt(0, C); group.add(buds); quads[q].push(buds);
           { const bt = new Float64Array(L.length * BRANCH_TIPS.length); for (let i = 0; i < bt.length; i++) bt[i] = tiles[Math.floor(i / BRANCH_TIPS.length)]; buds.userData.pick = { kind: 'tree', tiles: bt }; treeMeshes.push(buds); }   /* tap the leaves to chop, as the crown was */
@@ -11160,7 +11178,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       const RC = rect || [0, 0, map.W, map.H], X0 = RC[0], Y0 = RC[1], W = RC[2], H = RC[3], at = (x, y) => map.tileAt(x, y);
       const mm = document.createElement('canvas'); mm.width = W * 4; mm.height = H * 4;
       {
-        const g = mm.getContext('2d'), MC = { '.': '#4e8a32', f: '#4e8a32', F: '#6a4a2a', ',': '#3e7428', p: '#a08458', c: '#8a857c', d: '#857254', B: '#6e4f2e', g: '#a99d58', q: '#9aa38d', v: '#3f7ab8', J: '#d4e6f0', s: '#c4b07a', '~': '#2f6aa8', H: '#8a6a50', X: '#7a6a5a', R: '#6a6a66', N: '#6a6a66', I: '#6a6a66', r: '#6a6a66', T: '#2a5a1e', P: '#22501e', O: '#2e5a1c', W: '#5d7f3a', M: '#8a5a26', Y: '#1f4722', U: '#c4b07a', C: '#4a4a52', G: '#8a7a4a', A: '#6a7488', '^': '#77736a', K: '#8a877c' };
+        const g = mm.getContext('2d'), MC = { '.': '#4e8a32', f: '#4e8a32', F: '#6a4a2a', ',': '#3e7428', p: '#a08458', c: '#8a857c', d: '#857254', B: '#6e4f2e', g: '#a99d58', q: '#9aa38d', v: '#3f7ab8', J: '#d4e6f0', s: '#c4b07a', '~': '#2f6aa8', H: '#8a6a50', X: '#7a6a5a', R: '#6a6a66', N: '#6a6a66', I: '#6a6a66', r: '#6a6a66', T: '#2a5a1e', P: '#22501e', O: '#2e5a1c', W: '#5d7f3a', M: '#8a5a26', E: '#7fa457', Y: '#1f4722', U: '#c4b07a', C: '#4a4a52', G: '#8a7a4a', A: '#6a7488', '^': '#77736a', K: '#8a877c' };
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const c = at(X0 + x, Y0 + y); g.fillStyle = MC[c] || '#4e8a32'; g.fillRect(x * 4, y * 4, 4, 4); if ('TPOMWYU'.indexOf(c) >= 0) { g.fillStyle = c === 'U' ? '#3f6a2a' : '#183a12'; g.fillRect(x * 4 + 1, y * 4 + 1, 2, 2); } }
         for (const o of map.objects) if (o.k === 'house' || o.k === 'shop' || o.k === 'smithy' || o.k === 'church') { const ox = o.x - X0, oy = o.y - Y0; g.fillStyle = '#b8a890'; g.fillRect(ox * 4, oy * 4, o.w * 4, o.h * 4); g.strokeStyle = '#ffffff'; g.lineWidth = 1; g.strokeRect(ox * 4 + 0.5, oy * 4 + 0.5, o.w * 4 - 1, o.h * 4 - 1); }
       }
@@ -13631,9 +13649,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
   'use strict';
   const TILT = 23.44 * Math.PI / 180, YEAR = 365, EQUINOX = 79;
   const FALL0 = 0.588, FALLW = 2.2 / 365;   /* the leaves come down in late October, every tree within about two days */   /* day 80 of the year: the northern spring equinox */
-  const DECIDUOUS = { T: 1, O: 1, W: 1, M: 1 };
+  const DECIDUOUS = { T: 1, O: 1, W: 1, M: 1, E: 1 };   /* E: birch */
   /* autumn colours per kind: broadleaf yellow-gold, oak russet, willow pale yellow, maple scarlet */
-  const AUTUMN = { T: [0.86, 0.66, 0.16], O: [0.62, 0.34, 0.12], W: [0.82, 0.78, 0.32], M: [0.80, 0.18, 0.08] };
+  const AUTUMN = { T: [0.86, 0.66, 0.16], O: [0.62, 0.34, 0.12], W: [0.82, 0.78, 0.32], M: [0.80, 0.18, 0.08], E: [0.96, 0.84, 0.22] };   /* birch: bright yellow */
   const SPRING = [0.62, 0.82, 0.36];   /* new leaves: light, yellowish green */
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
   const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
@@ -13703,7 +13721,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       const snow = clamp((cold * k - 0.5) / 0.3, 0, 1);
       /* the coloured leaves on the ground go as soon as the water freezes (2026-10-07), and where it froze they do not come back in spring */
       if (snow > 0.5 || (hardWinter && p < 0.25)) litter = 0;
-      return { name, p, k, day: Math.floor(p * YEAR), leaf: { stage, colourT, crown, springT, bud, grow, dropped, spring }, litter, flora, riceAt, rice, ground, snow, frozen: snow > 0.5 };
+      return { name, p, k, melt, cold, leafy, day: Math.floor(p * YEAR), leaf: { stage, colourT, crown, springT, bud, grow, dropped, spring }, litter, flora, riceAt, rice, ground, snow, frozen: snow > 0.5 };
     }
     function leafColour(kind, base, s) {
       if (!DECIDUOUS[kind]) return base;   /* pines, yews and cacti keep their colour */
@@ -13712,7 +13730,42 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       if (s.leaf.colourT > 0) c = mix(c, AUTUMN[kind] || AUTUMN.T, s.leaf.colourT);
       return c;
     }
-    return { api: 1, YEAR, TILT, FALL0, LITTER: [AUTUMN.T, AUTUMN.O, AUTUMN.M], calendar, declination, at, leafColour, deciduous: k => !!DECIDUOUS[k] };
+    /* TEMPERATURE (2026-10-08: the sap runs only on a day that thaws after a night that froze). Degrees C, pure maths:
+       a mean for the latitude and the time of year (27 at the equator; Ashvale at 60 N about 0 over the year, -18 at midwinter,
+       +18 in summer), a day-night swing (coldest about 3 in the morning, warmest mid-afternoon), and a wobble from day to day
+       (smooth noise over the days, the same in every game) so some spring days thaw and some do not. */
+    const hashI = n => { n = Math.imul(n ^ (n >>> 16), 0x45d9f3b); n = Math.imul(n ^ (n >>> 16), 0x45d9f3b); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; };
+    const dayNo = tms => Math.floor((tms / 1000 - epoch) / dayS);
+    function wobble(day, latDeg) {   /* -1..1, smooth from one day to the next; a band of 10 degrees shares its weather */
+      const band = Math.floor((latDeg + 90) / 10), t = day / 3, i = Math.floor(t), f = t - i, u = f * f * (3 - 2 * f);
+      const a = hashI(i * 9176 + band * 131 + 7) * 2 - 1, b = hashI((i + 1) * 9176 + band * 131 + 7) * 2 - 1;
+      return a + (b - a) * u;
+    }
+    function climate(latDeg, tms) {   /* {mean, swing} for the day holding tms */
+      const S = at(latDeg, tms), al = Math.abs(latDeg);
+      const ann = 27 - 0.56 * Math.max(0, al - 12), amp = 2 + 16 * S.k;
+      const dn = dayNo(tms), clouds = hashI(dn * 7919 + Math.floor((latDeg + 90) / 10) * 104729 + 3);   /* a cloudy day swings less */
+      return { mean: ann + amp * (1 - 2 * S.cold) + 8 * wobble(dn, latDeg), swing: (2 + 5 * S.k) * (0.45 + 0.55 * clouds), S };
+    }
+    /* the temperature now; lonDeg sets the local hour (the sun's day), 0 if not given */
+    function temperature(latDeg, tms, lonDeg) {
+      const C = climate(latDeg, tms), d = ((tms / 1000 - epoch) / dayS) + (lonDeg || 0) / 360, h = d - Math.floor(d);
+      return C.mean + C.swing * Math.cos(2 * Math.PI * (h - 0.62));
+    }
+    /* the night before this day (its low) and this day (its high) */
+    function dayRange(latDeg, tms) {
+      const C = climate(latDeg, tms), P = climate(latDeg, tms - dayS * 1000);
+      return { low: Math.min(P.mean, C.mean) - C.swing, high: C.mean + C.swing, mean: C.mean };
+    }
+    /* THE SAP RUN (ziinzibaakwadwaaboo): the 14 days before the first maple buds where you stand, on a day that warms above
+       freezing after a night that froze. {season, day, low, high, left (days to the buds)} - day says whether it runs today */
+    const SAP_DAYS = 14;
+    function sap(latDeg, tms) {
+      const S = at(latDeg, tms), w = SAP_DAYS / YEAR, R = dayRange(latDeg, tms);
+      const season = S.leafy >= 0.5 && S.p >= S.melt - w && S.p < S.melt;
+      return { season, day: season && R.low < 0 && R.high > 0, low: R.low, high: R.high, left: season ? Math.ceil((S.melt - S.p) * YEAR) : 0 };
+    }
+    return { api: 1, YEAR, TILT, FALL0, SAP_DAYS, temperature, dayRange, sap, LITTER: [AUTUMN.T, AUTUMN.O, AUTUMN.M], calendar, declination, at, leafColour, deciduous: k => !!DECIDUOUS[k] };
   }
   const api = { api: 1, create };
   if (root.ASH3D && root.ASH3D.define) root.ASH3D.define('seasons', { api: 1, v: 1, needs: {} }, () => api);
@@ -15275,6 +15328,14 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (key !== SEASON.key) { SEASON.key = key; const ta = performance.now(); if (SCENE.seasonApply) SCENE.seasonApply(S, SEASONS); SEASON.applyMs = performance.now() - ta; SEASON.applies = (SEASON.applies || 0) + 1; SEASON.snowy = S.name === 'winter' && S.snow > 0.3;   /* it snows only in winter (2026-10-07: "It shouldn't be snowing in the spring time") */ wxShown = ''; if (core.setSeason) core.setSeason({ snowy: SEASON.snowy, rice: !!S.rice, riceLate: S.p > 0.551 && S.p < 0.95 }); showWeather(); }
         if (S.name !== SEASON.name) { if (SEASON.name) { const C = SEASONS.calendar(now); hud.chat(S.name.charAt(0).toUpperCase() + S.name.slice(1) + ' has come: year ' + C.year + ', day ' + C.day + '.', 'sys'); } SEASON.name = S.name; }
         /* a time-lapse runs the weather fast too: every few seconds each region this viewer hosts rolls again (for its season) */
+        SEASON.lat = lat; SEASON.lon = Math.atan2(B.u[1], B.u[0]) * 180 / Math.PI;
+        if (TL.n > 1 && SEASONS.temperature) {   /* a time-lapse shows the date, the temperature and the sap run (2026-10-08) */
+          let el = document.getElementById('tl-clock');
+          if (!el) { el = document.createElement('div'); el.id = 'tl-clock'; el.style.cssText = 'position:fixed;left:12px;top:12px;z-index:50;padding:6px 10px;border-radius:6px;background:rgba(10,14,20,.72);color:#f2ead8;font:600 15px/1.35 system-ui,sans-serif;pointer-events:none;white-space:pre'; document.body.appendChild(el); }
+          const C = SEASONS.calendar(now), T = SEASONS.temperature(lat, now, SEASON.lon), sp = SEASONS.sap(lat, now), hr = ((C.dayFrac + SEASON.lon / 360) % 1 + 1) % 1;
+          el.textContent = 'Year ' + C.year + ', day ' + C.day + '  ' + String(Math.floor(hr * 24)).padStart(2, '0') + ':' + String(Math.floor(hr * 1440) % 60).padStart(2, '0') + '  ' + S.name + '\n' + T.toFixed(1) + ' \u00b0C   night ' + sp.low.toFixed(0) + ' / day ' + sp.high.toFixed(0) + '\n' +
+            (sp.season ? (sp.day ? 'The sap is running' : 'Sap season - no run today') + ' (' + sp.left + ' days to the buds)' : 'leaves: ' + S.leaf.stage);
+        }
         if (core.M.setIce && real - SEASON.ice > (TL.n > 1 ? 2000 : 60000)) { SEASON.ice = real; core.M.setIce(la => SEASONS.at(la, skyNow()).frozen); }
       }
       function dayTick() {
@@ -17071,11 +17132,11 @@ ASH3D.defineData({"ashvale3d":"module","name":"quests","api":1,"v":2,"data":{"qu
 
 </script>
 <script>
-ASH3D.defineData({"ashvale3d":"module","name":"rules","api":1,"v":3,"data":{"xp":[0,0,83,174,276,388,512,650,801,969,1154,1358,1584,1833,2107,2411,2746,3115,3523,3973,4470,5018,5624,6291,7028,7842,8740,9730,10824,12031,13363,14833,16456,18247,20224,22406,24815,27473,30408,33648,37224,41171,45529,50339,55649,61512,67983,75127,83014,91721,101333,111945,123660,136594,150872,166636,184040,203254,224466,247886,273742,302288,333804,368599,407015,449428,496254,547953,605032,668051,737627,814445,899257,992895,1096278,1210421,1336443,1475581,1629200,1798808,1986068,2192818,2421087,2673114,2951373,3258594,3597792,3972294,4385776,4842295,5346332,5902831,6517253,7195629,7944614,8771558,9684577,10692629,11805606,13034431],"tiles":{"block":"TPORNIr~FHXWMYCGAU^K","los":"TPORNIrHXWMYCGA^K","tree":"TPOMWY","rock":"RNICGA","floor":"i"},"nodes":{"T":{"skill":"woodcutting","name":"Tree","item":"logs","req":1,"xp":250,"speed":4,"deplete":6,"regrow":-1},"P":{"skill":"woodcutting","name":"Pine tree","item":"logs","req":1,"xp":250,"speed":4,"deplete":6,"regrow":-1},"O":{"skill":"woodcutting","name":"Oak tree","item":"oak_logs","req":15,"xp":375,"speed":4,"deplete":8,"regrow":-1},"W":{"skill":"woodcutting","name":"Willow","item":"willow_logs","req":20,"xp":500,"speed":4,"deplete":8,"regrow":-1},"M":{"skill":"woodcutting","name":"Maple","item":"maple_logs","req":30,"xp":675,"speed":5,"deplete":8,"regrow":-1},"Y":{"skill":"woodcutting","name":"Yew","item":"yew_logs","req":40,"xp":900,"speed":5,"deplete":10,"regrow":-1},"R":{"skill":"mining","name":"Copper rocks","item":"copper_ore","req":1,"xp":175,"speed":4,"deplete":1,"regrow":8},"N":{"skill":"mining","name":"Tin rocks","item":"tin_ore","req":1,"xp":175,"speed":4,"deplete":1,"regrow":8},"I":{"skill":"mining","name":"Iron rocks","item":"iron_ore","req":15,"xp":350,"speed":4,"deplete":1,"regrow":15},"C":{"skill":"mining","name":"Coal rocks","item":"coal","req":20,"xp":250,"speed":4,"deplete":1,"regrow":20},"G":{"skill":"mining","name":"Gold rocks","item":"gold_ore","req":30,"xp":420,"speed":4,"deplete":1,"regrow":30},"A":{"skill":"mining","name":"Mithril rocks","item":"mithril_ore","req":40,"xp":600,"speed":5,"deplete":1,"regrow":45},"fish":{"skill":"fishing","name":"Fishing spot","req":1,"xp":100,"speed":5,"deplete":0},"range":{"skill":"cooking","name":"Cooking range","speed":4},"fire":{"skill":"cooking","name":"Campfire","speed":4,"burnBonus":10},"altar":{"skill":"prayer","name":"Altar","speed":2}},"skills":["attack","strength","defence","hitpoints","ranged","magic","dexterity","speechcraft","woodcutting","mining","fishing","cooking","firemaking","prayer"],"fires":{"lightTicks":3,"basePct":50,"pctPerLevel":2,"maxPct":95},"effects":{"note":"effect library (core.js EFFECTS); item JSON: Effect, Effect ticks, Effect chance (%), Effect damage. Unknown effects are ignored.","known":["freeze","stun","slow","poison","burn"]},"spells":[[1,2,"Wind strike"],[5,4,"Water strike"],[9,6,"Earth strike"],[13,8,"Fire strike"],[17,9,"Wind bolt"],[23,10,"Water bolt"],[29,11,"Earth bolt"],[35,12,"Fire bolt"],[41,13,"Wind blast"],[47,14,"Water blast"]],"start":{"inv":[["coins",75],["bread",1],["bread",1],["bread",1]],"hitpoints":10,"points":10,"maxPerSkill":5,"skills":["attack","strength","defence","ranged","magic","hitpoints","dexterity","speechcraft"]},"items":{"categories":{"weapon":["sword","dagger","longsword","mace","bow","staff"],"armour":["helmet","platebody","chainbody","platelegs","kiteshield","robe","torch"],"tool":["hatchet","pickaxe","net","rod","pot","tinderbox","stone"],"pack":["pack"],"cosmetic":["hat","cape","robe"],"resource":["logs","ore","coal","bar","pelt","fish","mushroom","meat","bones","note","sapling"],"food":["bread","fish","mushroom","meat"],"potion":["healing"],"ammo":["arrow"],"currency":["gold"],"jewellery":["ring","charm"]},"slots":{"weapon":"weapon","armour/helmet":"head","armour/platebody":"body","armour/chainbody":"body","armour/platelegs":"legs","armour/kiteshield":"shield","armour/torch":"shield","ammo":"ammo","pack":"pack","cosmetic/hat":"head","cosmetic/cape":"cape","cosmetic/robe":"body","jewellery/ring":"ring","armour/robe":"body","jewellery/charm":"shield"},"weapons":{"sword":{"class":"melee","anim":"slash"},"dagger":{"class":"melee","anim":"stab"},"longsword":{"class":"melee","anim":"slash"},"mace":{"class":"melee","anim":"crush"},"bow":{"class":"ranged","anim":"bow","twoHanded":true},"staff":{"class":"magic","anim":"cast"}},"tools":{"hatchet":"woodcutting","pickaxe":"mining","net":"fishing","rod":"fishing","pot":"fishing","tinderbox":"firemaking"},"edible":["food","potion"],"drink":["potion"],"traits":{"Edition":"edition","Cures":"cures","Light":"light","Form":"form","Teleport":"teleport","Cooldown ticks":"cooldown","Call to arms":"arms","Attack":"attack","Strength":"strength","Defence":"defence","Ranged":"ranged","Magic":"magic","Ranged strength":"rstr","Speed":"speed","Range":"range","Carry":["carry",1000],"Heal":"heal","Heal %":"healPct","Cooks into":"cooks","Burns into":"burns","Cooking level":"cookReq","Cooking XP":"cookXp","Firemaking level":"fireReq","Burn ticks":"burnTicks","Firemaking XP":"fireXp","Effect":"effect","Effect ticks":"effectTicks","Effect chance":"effectChance","Effect damage":"effectDamage","Prayer XP":["buryXp",10],"Prayer":"prayer","Prayer seconds":"prayerSec","Prayer hold":"ppHold","Teleport from step":"teleFrom"},"limits":{"perTier":{"Attack":12,"Strength":12,"Ranged":12,"Magic":12,"Defence":16,"Ranged strength":8},"flat":{"Speed":[2,7],"Range":[1,10],"Carry":[0,100],"Heal":[0,40],"Heal %":[0,100],"Cooking level":[1,99],"Cooking XP":[0,500],"Firemaking level":[1,99],"Burn ticks":[10,600],"Firemaking XP":[0,500],"Effect ticks":[1,50],"Effect chance":[0,100],"Effect damage":[0,20],"Prayer XP":[0,500],"Prayer":[0,30],"Prayer seconds":[0,30],"Prayer hold":[0,30]},"weight":[1,100000],"tier":[1,5]},"armouryMap":{"sword":"weapon/sword","bow":"weapon/bow","staff":"weapon/staff","helmet":"armour/helmet","body":"armour/platebody","legs":"armour/platelegs","shield":"armour/kiteshield","ring":"jewellery/ring"},"creator":"nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c","also":["ns3A7VS6DDaCoBvNFnayHeS9pysgi7Ukrf","@yourfirstname","yourfirstname"]},"weather":{"climate":{"0":{"kinds":{"clear":45,"rain":30,"fog":25},"min":300,"max":900},"1":{"kinds":{"clear":60,"rain":25,"fog":15},"min":300,"max":900},"2":{"kinds":{"clear":80,"rain":12,"fog":8},"min":400,"max":1100},"3":{"kinds":{"clear":96,"rain":2,"fog":2},"min":600,"max":1500},"4":{"kinds":{"clear":72,"rain":23,"fog":5},"min":300,"max":900},"5":{"kinds":{"clear":25,"rain":55,"fog":20},"min":240,"max":720},"6":{"kinds":{"clear":35,"snow":35,"fog":20,"rain":10},"min":300,"max":900},"7":{"kinds":{"clear":30,"snow":55,"fog":15},"min":300,"max":900},"coastFog":12},"kinds":{"clear":{},"fog":{"sight":0.5,"range":0.6},"rain":{"fireFail":0.25,"fireBurn":0.6},"snow":{"run":0.85,"sight":0.8}},"say":{"clear":"The sky clears.","fog":"A fog rolls in.","rain":"It starts to rain.","snow":"Snow begins to fall."},"intensity":[50,100]},"retaliate":{"ticks":10,"beyond":12,"note":"a monster hit in the last `ticks` keeps its attacker as target across zone borders and up to `beyond` tiles past its leash (the operator)"},"respawn":{"emptyTicks":50,"deadTicks":2000,"note":"a dead monster comes back when its zone has been empty this long (50 ticks = 30 s) and someone enters, or after deadTicks (2000 = 20 min) at its post when no player stands within 8 tiles of it"},"carry":{"base":30000,"perStrength":1000,"unit":"grams","frozenPct":150},"death":{"pileTicks":1000,"note":"everything carried and worn drops where you die; what rules.persist keeps (Gold, stones, magical, worth 100+) stays until taken, the rest lasts pileTicks (1000 = 10 minutes)"},"portals":[{"id":"ashvale","name":"Ashvale","x":19,"y":55,"to":[19,56]},{"id":"saltmere","name":"Saltmere","x":462,"y":28,"to":[462,29]},{"id":"spidercave","name":"the Spider Cave","x":-125,"y":8,"to":[-124,10]}],"persist":{"minValue":100,"always":["currency"],"teleport":true,"note":"a drop lies where it fell until someone takes it when it is Gold, a teleport stone or rune stone, magical, or worth minValue GOLD or more (value x how many); everything else despawns. The @ashvale Bank holds persisted drops and shows them to every player"},"dexterity":{"drainPerLevelPermille":5,"drainMaxPermille":400,"dodgePerTenLevels":1,"fastAt":50,"fastKinds":["dagger","bow"],"xpPerRunTile":2,"xpPerDamage":10},"speechcraft":{"pctPerLevelPermille":4,"maxPermille":300,"xpPerGold":1,"xpQuestTalk":250},"yard":{"note":"2026-10-04: chickens wherever there are buildings - n birds per `per` buildings, by a building, at most max per town","kinds":["house","shop","smithy","inn","tavern","hall"],"per":2,"n":2,"max":14,"birds":["chicken","hen"]},"prayer":{"resist":100,"buryTicks":2,"bones":"bones","list":[{"id":"protect_from_melee","name":"Protect from Melee","level":1,"drain":12,"kind":"protect","desc":"Protects you from melee attacks.","g":"head","x":["head"],"protect":"melee","icon":"melee"},{"id":"protect_from_missiles","name":"Protect from Missiles","level":4,"drain":12,"kind":"protect","desc":"Protects you from ranged attacks.","g":"head","x":["head"],"protect":"ranged","icon":"missiles"},{"id":"protect_from_magic","name":"Protect from Magic","level":15,"drain":12,"kind":"protect","desc":"Protects you from magic attacks.","g":"head","x":["head"],"protect":"magic","icon":"magic"}]},"flags":{"gift_of_angels":{"name":"the Gift of Angels","quest":"angel_gift","ringCooldown":1000,"desc":"Iria's blessing is on you now: the Ring of Angels rests ten minutes between saves instead of an hour."},"vorth_gate":{"name":"Pike's latch","quest":"red_pyre","desc":"Pike has opened the compound gate. You may enter and leave."},"vorth_bag":{"name":"Edric's bag","quest":"red_pyre","desc":"You searched the bones in the Spider Cave."},"vorth_spoke":{"name":"Edric's last word","quest":"red_pyre","desc":"Edric's shade has said his piece and gone."},"replant":{"name":"Replanting","quest":"even_grove","desc":"You can set a sapling in any stump, anywhere a tree used to stand. The tree grows back."}}}});
+ASH3D.defineData({"ashvale3d":"module","name":"rules","api":1,"v":3,"data":{"xp":[0,0,83,174,276,388,512,650,801,969,1154,1358,1584,1833,2107,2411,2746,3115,3523,3973,4470,5018,5624,6291,7028,7842,8740,9730,10824,12031,13363,14833,16456,18247,20224,22406,24815,27473,30408,33648,37224,41171,45529,50339,55649,61512,67983,75127,83014,91721,101333,111945,123660,136594,150872,166636,184040,203254,224466,247886,273742,302288,333804,368599,407015,449428,496254,547953,605032,668051,737627,814445,899257,992895,1096278,1210421,1336443,1475581,1629200,1798808,1986068,2192818,2421087,2673114,2951373,3258594,3597792,3972294,4385776,4842295,5346332,5902831,6517253,7195629,7944614,8771558,9684577,10692629,11805606,13034431],"tiles":{"block":"TPORNIr~FHXWMYCGAU^K","los":"TPORNIrHXWMYCGA^K","tree":"TPOMWY","rock":"RNICGA","floor":"i"},"nodes":{"T":{"skill":"woodcutting","name":"Tree","item":"logs","req":1,"xp":250,"speed":4,"deplete":6,"regrow":-1},"P":{"skill":"woodcutting","name":"Pine tree","item":"logs","req":1,"xp":250,"speed":4,"deplete":6,"regrow":-1},"O":{"skill":"woodcutting","name":"Oak tree","item":"oak_logs","req":15,"xp":375,"speed":4,"deplete":8,"regrow":-1},"W":{"skill":"woodcutting","name":"Willow","item":"willow_logs","req":20,"xp":500,"speed":4,"deplete":8,"regrow":-1},"M":{"skill":"woodcutting","name":"Maple","item":"maple_logs","req":30,"xp":675,"speed":5,"deplete":8,"regrow":-1},"E":{"skill":"woodcutting","name":"Birch","item":"logs","req":1,"xp":250,"speed":4,"deplete":6,"regrow":-1},"Y":{"skill":"woodcutting","name":"Yew","item":"yew_logs","req":40,"xp":900,"speed":5,"deplete":10,"regrow":-1},"R":{"skill":"mining","name":"Copper rocks","item":"copper_ore","req":1,"xp":175,"speed":4,"deplete":1,"regrow":8},"N":{"skill":"mining","name":"Tin rocks","item":"tin_ore","req":1,"xp":175,"speed":4,"deplete":1,"regrow":8},"I":{"skill":"mining","name":"Iron rocks","item":"iron_ore","req":15,"xp":350,"speed":4,"deplete":1,"regrow":15},"C":{"skill":"mining","name":"Coal rocks","item":"coal","req":20,"xp":250,"speed":4,"deplete":1,"regrow":20},"G":{"skill":"mining","name":"Gold rocks","item":"gold_ore","req":30,"xp":420,"speed":4,"deplete":1,"regrow":30},"A":{"skill":"mining","name":"Mithril rocks","item":"mithril_ore","req":40,"xp":600,"speed":5,"deplete":1,"regrow":45},"fish":{"skill":"fishing","name":"Fishing spot","req":1,"xp":100,"speed":5,"deplete":0},"range":{"skill":"cooking","name":"Cooking range","speed":4},"fire":{"skill":"cooking","name":"Campfire","speed":4,"burnBonus":10},"altar":{"skill":"prayer","name":"Altar","speed":2}},"skills":["attack","strength","defence","hitpoints","ranged","magic","dexterity","speechcraft","woodcutting","mining","fishing","cooking","firemaking","prayer"],"fires":{"lightTicks":3,"basePct":50,"pctPerLevel":2,"maxPct":95},"effects":{"note":"effect library (core.js EFFECTS); item JSON: Effect, Effect ticks, Effect chance (%), Effect damage. Unknown effects are ignored.","known":["freeze","stun","slow","poison","burn"]},"spells":[[1,2,"Wind strike"],[5,4,"Water strike"],[9,6,"Earth strike"],[13,8,"Fire strike"],[17,9,"Wind bolt"],[23,10,"Water bolt"],[29,11,"Earth bolt"],[35,12,"Fire bolt"],[41,13,"Wind blast"],[47,14,"Water blast"]],"start":{"inv":[["coins",75],["bread",1],["bread",1],["bread",1]],"hitpoints":10,"points":10,"maxPerSkill":5,"skills":["attack","strength","defence","ranged","magic","hitpoints","dexterity","speechcraft"]},"items":{"categories":{"weapon":["sword","dagger","longsword","mace","bow","staff"],"armour":["helmet","platebody","chainbody","platelegs","kiteshield","robe","torch"],"tool":["hatchet","pickaxe","net","rod","pot","tinderbox","stone"],"pack":["pack"],"cosmetic":["hat","cape","robe"],"resource":["logs","ore","coal","bar","pelt","fish","mushroom","meat","bones","note","sapling"],"food":["bread","fish","mushroom","meat"],"potion":["healing"],"ammo":["arrow"],"currency":["gold"],"jewellery":["ring","charm"]},"slots":{"weapon":"weapon","armour/helmet":"head","armour/platebody":"body","armour/chainbody":"body","armour/platelegs":"legs","armour/kiteshield":"shield","armour/torch":"shield","ammo":"ammo","pack":"pack","cosmetic/hat":"head","cosmetic/cape":"cape","cosmetic/robe":"body","jewellery/ring":"ring","armour/robe":"body","jewellery/charm":"shield"},"weapons":{"sword":{"class":"melee","anim":"slash"},"dagger":{"class":"melee","anim":"stab"},"longsword":{"class":"melee","anim":"slash"},"mace":{"class":"melee","anim":"crush"},"bow":{"class":"ranged","anim":"bow","twoHanded":true},"staff":{"class":"magic","anim":"cast"}},"tools":{"hatchet":"woodcutting","pickaxe":"mining","net":"fishing","rod":"fishing","pot":"fishing","tinderbox":"firemaking"},"edible":["food","potion"],"drink":["potion"],"traits":{"Edition":"edition","Cures":"cures","Light":"light","Form":"form","Teleport":"teleport","Cooldown ticks":"cooldown","Call to arms":"arms","Attack":"attack","Strength":"strength","Defence":"defence","Ranged":"ranged","Magic":"magic","Ranged strength":"rstr","Speed":"speed","Range":"range","Carry":["carry",1000],"Heal":"heal","Heal %":"healPct","Cooks into":"cooks","Burns into":"burns","Cooking level":"cookReq","Cooking XP":"cookXp","Firemaking level":"fireReq","Burn ticks":"burnTicks","Firemaking XP":"fireXp","Effect":"effect","Effect ticks":"effectTicks","Effect chance":"effectChance","Effect damage":"effectDamage","Prayer XP":["buryXp",10],"Prayer":"prayer","Prayer seconds":"prayerSec","Prayer hold":"ppHold","Teleport from step":"teleFrom"},"limits":{"perTier":{"Attack":12,"Strength":12,"Ranged":12,"Magic":12,"Defence":16,"Ranged strength":8},"flat":{"Speed":[2,7],"Range":[1,10],"Carry":[0,100],"Heal":[0,40],"Heal %":[0,100],"Cooking level":[1,99],"Cooking XP":[0,500],"Firemaking level":[1,99],"Burn ticks":[10,600],"Firemaking XP":[0,500],"Effect ticks":[1,50],"Effect chance":[0,100],"Effect damage":[0,20],"Prayer XP":[0,500],"Prayer":[0,30],"Prayer seconds":[0,30],"Prayer hold":[0,30]},"weight":[1,100000],"tier":[1,5]},"armouryMap":{"sword":"weapon/sword","bow":"weapon/bow","staff":"weapon/staff","helmet":"armour/helmet","body":"armour/platebody","legs":"armour/platelegs","shield":"armour/kiteshield","ring":"jewellery/ring"},"creator":"nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c","also":["ns3A7VS6DDaCoBvNFnayHeS9pysgi7Ukrf","@yourfirstname","yourfirstname"]},"weather":{"climate":{"0":{"kinds":{"clear":45,"rain":30,"fog":25},"min":300,"max":900},"1":{"kinds":{"clear":60,"rain":25,"fog":15},"min":300,"max":900},"2":{"kinds":{"clear":80,"rain":12,"fog":8},"min":400,"max":1100},"3":{"kinds":{"clear":96,"rain":2,"fog":2},"min":600,"max":1500},"4":{"kinds":{"clear":72,"rain":23,"fog":5},"min":300,"max":900},"5":{"kinds":{"clear":25,"rain":55,"fog":20},"min":240,"max":720},"6":{"kinds":{"clear":35,"snow":35,"fog":20,"rain":10},"min":300,"max":900},"7":{"kinds":{"clear":30,"snow":55,"fog":15},"min":300,"max":900},"coastFog":12},"kinds":{"clear":{},"fog":{"sight":0.5,"range":0.6},"rain":{"fireFail":0.25,"fireBurn":0.6},"snow":{"run":0.85,"sight":0.8}},"say":{"clear":"The sky clears.","fog":"A fog rolls in.","rain":"It starts to rain.","snow":"Snow begins to fall."},"intensity":[50,100]},"retaliate":{"ticks":10,"beyond":12,"note":"a monster hit in the last `ticks` keeps its attacker as target across zone borders and up to `beyond` tiles past its leash (the operator)"},"respawn":{"emptyTicks":50,"deadTicks":2000,"note":"a dead monster comes back when its zone has been empty this long (50 ticks = 30 s) and someone enters, or after deadTicks (2000 = 20 min) at its post when no player stands within 8 tiles of it"},"carry":{"base":30000,"perStrength":1000,"unit":"grams","frozenPct":150},"death":{"pileTicks":1000,"note":"everything carried and worn drops where you die; what rules.persist keeps (Gold, stones, magical, worth 100+) stays until taken, the rest lasts pileTicks (1000 = 10 minutes)"},"portals":[{"id":"ashvale","name":"Ashvale","x":19,"y":55,"to":[19,56]},{"id":"saltmere","name":"Saltmere","x":462,"y":28,"to":[462,29]},{"id":"spidercave","name":"the Spider Cave","x":-125,"y":8,"to":[-124,10]}],"persist":{"minValue":100,"always":["currency"],"teleport":true,"note":"a drop lies where it fell until someone takes it when it is Gold, a teleport stone or rune stone, magical, or worth minValue GOLD or more (value x how many); everything else despawns. The @ashvale Bank holds persisted drops and shows them to every player"},"dexterity":{"drainPerLevelPermille":5,"drainMaxPermille":400,"dodgePerTenLevels":1,"fastAt":50,"fastKinds":["dagger","bow"],"xpPerRunTile":2,"xpPerDamage":10},"speechcraft":{"pctPerLevelPermille":4,"maxPermille":300,"xpPerGold":1,"xpQuestTalk":250},"yard":{"note":"2026-10-04: chickens wherever there are buildings - n birds per `per` buildings, by a building, at most max per town","kinds":["house","shop","smithy","inn","tavern","hall"],"per":2,"n":2,"max":14,"birds":["chicken","hen"]},"prayer":{"resist":100,"buryTicks":2,"bones":"bones","list":[{"id":"protect_from_melee","name":"Protect from Melee","level":1,"drain":12,"kind":"protect","desc":"Protects you from melee attacks.","g":"head","x":["head"],"protect":"melee","icon":"melee"},{"id":"protect_from_missiles","name":"Protect from Missiles","level":4,"drain":12,"kind":"protect","desc":"Protects you from ranged attacks.","g":"head","x":["head"],"protect":"ranged","icon":"missiles"},{"id":"protect_from_magic","name":"Protect from Magic","level":15,"drain":12,"kind":"protect","desc":"Protects you from magic attacks.","g":"head","x":["head"],"protect":"magic","icon":"magic"}]},"flags":{"gift_of_angels":{"name":"the Gift of Angels","quest":"angel_gift","ringCooldown":1000,"desc":"Iria's blessing is on you now: the Ring of Angels rests ten minutes between saves instead of an hour."},"vorth_gate":{"name":"Pike's latch","quest":"red_pyre","desc":"Pike has opened the compound gate. You may enter and leave."},"vorth_bag":{"name":"Edric's bag","quest":"red_pyre","desc":"You searched the bones in the Spider Cave."},"vorth_spoke":{"name":"Edric's last word","quest":"red_pyre","desc":"Edric's shade has said his piece and gone."},"replant":{"name":"Replanting","quest":"even_grove","desc":"You can set a sapling in any stump, anywhere a tree used to stand. The tree grows back."}}}});
 
 </script>
 <script>
-ASH3D.defineData({"ashvale3d":"module","name":"globecfg","api":1,"v":1,"data":{"seed":"ashvale","n":128,"radius_m":36110,"face":19,"north":-1,"origin":[8811,-3368],"grid":[8619,-3560],"chunk":64,"area":128,"region":512,"belt":{"whisperwood":90,"village":30},"links":[["eastend","saltmere"],["ziibiing","village","trail"]]}});
+ASH3D.defineData({"ashvale3d":"module","name":"globecfg","api":1,"v":1,"data":{"seed":"ashvale","n":128,"radius_m":36110,"face":19,"north":-1,"origin":[8811,-3368],"grid":[8619,-3560],"chunk":64,"area":128,"region":512,"belt":{"whisperwood":90,"village":30},"links":[["eastend","saltmere"],["ziibiing","village","trail"]],"groves":[{"piece":"ziibiing","x":70,"y":470,"rx":160,"ry":105,"sp":"MMMEE","dens":0.6,"edge":35}]}});
 
 </script>
 <script>

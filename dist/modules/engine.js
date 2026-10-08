@@ -1137,6 +1137,14 @@
         if (key !== SEASON.key) { SEASON.key = key; const ta = performance.now(); if (SCENE.seasonApply) SCENE.seasonApply(S, SEASONS); SEASON.applyMs = performance.now() - ta; SEASON.applies = (SEASON.applies || 0) + 1; SEASON.snowy = S.name === 'winter' && S.snow > 0.3;   /* it snows only in winter (2026-10-07: "It shouldn't be snowing in the spring time") */ wxShown = ''; if (core.setSeason) core.setSeason({ snowy: SEASON.snowy, rice: !!S.rice, riceLate: S.p > 0.551 && S.p < 0.95 }); showWeather(); }
         if (S.name !== SEASON.name) { if (SEASON.name) { const C = SEASONS.calendar(now); hud.chat(S.name.charAt(0).toUpperCase() + S.name.slice(1) + ' has come: year ' + C.year + ', day ' + C.day + '.', 'sys'); } SEASON.name = S.name; }
         /* a time-lapse runs the weather fast too: every few seconds each region this viewer hosts rolls again (for its season) */
+        SEASON.lat = lat; SEASON.lon = Math.atan2(B.u[1], B.u[0]) * 180 / Math.PI;
+        if (TL.n > 1 && SEASONS.temperature) {   /* a time-lapse shows the date, the temperature and the sap run (2026-10-08) */
+          let el = document.getElementById('tl-clock');
+          if (!el) { el = document.createElement('div'); el.id = 'tl-clock'; el.style.cssText = 'position:fixed;left:12px;top:12px;z-index:50;padding:6px 10px;border-radius:6px;background:rgba(10,14,20,.72);color:#f2ead8;font:600 15px/1.35 system-ui,sans-serif;pointer-events:none;white-space:pre'; document.body.appendChild(el); }
+          const C = SEASONS.calendar(now), T = SEASONS.temperature(lat, now, SEASON.lon), sp = SEASONS.sap(lat, now), hr = ((C.dayFrac + SEASON.lon / 360) % 1 + 1) % 1;
+          el.textContent = 'Year ' + C.year + ', day ' + C.day + '  ' + String(Math.floor(hr * 24)).padStart(2, '0') + ':' + String(Math.floor(hr * 1440) % 60).padStart(2, '0') + '  ' + S.name + '\n' + T.toFixed(1) + ' \u00b0C   night ' + sp.low.toFixed(0) + ' / day ' + sp.high.toFixed(0) + '\n' +
+            (sp.season ? (sp.day ? 'The sap is running' : 'Sap season - no run today') + ' (' + sp.left + ' days to the buds)' : 'leaves: ' + S.leaf.stage);
+        }
         if (core.M.setIce && real - SEASON.ice > (TL.n > 1 ? 2000 : 60000)) { SEASON.ice = real; core.M.setIce(la => SEASONS.at(la, skyNow()).frozen); }
       }
       function dayTick() {

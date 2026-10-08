@@ -33,7 +33,7 @@ def overlay(base, extra):
     return extra
 
 
-TREES = 'TPOWMY'   # the tree letters; the rest of the blocking letters (water, rock, fences, graves, walls) are never cleared
+TREES = 'TPOWMYE'   # E: birch; the tree letters; the rest of the blocking letters (water, rock, fences, graves, walls) are never cleared
 BLOCKS = 'TPORNIr~FHXWMYCGA^K'
 def open_ways(tiles):
     """No walled-in ground in a drawn area (2026-10-06: "Animals keep getting stuck in the woods because there's no way
@@ -1554,6 +1554,7 @@ module('rules', 3, {
         "O": {"skill": "woodcutting", "name": "Oak tree", "item": "oak_logs", "req": 15, "xp": 375, "speed": 4, "deplete": 8, "regrow": -1},
         "W": {"skill": "woodcutting", "name": "Willow", "item": "willow_logs", "req": 20, "xp": 500, "speed": 4, "deplete": 8, "regrow": -1},
         "M": {"skill": "woodcutting", "name": "Maple", "item": "maple_logs", "req": 30, "xp": 675, "speed": 5, "deplete": 8, "regrow": -1},
+        "E": {"skill": "woodcutting", "name": "Birch", "item": "logs", "req": 1, "xp": 250, "speed": 4, "deplete": 6, "regrow": -1},   # wiigwaasaatig (2026-10-08); long-press peels its bark
         "Y": {"skill": "woodcutting", "name": "Yew", "item": "yew_logs", "req": 40, "xp": 900, "speed": 5, "deplete": 10, "regrow": -1},
         "R": {"skill": "mining", "name": "Copper rocks", "item": "copper_ore", "req": 1, "xp": 175, "speed": 4, "deplete": 1, "regrow": 8},
         "N": {"skill": "mining", "name": "Tin rocks", "item": "tin_ore", "req": 1, "xp": 175, "speed": 4, "deplete": 1, "regrow": 8},
@@ -1639,4 +1640,7 @@ module('rules', 3, {
 # then to the coast of one of two continents on a mostly-ocean globe (2026-10-03 evening): face 19, Saltmere's shore parcel next door.
 module('globecfg', 1, {"seed": "ashvale", "n": 128, "radius_m": 36110, "face": 19, "north": -1, "origin": [8811, -3368], "grid": [8619, -3560],
                        "chunk": 64, "area": 128, "region": 512, "belt": {"whisperwood": 90, "village": 30},
-                       "links": [["eastend", "saltmere"], ["ziibiing", "village", "trail"]]})   # the road to Saltmere leaves from Eastend, one straight cobbled road (2026-10-08); village and Eastend touch, one street   # + the skinny trail up from Ziibiing (2026-10-07)   # the trail from Ashvale down to Saltmere (2026-10-03)
+                       "links": [["eastend", "saltmere"], ["ziibiing", "village", "trail"]],
+                       # the maple and birch woods (2026-10-08: "a large deciduous forest with maple and Birch", on Ziibiing's own side of
+                       # the river, between it and Ashvale; the trail runs through) - game tiles, an ellipse with a wandering edge
+                       "groves": [{"piece": "ziibiing", "x": 70, "y": 470, "rx": 160, "ry": 105, "sp": "MMMEE", "dens": 0.6, "edge": 35}]})   # the road to Saltmere leaves from Eastend, one straight cobbled road (2026-10-08); village and Eastend touch, one street   # + the skinny trail up from Ziibiing (2026-10-07)   # the trail from Ashvale down to Saltmere (2026-10-03)

@@ -20,9 +20,9 @@
   'use strict';
   const TILT = 23.44 * Math.PI / 180, YEAR = 365, EQUINOX = 79;
   const FALL0 = 0.588, FALLW = 2.2 / 365;   /* the leaves come down in late October, every tree within about two days */   /* day 80 of the year: the northern spring equinox */
-  const DECIDUOUS = { T: 1, O: 1, W: 1, M: 1 };
+  const DECIDUOUS = { T: 1, O: 1, W: 1, M: 1, E: 1 };   /* E: birch */
   /* autumn colours per kind: broadleaf yellow-gold, oak russet, willow pale yellow, maple scarlet */
-  const AUTUMN = { T: [0.86, 0.66, 0.16], O: [0.62, 0.34, 0.12], W: [0.82, 0.78, 0.32], M: [0.80, 0.18, 0.08] };
+  const AUTUMN = { T: [0.86, 0.66, 0.16], O: [0.62, 0.34, 0.12], W: [0.82, 0.78, 0.32], M: [0.80, 0.18, 0.08], E: [0.96, 0.84, 0.22] };   /* birch: bright yellow */
   const SPRING = [0.62, 0.82, 0.36];   /* new leaves: light, yellowish green */
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
   const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
@@ -92,7 +92,7 @@
       const snow = clamp((cold * k - 0.5) / 0.3, 0, 1);
       /* the coloured leaves on the ground go as soon as the water freezes (2026-10-07), and where it froze they do not come back in spring */
       if (snow > 0.5 || (hardWinter && p < 0.25)) litter = 0;
-      return { name, p, k, day: Math.floor(p * YEAR), leaf: { stage, colourT, crown, springT, bud, grow, dropped, spring }, litter, flora, riceAt, rice, ground, snow, frozen: snow > 0.5 };
+      return { name, p, k, melt, cold, leafy, day: Math.floor(p * YEAR), leaf: { stage, colourT, crown, springT, bud, grow, dropped, spring }, litter, flora, riceAt, rice, ground, snow, frozen: snow > 0.5 };
     }
     function leafColour(kind, base, s) {
       if (!DECIDUOUS[kind]) return base;   /* pines, yews and cacti keep their colour */
@@ -101,7 +101,42 @@
       if (s.leaf.colourT > 0) c = mix(c, AUTUMN[kind] || AUTUMN.T, s.leaf.colourT);
       return c;
     }
-    return { api: 1, YEAR, TILT, FALL0, LITTER: [AUTUMN.T, AUTUMN.O, AUTUMN.M], calendar, declination, at, leafColour, deciduous: k => !!DECIDUOUS[k] };
+    /* TEMPERATURE (2026-10-08: the sap runs only on a day that thaws after a night that froze). Degrees C, pure maths:
+       a mean for the latitude and the time of year (27 at the equator; Ashvale at 60 N about 0 over the year, -18 at midwinter,
+       +18 in summer), a day-night swing (coldest about 3 in the morning, warmest mid-afternoon), and a wobble from day to day
+       (smooth noise over the days, the same in every game) so some spring days thaw and some do not. */
+    const hashI = n => { n = Math.imul(n ^ (n >>> 16), 0x45d9f3b); n = Math.imul(n ^ (n >>> 16), 0x45d9f3b); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; };
+    const dayNo = tms => Math.floor((tms / 1000 - epoch) / dayS);
+    function wobble(day, latDeg) {   /* -1..1, smooth from one day to the next; a band of 10 degrees shares its weather */
+      const band = Math.floor((latDeg + 90) / 10), t = day / 3, i = Math.floor(t), f = t - i, u = f * f * (3 - 2 * f);
+      const a = hashI(i * 9176 + band * 131 + 7) * 2 - 1, b = hashI((i + 1) * 9176 + band * 131 + 7) * 2 - 1;
+      return a + (b - a) * u;
+    }
+    function climate(latDeg, tms) {   /* {mean, swing} for the day holding tms */
+      const S = at(latDeg, tms), al = Math.abs(latDeg);
+      const ann = 27 - 0.56 * Math.max(0, al - 12), amp = 2 + 16 * S.k;
+      const dn = dayNo(tms), clouds = hashI(dn * 7919 + Math.floor((latDeg + 90) / 10) * 104729 + 3);   /* a cloudy day swings less */
+      return { mean: ann + amp * (1 - 2 * S.cold) + 8 * wobble(dn, latDeg), swing: (2 + 5 * S.k) * (0.45 + 0.55 * clouds), S };
+    }
+    /* the temperature now; lonDeg sets the local hour (the sun's day), 0 if not given */
+    function temperature(latDeg, tms, lonDeg) {
+      const C = climate(latDeg, tms), d = ((tms / 1000 - epoch) / dayS) + (lonDeg || 0) / 360, h = d - Math.floor(d);
+      return C.mean + C.swing * Math.cos(2 * Math.PI * (h - 0.62));
+    }
+    /* the night before this day (its low) and this day (its high) */
+    function dayRange(latDeg, tms) {
+      const C = climate(latDeg, tms), P = climate(latDeg, tms - dayS * 1000);
+      return { low: Math.min(P.mean, C.mean) - C.swing, high: C.mean + C.swing, mean: C.mean };
+    }
+    /* THE SAP RUN (ziinzibaakwadwaaboo): the 14 days before the first maple buds where you stand, on a day that warms above
+       freezing after a night that froze. {season, day, low, high, left (days to the buds)} - day says whether it runs today */
+    const SAP_DAYS = 14;
+    function sap(latDeg, tms) {
+      const S = at(latDeg, tms), w = SAP_DAYS / YEAR, R = dayRange(latDeg, tms);
+      const season = S.leafy >= 0.5 && S.p >= S.melt - w && S.p < S.melt;
+      return { season, day: season && R.low < 0 && R.high > 0, low: R.low, high: R.high, left: season ? Math.ceil((S.melt - S.p) * YEAR) : 0 };
+    }
+    return { api: 1, YEAR, TILT, FALL0, SAP_DAYS, temperature, dayRange, sap, LITTER: [AUTUMN.T, AUTUMN.O, AUTUMN.M], calendar, declination, at, leafColour, deciduous: k => !!DECIDUOUS[k] };
   }
   const api = { api: 1, create };
   if (root.ASH3D && root.ASH3D.define) root.ASH3D.define('seasons', { api: 1, v: 1, needs: {} }, () => api);
