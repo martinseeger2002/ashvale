@@ -213,7 +213,8 @@ dump(os.path.join(EX, 'monsters.json'), mon)
 
 rules = load(os.path.join(EX, 'rules.json'))
 rules['items']['categories']['resource'] = [
-    "logs", "ore", "coal", "bar", "pelt", "fish", "mushroom", "meat", "bones", "note"
+    "logs", "ore", "coal", "bar", "pelt", "fish", "mushroom", "meat", "bones", "note",
+    "silk", "grain", "bark", "sinew", "bucket", "curio"   # spider silk, wild rice, and the sugar bush (2026-10-08)
 ]
 rules['flags']['vorth_gate'] = {
     "name": "Pike's latch",

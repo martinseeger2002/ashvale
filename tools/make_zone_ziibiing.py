@@ -120,7 +120,8 @@ npc('nookomis', 'Nookomis', FIRE[0] + 2, FIRE[1] + 1,
 npc('migizi', 'Migizi', LAND[0] - 2, LAND[1] - 1,
     ["Boozhoo. That canoe is birch bark over cedar ribs, sewn with spruce root and sealed with pitch.",
      "Take her out if you like. Sit in her, then point where you want to go on the water. Point at the shore and she will bring you to it.",
-     "Keep low and keep to the middle. The river is kind if you are patient with it."],
+     "Keep low and keep to the middle. The river is kind if you are patient with it.",
+     "Bring me two sheets of wiigwaas (birch bark) and some ojiitad (sinew), and I will fold you a biskitenaagan (birch bark sap bucket) for the sugar bush."],
     'Migizi, the canoe maker, in a ribbon shirt, a beaded bandolier bag across his chest.')
 npc('makwa', 'Makwa', LAND[0] + 2, LAND[1] - 3,
     ["The fish dry best on the rack in this wind. Smoke underneath keeps the flies off.",
@@ -144,6 +145,42 @@ npc('maiingan', "Ma'iingan", FIRE[0] - 3, FIRE[1] + 1,
      "My uncle says the river runs all the way to the big water. One day I will paddle it to see."],
     "Ma'iingan, a young man of the village, in a ribbon shirt and a beaded headband.")
 
+# THE SUGAR BUSH (2026-10-08, handoff/sugarbush_plan.md): Migizi folds the biskitenaagan (two wiigwaas and an ojiitad, ready
+# the next game day), Ma'iingan trades ojiitad for a deer hide, Nookomis gives the sugar bush quest each spring, and four of the
+# people each watch one part of the world and end with it: Animikii the weather, Ziigwan the plants and birds, Waabigwan the moon,
+# Makwa the sun, the stars and the planets (the lines come from the engine, which has the sky and the seasons)
+def at(i): return next(n for n in npcs if n['id'] == i)
+at('migizi')['craft'] = {'take': {'wiigwaas': 2, 'sinew': 1}, 'give': 'bucket_bark', 'days': 1, 'hint': True,
+    'say': ["Two sheets of wiigwaas (birch bark) and ojiitad (sinew). Good.",
+            "I will fold you a biskitenaagan (sap bucket): the bark bent at the corners so it holds without a seam, the rim sewn with the ojiitad. It has to dry in its folds. Come back tomorrow, {name}."],
+    'wait': ["The biskitenaagan (sap bucket) is still drying in its folds. Come back tomorrow, {name}."],
+    'ready': ["Here is your biskitenaagan (sap bucket), {name}. Fold it the way it wants to go and it will hold sap all day.",
+              "Set it under the cut on an ininaatig (maple) when the nights freeze and the days thaw."],
+    'lack': ["For a biskitenaagan (sap bucket) I need two sheets of wiigwaas (birch bark) and one ojiitad (sinew) to sew the rim.",
+             "Peel the wiigwaas off a wiigwaasaatig (birch tree) - each one gives once a year. Ma'iingan has ojiitad if you bring him a deer hide."]}
+at('maiingan')['lines'].append("If you bring me a waawaashkeshiwayaan (deer hide), I will give you ojiitad (sinew) for sewing. Migizi uses it for the sap buckets.")
+at('maiingan')['trade'] = {'take': {'deer_hide': 1}, 'give': {'sinew': 2},
+    'say': ["A waawaashkeshiwayaan (deer hide)! Miigwech (thank you).",
+            "Here, two lengths of ojiitad (sinew) from along the deer's back, dried and split. It sews bark better than anything."]}
+at('nookomis')['quest'] = 'sugar_bush'
+at('nookomis')['sapAt'] = [93, 545]   # by the sugar camp's fire while the sap runs (core moves her there and back)
+at('nookomis').pop('lines', None)   # a quest giver chats of nothing (her quest's own words say it all)
+for i, k in (('animikii', 'weather'), ('ziigwan', 'plants'), ('waabigwan', 'moon'), ('makwa', 'sky')): at(i)['nature'] = k
+# THE RICING TOOLS (2026-10-08): Ziigwan carves a gaandakii'iganaak (push pole) from two tamarack logs and a pair of
+# bawa'iganaakoog (knockers) from two cedar logs, each ready the next game day
+at('ziigwan')['lines'].append("To go ricing you need a gaandakii'iganaak (push pole) for the one who stands in the back, and bawa'iganaakoog (knockers) for the one who sits in front. Bring me two logs of mashkiigwaatig (tamarack) for a pole, two of giizhik (cedar) for knockers, and I will carve them.")
+at('ziigwan')['craft'] = [
+    {'take': {'tamarack_logs': 2}, 'give': 'push_pole', 'days': 1, 'hint': True,
+     'say': ["Mashkiigwaatig (tamarack). It is light and it does not rot in the water.", "I will shave it smooth and split the foot into a fork, so it does not sink in the mud of the lake bed. Come back tomorrow, {name}."],
+     'wait': ["The gaandakii'iganaak (push pole) is still drying by the fire. Come back tomorrow, {name}."],
+     'ready': ["Here is your gaandakii'iganaak (push pole), {name}. Stand in the back of the jiimaan (canoe) and push from the lake bed - gently, the rice bends."],
+     'lack': ["A gaandakii'iganaak (push pole) takes two logs of mashkiigwaatig (tamarack). It grows in the wet ground along the river."]},
+    {'take': {'cedar_logs': 2}, 'give': 'knockers', 'days': 1, 'hint': True,
+     'say': ["Giizhik (cedar). Light in the hand, and kind to the plants.", "I will carve you a pair of bawa'iganaakoog (knockers). Come back tomorrow, {name}."],
+     'wait': ["The bawa'iganaakoog (knockers) are not finished yet. Come back tomorrow, {name}."],
+     'ready': ["Here are your bawa'iganaakoog (knockers), {name}. Bend the stalks over the canoe with one and tap the heads with the other. Never beat them - what does not fall is for next year."],
+     'lack': ["Bawa'iganaakoog (knockers) take two logs of giizhik (cedar). It grows in the wet ground along the river."]}]
+
 npcs.append({'id': 'makak', 'name': 'Ziibiing makak', 'look': 'makak', 'x': FIRE[0] + 3, 'y': FIRE[1] - 1, 'chest': True,
              'examine': 'A birch bark makak, sewn with spruce root, quill flowers on its side. Like the chest in Ashvale, it holds everything you own in your arcade wallet.'})
 # Mishoomis, the elder: he lives in the first wigwam, sitting cross-legged west of its fire, and sends you ricing
@@ -163,14 +200,14 @@ print('wrote data/zone.ziibiing.json: %d x %d at %d,%d; landing %s; fire %s' % (
 # The zone keeps the world's own tiles there; a big field of manoomin stands across the lake's western half, a few gaps in it
 RX, RY, RW, RH = 300, 722, 110, 46
 js2 = world_tiles.__doc__   # (same worldgen call, other rectangle)
-def tiles_at(X, Y, Wd, Ht):
+def tiles_at(X, Y, Wd, Ht, more=()):   # more: other zones to lay first (the sugar camp needs Ziibiing, whose grove it stands in)
     js = """
 const fs=require('fs'),path=require('path'),G0=require('./src/globe.js'),AW=require('./src/worldgen.js');
 const mod=n=>JSON.parse(fs.readFileSync(path.join('data',n+'.json'),'utf8')).data, cfg=mod('globecfg');
-const zs=['village','whisperwood','saltmere','wolfden','cavemouth'].map(id=>Object.assign({id},mod('zone.'+id)));
+const zs=['village','whisperwood','saltmere','wolfden','cavemouth'].concat(%s).map(id=>Object.assign({id},mod('zone.'+id)));
 const W=AW.createWorldgen(G0.createGlobe(cfg),{seed:cfg.seed});
-W.setSetPieces(W.piecesFromZones(zs,cfg.face,cfg.origin[0],cfg.origin[1],{belt:cfg.belt||{},links:cfg.links||[]}));
-console.log(JSON.stringify(W.tiles(cfg.face,%d+cfg.origin[0],%d+cfg.origin[1],%d,%d)));""" % (X, Y, Wd, Ht)
+W.setSetPieces(W.piecesFromZones(zs,cfg.face,cfg.origin[0],cfg.origin[1],{belt:cfg.belt||{},links:cfg.links||[],groves:cfg.groves||[]}));
+console.log(JSON.stringify(W.tiles(cfg.face,%d+cfg.origin[0],%d+cfg.origin[1],%d,%d)));""" % (json.dumps(list(more)), X, Y, Wd, Ht)
     return [list(r) for r in json.loads(subprocess.run(['node', '-e', js], capture_output=True, text=True, cwd=HERE, check=True).stdout)]
 rg = tiles_at(RX, RY, RW, RH)
 robj = []
@@ -184,4 +221,23 @@ rz = {'name': 'Manoomin lake', 'level': '1-10', 'origin': [RX, RY], 'size': [RW,
       'tiles': [''.join(r) for r in rg], 'objects': robj, 'npcs': [], 'spawns': [], 'fishing': []}
 json.dump({'ashvale3d': 'module', 'name': 'zone.ricelake', 'api': 1, 'v': 1, 'data': rz}, open(os.path.join(HERE, 'data', 'zone.ricelake.json'), 'w'), separators=(',', ':'))
 print('wrote data/zone.ricelake.json: %d rice clumps' % len(robj))
+# THE SUGAR CAMP (iskigamizigan, 2026-10-08, handoff/sugarbush_plan.md): a clearing at the near edge of the maple and birch
+# woods, beside the trail up from Ziibiing - a fire with the iskigamiziganaak (kettle frame) over it, the iskigamizigewigamig (the
+# bark sap-boiling lodge), a woodpile, a drying rack and birch bark baskets. Nookomis comes up here while the sap runs.
+CX, CY, CW, CH = 84, 536, 16, 13
+cg = tiles_at(CX, CY, CW, CH, ['ziibiing'])
+for y in range(CH):
+    for x in range(CW):
+        if 2 <= x <= CW - 3 and 2 <= y <= CH - 3 and cg[y][x] not in '~v': cg[y][x] = '.'   # the clearing
+CAMP_FIRE = (CX + 8, CY + 7)
+cobj = [{'k': 'campfire', 'x': CAMP_FIRE[0], 'y': CAMP_FIRE[1]}, {'k': 'kettle', 'x': CAMP_FIRE[0], 'y': CAMP_FIRE[1]},
+        {'k': 'barklodge', 'x': CX + 5, 'y': CY + 4}, {'k': 'woodpile', 'x': CX + 11, 'y': CY + 4},
+        {'k': 'fishrack', 'x': CX + 11, 'y': CY + 9}, {'k': 'basket', 'x': CX + 6, 'y': CY + 9}, {'k': 'basket', 'x': CX + 7, 'y': CY + 10}]
+for xx in range(CX + 4, CX + 7):
+    for yy in range(CY + 3, CY + 5): cg[yy - CY][xx - CX] = 'H'   # the lodge stands on its own ground
+cz = {'name': 'Iskigamizigan', 'level': '1-10', 'origin': [CX, CY], 'size': [CW, CH], 'ground': 'grass',
+      'tiles': [''.join(r) for r in cg], 'objects': cobj, 'npcs': [], 'spawns': [], 'fishing': []}
+json.dump({'ashvale3d': 'module', 'name': 'zone.sugarcamp', 'api': 1, 'v': 1, 'data': cz}, open(os.path.join(HERE, 'data', 'zone.sugarcamp.json'), 'w'), separators=(',', ':'))
+print('wrote data/zone.sugarcamp.json at %d,%d' % (CX, CY))
+for r in cg: print(''.join(r))
 for r in g: print(''.join(r))

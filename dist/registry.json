@@ -1200,6 +1200,12 @@
     "api": 1,
     "kind": "json"
    },
+   "gear.quillmakak": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "gear.ricesticks": {
     "id": null,
     "v": 1,
@@ -1284,6 +1290,12 @@
     "api": 1,
     "kind": "json"
    },
+   "item.candy": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.castlestone": {
     "id": null,
     "v": 1,
@@ -1309,6 +1321,12 @@
     "kind": "json"
    },
    "item.fish": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.knockers": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1374,6 +1392,12 @@
     "api": 1,
     "kind": "json"
    },
+   "item.pail": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.pelt": {
     "id": null,
     "v": 1,
@@ -1381,6 +1405,12 @@
     "kind": "json"
    },
    "item.potion": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.pushpole": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1404,6 +1434,12 @@
     "api": 1,
     "kind": "json"
    },
+   "item.sapbucket": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.sapling": {
     "id": null,
     "v": 1,
@@ -1416,7 +1452,19 @@
     "api": 1,
     "kind": "json"
    },
+   "item.sinew": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.stone": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.wiigwaas": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1505,6 +1553,12 @@
     "kind": "json"
    },
    "ricelake": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "sugarcamp": {
     "id": null,
     "v": 1,
     "api": 1,

@@ -95,7 +95,8 @@
       const req = d.req ? Object.keys(d.req).filter(k => d.req[k] > 1).map(k => A.cap(k) + ' ' + d.req[k]).join(', ') : '';
       if (d.weight) b.push((d.weight * Math.max(1, n || 1) / 1000).toFixed(d.weight * (n || 1) < 1000 ? 2 : 1) + ' kg');
       if (d.carry) b.push('Carry +' + (d.carry / 1000) + ' kg');
-      return d.name + (n > 1 ? ' x ' + n.toLocaleString() : '') + ': ' + (b.length ? b.join(', ') + '. ' : '') + (req ? 'Requires ' + req + '. ' : '') + 'Value ' + d.value + ' GOLD.' + (d.nft ? ' (ASHVALE Armoury: ' + d.nft.copies + ' NFT copies)' : '');
+      if (d.energy) b.push('Run energy +' + Math.round(d.energy / 100) + '%');
+      return d.name + (d.english ? ' (' + d.english + ')' : '') + (n > 1 ? ' x ' + n.toLocaleString() : '') + ': ' + (b.length ? b.join(', ') + '. ' : '') + (req ? 'Requires ' + req + '. ' : '') + 'Value ' + d.value + ' GOLD.' + (d.nft ? ' (ASHVALE Armoury: ' + d.nft.copies + ' NFT copies)' : '');
     }
 
     function updateOrbs() {

@@ -157,7 +157,7 @@ for (const [qid, Q] of Object.entries(D.quests.quests)) {
   const many = n => n == null || n > 0;
   ok(live.every(s => s.goal.kill ? (D.monsters[s.goal.kill] && many(s.goal.n) && (!s.goal.bring || D.items[s.goal.bring]))
                     : s.goal.cook ? (D.items[s.goal.cook] && many(s.goal.n))
-                    : s.goal.bring ? (D.items[s.goal.bring] && many(s.goal.n) && (!s.goal.with || D.items[s.goal.with]))
+                    : s.goal.bring ? ([].concat(s.goal.bring).every(b => D.items[b]) && many(s.goal.n) && (!s.goal.with || D.items[s.goal.with]))   /* a list: any of them will do (sap in a bucket or a pail) */
                     : s.goal.talk ? !!keeperZone(s.goal.talk)
                     : s.goal.plant ? (s.goal.plant === 'open' || s.goal.plant === 'stump') && many(s.goal.n)   /* sadfrog's Even Grove: saplings on open ground or stumps */
                     : s.goal.kills ? Object.keys(s.goal.kills).every(m => D.monsters[m]) && many(s.goal.n) : false),
@@ -266,7 +266,7 @@ for (const S of Object.values(D.shops.shops)) {
       const g = s.goal || {}, where = q.name + ' step ' + s.id;
       const nameless = (msg) => { if (unreachable(s)) gaps.push(msg); else ok(false, msg); };
       if (g.kill) { const m = D.monsters[g.kill]; if (!m || !m.name) nameless(where + ' wants ' + (g.n || 1) + ' ' + g.kill + ', which is not in the monsters table' + (s.zone && !built.has(s.zone) ? ' (zone ' + s.zone + ' is not built)' : '')); else ok(true, where + ' slays ' + m.name); }
-      if (g.bring) { const it = D.items[g.bring]; if (!it || !it.name) nameless(where + ' wants ' + (g.n || 1) + ' of ' + g.bring + ', which is not an item'); else ok(true, where + ' asks for ' + it.name); }
+      if (g.bring) for (const b of [].concat(g.bring)) { const it = D.items[b]; if (!it || !it.name) nameless(where + ' wants ' + (g.n || 1) + ' of ' + b + ', which is not an item'); else ok(true, where + ' asks for ' + it.name); }
       if (g.talk) { if (!npcHere[g.talk]) nameless(where + ' sends you to ' + g.talk + ', who stands nowhere'); else ok(true, where + ' sends you to ' + g.talk + ' in ' + npcHere[g.talk]); }
       if (!g.kill && !g.bring && !g.talk && !g.plant && !g.kills) ok(false, where + ' has a goal the panel cannot describe: ' + JSON.stringify(g));
       const r = s.reward;
@@ -1419,7 +1419,7 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
      'Cinder the cook is a giver now - her two chat lines went into the range, where the fire she keeps is the reason for it');
   ok(cur && (cur.lines || []).length === 2 && !cur.quest && !cur.shop, 'and the last course is carried to a curator who keeps his own two lines and gives nothing else - a talk goal lands at whoever stands there');
   const RG = (vz.objects || []).find(o => o.k === 'range'), WL = (vz.objects || []).find(o => o.k === 'well');
-  const fire = {}; for (const [k, it] of Object.entries(D.items)) for (const a of (it.attributes || [])) {
+  const fire = {}; for (const [k, it] of Object.entries(D.items)) if (!(it.attributes || []).some(a => a.trait_type === 'Container')) for (const a of (it.attributes || [])) {   /* the sugar bush's buckets boil down, they are not the cook's ladder */
     const t = D.rules.items.traits[a.trait_type]; if (!t) continue;
     (fire[k] = fire[k] || {})[Array.isArray(t) ? t[0] : t] = Array.isArray(t) ? Math.round(a.value * t[1]) : a.value; }
   const marks = []; for (const z of allZones) for (const m of (z.fishing || [])) marks.push(Object.assign({ zone: z.id }, m));

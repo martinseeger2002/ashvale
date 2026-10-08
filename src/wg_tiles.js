@@ -70,7 +70,11 @@
       if (!clear && r1 < forest) {
         FOREST_HIT = true;
         if (PI.length) { ctx.pieceFlora(f, cx, cy, PFL); if (PFL.sp && g.u01(g.mix32(hv ^ 0x3c6ef372)) >= PFL.k) { FOREST_HIT = false; return PFL.sp[Math.floor(r2 * PFL.sp.length)]; } }
-        if (TF[4] > 0.02 || TF[2] > 0.12 || (TF[9] > 0.12 && r2 < 0.5)) return TR.wet;
+        if (TF[4] > 0.02 || TF[2] > 0.12 || (TF[9] > 0.12 && r2 < 0.5)) {   /* wet ground: willow; in the cool woods also tamarack and cedar (2026-10-08) */
+          const cl = CMT && TR.wetCool ? ctx.climOf(TF[15], TF[14]) : -1;
+          return cl === 0 || cl === 6 ? TR.wetCool[Math.floor(r2 * TR.wetCool.length)] : TR.wet;
+        }
+        if (PI.length && ctx.groveAt) { const GV = ctx.groveAt(f, cx, cy); if (GV && g.u01(g.mix32(hv ^ 0x2545f491)) < GV.k) return GV.sp[Math.floor(r2 * GV.sp.length)]; }   /* in a grove: its own trees */
         /* the climate's own trees: pines in the taiga, broadleaf mixes in the rainforest (2026-10-03) */
         const zt = CMT ? CMT.trees[ctx.climOf(TF[15], TF[14])] : '';
         if (zt) return zt[Math.floor(r2 * zt.length)];

@@ -38,7 +38,13 @@
     "meat",
     "bones",
     "note",
-    "sapling"
+    "sapling",
+    "silk",
+    "grain",
+    "bark",
+    "sinew",
+    "bucket",
+    "curio"
    ]
   },
   "slots": {

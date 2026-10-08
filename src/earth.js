@@ -22,7 +22,7 @@
       const G = deps.globe.createGlobe({ n: CFG.n, radius_m: CFG.radius_m, seed: CFG.seed });
       const W = deps.worldgen.createWorldgen(G, { seed: CFG.seed });
       const zones = Object.keys(DATA).filter(k => k.indexOf('zone.') === 0).map(k => Object.assign({ id: k.slice(5) }, DATA[k])).filter(z => !z.under);   /* an underground area (the Spider Cave) is not on the land */
-      if (zones.length && CFG.origin) W.setSetPieces(W.piecesFromZones(zones, CFG.face, CFG.origin[0], CFG.origin[1], { belt: CFG.belt || {}, links: CFG.links || [] }));
+      if (zones.length && CFG.origin) W.setSetPieces(W.piecesFromZones(zones, CFG.face, CFG.origin[0], CFG.origin[1], { belt: CFG.belt || {}, links: CFG.links || [], groves: CFG.groves || [] }));
       const R = G.radius_m, CL = G.classes();
 
       /* ---- colours (natural; the parcel map is an overlay) ---- */
@@ -248,7 +248,9 @@
         return [Math.cos(L) * cd, Math.sin(L) * cd, Math.sin(dl)];
       }
       /* a game tile (the x, y a character stands on) -> the sphere direction and the planar point, the same mapping as the places */
-      const gameAt = (vx, vy) => { if (!CFG.origin) return null; const fx = vx + CFG.origin[0] + 0.5, fy = -(vy + CFG.origin[1]) - 0.5; return { u: W.toSphere(CFG.face, fx, fy), face: CFG.face, x: fx, y: fy }; };
+      /* through the flat net of the open globe (handoff/globe_net.md): a game point anywhere on the planet -> its face and sphere */
+      const NETA = W.net && !CFG.fenced ? W.net(CFG.face) : null;
+      const gameAt = (vx, vy) => { if (!CFG.origin) return null; const px = vx + CFG.origin[0] + 0.5, py = -(vy + CFG.origin[1]) - 0.5; if (!NETA) return { u: W.toSphere(CFG.face, px, py), face: CFG.face, x: px, y: py }; const r = NETA.toFace(px, py), h = W.fold(r.f, r.x, r.y); return { u: W.toSphere(h[0], h[1], h[2]), face: h[0], x: h[1], y: h[2] }; };
       { const at = (vx, vy) => { const fx = vx + CFG.origin[0] + 0.5, fy = -(vy + CFG.origin[1]) - 0.5; return W.toSphere(CFG.face, fx, fy); };
         if (CFG.origin) PLACES.ashvale = { u: at(22, 52), alt: 60 };
         /* every area is a place (?at=<zone id>): over its middle, high enough to see the whole of it */

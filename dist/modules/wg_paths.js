@@ -16,7 +16,7 @@
 (function (root) {
   'use strict';
   const META = { api: 1, v: 3, needs: { wg_geo: 1 } };
-  const TREES = 'TPOWMYU';
+  const TREES = 'TPOWMYUELQ';
   function attach(ctx) {
     const g = ctx.geo, T = ctx.T, PT = T.paths, PC = T.pieces, BK = 32;
     const bkey = (f, bx, by) => (f * 8192 + (bx + 4096)) * 8192 + (by + 4096);
@@ -53,6 +53,20 @@
     function waterCarve(f, x, y, h) {
       const r = segDist(f, x, y, 1); if (!r || r[0] > 1.5) return h;
       const k = g.sstep(-0.6, 1.5, r[0]); return Math.min(h, r[1] * (1 - k) + h * k);
+    }
+    /* GROVES (2026-10-08: "a large deciduous forest with maple and birch" by Ziibiing): an ellipse of woods tied to a
+       piece (globecfg.groves: {piece, x, y, rx, ry, sp, dens, edge}, game tiles), its edge wandering with noise. Returns the
+       grove's species and density and k, how fully this spot is in it (0 outside .. 1 well inside), or null */
+    const GROVE = { k: 0, sp: '', dens: 0 };
+    function groveAt(f, x, y) {
+      const gx = x, gy = -y;
+      for (const pc of ctx.PIECES) if (pc.face === f && pc.groves && pc.groves.length) for (const q of pc.groves) {
+        const dx = (gx - q.x) / q.rx, dy = (gy - q.y) / q.ry, d = Math.sqrt(dx * dx + dy * dy) * (0.85 + 0.3 * g.vnoise(gx / 37, gy / 37, f, ctx.S.pa ^ 0x6b43));
+        if (d >= 1) continue;
+        const e = Math.max(0.05, (q.edge || 30) / Math.min(q.rx, q.ry)), t = Math.min(1, (1 - d) / e);
+        GROVE.k = t * t * (3 - 2 * t); GROVE.sp = q.sp || 'M'; GROVE.dens = q.dens == null ? 0.6 : q.dens; return GROVE;
+      }
+      return null;
     }
     /* flora near a piece: the profile of the nearest edge tile, and how far the seeded land has taken over */
     function pieceFlora(f, x, y, out) {
@@ -119,7 +133,7 @@
         }
       }
       for (const sp of (list || [])) {
-        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, links: sp.links || [], linkStyles: sp.linkStyles || {} };
+        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, groves: sp.groves || [], links: sp.links || [], linkStyles: sp.linkStyles || {} };
         pc.px0 = pc.x; pc.px1 = pc.x + pc.w; pc.py0 = -(pc.y + pc.h); pc.py1 = -pc.y;
         PIECES.push(pc); ctx.PIECE_BY_ID.set(pc.id, pc);
       }
@@ -330,7 +344,7 @@
       if (ctx.clearCaches) ctx.clearCaches();
       return PIECES.map(p => ({ id: p.id, face: p.face, x: p.x, y: p.y, w: p.w, h: p.h, hb: p.hb }));
     }
-    Object.assign(ctx, { pieceDist, pieceTile, pathDist, roadDist, bridgeDist, waterCarve, pieceFlora, setSetPieces, pathCount: () => SEG.length / NS, roadObjects: () => ctx.ROAD_OBJ || [] });
+    Object.assign(ctx, { pieceDist, pieceTile, pathDist, roadDist, bridgeDist, waterCarve, pieceFlora, groveAt, setSetPieces, pathCount: () => SEG.length / NS, roadObjects: () => ctx.ROAD_OBJ || [] });
     return ctx;
   }
   const api = { api: 1, attach };

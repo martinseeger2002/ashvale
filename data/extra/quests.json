@@ -519,7 +519,7 @@
       "Boozhoo (hello), {name}. Sit, sit. My knees have not stood up since the last ricing moon.",
       "Manoominike-giizis (the ricing moon) is here. Out on the zaaga'igan (lake) down the ziibi (river) the manoomin (wild rice) stands ripe, and my old arms cannot knock it.",
       "It takes two in the jiimaan (canoe). One stands in the back with the gaandakii'iganaak (push pole) and moves her through the stalks. The other sits forward with the bawa'iganaakoog (ricing sticks): bend the stalks over with one, knock them with the other, and the rice falls in.",
-      "Find a friend, take the canoe from the landing, and bring me twenty handfuls of manoomin.",
+      "Ziigwan will carve you the gaandakii'iganaak (push pole) and the bawa'iganaakoog (knockers) if you bring her tamarack and cedar. Find a friend, take the canoe from the landing, and bring me twenty handfuls of manoomin.",
       "Do this, and I have a really special gift for you. Something I have kept a long time. You will see when you come back."
      ],
      "progress": [
@@ -535,6 +535,93 @@
    "done": [
     "Boozhoo, {name}. The manoomin (wild rice) is drying on the birch bark. Sit by the fire a while.",
     "Are you keeping the waawaabiganoojiinh (mouse) somewhere safe? A gift like that does not come twice."
+   ]
+  },
+  "sugar_bush": {
+   "name": "Iskigamizigan",
+   "giver": "nookomis",
+   "repeat": "spring",
+   "note": "2026-10-08 (handoff/sugarbush_plan.md): sap, then syrup, then candy, each spring; the Quillwork makak the first time only",
+   "steps": [
+    {
+     "id": 1,
+     "zone": "ziibiing",
+     "goal": {
+      "bring": [
+       "sap_bark",
+       "sap_pail"
+      ],
+      "n": 1
+     },
+     "reward": "xp:woodcutting:600",
+     "talk": [
+      "Boozhoo, {name}. Sit by me. Can you smell it? Under the snow the ground is waking.",
+      "When the nights still freeze and the days begin to thaw, the ziinzibaakwadwaaboo (maple sap) runs. It is the first gift of the year, before the leaves, before anything else is green.",
+      "We go to the iskigamizigan (sugar bush) in the woods up the trail, where the ininaatig (maple) and the wiigwaasaatig (birch) stand together.",
+      "You need something to catch it in. Migizi can fold you a biskitenaagan (birch bark sap bucket) from two sheets of wiigwaas (birch bark) and some ojiitad (sinew) - ask Ma'iingan for that. Or buy an akik (pail) at the store in Ashvale.",
+      "Each ininaatig gives once a day, and only on a day that thaws after a night that froze. Bring me one bucket of sap."
+     ],
+     "progress": [
+      "One bucket of ziinzibaakwadwaaboo (maple sap), {name}. It runs only on a day that thaws after a night that froze, in the days before the maples bud. Ask Animikii what last night did."
+     ],
+     "complete": [
+      "Miigwech (thank you), {name}. Taste it - it is only a little sweet, like water that remembers the tree.",
+      "It boils a long time before it is syrup. That is why we sit up all night by the akik (kettle)."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "ziibiing",
+     "goal": {
+      "bring": [
+       "syrup_bark",
+       "syrup_pail"
+      ],
+      "n": 1
+     },
+     "reward": "xp:cooking:800",
+     "talk": [
+      "Now boil it. Any fire will do - ours here, one you light yourself, even Hob's range up in Ashvale - but watch it. Hang the akik from the iskigamiziganaak (kettle frame) and keep the fire high.",
+      "When it is thick and gold, it is zhiiwaagamizigan (maple syrup). Bring me a bucket of it."
+     ],
+     "progress": [
+      "A bucket of zhiiwaagamizigan (maple syrup), {name}. Boil your sap at a fire until it is thick and gold."
+     ],
+     "complete": [
+      "Look at the colour of it. That is the colour of the sun in iskigamizige-giizis (the sugar-making moon).",
+      "One more boiling."
+     ]
+    },
+    {
+     "id": 3,
+     "zone": "ziibiing",
+     "goal": {
+      "bring": "maple_candy",
+      "n": 1
+     },
+     "reward": "quill_makak",
+     "againReward": "xp:cooking:1500",
+     "talk": [
+      "Boil the syrup once more and stir it as it cools, and it sets into ziinzibaakwadoons (candy). The children wait all winter for it.",
+      "Bring me one piece. Your bucket will come back to you empty, ready for next spring."
+     ],
+     "progress": [
+      "One piece of ziinzibaakwadoons (candy), {name}. Boil your syrup again at a fire."
+     ],
+     "complete": [
+      "Ahh. That is the taste of the iskigamizigewigamig (sap-boiling lodge) when I was a little girl.",
+      "I sewed this makak (birch bark box) for you this winter. Wiigwaas (birch bark), spruce root, and gaaway (porcupine quill) dyed for the flowers. Carry it on your back - it holds more than any pack the stone towns make.",
+      "Come back to the iskigamizigan every spring, {name}. The trees will remember you."
+     ]
+    }
+   ],
+   "again": [
+    "Boozhoo, {name}! The nights are freezing and the days are thawing again. The ininaatig (maple) are ready.",
+    "Bring me a bucket of ziinzibaakwadwaaboo (maple sap), then syrup, then a piece of candy, as you did before."
+   ],
+   "done": [
+    "Boozhoo, {name}. The sugar is put away in its makak for the year. Sit by the fire.",
+    "When the sap runs again next spring, come and find me."
    ]
   }
  }

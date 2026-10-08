@@ -1,0 +1,1 @@
+{"ashvale3d":"part","api":1,"v":1,"id":"item.knockers","kind":"item","items":{"knockers":null},"note":"bawa'iganaakoog (2026-10-08): a pair of light cedar ricing sticks","shapes":[{"t":"cyl","s":[0.012,0.014,0.42],"c":"#c98f62","p":[0,0.02,0.025],"r":[0,0,1.5708],"seg":6},{"t":"cyl","s":[0.012,0.014,0.42],"c":"#bd8457","p":[0.02,0.045,-0.02],"r":[0,0.15,1.5708],"seg":6}]}
