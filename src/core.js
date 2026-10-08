@@ -531,8 +531,35 @@
     /* BFS in a window around the start (the map has no edge any more): (2L+5)^2 cells for a depth limit L, buffers kept
        and stamped per search, so a search costs what it visits. Same order and ties as the old whole-map BFS. */
     let PB = null, PGEN = 0;
+    /* A CANOE KEEPS TO THE RIVER (2026-10-07: "When I'm traveling in the canoe and I click down the river, it tries to go diagonal
+       to the shore. It should just travel down the river"): its own search, by cost - water beside the bank costs more, so the
+       way runs down the middle of the river and comes in to the bank only at the end; a diagonal costs its length. */
+    function boatPath(sx, sy, goal, ax, ay, limit) {
+      const L = limit || 400, near = new Map(), shoreCost = (x, y) => { const k = x * 65536 + y; let c = near.get(k); if (c != null) return c; c = 0;
+        for (let r = 1; r <= 2 && !c; r++) for (let dy = -r; dy <= r && !c; dy++) for (let dx = -r; dx <= r; dx++) if (!isWet(x + dx, y + dy)) { c = r === 1 ? 2.5 : 0.8; break; }
+        near.set(k, c); return c; };
+      const key = (x, y) => (x + 32768) * 65536 + (y + 32768), dist = new Map(), prev = new Map(), H = [];   /* binary heap of [cost, x, y] */
+      const push = (c, x, y) => { H.push([c, x, y]); let i = H.length - 1; while (i > 0) { const j = (i - 1) >> 1; if (H[j][0] <= H[i][0]) break; [H[i], H[j]] = [H[j], H[i]]; i = j; } };
+      const pop = () => { const top = H[0], last = H.pop(); if (H.length) { H[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < H.length && H[l][0] < H[m][0]) m = l; if (r < H.length && H[r][0] < H[m][0]) m = r; if (m === i) break; [H[i], H[m]] = [H[m], H[i]]; i = m; } } return top; };
+      dist.set(key(sx, sy), 0); push(0, sx, sy); let found = null, best = null, bestD = 1e18, n = 0;
+      while (H.length && n++ < 30000) {
+        const [c, x, y] = pop(), k = key(x, y); if (c > dist.get(k)) continue;
+        if ((x !== sx || y !== sy) && goal(x, y)) { found = k; break; }
+        if (ax != null) { const d = (x - ax) * (x - ax) + (y - ay) * (y - ay); if (d < bestD) { bestD = d; best = k; } }
+        if (Math.max(Math.abs(x - sx), Math.abs(y - sy)) >= L) continue;
+        for (let q = 0; q < 8; q++) {
+          const dx = DIRS[q][0], dy = DIRS[q][1]; if (!canStep(x, y, dx, dy)) continue;
+          const nx = x + dx, ny = y + dy, nk = key(nx, ny), nc = c + (dx && dy ? 1.42 : 1) + shoreCost(nx, ny) + (prev.has(k) && prev.get(k)[2] !== q ? 0.15 : 0);   /* a small cost to change course: straight runs, not a zigzag */
+          if (nc < (dist.has(nk) ? dist.get(nk) : 1e18)) { dist.set(nk, nc); prev.set(nk, [x, y, q]); push(nc, nx, ny); }
+        }
+      }
+      let end = found != null ? found : best; if (end == null || end === key(sx, sy)) return [];
+      const path = []; while (end !== key(sx, sy)) { const pv = prev.get(end); const ex = Math.floor(end / 65536) - 32768, ey = (end % 65536) - 32768; path.push(idx(ex, ey)); end = key(pv[0], pv[1]); }
+      return path.reverse();
+    }
     function findPath(sx, sy, goal, ax, ay, limit) {
       if (goal(sx, sy)) return [];
+      if (BOAT && !FLY) return boatPath(sx, sy, goal, ax, ay, Math.min(limit || 400, 400));
       const L = limit || 120, R2 = L + 2, S2 = 2 * R2 + 1, N = S2 * S2, X0 = sx - R2, Y0 = sy - R2;
       if (!PB || PB.n < N) PB = { n: N, prev: new Int32Array(N), dist: new Int32Array(N), q: new Int32Array(N), st: new Uint32Array(N) };
       if (++PGEN > 4294967000) { PB.st.fill(0); PGEN = 1; }
@@ -625,7 +652,7 @@
           p.act = { k: 'ride', pid: c.pid }; p.skilling = null; closeShop(p); break;
         }
         case 'board': {   /* get into a canoe at the landing */
-          const o = M.objects.find(q => q.k === 'canoe' && q.x === (c.x | 0) && q.y === (c.y | 0));
+          const o = M.objects.find(q => q.k === 'canoe' && q.x === (c.x | 0) && q.y === (c.y | 0)) || BOATS.get((c.x | 0) + ',' + (c.y | 0));
           if (o && !p.dead && !p.boat && !isHawk(p) && p.lv === 0) { p.act = { k: 'board', x: o.x, y: o.y }; p.skilling = null; closeShop(p); }
           break;
         }
@@ -777,7 +804,7 @@
     function passageAt(x, y) { for (const o of M.objects) if (o.to && o.x === x && o.y === y) return o; return null; }
     function teleport(p, P, text) {
       const ox = p.x, oy = p.y, passage = P.id === 'cavemouth' || P.id === 'caveexit';
-      p.x = P.to[0]; p.y = P.to[1]; p.path = []; p.act = null; p.skilling = null; p.lv = 0; p.bld = -1; closeShop(p); if (p.boat) { p.boat = 0; p.land = null; p.ride = null; ev({ e: 'boat', p: p.id, on: 0 }); }
+      p.x = P.to[0]; p.y = P.to[1]; p.path = []; p.act = null; p.skilling = null; p.lv = 0; p.bld = -1; closeShop(p); if (p.boat === 1) landBoat(ox, oy, p.face, p.id); if (p.boat) { p.boat = 0; p.land = null; p.ride = null; ev({ e: 'boat', p: p.id, on: 0 }); }
       let k = 0;
       for (const m of S.mobs) if (m.tgt === p.id) {
         /* through a cave opening, the relentless ones close behind you come too, a few ticks apart (the operator: "Follow you up") */
@@ -1607,6 +1634,18 @@
       }
     }
     /* out of the canoe at the shore: onto the dry tile next to it that is nearest where you pointed, then walk on there */
+    /* LANDED CANOES (2026-10-07: "the canoe despawns when the player gets out ... it leaves the player stranded. Landed canoes
+       should persist for one game year"): where you step out, the canoe stays, afloat at the bank, for anyone to take again. The
+       engine tells the @ashvale Bank (it keeps them a game year) and puts down the ones the Bank lists near you (setBoats). */
+    const BOATS = new Map();   /* 'x,y' -> {x, y, face} */
+    function landBoat(x, y, face, by) { const k = x + ',' + y; if (BOATS.has(k)) return; BOATS.set(k, { x, y, face: face | 0 }); ev({ e: 'boatland', x, y, face: face | 0, by: by || null }); }
+    function takeBoat(x, y, by) { const k = x + ',' + y; if (!BOATS.has(k)) return false; BOATS.delete(k); ev({ e: 'boatgone', x, y, by: by || null }); return true; }
+    function setBoats(box, list) {   /* the Bank's word for a rectangle: these lie there, the rest in it are gone */
+      const want = new Set();
+      for (const r of list || []) { const x = r[0] | 0, y = r[1] | 0; want.add(x + ',' + y); if (!BOATS.has(x + ',' + y) && inMap(x, y)) landBoat(x, y, r[2] | 0, null); }
+      const [x0, y0, x1, y1] = box || [0, 0, -1, -1];
+      for (const b of Array.from(BOATS.values())) if (b.x >= x0 && b.x <= x1 && b.y >= y0 && b.y <= y1 && !want.has(b.x + ',' + b.y)) takeBoat(b.x, b.y, null);
+    }
     function disembark(p) {
       const T = p.land; let best = null, bd = 1e9;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
@@ -1614,8 +1653,9 @@
         const d = (x - T[0]) ** 2 + (y - T[1]) ** 2; if (d < bd) { bd = d; best = [x, y]; }
       }
       if (!best) { if (p.land) msg(p, "There's no place to land here.", 'warn'); p.land = null; return; }
+      landBoat(p.x, p.y, p.face, p.id);   /* the canoe stays where you left it */
       p.boat = 0; p.land = null; p.x = best[0]; p.y = best[1]; p.moved = 1;
-      ev({ e: 'boat', p: p.id, on: 0 }); msg(p, 'You step out of the canoe onto the bank.');
+      ev({ e: 'boat', p: p.id, on: 0 }); msg(p, 'You step out of the canoe onto the bank. It will wait for you here.');
       if (best[0] !== T[0] || best[1] !== T[1]) { BOAT = false; p.path = findPath(p.x, p.y, (x, y) => x === T[0] && y === T[1], T[0], T[1]); }
     }
     /* A CANOE DOES NOT SPIN (2026-10-07: "It should have to travel forward and backward in arcs to turn around"): it keeps a
@@ -1645,7 +1685,7 @@
       if (bd === 1 && (S.t & 1)) { p.moved = 0; return; }   /* overburdened: a step every other tick, no running */
       if (bd === 1 && isHawk(p) && S.t % HK.groundEvery) { p.moved = 0; return; }   /* an overburdened hawk walks: half as fast again */
       if (p.runNow && p.path.length > 1 && (bd || !p.energy)) { p.runNow = false; msg(p, bd ? 'You are carrying too much to run.' : 'You are out of run energy: walking.', 'warn'); }
-      let steps = FLY ? Math.min(4, p.path.length) : p.runNow && p.energy > 0 && p.path.length > 1 ? 2 : 1;   /* a hawk flies twice as fast as a run, for free (2026-10-04) */
+      let steps = FLY ? Math.min(4, p.path.length) : p.boat === 1 && BOAT ? Math.min(6, p.path.length) : p.runNow && p.energy > 0 && p.path.length > 1 ? 2 : 1;   /* a canoe goes three times as fast as a run (2026-10-07), for free */   /* a hawk flies twice as fast as a run, for free (2026-10-04) */
       if (steps === 2) { const rf = wx(zoneOf(p.x, p.y), 'run'); if (rf < 1) { p.runAcc = (p.runAcc || 0) + Math.round(rf * 1000); if (p.runAcc >= 1000) p.runAcc -= 1000; else steps = 1; } }   /* snow: deep going */
       let moved = 0;
       for (let s = 0; s < steps && p.path.length; s++) {
@@ -1655,7 +1695,7 @@
         p.face = faceTo(p.x, p.y, nx, ny); p.x = nx; p.y = ny; p.path.shift(); moved++;
       }
       p.moved = moved;
-      if (moved === 2 && !FLY) { addXp(p, 'dexterity', 2 * (DEX.xpPerRunTile || 2)); p.energy = Math.max(0, p.energy - Math.floor(60 * (1000 - Math.min(DEX.drainMaxPermille || 400, (DEX.drainPerLevelPermille || 5) * lv(p, 'dexterity'))) / 1000)); if (!p.energy) { p.run = false; msg(p, 'You are out of run energy.', 'warn'); ev({ e: 'run', p: p.id }); } }
+      if (moved === 2 && !FLY && !p.boat) { addXp(p, 'dexterity', 2 * (DEX.xpPerRunTile || 2)); p.energy = Math.max(0, p.energy - Math.floor(60 * (1000 - Math.min(DEX.drainMaxPermille || 400, (DEX.drainPerLevelPermille || 5) * lv(p, 'dexterity'))) / 1000)); if (!p.energy) { p.run = false; msg(p, 'You are out of run energy.', 'warn'); ev({ e: 'run', p: p.id }); } }
     }
     function playerAt(x, y, self) { for (const pid of S.order) { const o = S.players[pid]; if (o !== self && !o.dead && o.x === x && o.y === y) return true; } return false; }
     function puppetTick(p) {   /* another player's character in this game: position comes from the network, never stepped here */
@@ -1967,7 +2007,7 @@
         else if (cheb(p.x, p.y, t.x, t.y) <= 2) { p.act = null; p.path = []; p.boat = 2; p.ride = a.pid; p.rideMiss = 0; p.x = t.x; p.y = t.y; ev({ e: 'boat', p: p.id, on: 2 }); msg(p, "You climb into the bow with a paddle, and the bawa'iganaakoog (ricing sticks) at your feet. In the manoomin (wild rice) your partner stands with the gaandakii'iganaak (push pole) and you knock the rice in."); }
         else { p.path = findPath(p.x, p.y, (x, y) => cheb(x, y, t.x, t.y) <= 2, t.x, t.y); stepPath(p); if (!p.path.length && cheb(p.x, p.y, t.x, t.y) > 2) { msg(p, "I can't reach that canoe from here.", 'warn'); p.act = null; } }
       } else if (a && a.k === 'board') {   /* walk to the canoe, sit down in it: it floats where it lay */
-        if (inReach(p.x, p.y, a.x, a.y, 1)) { p.act = null; p.path = []; p.boat = 1; p.x = a.x; p.y = a.y; p.land = null; ev({ e: 'boat', p: p.id, on: 1 }); msg(p, 'You sit down in the canoe and take up the paddle. Point at the water to paddle there, or at the shore to land.'); }
+        if (inReach(p.x, p.y, a.x, a.y, 1)) { const lb = BOATS.get(a.x + ',' + a.y); if (lb) { p.face = lb.face; takeBoat(a.x, a.y, p.id); } p.act = null; p.path = []; p.boat = 1; p.x = a.x; p.y = a.y; p.land = null; ev({ e: 'boat', p: p.id, on: 1 }); msg(p, 'You sit down in the canoe and take up the paddle. Point at the water to paddle there, or at the shore to land.'); }
         else { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, a.x, a.y, 1), a.x, a.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, a.x, a.y, 1)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
       } else if (a && a.k === 'enter') {   /* walk up to a passage and go through: it takes you to its `to` */
         const o = passageAt(a.x, a.y);
@@ -2435,7 +2475,7 @@
       return true;
     }
     return {
-      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
+      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
