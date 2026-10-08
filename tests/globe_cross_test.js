@@ -29,4 +29,13 @@ for (let f = 0; f < 20; f++) for (let k = 0; k < 3; k++) { const g = D.wg.neighb
 ok(tried === 22 && good === tried, 'past every one of the 22 cut-edge sides a hawk is carried across to the same ground (' + good + '/' + tried + ', worst ' + worst.toFixed(1) + ' m apart)');
 { let found = null; for (let f = 0; f < 20 && !found; f++) for (let k = 0; k < 3; k++) { const g = D.wg.neighbourFace(f, k); if (N.isTree(f, g)) continue; const t = N.TRI[f], a = t[(k + 1) % 3], b = t[(k + 2) % 3], c = t[k], mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, dx = mx - c[0], dy = my - c[1], L = Math.hypot(dx, dy); const v = vale(mx + dx / L * 400, my + dy / L * 400); if (M.netGap(v[0], v[1]) > 100) { found = v; break; } }
   ok(found && !M.inWorld(found[0], found[1]), 'the empty space far past a cut edge is no one\'s ground (you are carried across long before)'); }
+/* across a seam players see each other: a point on the far side, relocated into my frame, is the same place on the planet */
+{ let tried = 0, good = 0;
+  for (let f = 0; f < 20; f++) for (let k = 0; k < 3; k++) { const g = D.wg.neighbourFace(f, k); if (N.isTree(f, g)) continue;
+    const t = N.TRI[f], a = t[(k + 1) % 3], b = t[(k + 2) % 3], c = t[k], mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, dx = mx - c[0], dy = my - c[1], L = Math.hypot(dx, dy);
+    const me = vale(mx - dx / L * 15, my - dy / L * 15), there = vale(mx + dx / L * 20, my + dy / L * 20), nat = M.netAcross(there[0], there[1]); if (!nat) continue; tried++;
+    const q = M.netNear(nat.x + 0.5, nat.y + 0.5, me[0] + 0.5, me[1] + 0.5); if (!q) continue;
+    const s1 = M.sphereAt(q[0], q[1]), s2 = M.sphereAt(nat.x + 0.5, nat.y + 0.5), d = dist(s1, s2), near = Math.hypot(q[0] - me[0], q[1] - me[1]);
+    if (d < 2 && near < 60) good++; }
+  ok(tried === 22 && good === tried, 'a player just across each of the 22 seam sides is drawn beside me, at their true place (' + good + '/' + tried + ')'); }
 console.log(fails ? 'FAILED: ' + fails : 'ALL OK');

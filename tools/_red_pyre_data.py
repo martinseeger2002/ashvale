@@ -102,7 +102,7 @@ cave_path = os.path.join(DD, 'zone.spidercave.json')
 cave = load(cave_path)
 cave['data']['npcs'] = [
     {
-        "id": "edric_skel", "name": "A dead man", "look": "edric_skel", "x": -146, "y": 16105,
+        "id": "edric_skel", "name": "A dead man", "look": "edric_skel", "x": 24054, "y": 24005,
         "verb": "Search",
         "search": {
             "quest": "red_pyre", "step": 3, "item": "vorth_rosary", "flag": "vorth_bag",
@@ -119,7 +119,7 @@ cave['data']['npcs'] = [
         "lines": ["We should probably leave him alone."]
     },
     {
-        "id": "edric_ghost", "name": "Edric's shade", "look": "edric_ghost", "x": -145, "y": 16105,
+        "id": "edric_ghost", "name": "Edric's shade", "look": "edric_ghost", "x": 24055, "y": 24005,
         "hideFlag": "vorth_bag",
         "lines": [
             "I am Edric. I wore the orange once. I was a Vorthan, and I believed the fire was justice.",
