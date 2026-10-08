@@ -98,8 +98,8 @@
       const inPiece = (face, gx, gy) => PIECES.some(q => q.face === face && gx >= q.x && gy >= q.y && gx < q.x + q.w && gy < q.y + q.h);
       function lightTrail(face, pts, w0) {   /* lit posts along a trail between towns (the road to Saltmere) */
         if (!pts || pts.length < 2) return;
-        const SPACE = 8, off = Math.max(1.15, (w0 || 1) + 0.85), seen = new Set();
-        let acc = SPACE * 0.45, n = 0;
+        const SPACE = 16 /* every other lamp gone (2026-10-08) */, off = Math.max(1.15, (w0 || 1) + 0.85), seen = new Set();
+        let acc = SPACE * 0.45;
         for (let i = 1; i < pts.length; i++) {
           const ax = pts[i - 1][0], ay = pts[i - 1][1], bx = pts[i][0], by = pts[i][1];
           const L = Math.hypot(bx - ax, by - ay); if (L < 0.05) continue;
@@ -107,7 +107,7 @@
           let d = 0;
           while (acc + (L - d) >= SPACE) {
             const step = SPACE - acc; d += step; acc = 0;
-            const px = ax + ux * d, py = ay + uy * d, side = (n++ & 1) ? 1 : -1;
+            const px = ax + ux * d, py = ay + uy * d, side = 1;   /* all down one side of the road (2026-10-08), not alternating */
             ctx.foldInto(face, px, py, SB);
             const s0 = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false);
             if (s0.h < ctx.WATER + 0.2 || s0.peakS > 0.08) continue;

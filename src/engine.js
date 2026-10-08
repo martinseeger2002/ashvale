@@ -412,7 +412,7 @@
       const blobGeo = new THREE.CircleGeometry(0.42, 12).rotateX(-PI / 2), blobMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false });
       function gearOf(p) { const g = {}; for (const k of ['head', 'cape', 'pack', 'body', 'legs', 'weapon', 'shield', 'ammo', 'ring']) g[k] = p.eq[k] ? p.eq[k].id : null; return g; }
       /* the hawk ring: an entity wearing it is drawn as a hawk HAWK_ALT m up, wings beating (the operator) */
-      const HAWK_ALT = 14, ringHawk = (id) => !!(id && D.items[id] && (D.items[id].attributes || []).some(a => a.trait_type === 'Form' && a.value === 'hawk'));
+      const HAWK_ALT = 28 /* doubled (2026-10-08) */, ringHawk = (id) => !!(id && D.items[id] && (D.items[id].attributes || []).some(a => a.trait_type === 'Form' && a.value === 'hawk'));
       /* the hawk's height (2026-10-04): a dive down to its prey on every strike, perched in a tree on the side you
          tapped, standing on the ground (legs and shadow back) when it carries too much */
       const PERCH_H = 1.75, PERCH_OUT = 0.55, SIT_SCALE = 0.42;   /* perched IN the tree (2026-10-07: it stood above the crown): on a branch among the leaves, on the side you chose */   /* perched or standing, the hawk is bird-sized next to a tree (it flies big to be seen from high up) */
@@ -468,7 +468,7 @@
           if (perched) { e.hawk.object.position.set(PERCH_OUT * (P.sx || 0), 0, PERCH_OUT * (P.sy || 0)); return PERCH_H; }
           e.hawk.object.position.set(0, 0, 0);
         }
-        if (e.dive) { const t = (performance.now() - e.dive) / 900; if (t >= 1) e.dive = 0; else return HAWK_ALT * (1 - 0.92 * Math.sin(Math.PI * t)); }
+        if (e.dive) { const t = (performance.now() - e.dive) / 900; if (t >= 1) e.dive = 0; else return HAWK_ALT * (1 - 0.96 * Math.sin(Math.PI * t)); }   /* the dive still bottoms out ~1 m over the prey */
         return e.alt || HAWK_ALT;
       }
       function hawkify(e, ring) {
@@ -1082,6 +1082,27 @@
         { day: 369.050, n: 17, dur: 104000, at: 'moon', zoom: 4.8, say: 'A total lunar eclipse (game day 369): the moon passes through the planet\'s shadow and turns copper.' },
         { day: 530.105, n: 4, dur: 42000, at: 'sun', zoom: 9.5, say: 'Sunset (game day 530).' },
         { day: 372.052, n: 4, dur: 42000, at: 'moon', zoom: 9.5, say: 'Moonrise (game day 372), just past full.' }] } : null;
+      /* ?demo=hawk (a showing for 2026-10-08; never on the arcade, where it would hand out a ring): a hawk ring on, and a flight
+         along the new road from Eastend to Saltmere and back, seen through the hawk's eyes looking ahead and a little down */
+      const HDEMO = q.get('demo') === 'hawk' && !G.arcade ? { i: 0, ring: false, way: [] } : null;
+      if (HDEMO) { for (let k = 0; k <= 10; k++) HDEMO.way.push([Math.round(74 + (378 - 74) * k / 10), Math.round(50 + (24 - 50) * k / 10)]); HDEMO.way = HDEMO.way.concat(HDEMO.way.slice(0, -1).reverse()); }
+      function hawkDemoTick() {
+        if (!HDEMO) return;
+        if (!HDEMO.ring) {
+          HDEMO.ring = true; coreCall(() => core.grantItem && core.grantItem(PID, 'ring_hawk', 1));
+          setTimeout(() => { const slot = me.inv.findIndex(sl => sl && sl.id === 'ring_hawk'); if (slot >= 0) send({ c: 'equip', slot }); if (core.setWeather) coreCall(() => core.setWeather(zoneHere(), 'clear', 0, 100000)); hud.chat('A hawk flight over the new road, Eastend to Saltmere and back.', 'sys'); }, 1500);
+          return;
+        }
+        if (!myEnt.hawk) return;
+        const W = HDEMO.way[HDEMO.i % HDEMO.way.length];
+        if (Math.max(Math.abs(me.x - W[0]), Math.abs(me.y - W[1])) <= 2 || !me.path.length) {
+          if (Math.max(Math.abs(me.x - W[0]), Math.abs(me.y - W[1])) <= 2) HDEMO.i++;
+          const N = HDEMO.way[HDEMO.i % HDEMO.way.length]; if (!me.path.length || HDEMO.sent !== HDEMO.i) { HDEMO.sent = HDEMO.i; send({ c: 'walk', x: N[0], y: N[1] }); }
+        }
+        const N = HDEMO.way[HDEMO.i % HDEMO.way.length], dx = N[0] + 0.5 - myEnt.root.position.x, dz = N[1] + 0.5 - myEnt.root.position.z;
+        if (Math.hypot(dx, dz) > 0.5) { const want = Math.atan2(-dx, -dz); cam.tyaw = want + Math.round((cam.yaw - want) / (2 * PI)) * 2 * PI; }
+        cam.tpitch = 0.45; cam.tdist = 11;
+      }
       function demoTick(now) {
         if (!DEMO || !SUNL.sv) return;
         const cur = DEMO.list[DEMO.i];
@@ -1119,7 +1140,7 @@
         if (key !== SUNL.key) { const a = sphereAt(me.x, me.y); SUNL.key = key; SUNL.b = a ? { u: nrm3(a[0]), e: nrm3(sub3(a[1], a[0])), s: nrm3(sub3(a[2], a[0])) } : null; }   /* up, game east (+x), game south (+y) */
         const B = SUNL.b; if (!B) return;
         seasonTick(B);
-        demoTick(performance.now());
+        demoTick(performance.now()); hawkDemoTick();
         const now = sunTime(B);
         /* the sun and the moon from the sky module (true sizes and distances, eclipses); without it the old rule */
         const SK = SKYM ? (SUNL.lonA == null && sunAt(now), SKYM.at(now, SUNL.lonA)) : null;
@@ -1747,7 +1768,9 @@
             hud.chat('From ' + (ev.from.tag ? '@' + ev.from.tag : ev.from.address.slice(0, 8) + '...') + ': ' + m.text.slice(0, 120), 'dm'); sfx('click'); return;
           }
           if (stopped || m.t !== 'dev' || m.s === ONE.sid || !ev.from || ev.from.address !== who.address) return;
-          if (m.claim || m.at > ONE.at || (m.at === ONE.at && String(m.s) > ONE.sid)) evicted();
+          /* the newest session wins on its start time alone (2026-10-08): a 'claim' only says "I just opened" - a stale one (a
+             replay, a game that opened before us) must not stop a newer game, which is what kept stopping @cinderwalker */
+          if (m.at > ONE.at || (m.at === ONE.at && String(m.s) > ONE.sid)) { G.__evictedBy = { s: m.s, at: m.at, claim: !!m.claim, ours: ONE.at, from: ev.from && (ev.from.id || ev.from.address) }; try { console.warn('ASHVALE: stopped by a newer session', JSON.stringify(G.__evictedBy)); } catch (e) { /* no console */ } evicted(); }
           else if (Date.now() - ONE.said > 3000) say(false);   /* the other is older: make sure it hears us */
         }, { self: true });
         R.on('join', () => say(false));
@@ -2640,7 +2663,7 @@
         updateRemotes(now, dt);
         for (let i = projs.length - 1; i >= 0; i--) {
           const p = projs[i]; p.t += dt; const k = Math.min(1, p.t / p.dur);
-          const to = p.tgt.root.position.clone(); to.y += (p.tgt.H.height || 1.2) * p.tgt.scale * 0.55;
+          const to = p.tgt.root.position.clone(); to.y += p.tgt.hawk ? 0.25 : (p.tgt.H.height || 1.2) * p.tgt.scale * 0.55;   /* up at the hawk itself in the sky */
           const pos = p.from.clone().lerp(to, k); if (p.kind === 'ranged') pos.y += Math.sin(k * PI) * 0.25 * p.from.distanceTo(to) / 6;
           p.obj.lookAt(pos.x + (to.x - p.from.x), pos.y + (to.y - p.from.y) * 0.1, pos.z + (to.z - p.from.z)); p.obj.position.copy(pos);
           if (p.kind !== 'ranged') p.obj.rotation.z += dt * 8;
