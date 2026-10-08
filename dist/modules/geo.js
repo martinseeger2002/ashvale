@@ -47,7 +47,8 @@
     const sphere = (f, x, y) => WG.toSphere(f, x, y, [0, 0, 0]);
     function latLon(f, x, y) {
       const u = sphere(f, x, y);
-      return { lat: Math.asin(Math.max(-1, Math.min(1, u[2]))) * DEG, lon: Math.atan2(u[1], u[0]) * DEG };
+      const ns = cfg && cfg.north === -1 ? -1 : 1;   /* the world's north (globecfg.north) */
+      return { lat: Math.asin(Math.max(-1, Math.min(1, ns * u[2]))) * DEG, lon: Math.atan2(ns * u[1], u[0]) * DEG };
     }
     /* vale tile (x, y) covers planar [x+OX, x+OX+1) x (-(y+OY)-1, -(y+OY)] of face FACE (y flips: game y = south) */
     const fromVale = (x, y) => ({ f: FACE, x: Math.floor(x) + OX, y: -(Math.floor(y) + OY) - 1 });

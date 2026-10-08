@@ -71,7 +71,8 @@
       return { npcs: npcs.slice(n0), spawns: spawns.slice(s0), objects: objects.slice(o0) };
     }
     for (const z of D.zones) ingest(z);
-    const ranges = (objs) => { for (const o of objs) if (o.k === 'range' || o.k === 'altar') { const k = key(o.x, o.y); nodes.set(k, { kind: o.k, x: o.x, y: o.y, chapel: o.chapel || null }); fixed.add(k); } };
+    /* ranges, altars, and a town's own campfires (2026-10-07: "You should also be able to cook on the campfire in the Indian village"): cook at a campfire as at one you lit */
+    const ranges = (objs) => { for (const o of objs) if (o.k === 'range' || o.k === 'altar' || o.k === 'campfire') { const k = key(o.x, o.y); nodes.set(k, { kind: o.k === 'campfire' ? 'fire' : o.k, x: o.x, y: o.y, chapel: o.chapel || null }); fixed.add(k); } };
     ranges(objects);
     let minX = 0, minY = 0;
     for (const P of pieces) { if (P.x0 < minX) minX = P.x0; if (P.y0 < minY) minY = P.y0; }
@@ -243,7 +244,7 @@
       if (ICE.kinds.size > 200000) ICE.kinds.clear();
       ICE.kinds.set(k, v); return v;
     }
-    function latOf(x, y) { if (!WG || !WG.toSphere) return 0; const u = WG.toSphere(FACE, x + OX + 0.5, -(y + OY) - 0.5); return Math.asin(u[2] / Math.hypot(u[0], u[1], u[2])) * 180 / Math.PI; }
+    function latOf(x, y) { if (!WG || !WG.toSphere) return 0; const u = WG.toSphere(FACE, x + OX + 0.5, -(y + OY) - 0.5); return (CFG.north === -1 ? -1 : 1) * Math.asin(u[2] / Math.hypot(u[0], u[1], u[2])) * 180 / Math.PI; }   /* north: the world's (globecfg.north) */
     function iceAt(x, y) {
       if (!ICE.at) return false;
       const c = chunkAt(x, y), t = CHR[c.t[ci(x, y)]]; if (t !== '~' && t !== 'v') return false;

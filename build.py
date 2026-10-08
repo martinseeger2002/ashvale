@@ -25,11 +25,16 @@ if os.path.exists(os.path.join(SRC, 'weather.js')):   # weather visuals (local a
     JS_MODULES.insert(JS_MODULES.index('engine'), 'weather')      # load order does not matter (factories), kept stable
 if os.path.exists(os.path.join(SRC, 'seasons.js')):   # the year and its seasons (2026-10-07): its own module/inscription
     JS_MODULES.insert(JS_MODULES.index('engine'), 'seasons')
+if os.path.exists(os.path.join(SRC, 'sky.js')):
+    JS_MODULES.insert(JS_MODULES.index('engine'), 'sky')
+if os.path.exists(os.path.join(SRC, 'skyview.js')):   # the sky drawn as a 3D scene of its own: sun, moon, stars (2026-10-07)
+    JS_MODULES.insert(JS_MODULES.index('engine'), 'skyview')
 if os.path.exists(os.path.join(SRC, 'geo.js')):       # the global grid: face cells, seams, lat/lon (handoff/globe_open_plan.md phase 1)
     JS_MODULES.insert(JS_MODULES.index('engine'), 'geo')
 if os.path.exists(os.path.join(SRC, 'fog.js')):       # fog measured from the camera-player segment (2026-10-02): its own module
     JS_MODULES.insert(JS_MODULES.index('engine'), 'fog')
 DATA_MODULES = ['items', 'monsters', 'shops', 'quests', 'rules', 'globecfg', 'assets', 'housekit']   # housekit: converted Quaternius house pieces (tools/housekit/q2code.mjs --game)
+DATA_MODULES = DATA_MODULES + (['starmap'] if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'starmap.json')) else [])   # the real night sky (d3-celestial, BSD-3)
 DATA_MODULES = DATA_MODULES + (['pools'] if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'pools.json')) else [])   # pools: tools/pools3d.py data   # globecfg: where ASHVALE sits on the globe (P2)
 # globe P2 step B: seeded land around the old map. The globe grid + worldgen modules (written for the Atlas, used as they
 # are) and worldgen's numbers; without them the game is the old map alone (the engine checks for them).

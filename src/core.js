@@ -460,6 +460,9 @@
       if ((s.v | 0) >= 2 && Array.isArray(s.pos) && s.pos.length === 3) xy = M.fromFace(s.pos[0] | 0, s.pos[1] | 0, s.pos[2] | 0);
       else if ((s.v | 0) <= 1 && Number.isInteger(s.x) && Number.isInteger(s.y)) xy = [s.x, s.y];
       if (!xy || !inMap(xy[0], xy[1])) return;   /* outside the world: the spawn */
+      /* in your canoe when you left (2026-10-07: "if you're in a canoe that needs to save ... so when you reload the game, you're not on
+         the shore without your canoe"): you come back sitting in it, on the water where you were */
+      if (s.boat === 1 && !isHawk(p) && isWet(xy[0], xy[1])) { p.x = xy[0]; p.y = xy[1]; p.boat = 1; p.face = s.face | 0; ev({ e: 'boat', p: p.id, on: 1 }); return; }
       /* 2026-10-06: "I flew over the ocean and the game lost track of my position ... My position should be kept no
          matter where on the globe I am." A hawk (the ring is restored before this) keeps its exact spot over sea, lake or
          woods; anyone else on a tile they cannot stand on goes to the nearest open ground, not back to the village. */
@@ -476,7 +479,7 @@
     function exportPlayer(id) {
       const p = S.players[id]; if (!p) return null;
       const at = p.dead ? wakeSpot(p).at : [p.x, p.y];
-      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, town: p.town || null, hawkHp: p.hawkHp == null ? null : p.hawkHp, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
+      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
     }
 
     // ---------------- pathfinding: BFS over the tile grid, 8 directions, no corner cutting (RuneScape-style)
@@ -1158,6 +1161,8 @@
       const C = md.cover, q = p.quests && p.quests[C.quest];
       return !(q && q.step >= (C.step || 1));
     }
+    let SKYTELL = null;   /* the engine's word on the next eclipses (it has the sky); NPCs marked `sky` end with it */
+    function setSkyTell(fn) { SKYTELL = typeof fn === 'function' ? fn : null; }
     function talk(p, n) {
       /* a step's kit is never lost for good (the Arcade session 2026-10-07: The Even Grove soft-locked when its three saplings were
          sold): talking to the quest's giver while the step is open hands back what is missing of it, as logging in already did */
@@ -1219,7 +1224,7 @@
       if (n.shop && !ends) { const sh = shopOf(n.shop); p.shop = n.shop; ev({ e: 'shop', p: p.id, shop: n.shop, npc: n.id }); msg(p, n.name + ': ' + sh.greet, 'npc'); return; }
       const idle = npcIdleLines(n, p), offered = nextOffered(n, p);
       const hadQuest = (n.quests || []).concat(n.quest ? [n.quest] : []).some(id => p.quests[id]);
-      if (idle && idle.length && !ends && !offered && !hadQuest) { ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: idle }); return; }   /* dialogue straight off the zone data, checked after shop and quest */
+      if (idle && idle.length && !ends && !offered && !hadQuest) { let tell = null; if (n.sky && SKYTELL) try { tell = SKYTELL(p); } catch (e) { tell = null; } ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: tell ? idle.concat([tell]) : idle }); return; }   /* the sky-watchers end with the next eclipses */   /* dialogue straight off the zone data, checked after shop and quest */
       /* an NPC may offer the next quest only after the one before it is finished (Iria's supper, then the Gift of Angels) */
       let qid = ends || offered || n.quest;
       if (!qid && n.quests && n.quests.length) {
@@ -1638,7 +1643,19 @@
        should persist for one game year"): where you step out, the canoe stays, afloat at the bank, for anyone to take again. The
        engine tells the @ashvale Bank (it keeps them a game year) and puts down the ones the Bank lists near you (setBoats). */
     const BOATS = new Map();   /* 'x,y' -> {x, y, face} */
-    function landBoat(x, y, face, by) { const k = x + ',' + y; if (BOATS.has(k)) return; BOATS.set(k, { x, y, face: face | 0 }); ev({ e: 'boatland', x, y, face: face | 0, by: by || null }); }
+    /* a canoe left at the bank lies along it (2026-10-07: "parked parallel with the river bank automatically"): the bank's line is
+       across the way the land lies from it; of the eight headings, the one nearest that line, the end nearest the way it was going */
+    function bankFace(x, y, face) {
+      let nx = 0, ny = 0; for (let k = 0; k < 8; k++) { const [dx, dy] = DIRS[k]; if (!isWet(x + dx, y + dy)) { const l = Math.hypot(dx, dy); nx += dx / l; ny += dy / l; } }
+      if (!nx && !ny) return face | 0;
+      const tx = -ny, ty = nx, [hx, hy] = DIRS[face | 0] || DIRS[0], sg = tx * hx + ty * hy < 0 ? -1 : 1; let best = face | 0, bd = -2;
+      for (let k = 0; k < 8; k++) { const [dx, dy] = DIRS[k], l = Math.hypot(dx, dy), d = (dx * tx + dy * ty) * sg / (l * Math.hypot(tx, ty)); if (d > bd) { bd = d; best = k; } }
+      return best;
+    }
+    function landBoat(x, y, face, by) { const k = x + ',' + y; if (BOATS.has(k)) return; const f = by ? bankFace(x, y, face) : face | 0; BOATS.set(k, { x, y, face: f }); ev({ e: 'boatland', x, y, face: f, by: by || null }); }
+    /* the landing gives no new canoe while three or more are left at the banks within 500 feet of it (2026-10-07) */
+    const DOCK_R = 152, DOCK_MAX = 3;
+    function dockFull(x, y) { let n = 0; for (const b of BOATS.values()) if (Math.hypot(b.x - x, b.y - y) <= DOCK_R && ++n >= DOCK_MAX) return true; return false; }
     function takeBoat(x, y, by) { const k = x + ',' + y; if (!BOATS.has(k)) return false; BOATS.delete(k); ev({ e: 'boatgone', x, y, by: by || null }); return true; }
     function setBoats(box, list) {   /* the Bank's word for a rectangle: these lie there, the rest in it are gone */
       const want = new Set();
@@ -1685,7 +1702,8 @@
       if (bd === 1 && (S.t & 1)) { p.moved = 0; return; }   /* overburdened: a step every other tick, no running */
       if (bd === 1 && isHawk(p) && S.t % HK.groundEvery) { p.moved = 0; return; }   /* an overburdened hawk walks: half as fast again */
       if (p.runNow && p.path.length > 1 && (bd || !p.energy)) { p.runNow = false; msg(p, bd ? 'You are carrying too much to run.' : 'You are out of run energy: walking.', 'warn'); }
-      let steps = FLY ? Math.min(4, p.path.length) : p.boat === 1 && BOAT ? Math.min(6, p.path.length) : p.runNow && p.energy > 0 && p.path.length > 1 ? 2 : 1;   /* a canoe goes three times as fast as a run (2026-10-07), for free */   /* a hawk flies twice as fast as a run, for free (2026-10-04) */
+      const crew = p.boat === 1 && BOAT && Object.values(S.players).some(q => q.boat === 2 && q.ride === p.id && !q.dead);   /* two paddling */
+      let steps = FLY ? Math.min(4, p.path.length) : p.boat === 1 && BOAT ? Math.min(p.energy > 0 ? (crew ? 8 : 6) : 2, p.path.length) : p.runNow && p.energy > 0 && p.path.length > 1 ? 2 : 1;   /* a canoe goes three times as fast as a run (2026-10-07), for free */   /* a hawk flies twice as fast as a run, for free (2026-10-04) */
       if (steps === 2) { const rf = wx(zoneOf(p.x, p.y), 'run'); if (rf < 1) { p.runAcc = (p.runAcc || 0) + Math.round(rf * 1000); if (p.runAcc >= 1000) p.runAcc -= 1000; else steps = 1; } }   /* snow: deep going */
       let moved = 0;
       for (let s = 0; s < steps && p.path.length; s++) {
@@ -1695,6 +1713,9 @@
         p.face = faceTo(p.x, p.y, nx, ny); p.x = nx; p.y = ny; p.path.shift(); moved++;
       }
       p.moved = moved;
+      /* PADDLING (2026-10-07): three times a run alone, four times with a second paddler, and two share the work - half the
+         run energy each tick; out of energy, the canoe goes at a run */
+      if (p.boat === 1 && moved > 2 && !FLY) { addXp(p, 'dexterity', 2 * (DEX.xpPerRunTile || 2)); p.energy = Math.max(0, p.energy - Math.floor((crew ? 0.5 : 1) * 60 * (1000 - Math.min(DEX.drainMaxPermille || 400, (DEX.drainPerLevelPermille || 5) * lv(p, 'dexterity'))) / 1000)); if (!p.energy) msg(p, 'Your arms are spent: the canoe slows to an easy pace.', 'warn'); }
       if (moved === 2 && !FLY && !p.boat) { addXp(p, 'dexterity', 2 * (DEX.xpPerRunTile || 2)); p.energy = Math.max(0, p.energy - Math.floor(60 * (1000 - Math.min(DEX.drainMaxPermille || 400, (DEX.drainPerLevelPermille || 5) * lv(p, 'dexterity'))) / 1000)); if (!p.energy) { p.run = false; msg(p, 'You are out of run energy.', 'warn'); ev({ e: 'run', p: p.id }); } }
     }
     function playerAt(x, y, self) { for (const pid of S.order) { const o = S.players[pid]; if (o !== self && !o.dead && o.x === x && o.y === y) return true; } return false; }
@@ -2007,7 +2028,7 @@
         else if (cheb(p.x, p.y, t.x, t.y) <= 2) { p.act = null; p.path = []; p.boat = 2; p.ride = a.pid; p.rideMiss = 0; p.x = t.x; p.y = t.y; ev({ e: 'boat', p: p.id, on: 2 }); msg(p, "You climb into the bow with a paddle, and the bawa'iganaakoog (ricing sticks) at your feet. In the manoomin (wild rice) your partner stands with the gaandakii'iganaak (push pole) and you knock the rice in."); }
         else { p.path = findPath(p.x, p.y, (x, y) => cheb(x, y, t.x, t.y) <= 2, t.x, t.y); stepPath(p); if (!p.path.length && cheb(p.x, p.y, t.x, t.y) > 2) { msg(p, "I can't reach that canoe from here.", 'warn'); p.act = null; } }
       } else if (a && a.k === 'board') {   /* walk to the canoe, sit down in it: it floats where it lay */
-        if (inReach(p.x, p.y, a.x, a.y, 1)) { const lb = BOATS.get(a.x + ',' + a.y); if (lb) { p.face = lb.face; takeBoat(a.x, a.y, p.id); } p.act = null; p.path = []; p.boat = 1; p.x = a.x; p.y = a.y; p.land = null; ev({ e: 'boat', p: p.id, on: 1 }); msg(p, 'You sit down in the canoe and take up the paddle. Point at the water to paddle there, or at the shore to land.'); }
+        if (inReach(p.x, p.y, a.x, a.y, 1)) { const lb = BOATS.get(a.x + ',' + a.y); if (!lb && dockFull(a.x, a.y)) { msg(p, 'There is no canoe at the landing: three are already left at the banks nearby. Take one of those.', 'warn'); p.act = null; return; } if (lb) { p.face = lb.face; takeBoat(a.x, a.y, p.id); } p.act = null; p.path = []; p.boat = 1; p.x = a.x; p.y = a.y; p.land = null; ev({ e: 'boat', p: p.id, on: 1 }); msg(p, 'You sit down in the canoe and take up the paddle. Point at the water to paddle there, or at the shore to land.'); }
         else { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, a.x, a.y, 1), a.x, a.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, a.x, a.y, 1)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
       } else if (a && a.k === 'enter') {   /* walk up to a passage and go through: it takes you to its `to` */
         const o = passageAt(a.x, a.y);
@@ -2475,7 +2496,7 @@
       return true;
     }
     return {
-      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
+      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, setSkyTell, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */

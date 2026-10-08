@@ -606,7 +606,8 @@
    "lines": [
     "The axle has snapped clean through. Candles and torn altar cloth lie in the grass where the load spilled."
    ],
-   "verb": "Search"
+   "verb": "Search",
+   "still": true
   },
   {
    "id": "guard_ash_1",

@@ -31,7 +31,8 @@
    "examine": "A skeleton sprawled on the cave floor, a rotting bag still hooked in the ribs.",
    "lines": [
     "We should probably leave him alone."
-   ]
+   ],
+   "still": true
   },
   {
    "id": "edric_ghost",

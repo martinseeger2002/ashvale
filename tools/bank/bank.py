@@ -253,15 +253,26 @@ def handle_save(c, addr, msg):
         except (KeyError, TypeError, ValueError): return None
         if not (0 < n <= SV_MAX and 0 <= i < n and len(d) <= 400 and 0 < sid < 10**14): return None
         cur = SV_PART.get(addr)
-        if not cur or cur['id'] != sid or cur['n'] != n: cur = SV_PART[addr] = {'id': sid, 'n': n, 'parts': {}}
+        if not cur or cur['id'] != sid or cur['n'] != n: cur = SV_PART[addr] = {'id': sid, 'n': n, 'parts': {}, 'base': msg.get('base')}
         cur['parts'][i] = d
         if len(cur['parts']) < n: return None
         SV_PART.pop(addr, None)
         blob = ''.join(cur['parts'][k] for k in range(n))
         old = c.execute('select id from saves where addr=?', (addr,)).fetchone()
-        if old and old['id'] >= sid: return None      # an older save arriving late never wins
+        # WHICH SAVE WINS (2026-10-07: changed gear on another device, came back, and the old device's gear was back): not
+        # by the devices' clocks (a phone's can run behind) but by lineage - a save names the save it continues ('base', the id the
+        # game loaded or last had taken); one that does not continue the Bank's current save is from a device that fell behind
+        # (another device has played since): refused, and that game is told so ('svx') and stops. Old games without 'base': by id.
+        base = cur.get('base')
+        if old and base is not None:
+            try: base = int(base)
+            except (TypeError, ValueError): base = -1
+            if base != old['id'] and old['id'] != sid:
+                log('SAVE REFUSED', addr, 'continues', base, 'but the Bank has', old['id'])
+                return {'t': 'svx', 'to': addr, 'id': old['id']}
+        elif old and old['id'] >= sid: return None      # an older save arriving late never wins
         c.execute('insert into saves values(?,?,?,?) on conflict(addr) do update set id=excluded.id, blob=excluded.blob, at=excluded.at', (addr, sid, blob, time.time())); c.commit()
-        return None
+        return {'t': 'svok', 'to': addr, 'id': sid}
     r = c.execute('select id, blob from saves where addr=?', (addr,)).fetchone()
     log('LOAD?', addr, 'none' if not r else '%d B' % len(r['blob']))
     if not r: return {'t': 'ld', 'to': addr, 'n': 0}

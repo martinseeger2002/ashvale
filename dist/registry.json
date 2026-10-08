@@ -99,6 +99,12 @@
    "api": 1,
    "kind": "js"
   },
+  "castle": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
   "scene": {
    "id": null,
    "v": "1",
@@ -171,6 +177,18 @@
    "api": 1,
    "kind": "js"
   },
+  "sky": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "skyview": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
   "geo": {
    "id": null,
    "v": "1",
@@ -233,6 +251,12 @@
     "kind": "json"
    },
    "housekit": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "starmap": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1260,6 +1284,12 @@
     "api": 1,
     "kind": "json"
    },
+   "item.castlestone": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.chanterelle": {
     "id": null,
     "v": 1,
@@ -1417,6 +1447,12 @@
    "saltmere": {
     "id": null,
     "v": 3,
+    "api": 1,
+    "kind": "json"
+   },
+   "castle": {
+    "id": null,
+    "v": 1,
     "api": 1,
     "kind": "json"
    },

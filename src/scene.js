@@ -928,7 +928,7 @@
           }
           /* ZIIBIING, the Ojibwe village on the river (2026-10-07) */
           case 'wigwam': {   /* waaginogaan (2026-10-07): the bark-over-ironwood shell, its door east, a hide over it, the smoke hole */
-            const D = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] }[o.face || 'e'], ry = Math.atan2(D[0], D[1]), R0 = 1.45, HT = 2.15;
+            const D = Array.isArray(o.dir) ? o.dir : { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] }[o.face || 'e'], ry = Math.atan2(D[0], D[1]), R0 = 1.45, HT = 2.15;   /* dir: the true east the generator worked out (toward the sunrise) */
             const g = wigwamShell(R0, HT, false, o.seed | 0); g.position.set(x, y, z); g.rotation.y = ry; group.add(g);
             g.add(mesh(new THREE.BoxGeometry(0.72, 1.1, 0.3), 0x1a140e, 0, 0.55, R0 - 0.2));          /* the dark of the doorway */
             const flap = mesh(new THREE.BoxGeometry(0.5, 1.05, 0.04), 0x8a6238, -0.48, 0.58, R0 + 0.03); flap.rotation.y = -0.35; g.add(flap);   /* the hide, tied back */
@@ -957,7 +957,7 @@
           case 'canoe': case 'canoe_up': {   /* the landing's canoe, afloat in the shallows; a second turned over on the bank to dry */
             const c = canoeMesh(); group.add(c);
             if (o.k === 'canoe') {
-              DOCKS.push(c);   /* you paddle off in this one: the engine hides it while you are out on the water */
+              DOCKS.push(c); c.userData.dock = [o.x, o.y];   /* you paddle off in this one: the engine hides it while you are out on the water, or while the landing has none to give */
               const sf = surfOfMap(o.x, o.y); c.position.set(x, sf - 0.02, z); c.rotation.y = 1.45 + hash2(o.x, o.y) * 0.2;
               const pk = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.9, 4.4), new THREE.MeshBasicMaterial({ visible: false })); pk.position.copy(c.position); pk.rotation.y = c.rotation.y; pk.userData.pick = { kind: 'canoe', x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
             } else {
@@ -1143,6 +1143,7 @@
             for (let k = 0; k < 6; k++) B.add('box', 0x6a6a6a, x + Math.cos(k) * 0.45, y + 0.07, z + Math.sin(k) * 0.45, 0.16, 0.14, 0.16, k);
             if (o.smoke !== false) anim.push({ smoke: true, x, y: y + 0.8, z, parts: [] });   /* a camp's fire smokes */
             const f = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 6), new THREE.MeshBasicMaterial({ color: 0xff8a20 })); f.position.set(x, y + 0.35, z); group.add(f); torches.push({ f, ph: 1, x, y, z });
+            if (map.nodes && map.nodes.get && map.nodes.get(K(o.x, o.y))) { const pk = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.8, 8), new THREE.MeshBasicMaterial({ visible: false })); pk.position.set(x, y + 0.4, z); pk.userData.pick = { kind: 'node', i: K(o.x, o.y) }; group.add(pk); pickables.push(pk); }   /* a town's campfire: cook on it */
             break;
           }
         }
