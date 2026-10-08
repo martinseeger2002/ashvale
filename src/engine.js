@@ -1090,7 +1090,7 @@
         if (!HDEMO) return;
         if (!HDEMO.ring) {
           HDEMO.ring = true; coreCall(() => core.grantItem && core.grantItem(PID, 'ring_hawk', 1));
-          setTimeout(() => { const slot = me.inv.findIndex(sl => sl && sl.id === 'ring_hawk'); if (slot >= 0) send({ c: 'equip', slot }); if (core.setWeather) coreCall(() => core.setWeather(zoneHere(), 'clear', 0, 100000)); hud.chat('A hawk flight over the new road, Eastend to Saltmere and back.', 'sys'); }, 1500);
+          setTimeout(() => { const slot = me.inv.findIndex(sl => sl && sl.id === 'ring_hawk'); if (slot >= 0) send({ c: 'equip', slot }); if (core.setWeather) coreCall(() => core.setWeather(zoneHere(), 'clear', 0, 100000)); hud.chat('A hawk flight over the new road, West End to Saltmere and back.', 'sys'); }, 1500);
           return;
         }
         if (!myEnt.hawk) return;
@@ -2801,14 +2801,16 @@
       }
       setTimeout(() => { reportBook().catch(() => {}); setInterval(() => reportBook().catch(() => {}), 600000); }, 15000);
       /* the save to the Bank (cloudLoad above): only when it changed, at most every 20 s, at once when you leave */
-      const CLOUD = { last: null, at: (save && save.at) || 0, sent: '', t: 0, base: save && save.base != null ? +save.base : null };   /* base: the Bank's save this game continues */
+      const CLOUD = { last: null, at: (save && save.at) || 0, sent: '', t: 0, mine: null, base: save && save.base != null ? +save.base : null };   /* base: the Bank's save this game continues */
       function cloudPush(json, now) {
         if (!G.arcade || !CLOUD_OK || !json || json === CLOUD.sent || (!now && performance.now() - CLOUD.t < 20000)) return;
         CLOUD.t = performance.now(); const at = CLOUD.at;
         packSave(json).then(b => bankRoom().then(R => {
           if (!R) return; const n = Math.max(1, Math.ceil(b.length / CHUNK));
           if (n > 40) { console.warn('ASHVALE: the save is too big for the Bank (' + b.length + ' B)'); return; }
-          CLOUD.sent = json; for (let i = 0; i < n; i++) R.send(Object.assign({ t: 'sv', id: at, i, n, d: b.slice(i * CHUNK, (i + 1) * CHUNK) }, CLOUD.base != null ? { base: CLOUD.base } : {}));
+          /* mine: the last save THIS game sent - if the Bank's 'svok' for it never reached us, the Bank still knows no other device
+             came between (2026-10-08: a lost svok left base one save behind and the next save was refused as another device's) */
+          const mine = CLOUD.mine; CLOUD.sent = json; CLOUD.mine = at; for (let i = 0; i < n; i++) R.send(Object.assign({ t: 'sv', id: at, i, n, d: b.slice(i * CHUNK, (i + 1) * CHUNK) }, CLOUD.base != null ? { base: CLOUD.base } : {}, mine != null ? { mine } : {}));
         })).catch(e => console.warn('ASHVALE: cloud save', e && e.message));
       }
       function persist(leaving) {
