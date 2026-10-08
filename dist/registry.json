@@ -171,6 +171,12 @@
    "api": 1,
    "kind": "js"
   },
+  "geo": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
   "fog": {
    "id": null,
    "v": "1",
@@ -661,6 +667,12 @@
     "kind": "json"
    },
    "char.tolly": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.town_guard": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1171,6 +1183,12 @@
     "kind": "json"
    },
    "gear.robe": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "gear.rosary": {
     "id": null,
     "v": 1,
     "api": 1,

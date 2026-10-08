@@ -77,6 +77,7 @@
       if (d.edible) o.push({ html: (d.drink ? 'Drink ' : 'Eat ') + nm, fn: () => api.cmd({ c: 'eat', slot }) });
       if (d.buryXp) o.push({ html: 'Bury ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
       else if (d.burnTicks) o.push({ html: 'Light ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
+      else if (d.teleport && d.eq !== 'ring') o.push({ html: 'Use ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
       else if (!d.eq && !d.edible) o.push({ html: 'Use ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
       if (d.arms) { o.push({ html: 'Call to arms <span class="c">castle guard</span>', fn: () => api.cmd({ c: 'arms', on: true }) }); o.push({ html: 'Stand down <span class="c">castle guard</span>', fn: () => api.cmd({ c: 'arms', on: false }) }); }   /* the Lake Castle stone (2026-10-05) */
       o.push({ html: 'Drop ' + nm, fn: () => api.cmd({ c: 'drop', slot }) });

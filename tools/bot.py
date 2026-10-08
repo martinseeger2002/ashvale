@@ -297,8 +297,15 @@ class Bot:
             bug('passage', '%s at (%d, %d) needs the flag %s, which he does not have, to reach (%d, %d)' % (P['name'], P['x'], P['y'], P['need'], x, y)); return False
         side = P.get('out') or [P['x'] - 1, P['y']]
         log('the way in is the %s at (%d, %d): going through' % (P['name'], P['x'], P['y']))
-        self.r("return await walkTo(%d, %d, 60000)" % (side[0], side[1]))
+        for _ in range(5):   # one minute was not enough to get there (2026-10-07: tried the gate from (49, 23))
+            at = self.st().get('at') or [0, 0]
+            if max(abs(at[0] - P['x']), abs(at[1] - P['y'])) <= 1: break
+            self.r("return await walkTo(%d, %d, 60000)" % (side[0], side[1]))
+        at = self.st().get('at') or [0, 0]
+        if max(abs(at[0] - P['x']), abs(at[1] - P['y'])) > 1:
+            log('could not get to the %s at (%d, %d): stopped at %s' % (P['name'], P['x'], P['y'], at)); return False
         self.r("ASH.core.cmd('me', { c: 'enter', x: %d, y: %d }); await wait(4000); return 1" % (P['x'], P['y']))
+        log('after the %s: at %s, the game said %s' % (P['name'], self.st().get('at'), (self.r("return chat(3)") or [])[-3:]))
         return True
     def chest_take_all(self, keys):
         self.r("await talk('chest'); return 1")

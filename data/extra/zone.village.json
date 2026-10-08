@@ -478,7 +478,7 @@
    "y": 50,
    "talk": "quest",
    "quest": "bronze_gate",
-   "examine": "Silas the mason. He laid the well, the two shops and the north gate, and he means you to know it."
+   "examine": "Silas the mason. He laid the well, the two shops and the northwest gate, and he means you to know it."
   },
   {
    "id": "pip",
@@ -508,7 +508,7 @@
    "look": "modulus",
    "x": 33,
    "y": 50,
-   "examine": "Modulus the surveyor, measuring the east road for the third time this morning.",
+   "examine": "Modulus the surveyor, measuring the southwest road for the third time this morning.",
    "lines": [
     "I measured this street at a hundred and forty-four feet. They said it needed to be a hundred and forty-three. It is, somehow.",
     "Everything twice, once well. That's the whole trade. Count the ground before you sell it."
@@ -522,7 +522,7 @@
    "y": 44,
    "talk": "quest",
    "quest": "elder_bow",
-   "examine": "Latency the warden, on the north road. Late to everything, and there before you are."
+   "examine": "Latency the warden, on the northwest road. Late to everything, and there before you are."
   },
   {
    "id": "symmetry",
@@ -554,7 +554,7 @@
    "y": 48,
    "talk": "quest",
    "quest": "skinning_knife",
-   "examine": "Fenn the tanner, on the lane below the east road, with frames of skins that nobody in this village knew he had."
+   "examine": "Fenn the tanner, on the lane below the southwest road, with frames of skins that nobody in this village knew he had."
   },
   {
    "id": "chest",
@@ -607,6 +607,59 @@
     "The axle has snapped clean through. Candles and torn altar cloth lie in the grass where the load spilled."
    ],
    "verb": "Search"
+  },
+  {
+   "id": "guard_ash_1",
+   "name": "Town guard",
+   "look": "town_guard",
+   "x": 24,
+   "y": 50,
+   "watch": "village",
+   "examine": "A town guard. Combat level 33. He keeps the peace, and the lamps.",
+   "lines": [
+    "We keep the peace. When the day goes we light the lamps and the torches. When it comes back we put the lamps out.",
+    "Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."
+   ]
+  },
+  {
+   "id": "guard_ash_2",
+   "name": "Town guard",
+   "look": "town_guard",
+   "x": 12,
+   "y": 48,
+   "watch": "village",
+   "examine": "A town guard. Combat level 33. He keeps the peace, and the lamps.",
+   "lines": [
+    "Strike one of us and the whole watch answers.",
+    "Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."
+   ]
+  },
+  {
+   "id": "guard_ash_3",
+   "name": "Town guard",
+   "look": "town_guard",
+   "x": 28,
+   "y": 50,
+   "watch": "village",
+   "examine": "A town guard. Combat level 33. He keeps the peace, and the lamps.",
+   "lines": [
+    "The lamps along the street are our work, not the sun's.",
+    "Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."
+   ]
+  },
+  {
+   "id": "guard_road",
+   "name": "Town guard",
+   "look": "town_guard",
+   "x": 46,
+   "y": 51,
+   "watch": "road",
+   "road": true,
+   "examine": "A town guard. Combat level 33. He walks the cobbles from Ashvale to Saltmere and tends the lamps.",
+   "lines": [
+    "The cobbles run from Ashvale to Saltmere. I light those lamps at dusk and put them out at dawn.",
+    "Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."
+   ]
   }
  ]
 }

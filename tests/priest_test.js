@@ -39,7 +39,7 @@ d = talk('aldous'); ok(Q().step === 1 && /Symmetry/.test(d.lines[0]), 'before Sy
 d = talk('odric'); ok(Q().n === 0 && /wheelwright/.test(d.lines[0]), 'Odric too early: his own lines, nothing counted');
 
 d = talk('symmetry'); ok(Q().n === 1 && /blessing-roll/.test(d.lines[0]), 'Symmetry speaks the quest lines (say), not her usual ones');
-let x0 = prayXp(); d = talk('aldous'); ok(Q().step === 2 && /east road/.test(d.lines.join(' ')) && prayXp() - x0 === 1000, 'back to Aldous: step 2, 100 Prayer XP, sent east along the road');
+let x0 = prayXp(); d = talk('aldous'); ok(Q().step === 2 && /southwest road/.test(d.lines.join(' ')) && prayXp() - x0 === 1000, 'back to Aldous: step 2, 100 Prayer XP, sent southwest along the road');
 
 d = talk('wenna'); ok(Q().step === 2 && /Eleven years/.test(d.lines[0]), 'going on to Saltmere early does nothing');
 d = talk('odric_wagon'); ok(Q().n === 0 && /axle/.test(d.lines[0]), 'searching the wagon: the wreck, nothing counted');

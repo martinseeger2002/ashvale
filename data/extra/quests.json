@@ -13,11 +13,11 @@
      },
      "talk": [
       "You are on the main path. I came down here, away from the pond. I am Iria.",
-      "Cook me a chicken. A raw one, on a range or a campfire, until it is cooked through and not burnt. The chickens run in Ashvale village, and Hob's range stands by the houses there. There is a campfire in the eastern tents of this wood if you would rather not walk back.",
+      "Cook me a chicken. A raw one, on a range or a campfire, until it is cooked through and not burnt. The chickens run in Ashvale village, and Hob's range stands by the houses there. There is a campfire in the southwestern tents of this wood if you would rather not walk back.",
       "Bring me word when it is done. I will know if the fire took it."
      ],
      "progress": [
-      "The chicken is not cooked yet, {name}. Kill one of the village chickens for the raw meat, then cook it on Hob's range or on the campfire in the eastern tents. A burnt one does not count."
+      "The chicken is not cooked yet, {name}. Kill one of the village chickens for the raw meat, then cook it on Hob's range or on the campfire in the southwestern tents. A burnt one does not count."
      ],
      "complete": [
       "Cooked, and the smell is honest. I asked for a chicken. What I wanted was a sandwich."
@@ -51,10 +51,10 @@
      },
      "talk": [
       "A lobster on the side. I do not keep them here.",
-      "Hollis sells lobster at the Saltmere Tap. Saltmere is the harbour east of the valley, along the coast. Ask for Hollis."
+      "Hollis sells lobster at the Saltmere Tap. Saltmere is the harbour southwest of the valley, along the coast. Ask for Hollis."
      ],
      "progress": [
-      "One lobster, {name}. Hollis, at the Saltmere Tap. The harbour is east."
+      "One lobster, {name}. Hollis, at the Saltmere Tap. The harbour is southwest."
      ],
      "complete": [
       "That will do for supper. You have fed me. The ring is another matter."
@@ -70,11 +70,11 @@
      },
      "reward": "ring_angels",
      "talk": [
-      "The Ring of Angels is not payment for a meal. Kill one timber wolf and bring me its pelt. They den in the trees west of the north pond, well off this path, and further out in the woods.",
+      "The Ring of Angels is not payment for a meal. Kill one timber wolf and bring me its pelt. They den in the trees northeast of the pond, well off this path, and further out in the woods.",
       "Do both, and the ring is yours. Wear it. If a blow leaves you below a fifth of your life, it carries you home to Ashvale. It rests for an hour before it can do so again."
      ],
      "progress": [
-      "One timber wolf slain, and its pelt in your bag. So far: {n} of {goal} slain. The pelt comes off the beast. West of the north pond, off the path."
+      "One timber wolf slain, and its pelt in your bag. So far: {n} of {goal} slain. The pelt comes off the beast. Northeast of the pond, off the path."
      ],
      "complete": [
       "The pelt is honest. Take the Ring of Angels. Wear it, and if a blow leaves you below a fifth of your life it will carry you home. It rests an hour between saves.",
@@ -100,7 +100,7 @@
      },
      "reward": "flag:gift_of_angels",
      "talk": [
-      "The hour is long. Kill three timber wolves and bring me their pelts. The same dens, west of the north pond, off this path, and out in the woods.",
+      "The hour is long. Kill three timber wolves and bring me their pelts. The same dens, northeast of the pond, off this path, and out in the woods.",
       "Do that and I will give you the Gift of Angels. The ring will rest ten minutes, not an hour."
      ],
      "progress": [
@@ -121,7 +121,7 @@
      "id": 4,
      "zone": "spidercave",
      "talk": [
-      "The crown was the old king's, burned with him when the Keep fell. What was left of it was carried down into the dark: into the Spider Cave, in the woods west of Whisperwood, at the end of the trail that leaves its west road.",
+      "The crown was the old king's, burned with him when the Keep fell. What was left of it was carried down into the dark: into the Spider Cave, in the woods northeast of Whisperwood, at the end of the trail that leaves its northeast road.",
       "Its pieces have been calling things out of that dark ever since. Three wraiths drift through the tunnels past the flooded grotto. Lay them to rest."
      ],
      "progress": [
@@ -161,7 +161,7 @@
      "talk": [
       "Peace be with you, {name}. Mind the pews - the left one rocks.",
       "I am Father Aldous. This little church is all Ashvale has, but Saltmere had a chapel once, and it has stood empty since the fever years.",
-      "I mean to light its altar again. For that I need the old chapel's blessing-roll, the list of every hand that was ever blessed there. Symmetry keeps the village's old things in her house by the lake.",
+      "I mean to light its altar again. For that I need the old chapel's blessing-roll, the list of every hand that was ever blessed there. Symmetry keeps the village's old things in the house with the green roof, southeast of the square.",
       "Ask her for it, would you? She will know the one I mean: a grey scroll with a salt stain."
      ],
      "say": [
@@ -170,7 +170,7 @@
       "Tell Father Aldous it is on the road, not lost. I would never lose anything. I only move it where it looks right."
      ],
      "progress": [
-      "Symmetry lives by the lake, south of the well. Ask her about the blessing-roll."
+      "Symmetry is in the house with the green roof, southeast of the square. Ask her about the blessing-roll."
      ],
      "complete": [
       "With Odric? Then it has been on the road for a month. Odric does the trip to Saltmere in four days.",
@@ -185,7 +185,7 @@
      },
      "reward": "xp:prayer:250",
      "talk": [
-      "Take the east road out of the village, the old trail towards Saltmere. Odric drives a covered wagon with a grey horse; you cannot miss it.",
+      "Take the southwest road out of the village, the old trail towards Saltmere. Odric drives a covered wagon with a grey horse; you cannot miss it.",
       "Find him, {name}. Then come back and tell me what you found - do not go on to Saltmere yet. If he is hurt I will need to know first."
      ],
      "say": [
@@ -194,7 +194,7 @@
       "Don't go on to Saltmere on my account. Go back to Ashvale and tell Father Aldous - he'll send help, and he'll know what to do with this."
      ],
      "progress": [
-      "East out of the village, along the trail to Saltmere. Odric will be somewhere on the road.",
+      "Southwest out of the village, along the trail to Saltmere. Odric will be somewhere on the road.",
       "Come back and tell me what you find."
      ],
      "complete": [
@@ -211,11 +211,11 @@
      "ends": "wenna",
      "reward": "monk_robe",
      "talk": [
-      "Now go on to Saltmere, {name}. The chapel stands at the west end of the town, the first house past the trail, with a little steeple on it.",
+      "Now go on to Saltmere, {name}. The chapel stands at the northeast end of the town, the first house past the trail, with a little steeple on it.",
       "Mother Wenna has kept it swept all these years with nobody to pray in it. Tell her the roll is found and Odric is coming. She will take it from there."
      ],
      "progress": [
-      "The Saltmere chapel is at the west end of the town, where the trail comes in. Mother Wenna will be inside."
+      "The Saltmere chapel is at the northeast end of the town, where the trail comes in. Mother Wenna will be inside."
      ],
      "complete": [
       "Aldous sent you? And the roll is found - and Odric alive on the road? Then the chapel opens again. I have waited eleven years to say that.",
@@ -243,7 +243,7 @@
      "talk": [
       "The chapel is open, {name}. That is not the end of the work.",
       "The Bright Three keep this valley: Althas of the Hearth, Caelen of the Road, Mira of the Well. You walked their blessing-roll. They have an enemy.",
-      "North of the village, up the Whisperwood path a little way, then east of the bandits: a closed gate, and a man who looks like one of them. He is not. Go talk to him. I will not say his name on this floor."
+      "Northwest of the village, up the Whisperwood path a little way, then west of the bandits: a closed gate, and a man who looks like one of them. He is not. Go talk to him. I will not say his name on this floor."
      ],
      "say": [
       "Keep your voice down. If they hear a prayer out of you I am a dead man.",
@@ -251,7 +251,7 @@
       "Inside that fence is the Red Pyre. They are Vorthans - not priests of the Three. Vorth was the fourth they buried still breathing. Orange hoods, a red church. I open the gate. You listen. You do not strike. If you blow this, they will know I let you in."
      ],
      "progress": [
-      "North up the Whisperwood path, then east of the bandits. A closed gate and a man who looks like a lookout. Talk to him, then come back."
+      "Northwest up the Whisperwood path, then west of the bandits. A closed gate and a man who looks like a lookout. Talk to him, then come back."
      ],
      "complete": [
       "Pike. Yes. Caelen still has a man in that camp. You did not name him in the wood, I hope.",
@@ -279,7 +279,7 @@
      "complete": [
       "Vorth the Unburied. I had hoped it was rumour. The Three are hearth, road and well - and they had a brother they would not name.",
       "Pike cannot hold that gate forever. There is a keeper among them who carries burnt beads, a rosary. You must take it from him. Until I said this, you were not to raise a hand in there. Now you must.",
-      "The beads will put you at a cave in the west woods. Whatever they have been hiding, it is there. Bring me what you find."
+      "The beads will put you at a cave in the northeast woods. Whatever they have been hiding, it is there. Bring me what you find."
      ]
     },
     {
@@ -292,7 +292,7 @@
      },
      "reward": "xp:prayer:693",
      "talk": [
-      "Kill the Vorthan who keeps the rosary. Use the beads. They will carry you to the Spider Cave, west of Whisperwood.",
+      "Kill the Vorthan who keeps the rosary. Use the beads. They will carry you to the Spider Cave, northeast of Whisperwood.",
       "Halfway down the first tunnel you will find what they left. Search it. Bring me the writing. The robe is yours if it still holds together."
      ],
      "progress": [
@@ -329,8 +329,8 @@
       "The birch on the left is arguing with the birch on the right. I was listening. Oh. A person.",
       "I am Vael. Balance, wearing a body, for as long as the rope holds. The green does most of the talking.",
       "A hawk is deciding whether the field is one thing or two. I have been on that question since morning.",
-      "You stink of a tipped scale. Chapel stones do that. Sixty-two paces north of here and one pace east, and the carving was honest, so here you are.",
-      "Plant three shoots in the grass around me. Not within ten tiles of this rope, not on the path that runs south from the chapel, and not inside a town. Only grass will take them."
+      "You stink of a tipped scale. Chapel stones do that. The carving sent you forty-nine paces north and thirty-seven paces west from that altar, so here you are.",
+      "Plant three shoots in the grass around me. Not within ten tiles of this rope, not on the path the altar carves from the chapel, and not inside a town. Only grass will take them."
      ],
      "complete": [
       "Take the shoots. The open ground will know what to do with them."
@@ -493,7 +493,7 @@
      ],
      "complete": [
       "You wore the prayers like a person who means to live. I am pleased. The wind is also pleased, which is rarer.",
-      "Take the Verdant wreath. Each Prayer point you still hold adds a second before the next one leaves you.",
+      "Take the Verdant wreath. The leaves carry a monk's blessing: Magic +1, Prayer +3, and a second longer on every prayer point.",
       "The Ancient Chapel will have you now. Kneel at that altar and it fills you past a normal prayer: six parts in five."
      ]
     }

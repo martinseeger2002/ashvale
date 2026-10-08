@@ -3,7 +3,7 @@
    and a squad of identical guards (SQUAD below). Every look must also exist as a char part. */
 const fs = require('fs'), path = require('path');
 const DD = path.join(__dirname, '..', 'data');
-const SHARED = new Set(['chest']), SQUAD = new Set(['ash_knight']);
+const SHARED = new Set(['chest']), SQUAD = new Set(['ash_knight', 'town_guard']);
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
 const used = new Map();

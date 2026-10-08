@@ -25,6 +25,8 @@ if os.path.exists(os.path.join(SRC, 'weather.js')):   # weather visuals (local a
     JS_MODULES.insert(JS_MODULES.index('engine'), 'weather')      # load order does not matter (factories), kept stable
 if os.path.exists(os.path.join(SRC, 'seasons.js')):   # the year and its seasons (2026-10-07): its own module/inscription
     JS_MODULES.insert(JS_MODULES.index('engine'), 'seasons')
+if os.path.exists(os.path.join(SRC, 'geo.js')):       # the global grid: face cells, seams, lat/lon (handoff/globe_open_plan.md phase 1)
+    JS_MODULES.insert(JS_MODULES.index('engine'), 'geo')
 if os.path.exists(os.path.join(SRC, 'fog.js')):       # fog measured from the camera-player segment (2026-10-02): its own module
     JS_MODULES.insert(JS_MODULES.index('engine'), 'fog')
 DATA_MODULES = ['items', 'monsters', 'shops', 'quests', 'rules', 'globecfg', 'assets', 'housekit']   # housekit: converted Quaternius house pieces (tools/housekit/q2code.mjs --game)

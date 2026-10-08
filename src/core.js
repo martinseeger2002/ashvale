@@ -123,7 +123,7 @@
     for (const P of PORTALS) if (!M.npcs.some(n => n.id === 'portal_' + P.id))
       M.npcs.push({ id: 'portal_' + P.id, name: 'Town portal', look: 'portal', x: P.x, y: P.y, portal: P.id, examine: 'A ring of standing stones, humming softly. Step through to travel to another town.' });
     const R = Rng(opts.seed == null ? 'ashvale3d' : opts.seed);
-    const S = { t: 0, uid: 1, players: {}, order: [], mobs: [], ground: [], dep: {}, fell: {}, cleared: {}, plants: {}, pending: [], ev: [], noAuth: {}, seen: {}, fires: [], weather: {}, salt: 0, dyn: 0 };
+    const S = { t: 0, uid: 1, players: {}, order: [], mobs: [], ground: [], dep: {}, fell: {}, cleared: {}, plants: {}, lit: {}, night: false, pending: [], ev: [], noAuth: {}, seen: {}, fires: [], weather: {}, salt: 0, dyn: 0 };
     const queue = [], log = [];
     const idx = M.key, kx = M.kx, ky = M.ky, inMap = M.inWorld;
     const cheb = (ax, ay, bx, by) => Math.max(Math.abs(ax - bx), Math.abs(ay - by));
@@ -487,7 +487,7 @@
     function stepClear(x, y, dx, dy) {   /* walls and corner-cutting only (the target tile itself may be occupied) */
       const nx = x + dx, ny = y + dy; if (!inMap(nx, ny)) return false;
       if (!dx || !dy) return edgeOpen(x, y, dx, dy);
-      if (M.blocked(x + dx, y) || M.blocked(x, y + dy)) return false;
+      if ((M.blocked(x + dx, y) && !gateOpen(x + dx, y)) || (M.blocked(x, y + dy) && !gateOpen(x, y + dy))) return false;
       return edgeOpen(x, y, dx, 0) && edgeOpen(x + dx, y, 0, dy) && edgeOpen(x, y, 0, dy) && edgeOpen(x, y + dy, dx, 0);
     }
     let LV_LIMIT = -1;
@@ -496,6 +496,7 @@
     /* THE CANOE (2026-10-07, Ziibiing): while you sit in one, only water is open - rivers, lakes, the shallows, under a
        bridge - and never across a corner of land */
     let BOAT = false;
+    let GATE_P = null;   /* while a player paths: an open gate (need flag met) is walkable even though its tile is F */
     const isWet = (x, y) => { const t = M.tileAt(x, y); return (t === '~' || t === 'v' || t === 'B') && !(M.iceAt && M.iceAt(x, y)); };   /* a frozen lake is no water for a canoe */
     /* the hawk (2026-10-04): its own stats. hp 4; a strike every `strike` ticks with a hitPct % chance of hitDmg; a
        strike costs `energy` run energy (Dexterity) and leaves it open to a hit for those ticks; a third of the carrying
@@ -504,6 +505,11 @@
     const slotLimit = (p) => isHawk(p) ? Math.min(HK.slots, p.inv.length) : p.inv.length;
     const airborne = (p) => isHawk(p) && !(p.burden > 0) && !(p.striking > S.t);   /* in the air: no land animal can touch it */
     const isHawk = (p) => !!(p && p.eq && p.eq.ring && IT[p.eq.ring.id] && IT[p.eq.ring.id].form === 'hawk');
+    function gateOpen(x, y) {
+      if (!GATE_P) return false;
+      const o = passageAt(x, y); if (!o || o.k !== 'gate') return false;
+      return !o.need || hasFlag(GATE_P, o.need);
+    }
     function canStep(x, y, dx, dy) {
       const nx = x + dx, ny = y + dy;
       if (FLY) return inMap(nx, ny);   /* a hawk flies over trees, walls and water */
@@ -511,12 +517,12 @@
       if (M.lifts && LV_LIMIT < 0) {   /* raised ground (a castle's stairs and wall walk): heights decide, not the wall tiles */
         const la = M.liftAt(x, y), lb = M.liftAt(nx, ny);
         if (la || lb) {
-          const ok1 = (ax, ay) => { const l = M.liftAt(ax, ay); return Math.abs(l - la) <= LIFT_STEP && (l > 0 || (inMap(ax, ay) && !M.blocked(ax, ay))); };
+          const ok1 = (ax, ay) => { const l = M.liftAt(ax, ay); return Math.abs(l - la) <= LIFT_STEP && (l > 0 || (inMap(ax, ay) && !M.blocked(ax, ay)) || gateOpen(ax, ay)); };
           if (!inMap(nx, ny) || !ok1(nx, ny)) return false;
           return !dx || !dy || (ok1(x + dx, y) && ok1(x, y + dy));
         }
       }
-      if (!inMap(nx, ny) || M.blocked(nx, ny)) return false;
+      if (!inMap(nx, ny) || (M.blocked(nx, ny) && !gateOpen(nx, ny))) return false;
       if (LV_LIMIT >= 0 && M.buildingAt(nx, ny) !== LV_LIMIT) return false;
       return stepClear(x, y, dx, dy);
     }
@@ -581,17 +587,18 @@
     };
     function dropGround(id, n, x, y, owner, life, extra) {
       if (!isAuth(zoneOf(x, y))) { ev(Object.assign({ e: 'xdrop', id, n, x, y, life: life || 300, owner: owner || null }, extra || {})); return null; }
-      const g = S.ground.find(q => q.x === x && q.y === y && q.id === id && IT[id].stack);
-      const keep = !perishable(id, g ? g.n + n : n);   /* gear, tools and Gold (rules.persist) and every magical item lie where they fell until someone takes them; the rest despawns (2026-10-04) */
+      const sunk = extra && extra.sunk || 0;
+      const g = S.ground.find(q => q.x === x && q.y === y && q.id === id && IT[id].stack && (q.sunk || 0) === sunk);
+      const keep = sunk || !perishable(id, g ? g.n + n : n);   /* what lies at the bottom of a lake stays there until it is fished up */   /* gear, tools and Gold (rules.persist) and every magical item lie where they fell until someone takes them; the rest despawns (2026-10-04) */
       if (g) { g.n += n; g.until = keep ? 1e15 : S.t + (life || 300); ev({ e: 'ground', g: g.uid, n: g.n, x, y }); return g; }
       const ng = { uid: nuid(), id, n, x, y, owner: owner || null, until: keep ? 1e15 : S.t + (life || 300) };
       if (extra) Object.assign(ng, extra);
-      S.ground.push(ng); ev({ e: 'drop', g: ng.uid, id, n, x, y, from: ng.from || null, owner: owner || null }); return ng;   /* owner: who let it fall (the chest's exact-NFT drops) */
+      S.ground.push(ng); ev({ e: 'drop', g: ng.uid, id, n, x, y, from: ng.from || null, owner: owner || null, sunk: ng.sunk || 0 }); return ng;   /* owner: who let it fall (the chest's exact-NFT drops) */
     }
 
     // ---------------- commands
     function cmd(pid, c) { if (!c || typeof c.c !== 'string') return; queue.push([pid, c]); log.push([S.t, pid, c]); }
-    function apply(p, c) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); BOAT = !!p.boat && !FLY; try { apply0(p, c); } finally { LV_LIMIT = -1; FLY = false; BOAT = false; } }
+    function apply(p, c) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); BOAT = !!p.boat && !FLY; GATE_P = p; try { apply0(p, c); } finally { LV_LIMIT = -1; FLY = false; BOAT = false; GATE_P = null; } }
     function apply0(p, c) {
       if (p.dead && c.c !== 'style' && c.c !== 'run' && c.c !== 'retal' && c.c !== 'look') return;
       if (isHawk(p) && ['npc', 'light', 'climb', 'buy', 'sell', 'trade', 'eat', 'use'].indexOf(c.c) >= 0 && !(c.c === 'use' && p.inv[c.slot | 0] && IT[p.inv[c.slot | 0].id].teleport)) { msg(p, 'A hawk can only fly, strike, fish and carry. Take off the ring over open ground to land.', 'warn'); return; }
@@ -636,7 +643,11 @@
           else { p.act = { k: 'climb', bi, dir: c.dir > 0 ? 1 : -1 }; p.path = findPath(p.x, p.y, (x, y) => cheb(x, y, B.stairs[0], B.stairs[1]) <= 1, B.stairs[0], B.stairs[1]); }
           break;
         }
-        case 'attack': { if (p.lv > 0) { msg(p, "You can't reach that from up here.", 'warn'); break; } const m = mobByUid(c.uid); if (m && !m.dead) { if (coverBlocks(p, m)) { msg(p, 'You dare not strike. One blow here would unmask you both.', 'warn'); break; } p.act = { k: 'attack', uid: m.uid }; p.skilling = null; p._stall = 0; closeShop(p); } break; }
+        case 'attack': {
+          if (p.lv > 0) { msg(p, "You can't reach that from up here.", 'warn'); break; }
+          if (c.id) { const n = M.npcs.find(q => q.id === c.id); if (n && n.watch && !n.down) { p.act = { k: 'attackn', id: n.id }; p.skilling = null; p._stall = 0; closeShop(p); } break; }
+          const m = mobByUid(c.uid); if (m && !m.dead) { if (coverBlocks(p, m)) { msg(p, 'You dare not strike. One blow here would unmask you both.', 'warn'); break; } p.act = { k: 'attack', uid: m.uid }; p.skilling = null; p._stall = 0; closeShop(p); } break;
+        }
         case 'escape': {
           const n = M.npcs.find(q => q.id === c.id);
           if (!n || !n.escape || p.dead) break;
@@ -725,13 +736,24 @@
     function useItem(p, slot) {
       const s = p.inv[slot]; if (!s) return; const d = IT[s.id];
       if (d.buryXp) { bury(p, slot); return; }
-      if (d.eq) { equip(p, slot); return; }   /* a click wears gear; a ring's teleport fires only when its effect triggers */
+      /* rings wear on click (their teleport is a trigger, e.g. the Ring of Angels). Charms and stones with a Teleport
+         trait Use to travel; Wear still equips a charm that also has an eq slot (Vorth's rosary in the shield hand). */
+      if (d.eq && (d.eq === 'ring' || d.teleport == null)) { equip(p, slot); return; }
       if (d.teleport) {   /* a town stone: home, as often as you like, once its cooldown has passed (30 minutes) */
+        if (d.teleFrom) {   /* "questId:step" — beads stay cold until that quest step (or the quest is finished) */
+          const parts = String(d.teleFrom).split(':'), qid = parts[0], need = Math.max(1, parts[1] | 0);
+          const q = p.quests && p.quests[qid];
+          if (!(questFinished(p, qid) || (q && q.step >= need))) {
+            msg(p, 'The beads are cold. They will not carry you until Mother Wenna has sent you for them.', 'warn');
+            return;
+          }
+        }
         const P = portalOf(d.teleport); if (!P) { msg(p, 'Nothing happens.'); return; }
         p.cd = p.cd || {}; const left = (p.cd[s.id] || 0) - S.t;
         if (left > 0) { msg(p, 'The stone is still cold. It wakes again in ' + Math.ceil(left * 0.6 / 60) + ' minute' + (Math.ceil(left * 0.6 / 60) === 1 ? '' : 's') + '.', 'warn'); return; }
         p.cd[s.id] = S.t + (d.cooldown || 0); teleport(p, P, 'The stone warms in your hand, and ' + P.name + ' rises around you.'); return;
       }
+      if (d.eq) { equip(p, slot); return; }
       if (d.edible) { eat(p, slot); return; }
       if (d.burnTicks) { p.act = { k: 'light', slot, id: s.id }; p.gT = 0; p.path = []; p.skilling = null; return; }   /* tap logs = light them (needs a tinderbox) */
       if (p.using && p.using.slot === slot && p.using.id === s.id) {
@@ -804,7 +826,11 @@
       p.atk = Math.max(p.atk, 0) + 3;
       msg(p, (d.drink ? 'You drink the ' : 'You eat the ') + d.name.toLowerCase() + '.' + (p.hp > before ? ' It heals some health.' : ''));
       ev({ e: 'eat', p: p.id, id: s.id, heal: p.hp - before });
-      if (p.poison) curePoison(p, d.cures === 'poison' ? 'The antidote burns going down. The poison is gone.' : 'That settles your stomach. The poison fades.');
+      if (d.cures === 'poison') {
+        p.cd = p.cd || {}; p.cd.antidote = S.t + ANTIDOTE_TICKS;   /* three minutes, saved with the other cooldowns */
+        if (p.poison) curePoison(p, 'The antidote burns going down. The poison is gone, and it will not take for three minutes.');
+        else msg(p, 'The antidote will keep poison off you for three minutes.', 'info');
+      } else if (p.poison) curePoison(p, 'That settles your stomach. The poison fades.');
     }
     function shopOf(id) { return D.shops.shops[id]; }
     function nearKeeper(p, sh) { const n = M.npcs.find(q => q.id === sh.keeper); return n && cheb(p.x, p.y, n.x, n.y) <= 2; }
@@ -997,8 +1023,9 @@
        they are poisoned other than just their health going down"): v.dmg every POISON_EVERY ticks for v.ticks ticks. A new
        bite while poisoned keeps the stronger dose and the later end. Food or an antidote cures it; death clears it. The
        engine shows it (event 'poison': the green Hitpoints orb and badge, green splats from cls 'poison' hits). */
-    const POISON_EVERY = 3;
+    const POISON_EVERY = 3, ANTIDOTE_TICKS = 300;   /* 300 ticks is three minutes (a tick is 0.6 s) */
     function poisonPlayer(p, v, by) {
+      if (p.cd && p.cd.antidote > S.t) { msg(p, 'The antidote is still in you. The poison does not take.', 'info'); return; }
       const was = !!p.poison, until = S.t + (v.ticks | 0), dmg = Math.max(1, v.dmg | 0);
       if (was) { p.poison.until = Math.max(p.poison.until, until); p.poison.dmg = Math.max(p.poison.dmg, dmg); return; }
       p.poison = { until, dmg, next: S.t + POISON_EVERY };
@@ -1019,7 +1046,33 @@
       if (angelSave(p)) { /* the ring carried them home - still poisoned */ }
       else if (p.hp <= 0) killPlayer(p);
     }
-    function killPlayer(p) {
+    /* LAKES (2026-10-07): a lake is one body of still water; its key is its lowest tile index, found once by a flood fill
+       and kept for every tile of it. Things that sink in it lie on its bottom (ground items with .sunk = the key), unseen,
+       until somebody fishing anywhere on that lake hooks one. */
+    const LAKE = new Map();
+    function lakeKey(x, y) {
+      const k0 = idx(x, y); if (LAKE.has(k0)) return LAKE.get(k0);
+      const wet = (a, b) => { const t = M.tileAt(a, b); return t === '~' || t === 'v'; };
+      if (!wet(x, y) || (M.waterKind && M.waterKind(x, y) !== 'lake')) { LAKE.set(k0, 0); return 0; }
+      const seen = [], q = [[x, y]], vis = new Set([k0]); let lo = k0;
+      while (q.length && seen.length < 8000) {
+        const [a, b] = q.pop(); seen.push(idx(a, b)); lo = Math.min(lo, idx(a, b));
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = a + dx, ny = b + dy, ki = idx(nx, ny); if (!vis.has(ki) && wet(nx, ny)) { vis.add(ki); q.push([nx, ny]); } }
+      }
+      const key = 'L' + lo; for (const ki of seen) LAKE.set(ki, key); return key;
+    }
+    /* THROUGH THE ICE (2026-10-07: "If you're walking on the ice during spring thaw and it melts and you fall through the lake,
+       you should respawn at the nearest town portal as if you died. All of your items should be lost in the bottom of the lake"):
+       a death, but what you carried and wore sinks into that lake instead of lying in a pile */
+    function fallThrough(pid) {
+      const p = S.players[pid]; if (!p || p.dead || p.boat) return false;
+      const key = lakeKey(p.x, p.y) || 'L' + idx(p.x, p.y);
+      msg(p, 'The ice cracks under your feet and gives way! You plunge into the freezing water.', 'warn');
+      killPlayer(p, key);
+      return true;
+    }
+    function sunkIn(key) { let n = 0; for (const g of S.ground) if (g.sunk === key) n++; return n; }
+    function killPlayer(p, sunkKey) {
       if (p.poison) { delete p.poison; ev({ e: 'poison', p: p.id, on: false }); }
       p.dead = S.t; p.act = null; p.path = []; p.skilling = null; closeShop(p); prayersOff(p); p.pfx = null;
       ev({ e: 'die', p: p.id });
@@ -1028,8 +1081,9 @@
       const pile = [];
       for (let i = 0; i < p.inv.length; i++) { const s = p.inv[i]; if (s) { pile.push(s); p.inv[i] = null; } }
       for (const k of EQ_SLOTS) { const e = p.eq[k]; if (e) { pile.push(e); delete p.eq[k]; } }
-      for (const it of pile) dropGround(it.id, it.n, p.x, p.y, null, DEATH.pileTicks || 1000, { from: p.id, diedAt: S.t });
-      if (pile.length) {
+      for (const it of pile) dropGround(it.id, it.n, p.x, p.y, null, DEATH.pileTicks || 1000, sunkKey ? { from: p.id, diedAt: S.t, sunk: sunkKey } : { from: p.id, diedAt: S.t });
+      if (pile.length && sunkKey) { msg(p, 'Everything you carried sinks to the bottom of the lake. Someone fishing here might hook it one day.', 'warn'); ev({ e: 'inv', p: p.id }); ev({ e: 'equip', p: p.id }); }
+      else if (pile.length) {
         const z = M.zoneAt(p.x, p.y);
         msg(p, 'Your belongings lie where you fell (' + (z || 'the wild') + ', ' + p.x + ',' + p.y + ') for ' + Math.round((DEATH.pileTicks || 1000) * 0.6 / 60) + ' minutes. Others will be able to take them once shared loot arrives.', 'warn');
         p.deathPile = { x: p.x, y: p.y, t: S.t };
@@ -1078,6 +1132,9 @@
       return !(q && q.step >= (C.step || 1));
     }
     function talk(p, n) {
+      /* a step's kit is never lost for good (the Arcade session 2026-10-07: The Even Grove soft-locked when its three saplings were
+         sold): talking to the quest's giver while the step is open hands back what is missing of it, as logging in already did */
+      for (const qid in p.quests || {}) { const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.giver === n.id && Q.steps[q.step - 1]; if (st && st.kit && !questFinished(p, qid)) topUp(p, q, st); }
       if (n.hideFlag && !hasFlag(p, n.hideFlag)) return;
       if (n.search) {
         if (!searchOpen(p, n)) {
@@ -1262,7 +1319,7 @@
     function ensureStep(p, q, st) { openStep(p, q, st); }
     const VAEL_CLEAR = 10;
     function vaelTile() { const n = M.npcs.find(q => q.id === 'vael'); return n ? [n.x, n.y] : null; }
-    /* the walk the chapel carves: one tile west of the altar, then south into the open field, three tiles wide */
+    /* the walk the chapel carves: one tile west of the altar, then toward the grove (map-north / true northwest), three tiles wide */
     function onChapelPath(x, y) { return x >= 196 && x <= 198 && y <= 14 && y >= -40; }
     function townAt(x, y) {
       for (const z of ZINDEX) {
@@ -1385,7 +1442,7 @@
           }
           const lines = [
             'A mighty headache. It sits behind the eyes and will not blink.',
-            'When it eases, a path is carved there. Sixty-two paces south. One pace west. The tile reads 197, -51.',
+            'When it eases, a path is carved there. Forty-nine paces north. Thirty-seven paces west. The tile reads 197, -51.',
             'The altar will not have you. You are out of balance.'
           ];
           if (questFinished(p, 'even_grove')) lines.push('The carving is still there. When the Red Pyre is known, the one on the rope will teach the harder balance.');
@@ -1428,6 +1485,22 @@
       p.gT = S.t + nd.speed;
       const pct = Math.max(8, Math.min(92, 30 + 2 * (L - req)));
       if (R.int(100) >= pct) { ev({ e: 'gather', p: p.id, node: i, ok: false }); return; }
+      /* a lake gives back what sank in it (2026-10-07): the more lies on its bottom, the likelier a cast brings one up
+         instead of a fish - 3 % for one thing, 2 % more for each other, at most 40 % */
+      if (skill === 'fishing') {
+        const lk = lakeKey(n.x, n.y) || [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => lakeKey(n.x + dx, n.y + dy)).find(Boolean), cnt = lk ? sunkIn(lk) : 0;
+        if (cnt && R.int(100) < Math.min(40, 1 + 2 * cnt)) {
+          const pool = S.ground.filter(q => q.sunk === lk && (isAuth(zoneOf(q.x, q.y)) || q.bank != null)), g = pool.length ? pool[R.int(pool.length)] : null;
+          if (g && canAdd(p, g.id, g.n)) {
+            const left = addItem(p, g.id, g.n); addXp(p, skill, n.xp || nd.xp);
+            ev({ e: 'take', p: p.id, g: g.uid, id: g.id, n: g.n - left, x: g.x, y: g.y, own: g.from === p.id ? 1 : 0, fished: 1 });
+            if (left) g.n = left; else { S.ground.splice(S.ground.indexOf(g), 1); if (g.bank != null) BANK_GONE.add(g.bank); ev({ e: 'vanish', g: g.uid, x: g.x, y: g.y }); }
+            msg(p, 'Something heavy on the line... you haul up ' + (g.n - left > 1 ? (g.n - left) + ' x ' : '') + IT[g.id].name + ' from the bottom of the lake!', 'quest');
+            ev({ e: 'gather', p: p.id, node: i, ok: true, item: g.id });
+            return;
+          }
+        }
+      }
       addItem(p, n.item, 1); addXp(p, skill, n.xp || nd.xp);
       msg(p, skill === 'woodcutting' ? 'You get some ' + IT[n.item].name.toLowerCase() + '.' : skill === 'mining' ? 'You manage to mine some ' + IT[n.item].name.split(' ')[0].toLowerCase() + '.' : 'You catch some ' + IT[n.item].name.toLowerCase().replace('raw ', '') + '.');
       ev({ e: 'gather', p: p.id, node: i, ok: true, item: n.item });
@@ -1513,6 +1586,13 @@
       if (S.t % 3) return;
       let got = null;
       for (const o of M.objects) if (o.k === 'rice' && cheb(o.x, o.y, p.x, p.y) <= 2 && !(RICED[o.x + ',' + o.y] > S.t)) { got = o; break; }
+      /* ricing only in its season (2026-10-07: "only harvestable in late August to early October"): out of it the sticks
+         knock nothing loose */
+      if (got && SEASONW && SEASONW.rice === false) {
+        p.knocking = false;
+        if (!(p.riceSaid > S.t)) { p.riceSaid = S.t + 200; msg(p, SEASONW.riceLate ? 'The manoomin has already dropped its grain. Ricing time is late August to early October.' : 'The manoomin is not ripe yet. Ricing time is late August to early October.', 'info'); }
+        return;
+      }
       p.knocking = !!got;
       if (!got) return;
       RICED[got.x + ',' + got.y] = S.t + RICE_CD;
@@ -1604,6 +1684,146 @@
       p.lv = nl; p.bld = nl > 0 ? bi : -1; p.x = at[0]; p.y = at[1];
       msg(p, dir > 0 ? 'You climb up the stairs.' : 'You climb down the stairs.'); ev({ e: 'climb', p: p.id, lv: nl });
     }
+    /* town guards (2026-10-07): combat 33, they do not start a fight. Hit one and every guard of that
+       watch draws steel. At dusk they walk the town lamps and torches alight; at dawn they put the lamps out.
+       One guard walks the cobbles from Ashvale to Saltmere and tends the lamps along that road. */
+    const GSTAT = { hp: 40, att: 16, def: 16, attb: 12, defb: 12, max: 7, cb: 33 };
+    function isTended(o) {
+      if (!o) return false;
+      if (o.k === 'lamp') return true;
+      return (o.zone === 'village' || o.zone === 'saltmere') && (o.k === 'torch' || o.k === 'sconce');
+    }
+    function roadLamps() {
+      if (!M.roadTorchesIn) return [];
+      return M.roadTorchesIn(48, 10, 380, 70).filter(o => o.k === 'lamp').sort((a, b) => a.x - b.x || a.y - b.y);
+    }
+    let TEND = null;
+    function tendKeys() {
+      if (TEND) return TEND;
+      TEND = new Set();
+      for (const o of M.objects || []) if (isTended(o)) TEND.add(o.x + ',' + o.y);
+      for (const o of roadLamps()) TEND.add(o.x + ',' + o.y);
+      return TEND;
+    }
+    function lampLit(x, y) { const k = Math.floor(x) + ',' + Math.floor(y); return tendKeys().has(k) ? !!S.lit[k] : true; }
+    function townLights(zone) {
+      return (M.objects || []).filter(o => o.zone === zone && isTended(o)).map(o => ({ x: o.x, y: o.y })).sort((a, b) => a.x - b.x || a.y - b.y);
+    }
+    function stepNpc(n, tx, ty, reach) {
+      if (cheb(n.x, n.y, tx, ty) <= reach) return true;
+      if (!n.path || !n.path.length || S.t % 4 === 0) n.path = findPath(n.x, n.y, (x, y) => cheb(x, y, tx, ty) <= reach, tx, ty, 80);
+      const nx = n.path && n.path.shift(); if (nx == null) return false;
+      const x = kx(nx), y = ky(nx);
+      if (M.npcs.some(o => o !== n && !o.down && o.x === x && o.y === y)) { n.path = null; return false; }
+      n.x = x; n.y = y; return cheb(n.x, n.y, tx, ty) <= reach;
+    }
+    function rallyWatch(n, p) {
+      let first = true;
+      for (const g of M.npcs) if (g.watch === n.watch) { if (g.foe === p.id) first = false; g.foe = p.id; g.duty = null; }
+      if (first) msg(p, n.watch === 'road' ? 'The road guard draws his sword.' : 'The town guard draws steel. The whole watch comes for you.', 'warn');
+    }
+    function playerAttackGuard(p, n) {
+      if (n.hp == null) n.hp = GSTAT.hp;
+      const c = wclass(p), st = style(p), b = bonuses(p), w = weaponOf(p);
+      let A, max = maxHit(p), ammoId = null;
+      if (c === 'ranged') {
+        const ammo = p.eq.ammo; if (!ammo) { msg(p, 'There is no ammo left in your quiver.', 'warn'); p.act = null; return false; }
+        const ad = IT[ammo.id]; if (lv(p, 'ranged') < (ad.req ? ad.req.ranged || 1 : 1)) { msg(p, 'You need Ranged level ' + ad.req.ranged + ' to fire ' + ad.name.toLowerCase() + '.', 'warn'); p.act = null; return false; }
+        ammoId = ammo.id; ammo.n--; if (ammo.n <= 0) delete p.eq.ammo;
+        A = (eff(p, 'ranged') + (st.att || 0) + 8) * (b.ranged + 64);
+      } else if (c === 'magic') A = (eff(p, 'magic') + 8) * (b.magic + 64);
+      else A = (eff(p, 'attack') + (st.att || 0) + 8) * (b.attack + 64);
+      const Dr = (GSTAT.def + 9) * (GSTAT.defb + 64), hit = rollAttack(A, Dr), dmg = hit ? R.int(max + 1) : 0;
+      const dist = cheb(p.x, p.y, n.x, n.y), delay = c === 'ranged' ? 1 + Math.floor((3 + dist) / 6) : c === 'magic' ? 1 + Math.floor((1 + dist) / 3) : 0;
+      ev({ e: 'attack', src: p.id, dst: 'n:' + n.id, anim: w ? w.anim : 'punch', delay, cls: c, ammo: ammoId, spell: c === 'magic' ? spell(p)[2] : null, tier: w ? w.tier : 0 });
+      S.pending.push({ at: S.t + delay, src: p.id, guard: n.id, dmg, cls: c, xp: st.xp });
+      rallyWatch(n, p);
+      return true;
+    }
+    function landOnGuard(h) {
+      const n = M.npcs.find(q => q.id === h.guard), p = S.players[h.src]; if (!n || n.down) return;
+      if (n.hp == null) n.hp = GSTAT.hp;
+      const dmg = Math.min(h.dmg, n.hp); n.hp -= dmg;
+      ev({ e: 'hit', dst: 'n:' + n.id, src: h.src, dmg, max: GSTAT.hp, hp: n.hp, cls: h.cls });
+      if (p && !p.puppet) hitXp(p, h.cls, dmg, h.xp, false);
+      if (p) rallyWatch(n, p);
+      if (n.hp <= 0) {
+        n.down = S.t + 80; n.hp = 0; n.path = null; n.duty = null;
+        ev({ e: 'guard', id: n.id, up: false });
+        if (p) msg(p, 'The town guard falls. The rest of the watch does not.', 'warn');
+      }
+    }
+    function guardStrike(n, p) {
+      const b = bonuses(p), st = style(p);
+      const A = (GSTAT.att + 9) * (GSTAT.attb + 64), Dr = (eff(p, 'defence') + (st.def || 0) + 9) * (b.defence + 64);
+      if (airborne(p)) return;
+      const hit = rollAttack(A, Dr); let dmg = hit ? Math.min(R.int(GSTAT.max + 1), p.hp) : 0;
+      const prot = protects(p, 'melee'); if (prot) dmg = 0;
+      ev({ e: 'attack', src: 'n:' + n.id, dst: p.id, anim: 'slash', delay: 0, cls: 'melee' });
+      if (!p.puppet) p.hp -= dmg;
+      ev({ e: 'hit', dst: p.id, src: 'n:' + n.id, dmg, max: maxHp(p), hp: p.hp, cls: 'melee', blocked: !hit && !!p.eq.shield, prot: prot ? 1 : 0, raw: dmg });
+      if (p.retal && !p.act) p.act = { k: 'attackn', id: n.id };
+      if (!p.puppet && p.hp <= 0 && !angelSave(p)) killPlayer(p);
+    }
+    function setLit(x, y, on) {
+      const k = x + ',' + y; if (on) S.lit[k] = 1; else delete S.lit[k];
+      ev({ e: 'lamp', x, y, on: on ? 1 : 0 });
+    }
+    function watchPhase(night, boot) {
+      night = !!night; tendKeys();
+      if (boot) {
+        S.night = night;
+        if (night) for (const k of tendKeys()) S.lit[k] = 1;
+        return;
+      }
+      if (night === !!S.night) return;
+      S.night = night;
+      const groups = {};
+      for (const n of M.npcs) if (n.watch && !n.road) (groups[n.watch] = groups[n.watch] || []).push(n);
+      for (const zone in groups) {
+        const lights = townLights(zone), gs = groups[zone];
+        gs.forEach((n, i) => {
+          const mine = lights.filter((_, k) => k % gs.length === i);
+          if (n.hx == null) { n.hx = n.x; n.hy = n.y; }
+          n.duty = mine.length ? { on: night, i: 0, lamps: mine, home: false } : null;
+          n.path = null;
+        });
+      }
+    }
+    function watchTick() {
+      for (const n of M.npcs) {
+        if (!n.watch) continue;
+        if (n.hx == null) { n.hx = n.x; n.hy = n.y; }
+        if (n.down) {
+          if (S.t >= n.down) { n.down = 0; n.hp = GSTAT.hp; n.x = n.hx; n.y = n.hy; ev({ e: 'guard', id: n.id, up: true }); }
+          continue;
+        }
+        if (n.foe) {
+          const p = S.players[n.foe];
+          const gone = !p || p.dead || (n.watch !== 'road' && M.zoneAt && M.zoneAt(p.x, p.y) !== n.zone && cheb(p.x, p.y, n.x, n.y) > 18) || (n.watch === 'road' && cheb(p.x, p.y, n.x, n.y) > 18);
+          if (gone) { n.foe = null; n.path = null; continue; }
+          if (inReach(n.x, n.y, p.x, p.y, 1)) { if (S.t >= (n.atkT || 0)) { n.atkT = S.t + 4; guardStrike(n, p); } continue; }
+          stepNpc(n, p.x, p.y, 1); continue;
+        }
+        if (n.road) {
+          if (!n.route || !n.route.length) { n.route = roadLamps(); n.ri = 0; n.rd = 1; if (!n.route.length) continue; }
+          const L = n.route[n.ri]; if (!L) { n.ri = 0; continue; }
+          if (stepNpc(n, L.x, L.y, 1)) { setLit(L.x, L.y, !!S.night); let k = n.ri + n.rd; if (k < 0 || k >= n.route.length) { n.rd = -n.rd; k = n.ri + n.rd; } n.ri = k; n.path = null; }
+          continue;
+        }
+        if (n.duty) {
+          const L = n.duty.lamps[n.duty.i];
+          if (!L) {
+            if (n.x === n.hx && n.y === n.hy) n.duty = null;
+            else stepNpc(n, n.hx, n.hy, 0);
+            continue;
+          }
+          if (stepNpc(n, L.x, L.y, 1)) { setLit(L.x, L.y, !!n.duty.on); n.duty.i++; n.path = null; }
+          continue;
+        }
+        if (n.x !== n.hx || n.y !== n.hy) stepNpc(n, n.hx, n.hy, 0);
+      }
+    }
     /* NPCs with a round (o.patrol: tiles in order, e.g. a watchman on the wall walk): one tile every 3 ticks, there and back */
     function patrolTick() {
       if (S.t % 3) return;
@@ -1665,7 +1885,7 @@
         if (nx != null) { const x = kx(nx), y = ky(nx); if (!M.npcs.some(o => o !== n && o.escort && o.x === x && o.y === y)) { n.x = x; n.y = y; } }
       }
     }
-    function playerTick(p) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); BOAT = !!p.boat && !FLY; try { playerTick0(p); } finally { LV_LIMIT = -1; FLY = false; BOAT = false; } }
+    function playerTick(p) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); BOAT = !!p.boat && !FLY; GATE_P = p; try { playerTick0(p); } finally { LV_LIMIT = -1; FLY = false; BOAT = false; GATE_P = null; } }
     function playerTick0(p) {
       if (!(p.hp >= 0)) p.hp = maxHp(p);
       if (p.boat === 2 && !p.dead && !p.puppet) rideTick(p);   /* hitpoints that are not a number (the antidote bug, 2026-10-07): back to full */
@@ -1686,6 +1906,15 @@
       const a = p.act;
       if (a && a.k === 'light') { lightTick(p, a); }
       else if (a && a.k === 'climb') { const B = M.buildings[a.bi]; if (B && B.deck) { if (deckEnds(B, p).some(q => cheb(p.x, p.y, q[0], q[1]) <= 1)) climbNow(p, a.bi, a.dir); else if (p.path.length) stepPath(p); else p.act = null; } else if (B && (cheb(p.x, p.y, B.stairs[0], B.stairs[1]) <= 1 || (B.alt && cheb(p.x, p.y, B.alt[0], B.alt[1]) <= 1))) climbNow(p, a.bi, a.dir); else if (p.path.length) stepPath(p); else p.act = null; }
+      else if (a && a.k === 'attackn') {
+        const n = M.npcs.find(q => q.id === a.id);
+        if (!n || n.down) { p.act = null; }
+        else if (!inReach(p.x, p.y, n.x, n.y, 1)) {
+          p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, n.x, n.y, 1), n.x, n.y, 60);
+          if (!p.path.length) { msg(p, "I can't reach that!", 'warn'); p.act = null; }
+          else stepPath(p);
+        } else { p.path = []; p.face = faceTo(p.x, p.y, n.x, n.y); if (p.atk <= 0) { if (playerAttackGuard(p, n)) p.atk = attackSpeed(p); } }
+      }
       else if (a && a.k === 'attack') {
         const m = mobByUid(a.uid);
         if (!m || m.dead) { p.act = null; }
@@ -2089,8 +2318,8 @@
       for (const pid of S.order) playerTick(S.players[pid]);
       if (M.seeded) for (const pid of S.order) wake(S.players[pid]);
       for (const m of S.mobs) mobTick(m);
-      patrolTick(); guardTick();
-      for (let i = 0; i < S.pending.length;) { const h = S.pending[i]; if (h.at <= S.t) { S.pending.splice(i, 1); landOnMob(h); } else i++; }
+      patrolTick(); guardTick(); watchTick();
+      for (let i = 0; i < S.pending.length;) { const h = S.pending[i]; if (h.at <= S.t) { S.pending.splice(i, 1); if (h.guard) landOnGuard(h); else landOnMob(h); } else i++; }
       for (let i = 0; i < S.ground.length;) { const g = S.ground[i]; if (g.until <= S.t && isAuth(zoneOf(g.x, g.y))) { S.ground.splice(i, 1); ev({ e: 'vanish', g: g.uid, x: g.x, y: g.y }); } else i++; }
       const occ = {};
       for (const pid of S.order) { const p = S.players[pid]; if (!p.dead) occ[zoneOf(p.x, p.y)] = 1; }
@@ -2136,12 +2365,12 @@
         else if (!r[4] && m.dead) { m.dead = 0; ev({ e: 'spawn', mob: m.uid }); }
       }
     }
-    function groundAdd(uid, id, n, x, y, from) {
+    function groundAdd(uid, id, n, x, y, from, sunk) {
       if (!IT[id] || isAuth(zoneOf(x, y))) return;
       const did = uid >= BANK_UID ? uid - BANK_UID : null;   /* a persisted drop (its uid says so), even from a host too old to say */
       if (did != null && BANK_GONE.has(did)) return;         /* the Bank already told us somebody took it: an old host's copy stays gone */
       const g = S.ground.find(q => q.uid === uid); if (g) { g.n = n; return; }
-      S.ground.push({ uid, id, n, x, y, owner: null, until: S.t + 1e9, from: from || null, bank: did }); ev({ e: 'drop', g: uid, id, n, x, y });
+      S.ground.push({ uid, id, n, x, y, owner: null, until: S.t + 1e9, from: from || null, bank: did, sunk: sunk || 0 }); ev({ e: 'drop', g: uid, id, n, x, y, sunk: sunk || 0 });
     }
     function groundRemove(uid) { if (uid >= BANK_UID) BANK_GONE.add(uid - BANK_UID); const i = S.ground.findIndex(q => q.uid === uid); if (i >= 0 && !isAuth(zoneOf(S.ground[i].x, S.ground[i].y))) { S.ground.splice(i, 1); ev({ e: 'vanish', g: uid }); } }
     /* PERSISTED DROPS (2026-10-06): what the @ashvale Bank holds on the ground (Gold, stones, magical things, anything
@@ -2153,14 +2382,14 @@
     function bankGround(box, items) {
       const want = new Set();
       for (const r of items || []) {
-        const did = r[0] | 0, id = String(r[1]), n = Math.max(1, r[2] | 0), x = r[3] | 0, y = r[4] | 0;
+        const did = r[0] | 0, id = String(r[1]), n = Math.max(1, r[2] | 0), x = r[3] | 0, y = r[4] | 0, sunk = r[5] ? String(r[5]) : 0;
         if (!IT[id] || !inMap(x, y)) continue;   /* every game puts them down (the area's host may be an older game): same uid everywhere */
         want.add(did); const uid = BANK_UID + did;
         const g = S.ground.find(q => q.uid === uid || q.bank === did);
-        if (g) { g.n = n; g.until = 1e15; continue; }
+        if (g) { g.n = n; g.until = 1e15; if (sunk) g.sunk = sunk; continue; }
         const live = S.ground.find(q => q.bank == null && q.id === id && q.x === x && q.y === y);
-        if (live) { live.bank = did; live.until = 1e15; continue; }
-        S.ground.push({ uid, id, n, x, y, owner: null, until: 1e15, bank: did }); ev({ e: 'drop', g: uid, id, n, x, y, bank: 1 });
+        if (live) { live.bank = did; live.until = 1e15; if (sunk) live.sunk = sunk; continue; }
+        S.ground.push({ uid, id, n, x, y, owner: null, until: 1e15, bank: did, sunk }); ev({ e: 'drop', g: uid, id, n, x, y, bank: 1, sunk });
       }
       const [x0, y0, x1, y1] = box || [0, 0, -1, -1];
       for (let i = 0; i < S.ground.length;) {
@@ -2170,7 +2399,7 @@
       }
       return want.size;
     }
-    function groundFull(zone, list) { S.ground = S.ground.filter(g => zoneOf(g.x, g.y) !== zone || isAuth(zone) || g.bank != null);   /* the Bank's persisted drops stay: the Bank, not the host, says when they go */ for (const r of list) groundAdd(r[0], r[1], r[2], r[3], r[4], r[5]); }
+    function groundFull(zone, list) { S.ground = S.ground.filter(g => zoneOf(g.x, g.y) !== zone || isAuth(zone) || g.bank != null);   /* the Bank's persisted drops stay: the Bank, not the host, says when they go */ for (const r of list) groundAdd(r[0], r[1], r[2], r[3], r[4], r[5], r[6]); }
     /* owner side: what the host resolved about OUR player */
     function applyHit(pid, dmg, cls, fromMob, fx, fxt) { const p = S.players[pid]; if (!p || p.puppet || p.dead) return; if (fromMob && cls && protects(p, cls)) dmg = 0; else if (fromMob && fx) magicFx(p, fx, fxt || 5); p.hp -= Math.min(dmg, p.hp); if (angelSave(p)) return; if (p.retal && !p.act && !p.path.length) { } if (p.hp <= 0) killPlayer(p); }
     function storeItem(pid, id, n) { const p = S.players[pid]; if (!p || !IT[id]) return 0; const had = invCount(p, id); removeItem(p, id, Math.min(n, had)); ev({ e: 'inv', p: pid }); return Math.min(n, had); }   /* into the town chest: it stays in the wallet, only out of the bag */
@@ -2206,7 +2435,7 @@
       return true;
     }
     return {
-      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
+      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
@@ -2215,7 +2444,7 @@
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
-      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, EFFECTS: Object.keys(EFFECTS),
+      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
       applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, setFelled,
       hitXp: (pid, cls, dmg, dex) => { const p = S.players[pid]; if (p && !p.puppet) hitXp(p, cls, dmg, null, dex); },
       creditKill: (pid, key) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key); }

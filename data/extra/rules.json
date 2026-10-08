@@ -43,7 +43,8 @@
   },
   "slots": {
    "armour/robe": "body",
-   "cosmetic/robe": "body"
+   "cosmetic/robe": "body",
+   "jewellery/charm": "shield"
   },
   "traits": {
    "Prayer XP": [
@@ -52,7 +53,8 @@
    ],
    "Prayer": "prayer",
    "Prayer seconds": "prayerSec",
-   "Prayer hold": "ppHold"
+   "Prayer hold": "ppHold",
+   "Teleport from step": "teleFrom"
   },
   "limits": {
    "flat": {

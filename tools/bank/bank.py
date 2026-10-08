@@ -16,7 +16,7 @@ How it runs:
 Run:  python3 tools/bank/bank.py            (systemd user unit ashvale-bank)
       python3 tools/bank/bank.py --status   (queue summary)
 Never prints @ashvale's words, password or keys."""
-import sys, os, json, time, sqlite3, struct, zlib, threading, traceback, urllib.request
+import sys, os, re, json, time, sqlite3, struct, zlib, threading, traceback, urllib.request
 HERE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(HERE, 'tools'))
 os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', '/home/you/.cache/ms-playwright')
@@ -58,7 +58,7 @@ def db():
         except sqlite3.OperationalError: pass
     # persisted drops (2026-10-06): units (Gold and other tokens have no piece), live = shown to every player until
     # someone takes it, paid = the picker's piece has been handed out
-    for col, ty in (('units', 'integer default 1'), ('live', 'integer default 0'), ('paid', 'integer default 0')):
+    for col, ty in (('units', 'integer default 1'), ('live', 'integer default 0'), ('paid', 'integer default 0'), ('sunk', 'text')):   # sunk: the lake it lies at the bottom of (unseen; fished up)
         try: c.execute('alter table drops add column %s %s' % (col, ty))
         except sqlite3.OperationalError: pass
     return c
@@ -71,17 +71,18 @@ def handle_drop(c, addr, msg):
     [itemId, piece or '', units] and the game only sends what its rules keep (Gold, stones, magical, worth 100+ GOLD); those are
     LIVE: held for no time limit and shown to every player who asks what lies near them ('ground?')"""
     x, y = int(msg.get('x') or 0), int(msg.get('y') or 0); live = 1 if (msg.get('v') or 0) >= 3 else 0
+    sunk = str(msg.get('sunk'))[:16] if msg.get('sunk') and re.match(r'^L\d{1,14}$', str(msg.get('sunk'))) else None   # fell through the ice (2026-10-07)
     for it in (msg.get('items') or [])[:40]:
         try: k, pc = str(it[0]), str(it[1] or ''); u = max(1, min(1000000, int(it[2]) if len(it) > 2 else 1))
         except (TypeError, IndexError, ValueError): continue
         if k not in ITEMS: continue
         if pc:
             if len(pc) != 64 or c.execute('select 1 from drops where piece=? and taken_by is null', (pc,)).fetchone(): continue
-            c.execute('insert into drops(addr,item,piece,x,y,at,units,live) values(?,?,?,?,?,?,1,?)', (addr, k, pc, x, y, time.time(), live))
+            c.execute('insert into drops(addr,item,piece,x,y,at,units,live,sunk) values(?,?,?,?,?,?,1,?,?)', (addr, k, pc, x, y, time.time(), live, sunk))
         elif live:   # a token (Gold...): an amount on a spot; the same kind dropped on the same spot again adds to it
-            r = c.execute('select n from drops where item=? and piece is null and live=1 and taken_by is null and x=? and y=?', (k, x, y)).fetchone()
+            r = c.execute('select n from drops where item=? and piece is null and live=1 and taken_by is null and x=? and y=? and coalesce(sunk,\'\')=?', (k, x, y, sunk or '')).fetchone()
             if r: c.execute('update drops set units=units+?, at=? where n=?', (u, time.time(), r['n']))
-            else: c.execute('insert into drops(addr,item,piece,x,y,at,units,live) values(?,?,null,?,?,?,?,1)', (addr, k, x, y, time.time(), u))
+            else: c.execute('insert into drops(addr,item,piece,x,y,at,units,live,sunk) values(?,?,null,?,?,?,?,1,?)', (addr, k, x, y, time.time(), u, sunk))
     c.commit(); log('DROP', addr, json.dumps(msg.get('items'))[:200], x, y, 'live' if live else '')
 def handle_took(c, addr, msg):
     """{t:'took', id, n, x, y}: a player picked up a persisted drop. It leaves every other player's ground at once (the next
@@ -117,8 +118,8 @@ def handle_ground(c, addr, msg):
     try: x0, y0, x1, y1 = (int(msg[k]) for k in ('x0', 'y0', 'x1', 'y1'))
     except (KeyError, TypeError, ValueError): return None
     if x1 - x0 > 400 or y1 - y0 > 400: return None
-    rows = [[r['n'], r['item'], r['units'] or 1, r['x'], r['y']] for r in
-            c.execute('select n, item, units, x, y from drops where live=1 and taken_by is null and x between ? and ? and y between ? and ? order by n', (x0, x1, y0, y1))]
+    rows = [[r['n'], r['item'], r['units'] or 1, r['x'], r['y']] + ([r['sunk']] if r['sunk'] else []) for r in
+            c.execute('select n, item, units, x, y, sunk from drops where live=1 and taken_by is null and x between ? and ? and y between ? and ? order by n', (x0, x1, y0, y1))]
     box, q = [x0, y0, x1, y1], str(msg.get('q') or '')[:12]
     log('GROUND?', addr, box, len(rows), 'live drops')
     chunks = [rows[i:i + 10] for i in range(0, len(rows), 10)] or [[]]

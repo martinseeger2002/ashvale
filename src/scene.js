@@ -15,6 +15,7 @@
       W: 0x4a7a3a, M: 0x4c7030, Y: 0x36612a, U: 0xc9b47c, C: 0x74716e, G: 0x7e7a6a, A: 0x767a82, '^': 0x74716a, K: 0x6f8f4a };
     const ORE = { R: 0xc8702c, N: 0xd8d8d0, I: 0x8a4632, C: 0x33333c, G: 0xd9a930, A: 0x6f86c8 };
     const WATER_Y = -0.16;
+    let LAMPQ = null;   /* (x, y) -> whether a tended lamp or town torch is lit; the engine sets this from the guards */
     const SNOWC = new THREE.Color(0xf2f1ec);
 
     function hash2(x, y) { let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
@@ -112,39 +113,114 @@
     }
     /* THE SEASONS (2026-10-07; the maths: the `seasons` module). Shared uniforms the ground and still water read, and a
        register of every tree crown built, so a change of season recolours the woods in place - no rebuild. */
-    const SEASON_U = { uGround: { value: new THREE.Color(1, 1, 1) }, uSnow: { value: 0 }, uIce: { value: 0 } };
-    let SEASON_CUR = null, SEASON_LIB = null; const TREE_REG = [];
+    const SEASON_U = { uGround: { value: new THREE.Color(1, 1, 1) }, uSnow: { value: 0 }, uIce: { value: 0 }, uLitter: { value: 0 }, uTreeSnow: { value: 0 } };
+    let SEASON_CUR = null, SEASON_LIB = null; const TREE_REG = [], FLORA_REG = [], RICE_REG = [];
+    const BRANCH_TIPS = [];   /* where each branch ends: spring's first leaves grow out from here */
     const BRANCH_GEO = (() => { const parts = [[0.35, 0.0], [-0.3, 0.6], [0.05, -0.4], [0.3, 0.45], [-0.25, -0.35]].map(([dx, dz], i) => {
-      const L = 0.85 + 0.1 * i % 0.3, g = new THREE.CylinderGeometry(0.025, 0.045, L, 5); g.translate(0, L / 2, 0); g.rotateZ(-dx * 1.2); g.rotateX(dz * 1.2); g.translate(0, 0.92, 0); return { geo: g }; });
+      const L = 0.85 + 0.1 * i % 0.3, g = new THREE.CylinderGeometry(0.025, 0.045, L, 5); g.translate(0, L / 2, 0); g.rotateZ(-dx * 1.2); g.rotateX(dz * 1.2); g.translate(0, 0.92, 0);
+      const tip = new THREE.Vector3(0, L, 0).applyAxisAngle(new THREE.Vector3(0, 0, 1), -dx * 1.2).applyAxisAngle(new THREE.Vector3(1, 0, 0), dz * 1.2); tip.y += 0.92; BRANCH_TIPS.push(tip);
+      return { geo: g }; });
       return parts; })();
+    const BUD_GEO = new THREE.IcosahedronGeometry(0.26, 0);
     function seasonGround(mat) {   /* grass takes the season's tint; snow lies on all ground, a little thinner on paths and sand */
       const prev = mat.onBeforeCompile;
       mat.onBeforeCompile = (sh, r) => { if (prev) prev(sh, r);
-        sh.uniforms.uGround = SEASON_U.uGround; sh.uniforms.uSnow = SEASON_U.uSnow;
-        sh.fragmentShader = 'uniform vec3 uGround;\nuniform float uSnow;\n' + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n  { vec3 c0 = diffuseColor.rgb; float grassy = smoothstep(0.0, 0.05, c0.g - max(c0.r, c0.b)); vec3 c1 = mix(c0, clamp(c0 * uGround, 0.0, 1.0), grassy); diffuseColor.rgb = mix(c1, vec3(0.92, 0.94, 0.97), uSnow * (0.6 + 0.4 * grassy)); }'); };
+        sh.uniforms.uGround = SEASON_U.uGround; sh.uniforms.uSnow = SEASON_U.uSnow; sh.uniforms.uLitter = SEASON_U.uLitter;
+        /* the fallen leaves (2026-10-07: "covering the ground with the color of the leaves"): grass under a patchwork of
+           gold, russet and scarlet, a hand's breadth per patch, from the fall until the spring grass comes through */
+        sh.vertexShader = 'attribute float aLeafy;\nvarying float vLeafy;\nvarying vec2 vLitW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vLitW = (modelMatrix * vec4(transformed, 1.0)).xz; vLeafy = aLeafy;');
+        sh.fragmentShader = 'uniform vec3 uGround;\nuniform float uSnow;\nuniform float uLitter;\nvarying float vLeafy;\nvarying vec2 vLitW;\nfloat litH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\nfloat snowN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(litH(i), litH(i + vec2(1.0, 0.0)), f.x), mix(litH(i + vec2(0.0, 1.0)), litH(i + vec2(1.0, 1.0)), f.x), f.y); }\n' + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n  { vec3 c0 = diffuseColor.rgb; float grassy = smoothstep(0.0, 0.05, c0.g - max(c0.r, c0.b)); vec3 c1 = mix(c0, clamp(c0 * uGround, 0.0, 1.0), grassy);\n    if (uLitter > 0.0) { vec2 q = floor(vLitW * 3.3); float h = litH(q), h2 = litH(q + 17.0); vec3 lc = h < 0.4 ? vec3(0.78, 0.56, 0.16) : h < 0.75 ? vec3(0.55, 0.30, 0.11) : vec3(0.70, 0.17, 0.08); lc *= 0.8 + 0.3 * h2; c1 = mix(c1, lc, grassy * uLitter * vLeafy * (0.62 + 0.3 * h2)); }\n    float nz = 0.08 + 0.84 * (0.65 * snowN(vLitW * 0.18) + 0.35 * snowN(vLitW * 0.61 + 7.3)); float cover = smoothstep(nz - 0.05, nz + 0.05, uSnow);\n    diffuseColor.rgb = mix(c1, vec3(0.92, 0.94, 0.97), cover * (0.75 + 0.25 * grassy)); }'); };   /* snow lies and melts in patches (2026-10-07: "it should melt over several days and expose the green grass") */
       mat.customProgramCacheKey = () => 'season-ground'; return mat;
+    }
+    /* snow on the trees (2026-10-07: "Evergreen trees should stay green throughout the winter, but just have some patchy
+       snow buildup on them ... a line of snow on the part [of the branches] that faces the sky"): only the faces that look up
+       take snow, in patches; lo/hi: how steep a face still holds it (needles hold it on gentle slopes, a branch only on top) */
+    const SNOWMAT = new Map();
+    function snowyLam(color, lo, hi) {
+      const k = color + ':' + lo + ':' + hi; if (SNOWMAT.has(k)) return SNOWMAT.get(k);
+      const mat = seeThrough(new THREE.MeshLambertMaterial({ color, flatShading: true })), prev = mat.onBeforeCompile;
+      mat.onBeforeCompile = (sh, r) => { if (prev) prev(sh, r);
+        sh.uniforms.uTreeSnow = SEASON_U.uTreeSnow;
+        sh.vertexShader = 'varying vec3 vSnW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n#ifdef USE_INSTANCING\n  vSnW = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;\n#else\n  vSnW = (modelMatrix * vec4(transformed, 1.0)).xyz;\n#endif');
+        sh.fragmentShader = 'uniform float uTreeSnow;\nvarying vec3 vSnW;\nfloat tsH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\nfloat tsN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(tsH(i), tsH(i + vec2(1.0, 0.0)), f.x), mix(tsH(i + vec2(0.0, 1.0)), tsH(i + vec2(1.0, 1.0)), f.x), f.y); }\n' +
+          sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n  if (uTreeSnow > 0.0) { vec3 wn = normalize(cross(dFdx(vSnW), dFdy(vSnW))); float up = smoothstep(' + lo.toFixed(2) + ', ' + hi.toFixed(2) + ', wn.y); float tpat = smoothstep(0.3, 0.5, tsN(vSnW.xz * 2.3 + vSnW.y * 1.7) + 0.55 * uTreeSnow - 0.2);   /* deep winter: most of each upper face white, a few green breaks */ diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.95, 0.98), up * tpat * uTreeSnow); }'); };
+      mat.customProgramCacheKey = () => 'tree-snow:' + k; SNOWMAT.set(k, mat); return mat;
     }
     function seasonIce(mat) {   /* still water (lakes, ponds) turns to ice when frozen; rivers and the sea never do */
       mat.onBeforeCompile = (sh) => { sh.uniforms.uIce = SEASON_U.uIce;
         sh.fragmentShader = 'uniform float uIce;\n' + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.80, 0.88, 0.95), uIce); diffuseColor.a = mix(diffuseColor.a, 1.0, uIce);'); };
       mat.customProgramCacheKey = () => 'season-ice'; return mat;
     }
-    function treeSeason(reg) {   /* one crown mesh to the current season: colour, how much leaf is left, bare branches in winter */
+    /* one kind of tree to the current season (2026-10-07). The branches are always there (under the leaves in summer).
+       Autumn: the crown keeps its full size while it turns, then each tree drops every leaf on its own day (its hash h in the
+       couple-of-days window) - no shrinking. Spring: small clusters of leaf grow out from the end of every branch (bud), then
+       the crown fills in round them (grow). A felled tree stays gone whatever the season. */
+    const TS_M = new THREE.Matrix4(), TS_S = new THREE.Matrix4(), TS_T = new THREE.Matrix4(), TS_T2 = new THREE.Matrix4(), CROWN_Y = { T: 1.3, O: 1.45, W: 1.42, M: 1.32 }, TS_Z = new THREE.Matrix4().makeScale(0, 0, 0), TS_C = new THREE.Color(), TS_B = new THREE.Color();
+    function treeSeason(reg) {
       const S = SEASON_CUR, L = SEASON_LIB; if (!S || !L) return;
-      const dec = L.deciduous(reg.kind), f = dec ? S.leaf.crown : 1, M = new THREE.Matrix4(), SC = new THREE.Matrix4(), Z = new THREE.Matrix4().makeScale(0, 0, 0), C = new THREE.Color();
+      const dec = L.deciduous(reg.kind), lf = S.leaf, nb = BRANCH_TIPS.length;
       for (const t of reg.list) {
-        const c = L.leafColour(reg.kind, t.base, S); C.setRGB(c[0], c[1], c[2]);
-        if (!dec && S.snow > 0) C.lerp(SNOWC, 0.5 * S.snow);   /* snow on the evergreens */
-        reg.crown.setColorAt(t.n, C);
-        if (dec) reg.crown.setMatrixAt(t.n, f < 0.03 ? Z : M.copy(t.m).multiply(SC.makeScale(f, 0.6 + 0.4 * f, f)));
+        const c = L.leafColour(reg.kind, t.base, S); TS_C.setRGB(c[0], c[1], c[2]);
+   /* snow on the evergreens, white once the frost is hard */
+        reg.crown.setColorAt(t.n, TS_C);
+        if (!dec) continue;
+        const gone = !!t.felled, bare = !lf.dropped ? false : lf.dropped(t.h), sp = !bare && lf.spring ? lf.spring(t.h) : null;
+        /* a broadleaf tree's leaves ARE the clusters at its branch tips (2026-10-07: they sprout at the ends of the branches,
+           swell, and "when they are at their fully grown state they should just stay like that"): the old one-piece crown is
+           never shown for these kinds; the clusters turn colour in autumn and drop on the tree's day */
+        reg.crown.setMatrixAt(t.n, TS_Z);
+        if (reg.branches) reg.branches.setMatrixAt(t.n, gone ? TS_Z : t.m);
+        if (reg.buds) {
+          const b = sp && !gone ? sp.bud * (1 + 1.1 * sp.swell) : 0; TS_B.copy(TS_C);   /* sprout, then swell to full leaf, and stay */
+          for (let k = 0; k < nb; k++) {
+            const i = t.n * nb + k, tip = BRANCH_TIPS[k];
+            reg.buds.setMatrixAt(i, b <= 0.01 ? TS_Z : TS_M.copy(t.m).multiply(TS_S.makeTranslation(tip.x, tip.y, tip.z)).multiply(TS_S.makeScale(b, b, b)));
+            reg.buds.setColorAt(i, TS_B);
+          }
+        }
       }
-      reg.crown.instanceColor.needsUpdate = true; reg.crown.instanceMatrix.needsUpdate = true;
-      if (reg.branches) reg.branches.visible = dec && f < 0.55;
+      reg.crown.instanceColor.needsUpdate = true; reg.crown.instanceMatrix.needsUpdate = true; reg.crown.boundingSphere = null;   /* bounds again: an InstancedMesh keeps the bounds of its first draw, and a bud or a crown that was nothing then was culled for good */
+      if (reg.branches) reg.branches.instanceMatrix.needsUpdate = true;
+      if (reg.buds) { reg.buds.instanceMatrix.needsUpdate = true; reg.buds.boundingSphere = null; if (reg.buds.instanceColor) reg.buds.instanceColor.needsUpdate = true; reg.buds.visible = dec; }
+    }
+    /* the small flora (flowers, grass tufts, mushrooms; 2026-10-07: "removed in the fall and grow back in the spring"):
+       each plant has its own moment (h) in spring to come back, and grows up from nothing */
+    function floraSeason(reg) {
+      const S = SEASON_CUR; if (!S || !S.flora) return;
+      for (const st of reg.sets) {
+        for (let i = 0; i < st.ms.length; i++) {
+          const f = S.flora(hash2(i * 7 + 3, st.ms.length + i));
+          st.im.setMatrixAt(i, f <= 0.01 ? TS_Z : f >= 1 ? st.ms[i] : TS_M.copy(st.ms[i]).multiply(TS_S.makeScale(f, f, f)));
+        }
+        st.im.instanceMatrix.needsUpdate = true; st.im.boundingSphere = null;
+      }
+    }
+    /* MANOOMIN THROUGH THE YEAR (2026-10-07: "a seasonal growth with the dark burgundy grain only harvestable in late August
+       to early October"): shoots after the ice goes out, tall by early summer; green heads in midsummer that darken to burgundy;
+       ripe late August to early October (the ricing season, S.rice); then the grain drops, the stalks go to straw and lie down;
+       nothing over the winter. Each plant a few days apart (h). */
+    const RS_Q = new THREE.Quaternion(), RS_E = new THREE.Euler(), RS_P = new THREE.Vector3(), RS_S = new THREE.Vector3(), RS_C = new THREE.Color();
+    const RICE_GREEN = new THREE.Color(0x6f8a3a), RICE_STRAW = new THREE.Color(0xb59a5a), RICE_HEADG = new THREE.Color(0x7d9a44), RICE_RIPE = new THREE.Color(0x4a1626), RICE_RIPE2 = new THREE.Color(0x5c1e2e);
+    function riceSeason(reg) {
+      const S = SEASON_CUR; if (!S || !S.riceAt) return;
+      const set = (im, i, x, y, z, sx, sy, sz, ry, rx, col) => { if (sy <= 0.002) { im.setMatrixAt(i, TS_Z); return; } RS_E.set(rx, ry, 0); RS_Q.setFromEuler(RS_E); TS_M.compose(RS_P.set(x, y, z), RS_Q, RS_S.set(sx, sy, sz)); im.setMatrixAt(i, TS_M); im.setColorAt(i, col); };
+      reg.plants.forEach((q, i) => {
+        const R = S.riceAt(q.h), hh = q.hh * R.tall, lean = q.lean + R.lie * 1.1;
+        RS_C.copy(RICE_GREEN).lerp(RICE_STRAW, R.straw);
+        set(reg.stalk, i, q.x, q.base + Math.cos(lean) * hh / 2, q.z, 0.018, hh, 0.018, q.a, lean, RS_C);
+        set(reg.blade, i, q.x, q.base + hh * 0.4, q.z, 0.12 * Math.min(1, R.tall * 1.5), 0.012, 0.02, q.a + 0.8, 0.9, RS_C);
+        const tx = q.x + Math.sin(q.a) * Math.sin(lean) * hh, tz = q.z + Math.cos(q.a) * Math.sin(lean) * hh;
+        RS_C.copy(RICE_HEADG).lerp(q.dark ? RICE_RIPE2 : RICE_RIPE, R.ripe);
+        set(reg.head, i, tx, q.base + Math.cos(lean) * hh + 0.09, tz, 0.035, 0.22 * R.head, 0.03, q.a, lean + 0.35, RS_C);
+      });
+      for (const im of [reg.stalk, reg.blade, reg.head]) { im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
     }
     function seasonApply(S, lib) {   /* the engine, when the season where you stand has moved on */
       SEASON_CUR = S; SEASON_LIB = lib;
-      SEASON_U.uGround.value.setRGB(S.ground[0], S.ground[1], S.ground[2]); SEASON_U.uSnow.value = 0.85 * S.snow; SEASON_U.uIce.value = S.frozen ? 1 : 0;
+      SEASON_U.uGround.value.setRGB(S.ground[0], S.ground[1], S.ground[2]); SEASON_U.uSnow.value = S.frozen ? 1 : Math.min(1, S.snow * 2); SEASON_U.uIce.value = S.frozen ? 1 : 0;   /* the moment the leaves on the ground go (the freeze), the ground is white (2026-10-07) */ SEASON_U.uLitter.value = S.litter || 0; SEASON_U.uTreeSnow.value = Math.min(1, S.snow * 1.6);
       for (let i = TREE_REG.length - 1; i >= 0; i--) { const r = TREE_REG[i]; if (!r.crown.parent) { TREE_REG.splice(i, 1); continue; } treeSeason(r); }
+      for (let i = RICE_REG.length - 1; i >= 0; i--) { const r = RICE_REG[i]; if (!r.head.parent) { RICE_REG.splice(i, 1); continue; } riceSeason(r); }
+      for (let i = FLORA_REG.length - 1; i >= 0; i--) { const r = FLORA_REG[i]; if (r.sets.length && !r.sets[0].im.parent) { FLORA_REG.splice(i, 1); continue; } floraSeason(r); }
     }
     const SEE = { uSeeP: { value: new THREE.Vector2(-1e4, -1e4) }, uSeeR: { value: 0 }, uSeeD: { value: 0 }, uSeeY: { value: -1e9 } };   /* uSeeY: the avatar's feet - the floor and ground you stand on never dissolve (the operator: upstairs it looked like standing outside the house) */
     function seeThrough(m) {
@@ -227,7 +303,7 @@
             geos[kind] = new THREE.CylinderGeometry(1, 1, 1, 3, 1, true, Math.PI / 2 - th / 2, th);
           }
           const k = kind + ':' + color; if (!sets.has(k)) sets.set(k, { kind, color, ms: [] }); const m = new THREE.Matrix4(); m.compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx || 0, ry || 0, rz || 0, 'YXZ')), new THREE.Vector3(sx, sy, sz)); sets.get(k).ms.push(m); },
-        finish(shadow) { for (const s of sets.values()) { const im = new THREE.InstancedMesh(geos[s.kind], lam(s.color), s.ms.length); s.ms.forEach((m, i) => im.setMatrixAt(i, m)); im.castShadow = shadow !== false; im.receiveShadow = true; group.add(im); } }
+        finish(shadow) { const out = []; for (const s of sets.values()) { const im = new THREE.InstancedMesh(geos[s.kind], lam(s.color), s.ms.length); s.ms.forEach((m, i) => im.setMatrixAt(i, m)); im.castShadow = shadow !== false; im.receiveShadow = true; group.add(im); out.push({ im, ms: s.ms }); } return out; }
       };
     }
     function textSprite(text, w, h, bg, fg) {
@@ -430,7 +506,16 @@
           const a = (y - Y0) * (RW + 1) + (x - X0), b = a + 1, c = a + RW + 1, d = c + 1;
           if ((x + y) & 1) ind.push(a, c, b, b, c, d); else ind.push(a, c, d, a, d, b);
         }
-        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setIndex(ind); g.computeVertexNormals();
+        /* leaf litter lies only under the trees that drop their leaves (2026-10-07): each corner's share of broadleaf
+           crowns within 2.6 m, from the tiles themselves so it runs on across chunk edges */
+        const leafy = new Float32Array((RW + 1) * (RH + 1)), PAD = 3, GW = RW + 2 * PAD, dec = new Uint8Array(GW * (RH + 2 * PAD));
+        for (let y = 0; y < RH + 2 * PAD; y++) for (let x = 0; x < GW; x++) { const t = at(X0 - PAD + x, Y0 - PAD + y); dec[y * GW + x] = t === 'T' || t === 'O' || t === 'W' || t === 'M' ? 1 : 0; }
+        for (let cy = Y0; cy <= Y1; cy++) for (let cx = X0; cx <= X1; cx++) {
+          let w = 0;
+          for (let dy = -3; dy <= 2; dy++) for (let dx = -3; dx <= 2; dx++) { const gx = cx + dx - X0 + PAD, gy = cy + dy - Y0 + PAD; if (gx < 0 || gy < 0 || gx >= GW || gy >= RH + 2 * PAD || !dec[gy * GW + gx]) continue; const d = Math.hypot(dx + 0.5, dy + 0.5); if (d < 2.6) w += 1 - d / 2.6; }
+          leafy[(cy - Y0) * (RW + 1) + (cx - X0)] = Math.min(1, w * 0.7);
+        }
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('aLeafy', new THREE.BufferAttribute(leafy, 1)); g.setIndex(ind); g.computeVertexNormals();
         const terrain = new THREE.Mesh(g, seasonGround(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })));
         terrain.receiveShadow = true; terrain.userData.pick = { kind: 'ground' }; group.add(terrain);
         var terrainMesh = terrain;
@@ -545,7 +630,7 @@
       const qOf = t => chunk ? Math.min(1, (t.x - X0) >> 5) + 2 * Math.min(1, (t.y - Y0) >> 5) : 0;
       for (const k in treeKinds) for (let q = 0; q < (chunk ? 4 : 1); q++) {
         const L = treeList[k].filter(t => qOf(t) === q), tk = treeKinds[k]; if (!L.length) continue;
-        const trunk = new THREE.InstancedMesh(tk.trunk, lam(tk.tc), L.length), crown = new THREE.InstancedMesh(tk.crown, lam(0xffffff), L.length);
+        const trunk = new THREE.InstancedMesh(tk.trunk, lam(tk.tc), L.length), crown = new THREE.InstancedMesh(tk.crown, 'PY'.indexOf(k) >= 0 ? snowyLam(0xffffff, -0.15, 0.3) : lam(0xffffff), L.length);
         const tiles = new Float64Array(L.length);
         L.forEach((t, n) => {
           const jx = (hash2(t.x, t.y) - 0.5) * 0.3, jz = (hash2(t.y, t.x + 3) - 0.5) * 0.3, s = 0.85 + hash2(t.x + 5, t.y + 9) * 0.35 + (t.i < 0 ? 0.25 : 0);
@@ -563,8 +648,14 @@
         group.add(trunk, crown); treeMeshes.push(trunk, crown); quads[q].push(trunk, crown);
         /* winter: bare branches over the trunk (deciduous kinds), shown while the leaves are down */
         let branches = null;
-        if ('TOWM'.indexOf(k) >= 0) { branches = new THREE.InstancedMesh(mergeGeos(BRANCH_GEO), lam(0x4a3a2c), L.length); L.forEach((t, n) => branches.setMatrixAt(n, t.m)); branches.visible = false; branches.castShadow = true; group.add(branches); quads[q].push(branches); }
-        const reg = { kind: k, crown, branches, list: L.map(t => ({ n: t.n, m: t.m, base: t.base })) }; TREE_REG.push(reg); treeSeason(reg);
+        let buds = null;
+        if ('TOWM'.indexOf(k) >= 0) {
+          branches = new THREE.InstancedMesh(mergeGeos(BRANCH_GEO), snowyLam(0x4a3a2c, 0.2, 0.55), L.length); L.forEach((t, n) => branches.setMatrixAt(n, t.m)); branches.castShadow = true; group.add(branches); quads[q].push(branches);
+          buds = new THREE.InstancedMesh(BUD_GEO, lam(0xffffff), L.length * BRANCH_TIPS.length); buds.visible = false; buds.castShadow = true; buds.receiveShadow = true; buds.setColorAt(0, C); group.add(buds); quads[q].push(buds);
+          { const bt = new Float64Array(L.length * BRANCH_TIPS.length); for (let i = 0; i < bt.length; i++) bt[i] = tiles[Math.floor(i / BRANCH_TIPS.length)]; buds.userData.pick = { kind: 'tree', tiles: bt }; treeMeshes.push(buds); }   /* tap the leaves to chop, as the crown was */
+        }
+        L.forEach(t => { t.h = hash2(t.x + 31, t.y + 77); t.branches = branches; });   /* t.h: this tree's day in the leaf fall */
+        const reg = { kind: k, crown, branches, buds, list: L }; TREE_REG.push(reg); L.forEach(t => { t.reg = reg; }); treeSeason(reg);
       }
       /* ---------- rocks */
       const rockAt = new Map(), pickables = [terrainMesh].concat(treeMeshes);
@@ -581,7 +672,7 @@
         rockAt.set(K(x, y), { g, ore }); group.add(g);
       }
       /* ---------- buildings, fences and props */
-      const B = Batcher(group), anim = [];
+      const B = Batcher(group), BF = Batcher(group), anim = [], RICEP = [];   /* RICEP: the wild rice plants, grown by the seasons */   /* BF: the small flora, which the seasons take away and give back */
       const roofs = [];
       const floor = HG.floor;
       function building(o) {
@@ -726,7 +817,7 @@
       let CK = null; try { const CM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('castle'); if (CM && CM.create) CK = CM.create({ THREE, B, Batcher, KitBatch, kitData, heightAt, group, pickables }); } catch (e) { console.warn('castle module', e && e.message); }
       const surfOfMap = (tx, ty) => { const Hh = heightsOf(map); return Hh.surf ? Hh.surf(tx, ty) : heightAt(tx + 0.5, ty + 0.5); };
       const mounts = [];   /* items hung on walls: {obj, item, quest, untilStep} */
-      const torches = [];
+      const torches = [], street = [];
       const floorY = (o, y) => { const f = floor[o.y * W + o.x]; return isNaN(f) ? y : f; };
       const siteObjs = chunk ? [].concat(...map.sitesIn(X0, Y0, X1 - 1, Y1 - 1).map(st => st.objects), ...(map.roadTorchesIn ? map.roadTorchesIn(X0, Y0, X1 - 1, Y1 - 1) : [])) : [];   /* tents, campfires, and lit posts along the town roads */
       const objs = (chunk ? siteObjs : map.objects.filter(o => inR(o.x, o.y))).sort((a, b) => (b.enter ? 1 : 0) - (a.enter ? 1 : 0));
@@ -788,7 +879,7 @@
             B.add('box', 0x2a2a2a, x, y + 1.22, z, 0.2, 0.08, 0.2);
             const f = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.32, 5), new THREE.MeshBasicMaterial({ color: 0xffa030 })); f.position.set(x, y + 1.42, z); group.add(f);
             const f2 = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.2, 5), new THREE.MeshBasicMaterial({ color: 0xfff0a0 })); f2.position.set(x, y + 1.36, z); group.add(f2);
-            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x, y, z, night: !!o.night });
+            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x, y, z, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y });
             break;
           }
           case 'lamp': {   /* a gas street lamp on the verge of a trail (2026-10-07): iron post, glass lantern, pyramid cap */
@@ -796,7 +887,8 @@
             B.add('box', IR, x, y + 0.14, z, 0.3, 0.28, 0.3);
             B.add('cyl', IR, x, y + 1.3, z, 0.11, 2.1, 0.11);
             B.add('cyl', IR, x, y + 2.38, z, 0.22, 0.08, 0.22);
-            const gl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.3), LAMPG); gl.position.set(x, y + 2.62, z); group.add(gl);
+            const glMat = LAMPG.clone(), gl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.3), glMat); gl.position.set(x, y + 2.62, z); group.add(gl);
+            street.push({ mat: glMat, x: o.x, y: o.y });
             for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) B.add('box', IR, x + dx * 0.16, y + 2.62, z + dz * 0.16, 0.035, 0.44, 0.035);
             B.add('box', IR, x, y + 2.41, z, 0.36, 0.04, 0.36);
             const cap = mesh(new THREE.ConeGeometry(0.29, 0.24, 4), IR, x, y + 2.96, z); cap.rotation.y = Math.PI / 4; group.add(cap);
@@ -813,7 +905,7 @@
             { const [a, b, c] = at(0.34); B.add('cyl', 0x2a1f16, a, b, c, 0.09, 0.08, 0.09, ry, TL); }
             const f = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.24, 5), new THREE.MeshBasicMaterial({ color: 0xffa030 })), f2 = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.15, 5), new THREE.MeshBasicMaterial({ color: 0xfff0a0 }));
             for (const [m, d] of [[f, 0.48], [f2, 0.44]]) { m.position.set(...at(d)); m.rotation.set(TL, ry, 0, 'YXZ'); group.add(m); }
-            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x: wx, y, z: wz, night: !!o.night });
+            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x: wx, y, z: wz, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y });
             break;
           }
           case 'iwall': {   /* a room divider inside a walk-in building (2026-10-07: Saltmere town hall) */
@@ -885,12 +977,12 @@
             for (let k = 0; k < n; k++) {
               const a = k * 2.4 + r0 * 6, rr = 0.12 + 0.36 * hash2(o.x + k, o.y - k), sx = x + Math.cos(a) * rr, sz = z + Math.sin(a) * rr, hh = (o.k === 'rice' ? 0.75 : 1.3) + 0.35 * hash2(o.x - k, o.y + k);
               const lean = (hash2(o.x * k, o.y) - 0.5) * 0.3, base = o.k === 'rice' ? sf - 0.05 : Math.min(sf, y + 0.1);
-              B.add('box', o.k === 'rice' ? 0x6f8a3a : 0x5f7a34, sx, base + hh / 2, sz, 0.018, hh, 0.018, a, lean, 0);
-              if (o.k === 'rice') {
-                const tx = sx + Math.sin(a) * Math.sin(lean) * hh, tz = sz + Math.cos(a) * Math.sin(lean) * hh;
-                B.add('box', k % 3 ? 0x4a1626 : 0x5c1e2e, tx, base + hh + 0.09, tz, 0.035, 0.22, 0.03, a, lean + 0.35, 0);   /* the head, drooping a little */
-                B.add('box', 0x7d9a44, sx, base + hh * 0.4, sz, 0.12, 0.012, 0.02, a + 0.8, 0.9, 0);   /* a blade off the stalk */
-              } else if (k % 2 === 0) B.add('cyl6', 0x5a3a20, sx, base + hh - 0.1, sz, 0.06, 0.22, 0.06, a, lean, 0);
+              if (o.k === 'rice') {   /* its own instances, so the year can grow it (riceSeason) */
+                RICEP.push({ x: sx, z: sz, base, hh, a, lean, dark: !(k % 3), h: hash2(o.x * 7 + k, o.y * 3 - k) });
+                continue;
+              }
+              B.add('box', 0x5f7a34, sx, base + hh / 2, sz, 0.018, hh, 0.018, a, lean, 0);
+              if (k % 2 === 0) B.add('cyl6', 0x5a3a20, sx, base + hh - 0.1, sz, 0.06, 0.22, 0.06, a, lean, 0);
             }
             break;
           }
@@ -946,16 +1038,44 @@
             anim.push({ smoke: true, x: x + 0.3, y: y + 1.7, z: z - 0.2, parts: [] });
             break;
           }
-          case 'altar': {   /* the church altar: pray at it to restore your Prayer points (world.js makes it a node) */
-            const fl = floorY(o, y);
-            B.add('box', 0x8a857a, x, fl + 0.45, z, 1.0, 0.9, 0.6); B.add('box', 0xa8a294, x, fl + 0.93, z, 1.12, 0.07, 0.7);
-            B.add('box', 0xf2eee0, x, fl + 0.97, z, 1.0, 0.02, 0.62); B.add('box', 0x6a3a8a, x, fl + 0.7, z - 0.31, 0.34, 0.5, 0.01);
-            B.add('box', 0xe8c050, x, fl + 1.2, z + 0.1, 0.05, 0.42, 0.05); B.add('box', 0xe8c050, x, fl + 1.3, z + 0.1, 0.26, 0.05, 0.05);
-            for (const sx of [-0.38, 0.38]) { B.add('cyl', 0xf4eccc, x + sx, fl + 1.07, z + 0.1, 0.05, 0.18, 0.05); const f = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.09, 5), new THREE.MeshBasicMaterial({ color: 0xffd060 })); f.position.set(x + sx, fl + 1.2, z + 0.1); group.add(f); torches.push({ f, ph: sx * 7, x: x + sx, y: fl + 1.2, z: z + 0.1 }); }
-            const p = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.4, 0.9), new THREE.MeshBasicMaterial({ visible: false })); p.position.set(x, fl + 0.7, z); p.userData.pick = { kind: 'node', i: K(o.x, o.y) }; group.add(p); pickables.push(p);
+          case 'altar': {   /* the church altar: pray at it to restore your Prayer points (world.js makes it a node).
+               face = the front the congregation looks at. Default "n" (Saltmere). "w"/"e" for an altar on an east or west wall. */
+            const fl = floorY(o, y), face = o.face || 'n', ew = face === 'e' || face === 'w';
+            if (ew) {
+              const fx = face === 'w' ? -1 : 1;
+              B.add('box', 0x8a857a, x, fl + 0.45, z, 0.6, 0.9, 1.0); B.add('box', 0xa8a294, x, fl + 0.93, z, 0.7, 0.07, 1.12);
+              B.add('box', 0xf2eee0, x, fl + 0.97, z, 0.62, 0.02, 1.0); B.add('box', 0x6a3a8a, x + fx * 0.31, fl + 0.7, z, 0.01, 0.5, 0.34);
+              B.add('box', 0xe8c050, x + fx * -0.1, fl + 1.2, z, 0.05, 0.42, 0.05); B.add('box', 0xe8c050, x + fx * -0.1, fl + 1.3, z, 0.05, 0.05, 0.26);
+              for (const sz of [-0.38, 0.38]) { B.add('cyl', 0xf4eccc, x + fx * -0.1, fl + 1.07, z + sz, 0.05, 0.18, 0.05); const f = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.09, 5), new THREE.MeshBasicMaterial({ color: 0xffd060 })); f.position.set(x + fx * -0.1, fl + 1.2, z + sz); group.add(f); torches.push({ f, ph: sz * 7, x: x + fx * -0.1, y: fl + 1.2, z: z + sz }); }
+              const p = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.4, 1.1), new THREE.MeshBasicMaterial({ visible: false })); p.position.set(x, fl + 0.7, z); p.userData.pick = { kind: 'node', i: K(o.x, o.y) }; group.add(p); pickables.push(p);
+            } else {
+              const fz = face === 's' ? 1 : -1;
+              B.add('box', 0x8a857a, x, fl + 0.45, z, 1.0, 0.9, 0.6); B.add('box', 0xa8a294, x, fl + 0.93, z, 1.12, 0.07, 0.7);
+              B.add('box', 0xf2eee0, x, fl + 0.97, z, 1.0, 0.02, 0.62); B.add('box', 0x6a3a8a, x, fl + 0.7, z + fz * 0.31, 0.34, 0.5, 0.01);
+              B.add('box', 0xe8c050, x, fl + 1.2, z + fz * -0.1, 0.05, 0.42, 0.05); B.add('box', 0xe8c050, x, fl + 1.3, z + fz * -0.1, 0.26, 0.05, 0.05);
+              for (const sx of [-0.38, 0.38]) { B.add('cyl', 0xf4eccc, x + sx, fl + 1.07, z + fz * -0.1, 0.05, 0.18, 0.05); const f = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.09, 5), new THREE.MeshBasicMaterial({ color: 0xffd060 })); f.position.set(x + sx, fl + 1.2, z + fz * -0.1); group.add(f); torches.push({ f, ph: sx * 7, x: x + sx, y: fl + 1.2, z: z + fz * -0.1 }); }
+              const p = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.4, 0.9), new THREE.MeshBasicMaterial({ visible: false })); p.position.set(x, fl + 0.7, z); p.userData.pick = { kind: 'node', i: K(o.x, o.y) }; group.add(p); pickables.push(p);
+            }
             break;
           }
-          case 'pew': { const fl = floorY(o, y), w = (o.w || 1) - 0.1; B.add('box', 0x6a4426, x, fl + 0.42, z + 0.05, w, 0.07, 0.42); B.add('box', 0x6a4426, x, fl + 0.72, z + 0.25, w, 0.55, 0.06); for (const sx of [-1, 1]) B.add('box', 0x5a3a1e, x + sx * (w / 2 - 0.05), fl + 0.4, z + 0.05, 0.07, 0.8, 0.5); break; }
+          case 'pew': {
+            /* face = the way you sit (backrest opposite). Default "n": long seat along X, back on +z (Saltmere).
+               "e"/"w": long seat along Z for a church whose altar is on the east or west wall. */
+            const fl = floorY(o, y), face = o.face || 'n', ew = face === 'e' || face === 'w';
+            const len = (ew ? (o.h || 1) : (o.w || 1)) - 0.1, d = 0.42;
+            if (ew) {
+              const bx = face === 'e' ? -1 : 1;   /* backrest on the side you are not facing */
+              B.add('box', 0x6a4426, x + bx * 0.05, fl + 0.42, z, d, 0.07, len);
+              B.add('box', 0x6a4426, x + bx * 0.25, fl + 0.72, z, 0.06, 0.55, len);
+              for (const sz of [-1, 1]) B.add('box', 0x5a3a1e, x + bx * 0.05, fl + 0.4, z + sz * (len / 2 - 0.05), 0.5, 0.8, 0.07);
+            } else {
+              const bz = face === 's' ? -1 : 1;
+              B.add('box', 0x6a4426, x, fl + 0.42, z + bz * 0.05, len, 0.07, d);
+              B.add('box', 0x6a4426, x, fl + 0.72, z + bz * 0.25, len, 0.55, 0.06);
+              for (const sx of [-1, 1]) B.add('box', 0x5a3a1e, x + sx * (len / 2 - 0.05), fl + 0.4, z + bz * 0.05, 0.07, 0.8, 0.5);
+            }
+            break;
+          }
           case 'shelf': { const w = o.w || 1, d = o.h || 1, lng = w >= d, ex = lng ? w : d; const zb = lng ? o.y + 0.25 : z, xb = lng ? x : o.x + 0.25, fl = floorY(o, y);
             B.add('box', 0x6a4a2a, xb, fl + 0.75, zb, lng ? ex - 0.1 : 0.4, 1.5, lng ? 0.4 : ex - 0.1);
             for (let k = 0; k < 3; k++) for (let n = 0; n < ex * 3; n++) { const t = (n + 0.5) / (ex * 3) - 0.5, col = [0xd29a52, 0xc84040, 0x8a5aa0, 0x6aa0d0, 0xe0c060][(n + k * 2 + o.x) % 5]; B.add('box', col, xb + (lng ? t * (ex - 0.2) : 0.05), fl + 0.35 + k * 0.45, zb + (lng ? 0.05 : t * (ex - 0.2)), 0.16, 0.18, 0.16); }
@@ -1062,11 +1182,16 @@
         }
         if (c === '^' && map.underNear && map.underNear(x, y)) continue;   /* underground the rock is the raised ground itself */
         if (c === '^') { if (r < 0.4) B.add('pyr', 0x76736b, x + 0.5, heightAt(x + 0.5, y + 0.5) + 0.5, y + 0.5, 1.4, 1 + r * 2, 1.4, r * 6); continue; }   /* mountain rock */
-        if (c === 'f') for (let k = 0; k < 5; k++) { const fx = x + 0.2 + hash2(x + k, y) * 0.6, fz = y + 0.2 + hash2(x, y + k) * 0.6, fy = heightAt(fx, fz); B.add('box', 0x3a7a2a, fx, fy + 0.08, fz, 0.03, 0.16, 0.03); B.add('box', FL[(x + y + k) % 5], fx, fy + 0.18, fz, 0.09, 0.07, 0.09); }
-        else if ((c === '.' || c === ',') && r < 0.28) { const fx = x + 0.2 + hash2(x, y + 2) * 0.6, fz = y + 0.2 + hash2(x + 2, y) * 0.6; B.add('cone', c === ',' ? 0x3a6a26 : 0x4a8a30, fx, heightAt(fx, fz) + 0.1, fz, 0.22, 0.22, 0.22, r * 9); }
-        else if (c === ',' && r > 0.965) { const fx = x + 0.3 + hash2(x, y + 7) * 0.4, fz = y + 0.3 + hash2(x + 7, y) * 0.4, fy = heightAt(fx, fz); B.add('cyl6', 0xe8e0c8, fx, fy + 0.05, fz, 0.05, 0.1, 0.05); B.add('cone', 0xb83a2a, fx, fy + 0.12, fz, 0.14, 0.07, 0.14); }
+        if (c === 'f') for (let k = 0; k < 5; k++) { const fx = x + 0.2 + hash2(x + k, y) * 0.6, fz = y + 0.2 + hash2(x, y + k) * 0.6, fy = heightAt(fx, fz); BF.add('box', 0x3a7a2a, fx, fy + 0.08, fz, 0.03, 0.16, 0.03); BF.add('box', FL[(x + y + k) % 5], fx, fy + 0.18, fz, 0.09, 0.07, 0.09); }
+        else if ((c === '.' || c === ',') && r < 0.28) { const fx = x + 0.2 + hash2(x, y + 2) * 0.6, fz = y + 0.2 + hash2(x + 2, y) * 0.6; BF.add('cone', c === ',' ? 0x3a6a26 : 0x4a8a30, fx, heightAt(fx, fz) + 0.1, fz, 0.22, 0.22, 0.22, r * 9); }
+        else if (c === ',' && r > 0.965) { const fx = x + 0.3 + hash2(x, y + 7) * 0.4, fz = y + 0.3 + hash2(x + 7, y) * 0.4, fy = heightAt(fx, fz); BF.add('cyl6', 0xe8e0c8, fx, fy + 0.05, fz, 0.05, 0.1, 0.05); BF.add('cone', 0xb83a2a, fx, fy + 0.12, fz, 0.14, 0.07, 0.14); }
       }
       B.finish();
+      { const reg = { sets: BF.finish() }; FLORA_REG.push(reg); floraSeason(reg); }
+      if (RICEP.length) {   /* the manoomin: stalk, a blade off it, and the head on top; tinted per plant by the season */
+        const mk = () => { const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0xffffff), RICEP.length); im.castShadow = true; im.frustumCulled = false; im.setColorAt(0, new THREE.Color()); group.add(im); return im; };
+        const reg = { plants: RICEP, stalk: mk(), blade: mk(), head: mk() }; RICE_REG.push(reg); riceSeason(reg);
+      }
       /* fishing spots: rippling rings */
       const spots = [];
       for (const [i, n] of map.nodes) if (n.kind === 'fish' && inR(n.x, n.y) && mine(n.x, n.y)) {
@@ -1103,11 +1228,17 @@
         },
         setDepleted(i, on) {
           const t = treeAt.get(i);
-          if (t) { t.trunk.setMatrixAt(t.n, on ? ZERO : t.m); t.crown.setMatrixAt(t.n, on ? ZERO : t.m); t.trunk.instanceMatrix.needsUpdate = t.crown.instanceMatrix.needsUpdate = true; stumps.setMatrixAt(t.stump, on ? t.sm : ZERO); stumps.instanceMatrix.needsUpdate = true; if (stumps.computeBoundingSphere) stumps.computeBoundingSphere(); return; }
+          if (t) { t.felled = !!on; t.trunk.setMatrixAt(t.n, on ? ZERO : t.m); t.crown.setMatrixAt(t.n, on ? ZERO : t.m); if (t.reg) treeSeason(t.reg); t.trunk.instanceMatrix.needsUpdate = t.crown.instanceMatrix.needsUpdate = true; stumps.setMatrixAt(t.stump, on ? t.sm : ZERO); stumps.instanceMatrix.needsUpdate = true; if (stumps.computeBoundingSphere) stumps.computeBoundingSphere(); return; }
           const r = rockAt.get(i); if (r) r.ore.visible = !on;
         },
         update(dt, time) {
-          for (const t of torches) { const s = 0.85 + 0.15 * Math.sin(time * 13 + t.ph) + 0.08 * Math.sin(time * 31 + t.ph * 2); if (t.night) { const on = NIGHTK > 0.04; t.f.visible = on; if (t.f2) t.f2.visible = on; } t.f.scale.set(1, s, 1); if (t.f2) t.f2.scale.set(1, s, 1); }
+          for (const t of torches) {
+            const s = 0.85 + 0.15 * Math.sin(time * 13 + t.ph) + 0.08 * Math.sin(time * 31 + t.ph * 2);
+            if (t.tend) { const on = LAMPQ ? !!LAMPQ(t.tx, t.ty) : true; t.f.visible = on; if (t.f2) t.f2.visible = on; }
+            else if (t.night) { const on = NIGHTK > 0.04; t.f.visible = on; if (t.f2) t.f2.visible = on; }
+            t.f.scale.set(1, s, 1); if (t.f2) t.f2.scale.set(1, s, 1);
+          }
+          for (const L of street) { const on = LAMPQ ? !!LAMPQ(L.x, L.y) : NIGHTK > 0.04; L.mat.color.copy(LAMP_OFF).lerp(LAMP_ON, on ? 1 : 0); }
           for (const L of lights) L.intensity = 2.6 + Math.sin(time * 11 + L.position.x) * 0.4;
           for (const s of spots) { const ice = !!(map.iceAt && map.iceAt(s.x, s.y)); s.rings.forEach(r => { r.visible = !ice; }); }   /* a frozen pond does not ripple: you fish through the ice */
           for (const s of spots) if (s.rings[0].visible) s.rings.forEach((r, k) => { const p = ((time * 0.6 + s.ph + k / 3) % 1); r.scale.setScalar(0.6 + p * 2.2); r.material.opacity = 0.75 * (1 - p); });
@@ -1131,7 +1262,7 @@
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, canoeMesh, seasonApply, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, canoeMesh, seasonApply, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

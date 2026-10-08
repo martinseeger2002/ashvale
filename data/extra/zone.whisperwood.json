@@ -11,7 +11,7 @@
     "iria_supper",
     "angel_gift"
    ],
-   "examine": "Iria, pale as the well-mist, with two low wings folded at her back. She stands on the main path, well south of the pond."
+   "examine": "Iria, pale as the well-mist, with two low wings folded at her back. She stands on the main path, well southeast of the pond."
   },
   {
    "id": "pike",
@@ -39,8 +39,8 @@
    "id": "vorthan_reader",
    "name": "Vorthan Reader",
    "look": "vorthan_reader",
-   "x": 35,
-   "y": 4,
+   "x": 36,
+   "y": 3,
    "lines": [
     "The Bright Three are a lie the valley tells itself. Althas, Caelen, Mira - hearth, road, well. Pretty names for a locked door.",
     "Vorth was the fourth. They buried him still breathing. We wear the orange so the living remember the fire that was stolen.",
@@ -52,7 +52,7 @@
    "id": "vorthan_acolyte",
    "name": "Vorthan Acolyte",
    "look": "vorthan_acolyte",
-   "x": 35,
+   "x": 36,
    "y": 5,
    "lines": [
     "The Red Pyre is not a church of Ashvale. It is the place Vorth's name is still spoken.",
@@ -342,10 +342,10 @@
    "x": 33,
    "y": 3,
    "w": 4,
-   "h": 4,
+   "h": 3,
    "door": [
     33,
-    5
+    4
    ],
    "enter": true,
    "sign": "The Red Pyre",
@@ -357,21 +357,40 @@
    "x": 36,
    "y": 4,
    "w": 1,
-   "h": 1
+   "h": 1,
+   "face": "w"
   },
   {
    "k": "pew",
-   "x": 33,
-   "y": 4,
-   "w": 2,
-   "h": 1
+   "x": 34,
+   "y": 3,
+   "w": 1,
+   "h": 1,
+   "face": "e"
   },
   {
    "k": "pew",
-   "x": 33,
+   "x": 35,
+   "y": 3,
+   "w": 1,
+   "h": 1,
+   "face": "e"
+  },
+  {
+   "k": "pew",
+   "x": 34,
    "y": 5,
-   "w": 2,
-   "h": 1
+   "w": 1,
+   "h": 1,
+   "face": "e"
+  },
+  {
+   "k": "pew",
+   "x": 35,
+   "y": 5,
+   "w": 1,
+   "h": 1,
+   "face": "e"
   },
   {
    "k": "sconce",

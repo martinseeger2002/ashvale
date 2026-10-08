@@ -51,7 +51,7 @@ byid['pike'] = {
     "examine": "Pike, a bandit lookout in a frayed hood. He stands too still for a thief, and his eyes keep dropping to the gate."
 }
 byid['vorthan_reader'] = {
-    "id": "vorthan_reader", "name": "Vorthan Reader", "look": "vorthan_reader", "x": 35, "y": 4,
+    "id": "vorthan_reader", "name": "Vorthan Reader", "look": "vorthan_reader", "x": 36, "y": 3,
     "lines": [
         "The Bright Three are a lie the valley tells itself. Althas, Caelen, Mira - hearth, road, well. Pretty names for a locked door.",
         "Vorth was the fourth. They buried him still breathing. We wear the orange so the living remember the fire that was stolen.",
@@ -60,7 +60,7 @@ byid['vorthan_reader'] = {
     "examine": "A Vorthan in an orange hooded robe. The cloth is the colour of a banked fire."
 }
 byid['vorthan_acolyte'] = {
-    "id": "vorthan_acolyte", "name": "Vorthan Acolyte", "look": "vorthan_acolyte", "x": 35, "y": 5,
+    "id": "vorthan_acolyte", "name": "Vorthan Acolyte", "look": "vorthan_acolyte", "x": 36, "y": 5,
     "lines": [
         "The Red Pyre is not a church of Ashvale. It is the place Vorth's name is still spoken.",
         "Do not touch the beads on the keeper. They remember the cave."
@@ -73,15 +73,17 @@ extra_ww['objects'] = [
     {"k": "tent", "x": 43, "y": 21, "w": 2, "h": 2},
     {"k": "tent", "x": 44, "y": 26, "w": 2, "h": 2},
     {"k": "campfire", "x": 41, "y": 24, "w": 1, "h": 1},
-    {"k": "gate", "x": 28, "y": 3, "to": [30, 3], "out": [27, 3], "need": "vorth_gate",
+    {"k": "gate", "x": 28, "y": 3, "to": [30, 3], "out": [27, 3], "span": "ns", "need": "vorth_gate",
      "label": "Open the gate", "name": "Compound gate",
      "shut": "The gate is barred. The lookout will not open it.",
      "say": "Pike's latch lifts. You slip through."},
-    {"k": "church", "x": 33, "y": 3, "w": 4, "h": 4, "door": [33, 5], "enter": True,
+    {"k": "church", "x": 33, "y": 3, "w": 4, "h": 3, "door": [33, 4], "enter": True,
      "sign": "The Red Pyre", "wall": "#8a2018", "roof": "#4a0c0c"},
-    {"k": "altar", "x": 35, "y": 6, "w": 1, "h": 1},
-    {"k": "pew", "x": 33, "y": 4, "w": 2, "h": 1},
-    {"k": "pew", "x": 33, "y": 5, "w": 2, "h": 1},
+    {"k": "altar", "x": 36, "y": 4, "w": 1, "h": 1, "face": "w"},
+    {"k": "pew", "x": 34, "y": 3, "w": 1, "h": 1, "face": "e"},
+    {"k": "pew", "x": 35, "y": 3, "w": 1, "h": 1, "face": "e"},
+    {"k": "pew", "x": 34, "y": 5, "w": 1, "h": 1, "face": "e"},
+    {"k": "pew", "x": 35, "y": 5, "w": 1, "h": 1, "face": "e"},
     {"k": "sconce", "x": 34, "y": 3, "w": 1, "h": 1, "face": "n", "night": True}
 ]
 spawns = [s for s in (extra_ww.get('spawns') or []) if s.get('m') != 'vorthan']
@@ -122,7 +124,7 @@ cave['data']['npcs'] = [
         "lines": [
             "I am Edric. I wore the orange once. I was a Vorthan, and I believed the fire was justice.",
             "Then I heard them plan to take the cave. Not to hide. To dump the ones who would not kneel. They used the rosary as a key - it always puts you at the mouth.",
-            "I stole a robe and wrote it down. I ran west. They sent me into the dark after the beads, and the spiders finished what the Pyre started.",
+            "I stole a robe and wrote it down. I ran northeast. They sent me into the dark after the beads, and the spiders finished what the Pyre started.",
             "Take the note to Mother Wenna in Saltmere. Let the Bright Three hear it. I was not brave enough to walk there alive."
         ],
         "examine": "A pale figure in a ruined orange hood. You can see the cave wall through him."
@@ -152,16 +154,22 @@ items['items']['vorthan_robe'] = {
 }
 items['items']['vorth_rosary'] = {
     "name": "Vorth's rosary",
-    "description": "A string of burnt-orange beads. Used, it carries you to the mouth of the Spider Cave in the woods west of Whisperwood.",
+    "description": "A string of burnt-orange beads. Worn in the shield hand: Magic +2, Prayer +4, and two seconds added to each prayer point (same as a Vorthan robe). Once Mother Wenna has sent you for the keeper's beads, using them carries you to the mouth of the Spider Cave northeast of Whisperwood.",
     "collection": "ASHVALE The Red Pyre",
     "game": "ashvale",
     "category": "jewellery",
     "subcategory": "charm",
+    "tier": 1,
     "weight": 80,
-    "model": "item.ring",
-    "value": 80,
+    "req": {"prayer": 1},
+    "model": "gear.rosary",
+    "value": 140,
     "attributes": [
+        {"trait_type": "Magic", "value": 2},
+        {"trait_type": "Prayer", "value": 4},
+        {"trait_type": "Prayer seconds", "value": 2},
         {"trait_type": "Teleport", "value": "spidercave"},
+        {"trait_type": "Teleport from step", "value": "red_pyre:3"},
         {"trait_type": "Cooldown ticks", "value": 0}
     ],
     "nft": {"copies": 25, "key": "vorth_rosary"}
@@ -238,7 +246,7 @@ quests['quests']['red_pyre'] = {
             "talk": [
                 "The chapel is open, {name}. That is not the end of the work.",
                 "The Bright Three keep this valley: Althas of the Hearth, Caelen of the Road, Mira of the Well. You walked their blessing-roll. They have an enemy.",
-                "North of the village, up the Whisperwood path a little way, then east of the bandits: a closed gate, and a man who looks like one of them. He is not. Go talk to him. I will not say his name on this floor."
+                "Northwest of the village, up the Whisperwood path a little way, then west of the bandits: a closed gate, and a man who looks like one of them. He is not. Go talk to him. I will not say his name on this floor."
             ],
             "say": [
                 "Keep your voice down. If they hear a prayer out of you I am a dead man.",
@@ -246,7 +254,7 @@ quests['quests']['red_pyre'] = {
                 "Inside that fence is the Red Pyre. They are Vorthans - not priests of the Three. Vorth was the fourth they buried still breathing. Orange hoods, a red church. I open the gate. You listen. You do not strike. If you blow this, they will know I let you in."
             ],
             "progress": [
-                "North up the Whisperwood path, then east of the bandits. A closed gate and a man who looks like a lookout. Talk to him, then come back."
+                "Northwest up the Whisperwood path, then west of the bandits. A closed gate and a man who looks like a lookout. Talk to him, then come back."
             ],
             "complete": [
                 "Pike. Yes. Caelen still has a man in that camp. You did not name him in the wood, I hope.",
@@ -271,7 +279,7 @@ quests['quests']['red_pyre'] = {
             "complete": [
                 "Vorth the Unburied. I had hoped it was rumour. The Three are hearth, road and well - and they had a brother they would not name.",
                 "Pike cannot hold that gate forever. There is a keeper among them who carries burnt beads, a rosary. You must take it from him. Until I said this, you were not to raise a hand in there. Now you must.",
-                "The beads will put you at a cave in the west woods. Whatever they have been hiding, it is there. Bring me what you find."
+                "The beads will put you at a cave in the northeast woods. Whatever they have been hiding, it is there. Bring me what you find."
             ]
         },
         {
@@ -280,7 +288,7 @@ quests['quests']['red_pyre'] = {
             "goal": {"kill": "vorthan", "n": 1, "bring": "edric_note"},
             "reward": "xp:prayer:693",
             "talk": [
-                "Kill the Vorthan who keeps the rosary. Use the beads. They will carry you to the Spider Cave, west of Whisperwood.",
+                "Kill the Vorthan who keeps the rosary. Use the beads. They will carry you to the Spider Cave, northeast of Whisperwood.",
                 "Halfway down the first tunnel you will find what they left. Search it. Bring me the writing. The robe is yours if it still holds together."
             ],
             "progress": [

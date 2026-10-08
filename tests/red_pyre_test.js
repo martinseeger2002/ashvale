@@ -35,7 +35,11 @@ ok(D.monsters.vorthan && D.monsters.vorthan.cover && D.monsters.vorthan.cover.st
 ok(D.items.vorthan_robe && D.items.vorth_rosary && D.items.edric_note, 'robe, rosary and note exist');
 const robe = core.item('vorthan_robe'), monk = core.item('monk_robe');
 ok(robe.magic === monk.magic + 1 && robe.prayer === monk.prayer + 1 && robe.prayerSec === monk.prayerSec + 1, 'Vorthan robe is Monk\'s robe +1');
-ok(core.item('vorth_rosary').teleport === 'spidercave', 'the rosary teleports to the Spider Cave');
+const ros = core.item('vorth_rosary');
+ok(ros.teleport === 'spidercave', 'the rosary teleports to the Spider Cave');
+ok(ros.eq === 'shield', 'the rosary is worn in the shield hand');
+ok(ros.magic === robe.magic && ros.prayer === robe.prayer && ros.prayerSec === robe.prayerSec, 'the rosary matches the Vorthan robe\'s Magic, Prayer and Prayer seconds');
+
 
 let d = talk('pike');
 ok(d && /Sod off/.test(d.lines[0]) && !p.quests.red_pyre, 'Pike refuses until Wayside Prayer is done');
@@ -74,18 +78,27 @@ d = talk('wenna');
 ok(p.quests.red_pyre.step === 3 && /rosary|beads/.test(d.lines.join(' ')), 'Wenna authorises the killing blow');
 ok(!core.coverBlocks(p, v), 'cover lifts once she has sent you to kill');
 
-v.hp = 1; p.x = v.x + 1; p.y = v.y; p.act = null;
+p.x = 27; p.y = 3; p.act = null; p.path = [];
+v.hp = D.monsters.vorthan.hp; v.dead = 0; v.x = 31; v.y = 4;
 core.cmd('p1', { c: 'attack', uid: v.uid });
-for (let i = 0; i < 40 && !v.dead; i++) core.tick();
-ok(v.dead && p.quests.red_pyre.n === 1, 'the keeper is slain and the kill counts');
+for (let i = 0; i < 80 && !v.dead; i++) core.tick();
+ok(v.dead && p.quests.red_pyre.n === 1, 'from outside the open gate you can walk in and slay the keeper');
+ok(p.x >= 28, 'the fight path takes you through the gate');
 for (let i = 0; i < 6; i++) core.tick();
 ok(core.S.ground.some(g => g.id === 'vorth_rosary'), 'he drops Vorth\'s rosary');
 
 const slot = p.inv.findIndex(s => !s);
 p.inv[slot] = { id: 'vorth_rosary', n: 1 };
+const beforeStep = { step: 2, n: 1 };
+p.quests.red_pyre = beforeStep;
+const xLock = p.x, yLock = p.y;
 core.cmd('p1', { c: 'use', slot });
 for (let i = 0; i < 4; i++) core.tick();
-ok(p.x === -124 && p.y === 10, 'the rosary carries you to the cave mouth');
+ok(p.x === xLock && p.y === yLock, 'the rosary will not teleport before Wenna sends you for the beads');
+p.quests.red_pyre = { step: 3, n: 1 };
+core.cmd('p1', { c: 'use', slot });
+for (let i = 0; i < 4; i++) core.tick();
+ok(p.x === -124 && p.y === 10, 'the rosary carries you to the cave mouth once the kill step is open');
 
 ok(core.searchOpen(p, npc('edric_skel')), 'the bones can be searched after the kill');
 d = talk('edric_skel');

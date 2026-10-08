@@ -227,10 +227,13 @@
         const halo = new THREE.Mesh(new THREE.SphereGeometry(R * 0.62, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffd36a, transparent: true, opacity: 0.18, depthWrite: false, fog: false }));
         g.add(core, halo); g.frustumCulled = false; core.frustumCulled = halo.frustumCulled = false; scene.add(g); sunBall = g;
         moonBall = new THREE.Mesh(new THREE.SphereGeometry(R * 0.2, 24, 16), new THREE.MeshLambertMaterial({ color: 0xd8d8d0, fog: false })); moonBall.frustumCulled = false; scene.add(moonBall); }
-      function sunNow() {   /* the sun's direction from the planet's centre: over the equator, moving west 360 degrees a day */
+      function sunNow() {   /* the sun's direction from the planet's centre: moving west 360 degrees a day, north or south of the equator by the season */
         if (sunLon == null) { const a = PLACES.ashvale ? PLACES.ashvale.u : [1, 0, 0]; sunLon = Math.atan2(a[1], a[0]); }
-        const L = sunLon - Math.PI / 2 - 2 * Math.PI * ((Date.now() / 1000 - SUN_EPOCH) / DAY_S);
-        return [Math.cos(L), Math.sin(L), 0];
+        const days = (Date.now() / 1000 - SUN_EPOCH) / DAY_S, L = sunLon - Math.PI / 2 - 2 * Math.PI * days;
+        /* the year (the game's seasons module, src/seasons.js): the axis leans 23.44 degrees, so the sun stands north or south of
+           the equator by the day of the 365-day year - the same sun the game lights its world with */
+        const dl = 23.44 * Math.PI / 180 * Math.sin(2 * Math.PI * (days - 79) / 365), cd = Math.cos(dl);
+        return [Math.cos(L) * cd, Math.sin(L) * cd, Math.sin(dl)];
       }
       /* a game tile (the x, y a character stands on) -> the sphere direction and the planar point, the same mapping as the places */
       const gameAt = (vx, vy) => { if (!CFG.origin) return null; const fx = vx + CFG.origin[0] + 0.5, fy = -(vy + CFG.origin[1]) - 0.5; return { u: W.toSphere(CFG.face, fx, fy), face: CFG.face, x: fx, y: fy }; };

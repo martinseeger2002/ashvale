@@ -51,7 +51,7 @@ core.cmd('p1', { c: 'gather', x: 198, y: 11 });
 let dlg = null;
 ticks(4, e => { if (e.e === 'dialog' && e.p === 'p1') dlg = e; });
 const text = dlg ? dlg.lines.join(' ') : '';
-ok(dlg && dlg.name === 'You' && /mighty headache/i.test(text) && /Sixty-two paces south/.test(text) && /One pace west/.test(text) && /197, -51/.test(text) && /out of balance/i.test(text), 'the altar carves the path and refuses: ' + text.slice(0, 80));
+ok(dlg && dlg.name === 'You' && /mighty headache/i.test(text) && /Forty-nine paces north/.test(text) && /Thirty-seven paces west/.test(text) && /197, -51/.test(text) && /out of balance/i.test(text), 'the altar carves the path and refuses: ' + text.slice(0, 80));
 ok(p.pp === before, 'prayer is not restored');
 ok(p.quests.even_grove && p.quests.even_grove.step === 1, 'The Even Grove starts at the altar');
 
@@ -145,7 +145,7 @@ ok(dlg && /Ancient Chapel/.test(dlg.lines.join(' ')), 'Wenna says it aloud');
 p.x = 198; p.y = 12; p.pp = 1;
 core.cmd('p1', { c: 'gather', x: 198, y: 11 });
 dlg = null; ticks(4, e => { if (e.e === 'dialog') dlg = e; });
-ok(dlg && /Sixty-two paces south/.test(dlg.lines.join(' ')) && p.pp === 1, 'the altar still shows the path until the second quest is done');
+ok(dlg && /Forty-nine paces north/.test(dlg.lines.join(' ')) && p.pp === 1, 'the altar still shows the path until the second quest is done');
 
 dlg = talk('vael');
 ok(dlg && /Protect from Magic/.test(dlg.lines.join(' ')) && /Gale/.test(dlg.lines.join(' ')), 'he teaches the overhead prayers and names the three');
@@ -187,12 +187,15 @@ ok(p.quests.even_guard.step > D.quests.quests.even_guard.steps.length, 'The Even
 const slot = p.inv.findIndex(s => s && s.id === 'verdant_wreath');
 core.cmd('p1', { c: 'equip', slot });
 ticks(2);
-ok(p.eq.head && p.eq.head.id === 'verdant_wreath' && core.item('verdant_wreath').ppHold === 1, 'the wreath sits on the head and holds prayer');
-p.pray = { protect_from_melee: 1 }; p.pd = 0; p.pp = 2;
-const low = core.prayTicks(p, 1, 12);
-p.pp = 12; p.pd = 0;
-const high = core.prayTicks(p, 1, 12);
-ok(high > low, 'each point you still hold adds a second (' + low + ' ticks at 2pp, ' + high + ' at 12pp)');
+ok(p.eq.head && p.eq.head.id === 'verdant_wreath' && core.item('verdant_wreath').magic === 1 && core.item('verdant_wreath').prayer === 3 && core.item('verdant_wreath').prayerSec === 1, 'the wreath sits on the head with a monk robe\'s blessing');
+p.pray = { protect_from_melee: 1 }; p.pd = 0; p.pp = 12;
+const worn = core.prayTicks(p, 1, 12);
+const head = p.eq.head; p.eq.head = null;
+const bare = core.prayTicks(p, 1, 12);
+const body = p.eq.body; p.eq.body = { id: 'monk_robe', n: 1 };
+const robe = core.prayTicks(p, 1, 12);
+p.eq.head = head; p.eq.body = body;
+ok(worn > bare && worn === robe, 'the wreath lengthens prayer exactly as a monk robe does (' + bare + ' bare, ' + worn + ' worn)');
 
 p.x = 198; p.y = 12; p.pp = 1; p.pd = 0; p.act = null; p.path = [];
 core.cmd('p1', { c: 'gather', x: 198, y: 11 });
@@ -236,6 +239,20 @@ ticks(1);
 const grown = core.nodeAt(core.idx(spot[0], spot[1]));
 ok(core.M.blocked(spot[0], spot[1]) && grown && grown.kind === 'P' && core.S.plants[core.idx(spot[0], spot[1])].grown, 'after an hour the grass grows a tree that stays');
 ok(!core.canPlant(p, spot[0], spot[1]), 'the grown tree cannot be picked back up');
+
+const gv = core.M.npcs.filter(n => n.watch === 'village'), gs = core.M.npcs.filter(n => n.watch === 'saltmere');
+ok(gv.length === 3 && gs.length === 4 && !!core.M.npcs.find(n => n.road), 'town guards stand in Ashvale and Saltmere, and one has the road');
+ok(gv.every(n => !n.foe) && core.guardCb === 33, 'the guards are combat 33 and do not start a fight');
+const g0 = gv[0];
+p.x = g0.x + 1; p.y = g0.y; if (core.M.blocked(p.x, p.y)) { p.x = g0.x; p.y = g0.y + 1; }
+p.path = []; p.act = null; p.dead = 0; p.hp = core.maxHp(p);
+core.cmd('p1', { c: 'attack', id: g0.id });
+ticks(3);
+ok(gv.every(n => n.foe === 'p1') && gs.every(n => !n.foe), 'hitting one Ashvale guard turns that watch, not Saltmere');
+for (const n of gv) { n.foe = null; n.down = 0; n.hp = 40; }
+core.watchPhase(true, false);
+ticks(8);
+ok(gv.some(n => n.duty) || Object.keys(core.S.lit).length > 0, 'at dusk the Ashvale guards walk out to light the lamps');
 
 console.log(fails ? fails + ' FAILED' : 'all passed');
 process.exit(fails ? 1 : 0);
