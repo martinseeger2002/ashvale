@@ -507,6 +507,7 @@
     const HK = Object.assign({ hp: 4, slots: 9, carry: 0.34, strike: 3, exposed: 1, hitPct: 25, hitDmg: 4, energy: 250, groundEvery: 4, regenEvery: 50 }, RU.hawk || {});   /* exposed: ticks it is down within reach */
     const slotLimit = (p) => isHawk(p) ? Math.min(HK.slots, p.inv.length) : p.inv.length;
     const airborne = (p) => isHawk(p) && !(p.burden > 0) && !(p.striking > S.t);   /* in the air: no land animal can touch it */
+    const shooter = (m, md) => !!(md.cast || (m.carry && Object.keys(m.carry).some(k => /^arrows_/.test(k) && m.carry[k] > 0)));   /* can reach a hawk in the sky */
     const isHawk = (p) => !!(p && p.eq && p.eq.ring && IT[p.eq.ring.id] && IT[p.eq.ring.id].form === 'hawk');
     function gateOpen(x, y) {
       if (!GATE_P) return false;
@@ -583,7 +584,30 @@
       }
       let end = found >= 0 ? found : best; if (end < 0 || end === s0) return [];
       const path = []; while (end !== s0) { path.push(idx(X0 + end % S2, Y0 + ((end / S2) | 0))); end = prev[end]; }
-      return path.reverse();
+      return straightPath(sx, sy, path.reverse());
+    }
+    /* WALK STRAIGHT (2026-10-08: "fix the character movement so the character doesn't jog back-and-forth so much"): the search
+       finds a shortest way, but among the many equally short ones it takes the first, which bunches its diagonal steps and turns
+       at every chance. The way is redrawn as straight lines wherever every step of the line can be taken, the diagonals spread
+       evenly along each line - never longer than before, and only through tiles a step may enter anyway. */
+    function lineSteps(ax, ay, bx, by) {
+      const dx = bx - ax, dy = by - ay, n = Math.max(Math.abs(dx), Math.abs(dy)), out = [];
+      for (let k = 1; k <= n; k++) out.push([ax + Math.round(dx * k / n), ay + Math.round(dy * k / n)]);
+      return out;
+    }
+    function lineOk(ax, ay, steps) { let px = ax, py = ay; for (const [x, y] of steps) { if (!canStep(px, py, x - px, y - py)) return false; px = x; py = y; } return true; }
+    function straightPath(sx, sy, path) {
+      if (path.length < 3) return path;
+      const pts = [[sx, sy]].concat(path.map(k => [kx(k), ky(k)])), out = [];
+      let i = 0;
+      while (i < pts.length - 1) {
+        let j = Math.min(pts.length - 1, i + 48), seg = null;
+        for (; j > i + 1; j--) { const st = lineSteps(pts[i][0], pts[i][1], pts[j][0], pts[j][1]); if (st.length <= j - i && lineOk(pts[i][0], pts[i][1], st)) { seg = st; break; } }
+        if (!seg) { seg = [pts[i + 1]]; j = i + 1; }
+        for (const [x, y] of seg) out.push(idx(x, y));
+        i = j;
+      }
+      return out.length <= path.length ? out : path;
     }
     function lineOfSight(ax, ay, bx, by) {
       let x = ax, y = ay; const dx = Math.abs(bx - ax), dy = Math.abs(by - ay), sx = ax < bx ? 1 : -1, sy = ay < by ? 1 : -1; let err = dx - dy;
@@ -991,7 +1015,7 @@
       /* a spell is rolled against magic defence as in RuneScape: 70% Magic, 30% Defence */
       const A = magic ? ((C.att || md.att) + 9) * ((C.attb || md.attb) + 64) : (md.att + 9) * (md.attb + 64);
       const Dr = magic ? (Math.floor(eff(p, 'magic') * 0.7 + eff(p, 'defence') * 0.3) + 9) * (b.defence + 64) : (eff(p, 'defence') + (st.def || 0) + 9) * (b.defence + 64);
-      if (airborne(p)) return;   /* a hawk in the air: no land animal can touch it */
+      if (airborne(p) && !mode) return;   /* a hawk in the air: no blow can reach it - only an arrow or a spell, shot up at it (2026-10-08) */
       const hk = isHawk(p), hit = rollAttack(A, Dr); let dmg = hit ? Math.min(R.int((magic && C.max != null ? C.max : md.max) + 1), hk ? p.hawkHp : p.hp) : 0, dodged = false;
       if (dmg > 0 && R.int(100) < Math.floor(lv(p, 'dexterity') / 10) * (DEX.dodgePerTenLevels || 1)) { dmg = 0; dodged = true; }   /* Dexterity: a dodge turns a hit into a 0 */
       /* an overhead protection prayer stops a monster's blows of its kind entirely, as in RuneScape; against a spell it
@@ -1351,7 +1375,7 @@
     function ensureStep(p, q, st) { openStep(p, q, st); }
     const VAEL_CLEAR = 10;
     function vaelTile() { const n = M.npcs.find(q => q.id === 'vael'); return n ? [n.x, n.y] : null; }
-    /* the walk the chapel carves: one tile west of the altar, then toward the grove (map-north / true northwest), three tiles wide */
+    /* the walk the chapel carves: one tile west of the altar, then toward the grove (map-north / true south-southwest since the north was turned), three tiles wide */
     function onChapelPath(x, y) { return x >= 196 && x <= 198 && y <= 14 && y >= -40; }
     function townAt(x, y) {
       for (const z of ZINDEX) {
@@ -1474,7 +1498,7 @@
           }
           const lines = [
             'A mighty headache. It sits behind the eyes and will not blink.',
-            'When it eases, a path is carved there. Forty-nine paces north. Thirty-seven paces west. The tile reads 197, -51.',
+            'When it eases, a path is carved there. Forty-nine paces south. Thirty-eight paces west. The tile reads 197, -51.',
             'The altar will not have you. You are out of balance.'
           ];
           if (questFinished(p, 'even_grove')) lines.push('The carving is still there. When the Red Pyre is known, the one on the rope will teach the harder balance.');
@@ -2186,7 +2210,7 @@
       let best = null, bd = 99;
       for (const pid of S.order) {
         const q = S.players[pid];
-        if (q.dead || q.lv > 0 || airborne(q) || S.t - q.spawnT <= 8 || combatLevel(q) > mobCombat(md) || M.zoneAt(q.x, q.y) !== m.zone) continue;   /* monsters keep to the ground floor, and cannot reach a hawk */
+        if (q.dead || q.lv > 0 || (airborne(q) && !shooter(m, md)) || S.t - q.spawnT <= 8 || combatLevel(q) > mobCombat(md) || M.zoneAt(q.x, q.y) !== m.zone) continue;   /* monsters keep to the ground floor, and cannot reach a hawk */
         const d = cheb(q.x, q.y, m.x, m.y); if (d <= sightOf(m, md) && d < bd) { bd = d; best = q; }
       }
       if (best) { m.tgt = best.id; m.back = 0; m.path = null; }
@@ -2207,14 +2231,15 @@
         if (S.t - m.fleeing > 12 || (m.x === m.sx && m.y === m.sy)) { m.fleeing = 0; if (m.tgt) rally(m, m.tgt, 8); }   /* regrouped: back into the fight with friends */
         else { if (!mobPathStep(m, (x, y) => x === m.sx && y === m.sy, m.sx, m.sy, 24) && p) stepAway(m, p, ai.leash); return; }
       }
+      if (p && airborne(p) && !shooter(m, md)) { m.tgt = 0; m.back = 1; m.path = null; p = null; }   /* the hawk flew off: no sword reaches it (2026-10-08) */
       if (!p && !m.back && md.aggro > 0) p = acquire(m, md);
       if (comeStep(m)) { if (m.hp < md.hp && S.t % 10 === 0) m.hp++; return; }   /* someone is trying to hit us and cannot: come out to them, without attacking */
       if (p) {
         const d = cheb(m.x, m.y, p.x, p.y), archer = m.carry && Object.keys(m.carry).some(k => /^arrows_/.test(k) && m.carry[k] > 0);
         if (archer) {
           const rf = wx(m.zone, 'range'), keep = [Math.max(2, Math.round((ai.keep || [4, 6])[0] * rf)), Math.max(2, Math.round((ai.keep || [4, 6])[1] * rf))];
-          if (d <= 2 && stepAway(m, p, ai.leash)) return;   /* backs off when you close in ... */
-          if (d > 2 || !archer) {
+          if (d <= 2 && !airborne(p) && stepAway(m, p, ai.leash)) return;   /* backs off when you close in ... (a hawk overhead it just shoots) */
+          if (d > 2 || airborne(p)) {   /* a hawk overhead is shot at however close */
             if (d <= keep[1] + 1 && lineOfSight(m.x, m.y, p.x, p.y)) { m.face = faceTo(m.x, m.y, p.x, p.y); if (m.atk <= 0) { mobAttack(m, p, true); m.atk = md.speed; } return; }
             if (mobPathStep(m, (x, y) => { const dd = cheb(x, y, p.x, p.y); return dd >= keep[0] && dd <= keep[1] && lineOfSight(x, y, p.x, p.y); }, p.x, p.y, 14)) return;
           }
@@ -2290,8 +2315,9 @@
         m.crossing = retaliating(m, 10);
         if (p && !(m.crossing && p.id === m.hurt) && (p.dead || cheb(m.x, m.y, m.sx, m.sy) > 10 || cheb(p.x, p.y, m.sx, m.sy) > 14)) { m.tgt = 0; m.back = 1; p = null; }
       }
+      if (p && airborne(p) && !shooter(m, md)) { m.tgt = 0; m.back = 1; p = null; }   /* the hawk flew off: no bite or blow reaches it (2026-10-08) */
       if (!p && !m.back && md.aggro > 0) {
-        for (const pid of S.order) { const q = S.players[pid]; if (!q.dead && !airborne(q) && S.t - q.spawnT > 8 && cheb(q.x, q.y, m.x, m.y) <= sightOf(m, md) && (md.hunter || combatLevel(q) <= mobCombat(md)) && M.zoneAt(q.x, q.y) === M.zoneAt(m.sx, m.sy)) { m.tgt = q.id; p = q; break; } }   /* hunters (timber wolves) take on anyone */
+        for (const pid of S.order) { const q = S.players[pid]; if (!q.dead && !(airborne(q) && !shooter(m, md)) && S.t - q.spawnT > 8 && cheb(q.x, q.y, m.x, m.y) <= sightOf(m, md) && (md.hunter || combatLevel(q) <= mobCombat(md)) && M.zoneAt(q.x, q.y) === M.zoneAt(m.sx, m.sy)) { m.tgt = q.id; p = q; break; } }   /* hunters (timber wolves) take on anyone */
       }
       /* shy animals (2026-10-04: chickens scatter, deer flee when you come close): within md.shy tiles of a
          player they run, two steps a tick, away from the nearest one and back toward home after. Hit one and it is

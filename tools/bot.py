@@ -216,11 +216,26 @@ class Bot:
                   return false; }""")
                 if hit: log('declined the contacts prompt (a bot has no address book to share)'); break
         except Exception: pass
+    def not_elsewhere(self):
+        """"ASHVALE is open on another device": the game stopped here -- no saves, no network -- because a newer game
+        of @cinderwalker started somewhere (engine.js ONE DEVICE AT A TIME). From 00:49 to 12:00 on 2026-10-08 he
+        played on into a stopped game and nothing counted. He is the bot that plays this character: Play here
+        instead (a reload, which makes this the newest game), and the log says each time it happened."""
+        if time.time() - getattr(self, '_elsewhereT', 0) < 20: return
+        self._elsewhereT = time.time()
+        if not self.r("const e = document.querySelector('.ash .elsewhere'); return !!(e && e.style.display === 'flex')"): return
+        self._evicted = getattr(self, '_evicted', 0) + 1
+        # who won, as the game now says (ASHVALE 0.8.73: window.__evictedBy {s, at, claim, ours, from})
+        log('stopped by', self.r("return window.__evictedBy ? JSON.parse(JSON.stringify(window.__evictedBy)) : null"))
+        bug('one device', 'the game stopped: "ASHVALE is open on another device" (%d time(s) this run) -- another game of @cinderwalker started somewhere' % self._evicted)
+        # a fresh run is the newest game, and it puts back everything this page carries (eating, the death watch,
+        # the chat answers) -- a reload here would lose those
+        log('ending this run so a fresh one takes the game back'); self._stop_now = True
     def time_left(self):
         """False when the run is up - or when a new game release came out (chain/modules.json registry_version went up): the run
         ends cleanly and tools/bot_loop.sh starts it again on the new release, so other players keep seeing him (the operator
         2026-10-06: a run on an old release fell out of the players' rooms)"""
-        if LiveGame.stopping or time.time() - self.t0 >= self.limit: return False
+        if LiveGame.stopping or getattr(self, '_stop_now', False) or time.time() - self.t0 >= self.limit: return False
         # where he fell goes into the memory file the moment it happens: a restart reloads the page and loses the page's
         # note (2026-10-07: two deaths, gear and 271 GOLD left in the woods, both forgotten at the next restart)
         d = self.r("return window.__deadAt || null")
@@ -232,6 +247,8 @@ class Bot:
             try: self.g.shot(os.path.join(HERE, 'chain', 'cinder_died.png'))
             except Exception: pass
         self.no_contacts()
+        self.not_elsewhere()
+        if getattr(self, '_stop_now', False): return False
         if time.time() - getattr(self, '_shotT', 0) > 120:   # what he sees, for whoever is watching the bot
             self._shotT = time.time()
             try: self.g.shot(os.path.join(HERE, 'chain', 'cinder_now.png'))
@@ -297,6 +314,7 @@ class Bot:
             bug('passage', '%s at (%d, %d) needs the flag %s, which he does not have, to reach (%d, %d)' % (P['name'], P['x'], P['y'], P['need'], x, y)); return False
         side = P.get('out') or [P['x'] - 1, P['y']]
         log('the way in is the %s at (%d, %d): going through' % (P['name'], P['x'], P['y']))
+        self.portal_hop(side[0], side[1])   # from Saltmere it walked on foot and stopped at (319, 27) (2026-10-08)
         for _ in range(5):   # one minute was not enough to get there (2026-10-07: tried the gate from (49, 23))
             at = self.st().get('at') or [0, 0]
             if max(abs(at[0] - P['x']), abs(at[1] - P['y'])) <= 1: break

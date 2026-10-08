@@ -48,8 +48,8 @@ for x in range(54, 58): put(x, 52, 'p')                      # the south door's 
 # inside: a bed, a table and a chair each, a fireplace in the north house
 objects += [{'k': 'bed', 'x': 57, 'y': 43}, {'k': 'table', 'x': 54, 'y': 43}, {'k': 'chair', 'x': 54, 'y': 44}, {'k': 'fireplace', 'x': 56, 'y': 43},
             {'k': 'bed', 'x': 57, 'y': 56}, {'k': 'table', 'x': 54, 'y': 56}, {'k': 'chair', 'x': 55, 'y': 56}]
-# gas lamps by the crossing, either side of the road
-objects += [{'k': 'lamp', 'x': PX - 1, 'y': 49}, {'k': 'lamp', 'x': PX + 2, 'y': 52}]
+# a gas lamp by the crossing, on the road's north side like the lamps all down the road (2026-10-08: one side, every other one gone)
+objects += [{'k': 'lamp', 'x': PX - 1, 'y': 49}]
 zone = {'name': 'Eastend', 'level': '1-5', 'origin': [OX, OY], 'size': [W, H], 'ground': 'grass',
         'tiles': [''.join(r) for r in rows], 'objects': objects, 'npcs': npcs, 'spawns': [], 'fishing': []}
 out = {'ashvale3d': 'module', 'name': 'zone.eastend', 'api': 1, 'v': 1, 'data': zone}

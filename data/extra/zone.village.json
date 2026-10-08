@@ -478,7 +478,7 @@
    "y": 50,
    "talk": "quest",
    "quest": "bronze_gate",
-   "examine": "Silas the mason. He laid the well, the two shops and the northwest gate, and he means you to know it."
+   "examine": "Silas the mason. He laid the well, the two shops and the southwest gate, and he means you to know it."
   },
   {
    "id": "pip",
@@ -523,7 +523,7 @@
    "y": 44,
    "talk": "quest",
    "quest": "elder_bow",
-   "examine": "Latency the warden, on the northwest road. Late to everything, and there before you are."
+   "examine": "Latency the warden, on the southwest road. Late to everything, and there before you are."
   },
   {
    "id": "symmetry",
@@ -555,7 +555,7 @@
    "y": 48,
    "talk": "quest",
    "quest": "skinning_knife",
-   "examine": "Fenn the tanner, on the lane below the southwest road, with frames of skins that nobody in this village knew he had."
+   "examine": "Fenn the tanner, on the lane below the northwest road, with frames of skins that nobody in this village knew he had."
   },
   {
    "id": "chest",
@@ -590,7 +590,7 @@
    "name": "Odric the merchant",
    "look": "odric",
    "x": 209,
-   "y": 49,
+   "y": 39,
    "examine": "Odric the merchant, sat in the grass by his wagon with one boot off.",
    "lines": [
     "The wheelwright from Saltmere's coming, they say. They've been saying it for a while.",
@@ -602,7 +602,7 @@
    "name": "Crashed wagon",
    "look": "wagon",
    "x": 211,
-   "y": 50,
+   "y": 39,
    "examine": "A covered wagon on its side. The axle has snapped clean through.",
    "lines": [
     "The axle has snapped clean through. Candles and torn altar cloth lie in the grass where the load spilled."

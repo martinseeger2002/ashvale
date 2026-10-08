@@ -128,8 +128,8 @@ const buildings = [
   { k: 'house', x: 3440, y: 1830, w: 5, h: 5, door: [3442, 1830], roof: '#6a5a3a', wall: '#dbd1ba', enter: true },
   /* more of a town (the operator: "add more buildings to the second town so it doesn't look so plain") */
   { k: 'shop', x: 3474, y: 1794, w: 7, h: 5, door: [3477, 1798], sign: 'Harbour Master', roof: '#2f4a6a', wall: '#e4dccb', enter: true },
-  { k: 'house', x: 3478, y: 1773, w: 11, h: 5, door: [3483, 1777], sign: 'North Warehouse', roof: '#5a4a3a', wall: '#b9ad95' },
-  { k: 'house', x: 3478, y: 1874, w: 11, h: 5, door: [3483, 1874], sign: 'South Warehouse', roof: '#5a4a3a', wall: '#b9ad95' },
+  { k: 'house', x: 3478, y: 1773, w: 11, h: 5, door: [3483, 1777], sign: 'South Warehouse', roof: '#5a4a3a', wall: '#b9ad95' },
+  { k: 'house', x: 3478, y: 1874, w: 11, h: 5, door: [3483, 1874], sign: 'North Warehouse', roof: '#5a4a3a', wall: '#b9ad95' },
   { k: 'smithy', x: 3446, y: 1868, w: 7, h: 5, door: [3449, 1868], sign: 'Saltmere Armoury', roof: '#3a3a3a', wall: '#a59a88' },
   /* the enchantery (2026-10-05: "a magic store with some new magical items") — a small shop on the marsh end */
   { k: 'shop', x: 3424, y: 1866, w: 5, h: 5, door: [3426, 1866], sign: 'Saltmere Enchantery', roof: '#4a2f6a', wall: '#ddd6e2', enter: true },
@@ -285,7 +285,7 @@ const npcs = [
   { id: 'calder', name: 'Mayor Calder', look: 'calder', x: 3409, y: 1812,
     examine: "Mayor Calder of Saltmere, chain of office and a stack of plans that are not yet a desk.",
     lines: [
-      "Welcome to Saltmere's town hall. I am Mayor Calder. The west counter is the bank. This one is talk.",
+      "Welcome to Saltmere's town hall. I am Mayor Calder. The southeast counter is the bank. This one is talk.",
       "Ashvale is a living world on Dogecoin. You gather, fight, cook, bury bones for Prayer, and keep what you earn. Tam sells bread, Garrick smiths, Wren stitches hats and capes as tokens. The chest in each town is your arcade wallet - bag and bank are the same holdings.",
       "Day and night here run on a two-hour wheel, not a real day. Follow the lamps after dark. Portals between towns remember you once you have touched the stones.",
       "The tokens you hold are Omni assets. The Omni protocol writes them on Dogecoin itself, the same chain that carries the coin. They are not a costume the game invented. They are entries the chain can prove.",
