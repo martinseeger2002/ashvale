@@ -617,7 +617,8 @@
    "watch": "village",
    "examine": "A town guard. Combat level 33. He keeps the peace, and the lamps.",
    "lines": [
-    "We keep the peace. When the day goes we light the lamps and the torches. When it comes back we put the lamps out."
+    "We keep the peace. When the day goes we light the lamps and the torches. When it comes back we put the lamps out.",
+    "Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."
    ]
   },
   {
@@ -629,7 +630,8 @@
    "watch": "village",
    "examine": "A town guard. Combat level 33. He keeps the peace, and the lamps.",
    "lines": [
-    "Strike one of us and the whole watch answers."
+    "Strike one of us and the whole watch answers.",
+    "Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."
    ]
   },
   {
@@ -641,7 +643,8 @@
    "watch": "village",
    "examine": "A town guard. Combat level 33. He keeps the peace, and the lamps.",
    "lines": [
-    "The lamps along the street are our work, not the sun's."
+    "The lamps along the street are our work, not the sun's.",
+    "Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."
    ]
   },
   {
@@ -654,7 +657,8 @@
    "road": true,
    "examine": "A town guard. Combat level 33. He walks the cobbles from Ashvale to Saltmere and tends the lamps.",
    "lines": [
-    "The cobbles run from Ashvale to Saltmere. I light those lamps at dusk and put them out at dawn."
+    "The cobbles run from Ashvale to Saltmere. I light those lamps at dusk and put them out at dawn.",
+    "Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."
    ]
   }
  ]

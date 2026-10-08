@@ -231,7 +231,27 @@
     }
     const ci = (x, y) => ((y & CM) << SH) | (x & CM);
     const tileAt = (x, y) => CHR[chunkAt(x, y).t[ci(x, y)]];
-    const blocked = (x, y) => chunkAt(x, y).fl[ci(x, y)] & 1;
+    /* ICE (2026-10-07: lakes near the pole freeze in winter and you can walk on them; "not the ocean water that should remain
+       liquid and so should ocean bays and the flowing river water should always remain open"). Each water tile is a lake (still), a
+       river channel or the sea, from worldgen's own river flag and the planet's sea parcels; the engine says, by latitude, where
+       it is frozen (setIce). A frozen lake tile does not block. */
+    const ICE = { at: null, blocks: new Map(), kinds: new Map(), SB: null };
+    function waterKind(x, y) {
+      const k = x + ',' + y; let v = ICE.kinds.get(k); if (v) return v;
+      v = 'lake';
+      if (WG && WG.sample) { const s = WG.sample(FACE, x + OX + 0.5, -(y + OY) - 0.5, ICE.SB || (ICE.SB = WG.newSample())); if (s.river >= 0.5) v = 'river'; else if (s.cls === 3) v = 'sea'; }
+      if (ICE.kinds.size > 200000) ICE.kinds.clear();
+      ICE.kinds.set(k, v); return v;
+    }
+    function latOf(x, y) { if (!WG || !WG.toSphere) return 0; const u = WG.toSphere(FACE, x + OX + 0.5, -(y + OY) - 0.5); return Math.asin(u[2] / Math.hypot(u[0], u[1], u[2])) * 180 / Math.PI; }
+    function iceAt(x, y) {
+      if (!ICE.at) return false;
+      const c = chunkAt(x, y), t = CHR[c.t[ci(x, y)]]; if (t !== '~' && t !== 'v') return false;
+      const bk = (x >> 6) + ',' + (y >> 6); let f = ICE.blocks.get(bk); if (f == null) { f = !!ICE.at(latOf((x & ~63) + 32, (y & ~63) + 32)); ICE.blocks.set(bk, f); }
+      return f && waterKind(x, y) === 'lake';
+    }
+    const setIce = fn => { ICE.at = fn || null; ICE.blocks.clear(); };
+    const blocked = (x, y) => (chunkAt(x, y).fl[ci(x, y)] & 1) && !iceAt(x, y);
     const losAt = (x, y) => (chunkAt(x, y).fl[ci(x, y)] >> 1) & 1;
     const insideAt = (x, y) => (chunkAt(x, y).fl[ci(x, y)] >> 2) & 1;
     const wallAt = (x, y) => chunkAt(x, y).wl[ci(x, y)];
@@ -286,7 +306,7 @@
       API, CH, cfg: CFG, key, kx, ky, W, H, pieces, npcs, spawns, objects, nodes, respawn: respawn || [Math.floor(W / 2), Math.floor(H / 2)],
       tileAt, blocked, losAt, wallAt, insideAt, zoneAt, nodeAt, inWorld, addZone, hasZone: (id) => pieces.some(P => P.id === id),
       regionOf: (x, y) => 'vale:' + FACE + ':' + Math.floor((x + GX) / REG) + ':' + Math.floor((y + GY) / REG),
-      seeded: !!WG, inPiece: (x, y) => !!chunkAt(x, y).zi[ci(x, y)], underAt, underNear, underStyle,
+      seeded: !!WG, inPiece: (x, y) => !!chunkAt(x, y).zi[ci(x, y)], underAt, underNear, underStyle, waterKind, iceAt, setIce, latOf,
       /* seeded land, in the vale frame: sites (camps, ore, fishing; ids and monster uids from worldgen), the ground height
          at a tile corner relative to the set pieces' base height (so the old map keeps its own heights), the biome */
       sitesIn(x0, y0, x1, y1) {

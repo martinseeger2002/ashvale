@@ -166,7 +166,7 @@
        "weather" {kinds: {kind: weight}, min, max}; rules.weather.kinds[kind] = generic multipliers that the rules read
        (sight, range, fireFail, fireBurn, run). Rolled from the seeded RNG by the zone's host; replicas take it from the host. */
     const WX = RU.weather || { kinds: {}, intensity: [50, 100] };
-    const ZW = {}; for (const z of ZINDEX) if (z.weather) ZW[z.id] = z.weather;
+    const ZW = {}; for (const z of ZINDEX) if (z.weather && z.weather.kinds) ZW[z.id] = z.weather;   /* a cave's {none: true}: no weather at all */
     /* 2026-10-03: the weather follows the world's climate. On seeded land every area and every set piece belongs
        to the weather region of its climate zone ('cz<n>', tables in rules.weather.climate), and coasts are a little
        foggier; each region rolls like a zone does, so everyone in it agrees */
@@ -196,11 +196,25 @@
       if (key === 'fireFail') return (k || 0) * w.intensity / 100;
       return k == null ? 1 : 1 + (k - 1) * w.intensity / 100;
     }
+    /* THE WEATHER KEEPS THE SEASON (2026-10-07: "It should only snow in the winter at the latitude that it should snow. It's
+       not rain or be foggy in the winter. It should not snow where it is not winter"): the engine tells the core whether it is a
+       snowy winter where the roller stands (setSeason); in one, rain and fog become snow (or clear); anywhere else snow becomes
+       rain. Weather that no longer fits the season ends at once and is rolled again. */
+    let SEASONW = null;
+    const wrongFor = k => SEASONW && (SEASONW.snowy ? (k === 'rain' || k === 'fog') : k === 'snow');
+    function setSeason(st) { SEASONW = st || null; for (const z in S.weather) { const w = S.weather[z]; if (w && wrongFor(w.kind)) w.until = S.t; } }
+    function seasonKinds(K) {
+      if (!SEASONW) return K;
+      const o = Object.assign({}, K);
+      if (SEASONW.snowy) { o.snow = (o.snow || 0) + (o.rain || 0) + (o.fog || 0); delete o.rain; delete o.fog; if (!o.snow) o.snow = 1; }
+      else { o.rain = (o.rain || 0) + (o.snow || 0); delete o.snow; if (!o.rain) delete o.rain; }
+      return o;
+    }
     function weatherTick() {
       for (const z in ZW) {
         const w = S.weather[z]; if (!isAuth(z) || S.t < w.until) continue;
-        const ks = Object.keys(ZW[z].kinds), tot = ks.reduce((a, k) => a + ZW[z].kinds[k], 0); let r = R.int(tot), kind = ks[0];
-        for (const k of ks) { if (r < ZW[z].kinds[k]) { kind = k; break; } r -= ZW[z].kinds[k]; }
+        const KK = seasonKinds(ZW[z].kinds || {}), ks = Object.keys(KK), tot = ks.reduce((a, k) => a + KK[k], 0); let r = R.int(Math.max(1, tot)), kind = ks[0] || 'clear';
+        for (const k of ks) { if (r < KK[k]) { kind = k; break; } r -= KK[k]; }
         const I = kind === 'clear' ? 0 : WX.intensity[0] + R.int(WX.intensity[1] - WX.intensity[0] + 1);
         const len = ZW[z].min + R.int(Math.max(1, ZW[z].max - ZW[z].min + 1));
         const was = w.kind; S.weather[z] = { kind, intensity: I, until: S.t + len };
@@ -483,7 +497,7 @@
        bridge - and never across a corner of land */
     let BOAT = false;
     let GATE_P = null;   /* while a player paths: an open gate (need flag met) is walkable even though its tile is F */
-    const isWet = (x, y) => { const t = M.tileAt(x, y); return t === '~' || t === 'v' || t === 'B'; };
+    const isWet = (x, y) => { const t = M.tileAt(x, y); return (t === '~' || t === 'v' || t === 'B') && !(M.iceAt && M.iceAt(x, y)); };   /* a frozen lake is no water for a canoe */
     /* the hawk (2026-10-04): its own stats. hp 4; a strike every `strike` ticks with a hitPct % chance of hitDmg; a
        strike costs `energy` run energy (Dexterity) and leaves it open to a hit for those ticks; a third of the carrying
        capacity and `slots` bag slots; overburdened it lands and walks one step every groundEvery ticks */
@@ -573,12 +587,13 @@
     };
     function dropGround(id, n, x, y, owner, life, extra) {
       if (!isAuth(zoneOf(x, y))) { ev(Object.assign({ e: 'xdrop', id, n, x, y, life: life || 300, owner: owner || null }, extra || {})); return null; }
-      const g = S.ground.find(q => q.x === x && q.y === y && q.id === id && IT[id].stack);
-      const keep = !perishable(id, g ? g.n + n : n);   /* gear, tools and Gold (rules.persist) and every magical item lie where they fell until someone takes them; the rest despawns (2026-10-04) */
+      const sunk = extra && extra.sunk || 0;
+      const g = S.ground.find(q => q.x === x && q.y === y && q.id === id && IT[id].stack && (q.sunk || 0) === sunk);
+      const keep = sunk || !perishable(id, g ? g.n + n : n);   /* what lies at the bottom of a lake stays there until it is fished up */   /* gear, tools and Gold (rules.persist) and every magical item lie where they fell until someone takes them; the rest despawns (2026-10-04) */
       if (g) { g.n += n; g.until = keep ? 1e15 : S.t + (life || 300); ev({ e: 'ground', g: g.uid, n: g.n, x, y }); return g; }
       const ng = { uid: nuid(), id, n, x, y, owner: owner || null, until: keep ? 1e15 : S.t + (life || 300) };
       if (extra) Object.assign(ng, extra);
-      S.ground.push(ng); ev({ e: 'drop', g: ng.uid, id, n, x, y, from: ng.from || null, owner: owner || null }); return ng;   /* owner: who let it fall (the chest's exact-NFT drops) */
+      S.ground.push(ng); ev({ e: 'drop', g: ng.uid, id, n, x, y, from: ng.from || null, owner: owner || null, sunk: ng.sunk || 0 }); return ng;   /* owner: who let it fall (the chest's exact-NFT drops) */
     }
 
     // ---------------- commands
@@ -1031,7 +1046,33 @@
       if (angelSave(p)) { /* the ring carried them home - still poisoned */ }
       else if (p.hp <= 0) killPlayer(p);
     }
-    function killPlayer(p) {
+    /* LAKES (2026-10-07): a lake is one body of still water; its key is its lowest tile index, found once by a flood fill
+       and kept for every tile of it. Things that sink in it lie on its bottom (ground items with .sunk = the key), unseen,
+       until somebody fishing anywhere on that lake hooks one. */
+    const LAKE = new Map();
+    function lakeKey(x, y) {
+      const k0 = idx(x, y); if (LAKE.has(k0)) return LAKE.get(k0);
+      const wet = (a, b) => { const t = M.tileAt(a, b); return t === '~' || t === 'v'; };
+      if (!wet(x, y) || (M.waterKind && M.waterKind(x, y) !== 'lake')) { LAKE.set(k0, 0); return 0; }
+      const seen = [], q = [[x, y]], vis = new Set([k0]); let lo = k0;
+      while (q.length && seen.length < 8000) {
+        const [a, b] = q.pop(); seen.push(idx(a, b)); lo = Math.min(lo, idx(a, b));
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = a + dx, ny = b + dy, ki = idx(nx, ny); if (!vis.has(ki) && wet(nx, ny)) { vis.add(ki); q.push([nx, ny]); } }
+      }
+      const key = 'L' + lo; for (const ki of seen) LAKE.set(ki, key); return key;
+    }
+    /* THROUGH THE ICE (2026-10-07: "If you're walking on the ice during spring thaw and it melts and you fall through the lake,
+       you should respawn at the nearest town portal as if you died. All of your items should be lost in the bottom of the lake"):
+       a death, but what you carried and wore sinks into that lake instead of lying in a pile */
+    function fallThrough(pid) {
+      const p = S.players[pid]; if (!p || p.dead || p.boat) return false;
+      const key = lakeKey(p.x, p.y) || 'L' + idx(p.x, p.y);
+      msg(p, 'The ice cracks under your feet and gives way! You plunge into the freezing water.', 'warn');
+      killPlayer(p, key);
+      return true;
+    }
+    function sunkIn(key) { let n = 0; for (const g of S.ground) if (g.sunk === key) n++; return n; }
+    function killPlayer(p, sunkKey) {
       if (p.poison) { delete p.poison; ev({ e: 'poison', p: p.id, on: false }); }
       p.dead = S.t; p.act = null; p.path = []; p.skilling = null; closeShop(p); prayersOff(p); p.pfx = null;
       ev({ e: 'die', p: p.id });
@@ -1040,8 +1081,9 @@
       const pile = [];
       for (let i = 0; i < p.inv.length; i++) { const s = p.inv[i]; if (s) { pile.push(s); p.inv[i] = null; } }
       for (const k of EQ_SLOTS) { const e = p.eq[k]; if (e) { pile.push(e); delete p.eq[k]; } }
-      for (const it of pile) dropGround(it.id, it.n, p.x, p.y, null, DEATH.pileTicks || 1000, { from: p.id, diedAt: S.t });
-      if (pile.length) {
+      for (const it of pile) dropGround(it.id, it.n, p.x, p.y, null, DEATH.pileTicks || 1000, sunkKey ? { from: p.id, diedAt: S.t, sunk: sunkKey } : { from: p.id, diedAt: S.t });
+      if (pile.length && sunkKey) { msg(p, 'Everything you carried sinks to the bottom of the lake. Someone fishing here might hook it one day.', 'warn'); ev({ e: 'inv', p: p.id }); ev({ e: 'equip', p: p.id }); }
+      else if (pile.length) {
         const z = M.zoneAt(p.x, p.y);
         msg(p, 'Your belongings lie where you fell (' + (z || 'the wild') + ', ' + p.x + ',' + p.y + ') for ' + Math.round((DEATH.pileTicks || 1000) * 0.6 / 60) + ' minutes. Others will be able to take them once shared loot arrives.', 'warn');
         p.deathPile = { x: p.x, y: p.y, t: S.t };
@@ -1090,6 +1132,9 @@
       return !(q && q.step >= (C.step || 1));
     }
     function talk(p, n) {
+      /* a step's kit is never lost for good (the Arcade session 2026-10-07: The Even Grove soft-locked when its three saplings were
+         sold): talking to the quest's giver while the step is open hands back what is missing of it, as logging in already did */
+      for (const qid in p.quests || {}) { const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.giver === n.id && Q.steps[q.step - 1]; if (st && st.kit && !questFinished(p, qid)) topUp(p, q, st); }
       if (n.hideFlag && !hasFlag(p, n.hideFlag)) return;
       if (n.search) {
         if (!searchOpen(p, n)) {
@@ -1440,6 +1485,22 @@
       p.gT = S.t + nd.speed;
       const pct = Math.max(8, Math.min(92, 30 + 2 * (L - req)));
       if (R.int(100) >= pct) { ev({ e: 'gather', p: p.id, node: i, ok: false }); return; }
+      /* a lake gives back what sank in it (2026-10-07): the more lies on its bottom, the likelier a cast brings one up
+         instead of a fish - 3 % for one thing, 2 % more for each other, at most 40 % */
+      if (skill === 'fishing') {
+        const lk = lakeKey(n.x, n.y) || [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => lakeKey(n.x + dx, n.y + dy)).find(Boolean), cnt = lk ? sunkIn(lk) : 0;
+        if (cnt && R.int(100) < Math.min(40, 1 + 2 * cnt)) {
+          const pool = S.ground.filter(q => q.sunk === lk && (isAuth(zoneOf(q.x, q.y)) || q.bank != null)), g = pool.length ? pool[R.int(pool.length)] : null;
+          if (g && canAdd(p, g.id, g.n)) {
+            const left = addItem(p, g.id, g.n); addXp(p, skill, n.xp || nd.xp);
+            ev({ e: 'take', p: p.id, g: g.uid, id: g.id, n: g.n - left, x: g.x, y: g.y, own: g.from === p.id ? 1 : 0, fished: 1 });
+            if (left) g.n = left; else { S.ground.splice(S.ground.indexOf(g), 1); if (g.bank != null) BANK_GONE.add(g.bank); ev({ e: 'vanish', g: g.uid, x: g.x, y: g.y }); }
+            msg(p, 'Something heavy on the line... you haul up ' + (g.n - left > 1 ? (g.n - left) + ' x ' : '') + IT[g.id].name + ' from the bottom of the lake!', 'quest');
+            ev({ e: 'gather', p: p.id, node: i, ok: true, item: g.id });
+            return;
+          }
+        }
+      }
       addItem(p, n.item, 1); addXp(p, skill, n.xp || nd.xp);
       msg(p, skill === 'woodcutting' ? 'You get some ' + IT[n.item].name.toLowerCase() + '.' : skill === 'mining' ? 'You manage to mine some ' + IT[n.item].name.split(' ')[0].toLowerCase() + '.' : 'You catch some ' + IT[n.item].name.toLowerCase().replace('raw ', '') + '.');
       ev({ e: 'gather', p: p.id, node: i, ok: true, item: n.item });
@@ -1525,6 +1586,13 @@
       if (S.t % 3) return;
       let got = null;
       for (const o of M.objects) if (o.k === 'rice' && cheb(o.x, o.y, p.x, p.y) <= 2 && !(RICED[o.x + ',' + o.y] > S.t)) { got = o; break; }
+      /* ricing only in its season (2026-10-07: "only harvestable in late August to early October"): out of it the sticks
+         knock nothing loose */
+      if (got && SEASONW && SEASONW.rice === false) {
+        p.knocking = false;
+        if (!(p.riceSaid > S.t)) { p.riceSaid = S.t + 200; msg(p, SEASONW.riceLate ? 'The manoomin has already dropped its grain. Ricing time is late August to early October.' : 'The manoomin is not ripe yet. Ricing time is late August to early October.', 'info'); }
+        return;
+      }
       p.knocking = !!got;
       if (!got) return;
       RICED[got.x + ',' + got.y] = S.t + RICE_CD;
@@ -2297,12 +2365,12 @@
         else if (!r[4] && m.dead) { m.dead = 0; ev({ e: 'spawn', mob: m.uid }); }
       }
     }
-    function groundAdd(uid, id, n, x, y, from) {
+    function groundAdd(uid, id, n, x, y, from, sunk) {
       if (!IT[id] || isAuth(zoneOf(x, y))) return;
       const did = uid >= BANK_UID ? uid - BANK_UID : null;   /* a persisted drop (its uid says so), even from a host too old to say */
       if (did != null && BANK_GONE.has(did)) return;         /* the Bank already told us somebody took it: an old host's copy stays gone */
       const g = S.ground.find(q => q.uid === uid); if (g) { g.n = n; return; }
-      S.ground.push({ uid, id, n, x, y, owner: null, until: S.t + 1e9, from: from || null, bank: did }); ev({ e: 'drop', g: uid, id, n, x, y });
+      S.ground.push({ uid, id, n, x, y, owner: null, until: S.t + 1e9, from: from || null, bank: did, sunk: sunk || 0 }); ev({ e: 'drop', g: uid, id, n, x, y, sunk: sunk || 0 });
     }
     function groundRemove(uid) { if (uid >= BANK_UID) BANK_GONE.add(uid - BANK_UID); const i = S.ground.findIndex(q => q.uid === uid); if (i >= 0 && !isAuth(zoneOf(S.ground[i].x, S.ground[i].y))) { S.ground.splice(i, 1); ev({ e: 'vanish', g: uid }); } }
     /* PERSISTED DROPS (2026-10-06): what the @ashvale Bank holds on the ground (Gold, stones, magical things, anything
@@ -2314,14 +2382,14 @@
     function bankGround(box, items) {
       const want = new Set();
       for (const r of items || []) {
-        const did = r[0] | 0, id = String(r[1]), n = Math.max(1, r[2] | 0), x = r[3] | 0, y = r[4] | 0;
+        const did = r[0] | 0, id = String(r[1]), n = Math.max(1, r[2] | 0), x = r[3] | 0, y = r[4] | 0, sunk = r[5] ? String(r[5]) : 0;
         if (!IT[id] || !inMap(x, y)) continue;   /* every game puts them down (the area's host may be an older game): same uid everywhere */
         want.add(did); const uid = BANK_UID + did;
         const g = S.ground.find(q => q.uid === uid || q.bank === did);
-        if (g) { g.n = n; g.until = 1e15; continue; }
+        if (g) { g.n = n; g.until = 1e15; if (sunk) g.sunk = sunk; continue; }
         const live = S.ground.find(q => q.bank == null && q.id === id && q.x === x && q.y === y);
-        if (live) { live.bank = did; live.until = 1e15; continue; }
-        S.ground.push({ uid, id, n, x, y, owner: null, until: 1e15, bank: did }); ev({ e: 'drop', g: uid, id, n, x, y, bank: 1 });
+        if (live) { live.bank = did; live.until = 1e15; if (sunk) live.sunk = sunk; continue; }
+        S.ground.push({ uid, id, n, x, y, owner: null, until: 1e15, bank: did, sunk }); ev({ e: 'drop', g: uid, id, n, x, y, bank: 1, sunk });
       }
       const [x0, y0, x1, y1] = box || [0, 0, -1, -1];
       for (let i = 0; i < S.ground.length;) {
@@ -2331,7 +2399,7 @@
       }
       return want.size;
     }
-    function groundFull(zone, list) { S.ground = S.ground.filter(g => zoneOf(g.x, g.y) !== zone || isAuth(zone) || g.bank != null);   /* the Bank's persisted drops stay: the Bank, not the host, says when they go */ for (const r of list) groundAdd(r[0], r[1], r[2], r[3], r[4], r[5]); }
+    function groundFull(zone, list) { S.ground = S.ground.filter(g => zoneOf(g.x, g.y) !== zone || isAuth(zone) || g.bank != null);   /* the Bank's persisted drops stay: the Bank, not the host, says when they go */ for (const r of list) groundAdd(r[0], r[1], r[2], r[3], r[4], r[5], r[6]); }
     /* owner side: what the host resolved about OUR player */
     function applyHit(pid, dmg, cls, fromMob, fx, fxt) { const p = S.players[pid]; if (!p || p.puppet || p.dead) return; if (fromMob && cls && protects(p, cls)) dmg = 0; else if (fromMob && fx) magicFx(p, fx, fxt || 5); p.hp -= Math.min(dmg, p.hp); if (angelSave(p)) return; if (p.retal && !p.act && !p.path.length) { } if (p.hp <= 0) killPlayer(p); }
     function storeItem(pid, id, n) { const p = S.players[pid]; if (!p || !IT[id]) return 0; const had = invCount(p, id); removeItem(p, id, Math.min(n, had)); ev({ e: 'inv', p: pid }); return Math.min(n, had); }   /* into the town chest: it stays in the wallet, only out of the bag */
@@ -2367,7 +2435,7 @@
       return true;
     }
     return {
-      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
+      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
@@ -2376,7 +2444,7 @@
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
-      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
+      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
       applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, setFelled,
       hitXp: (pid, cls, dmg, dex) => { const p = S.players[pid]; if (p && !p.puppet) hitXp(p, cls, dmg, null, dex); },
       creditKill: (pid, key) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key); }

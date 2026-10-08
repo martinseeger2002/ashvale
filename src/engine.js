@@ -330,10 +330,33 @@
       const TRAVEL_MS = 900, CAVE_MS = 1400; let travelling = null, TRAVEL_KIND = null;
       /* through a cave passage the screen is the cave's own (down into the dark, up into the daylight), every time - even when
          the area there is already loaded - for at least CAVE_MS */
-      function caveTravel(kind, name) {
-        TRAVEL_KIND = kind; hud.travel && hud.travel(true, name, 0.2, kind);
-        const t0 = performance.now(), tick = () => { if (travelling) return; const f = (performance.now() - t0) / CAVE_MS; if (f >= 1) { TRAVEL_KIND = null; hud.travel && hud.travel(false); return; } hud.travel && hud.travel(true, name, 0.2 + 0.8 * f, kind); requestAnimationFrame(tick); };
+      /* 2026-10-07: "The loading screens need to come up as soon as a player clicks on a portal or the cave or a wigwam":
+         travelScreen goes up the moment you choose to go (and again, unchanged, when the jump itself comes), stays at least
+         CAVE_MS, and while a jump is still due (TRAVEL.due) or the area there is loading (arriveCheck's travelling) it waits.
+         A jump that never comes (refused, out of reach) lets it go after TRAVEL_GIVEUP. */
+      const TRAVEL = { t0: 0, kind: null, name: '', due: 0, on: false, hold: false, warm: true }, TRAVEL_GIVEUP = 8000;
+      function travelScreen(kind, name, due) {
+        const now = performance.now();
+        if (!TRAVEL.on || TRAVEL.kind !== kind) TRAVEL.t0 = now;
+        TRAVEL.warm = false;
+        TRAVEL.kind = kind; TRAVEL.name = name || TRAVEL.name; TRAVEL.due = due ? now + TRAVEL_GIVEUP : 0; TRAVEL_KIND = kind;
+        hud.travel && hud.travel(true, TRAVEL.name, 0.15, kind);
+        if (TRAVEL.on) return; TRAVEL.on = true;
+        const tick = () => {
+          const n = performance.now(), f = (n - TRAVEL.t0) / CAVE_MS;
+          if (travelling) { TRAVEL.on = false; return; }   /* arriveCheck holds the screen from here and lets it go */
+          if (f >= 1 && !TRAVEL.hold && !(TRAVEL.due && n < TRAVEL.due)) { TRAVEL.on = false; TRAVEL_KIND = null; hud.travel && hud.travel(false); return; }
+          hud.travel && hud.travel(true, TRAVEL.name, Math.min(0.95, 0.15 + 0.8 * Math.min(1, f)), TRAVEL.kind); requestAnimationFrame(tick);
+        };
         requestAnimationFrame(tick);
+      }
+      const caveTravel = (kind, name) => travelScreen(kind, name, false);
+      const PASSK = { cavemouth: 'down', caveexit: 'up', wigwamdoor: 'lodge', wigwamout: 'lodgeout' };
+      /* the moment you choose a passage or a portal: up goes the screen (when you are already beside it), and the area on
+         the far side starts loading now rather than when you arrive */
+      function travelSoon(kind, name, tx, ty, near) {
+        if (ZINDEX && tx != null) { const zi = zoneAtIndex(tx, ty); if (zi && !core.hasZone(zi.id)) fetchZone(zi.id).then(z => { if (!core.hasZone(zi.id)) coreCall(() => core.addZone(Object.assign({}, z))); }).catch(() => {}); }
+        if (near) travelScreen(kind, name, true);
       }
       function arriveCheck() {
         if (!ZINDEX) return;
@@ -343,7 +366,7 @@
         hud.travel && hud.travel(true, zi.name || zi.id, 0, TRAVEL_KIND);
         let k = 0;
         const step = () => {
-          if (core.hasZone(want)) { const left = Math.max(0, (TRAVEL_KIND ? CAVE_MS : TRAVEL_MS) - (performance.now() - t0)); setTimeout(() => { travelling = null; TRAVEL_KIND = null; streamRegions(true); cam.snap = true; hud.travel && hud.travel(false); }, left); return; }
+          if (core.hasZone(want)) { const left = Math.max(0, (TRAVEL_KIND ? CAVE_MS : TRAVEL_MS) - (performance.now() - Math.min(t0, TRAVEL.t0 || t0))); setTimeout(() => { travelling = null; TRAVEL_KIND = null; TRAVEL.due = 0; streamRegions(true); cam.snap = true; hud.travel && hud.travel(false); }, left); return; }
           hud.travel && hud.travel(true, zi.name || zi.id, Math.min(0.9, (performance.now() - t0) / 4000), TRAVEL_KIND);
           fetchZone(want).then(z => { if (!core.hasZone(want)) coreCall(() => core.addZone(Object.assign({}, z))); step(); })
             .catch(e => { console.warn('ASHVALE: ' + e.message + ', trying again'); setTimeout(step, Math.min(8000, 800 * ++k)); });
@@ -403,6 +426,8 @@
       }
       /* THE CANOE (2026-10-07, Ziibiing): whoever sits in one rides the water's skin in a birch bark canoe, paddle in hand */
       const SURF = SCENE.surface ? SCENE.surface(core.M) : null;
+      /* where feet stand: the ground, or on a frozen lake the ice (2026-10-07: walk ON the ice, not along the lake bed) */
+      function footY(x, z) { const h = heightAt(x, z); if (!(core.M.iceAt && core.M.iceAt(Math.floor(x), Math.floor(z)))) return h; const w = SURF ? SURF(Math.floor(x), Math.floor(z)) : null; return w != null && w > h ? w + 0.03 : h; }
       const waterY = (x, z) => { const h = heightAt(x, z); if (!SURF) return h; const s = SURF(Math.floor(x), Math.floor(z)); return s != null && s > h ? s : h; };
       /* two in one canoe (ricing): the knocker sits in the bow, the canoe's length ahead of the poler, facing the way it goes */
       function bowSeat(e, T, knocking) { const f = knocking ? 1.4 : 1.95;   /* knocking rice, the bow person sits in nearer the middle */   /* the bow seat: the stern paddler is 0.95 behind the canoe's middle, the bow one 1.0 ahead of it */ e.root.position.set(T.root.position.x + Math.sin(T.yaw) * f, T.root.position.y - 0.14, T.root.position.z + Math.cos(T.yaw) * f); e.yaw = e.tyaw = T.yaw; e.root.rotation.y = T.yaw; }
@@ -456,7 +481,7 @@
         ents.set(key, e); return e;
       }
       function removeEnt(e) { if (e.bub) e.bub.el.remove(); scene.remove(e.root); const i = proxies.indexOf(e.proxy); if (i >= 0) proxies.splice(i, 1); e.H.dispose && e.H.dispose(); for (const s of e.splats) s.el.remove(); if (e.bar) e.bar.remove(); if (e.tag) e.tag.remove(); if (e.ohd) e.ohd.remove(); ents.delete(e.key); }
-      function place(e, x, y) { const v = new THREE.Vector3(x + 0.5, 0, y + 0.5); v.y = heightAt(v.x, v.z); e.from.copy(v); e.to.copy(v); e.root.position.copy(v); e.tx = x; e.ty = y; }
+      function place(e, x, y) { const v = new THREE.Vector3(x + 0.5, 0, y + 0.5); v.y = footY(v.x, v.z); e.from.copy(v); e.to.copy(v); e.root.position.copy(v); e.tx = x; e.ty = y; }
       function moveTo(e, x, y, now) {
         if (e.tx === x && e.ty === y) return false;
         const steps = Math.max(Math.abs(x - e.tx), Math.abs(y - e.ty));
@@ -533,6 +558,7 @@
       function syncGround() {
         const seen = new Set(), perTile = {};
         for (const g of core.S.ground) {
+          if (g.sunk) continue;   /* on the bottom of a lake: nobody sees it */
           seen.add(g.uid); const k = g.x + ',' + g.y, n = perTile[k] = (perTile[k] || 0) + 1;
           if (gItems.has(g.uid)) continue;
           const o = new THREE.Group(), m = g.id === 'torch' ? standingTorch() : MOD.item(g.id); if (g.id !== 'torch') m.scale.setScalar(1.0); o.add(m);
@@ -687,17 +713,17 @@
             break;
           case 'shop': if (mine) { hud.openShop(e.shop); faceNpc(e.npc); } break;
           case 'portal': if (mine) {   /* the towns you have touched a portal in (2026-10-04) */
-            const L = (e.to || []).map(P => ({ html: 'Travel to <span class="y">' + P.name + '</span>', fn: () => send({ c: 'portal', to: P.id }) }));
+            const L = (e.to || []).map(P => ({ html: 'Travel to <span class="y">' + P.name + '</span>', fn: () => { send({ c: 'portal', to: P.id }); const T = (D.rules.portals || []).find(q => q.id === P.id); travelSoon(null, P.name, T && T.to[0], T && T.to[1], true); } }));
             if (!L.length) hud.chat('Touch the town portal in another town, and you can travel there from here.', 'sys');
             else { const r = host.getBoundingClientRect(); hud.menu(r.width / 2, r.height / 2, L); }
             if ((e.unknown || []).length) hud.chat('Not yet attuned: ' + e.unknown.join(', ') + '.', 'sys');
           } break;
           case 'angels': { const t = ents.get('p:' + e.p); if (t) { angelFlare(t.root.position); if (t.H && t.H.play) t.H.play('cast', { loop: false }); } if (mine) sfx('level'); break; }
           case 'teleport': if (mine) {
-            if (e.to === 'cavemouth' || e.to === 'caveexit') {   /* the cave's own screen goes up FIRST and gets painted; the heavy part (building the cave or the land) follows behind it */
-              const uz = core.M.underAt && core.M.underAt(e.x, e.y), zi2 = uz && ZINDEX && ZINDEX.find(z => z.id === uz);
-              caveTravel(e.to === 'cavemouth' ? 'down' : 'up', zi2 ? zi2.name : (core.M.underAt && ZINDEX && (ZINDEX.find(z => z.under) || {}).name) || 'cave');
-              CAVE.hold = true; requestAnimationFrame(() => setTimeout(() => { CAVE.hold = false; place(myEnt, e.x, e.y); cam.snap = true; streamRegions(); sfx('equip'); arriveCheck(); }, 30));
+            if (e.to !== 'gate') {   /* the screen goes up FIRST and gets painted; the heavy part (building the cave, the wigwam or the land) follows behind it */
+              const uz = core.M.underAt && core.M.underAt(e.x, e.y), zi2 = (uz && ZINDEX && ZINDEX.find(z => z.id === uz)) || zoneAtIndex(e.x, e.y);
+              travelScreen(PASSK[e.to] || null, zi2 ? zi2.name : PASSK[e.to] === 'down' ? 'cave' : '', false);
+              CAVE.hold = true; TRAVEL.hold = true; requestAnimationFrame(() => setTimeout(() => { CAVE.hold = false; place(myEnt, e.x, e.y); cam.snap = true; streamRegions(true); sfx('equip'); arriveCheck(); TRAVEL.warm = true; let k = 0; const settle = () => { if (++k < 3) requestAnimationFrame(settle); else TRAVEL.hold = false; }; requestAnimationFrame(settle); }, 30));   /* and it stays until the new place has been built and drawn a few frames (the first draw compiles its materials) */
             } else { place(myEnt, e.x, e.y); cam.snap = true; streamRegions(); sfx('equip'); arriveCheck(); }
           } break;
           case 'zoneadd': zoneArrived(e, now); break;
@@ -722,7 +748,7 @@
             if (n && n.pose) myEnt.restPose = n.pose;   /* sit down with him the same way (2026-10-07) */
           } break;
           case 'unhide': { const t = ents.get('n:' + e.npc); if (t) t.root.visible = true; break; }
-          case 'weather': if (e.zone === core.weatherZone(zoneHere())) { if (e.say) hud.chat(e.say, 'sys'); showWeather(); } break;
+          case 'weather': if (e.zone === core.weatherZone(zoneHere())) { const k = seasonal({ kind: e.kind }).kind, say = k === e.kind ? e.say : (((D.rules || {}).weather || {}).say || {})[k] || e.say; if (say && k + ':' + e.intensity !== wxShown) hud.chat(say, 'sys'); showWeather(); } break;
           case 'fire': addFire(e.fire, e.x, e.y); if (e.p === PID || !e.p) sfx('sizzle', e.p === PID ? null : { x: e.x, y: e.y }); break;
           case 'fireout': removeFire(e.fire); break;
           case 'fx': { const t = ents.get('m:' + e.mob); if (!t) break; t.fx = t.fx || {}; t.fx[e.fx] = 1; applyTint(t); const el = hud.fxSplat(e.fx); if (el) t.splats.push({ el, t: performance.now(), k: t.splats.length }); if (e.fx === 'freeze') sfx('freeze', t); break; }
@@ -777,6 +803,21 @@
         GLOW.mesh.count = n; GLOW.mesh.instanceMatrix.needsUpdate = true; if (GLOW.mesh.instanceColor) GLOW.mesh.instanceColor.needsUpdate = true;
       }
       const CAVE = { on: false, t: 0, me: null, pool: [], keep: null };
+      /* A FIXED NUMBER OF LIGHTS. three.js builds every material's shader for the number of lights in the scene; one light more
+         or fewer and every material in sight is compiled again (52 programs - that was most of the wait going into the cave or
+         a wigwam, and a stall each time a town's area loaded). So the lights are all there from the start and are only ever
+         dimmed (intensity 0), never added, removed or hidden; the towns' own plaza lights come and go with their areas, and a
+         pad of dark spare lights makes up the difference (lightBudget). */
+      for (let k = 0; k < (isPhone ? 4 : 6); k++) { const L = new THREE.PointLight(0xff9a3c, 0, 10, 1.2); scene.add(L); CAVE.pool.push(L); }
+      const LBUD = { n: 8, pad: [], key: -1 };
+      for (let k = 0; k < LBUD.n; k++) { const L = new THREE.PointLight(0xffa050, 0, 1, 2); L.position.set(0, -500, 0); scene.add(L); LBUD.pad.push(L); }
+      function lightBudget() {
+        let n = 0, sum = 0;
+        for (const r of regions) { const b = r.built; if (!b) continue; if (b._pl == null) { b._pl = []; b.group.traverse(o => { if (o.isPointLight) b._pl.push(o); }); } sum += b._pl.length; }
+        if (sum === LBUD.key) return; LBUD.key = sum;
+        for (const r of regions) { const b = r.built; if (!b) continue; for (const L of b._pl) { L.visible = n < LBUD.n; if (L.visible) n++; } }
+        LBUD.pad.forEach((L, k) => { L.visible = k < LBUD.n - n; });
+      }
       function caveTick(now) {
         const inCave = !!(core.M && core.M.underAt && core.M.underAt(me.x, me.y) != null);
         if (inCave !== CAVE.on) {
@@ -786,18 +827,15 @@
             if (wxMod && wxMod.set) try { wxMod.set('clear', 0, { instant: true }); } catch (e) { /* weather module */ }
             scene.background.setHex(0x030303); scene.fog.color.setHex(0x030303); scene.fog.near = 5; scene.fog.far = 16; hemi.intensity = 0.14; sun.intensity = 0.04;
             /* no light of your own (2026-10-07: "The player should not give off any light. The only light should be coming from the torches") */
-            if (!CAVE.pool.length) for (let k = 0; k < (isPhone ? 4 : 6); k++) { const L = new THREE.PointLight(0xff9a3c, 0, 10, 1.2); scene.add(L); CAVE.pool.push(L); }
-            for (const L of CAVE.pool) L.visible = true;
           } else {
             const K = CAVE.keep || {}; scene.background.setHex(K.bg != null ? K.bg : SKY); scene.fog.color.setHex(K.fc != null ? K.fc : SKY); scene.fog.near = K.fn || 24; scene.fog.far = K.ff || 52;
-            hemi.intensity = K.hemi || 1.7; sun.intensity = K.sun || 2.3; for (const L of CAVE.pool) L.visible = false;
+            hemi.intensity = K.hemi || 1.7; sun.intensity = K.sun || 2.3; for (const L of CAVE.pool) L.intensity = 0;
             wxShown = ''; showWeather(true);
           }
         }
         /* the four torches, ranges and campfires nearest you really light their surroundings - underground always, up top while
            it is dark (a moonless night has no other light: 2026-10-07) */
         const darkUp = !inCave && SUNL.dark > 0.3;
-        if (!CAVE.pool.length && darkUp) for (let k = 0; k < (isPhone ? 4 : 6); k++) { const L = new THREE.PointLight(0xff9a3c, 0, 10, 1.2); scene.add(L); CAVE.pool.push(L); }
         if (GLOW.mesh) { GLOW.mesh.visible = inCave || darkUp; GLOW.mesh.material.opacity = inCave ? 1 : Math.min(1, Math.max(0, (SUNL.dark - 0.3) / 0.4)); }
         if ((!inCave && !darkUp) || !CAVE.pool.length) { if (!inCave) for (const L of CAVE.pool) L.intensity = 0; return; }
         if (now - CAVE.t > 1000) {
@@ -840,6 +878,9 @@
          the sky and the light's colour, and the light (with the shadows) comes from its direction; under the horizon a faint
          bluish moon, opposite it, casts the shadows. */
       const SUN_EPOCH = 1791353761, DAY_S = 7200;
+      /* THE YEAR (2026-10-07): 365 game days from year 1, day 1 at SUN_EPOCH; the axis leans, so the sun climbs and sinks
+         through the year and the hemispheres take turns at summer (the maths: the seasons module, its own inscription) */
+      const SEASONS = (() => { try { const SM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('seasons'); return SM && SM.create ? SM.create({ epoch: SUN_EPOCH, dayS: DAY_S }) : null; } catch (e) { return null; } })();
       const SUNL = { dark: 0, dir: [-0.45, 0.8, 0.3], key: '', b: null, lonA: null, base: new THREE.Color(SKY), col: new THREE.Color(), night: new THREE.Color(), phase: null };
       if (SCENE.lampQuery) SCENE.lampQuery((x, y) => core.lampLit ? core.lampLit(x, y) : true);
       const NEW_SKY = new THREE.Color(0x1a2434), NIGHT_SKY = new THREE.Color(0x2a3a52), DUSK_SKY = new THREE.Color(0xd8865a), SUNC = new THREE.Color(0xfff0d6), DUSKC = new THREE.Color(0xffa060), MOONC = new THREE.Color(0x9fb4ff);
@@ -847,7 +888,8 @@
       function sunAt(tms) {   /* the sun's direction from the planet's centre */
         if (SUNL.lonA == null) { const a = sphereAt(22, 52); SUNL.lonA = a ? Math.atan2(a[0][1], a[0][0]) : 0; }   /* Ashvale's longitude (by the well) */
         const L = SUNL.lonA - Math.PI / 2 - 2 * Math.PI * ((tms / 1000 - SUN_EPOCH) / DAY_S);
-        return [Math.cos(L), Math.sin(L), 0];
+        const dl = SEASONS ? SEASONS.declination(tms) : 0, cd = Math.cos(dl);   /* north or south of the equator by the time of year */
+        return [Math.cos(L) * cd, Math.sin(L) * cd, Math.sin(dl)];
       }
       const MOON_P = 29.530588853, MOON_NEW = 947182440;   /* the synodic month; a new moon: 2000-01-06 18:14 UTC */
       function moonAt(tms, s) {   /* {v: its direction, lit: 0 at new moon .. 1 at full} */
@@ -858,6 +900,37 @@
       /* THE STARS: a fixed sky of 1600 points round the camera, shown at night - brightest on a clear moonless night, faint under a
          full moon, gone by day, underground and under cloud */
       const STARS = { pts: null };
+      /* THE SUN AND THE MOON in the sky (2026-10-07: "Just like the stars are visible in the clear sky at night, so should the
+         sun be and the moon, in their position from the Atlas"): two discs far out round the camera in the very directions that
+         light the world (the Atlas's sun, the real moon's phase); the moon is drawn lit on its sun side, faint by day, and both
+         hide under thick weather and underground */
+      const BODIES = { sun: null, moon: null, mph: -1, cv: null };
+      function bodyTex(draw) { const cv = document.createElement('canvas'); cv.width = cv.height = 96; draw(cv.getContext('2d'), cv); const t = new THREE.CanvasTexture(cv); if (THREE.SRGBColorSpace) t.colorSpace = THREE.SRGBColorSpace; return { t, cv }; }
+      function drawMoon(phase) {
+        const c = BODIES.cv.getContext('2d'), N = 96, R = 40, img = c.createImageData(N, N), a = 2 * Math.PI * phase, Lx = Math.sin(a), Lz = -Math.cos(a);
+        for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+          const nx = (x - N / 2 + 0.5) / R, ny = (y - N / 2 + 0.5) / R, r2 = nx * nx + ny * ny, o = (y * N + x) * 4; if (r2 > 1) continue;
+          const nz = Math.sqrt(1 - r2), l = nx * Lx + nz * Lz, edge = Math.min(1, (1 - Math.sqrt(r2)) * R / 1.5);
+          const spot = 0.9 + 0.1 * Math.sin(nx * 7.1 + ny * 3.3) * Math.sin(ny * 5.7 - nx * 2.1);   /* a few soft maria */
+          const lit = Math.max(0, Math.min(1, l * 6 + 0.5));
+          img.data[o] = 236 * spot; img.data[o + 1] = 232 * spot; img.data[o + 2] = 214 * spot; img.data[o + 3] = 255 * edge * (0.07 + 0.93 * lit);
+        }
+        c.putImageData(img, 0, 0); BODIES.moon.material.map.needsUpdate = true;
+      }
+      function skyBodies(sv, mv, day, M) {
+        if (!BODIES.sun) {
+          const sun = bodyTex(c => { const g = c.createRadialGradient(48, 48, 0, 48, 48, 48); g.addColorStop(0, 'rgba(255,255,244,1)'); g.addColorStop(0.28, 'rgba(255,246,200,1)'); g.addColorStop(0.36, 'rgba(255,214,120,0.55)'); g.addColorStop(1, 'rgba(255,190,90,0)'); c.fillStyle = g; c.fillRect(0, 0, 96, 96); });
+          const moon = bodyTex(() => {}); BODIES.cv = moon.cv;
+          const mk = t => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, fog: false })); sp.renderOrder = -1; sp.frustumCulled = false; scene.add(sp); return sp; };
+          BODIES.sun = mk(sun.t); BODIES.moon = mk(moon.t);
+        }
+        const w = core.weatherOf(zoneHere()), clear = !w || w.kind === 'clear' ? 1 : Math.max(0, 1 - w.intensity / 70), D = Math.max(60, camera.far * 0.85), P = camera.position;
+        const put = (sp, v, size, alpha) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; sp.position.set(P.x + v[0] / l * D, P.y + v[1] / l * D, P.z + v[2] / l * D); sp.scale.setScalar(D * size); sp.material.opacity = alpha; sp.visible = alpha > 0.01 && !CAVE.on; };
+        const sUp = sv[1] / (Math.hypot(sv[0], sv[1], sv[2]) || 1), mUp = mv[1] / (Math.hypot(mv[0], mv[1], mv[2]) || 1);
+        put(BODIES.sun, sv, 0.13, Math.max(0, Math.min(1, (sUp + 0.04) / 0.06)) * clear);
+        if (Math.abs(M.phase - BODIES.mph) > 0.004) { BODIES.mph = M.phase; drawMoon(M.phase); }
+        put(BODIES.moon, mv, 0.085, Math.max(0, Math.min(1, (mUp + 0.03) / 0.06)) * clear * (0.35 + 0.65 * (1 - day)));
+      }
       function starsAt(night, moonK) {
         if (!STARS.pts) {
           const n = 1600, pos = new Float32Array(n * 3), col = new Float32Array(n * 3); let h = 2166136261;
@@ -876,11 +949,47 @@
         STARS.pts.material.opacity = o; STARS.pts.visible = o > 0.01 && !CAVE.on;
         STARS.pts.position.copy(camera.position); STARS.pts.scale.setScalar(Math.max(60, camera.far * 0.9));
       }
+      /* the season where you stand, every few seconds: the woods, the ground and the lakes follow it; the lakes freeze by their
+         own latitude (core.M.setIce), refreshed each minute */
+      const SEASON = { t: 0, key: '', ice: 0, name: '' };
+      /* through the ice (2026-10-07): standing on a frozen lake when it thaws is a fall into it - a death, and what you carry sinks */
+      const ICEWALK = { on: false };
+      setInterval(() => {
+        if (!me || me.dead || me.boat || !core.M.iceAt) return;
+        const t = core.M.tileAt(me.x, me.y), wet = t === '~' || t === 'v';
+        if (wet && core.M.iceAt(me.x, me.y)) { ICEWALK.on = true; return; }
+        if (ICEWALK.on && wet && core.M.blocked(me.x, me.y)) { ICEWALK.on = false; coreCall(() => core.fallThrough && core.fallThrough(PID)); return; }
+        if (!wet) ICEWALK.on = false;
+      }, 400);
+      /* the sky's clock: real time, unless a viewer asks for a time-lapse (?timelapse=N runs the sun, moon and seasons N
+         times faster from now, ?skyday=D starts D game days on). Only this viewer's sky moves; nothing is sent */
+      const TL = { n: Math.max(1, +q.get('timelapse') || 1), t0: Date.now(), off: (+q.get('skyday') || 0) * DAY_S * 1000 };
+      const skyNow = () => TL.t0 + TL.off + (Date.now() - TL.t0) * TL.n;
+      /* a fast time-lapse (N of 2000 and up) holds the sun at noon where you stand, so the seasons run without day and night strobing */
+      TL.noon = null;
+      function sunTime(B) {
+        const t = skyNow(); if (TL.n < 2000 || !B) return t;
+        const DMS = DAY_S * 1000;
+        if (TL.noon == null) { let best = -2; for (let k = 0; k < 96; k++) { const tt = t + k * DMS / 96, v = dot3(sunAt(tt), B.u); if (v > best) { best = v; TL.noon = tt; } } }
+        return TL.noon + Math.floor((t - TL.noon) / DMS) * DMS;
+      }
+      function seasonTick(B) {
+        if (!SEASONS) return;
+        const real = Date.now(); if (real - SEASON.t < (TL.n > 1 ? 250 : 3000)) return; SEASON.t = real; const now = skyNow();
+        const lat = Math.asin(Math.max(-1, Math.min(1, B.u[2]))) * 180 / Math.PI, S = SEASONS.at(lat, now);
+        const key = [S.name, S.day, Math.round(S.leaf.bud * 20), Math.round(S.leaf.grow * 20), Math.round(S.leaf.colourT * 20), Math.round(S.leaf.springT * 10), Math.round(S.snow * 20), S.frozen].join(':');   /* every game day: in the leaf fall each tree has its own day */
+        if (key !== SEASON.key) { SEASON.key = key; const ta = performance.now(); if (SCENE.seasonApply) SCENE.seasonApply(S, SEASONS); SEASON.applyMs = performance.now() - ta; SEASON.applies = (SEASON.applies || 0) + 1; SEASON.snowy = S.name === 'winter' && S.snow > 0.3;   /* it snows only in winter (2026-10-07: "It shouldn't be snowing in the spring time") */ wxShown = ''; if (core.setSeason) core.setSeason({ snowy: SEASON.snowy, rice: !!S.rice, riceLate: S.p > 0.551 && S.p < 0.95 }); showWeather(); }
+        if (S.name !== SEASON.name) { if (SEASON.name) { const C = SEASONS.calendar(now); hud.chat(S.name.charAt(0).toUpperCase() + S.name.slice(1) + ' has come: year ' + C.year + ', day ' + C.day + '.', 'sys'); } SEASON.name = S.name; }
+        /* a time-lapse runs the weather fast too: every few seconds each region this viewer hosts rolls again (for its season) */
+        if (TL.n > 1 && core.S && core.S.weather && real - (SEASON.wx || 0) > 4000) { SEASON.wx = real; for (const z in core.S.weather) { const w = core.S.weather[z]; if (w) w.until = Math.min(w.until, core.S.t); } }
+        if (core.M.setIce && real - SEASON.ice > (TL.n > 1 ? 2000 : 60000)) { SEASON.ice = real; core.M.setIce(la => SEASONS.at(la, skyNow()).frozen); }
+      }
       function dayTick() {
         const key = (me.x >> 3) + ':' + (me.y >> 3);
         if (key !== SUNL.key) { const a = sphereAt(me.x, me.y); SUNL.key = key; SUNL.b = a ? { u: nrm3(a[0]), e: nrm3(sub3(a[1], a[0])), s: nrm3(sub3(a[2], a[0])) } : null; }   /* up, game east (+x), game south (+y) */
         const B = SUNL.b; if (!B) return;
-        const now = Date.now(), s = sunAt(now), up = dot3(s, B.u), ex = dot3(s, B.e), so = dot3(s, B.s);
+        seasonTick(B);
+        const now = sunTime(B), s = sunAt(now), up = dot3(s, B.u), ex = dot3(s, B.e), so = dot3(s, B.s);
         const day = Math.min(1, Math.max(0, (up + 0.08) / 0.2)), dusk = Math.max(0, 1 - Math.abs(up) / 0.18);   /* 1 by day, 0 by night; dusk near the horizon */
         /* the moon follows the real cycle and adds light when it is up. A moonless night is starlight (2026-10-07: "add stars
            to moonless [nights] so that it is at least navigable, but just barely"): a sky full of stars, and only just enough
@@ -891,6 +1000,7 @@
         sun.intensity = lit ? 0.5 + 1.8 * day : 0.04 + 0.22 * moonK; sun.color.copy(lit ? SUNC : MOONC); if (lit && dusk > 0) sun.color.lerp(DUSKC, dusk * 0.8);
         hemi.intensity = 1.7 * day + (0.08 + 0.13 * moonK) * (1 - day); SUNL.dark = 1 - day;
         starsAt(1 - day, moonK);
+        skyBodies([ex, up, so], [dot3(M.v, B.e), mup, dot3(M.v, B.s)], day, M);
         if (SCENE.lampGlow) SCENE.lampGlow((SUNL.dark - 0.3) / 0.4);   /* glass warms with the dark; each lamp still waits for its guard */
         if (core.watchPhase) { const night = SUNL.dark >= 0.5; if (SUNL.phase == null) { SUNL.phase = night; core.watchPhase(night, true); } else if (SUNL.phase !== night) { SUNL.phase = night; core.watchPhase(night, false); } }
         /* the sky: the weather's colour (the weather module repaints it every frame), toward dusk orange and the night's blue
@@ -902,7 +1012,8 @@
       }
       /* ---------- HAND TORCHES (2026-10-07: "a torch ... hold it at night and illuminate his surroundings"): whoever holds
          one (the off hand) carries a warm flickering light of its Light radius - you, and up to three players near you */
-      const TORCH = { me: null, pool: [] };
+      const TORCH = { me: new THREE.PointLight(0xffa040, 0, 8, 1.3), pool: [] };   /* made now, not on first use: see A FIXED NUMBER OF LIGHTS */
+      scene.add(TORCH.me); for (let k = 0; k < 3; k++) { const L = new THREE.PointLight(0xffa040, 0, 8, 1.3); scene.add(L); TORCH.pool.push(L); }
       /* any item worn or held with a Light value lights round you - a torch, a glowing helmet, the Spider Queen's Crown (the operator
          2026-10-07: "Or other illuminating items ... the spider queen's crown should be illuminating"); the brightest counts */
       const LIGHTC = { torch: 0xffa040 }, lightOf = ids => { let best = 0, col = 0xffa040; for (const id of ids) { const d = id && core.item(id); if (d && d.light > best) { best = d.light; col = d.id === 'hat_spidercrown' ? 0xc89aff : LIGHTC[d.id] || 0xffc070; } } return [best, col]; };
@@ -918,10 +1029,18 @@
       /* ---------- weather visuals: the weather module (src/weather.js, its own inscription) when it is loaded, else scene fog */
       let wxShown = '', wxMod = null;
       try { const W = G.ASH3D && G.ASH3D.get && G.ASH3D.get('weather'); if (W && W.createWeather) wxMod = W.createWeather(THREE, { scene, camera, quality: isPhone ? 'low' : 'high' }); } catch (er) { console.warn('weather module', er && er.message); }
+      /* what falls where you stand keeps your season, whatever the region's roll was (a region can span latitudes): in a
+         snowy winter rain and fog come down as snow; anywhere else snow comes down as rain */
+      function seasonal(w) {
+        if (SEASON.snowy == null || !w) return w;
+        if (SEASON.snowy && (w.kind === 'rain' || w.kind === 'fog')) return Object.assign({}, w, { kind: 'snow' });
+        if (!SEASON.snowy && w.kind === 'snow') return Object.assign({}, w, { kind: 'rain' });
+        return w;
+      }
       const WXLOOK = { clear: [SKY, 24, 52], fog: [0xb8bec4, 3, 16], rain: [0x7d8fa0, 14, 38], snow: [0xdfe6ec, 10, 30] };
       function showWeather(instant) {
         if (CAVE.on) return;   /* underground there is no weather (caveTick puts it back on the way out) */
-        const w = core.weatherOf(zoneHere()) || { kind: 'clear', intensity: 0 }, key = w.kind + ':' + w.intensity; if (key === wxShown) return; wxShown = key;
+        const w = seasonal(core.weatherOf(zoneHere()) || { kind: 'clear', intensity: 0 }), key = w.kind + ':' + w.intensity; if (key === wxShown) return; wxShown = key;
         if (wxMod) { wxMod.set(w.kind, w.intensity / 100, { instant: !!instant }); return; }
         const L = WXLOOK[w.kind] || WXLOOK.clear, C = WXLOOK.clear, k = w.kind === 'clear' ? 0 : w.intensity / 100;
         const col = new THREE.Color(C[0]).lerp(new THREE.Color(L[0]), k);
@@ -1106,6 +1225,7 @@
 
       /* ---------- camera (RuneScape-style orbit) */
       const cam = { yaw: PI * 0.12, pitch: 0.92, dist: isPhone ? 9 : 11, tyaw: PI * 0.12, tpitch: 0.92, tdist: isPhone ? 9 : 11, snap: true, keys: {} };
+      { const cy = +q.get('camyaw'), cp = +q.get('campitch'); if (q.has('camyaw') && isFinite(cy)) cam.yaw = cam.tyaw = cy; if (q.has('campitch') && isFinite(cp)) cam.pitch = cam.tpitch = cp; }   /* a playtest or time-lapse can set the view */
       const camT = new THREE.Vector3();
       function updateCamera(dt) {
         const k = cam.keys;
@@ -1199,7 +1319,7 @@
           return [{ html: 'Get into the ' + nm, act: { c: 'board', x: t.x, y: t.y }, red: 1 },
                   { html: 'Examine ' + nm, fn: () => hud.chat('A canoe of birch bark over cedar ribs, sewn with spruce root and sealed with pitch. It floats light as a leaf.', 'sys') }]; }
         if (t.kind === 'passage') { const o = core.passageAt(t.x, t.y); if (!o) return []; const nm = '<span class="c">' + esc(o.name || (o.k === 'cavemouth' ? 'Cave' : o.k === 'gate' ? 'Gate' : 'Way out')) + '</span>';
-          return [{ html: esc(o.label || 'Go through'), act: { c: 'enter', x: o.x, y: o.y }, red: 1 },
+          return [{ html: esc(o.label || 'Go through'), act: { c: 'enter', x: o.x, y: o.y }, red: 1, then: () => { if (o.k !== 'gate' && o.to) travelSoon(PASSK[o.k] || null, (zoneAtIndex(o.to[0], o.to[1]) || {}).name || '', o.to[0], o.to[1], Math.max(Math.abs(me.x - o.x), Math.abs(me.y - o.y)) <= 1); } },
                   { html: 'Examine ' + nm, fn: () => hud.chat(o.k === 'cavemouth' ? 'A dark opening in the rock. Webs hang just inside, and the air smells of damp and old fur.' : o.k === 'gate' ? 'A barred wooden gate in a palisade. The lookout has the latch.' : 'A ladder up to a shaft of daylight.', 'sys') }]; }
         if (t.kind === 'remote') {
           const r = remotes.get(t.id); if (!r) return [];
@@ -1212,7 +1332,9 @@
              on a player walks there (tapAt skips players) */
           if (trade && trade.available() && room && !room.me.guest && !r.from.guest) o.push({ html: 'Trade with ' + nm, fn: () => trade.open(r.from) });
           o.push({ html: 'Follow ' + nm, fn: () => startFollow(t.id) });
-          o.push({ html: 'View stats ' + nm, fn: () => hud.playerStats(label(r.name, r.from), r.skills || (pp ? Object.fromEntries(Object.keys(pp.xp).map(k => [k, core.lv(pp, k)])) : {}), cb) });
+          /* their own levels as their game sent them; not here yet (2026-10-07: a first look showed every skill at 1, a blank copy):
+             ask their game for them and open the panel when they come */
+          o.push({ html: 'View stats ' + nm, fn: () => { if (r.skills) { hud.playerStats(label(r.name, r.from), r.skills, cb); return; } hud.chat('Asking ' + label(r.name, r.from) + ' for their stats\u2026', 'sys'); r.wantStats = { at: Date.now(), name: label(r.name, r.from), cb }; netSend({ GQ: 1 }); } });
           o.push({ html: 'Examine ' + nm, fn: () => hud.chat(label(r.name, r.from) + ': another adventurer on the arcade.', 'sys') });
           return o;
         }
@@ -1277,7 +1399,7 @@
         if (!a) return opts;
         return [a].concat(opts.filter(o => !o.act || (o.act.c !== 'plant' && o.act.c !== 'unplant' && o.act.c !== a.act.c)));
       }
-      function doAct(o, sx, sy) { if (o.act) { send(o.act); if (sx != null) { const r = host.getBoundingClientRect(); hud.marker(sx - r.left, sy - r.top, o.red); } if (o.act.c === 'walk') flag = [o.act.x, o.act.y]; else flag = null; } else if (o.fn) o.fn(); }
+      function doAct(o, sx, sy) { if (o.act) { send(o.act); if (o.then) o.then(); if (sx != null) { const r = host.getBoundingClientRect(); hud.marker(sx - r.left, sy - r.top, o.red); } if (o.act.c === 'walk') flag = [o.act.x, o.act.y]; else flag = null; } else if (o.fn) o.fn(); }
       let flag = null;
       /* The operator: "a single click should make the character walk, a double click should make the character run". The first
          tap starts walking at once; a second tap within 300 ms near the same spot upgrades the same move to a run.
@@ -1732,7 +1854,7 @@
         if (!core.persists || e.x == null || !core.persists(e.id, e.n || 1)) return;
         const tell = o => bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send(o); });
         if (e.e === 'take' && e.p === PID) tell({ t: 'took', v: 1, id: e.id, n: e.n || 1, x: e.x, y: e.y });
-        else if ((e.e === 'drop' || e.e === 'xdrop') && (e.owner === PID || e.from === PID) && core.item(e.id) && core.item(e.id).stack) tell({ t: 'drop', v: 3, items: [[e.id, '', e.n || 1]], x: e.x, y: e.y });
+        else if ((e.e === 'drop' || e.e === 'xdrop') && (e.owner === PID || e.from === PID) && core.item(e.id) && core.item(e.id).stack) tell({ t: 'drop', v: 3, items: [[e.id, '', e.n || 1]], x: e.x, y: e.y, sunk: e.sunk || undefined });
       }
       function chestEvent(e) {
         persistTell(e);
@@ -1755,7 +1877,7 @@
           for (const pc of have) { if (items.length >= Math.min(e.n || 1, backed)) break; if (!held.has(pc)) { items.push([e.id, pc]); L.dropped.push({ k: e.id, pc, x: e.x, y: e.y, t: now }); } }
           if (!items.length) return;
           L.dropped = L.dropped.filter(d => now - d.t < 7200000).slice(-100); ledgerSave();
-          bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'drop', v: keep ? 3 : 2, items: keep ? items.map(it => [it[0], it[1], 1]) : items, x: e.x, y: e.y }); });
+          bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'drop', v: keep || e.sunk ? 3 : 2, items: keep || e.sunk ? items.map(it => [it[0], it[1], 1]) : items, x: e.x, y: e.y, sunk: e.sunk || undefined }); });
         } else if (e.e === 'take' && e.p === PID && e.x != null) {
           L.picks.push({ k: e.id, n: e.n || 1, x: e.x, y: e.y, t: now, own: e.own ? 1 : 0 }); L.picks = L.picks.filter(q => now - q.t < 7200000).slice(-100);
           /* YOUR OWN DROP, BACK IN YOUR BAG (2026-10-07, @tbuuol died, picked his things up and ended with two of everything):
@@ -1930,6 +2052,7 @@
         netStats.queued = outQ.length;
       }
       const totalLevel = p => (D.rules.skills || []).reduce((a, k) => a + core.lv(p, k), 0);   /* the Skills tab's Total level */
+      const NETGQ = { t: 0 };
       function netGear() { netSend({ g: gearOf(me), n: me.name, T: totalLevel(me), SK: Object.fromEntries(Object.keys(me.xp).map(k => [k, core.lv(me, k)])), L: ['attack', 'strength', 'defence', 'hitpoints', 'ranged', 'magic', 'dexterity'].map(k => core.lv(me, k)), st: me.styles }); netOutfit(); }
       function netOutfit() { if (myEnt.H.outfit) netSend({ o: myEnt.H.outfit }); }
       /* chat: what you type goes to everyone in the same zone room; rate-limited here (the mesh limits ~5 msgs/s) */
@@ -2097,7 +2220,7 @@
           case 'hit': if (fight()) hostQ.push(['h', toNet(e.src), toNet(e.dst), e.dmg, e.hp, (e.cls || 'm')[0] === 'm' ? 'm' : e.cls === 'ranged' ? 'r' : 'g', (e.blocked ? 1 : 0) | (e.dodged ? 2 : 0) | (e.dex ? 4 : 0) | (e.prot ? 8 : 0), e.prot ? e.raw | 0 : 0, e.fx || 0, e.fxt | 0]); break;
           case 'die': if (e.mob != null && mobIn(e.mob)) hostQ.push(['k', e.mob, e.killer ? toNet(e.killer) : 0]); break;
           case 'spawn': { const m = core.mobByUid(e.mob); if (m && iHost(m.zone)) hostQ.push(['s', m.uid, m.x, m.y, m.hp]); break; }
-          case 'drop': if (iHostAt(e.x, e.y)) hostQ.push(['d', e.g, e.id, e.n, e.x, e.y, e.from ? toNet(e.from) : 0]); break;
+          case 'drop': if (iHostAt(e.x, e.y)) hostQ.push(['d', e.g, e.id, e.n, e.x, e.y, e.from ? toNet(e.from) : 0, e.sunk || 0]); break;
           case 'take': if (iHostAt(e.x, e.y)) hostQ.push(['t', e.g, toNet(e.p), e.id, e.n, e.x, e.y]); break;
           case 'vanish': if (iHostAt(e.x, e.y)) hostQ.push(['v', e.g, e.x, e.y]); break;
           case 'ground': if (iHostAt(e.x, e.y)) hostQ.push(['n', e.g, e.n, e.x, e.y]); break;
@@ -2149,7 +2272,7 @@
         fullT = performance.now(); const seq = Math.round(fullT);
         packSend({ F: seq }, 'M', mobRows(true));
         for (const a of hosted) {
-          const G = core.S.ground.filter(g => areaAt(g.x, g.y) === a).map(g => [g.uid, g.id, g.n, g.x, g.y, g.from ? toNet(g.from) : 0]);
+          const G = core.S.ground.filter(g => areaAt(g.x, g.y) === a).map(g => [g.uid, g.id, g.n, g.x, g.y, g.from ? toNet(g.from) : 0, g.sunk || 0]);
           packSend({ F: seq, Gr: a }, 'G', G);
           const wz = core.weatherOf(a); if (wz) netSend({ F: seq, W: [a, wz.kind, wz.intensity, Math.max(1, wz.until - core.S.t)] });
         }
@@ -2169,7 +2292,8 @@
         if (d.d != null) pst.dead = !!d.d;
         if (d.g && typeof d.g === 'object') pst.g = d.g;
         if (Array.isArray(d.L)) { pst.L = d.L; r.maxHp = d.L[3] | 0; }
-        if (d.SK && typeof d.SK === 'object') { const sk = {}; for (const k in d.SK) if (/^[a-z]{1,20}$/.test(k)) { const L = d.SK[k] | 0; if (L >= 1 && L <= 99) sk[k] = L; } r.skills = sk; }
+        if (d.SK && typeof d.SK === 'object') { const sk = {}; for (const k in d.SK) if (/^[a-z]{1,20}$/.test(k)) { const L = d.SK[k] | 0; if (L >= 1 && L <= 99) sk[k] = L; } r.skills = sk; if (r.wantStats && Date.now() - r.wantStats.at < 15000) hud.playerStats(r.wantStats.name, sk, r.wantStats.cb); r.wantStats = null; }
+        if (d.GQ && Date.now() - (NETGQ.t || 0) > 3000) { NETGQ.t = Date.now(); netGear(); }   /* someone asked for our stats: send them again (at most every 3 s) */
         if (d.st && typeof d.st === 'object') pst.st = d.st;
         if (d.pr !== undefined) pst.pr = typeof d.pr === 'string' ? d.pr : 0;
         if (d.A !== undefined) pst.act = d.A ? { k: 'attack', uid: +d.A } : null;
@@ -2181,7 +2305,7 @@
         if (Array.isArray(d.M)) { const rows = d.M.filter(w => Array.isArray(w) && fromHostOf(id, mobArea(w[0]))); if (rows.length) coreCall(() => core.applyMobs(rows)); }
         if (Array.isArray(d.W) && fromHostOf(id, d.W[0])) coreCall(() => core.setWeather(d.W[0], String(d.W[1]), d.W[2] | 0, d.W[3] | 0));
         if (Array.isArray(d.Fi)) coreCall(() => { for (const f of d.Fi) if (fromHostOf(id, areaAt(f[1], f[2]))) core.fireAdd(f[0], f[1], f[2], f[3], f[4]); });
-        if (Array.isArray(d.G)) coreCall(() => { if (d.Gr) { if (fromHostOf(id, d.Gr)) core.groundFull(d.Gr, d.G); } else for (const g of d.G) if (fromHostOf(id, areaAt(g[3], g[4]))) core.groundAdd(g[0], g[1], g[2], g[3], g[4], g[5] ? fromNet(g[5]) : null); });
+        if (Array.isArray(d.G)) coreCall(() => { if (d.Gr) { if (fromHostOf(id, d.Gr)) core.groundFull(d.Gr, d.G); } else for (const g of d.G) if (fromHostOf(id, areaAt(g[3], g[4]))) core.groundAdd(g[0], g[1], g[2], g[3], g[4], g[5] ? fromNet(g[5]) : null, g[6] || 0); });
         if (Array.isArray(d.E)) coreCall(() => { for (const a of d.E) if (Array.isArray(a) && eventFromHost(id, a)) applyEvent(a); });
       }
       function eventFromHost(id, a) {   /* is the sender the host of the area this event is about? */
@@ -2210,7 +2334,7 @@
           }
           case 'k': { const m = core.mobByUid(a[1]); if (!m) break; core.applyMobs([[m.uid, m.x, m.y, 0, 1]]); if (fromNet(a[2]) === PID) core.creditKill(PID, m.key); for (const pid of core.S.order) { const o = core.S.players[pid]; if (o.act && o.act.k === 'attack' && o.act.uid === m.uid) o.act = null; } handle({ e: 'die', mob: m.uid }, now); break; }
           case 's': core.applyMobs([[a[1], a[2], a[3], a[4], 0]]); break;
-          case 'd': core.groundAdd(a[1], a[2], a[3], a[4], a[5], a[6] ? fromNet(a[6]) : null); break;
+          case 'd': core.groundAdd(a[1], a[2], a[3], a[4], a[5], a[6] ? fromNet(a[6]) : null, a[7] || 0); break;
           case 't': core.groundRemove(a[1]); if (fromNet(a[2]) === PID) { core.grantItem(PID, a[3], a[4]); persistTell({ e: 'take', p: PID, id: a[3], n: a[4], x: a[5], y: a[6] }); } break;   /* the host gave it to us: tell the Bank too */
           case 'v': core.groundRemove(a[1]); break;
           case 'n': { const g = core.S.ground.find(q => q.uid === a[1]); if (g) g.n = a[2]; break; }
@@ -2274,7 +2398,7 @@
           if (e.fadeIn) { const k = (now - e.fadeIn) / 500; if (k >= 1) { e.H.setOpacity(1); e.fadeIn = 0; } else e.H.setOpacity(Math.max(0.02, k)); }   /* a person whose zone just arrived */
           if (e.key.charAt(0) === 'r') continue;
           const a = Math.min(1, (now - e.t0) / e.dur);
-          if (!e.dead || a < 1) { e.root.position.lerpVectors(e.from, e.to, a); e.root.position.y = (e.canoe ? waterY(e.root.position.x, e.root.position.z) + (e.ricing ? 0.14 : 0) : heightAt(e.root.position.x, e.root.position.z) + liftOf(e, a)) + hawkAlt(e); }   /* the poler stands on the canoe's floor */   /* on an upper floor; a hawk over the trees */
+          if (!e.dead || a < 1) { e.root.position.lerpVectors(e.from, e.to, a); e.root.position.y = (e.canoe ? waterY(e.root.position.x, e.root.position.z) + (e.ricing ? 0.14 : 0) : footY(e.root.position.x, e.root.position.z) + liftOf(e, a)) + hawkAlt(e); }   /* the poler stands on the canoe's floor */   /* on an upper floor; a hawk over the trees */
           let d = e.tyaw - e.yaw; d = ((d + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI; e.yaw += d * Math.min(1, dt * 12); e.root.rotation.y = e.yaw;
           const moving = a < 1 && e.from.distanceToSquared(e.to) > 1e-4;
           if (!e.dead && !e.oneShot && !e.prone && !e.held) { const want = e.boatRole === 2 ? (e.knocking ? 'knock' : moving ? 'paddle' : 'sit') : e.canoe ? (e.ricing ? (moving ? 'pole' : 'idle') : moving ? 'paddle' : 'sit') : moving ? (e.running ? 'run' : 'walk') : (e.restPose || e.skill || 'idle'); if (want !== e.loco) { e.loco = want; e.H.play(want, { loop: true }); } }
@@ -2342,6 +2466,7 @@
         hud.setPos(me.x, me.y);
         netPos(now); netNeighbours(now); flushNet();
         if (fogMod && myEnt) fogMod.focus(myEnt.root.position);
+        if (wxMod && wxMod.focus && myEnt) wxMod.focus(myEnt.root.position);
         if (SCENE.see && myEnt) {   /* see-through: a circle round the avatar's chest on screen, for anything 2 m or more in front of it */
           const S = SCENE.see, hp = _seeV.copy(myEnt.root.position); hp.y += 1.0;
           const d = camera.position.distanceTo(hp); hp.project(camera);
@@ -2354,7 +2479,8 @@
         const fn0 = scene.fog.near, ff0 = scene.fog.far, fk = CAVE.on ? 1 : viewR() / VIEW, back = cam.dist;
         scene.fog.near = fn0 * fk + back; scene.fog.far = ff0 * fk + back;
         { const cf = Math.max(90, scene.fog.far + 8); if (Math.abs(camera.far - cf) > 2) { camera.far = cf; camera.updateProjectionMatrix(); } }
-        renderer.render(scene, camera);
+        lightBudget();
+        if (!((TRAVEL.on || travelling) && !TRAVEL.warm)) renderer.render(scene, camera);   /* behind a loading screen nothing is drawn: the frame time goes to building the place you are going to */
         scene.fog.near = fn0; scene.fog.far = ff0;
       }
       const arrivedProjs = [];
@@ -2365,7 +2491,7 @@
         const p = myEnt.root.position, dots = [];
         for (const m of core.S.mobs) if (!m.dead) { const e = ents.get('m:' + m.uid); if (e) dots.push({ x: e.root.position.x, y: e.root.position.z, c: '#ffff00' }); }
         for (const n of core.M.npcs) dots.push({ x: n.x + 0.5, y: n.y + 0.5, c: '#ffff00' });
-        for (const g of core.S.ground) dots.push({ x: g.x + 0.5, y: g.y + 0.5, c: '#ff2020' });
+        for (const g of core.S.ground) if (!g.sunk) dots.push({ x: g.x + 0.5, y: g.y + 0.5, c: '#ff2020' });
         for (const r of remotes.values()) dots.push({ x: r.e.root.position.x, y: r.e.root.position.z, c: '#ffffff' });
         if (flag && me.x === flag[0] && me.y === flag[1]) flag = null;
         minimapFor();
@@ -2505,6 +2631,10 @@
         tap: tapAt, menuAt, targetsAt, pad: () => PAD && PAD.state(), fps: () => frames, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries }), setCam(y, p, d) { if (y != null) cam.tyaw = cam.yaw = y; if (p != null) cam.tpitch = cam.pitch = p; if (d != null) cam.tdist = cam.dist = d; },
         net: () => ({ host: hostOf(zoneHere()), amHost: !!room && hostOf(zoneHere()) === myNetId, hosts: Object.fromEntries(hosts), hosted: Array.from(hosted), area: zoneHere(), region: roomZone, myId: myNetId, ids: Array.from(remotes.keys()), room: room && room.id, me: room && room.me, neighbours: nb ? nb.rooms().map(R => R.id) : [], viewers: Array.from(remotes).filter(e => e[1].viewOnly).map(e => e[0]), status: netStatus, stats: Object.assign({ perSec: +(netStats.sent / Math.max(1, (performance.now() - netStats.t0) / 1000)).toFixed(2) }, netStats, { times: undefined }), gear: Array.from(remotes.values()).map(r => [r.name, r.e.H.gear || null]), remotes: Array.from(remotes.keys()), names: Array.from(remotes.values()).map(r => r.e.tag && r.e.tag.textContent) }),
         weather: (kind, intensity, ticks) => coreCall(() => core.setWeather(zoneHere(), kind, intensity == null ? 80 : intensity, ticks || 500)),
+        wx: () => Object.assign({ season: SEASON.name, snowy: SEASON.snowy }, wxMod && wxMod.state ? wxMod.state() : {}),
+        progInfo: () => { const P = renderer.info.programs || [], I = renderer.info; return { n: P.length, calls: I.render.calls, tris: I.render.triangles, geos: I.memory.geometries, tex: I.memory.textures, applyMs: SEASON.applyMs, applies: SEASON.applies }; },
+        tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },   /* a test taps a thing as a player would (first option) */
+        travelShown: () => { const el = host.querySelector('.travel'); return el && el.style.display !== 'none' ? el.className + ' | ' + el.querySelector('.tt').textContent : null; },
         say, store, models: MOD, allowedAsset, wallet: walletApi(DATA.items.items), walletState: () => walletState, walletRefresh,
         chestEventForTest: chestEvent,
         chest: { state: chestState, take: chestTake, store: chestStore, promise: paid => { const L = ledgerFor(walletState.address); for (const k in paid) L.pend[k] = (L.pend[k] || 0) + paid[k]; ledgerSave(); },

@@ -1501,7 +1501,8 @@
     "watch": "saltmere",
     "examine": "A town guard. Combat level 33. He keeps the peace, and the lamps.",
     "lines": [
-     "We keep the peace. When the day goes we light the lamps and the torches. When it comes back we put the lamps out."
+     "We keep the peace. When the day goes we light the lamps and the torches. When it comes back we put the lamps out.",
+     "Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."
     ]
    },
    {
@@ -1513,7 +1514,8 @@
     "watch": "saltmere",
     "examine": "A town guard. Combat level 33. He keeps the peace, and the lamps.",
     "lines": [
-     "Strike one of us and the whole watch answers."
+     "Strike one of us and the whole watch answers.",
+     "Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."
     ]
    },
    {
@@ -1525,7 +1527,8 @@
     "watch": "saltmere",
     "examine": "A town guard. Combat level 33. He keeps the peace, and the lamps.",
     "lines": [
-     "Saltmere's lamps are ours to light."
+     "Saltmere's lamps are ours to light.",
+     "Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."
     ]
    },
    {
@@ -1537,7 +1540,8 @@
     "watch": "saltmere",
     "examine": "A town guard. Combat level 33. He keeps the peace, and the lamps.",
     "lines": [
-     "The road guard has the cobbles. The town is ours."
+     "The road guard has the cobbles. The town is ours.",
+     "Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."
     ]
    }
   ],

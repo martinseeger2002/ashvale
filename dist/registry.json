@@ -165,6 +165,18 @@
    "api": 1,
    "kind": "js"
   },
+  "seasons": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "geo": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
   "fog": {
    "id": null,
    "v": "1",
