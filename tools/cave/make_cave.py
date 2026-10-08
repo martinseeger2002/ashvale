@@ -15,7 +15,7 @@ import json, os, random, math
 HERE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SEED = 'spidercave-1'
 CELL, GW, GH = 12, 10, 7                     # 10 x 7 cells of 12 tiles = 120 x 84
-OX, OY = -200, 16100                         # outside the core face (its south edge is y 15925; play stops 48 inside it)
+OX, OY = 24000, 24000                        # in the empty space of the globe's flat net, where no ground is (moved 2026-10-08 from -200, 16100 when the globe opened: that spot is open sea now)
 MOUTH = (-125, 8)                            # the operator's spot in the woods (where @yourfirstname stood, 2026-10-06 23:38)
 R = random.Random(SEED)
 

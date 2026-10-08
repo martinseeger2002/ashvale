@@ -64,6 +64,13 @@ def db():
     for col, ty in (('units', 'integer default 1'), ('live', 'integer default 0'), ('paid', 'integer default 0'), ('sunk', 'text')):   # sunk: the lake it lies at the bottom of (unseen; fished up)
         try: c.execute('alter table drops add column %s %s' % (col, ty))
         except sqlite3.OperationalError: pass
+    # THE UNDERGROUND MOVED (2026-10-08, the globe opened): the Spider Cave and the wigwam rooms left their old spots for the empty
+    # space of the flat net. Anything kept at an old spot moves along (idempotent: moved rows no longer match)
+    for x0, y0, x1, y1, dx, dy in ((-200, 16100, -80, 16184, 24200, 7900), (40, 16300, 253, 16313, 23960, 8100)):
+        for t in ('drops', 'ghosts', 'wheres', 'carried'):
+            n = c.execute('update %s set x = x + ?, y = y + ? where x >= ? and x < ? and y >= ? and y < ?' % t, (dx, dy, x0, x1, y0, y1)).rowcount
+            if n: log('UNDER MOVED', t, n)
+    c.commit()
     return c
 
 # ---------------------------------------------------------------- requests (from the room)

@@ -123,6 +123,7 @@
         const sv = JSON.parse(st.get('ashvale3d.save.v1') || 'null'), C = DATA.globecfg || {};
         if (sv && (sv.v | 0) >= 2 && Array.isArray(sv.pos) && C.origin) at = [sv.pos[1] - C.origin[0], sv.pos[2] - C.origin[1]];
         else if (sv && Number.isInteger(sv.x) && Number.isInteger(sv.y)) at = [sv.x, sv.y];
+        for (const r of [[-200, 16100, -80, 16184, 24200, 7900], [40, 16300, 253, 16313, 23960, 8100]]) if (at[0] >= r[0] && at[0] < r[2] && at[1] >= r[1] && at[1] < r[3]) { at = [at[0] + r[4], at[1] + r[5]]; break; }   /* the underground moved (core.underMove) */
       } catch (e) { /* a new character */ }
       const bootEl = G.document && G.document.getElementById('boot'); if (bootEl) bootEl.textContent = 'Loading the land around you…';
       /* the zone you stand IN must be here before the core places you (on land without its town you could be "blocked" and put
@@ -1931,8 +1932,21 @@
         const s = new Set(); for (const o of [[d, 0], [-d, 0], [0, d], [0, -d], [d, d], [d, -d], [-d, d], [-d, -d]]) s.add(core.regionOf(x + o[0], y + o[1]));
         s.delete(core.regionOf(x, y)); s.delete(roomZone); return Array.from(s);
       }
+      /* THE SEAMS OF THE OPEN GLOBE (2026-10-08: "can you fix those 11 seams?"): across a cut edge of the flat net the same ground
+         lies far away in map coordinates, in another region's room. Near one, we also join the room of the ground across it (as a
+         viewer, like a region border) and draw its players at their true places beside us (core.M.netNear) */
+      const SEAM_NEAR = 160;
+      function seamRegions(x, y) {
+        if (!core.M.netAcross || !core.M.netGap) return [];
+        const out = new Set();
+        for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [0.7, -0.7], [-0.7, 0.7], [-0.7, -0.7]]) {
+          const px = Math.round(x + dx * SEAM_NEAR), py = Math.round(y + dy * SEAM_NEAR); if (core.M.netGap(px, py) <= 0) continue;
+          const a = core.M.netAcross(px, py); if (a) out.add(core.regionOf(a.x, a.y));
+        }
+        out.delete(core.regionOf(x, y)); out.delete(roomZone); return Array.from(out);
+      }
       let nbT = 0, nbPosT = 0, nbPosKey = '', nbGearT = 0, nbGearRefT = 0;
-      const nb = net.neighbours && q.has('nb') ? net.neighbours({   /* off until it is proven next to the adjacent-zones test: ?nb turns it on */ game: 'ashvale', loopback: q.has('loopback'), max: 3, on: {
+      const nb = net.neighbours ? net.neighbours({   /* region borders only with ?nb (not yet proven next to the adjacent-zones test); always the far side of a seam of the open globe */ game: 'ashvale', loopback: q.has('loopback'), max: 3, on: {
         message: (rid, ev) => onNet(ev, rid),
         join: (rid, ev) => { clearTimeout(nbGearT); nbGearT = setTimeout(nbGear, ev.self ? 0 : 600); },   /* we arrived, or somebody did: they need our look */
         leave: (rid, ev) => { const r = remotes.get(ev.from.id); if (r && r.via === rid) dropRemote(ev.from.id); },
@@ -1941,7 +1955,8 @@
       function netNeighbours(now) {
         if (!nb || joining || now - nbT < 1000) return; nbT = now;
         if (!room) { nb.update([], []); return; }
-        nb.update(regionsAround(me.x, me.y, NB_NEAR), regionsAround(me.x, me.y, NB_KEEP));
+        const seams = seamRegions(me.x, me.y);
+        nb.update((q.has('nb') ? regionsAround(me.x, me.y, NB_NEAR) : []).concat(seams), (q.has('nb') ? regionsAround(me.x, me.y, NB_KEEP) : []).concat(seams));
         const rooms = nb.rooms(); if (!rooms.length) return;
         const p = myEnt.root.position, an = myEnt.oneShot ? myEnt.lastOne || 'idle' : myEnt.loco || 'idle', key = p.x.toFixed(1) + ',' + p.z.toFixed(1) + ',' + an;
         if (now - nbPosT >= (key === nbPosKey ? 4000 : 1500)) {   /* moving: every 1.5 s; standing: a 4 s heartbeat (remotes drop after 12 s of silence) */
@@ -2786,9 +2801,10 @@
              (the operator's shared-world position check, 2026-10-02.) */
           const span = Math.max(1, Math.min(Bs.t - A.t, TICK));
           const k = Math.max(0, Math.min(1, (rt - A.t) / span));
-          const x = A.x + (Bs.x - A.x) * k, z = A.z + (Bs.z - A.z) * k;
+          let x = A.x + (Bs.x - A.x) * k, z = A.z + (Bs.z - A.z) * k, turnS = 0;
+          if (core.M.netNear && Math.abs(x - me.x) + Math.abs(z - me.y) > 400) { const q = core.M.netNear(x, z, me.x + 0.5, me.y + 0.5); if (q && Math.abs(q[0] - me.x) + Math.abs(q[1] - me.y) < 400) { x = q[0]; z = q[1]; turnS = q[2]; } }   /* across a seam: at their true place beside us */
           boatLook(r.e, r.boat === 1);
-          r.e.root.position.set(x, (r.e.canoe ? waterY(x, z) + (r.anim === 'pole' || r.anim === 'idle' ? 0.14 : 0) : heightAt(x, z)) + (r.e.alt || 0), z); r.e.tyaw = Bs.f;
+          r.e.root.position.set(x, (r.e.canoe ? waterY(x, z) + (r.anim === 'pole' || r.anim === 'idle' ? 0.14 : 0) : heightAt(x, z)) + (r.e.alt || 0), z); r.e.tyaw = Bs.f + turnS;
           const an = Bs.a; if (an !== r.anim) { r.anim = an; r.e.H.play(an, { loop: /idle|walk|run|chop|mine|fish|cook|sit|paddle|pole|knock|crosslegged/.test(an) }); }
           r.e.yaw += (((r.e.tyaw - r.e.yaw + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI) * Math.min(1, dt * 10); r.e.root.rotation.y = r.e.yaw;
           if (r.boat === 2) { const T = r.ride === myNetId ? myEnt : (remotes.get(r.ride) || {}).e; if (T) { bowSeat(r.e, T, r.anim === 'knock'); } }
@@ -3064,7 +3080,7 @@
         netHealth: () => ({ online: !!room, lost: NW.lost, heardAgo: NW.heard ? Math.round(performance.now() - NW.heard) : null, fails: NW.fails, saveFails }), _netBreak: () => { if (room) { const R = room; R.send = () => Promise.resolve(false); } },
         zones: () => ({ loaded: (core.D.zones || []).map(z => z.id), index: ZINDEX ? ZINDEX.map(z => z.id) : null, waiting: Object.keys(LZ_WAIT), travelling }),
         tap: tapAt, menuAt, targetsAt, pad: () => PAD && PAD.state(), fps: () => frames, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries }), setCam(y, p, d) { if (y != null) cam.tyaw = cam.yaw = y; if (p != null) cam.tpitch = cam.pitch = p; if (d != null) cam.tdist = cam.dist = d; },
-        remotesInfo: () => Array.from(remotes).map(([id, r]) => ({ id, boat: r.boat, ride: r.ride, offline: !!r.offline, name: r.name })),   /* tests: who rides with whom, and who is a dropped-out partner */
+        remotesInfo: () => Array.from(remotes).map(([id, r]) => ({ id, boat: r.boat, ride: r.ride, offline: !!r.offline, name: r.name, via: r.via || null, at: [Math.round(r.e.root.position.x), Math.round(r.e.root.position.z)] })),   /* tests: who rides with whom, and who is a dropped-out partner */
         net: () => ({ host: hostOf(zoneHere()), amHost: !!room && hostOf(zoneHere()) === myNetId, hosts: Object.fromEntries(hosts), hosted: Array.from(hosted), area: zoneHere(), region: roomZone, myId: myNetId, ids: Array.from(remotes.keys()), room: room && room.id, me: room && room.me, neighbours: nb ? nb.rooms().map(R => R.id) : [], viewers: Array.from(remotes).filter(e => e[1].viewOnly).map(e => e[0]), status: netStatus, stats: Object.assign({ perSec: +(netStats.sent / Math.max(1, (performance.now() - netStats.t0) / 1000)).toFixed(2) }, netStats, { times: undefined }), gear: Array.from(remotes.values()).map(r => [r.name, r.e.H.gear || null]), remotes: Array.from(remotes.keys()), names: Array.from(remotes.values()).map(r => r.e.tag && r.e.tag.textContent) }),
         weather: (kind, intensity, ticks) => coreCall(() => core.setWeather(zoneHere(), kind, intensity == null ? 80 : intensity, ticks || 500)),
         skyDirs: () => ({ north: trueNorth(me.x, me.y), season: SEASON.name, sun: SUNL.sv, moon: SUNL.mv, info: { eclipse: +(SUNL.eclipse || 0).toFixed(3), lunar: +(SUNL.lunar || 0).toFixed(3) } }),   /* a test aims the camera at the sun or the moon */

@@ -42,8 +42,9 @@
         return L; } }
       const cx = gx + 0.5, cy = -gy - 0.5;
       const st = ctx.siteOf(f, Math.floor(cx / SITE), Math.floor(cy / SITE));
-      if (st) { const L = st.foot.get(ctx.tkey(gx, gy)); if (L) return L; }
+      const FTL = st ? st.foot.get(ctx.tkey(gx, gy)) : null;
       ctx.fieldTrue(f, cx, cy, TF);
+      if (FTL && !(TF[16] > 0.5) && TF[0] >= WATER) return FTL;   /* a site's own tiles, never on water (2026-10-08) */
       const h = TF[0];
       if (TF[12] < 3 && h > WATER + 0.1 && TF[3] < 0.1 && seamStone(f, gx, gy, cx, cy)) return 'K';
       const pd = PI.length ? ctx.pathDist(f, cx, cy) : 1e9;

@@ -421,7 +421,7 @@
           const bed = (fade(tx, ty) + fade(tx + 1, ty) + fade(tx, ty + 1) + fade(tx + 1, ty + 1)) / 4;
           let ws = map.waterSurf ? map.waterSurf(tx, ty) : null;   /* rivers and lakes stand at their own level, flat (2026-10-04: "the rivers are dry"; a hollow's water "follows the contour") */
           if (ws == null && map.waterSurf) ws = nearSurf(tx, ty);   /* water with no level of its own beside a river or lake (a side channel, a bay) is part of it: its level, not a step down (2026-10-07: "Fix the sinking water tiles") */
-          if (ws != null) return Math.max(wLevel, ws + 0.2);   /* one height for a whole lake: never the bed's */
+          if (ws != null) return Math.max(wLevel, ws + 0.03 + 0.17 * Math.min(1, Math.max(0, (ws - wLevel) / 0.5)));   /* one height for a whole lake: never the bed's; a river's own level all the way down, the skin easing onto the sea at its mouth */
           /* a pond of the seeded land is a hollow dug below the world's water line, and its tiles are water exactly where the
              ground is below that line: its skin IS the line, flat, meeting the shore where the ground crosses it. Riding the
              bed (+0.6, capped at the old pond line) stepped the sheet tile by tile, floating at the rim and sunk in the middle
@@ -999,8 +999,8 @@
                 RICEP.push({ x: sx, z: sz, base, hh, a, lean, dark: !(k % 3), h: hash2(o.x * 7 + k, o.y * 3 - k) });
                 continue;
               }
-              B.add('box', 0x5f7a34, sx, base + hh / 2, sz, 0.018, hh, 0.018, a, lean, 0);
-              if (k % 2 === 0) B.add('cyl6', 0x5a3a20, sx, base + hh - 0.1, sz, 0.06, 0.22, 0.06, a, lean, 0);
+              BF.add('box', 0x5f7a34, sx, base + hh / 2, sz, 0.018, hh, 0.018, a, lean, 0);   /* cattails die back in winter and grow again in spring, like the small flora (2026-10-08) */
+              if (k % 2 === 0) BF.add('cyl6', 0x5a3a20, sx, base + hh - 0.1, sz, 0.06, 0.22, 0.06, a, lean, 0);
             }
             break;
           }

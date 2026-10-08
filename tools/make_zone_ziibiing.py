@@ -66,7 +66,7 @@ RING = 11
 # path out of it are the grid cells that way from the wigwam's 3 x 3 floor.
 EAST = (-0.774, 0.633)
 WIGWAMS = [(FIRE[0] + round(math.cos(a) * RING), FIRE[1] + round(math.sin(a) * RING * 0.82)) for a in (math.radians(d) for d in range(15, 375, 60))]
-LODGE_O, ROOM, GAP = (40, 16300), 13, 40   # the lodges: round rooms far under the world, like the Spider Cave, 40 m apart so no room sees another
+LODGE_O, ROOM, GAP = (24000, 24400), 13, 40   # (moved 2026-10-08 from 40, 16300 into the net's empty space, beside the Spider Cave) the lodges: round rooms far under the world, like the Spider Cave, 40 m apart so no room sees another
 lodges = [['^'] * (GAP * (len(WIGWAMS) - 1) + ROOM) for _ in range(ROOM)]
 lobj = []
 for n, (wx, wy) in enumerate(WIGWAMS):

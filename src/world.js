@@ -359,7 +359,7 @@
       waterH: () => WG ? WG.WATER - HB : 0,
       /* the surface of a river or lake over this tile (worldgen's own level, in groundH's frame), or null where the
          world holds no such water (the sea, a set piece's pond or well) - 2026-10-04: "The water should always be flat" */
-      waterSurf: (x, y) => { if (!WG) return null; const f = fieldAt(x + 0.5, y + 0.5); return f[16] > 0.5 && f[17] > WG.WATER + 0.05 ? f[17] - HB : null; },
+      waterSurf: (x, y) => { if (!WG) return null; const f = fieldAt(x + 0.5, y + 0.5); return f[16] > 0.5 ? f[17] - HB : null; },   /* every river and lake at its own level, down to the sea (2026-10-08: a river mouth 5 cm over the sea had lost its water) */
       forestAt: (x, y) => WG ? fieldAt(x + 0.5, y + 0.5)[1] : 0,
       liftAt: (x, y) => LIFT.size ? (LIFT.get(x + ',' + y) || 0) : 0, lifts: LIFT.size,
       buildings: STOREYED, buildingAt, stairsOf: (i) => STOREYED[i] ? STOREYED[i].stairs : null,
@@ -381,6 +381,7 @@
       sphereAt: (x, y) => { if (!WG || !WG.toSphere) return null; const q = onFace(x, y); return WG.toSphere(q[0], q[1], q[2]); },   /* continuous vale point -> unit sphere (any face) */
       netAcross: (x, y) => { if (!NET) return null; const r = NET.across(x + OX + 0.5, -(y + OY) - 0.5); return r ? { x: Math.floor(r.x) - OX, y: Math.floor(-r.y) - OY, turn: r.turn, f: r.f } : null; },   /* past a cut edge: where the same ground lies natively */
       netGap: (x, y) => NET ? NET.nearest(x + OX + 0.5, -(y + OY) - 0.5).d : 0,
+      netNear: (x, y, rx, ry) => { if (!NET) return null; const r = NET.relocate(x + OX, -(y + OY), rx + OX, -(ry + OY)); return r ? [r[0] - OX, -r[1] - OY, r[2]] : null; },   /* (continuous map points) another side of a seam, in the reference's frame */
       fromFace: (f, gx, gy) => f === FACE ? [gx - OX, gy - OY] : null,
       stats: () => ({ chunks: chunks.size, filled, dropped, nodes: nodes.size })
     };

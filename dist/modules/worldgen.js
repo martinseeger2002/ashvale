@@ -67,7 +67,7 @@
         const st = ctx.siteOf(f, Math.floor(tx / SITE), Math.floor(ty / SITE));
         if (st) {
           const dx = tx - st.x, dy = ty - st.y, d = Math.sqrt(dx * dx + dy * dy);
-          if (d < st.r + 6) { const k = geo.sstep(st.r + 6, st.r - 2, d); out.h = out.h * (1 - k * 0.9) + st.base * k * 0.9; out.site = k; out.forest *= 1 - k; }
+          if (d < st.r + 6 && !out.river && out.h >= WATER) { const k = geo.sstep(st.r + 6, st.r - 2, d); out.h = out.h * (1 - k * 0.9) + st.base * k * 0.9; out.site = k; out.forest *= 1 - k; }   /* never over a river, a lake or the sea (2026-10-08: a herd's ground had dammed a river) */
         }
         if (out.pieceId) {
           const pc = ctx.PIECE_BY_ID.get(out.pieceId), cx = Math.round(tx), cy = Math.round(-ty);
@@ -220,7 +220,15 @@
           const q2 = h2 && h2[0] === h[0] ? ap(T[h[0]], h2[1], h2[2]) : [q[0] + 1, q[1]];
           return { f: h[0], x: q[0], y: q[1], turn: Math.atan2(q2[1] - q[1], q2[0] - q[0]) };
         }
-        const N = { F0, T, TRI, tree, nearest, toFace, fromFace, across, place: f => T[f].slice(), isTree: (f, g) => tree.has(Math.min(f, g) + ':' + Math.max(f, g)) };
+        /* a point of another face, seen from a reference point across a cut edge: where it lies in the reference's own frame (the
+           faces must share that edge), and the turn - so players on the two sides of a seam can see each other */
+        function relocate(px, py, rx, ry) {
+          const F = nearest(rx, ry).f, n = toFace(px, py); if (n.f === F) return [px, py, 0];
+          const X = ctx.xform(n.f, F); if (!X) return null;
+          const lx = X[0] * n.x - X[1] * n.y + X[2], ly = X[1] * n.x + X[0] * n.y + X[3], q = ap(T[F], lx, ly);
+          return [q[0], q[1], Math.atan2(T[F][1], T[F][0]) + Math.atan2(X[1], X[0]) - Math.atan2(T[n.f][1], T[n.f][0])];
+        }
+        const N = { F0, T, TRI, tree, nearest, toFace, fromFace, across, relocate, place: f => T[f].slice(), isTree: (f, g) => tree.has(Math.min(f, g) + ':' + Math.max(f, g)) };
         NETS.set(F0, N); return N;
       }
       return {

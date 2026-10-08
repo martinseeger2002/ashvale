@@ -455,10 +455,15 @@
        character comes back where it was, kilometres out if need be. v1 (v0.5 and older) stored no position: those load at
        the village well as they always did; a v1 save that carries old map x, y keeps them (the old map is the vale frame:
        the village and Whisperwood keep their coordinates through the fixed globecfg origin). */
+    /* THE UNDERGROUND MOVED (2026-10-08): when the globe opened, the Spider Cave and the wigwam rooms of Ziibiing left their old spots
+       (now open sea) for the empty space of the flat net. A position saved inside an old spot is carried along. */
+    const UNDER_MOVES = [[-200, 16100, -80, 16184, 24200, 7900], [40, 16300, 253, 16313, 23960, 8100]];
+    function underMove(x, y) { for (const r of UNDER_MOVES) if (x >= r[0] && x < r[2] && y >= r[1] && y < r[3]) return [x + r[4], y + r[5]]; return [x, y]; }
     function placeFrom(p, s) {
       let xy = null;
       if ((s.v | 0) >= 2 && Array.isArray(s.pos) && s.pos.length === 3) xy = M.fromFace(s.pos[0] | 0, s.pos[1] | 0, s.pos[2] | 0);
       else if ((s.v | 0) <= 1 && Number.isInteger(s.x) && Number.isInteger(s.y)) xy = [s.x, s.y];
+      if (xy) xy = underMove(xy[0], xy[1]);   /* saved inside the Spider Cave or a wigwam before they moved */
       if (!xy || !inMap(xy[0], xy[1])) return;   /* outside the world: the spawn */
       /* in your canoe when you left (2026-10-07: "if you're in a canoe that needs to save ... so when you reload the game, you're not on
          the shore without your canoe"): you come back sitting in it, on the water where you were */
@@ -2495,7 +2500,7 @@
     const CROSS = 24;
     function netCross(p) {
       if (!p || p.puppet || p.dead || p.lv > 0 || p.boat === 2) return;   /* a rider goes with the canoe */
-      if (!(S.t % 2) || M.netGap(p.x, p.y) < CROSS) return;
+      if (!(S.t % 2) || M.netGap(p.x, p.y) < CROSS || (M.underAt && M.underAt(p.x, p.y))) return;   /* underground lies in the net's empty space on purpose */
       const a = M.netAcross(p.x, p.y); if (!a) return;
       let to = [a.x, a.y];
       const ok = (x, y) => p.boat ? isWet(x, y) : (isHawk(p) || !M.blocked(x, y));
@@ -2631,7 +2636,7 @@
       return true;
     }
     return {
-      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, setSkyTell, setNature, setNatureTell, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
+      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, setNature, setNatureTell, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
