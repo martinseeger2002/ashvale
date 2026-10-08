@@ -727,6 +727,8 @@
             } else { place(myEnt, e.x, e.y); cam.snap = true; streamRegions(); sfx('equip'); arriveCheck(); }
           } break;
           case 'zoneadd': zoneArrived(e, now); break;
+          case 'boatland': boatShow(e.x, e.y, e.face); if (e.by === PID) { boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, face: e.face, on: 0 }); } break;
+          case 'boatgone': boatHide(e.x, e.y); if (e.by === PID) boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, on: 1 }); break;
           case 'chest': if (mine) { const c = ents.get('n:' + e.npc); if (c) c.H.play('open'); hud.openChest(); } break;   /* the town chest */
           case 'shopclose': if (mine) hud.closeShop(); break;
           case 'mobjump': { const t = ents.get('m:' + e.mob); if (t) { place(t, e.x, e.y); if (t.path) t.path = null; } break; }   /* came through a cave opening */
@@ -1943,6 +1945,21 @@
       }
       /* felled trees, shared by every player for ever (2026-10-05): you tell the @ashvale Bank when you fell one, and
          ask it which trees round you are already down whenever you arrive somewhere new (and every few minutes) */
+      /* LANDED CANOES (2026-10-07): the core keeps them, the @ashvale Bank keeps them a game year for everyone, and here
+         each is a canoe afloat at the bank you can tap to get in */
+      const BOATM = new Map(), DIR8 = [[0, -1], [1, 0], [0, 1], [-1, 0], [1, -1], [1, 1], [-1, 1], [-1, -1]];
+      function boatShow(x, y, face) {
+        const k = x + ',' + y; if (BOATM.has(k) || !SCENE.canoeMesh) return;
+        const c = SCENE.canoeMesh(), d = DIR8[face | 0] || DIR8[2]; c.position.set(x + 0.5, waterY(x + 0.5, y + 0.5) - 0.02, y + 0.5); c.rotation.y = Math.atan2(d[0], d[1]); scene.add(c);
+        const pk = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.9, 4.4), proxyMat); pk.position.copy(c.position); pk.rotation.y = c.rotation.y; pk.userData.pick = { kind: 'canoe', x, y }; scene.add(pk); proxies.push(pk);
+        BOATM.set(k, { c, pk });
+      }
+      function boatHide(x, y) { const k = x + ',' + y, b = BOATM.get(k); if (!b) return; scene.remove(b.c); scene.remove(b.pk); const i = proxies.indexOf(b.pk); if (i >= 0) proxies.splice(i, 1); BOATM.delete(k); }
+      function boatTell(o) { bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send(o); }); setTimeout(() => boatsAsk(true), 3000); }
+      let boatsT = 0; const boatsGot = {};
+      function boatsAsk(force) { if (!force && performance.now() - boatsT < 10000) return; boatsT = performance.now(); bankRoom().then(R => { if (R && R.me) R.send({ t: 'boats?', v: 1, x0: me.x - 80, y0: me.y - 80, x1: me.x + 80, y1: me.y + 80 }); }); }
+      function boatsHeard(d) { const k = (d.box || []).join(','), G = boatsGot[k] = boatsGot[k] || { items: [], n: 0 }; G.items.push(...(d.items || [])); G.n++; if (G.n >= (d.of | 0)) { delete boatsGot[k]; coreCall(() => core.setBoats && core.setBoats(d.box, G.items)); } }
+      setInterval(() => boatsAsk(false), 10000); setTimeout(() => boatsAsk(true), 7000);
       function fellTell(x, y) { bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'fell', v: 1, x, y }); }); }
       let fellAt = null, fellT = 0;
       function felledAsk(force) {
@@ -1983,6 +2000,7 @@
           R.on('closed', () => { if (bank.room === R) bank.room = null; });
           R.on('message', ({ from, data }) => {
             const bankFrom = from && (from.address === DATA.assets.issuer || from.address === YOURFIRST_ADDR || from.tag === 'yourfirstname');
+            if (data && data.t === 'boats' && bankFrom && R.me && data.to === R.me.address) { boatsHeard(data); return; }   /* canoes left at the bank near me */
             if (data && data.t === 'felled' && bankFrom && R.me && data.to === R.me.address) { core.setFelled(data.cells || []); return; }   /* trees others felled */
             if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }   /* persisted drops near me */
             if (!data || data.t !== 'dep' || !bankFrom || !R.me || data.to !== R.me.address) return;   /* only @ashvale or @yourfirstname answers, only to me */

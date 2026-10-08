@@ -49,6 +49,7 @@ def db():
             txid text, piece text, err text, at real, done_at real, req text);
         create table if not exists given(piece text primary key, addr text, item text, at real);
         create table if not exists felled(x integer, y integer, by text, at real, primary key(x, y));   -- trees felled for good, shared (2026-10-05)
+        create table if not exists boats(x integer, y integer, face integer, by text, at real, primary key(x, y));   -- canoes left at the bank, kept a game year (2026-10-07)
         create table if not exists wheres(addr text primary key, x integer, y integer, at real);
         create table if not exists saves(addr text primary key, id integer, blob text, at real);   -- each player's whole game, packed (2026-10-07)   -- where each player last stood, for the Atlas (2026-10-06)
         create table if not exists drops(n integer primary key, addr text, item text, piece text, x integer, y integer, at real, taken_by text, taken_at real);
@@ -180,6 +181,24 @@ def handle_felled(c, addr, msg):
     if x1 - x0 > 400 or y1 - y0 > 400: return None
     cells = [[r['x'], r['y']] for r in c.execute('select x, y from felled where x between ? and ? and y between ? and ?', (x0, x1, y0, y1))]
     return [{'t': 'felled', 'to': addr, 'cells': cells[i:i + 30]} for i in range(0, len(cells), 30)]
+BOAT_LIFE = 365 * 7200   # one game year: 365 game days of two hours
+def handle_boats(c, addr, msg):
+    """'boat': {x, y, face, on: 0 landed | 1 taken} - a canoe left at the bank, or taken from it. 'boats?': the landed canoes in a
+    rectangle (younger than a game year), [[x, y, face], ...] in chunks"""
+    t = msg.get('t')
+    if t == 'boat':
+        try: x, y, f, on = int(msg['x']), int(msg['y']), int(msg.get('face') or 0) & 7, int(msg.get('on') or 0)
+        except (KeyError, TypeError, ValueError): return None
+        if on: c.execute('delete from boats where x=? and y=?', (x, y))
+        else: c.execute('insert or replace into boats values(?,?,?,?,?)', (x, y, f, addr, time.time()))
+        c.commit(); log('BOAT', addr, 'taken' if on else 'landed', x, y); return None
+    try: x0, y0, x1, y1 = (int(msg[k]) for k in ('x0', 'y0', 'x1', 'y1'))
+    except (KeyError, TypeError, ValueError): return None
+    if x1 - x0 > 400 or y1 - y0 > 400: return None
+    c.execute('delete from boats where at<?', (time.time() - BOAT_LIFE,)); c.commit()
+    rows = [[r['x'], r['y'], r['face']] for r in c.execute('select x, y, face from boats where x between ? and ? and y between ? and ?', (x0, x1, y0, y1))]
+    box = [x0, y0, x1, y1]; chunks = [rows[i:i + 30] for i in range(0, len(rows), 30)] or [[]]
+    return [{'t': 'boats', 'to': addr, 'box': box, 'i': i, 'of': len(chunks), 'items': ch} for i, ch in enumerate(chunks)]
 def handle_where(c, addr, msg):
     """the Atlas's "you are here" (2026-10-06: players open the Atlas from the Games tab and should see a dot where they
     are). 'here' {x, y}: the game says where this player stands (sent as it saves, when they have moved or every 2 minutes,
@@ -255,6 +274,7 @@ def handle(c, addr, msg):
     if msg.get('t') == 'took': return handle_took(c, addr, msg)
     if msg.get('t') == 'ground?': return handle_ground(c, addr, msg)
     if msg.get('t') in ('fell', 'felled?'): return handle_felled(c, addr, msg)
+    if msg.get('t') in ('boat', 'boats?'): return handle_boats(c, addr, msg)
     if msg.get('t') in ('here', 'where?'): return handle_where(c, addr, msg)
     if msg.get('t') in ('book', 'friends?'): return handle_contacts(c, addr, msg)
     if msg.get('t') in ('sv', 'ld?'): return handle_save(c, addr, msg)
@@ -456,7 +476,7 @@ def room_loop(stop):
                     if fr.evaluate("window.__bankClosed || null"): raise RuntimeError('room closed')
                     for m in fr.evaluate("window.__bankQ.splice(0)"):
                         d, f = m.get('data') or {}, m.get('from') or {}
-                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'sv', 'ld?'): continue
+                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'boat', 'boats?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'sv', 'ld?'): continue
                         if f.get('guest') or not f.get('address'): continue
                         try: rep = handle(c, f['address'], d)
                         except Exception: log('HANDLE ERROR', traceback.format_exc()[-400:]); rep = {'t': 'dep', 'id': d.get('id'), 'to': f['address'], 'ok': False, 'note': 'The bank hit an error; try again later.'}
