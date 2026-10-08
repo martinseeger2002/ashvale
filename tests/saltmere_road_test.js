@@ -17,7 +17,7 @@ const mineRoad = (village.objects || []).filter(o => o.k === 'lamp' && o.x >= 36
 ok(mineRoad.length >= 4, 'Ashvale\'s east road from the mine has street lamps (' + mineRoad.length + ')');
 
 const cfg = mod('globecfg').data;
-const zones = ['village', 'whisperwood', 'saltmere'].map(id => Object.assign({ id }, mod('zone.' + id).data));
+const zones = ['village', 'eastend', 'whisperwood', 'saltmere'].map(id => Object.assign({ id }, mod('zone.' + id).data));
 const G = AshGlobe.createGlobe(cfg), W = AW.createWorldgen(G, { seed: cfg.seed });
 W.setSetPieces(W.piecesFromZones(zones, cfg.face, cfg.origin[0], cfg.origin[1], { belt: cfg.belt || {}, links: cfg.links || [] }));
 ok(typeof W.roadObjects === 'function', 'worldgen exposes the roadside posts');

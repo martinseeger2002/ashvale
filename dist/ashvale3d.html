@@ -5886,13 +5886,24 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
             if (!di && !dj) continue; const ni = i + di, nj = j + dj; if (ni < 0 || nj < 0 || ni >= GW || nj >= GH) continue;
             const nk = nj * GW + ni; if (nk !== tk && !ok(ni, nj)) continue;
             const step = (di && dj ? 1.414 : 1) * CS, dh = Math.abs((hgt[nk] === hgt[nk] && hgt[nk] > -1e8 ? hgt[nk] : h0) - h0);
-            const ng = gsc[k] + step * (1 + 0.6 * dh / CS) * (0.92 + 0.16 * g.u01(g.hash3(ni, nj, hv)));
+            const ng = gsc[k] + step * (1 + (trail ? 0.6 : 0.3) * dh / CS) * (trail ? 0.92 + 0.16 * g.u01(g.hash3(ni, nj, hv)) : 0.98 + 0.04 * g.u01(g.hash3(ni, nj, hv)));   /* a road between towns runs as straight as the ground allows (2026-10-08); a trail wanders */
             if (ng < gsc[nk]) { gsc[nk] = ng; from[nk] = k; hpush(ng + Math.hypot(ni - ti, nj - tj) * CS, nk); }
           }
         }
         if (found) {
           const pts = []; for (let k = tk; k >= 0; k = from[k]) { const i = k % GW, j = (k - i) / GW; pts.push([gx0 + i * CS, gy0 + j * CS]); if (k === sk) break; }
           pts.reverse(); pts[0] = [x, y]; pts[pts.length - 1] = [tx, ty];
+          /* STRAIGHTEN (2026-10-08: "as straight as possible from Ashvale to Saltmere"): a road skips every corner it can - from
+             each point, on to the farthest point it reaches in a straight line over open ground - so it runs in long straight
+             reaches and bends only where water, rock or a town is in the way. A trail keeps its wander. */
+          if (!trail && pts.length > 2) {
+            const clear = (a2, b2) => { const n = Math.ceil(Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) / (CS / 2)); for (let q = 1; q < n; q++) { const px = a2[0] + (b2[0] - a2[0]) * q / n, py = a2[1] + (b2[1] - a2[1]) * q / n, ci = Math.round((px - gx0) / CS), cj = Math.round((py - gy0) / CS); if (ci < 0 || cj < 0 || ci >= GW || cj >= GH || !ok(ci, cj)) return false; } return true; };
+            const st = [pts[0]]; let i0 = 0;
+            while (i0 < pts.length - 1) { let j = pts.length - 1; while (j > i0 + 1 && !clear(pts[i0], pts[j])) j--; st.push(pts[j]); i0 = j; }
+            const fine = [st[0]];   /* back to points every step or so, so the road is laid (and lit) as before */
+            for (let q = 1; q < st.length; q++) { const a2 = st[q - 1], b2 = st[q], n = Math.max(1, Math.ceil(Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) / CS)); for (let r = 1; r <= n; r++) fine.push([a2[0] + (b2[0] - a2[0]) * r / n, a2[1] + (b2[1] - a2[1]) * r / n]); }
+            pts.length = 0; pts.push(...fine);
+          }
           let px0 = pts[0][0], py0 = pts[0][1];
           for (let k = 2; k < pts.length; k += 2) { const q = pts[Math.min(k, pts.length - 1)]; segs.push(A.face, px0, py0, q[0], q[1], w0, RK, A.hb - 0.75); px0 = q[0]; py0 = q[1]; }
           segs.push(A.face, px0, py0, tx, ty, w0, RK, A.hb - 0.75);
@@ -7505,7 +7516,30 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       }
       let end = found >= 0 ? found : best; if (end < 0 || end === s0) return [];
       const path = []; while (end !== s0) { path.push(idx(X0 + end % S2, Y0 + ((end / S2) | 0))); end = prev[end]; }
-      return path.reverse();
+      return straightPath(sx, sy, path.reverse());
+    }
+    /* WALK STRAIGHT (2026-10-08: "fix the character movement so the character doesn't jog back-and-forth so much"): the search
+       finds a shortest way, but among the many equally short ones it takes the first, which bunches its diagonal steps and turns
+       at every chance. The way is redrawn as straight lines wherever every step of the line can be taken, the diagonals spread
+       evenly along each line - never longer than before, and only through tiles a step may enter anyway. */
+    function lineSteps(ax, ay, bx, by) {
+      const dx = bx - ax, dy = by - ay, n = Math.max(Math.abs(dx), Math.abs(dy)), out = [];
+      for (let k = 1; k <= n; k++) out.push([ax + Math.round(dx * k / n), ay + Math.round(dy * k / n)]);
+      return out;
+    }
+    function lineOk(ax, ay, steps) { let px = ax, py = ay; for (const [x, y] of steps) { if (!canStep(px, py, x - px, y - py)) return false; px = x; py = y; } return true; }
+    function straightPath(sx, sy, path) {
+      if (path.length < 3) return path;
+      const pts = [[sx, sy]].concat(path.map(k => [kx(k), ky(k)])), out = [];
+      let i = 0;
+      while (i < pts.length - 1) {
+        let j = Math.min(pts.length - 1, i + 48), seg = null;
+        for (; j > i + 1; j--) { const st = lineSteps(pts[i][0], pts[i][1], pts[j][0], pts[j][1]); if (st.length <= j - i && lineOk(pts[i][0], pts[i][1], st)) { seg = st; break; } }
+        if (!seg) { seg = [pts[i + 1]]; j = i + 1; }
+        for (const [x, y] of seg) out.push(idx(x, y));
+        i = j;
+      }
+      return out.length <= path.length ? out : path;
     }
     function lineOfSight(ax, ay, bx, by) {
       let x = ax, y = ay; const dx = Math.abs(bx - ax), dy = Math.abs(by - ay), sx = ax < bx ? 1 : -1, sy = ay < by ? 1 : -1; let err = dx - dy;
@@ -14589,12 +14623,16 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         ents.set(key, e); return e;
       }
       function removeEnt(e) { if (e.bub) e.bub.el.remove(); scene.remove(e.root); const i = proxies.indexOf(e.proxy); if (i >= 0) proxies.splice(i, 1); e.H.dispose && e.H.dispose(); for (const s of e.splats) s.el.remove(); if (e.bar) e.bar.remove(); if (e.tag) e.tag.remove(); if (e.ohd) e.ohd.remove(); ents.delete(e.key); }
-      function place(e, x, y) { const v = new THREE.Vector3(x + 0.5, 0, y + 0.5); v.y = footY(v.x, v.z); e.from.copy(v); e.to.copy(v); e.root.position.copy(v); e.tx = x; e.ty = y; }
+      function place(e, x, y) { e.trail = null; const v = new THREE.Vector3(x + 0.5, 0, y + 0.5); v.y = footY(v.x, v.z); e.from.copy(v); e.to.copy(v); e.root.position.copy(v); e.tx = x; e.ty = y; }
       function moveTo(e, x, y, now) {
         if (e.tx === x && e.ty === y) return false;
         const steps = Math.max(Math.abs(x - e.tx), Math.abs(y - e.ty));
         e.from.copy(e.root.position); e.to.set(x + 0.5, 0, y + 0.5); e.t0 = now; e.dur = TICK;
-        e.running = steps > 1; e.tx = x; e.ty = y; return true;
+        e.running = steps > 1;
+        /* face the way you are going over the last few steps, not each tile's own step (no 45-degree snap at every tile) */
+        e.trail = (e.trail || []); e.trail.push([x, y]); if (e.trail.length > 3) e.trail.shift();   /* the last two steps' way: a diagonal and a straight step make one heading between them */
+        const t0 = e.trail[0]; e.headYaw = (t0[0] !== x || t0[1] !== y) && steps <= 2 ? Math.atan2(x - t0[0], y - t0[1]) : null;
+        e.tx = x; e.ty = y; return true;
       }
       const faceYaw = f => Math.atan2(DIRS[f][0], DIRS[f][1]);
       function playOnce(e, name, speed) { e.oneShot = true; e.lastOne = name; e.oneT = performance.now(); e.H.play(name, { loop: false, speed: speed || 1 }); }
@@ -14731,7 +14769,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           const p = core.S.players[pid], e = ents.get('p:' + pid); if (!e) continue;
           if (p.dead) continue;
           const mv = moveTo(e, p.x, p.y, stamp);
-          if (mv && !p.boat) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else e.tyaw = faceYaw(p.face);   /* a canoe faces its heading, even backing up */
+          if (mv && !p.boat) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else e.tyaw = faceYaw(p.face);   /* a canoe faces its heading, even backing up */
           const sk = p.skilling, skAnim = sk === 'chop' ? 'chop' : sk === 'mine' ? 'mine' : sk === 'fish' ? 'fish' : sk === 'cook' || sk === 'light' ? 'cook' : null;
           const ric = e === myEnt ? ricingNow() : false; e.ricing = ric;
           const tl = p.boat === 1 ? (ric ? 'push_pole' : 'paddle') : p.boat === 2 ? (p.knocking ? 'ricing_sticks' : 'paddle') : skAnim === 'chop' || skAnim === 'mine' || skAnim === 'fish' ? p.toolId || (sk === 'chop' ? 'hatchet' : sk === 'mine' ? 'pickaxe' : 'net') : null;
@@ -14743,13 +14781,13 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         for (const n of core.M.npcs) {
           const e = ents.get('n:' + n.id); if (!e) continue;
           e.root.visible = npcShown(n);
-          if (n.patrol || n.guard || n.watch) { if (moveTo(e, n.x, n.y, stamp)) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); }
+          if (n.patrol || n.guard || n.watch) { if (moveTo(e, n.x, n.y, stamp)) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); }
         }   /* a watchman walking his round, a guard answering the call to arms; hidden NPCs stay unseen until their flag */
         syncMobEnts();
         for (const m of core.S.mobs) {
           const e = ents.get('m:' + m.uid); if (!e || m.dead) continue;   /* (syncMobEnts runs right before) */
           const mv = moveTo(e, m.x, m.y, stamp);
-          if (mv) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else if (m.tgt) e.tyaw = faceYaw(m.face);
+          if (mv) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else if (m.tgt) e.tyaw = faceYaw(m.face);
           e.hp = m.hp;
         }
         syncGround();
@@ -17004,7 +17042,7 @@ ASH3D.defineData({"ashvale3d":"module","name":"rules","api":1,"v":3,"data":{"xp"
 
 </script>
 <script>
-ASH3D.defineData({"ashvale3d":"module","name":"globecfg","api":1,"v":1,"data":{"seed":"ashvale","n":128,"radius_m":36110,"face":19,"north":-1,"origin":[8811,-3368],"grid":[8619,-3560],"chunk":64,"area":128,"region":512,"belt":{"whisperwood":90,"village":30},"links":[["village","saltmere"],["ziibiing","village","trail"]]}});
+ASH3D.defineData({"ashvale3d":"module","name":"globecfg","api":1,"v":1,"data":{"seed":"ashvale","n":128,"radius_m":36110,"face":19,"north":-1,"origin":[8811,-3368],"grid":[8619,-3560],"chunk":64,"area":128,"region":512,"belt":{"whisperwood":90,"village":30},"links":[["eastend","saltmere"],["ziibiing","village","trail"]]}});
 
 </script>
 <script>

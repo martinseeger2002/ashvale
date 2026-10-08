@@ -282,13 +282,24 @@
             if (!di && !dj) continue; const ni = i + di, nj = j + dj; if (ni < 0 || nj < 0 || ni >= GW || nj >= GH) continue;
             const nk = nj * GW + ni; if (nk !== tk && !ok(ni, nj)) continue;
             const step = (di && dj ? 1.414 : 1) * CS, dh = Math.abs((hgt[nk] === hgt[nk] && hgt[nk] > -1e8 ? hgt[nk] : h0) - h0);
-            const ng = gsc[k] + step * (1 + 0.6 * dh / CS) * (0.92 + 0.16 * g.u01(g.hash3(ni, nj, hv)));
+            const ng = gsc[k] + step * (1 + (trail ? 0.6 : 0.3) * dh / CS) * (trail ? 0.92 + 0.16 * g.u01(g.hash3(ni, nj, hv)) : 0.98 + 0.04 * g.u01(g.hash3(ni, nj, hv)));   /* a road between towns runs as straight as the ground allows (2026-10-08); a trail wanders */
             if (ng < gsc[nk]) { gsc[nk] = ng; from[nk] = k; hpush(ng + Math.hypot(ni - ti, nj - tj) * CS, nk); }
           }
         }
         if (found) {
           const pts = []; for (let k = tk; k >= 0; k = from[k]) { const i = k % GW, j = (k - i) / GW; pts.push([gx0 + i * CS, gy0 + j * CS]); if (k === sk) break; }
           pts.reverse(); pts[0] = [x, y]; pts[pts.length - 1] = [tx, ty];
+          /* STRAIGHTEN (2026-10-08: "as straight as possible from Ashvale to Saltmere"): a road skips every corner it can - from
+             each point, on to the farthest point it reaches in a straight line over open ground - so it runs in long straight
+             reaches and bends only where water, rock or a town is in the way. A trail keeps its wander. */
+          if (!trail && pts.length > 2) {
+            const clear = (a2, b2) => { const n = Math.ceil(Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) / (CS / 2)); for (let q = 1; q < n; q++) { const px = a2[0] + (b2[0] - a2[0]) * q / n, py = a2[1] + (b2[1] - a2[1]) * q / n, ci = Math.round((px - gx0) / CS), cj = Math.round((py - gy0) / CS); if (ci < 0 || cj < 0 || ci >= GW || cj >= GH || !ok(ci, cj)) return false; } return true; };
+            const st = [pts[0]]; let i0 = 0;
+            while (i0 < pts.length - 1) { let j = pts.length - 1; while (j > i0 + 1 && !clear(pts[i0], pts[j])) j--; st.push(pts[j]); i0 = j; }
+            const fine = [st[0]];   /* back to points every step or so, so the road is laid (and lit) as before */
+            for (let q = 1; q < st.length; q++) { const a2 = st[q - 1], b2 = st[q], n = Math.max(1, Math.ceil(Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) / CS)); for (let r = 1; r <= n; r++) fine.push([a2[0] + (b2[0] - a2[0]) * r / n, a2[1] + (b2[1] - a2[1]) * r / n]); }
+            pts.length = 0; pts.push(...fine);
+          }
           let px0 = pts[0][0], py0 = pts[0][1];
           for (let k = 2; k < pts.length; k += 2) { const q = pts[Math.min(k, pts.length - 1)]; segs.push(A.face, px0, py0, q[0], q[1], w0, RK, A.hb - 0.75); px0 = q[0]; py0 = q[1]; }
           segs.push(A.face, px0, py0, tx, ty, w0, RK, A.hb - 0.75);

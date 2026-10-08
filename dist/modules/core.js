@@ -583,7 +583,30 @@
       }
       let end = found >= 0 ? found : best; if (end < 0 || end === s0) return [];
       const path = []; while (end !== s0) { path.push(idx(X0 + end % S2, Y0 + ((end / S2) | 0))); end = prev[end]; }
-      return path.reverse();
+      return straightPath(sx, sy, path.reverse());
+    }
+    /* WALK STRAIGHT (2026-10-08: "fix the character movement so the character doesn't jog back-and-forth so much"): the search
+       finds a shortest way, but among the many equally short ones it takes the first, which bunches its diagonal steps and turns
+       at every chance. The way is redrawn as straight lines wherever every step of the line can be taken, the diagonals spread
+       evenly along each line - never longer than before, and only through tiles a step may enter anyway. */
+    function lineSteps(ax, ay, bx, by) {
+      const dx = bx - ax, dy = by - ay, n = Math.max(Math.abs(dx), Math.abs(dy)), out = [];
+      for (let k = 1; k <= n; k++) out.push([ax + Math.round(dx * k / n), ay + Math.round(dy * k / n)]);
+      return out;
+    }
+    function lineOk(ax, ay, steps) { let px = ax, py = ay; for (const [x, y] of steps) { if (!canStep(px, py, x - px, y - py)) return false; px = x; py = y; } return true; }
+    function straightPath(sx, sy, path) {
+      if (path.length < 3) return path;
+      const pts = [[sx, sy]].concat(path.map(k => [kx(k), ky(k)])), out = [];
+      let i = 0;
+      while (i < pts.length - 1) {
+        let j = Math.min(pts.length - 1, i + 48), seg = null;
+        for (; j > i + 1; j--) { const st = lineSteps(pts[i][0], pts[i][1], pts[j][0], pts[j][1]); if (st.length <= j - i && lineOk(pts[i][0], pts[i][1], st)) { seg = st; break; } }
+        if (!seg) { seg = [pts[i + 1]]; j = i + 1; }
+        for (const [x, y] of seg) out.push(idx(x, y));
+        i = j;
+      }
+      return out.length <= path.length ? out : path;
     }
     function lineOfSight(ax, ay, bx, by) {
       let x = ax, y = ay; const dx = Math.abs(bx - ax), dy = Math.abs(by - ay), sx = ax < bx ? 1 : -1, sy = ay < by ? 1 : -1; let err = dx - dy;

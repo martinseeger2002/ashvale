@@ -488,12 +488,16 @@
         ents.set(key, e); return e;
       }
       function removeEnt(e) { if (e.bub) e.bub.el.remove(); scene.remove(e.root); const i = proxies.indexOf(e.proxy); if (i >= 0) proxies.splice(i, 1); e.H.dispose && e.H.dispose(); for (const s of e.splats) s.el.remove(); if (e.bar) e.bar.remove(); if (e.tag) e.tag.remove(); if (e.ohd) e.ohd.remove(); ents.delete(e.key); }
-      function place(e, x, y) { const v = new THREE.Vector3(x + 0.5, 0, y + 0.5); v.y = footY(v.x, v.z); e.from.copy(v); e.to.copy(v); e.root.position.copy(v); e.tx = x; e.ty = y; }
+      function place(e, x, y) { e.trail = null; const v = new THREE.Vector3(x + 0.5, 0, y + 0.5); v.y = footY(v.x, v.z); e.from.copy(v); e.to.copy(v); e.root.position.copy(v); e.tx = x; e.ty = y; }
       function moveTo(e, x, y, now) {
         if (e.tx === x && e.ty === y) return false;
         const steps = Math.max(Math.abs(x - e.tx), Math.abs(y - e.ty));
         e.from.copy(e.root.position); e.to.set(x + 0.5, 0, y + 0.5); e.t0 = now; e.dur = TICK;
-        e.running = steps > 1; e.tx = x; e.ty = y; return true;
+        e.running = steps > 1;
+        /* face the way you are going over the last few steps, not each tile's own step (no 45-degree snap at every tile) */
+        e.trail = (e.trail || []); e.trail.push([x, y]); if (e.trail.length > 3) e.trail.shift();   /* the last two steps' way: a diagonal and a straight step make one heading between them */
+        const t0 = e.trail[0]; e.headYaw = (t0[0] !== x || t0[1] !== y) && steps <= 2 ? Math.atan2(x - t0[0], y - t0[1]) : null;
+        e.tx = x; e.ty = y; return true;
       }
       const faceYaw = f => Math.atan2(DIRS[f][0], DIRS[f][1]);
       function playOnce(e, name, speed) { e.oneShot = true; e.lastOne = name; e.oneT = performance.now(); e.H.play(name, { loop: false, speed: speed || 1 }); }
@@ -630,7 +634,7 @@
           const p = core.S.players[pid], e = ents.get('p:' + pid); if (!e) continue;
           if (p.dead) continue;
           const mv = moveTo(e, p.x, p.y, stamp);
-          if (mv && !p.boat) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else e.tyaw = faceYaw(p.face);   /* a canoe faces its heading, even backing up */
+          if (mv && !p.boat) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else e.tyaw = faceYaw(p.face);   /* a canoe faces its heading, even backing up */
           const sk = p.skilling, skAnim = sk === 'chop' ? 'chop' : sk === 'mine' ? 'mine' : sk === 'fish' ? 'fish' : sk === 'cook' || sk === 'light' ? 'cook' : null;
           const ric = e === myEnt ? ricingNow() : false; e.ricing = ric;
           const tl = p.boat === 1 ? (ric ? 'push_pole' : 'paddle') : p.boat === 2 ? (p.knocking ? 'ricing_sticks' : 'paddle') : skAnim === 'chop' || skAnim === 'mine' || skAnim === 'fish' ? p.toolId || (sk === 'chop' ? 'hatchet' : sk === 'mine' ? 'pickaxe' : 'net') : null;
@@ -642,13 +646,13 @@
         for (const n of core.M.npcs) {
           const e = ents.get('n:' + n.id); if (!e) continue;
           e.root.visible = npcShown(n);
-          if (n.patrol || n.guard || n.watch) { if (moveTo(e, n.x, n.y, stamp)) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); }
+          if (n.patrol || n.guard || n.watch) { if (moveTo(e, n.x, n.y, stamp)) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); }
         }   /* a watchman walking his round, a guard answering the call to arms; hidden NPCs stay unseen until their flag */
         syncMobEnts();
         for (const m of core.S.mobs) {
           const e = ents.get('m:' + m.uid); if (!e || m.dead) continue;   /* (syncMobEnts runs right before) */
           const mv = moveTo(e, m.x, m.y, stamp);
-          if (mv) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else if (m.tgt) e.tyaw = faceYaw(m.face);
+          if (mv) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else if (m.tgt) e.tyaw = faceYaw(m.face);
           e.hp = m.hp;
         }
         syncGround();
