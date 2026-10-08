@@ -41,7 +41,7 @@
   const API = 1, V = 1, WATER = 0;
   const META = { api: API, v: V, needs: { globe: 1, wg_geo: 1, wg_terrain: 1, wg_paths: 1, wg_sites: 1, wg_tiles: 1, wg_tables: 1 } };
   const BIOME = ['meadow', 'woods', 'deep woods', 'shore', 'shallows', 'deep water', 'rock', 'snow', 'site', 'hills', 'village'];
-  const BLOCK = 'TPORNIr~FHXWMYCGA^KUE', LOS = 'TPORNIrHXWMYCGA^KE';   /* E: a birch (2026-10-08) */   /* U: a desert cactus blocks the way, not the view */
+  const BLOCK = 'TPORNIr~FHXWMYCGA^KUELQ', LOS = 'TPORNIrHXWMYCGA^KELQ';   /* L: tamarack, Q: cedar (2026-10-08) */   /* E: a birch (2026-10-08) */   /* U: a desert cactus blocks the way, not the view */
 
   function make(deps) {
     const AG = deps.globe, geo = deps.wg_geo, T = deps.wg_tables;
@@ -178,7 +178,53 @@
         });
       }
       if (O.setPieces) { LASTPC = O.setPieces; ctx.setSetPieces(O.setPieces); }
+      /* THE NET (handoff/globe_net.md, 2026-10-08: "open up the entire globe"): all 20 faces laid into ONE plane - face F0's
+         own plane, the game's vale frame - by a spanning tree grown breadth-first from F0. T[f] = [c, s, tx, ty] maps f's plane into
+         F0's (x' = c x - s y + tx, y' = s x + c y + ty). Across the tree's 19 edges the land runs on; the other 11 are cut. A map
+         point shows the face whose placed triangle is nearest (beyond a cut edge, that face's own continuation, folded). */
+      const NETS = new Map();
+      function net(F0) {
+        F0 = F0 | 0; if (NETS.has(F0)) return NETS.get(F0);
+        const T = new Array(20).fill(null), tree = new Set(), Q = [F0]; T[F0] = [1, 0, 0, 0];
+        const ap = (t, x, y) => [t[0] * x - t[1] * y + t[2], t[1] * x + t[0] * y + t[3]];
+        const comp = (A, B) => { const q = ap(A, B[2], B[3]); return [A[0] * B[0] - A[1] * B[1], A[1] * B[0] + A[0] * B[1], q[0], q[1]]; };
+        while (Q.length) { const f = Q.shift(); for (let k = 0; k < 3; k++) { const g = ctx.ADJ[f * 3 + k]; if (T[g]) continue; T[g] = comp(T[f], ctx.xform(g, f)); tree.add(Math.min(f, g) + ':' + Math.max(f, g)); Q.push(g); } }
+        const corners = f => [[ctx.FQ[f * 6], ctx.FQ[f * 6 + 1]], [ctx.FQ[f * 6 + 2], ctx.FQ[f * 6 + 3]], [ctx.FQ[f * 6 + 4], ctx.FQ[f * 6 + 5]]];
+        const TRI = []; for (let f = 0; f < 20; f++) TRI.push(corners(f).map(q => ap(T[f], q[0], q[1])));
+        const BOX = TRI.map(t => [Math.min(t[0][0], t[1][0], t[2][0]), Math.min(t[0][1], t[1][1], t[2][1]), Math.max(t[0][0], t[1][0], t[2][0]), Math.max(t[0][1], t[1][1], t[2][1])]);
+        function segD(px, py, a, b) { const ex = b[0] - a[0], ey = b[1] - a[1], t = Math.max(0, Math.min(1, ((px - a[0]) * ex + (py - a[1]) * ey) / (ex * ex + ey * ey))), dx = px - a[0] - ex * t, dy = py - a[1] - ey * t; return Math.sqrt(dx * dx + dy * dy); }
+        function triD(f, px, py) {   /* 0 inside the placed triangle, else the distance to it */
+          const t = TRI[f]; let neg = false, pos = false;
+          for (let k = 0; k < 3; k++) { const a = t[k], b = t[(k + 1) % 3], c = (b[0] - a[0]) * (py - a[1]) - (b[1] - a[1]) * (px - a[0]); if (c < 0) neg = true; else if (c > 0) pos = true; }
+          if (!(neg && pos)) return 0;
+          return Math.min(segD(px, py, t[0], t[1]), segD(px, py, t[1], t[2]), segD(px, py, t[2], t[0]));
+        }
+        let last = F0;
+        function nearest(px, py) {   /* {f, d}: the nearest placed face and how far outside it the point lies */
+          if (triD(last, px, py) === 0) return { f: last, d: 0 };
+          let bf = F0, bd = Infinity;
+          for (let f = 0; f < 20; f++) { const B = BOX[f]; const g = Math.max(B[0] - px, 0, px - B[2]) + Math.max(B[1] - py, 0, py - B[3]); if (g * 0.7 > bd) continue; const d = triD(f, px, py); if (d < bd) { bd = d; bf = f; if (d === 0) break; } }
+          if (bd === 0) last = bf;
+          return { f: bf, d: bd };
+        }
+        const inv = (t, x, y) => { const dx = x - t[2], dy = y - t[3]; return [t[0] * dx + t[1] * dy, -t[1] * dx + t[0] * dy]; };
+        /* map point (F0 plane) -> {f, x, y (f's plane), d}; and back */
+        function toFace(px, py) { const n = nearest(px, py), q = inv(T[n.f], px, py); return { f: n.f, x: q[0], y: q[1], d: n.d }; }
+        const fromFace = (f, x, y) => ap(T[f], x, y);
+        /* the true place of a map point past a cut edge: fold it home, then where that lies natively in the net, and the turn */
+        function across(px, py) {
+          const n = toFace(px, py), h = fold(n.f, n.x, n.y); if (h[0] === n.f) return null;
+          const q = ap(T[h[0]], h[1], h[2]);
+          /* the turn: carry a short step east across too, and see which way it points natively */
+          const n2 = toFace(px + 1, py), h2 = n2.f === n.f ? fold(n.f, n2.x, n2.y) : null;
+          const q2 = h2 && h2[0] === h[0] ? ap(T[h[0]], h2[1], h2[2]) : [q[0] + 1, q[1]];
+          return { f: h[0], x: q[0], y: q[1], turn: Math.atan2(q2[1] - q[1], q2[0] - q[0]) };
+        }
+        const N = { F0, T, TRI, tree, nearest, toFace, fromFace, across, place: f => T[f].slice(), isTree: (f, g) => tree.has(Math.min(f, g) + ':' + Math.max(f, g)) };
+        NETS.set(F0, N); return N;
+      }
       return {
+        net,
         api: API, V, WATER, BIOME, BLOCK, LOS, seed, G, climOf: ctx.climOf || null, climate: ctx.climate || null, rivers: ctx.rivers || null, riverLines: () => ctx.rivers ? ctx.rivers.lines() : null,
         sample, newSample: ctx.newSample, field, lattice, height: (f, x, y) => sample(f, x, y, SMP).h,
         setEdits, edits: () => EDL,

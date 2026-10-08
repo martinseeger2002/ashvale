@@ -16,7 +16,7 @@
 (function (root) {
   'use strict';
   const META = { api: 1, v: 3, needs: { wg_geo: 1 } };
-  const TREES = 'TPOWMYUE';
+  const TREES = 'TPOWMYUELQ';
   function attach(ctx) {
     const g = ctx.geo, T = ctx.T, PT = T.paths, PC = T.pieces, BK = 32;
     const bkey = (f, bx, by) => (f * 8192 + (bx + 4096)) * 8192 + (by + 4096);

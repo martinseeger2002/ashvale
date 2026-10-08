@@ -33,7 +33,7 @@ def overlay(base, extra):
     return extra
 
 
-TREES = 'TPOWMYE'   # E: birch; the tree letters; the rest of the blocking letters (water, rock, fences, graves, walls) are never cleared
+TREES = 'TPOWMYELQ'   # E: birch, L: tamarack, Q: cedar; the tree letters; the rest of the blocking letters (water, rock, fences, graves, walls) are never cleared
 BLOCKS = 'TPORNIr~FHXWMYCGA^K'
 def open_ways(tiles):
     """No walled-in ground in a drawn area (2026-10-06: "Animals keep getting stuck in the woods because there's no way
@@ -255,6 +255,43 @@ for t, (nm, carry, w, v) in enumerate([("Leather satchel", 10, 0.8, 40), ("Canva
                                          ("Frame pack", 55, 3.5, 2000), ("Enchanted pack", 80, 2.0, 8000)], 1):
     items["pack_t%d" % t] = {"name": nm, "kind": "pack", "tier": t, "eq": "pack", "carry": carry * 1000, "value": v, "_kg": w}
 
+# ---- THE SUGAR BUSH (2026-10-08, handoff/sugarbush_plan.md): birch bark (wiigwaas) peeled off a birch, sinew (ojiitad)
+# traded from Ma'iingan for a deer hide, the bark sap bucket (biskitenaagan) Migizi folds from two wiigwaas and a sinew, the pail
+# (akik) at the Ashvale store. Each holds ONE sap: empty -> sap (a maple, in the run) -> syrup (boiled at any fire) -> candy
+# (boiled again), and the bucket comes back empty. 'vessel' (trait Container): the empty bucket a full one is in - it comes back when
+# the contents are boiled into something that is not in a bucket, or handed to someone (Nookomis keeps the sap, not your bucket). Names are Ojibwe nouns (Ojibwe People's Dictionary spellings).
+items.update({
+    "wiigwaas": {"name": "Wiigwaas", "kind": "resource", "value": 6, "_kg": 0.2, "model": "item.wiigwaas"},
+    "sinew": {"name": "Ojiitad", "kind": "resource", "value": 8, "_kg": 0.05, "model": "item.sinew"},
+    "bucket_bark": {"name": "Biskitenaagan", "kind": "resource", "value": 20, "_kg": 0.3, "model": "item.sapbucket", "fills": "sap_bark"},
+    "sap_bark": {"name": "Biskitenaagan of sap", "kind": "resource", "value": 24, "_kg": 2.3, "model": "item.sapbucket",
+                 "cooks": "syrup_bark", "burns": "syrup_bark", "vessel": "bucket_bark", "cookReq": 1, "cookXp": 30},
+    "syrup_bark": {"name": "Biskitenaagan of syrup", "kind": "resource", "value": 40, "_kg": 0.6, "model": "item.sapbucket",
+                   "cooks": "maple_candy", "burns": "maple_candy", "vessel": "bucket_bark", "cookReq": 1, "cookXp": 45},
+    "pail": {"name": "Akik", "kind": "resource", "value": 25, "_kg": 0.9, "model": "item.pail", "fills": "sap_pail"},
+    "sap_pail": {"name": "Akik of sap", "kind": "resource", "value": 29, "_kg": 2.9, "model": "item.pail",
+                 "cooks": "syrup_pail", "burns": "syrup_pail", "vessel": "pail", "cookReq": 1, "cookXp": 30},
+    "syrup_pail": {"name": "Akik of syrup", "kind": "resource", "value": 45, "_kg": 1.2, "model": "item.pail",
+                   "cooks": "maple_candy", "burns": "maple_candy", "vessel": "pail", "cookReq": 1, "cookXp": 45},
+    "maple_candy": {"name": "Ziinzibaakwadoons", "kind": "food", "heal": 3, "energy": 2500, "value": 15, "_kg": 0.1, "model": "item.candy"},
+    # Nookomis's thanks the first spring you finish her sugar bush (one per player, minted fresh and numbered): birch bark sewn
+    # with spruce root, porcupine quill (gaaway) flowers on its sides; worn on the back it carries more than any pack
+    "quill_makak": {"name": "Quillwork makak", "kind": "pack", "tier": 5, "eq": "pack", "carry": 100 * 1000, "value": 12000, "_kg": 1.2,
+                    "collection": "ASHVALE Quillwork Makak", "nft": {"key": "quill_makak"}, "model": "gear.quillmakak"},
+})
+
+# THE RICING TOOLS (2026-10-08): Ziigwan carves a gaandakii'iganaak (push pole) from two tamarack logs and a pair of
+# bawa'iganaakoog (knockers) from two cedar logs, each ready the next game day. Two in a canoe rice only with them: the stern with
+# the pole, the bow with the knockers; without them two just paddle together.
+items.update({
+    "cedar_logs": {"name": "Cedar logs", "kind": "resource", "value": 30, "_kg": 2.5, "fireReq": 20, "burnTicks": 130, "fireXp": 100},
+    "tamarack_logs": {"name": "Tamarack logs", "kind": "resource", "value": 30, "_kg": 3.0, "fireReq": 20, "burnTicks": 140, "fireXp": 100},
+    "push_pole": {"name": "Gaandakii'iganaak", "kind": "tool", "value": 60, "_kg": 2.5, "model": "item.pushpole"},
+    "knockers": {"name": "Bawa'iganaakoog", "kind": "tool", "value": 50, "_kg": 0.6, "model": "item.knockers"},
+})
+# English names, shown in brackets when an item with an Ojibwe name is examined (2026-10-08)
+for _k, _e in {"wiigwaas": "birch bark", "sinew": "sinew", "bucket_bark": "birch bark sap bucket", "sap_bark": "birch bark sap bucket of maple sap", "syrup_bark": "birch bark sap bucket of maple syrup", "pail": "pail", "sap_pail": "pail of maple sap", "syrup_pail": "pail of maple syrup", "maple_candy": "maple sugar candy", "quill_makak": "birch bark box with porcupine quillwork", "push_pole": "push pole", "knockers": "ricing sticks"}.items(): items[_k]['english'] = _e
+
 # ---- WEIGHT (2026-10-01: "Each item should be assigned weight ... according to what they would probably weigh").
 # Stored as integer GRAMS in `weight` (the rules use integer maths). Worn equipment counts too, as in RuneScape.
 # Table (kg): coins 0.002 each, arrows 0.02 each, potion 0.3, bread 0.4, shrimp 0.1, trout 0.4, salmon 1.0, lobster 0.7
@@ -291,7 +328,7 @@ CAT = {  # internal kind -> (category, subcategory)
     "chainbody": ("armour", "chainbody"), "legs": ("armour", "platelegs"), "shield": ("armour", "kiteshield"), "torch": ("armour", "torch"),
     "arrows": ("ammo", "arrow"), "coins": ("currency", "gold"), "hat": ("cosmetic", "hat"), "cape": ("cosmetic", "cape"), "robe": ("cosmetic", "robe"),
     "pack": ("pack", "pack"), "ring": ("jewellery", "ring")}
-SUB_OF_ID = {"spider_silk": "silk", "ashvale_stone": "stone", "saltmere_stone": "stone", "castle_stone": "stone", "tinderbox": "tinderbox", "hatchet": "hatchet", "pickaxe": "pickaxe", "net": "net", "fishing_rod": "rod", "lobster_pot": "pot", "bread": "bread", "coal": "coal"}
+SUB_OF_ID = {"push_pole": "pole", "knockers": "knocker", "wiigwaas": "bark", "sinew": "sinew", "bucket_bark": "bucket", "sap_bark": "bucket", "syrup_bark": "bucket", "pail": "bucket", "sap_pail": "bucket", "syrup_pail": "bucket", "maple_candy": "candy", "spider_silk": "silk", "ashvale_stone": "stone", "saltmere_stone": "stone", "castle_stone": "stone", "tinderbox": "tinderbox", "hatchet": "hatchet", "pickaxe": "pickaxe", "net": "net", "fishing_rod": "rod", "lobster_pot": "pot", "bread": "bread", "coal": "coal"}
 MODEL = {"weapon": lambda sub, k: "gear." + sub, "armour": lambda sub, k: "gear." + {"kiteshield": "shield"}.get(sub, sub),
          "ammo": lambda sub, k: "gear.arrows", "pack": lambda sub, k: "gear.pack", "currency": lambda sub, k: "item.coins",
          "cosmetic": lambda sub, k: "cloth." + (k if sub == "hat" else "robe" if sub == "robe" else "cape"),
@@ -302,7 +339,7 @@ MODEL = {"weapon": lambda sub, k: "gear." + sub, "armour": lambda sub, k: "gear.
 TRAIT = [("attack", "Attack", 1), ("strength", "Strength", 1), ("defence", "Defence", 1), ("ranged", "Ranged", 1), ("magic", "Magic", 1),
          ("rstr", "Ranged strength", 1), ("speed", "Speed", 1), ("range", "Range", 1), ("carry", "Carry", 0.001), ("heal", "Heal", 1),
          ("healPct", "Heal %", 1), ("cooks", "Cooks into", None), ("burns", "Burns into", None), ("cookReq", "Cooking level", 1),
-         ("cookXp", "Cooking XP", 1), ("fireReq", "Firemaking level", 1), ("burnTicks", "Burn ticks", 1), ("fireXp", "Firemaking XP", 1),
+         ("cookXp", "Cooking XP", 1), ("vessel", "Container", None), ("fills", "Fills into", None), ("english", "English", None), ("energy", "Energy", 1), ("fireReq", "Firemaking level", 1), ("burnTicks", "Burn ticks", 1), ("fireXp", "Firemaking XP", 1),
          ("form", "Form", None), ("cures", "Cures", None), ("light", "Light", 1), ("teleport", "Teleport", None), ("cooldown", "Cooldown ticks", 1), ("arms", "Call to arms", 1), ("effect", "Effect", None), ("effectTicks", "Effect ticks", 1), ("effectChance", "Effect chance", 1), ("effectDamage", "Effect damage", 1), ("edition", "Edition", None)]
 ARMOURY = "ASHVALE Armoury"
 MEAT_BASES = {'chicken', 'rat_meat', 'hare', 'goat', 'venison', 'boar'}
@@ -327,7 +364,7 @@ for k, d in items.items():
     if d.get('tier'): j['tier'] = d['tier']
     j['weight'] = d['weight']
     if d.get('req'): j['req'] = d['req']
-    j['model'] = MODEL[cat](sub, k)
+    j['model'] = d.get('model') or MODEL[cat](sub, k)
     j['value'] = d['value']
     if d.get('stack'): j['stackable'] = True
     attrs = []
@@ -470,7 +507,7 @@ salt_armoury_stock = [k for k in armoury_stock if k != 'pack_t3'] + \
            key=lambda k: order.index(items[k]['kind'])) + ['pack_t3']
 shop0 = WORLD['shop']
 module('shops', 3, {"currency": "coins", "shops": {
-    "general": {"name": "Ashvale General Store", "keeper": "tam", "stock": ["bread", "potion", "antidote", "torch", "tinderbox", "hatchet", "pickaxe", "net", "fishing_rod", "lobster_pot", "pack_t1", "pack_t2"],
+    "general": {"name": "Ashvale General Store", "keeper": "tam", "stock": ["bread", "potion", "antidote", "torch", "tinderbox", "hatchet", "pickaxe", "net", "fishing_rod", "lobster_pot", "pack_t1", "pack_t2", "pail"],
                 "buys": "any", "buyRate": 40, "sellRate": 100,
                 "greet": "Bread, potions and good honest tools. What'll it be?"},
     "tailor": {"name": "Wren's Tailoring", "keeper": "wren", "stock": ["hat_cap", "hat_bandana", "hat_hood", "hat_feather", "hat_wizard",
@@ -1553,8 +1590,19 @@ module('rules', 3, {
         "P": {"skill": "woodcutting", "name": "Pine tree", "item": "logs", "req": 1, "xp": 250, "speed": 4, "deplete": 6, "regrow": -1},
         "O": {"skill": "woodcutting", "name": "Oak tree", "item": "oak_logs", "req": 15, "xp": 375, "speed": 4, "deplete": 8, "regrow": -1},
         "W": {"skill": "woodcutting", "name": "Willow", "item": "willow_logs", "req": 20, "xp": 500, "speed": 4, "deplete": 8, "regrow": -1},
-        "M": {"skill": "woodcutting", "name": "Maple", "item": "maple_logs", "req": 30, "xp": 675, "speed": 5, "deplete": 8, "regrow": -1},
-        "E": {"skill": "woodcutting", "name": "Birch", "item": "logs", "req": 1, "xp": 250, "speed": 4, "deplete": 6, "regrow": -1},   # wiigwaasaatig (2026-10-08); long-press peels its bark
+        "M": {"skill": "woodcutting", "name": "Maple", "item": "maple_logs", "req": 30, "xp": 675, "speed": 5, "deplete": 8, "regrow": -1,
+              "tap": {"xp": 200, "ticks": 5, "per": "day", "mark": "sap", "season": "sap", "verb": "Collect sap from",
+                      "say": "Ziinzibaakwadwaaboo drips from the cut into your {bucket} until it is full.",
+                      "again": "This ininaatig has given its sap today. Try another tree.",
+                      "none": "You need an empty biskitenaagan or an akik (pail) to catch the sap.",
+                      "off": "The sap is not running. It runs in the spring, in the days before the maples bud.",
+                      "cold": "The day never thawed: the sap is not running today.", "warm": "The night did not freeze: the sap is not running today."}},   # fills an empty bucket (an item that "fills" into another)
+        "Q": {"skill": "woodcutting", "name": "Cedar", "item": "cedar_logs", "req": 20, "xp": 500, "speed": 4, "deplete": 8, "regrow": -1},   # giizhik (2026-10-08)
+        "L": {"skill": "woodcutting", "name": "Tamarack", "item": "tamarack_logs", "req": 20, "xp": 500, "speed": 4, "deplete": 8, "regrow": -1},   # mashkiigwaatig
+        "E": {"skill": "woodcutting", "name": "Birch", "item": "logs", "req": 1, "xp": 250, "speed": 4, "deplete": 6, "regrow": -1,
+              "peel": {"item": "wiigwaas", "xp": 150, "ticks": 4, "per": "year", "mark": "bark", "verb": "Peel bark from",
+                       "say": "You cut round the trunk and ease off a sheet of wiigwaas. The birch will heal by next year.",
+                       "again": "This birch has given its wiigwaas this year. Leave it to heal and find another."}},   # wiigwaasaatig (2026-10-08); long-press peels its bark
         "Y": {"skill": "woodcutting", "name": "Yew", "item": "yew_logs", "req": 40, "xp": 900, "speed": 5, "deplete": 10, "regrow": -1},
         "R": {"skill": "mining", "name": "Copper rocks", "item": "copper_ore", "req": 1, "xp": 175, "speed": 4, "deplete": 1, "regrow": 8},
         "N": {"skill": "mining", "name": "Tin rocks", "item": "tin_ore", "req": 1, "xp": 175, "speed": 4, "deplete": 1, "regrow": 8},
@@ -1576,8 +1624,8 @@ module('rules', 3, {
               "skills": ["attack", "strength", "defence", "ranged", "magic", "hitpoints", "dexterity", "speechcraft"]},
     "items": {
         "categories": {"weapon": ["sword", "dagger", "longsword", "mace", "bow", "staff"], "armour": ["helmet", "platebody", "chainbody", "platelegs", "kiteshield", "torch"],
-                       "tool": ["hatchet", "pickaxe", "net", "rod", "pot", "tinderbox", "stone"], "pack": ["pack"], "cosmetic": ["hat", "cape", "robe"],
-                       "resource": ["logs", "ore", "coal", "bar", "pelt", "fish", "mushroom", "meat"], "food": ["bread", "fish", "mushroom", "meat"], "potion": ["healing"],
+                       "tool": ["hatchet", "pickaxe", "net", "rod", "pot", "tinderbox", "stone", "pole", "knocker"], "pack": ["pack"], "cosmetic": ["hat", "cape", "robe"],
+                       "resource": ["logs", "ore", "coal", "bar", "pelt", "fish", "mushroom", "meat", "silk", "grain", "bark", "sinew", "bucket"], "food": ["bread", "fish", "mushroom", "meat", "candy"], "potion": ["healing"],
                        "ammo": ["arrow"], "currency": ["gold"], "jewellery": ["ring"]},
         "slots": {"weapon": "weapon", "armour/helmet": "head", "armour/platebody": "body", "armour/chainbody": "body", "armour/platelegs": "legs",
                   "armour/kiteshield": "shield", "armour/torch": "shield", "ammo": "ammo", "pack": "pack", "cosmetic/hat": "head", "cosmetic/cape": "cape", "cosmetic/robe": "body", "jewellery/ring": "ring"},
@@ -1587,7 +1635,7 @@ module('rules', 3, {
         "edible": ["food", "potion"], "drink": ["potion"],
         "traits": {"Edition": "edition", "Cures": "cures", "Light": "light", "Form": "form", "Teleport": "teleport", "Cooldown ticks": "cooldown", "Call to arms": "arms", "Attack": "attack", "Strength": "strength", "Defence": "defence", "Ranged": "ranged", "Magic": "magic", "Ranged strength": "rstr",
                    "Speed": "speed", "Range": "range", "Carry": ["carry", 1000], "Heal": "heal", "Heal %": "healPct", "Cooks into": "cooks",
-                   "Burns into": "burns", "Cooking level": "cookReq", "Cooking XP": "cookXp", "Firemaking level": "fireReq", "Burn ticks": "burnTicks",
+                   "Burns into": "burns", "Container": "vessel", "Fills into": "fills", "English": "english", "Energy": "energy", "Cooking level": "cookReq", "Cooking XP": "cookXp", "Firemaking level": "fireReq", "Burn ticks": "burnTicks",
                    "Firemaking XP": "fireXp", "Effect": "effect", "Effect ticks": "effectTicks", "Effect chance": "effectChance", "Effect damage": "effectDamage"},
         "limits": {"perTier": {"Attack": 12, "Strength": 12, "Ranged": 12, "Magic": 12, "Defence": 16, "Ranged strength": 8},
                    "flat": {"Speed": [2, 7], "Range": [1, 10], "Carry": [0, 100], "Heal": [0, 40], "Heal %": [0, 100], "Cooking level": [1, 99], "Cooking XP": [0, 500],
@@ -1643,4 +1691,5 @@ module('globecfg', 1, {"seed": "ashvale", "n": 128, "radius_m": 36110, "face": 1
                        "links": [["eastend", "saltmere"], ["ziibiing", "village", "trail"]],
                        # the maple and birch woods (2026-10-08: "a large deciduous forest with maple and Birch", on Ziibiing's own side of
                        # the river, between it and Ashvale; the trail runs through) - game tiles, an ellipse with a wandering edge
-                       "groves": [{"piece": "ziibiing", "x": 70, "y": 470, "rx": 160, "ry": 105, "sp": "MMMEE", "dens": 0.6, "edge": 35}]})   # the road to Saltmere leaves from Eastend, one straight cobbled road (2026-10-08); village and Eastend touch, one street   # + the skinny trail up from Ziibiing (2026-10-07)   # the trail from Ashvale down to Saltmere (2026-10-03)
+                       "groves": [{"piece": "ziibiing", "x": 70, "y": 470, "rx": 160, "ry": 105, "sp": "MMMEE", "dens": 0.6, "edge": 35},
+                                  {"piece": "ziibiing", "x": 22, "y": 602, "rx": 30, "ry": 18, "sp": "QQLL", "dens": 0.6, "edge": 10}]})   # the road to Saltmere leaves from Eastend, one straight cobbled road (2026-10-08); village and Eastend touch, one street   # + the skinny trail up from Ziibiing (2026-10-07)   # the trail from Ashvale down to Saltmere (2026-10-03)   # a cedar and tamarack stand by the river (the push pole and the knockers)

@@ -48,7 +48,9 @@ def db():
         create table if not exists jobs(n integer primary key, addr text, item text, units integer, kind text, status text, tries integer default 0,
             txid text, piece text, err text, at real, done_at real, req text);
         create table if not exists given(piece text primary key, addr text, item text, at real);
-        create table if not exists felled(x integer, y integer, by text, at real, primary key(x, y));   -- trees felled for good, shared (2026-10-05)
+        create table if not exists felled(x integer, y integer, by text, at real, primary key(x, y));
+        create table if not exists carried(addr text primary key, x integer, y integer, by text, onb integer, at real);   -- a player carried on in a friend's canoe after dropping out (2026-10-08)
+        create table if not exists marks(k text, x integer, y integer, p integer, by text, at real, primary key(k, x, y));   -- the sugar bush: a maple's sap day, a birch's bark year, shared (2026-10-08)   -- trees felled for good, shared (2026-10-05)
         create table if not exists boats(x integer, y integer, face integer, by text, at real, primary key(x, y));   -- canoes left at the bank, kept a game year (2026-10-07)
         create table if not exists wheres(addr text primary key, x integer, y integer, at real);
         create table if not exists saves(addr text primary key, id integer, blob text, at real);   -- each player's whole game, packed (2026-10-07)   -- where each player last stood, for the Atlas (2026-10-06)
@@ -181,6 +183,36 @@ def handle_felled(c, addr, msg):
     if x1 - x0 > 400 or y1 - y0 > 400: return None
     cells = [[r['x'], r['y']] for r in c.execute('select x, y from felled where x between ? and ? and y between ? and ?', (x0, x1, y0, y1))]
     return [{'t': 'felled', 'to': addr, 'cells': cells[i:i + 30]} for i in range(0, len(cells), 30)]
+def handle_carry(c, addr, msg):
+    """'carry': {who, x, y, on} - this player's canoe carries `who` (who dropped out of the game) at (x, y); on 0: put ashore there.
+    Taken only from a player the Bank has lately seen within reach of that spot (their own 'here'), so nobody can move strangers
+    about. 'carried?': this player's last such record -> {t: 'carried', x, y, by, on, at} (the game uses it only if newer than its
+    own save)."""
+    if msg.get('t') == 'carry':
+        try: who, x, y, on = str(msg['who'])[:64], int(msg['x']), int(msg['y']), 1 if msg.get('on') else 0
+        except (KeyError, TypeError, ValueError): return None
+        if who == addr or abs(x) > 10**7 or abs(y) > 10**7: return None
+        w = c.execute('select x, y, at from wheres where addr=?', (addr,)).fetchone()
+        if not w or time.time() - w['at'] > 900 or max(abs(w['x'] - x), abs(w['y'] - y)) > 2000: log('CARRY REFUSED', addr, who, x, y); return None
+        c.execute('insert into carried values(?,?,?,?,?,?) on conflict(addr) do update set x=excluded.x, y=excluded.y, by=excluded.by, onb=excluded.onb, at=excluded.at', (who, x, y, addr, on, time.time())); c.commit()
+        log('CARRY', addr, 'carries' if on else 'puts ashore', who, x, y); return None
+    r = c.execute('select x, y, by, onb, at from carried where addr=?', (addr,)).fetchone()
+    return {'t': 'carried', 'to': addr, 'x': r['x'], 'y': r['y'], 'by': r['by'], 'on': r['onb'], 'at': int(r['at'])} if r else {'t': 'carried', 'to': addr, 'none': 1}
+def handle_marks(c, addr, msg):
+    """'mark': {k: 'sap'|'bark', x, y, p} - a maple tapped on game day p, a birch peeled in year p (kept: the latest). 'marks?': {k,
+    x0, y0, x1, y1} -> [[x, y, p], ...] in chunks of 30. A maple gives sap once a game day and a birch its bark once a year, to
+    whoever comes first."""
+    k = msg.get('k')
+    if k not in ('sap', 'bark'): return None
+    if msg.get('t') == 'mark':
+        try: x, y, per = int(msg['x']), int(msg['y']), int(msg['p'])
+        except (KeyError, TypeError, ValueError): return None
+        c.execute('insert into marks values(?,?,?,?,?,?) on conflict(k, x, y) do update set p=max(p, excluded.p), by=excluded.by, at=excluded.at', (k, x, y, per, addr, time.time())); c.commit(); return None
+    try: x0, y0, x1, y1 = (int(msg[q]) for q in ('x0', 'y0', 'x1', 'y1'))
+    except (KeyError, TypeError, ValueError): return None
+    if x1 - x0 > 400 or y1 - y0 > 400: return None
+    cells = [[r['x'], r['y'], r['p']] for r in c.execute('select x, y, p from marks where k=? and x between ? and ? and y between ? and ?', (k, x0, x1, y0, y1))]
+    return [{'t': 'marks', 'to': addr, 'k': k, 'cells': cells[i:i + 30]} for i in range(0, len(cells), 30)]
 BOAT_LIFE = 365 * 7200   # one game year: 365 game days of two hours
 def handle_boats(c, addr, msg):
     """'boat': {x, y, face, on: 0 landed | 1 taken} - a canoe left at the bank, or taken from it. 'boats?': the landed canoes in a
@@ -289,6 +321,8 @@ def handle(c, addr, msg):
     if msg.get('t') == 'took': return handle_took(c, addr, msg)
     if msg.get('t') == 'ground?': return handle_ground(c, addr, msg)
     if msg.get('t') in ('fell', 'felled?'): return handle_felled(c, addr, msg)
+    if msg.get('t') in ('mark', 'marks?'): return handle_marks(c, addr, msg)
+    if msg.get('t') in ('carry', 'carried?'): return handle_carry(c, addr, msg)
     if msg.get('t') in ('boat', 'boats?'): return handle_boats(c, addr, msg)
     if msg.get('t') in ('here', 'where?'): return handle_where(c, addr, msg)
     if msg.get('t') in ('book', 'friends?'): return handle_contacts(c, addr, msg)
@@ -491,7 +525,7 @@ def room_loop(stop):
                     if fr.evaluate("window.__bankClosed || null"): raise RuntimeError('room closed')
                     for m in fr.evaluate("window.__bankQ.splice(0)"):
                         d, f = m.get('data') or {}, m.get('from') or {}
-                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'boat', 'boats?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'sv', 'ld?'): continue
+                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'boat', 'boats?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'sv', 'ld?', 'mark', 'marks?', 'carry', 'carried?'): continue
                         if f.get('guest') or not f.get('address'): continue
                         try: rep = handle(c, f['address'], d)
                         except Exception: log('HANDLE ERROR', traceback.format_exc()[-400:]); rep = {'t': 'dep', 'id': d.get('id'), 'to': f['address'], 'ok': False, 'note': 'The bank hit an error; try again later.'}

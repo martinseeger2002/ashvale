@@ -1,0 +1,1 @@
+{"ashvale3d":"part","api":1,"v":1,"id":"item.sinew","kind":"item","items":{"sinew":null},"note":"ojiitad: a coil of dried split sinew","shapes":[{"t":"torus","s":[0.06,0.01],"c":"#d9c9a3","p":[0,0.012,0],"r":[1.5708,0,0]},{"t":"torus","s":[0.045,0.009],"c":"#cbb98f","p":[0.01,0.022,0],"r":[1.5708,0,0]}]}

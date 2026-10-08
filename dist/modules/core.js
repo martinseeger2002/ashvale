@@ -665,7 +665,7 @@
           const tx = c.x | 0, ty = c.y | 0;
           if (p.boat === 2) {   /* riding: your partner steers; pointing at the shore beside the canoe gets you out */
             if (!isWet(tx, ty) && cheb(p.x, p.y, tx, ty) <= 2 && !M.blocked(tx, ty)) { leaveRide(p, [tx, ty]); break; }
-            msg(p, "Your partner steers the jiimaan (canoe) with the gaandakii'iganaak (push pole). You knock the manoomin (wild rice) as you pass it - or point at the shore beside you to get out.", 'info'); break;
+            msg(p, p.knock ? "Your partner steers the jiimaan (canoe) with the gaandakii'iganaak (push pole). You knock the manoomin (wild rice) as you pass it - or point at the shore beside you to get out." : 'Your partner steers the jiimaan (canoe). Point at the shore beside you to get out.', 'info'); break;
           }
           /* in a canoe: water - paddle there; land - paddle to the water nearest it, step out, walk on to it (2026-10-07) */
           p.land = p.boat && !isWet(tx, ty) ? [tx, ty] : null;
@@ -675,7 +675,7 @@
         case 'ride': {   /* climb into a friend's canoe to knock rice (2026-10-07: "two people in the canoe, one with a push pole and one with a set of rice knockers") */
           const t = S.players[c.pid];
           if (!t || t === p || t.boat !== 1 || t.dead || p.boat || isHawk(p)) { msg(p, "There's no canoe to climb into there.", 'warn'); break; }
-          if (Object.values(S.players).some(q => q !== p && q.boat === 2 && q.ride === c.pid)) { msg(p, 'That canoe already has someone knocking rice in it.', 'warn'); break; }
+          if (Object.values(S.players).some(q => q !== p && q.boat === 2 && q.ride === c.pid)) { msg(p, 'That canoe already has two in it.', 'warn'); break; }
           p.act = { k: 'ride', pid: c.pid }; p.skilling = null; closeShop(p); break;
         }
         case 'board': {   /* get into a canoe at the landing */
@@ -715,7 +715,7 @@
         case 'npc': { const n = M.npcs.find(q => q.id === c.id); if (n) { p._trade = !!c.trade; p.act = { k: 'npc', id: n.id }; p.skilling = null; closeShop(p); } break; }
         case 'move': moveSlot(p, c.from | 0, c.to | 0); break;
         case 'light': { const s0 = p.inv[c.slot | 0]; if (s0 && IT[s0.id].burnTicks) { p.act = { k: 'light', slot: c.slot | 0, id: s0.id }; p.gT = 0; p.path = []; p.skilling = null; closeShop(p); } break; }
-        case 'gather': { const n = nodeAt(idx(c.x | 0, c.y | 0)); if (n) { p.act = { k: 'gather', i: idx(n.x, n.y) }; p.skilling = null; closeShop(p); p.gT = 0; } break; }
+        case 'gather': { const n = nodeAt(idx(c.x | 0, c.y | 0)); if (n) { p.act = { k: 'gather', i: idx(n.x, n.y), peel: c.peel ? 1 : 0, tap: c.tap ? 1 : 0 }; p.skilling = null; closeShop(p); p.gT = 0; } break; }
         case 'plant': p.act = { k: 'plant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); break;
         case 'unplant': p.act = { k: 'unplant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); break;
         case 'unuse': if (p.using) { p.using = null; ev({ e: 'using', p: p.id }); } break;
@@ -877,6 +877,7 @@
       const mx = maxHp(p), heal = d.healPct ? Math.floor(mx * d.healPct / 100) : (d.heal | 0);   /* an antidote heals nothing: 0, never undefined (it made hitpoints NaN, 2026-10-07) */
       removeItem(p, s.id, 1);
       const before = p.hp; p.hp = Math.min(mx, p.hp + heal);
+      if (d.energy) p.energy = Math.min(10000, (p.energy || 0) + d.energy);   /* maple candy: a run's worth of energy */
       p.atk = Math.max(p.atk, 0) + 3;
       msg(p, (d.drink ? 'You drink the ' : 'You eat the ') + d.name.toLowerCase() + '.' + (p.hp > before ? ' It heals some health.' : ''));
       ev({ e: 'eat', p: p.id, id: s.id, heal: p.hp - before });
@@ -1185,6 +1186,76 @@
       const C = md.cover, q = p.quests && p.quests[C.quest];
       return !(q && q.step >= (C.step || 1));
     }
+    /* ---------------- THE SUGAR BUSH (2026-10-08, handoff/sugarbush_plan.md) ----------------
+       NATURE: the engine's word on the season where the player stands ({day, year, sap: {season, day, low, high, left}}), as it
+       has the sky and the clock; NATTELL(kind, p): a line on the weather, the plants and birds, the moon, or the sun, stars and
+       planets, for the people who watch them. MARKS: which maples gave sap (on which game day) and which birches gave bark (in
+       which year), shared with everyone through the @ashvale Bank: a maple gives sap once a day and a birch its bark once a year,
+       to whoever comes first. */
+    let NATURE = null, NATTELL = null;
+    function setNature(o) { NATURE = o || null; }
+    function setNatureTell(fn) { NATTELL = typeof fn === 'function' ? fn : null; }
+    const MARKS = {};   /* mark kind -> Map(tile -> period) */
+    function setMarks(k, cells) { if (!/^[a-z]{1,12}$/.test(String(k))) return 0; const m = MARKS[k] = MARKS[k] || new Map(); let n = 0; for (const c of cells || []) { const i = idx(c[0] | 0, c[1] | 0), v = c[2] | 0; if (!(m.get(i) >= v)) { m.set(i, v); n++; } } return n; }
+    /* a tree's extra yield, all data (rules.nodes.<kind>.peel / .tap; 2026-10-08: the rules ride in the JSON): peel takes an
+       item off the tree, tap fills an empty bucket (an item with "Fills into"); each tree once per `per` (day | year) for anyone,
+       `season` must be on (sap: the run, from NATURE), and the words come with it */
+    const emptyBucket = (p) => p.inv.findIndex(sl => sl && IT[sl.id] && IT[sl.id].fills && IT[IT[sl.id].fills]);
+    function natureDay() { return NATURE && NATURE.day != null ? NATURE.day : Math.floor(S.t / 12000); }
+    function natureYear() { return NATURE && NATURE.year != null ? NATURE.year : 1 + Math.floor(S.t / (12000 * 365)); }
+    const period = (per) => per === 'year' ? natureYear() : natureDay();
+    function yieldTick(p, n, i, Y, how) {
+      p.face = faceTo(p.x, p.y, n.x, n.y);
+      const stop = (t) => { if (t) msg(p, t, 'warn'); p.act = null; p.skilling = null; };
+      const b = how === 'tap' ? emptyBucket(p) : -1;
+      if (how === 'tap' && b < 0) return stop(Y.none);
+      if (Y.season) {
+        const sp = NATURE && NATURE[Y.season];
+        if (!sp || !sp.season) return stop(Y.off);
+        if (!sp.day) return stop(sp.high <= 0 ? Y.cold : Y.warm);
+      }
+      const M0 = MARKS[Y.mark] = MARKS[Y.mark] || new Map();
+      if (M0.get(i) === period(Y.per)) return stop(Y.again);
+      if (how === 'peel' && !canAdd(p, Y.item, 1)) return stop('Your bag is full.');
+      p.skilling = 'chop';
+      if (!p.gT) { p.gT = S.t + (Y.ticks || 4); return; }
+      if (S.t < p.gT) return;
+      p.gT = 0; p.act = null; p.skilling = null;
+      let got = Y.item, was = null;
+      if (how === 'tap') { was = p.inv[b].id; got = IT[was].fills; removeItem(p, was, 1); }
+      addItem(p, got, 1); addXp(p, 'woodcutting', (Y.xp || 0) | 0);
+      M0.set(i, period(Y.per)); ev({ e: 'mark', p: p.id, k: Y.mark, x: n.x, y: n.y, v: period(Y.per) });
+      if (Y.say) msg(p, String(Y.say).replace('{bucket}', was ? IT[was].name.toLowerCase() : ''));
+      ev({ e: 'gather', p: p.id, node: i, ok: true, item: got }); ev({ e: 'inv', p: p.id });
+    }
+    /* TRADES AND CRAFTS by the people (data on the NPC): trade {take: {id: n}, give: {id: n}, say, lack} at once; craft {take,
+       give, days, say, wait, ready, lack} - made for you and ready to collect after `days` game days (Migizi's biskitenaagan) */
+    function tradeTalk(p, n) {
+      const T = n.trade, C = n.craft, f = (L) => (L || []).map(l => String(l).replace(/\{name\}/g, p.name || 'traveller'));
+      const has = (take) => Object.keys(take || {}).every(k => invCount(p, k) >= take[k]);
+      const say = (L) => { ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: f(L) }); return true; };
+      if (C) {   /* one craft, or a list (Ziigwan carves the push pole and the knockers); an order is kept per thing made */
+        p.orders = p.orders || {}; const L0 = Array.isArray(C) ? C : [C], key = (c) => L0.length > 1 ? n.id + ':' + c.give : n.id;
+        for (const c of L0) { const o = p.orders[key(c)]; if (!o || natureDay() < o.ready) continue;
+          if (!canAdd(p, c.give, 1)) { msg(p, 'Your bag is full: make room for what ' + n.name + ' made you.', 'warn'); return true; }
+          delete p.orders[key(c)]; addItem(p, c.give, 1); ev({ e: 'inv', p: p.id }); msg(p, n.name + ' gives you ' + IT[c.give].name + '.', 'info');
+          return say(c.ready); }
+        for (const c of L0) { if (p.orders[key(c)] || !has(c.take)) continue;
+          for (const k in c.take) removeItem(p, k, c.take[k]); ev({ e: 'inv', p: p.id });
+          p.orders[key(c)] = { ready: natureDay() + (c.days || 1) };
+          msg(p, 'You hand ' + n.name + ' ' + Object.keys(c.take).map(k => c.take[k] + ' x ' + IT[k].name).join(' and ') + '.', 'info');
+          return say(c.say); }
+        const w = L0.find(c => p.orders[key(c)]); if (w) return say(w.wait);
+        const part = L0.find(c => c.hint && Object.keys(c.take).some(k => invCount(p, k) > 0)); if (part) return say(part.lack);
+      }
+      if (T && has(T.take)) {
+        for (const k in T.give) if (!canAdd(p, k, T.give[k])) { msg(p, 'Your bag is full.', 'warn'); return true; }
+        for (const k in T.take) removeItem(p, k, T.take[k]); for (const k in T.give) addItem(p, k, T.give[k]); ev({ e: 'inv', p: p.id });
+        msg(p, 'You trade ' + Object.keys(T.take).map(k => IT[k].name).join(', ') + ' for ' + Object.keys(T.give).map(k => IT[k].name).join(', ') + '.', 'info');
+        return say(T.say);
+      }
+      return false;
+    }
     let SKYTELL = null;   /* the engine's word on the next eclipses (it has the sky); NPCs marked `sky` end with it */
     function setSkyTell(fn) { SKYTELL = typeof fn === 'function' ? fn : null; }
     function talk(p, n) {
@@ -1246,9 +1317,10 @@
       }   /* the town chest: the engine opens the wallet view (2026-10-04) */
       if (n.tailor && !(p._trade) && !ends) { ev({ e: 'tailor', p: p.id, npc: n.id }); msg(p, n.name + ': ' + (n.greet || 'Fancy a new look? Pick anything you like.'), 'npc'); return; }
       if (n.shop && !ends) { const sh = shopOf(n.shop); p.shop = n.shop; ev({ e: 'shop', p: p.id, shop: n.shop, npc: n.id }); msg(p, n.name + ': ' + sh.greet, 'npc'); return; }
+      if ((n.trade || n.craft) && !ends && tradeTalk(p, n)) return;
       const idle = npcIdleLines(n, p), offered = nextOffered(n, p);
       const hadQuest = (n.quests || []).concat(n.quest ? [n.quest] : []).some(id => p.quests[id]);
-      if (idle && idle.length && !ends && !offered && !hadQuest) { let tell = null; if (n.sky && SKYTELL) try { tell = SKYTELL(p); } catch (e) { tell = null; } ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: tell ? idle.concat([tell]) : idle }); return; }   /* the sky-watchers end with the next eclipses */   /* dialogue straight off the zone data, checked after shop and quest */
+      if (idle && idle.length && !ends && !offered && !hadQuest) { let tell = null; if (n.sky && SKYTELL) try { tell = SKYTELL(p); } catch (e) { tell = null; } let nat = null; if (n.nature && NATTELL) try { nat = NATTELL(n.nature, p); } catch (e) { nat = null; } ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: idle.concat(nat ? [nat] : [], tell ? [tell] : []) }); return; }   /* the sky-watchers end with the next eclipses */   /* dialogue straight off the zone data, checked after shop and quest */
       /* an NPC may offer the next quest only after the one before it is finished (Iria's supper, then the Gift of Angels) */
       let qid = ends || offered || n.quest;
       if (!qid && n.quests && n.quests.length) {
@@ -1256,6 +1328,10 @@
       }
       if (qid && D.quests.quests[qid]) {
         const Q = D.quests.quests[qid]; let q = p.quests[qid]; let lines;
+        if (q && Q.repeat === 'spring' && q.step > Q.steps.length && NATURE && NATURE.sap && NATURE.sap.season && natureYear() > (q.yr | 0)) {   /* Nookomis asks again every spring (2026-10-08) */
+          q = p.quests[qid] = { step: 1, n: 0, again: 1, yr: q.yr }; lines = (Q.again || Q.steps[0].talk).map(l => String(l).replace(/\{name\}/g, p.name || 'traveller')); ev({ e: 'quest', p: p.id, q: qid, step: 1 }); openStep(p, q, Q.steps[0]);
+          ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines }); return;
+        }
         if (q && q.hid) delete q.hid;   /* back in the log, at the step it was left on */
         /* goal kinds, all data: {"kill":key,"n":n} counted by creditKill, {"cook":item,"n":n} by a successful cook,
            {"bring":item,"n":n} counted in your bag, {"talk":npc} by the loop above. A step may ask for a kill and a
@@ -1263,16 +1339,18 @@
         const need = (st) => st.goal.n == null ? 1 : st.goal.n;
         const bringN = (st) => st.goal.bn == null ? need(st) : st.goal.bn;
         const withN = (st) => st.goal.wn == null ? 1 : st.goal.wn;
+        const bids = (g) => (Array.isArray(g.bring) ? g.bring : [g.bring]).filter(id => IT[id]);   /* bring: one item, or a list where any will do */
+        const bringHave = (g) => bids(g).reduce((a, id) => a + invCount(p, id), 0);
         const counted = (st) => {
           if (st.goal.kills) { let n = 0; for (const k in st.goal.kills) n += Math.min(st.goal.kills[k], (q.kn && q.kn[k]) | 0); return n; }
-          return (st.goal.kill || st.goal.cook || st.goal.talk || st.goal.plant) ? (q.n | 0) : (st.goal.bring && IT[st.goal.bring] ? invCount(p, st.goal.bring) : (q.n | 0));
+          return (st.goal.kill || st.goal.cook || st.goal.talk || st.goal.plant) ? (q.n | 0) : (st.goal.bring && bids(st.goal).length ? bringHave(st.goal) : (q.n | 0));
         };
         const killsMet = (st) => { const K = st.goal.kills; if (!K) return true; for (const k in K) if (((q.kn && q.kn[k]) | 0) < K[k]) return false; return true; };
         const met = (st) => {
           const g = st.goal;
           if ((g.kill || g.cook || g.talk || g.plant) && (q.n | 0) < need(st)) return false;
           if (g.kills && !killsMet(st)) return false;
-          if (g.bring && (!IT[g.bring] || invCount(p, g.bring) < bringN(st))) return false;
+          if (g.bring && (!bids(g).length || bringHave(g) < bringN(st))) return false;
           if (g.with && (!IT[g.with] || invCount(p, g.with) < withN(st))) return false;
           return !!(g.kill || g.cook || g.talk || g.bring || g.plant || g.kills);
         };
@@ -1285,15 +1363,14 @@
           else if (!open(st)) { const prev = Q.steps[q.step - 2]; lines = prev && prev.locked && prev.locked.length ? fill(prev.locked, st) : ['The road to that place is not open yet. Come back another day.']; }
           else if (met(st) && (!st.ends || st.ends === n.id)) {
             if (st.goal.bring) {   /* the goods change hands here, and only here: a step cannot be handed in twice */
-              removeItem(p, st.goal.bring, bringN(st));
-              msg(p, 'You hand over ' + bringN(st) + ' x ' + IT[st.goal.bring].name + '.', 'quest');
+              let left = bringN(st); for (const id of bids(st.goal)) { const k = Math.min(left, invCount(p, id)); if (k > 0) { removeItem(p, id, k); left -= k; msg(p, 'You hand over ' + k + ' x ' + IT[id].name + '.', 'quest'); if (IT[id].vessel && IT[IT[id].vessel]) { if (addItem(p, IT[id].vessel, k)) dropGround(IT[id].vessel, k, p.x, p.y, p.id, 600); msg(p, 'You get your ' + IT[IT[id].vessel].name.toLowerCase() + ' back, empty.', 'quest'); } } }   /* she keeps the sap, not your bucket */
             }
             if (st.goal.with) { removeItem(p, st.goal.with, withN(st)); msg(p, 'You hand over ' + withN(st) + ' x ' + IT[st.goal.with].name + '.', 'quest'); }
             if (st.goal.bring || st.goal.with) ev({ e: 'inv', p: p.id });
             let done = st.complete && st.complete.length ? fill(st.complete, st) : (st.fold ? [] : ['Well done, traveller. Take this, you have earned it.']);
             if (st.fold && st.say && st.say.length) done = fill(st.say, st).concat(done);
-            giveReward(p, st.reward, n.name, Q.name);
-            q.step++; q.n = 0;
+            giveReward(p, q.again && st.againReward ? st.againReward : st.reward, n.name, Q.name);
+            q.step++; q.n = 0; if (q.step > Q.steps.length && Q.repeat) q.yr = natureYear();
             const nx = Q.steps[q.step - 1];
             openStep(p, q, nx);
             if (!nx) lines = done.concat(fill(Q.done, null));
@@ -1522,12 +1599,19 @@
         if (S.t < p.gT) return;
         p.gT = S.t + nd.speed;
         const rd = IT[p.inv[raw].id]; p.inv[raw] = null;
-        const burnPct = Math.max(0, 40 - 4 * (lv(p, 'cooking') - rd.cookReq)) + (nd.burnBonus || 0);   /* an open fire burns a little more often */
+        const burnPct = rd.burns === rd.cooks ? 0 : Math.max(0, 40 - 4 * (lv(p, 'cooking') - rd.cookReq)) + (nd.burnBonus || 0);   /* an open fire burns a little more often; sap only boils down */
+        const back = rd.vessel && IT[rd.vessel] && !(IT[rd.cooks] && IT[rd.cooks].vessel) ? rd.vessel : null;   /* the bucket comes back when what is made is not in it (syrup boiled to candy) */
+        if (back) addItem(p, back, 1);
         if (R.int(100) < burnPct) { addItem(p, rd.burns, 1); msg(p, 'You accidentally burn the ' + IT[rd.cooks].name.toLowerCase() + '.'); }
-        else { addItem(p, rd.cooks, 1); addXp(p, 'cooking', rd.cookXp * 10); msg(p, 'You cook the ' + IT[rd.cooks].name.toLowerCase() + '.'); creditCook(p, rd.cooks); }
+        else { addItem(p, rd.cooks, 1); addXp(p, 'cooking', rd.cookXp * 10); msg(p, (rd.burns === rd.cooks ? 'You boil it down: ' + IT[rd.cooks].name + '.' : 'You cook the ' + IT[rd.cooks].name.toLowerCase() + '.') + (back ? ' Your ' + IT[back].name.toLowerCase() + ' is empty again.' : '')); creditCook(p, rd.cooks); }
+        if (rd.burns === rd.cooks) { p.act = null; p.skilling = null; }   /* sap and syrup: one boil a click, so the syrup is not boiled on into candy */
         ev({ e: 'gather', p: p.id, node: i, ok: true });
         return;
       }
+      /* a birch: peel its bark when asked, or always without an axe; a maple: tap it when asked, or without an axe but with an
+         empty bucket (2026-10-08) */
+      if (nd.peel && (p.act && p.act.peel || !hasWoodTool(p))) return yieldTick(p, n, i, nd.peel, 'peel');
+      if (nd.tap && (p.act && p.act.tap || !hasWoodTool(p))) return yieldTick(p, n, i, nd.tap, 'tap');
       const skill = nd.skill, L = lv(p, skill), req = n.req == null ? nd.req : n.req, want = n.tool || null;
       if (L < req) { msg(p, 'You need a ' + cap(skill) + ' level of ' + req + ' to do that.', 'warn'); p.act = null; return; }
       const toolSlot = p.inv.find(s => s && IT[s.id].tool === skill && (!want || s.id === want)), tool = !!toolSlot || (isHawk(p) && skill === 'fishing');   /* a hawk swoops for fish, no tool */
@@ -1639,6 +1723,7 @@
       if (!t || t.boat !== 1 || t.dead) { if (++p.rideMiss < 30) return; leaveRide(p, null); msg(p, 'Your partner has left the canoe, so you climb out onto the bank.', 'info'); return; }   /* a few ticks' grace: a late message is not a landing */
       p.rideMiss = 0;
       p.x = t.x; p.y = t.y; p.path = []; p.act = null;
+      if (!p.knock) { p.knocking = false; return; }   /* paddling along: rice only with the knockers in the bow and the push pole in the stern */
       if (S.t % 3) return;
       let got = null;
       for (const o of M.objects) if (o.k === 'rice' && cheb(o.x, o.y, p.x, p.y) <= 2 && !(RICED[o.x + ',' + o.y] > S.t)) { got = o; break; }
@@ -1646,7 +1731,7 @@
          knock nothing loose */
       if (got && SEASONW && SEASONW.rice === false) {
         p.knocking = false;
-        if (!(p.riceSaid > S.t)) { p.riceSaid = S.t + 200; msg(p, SEASONW.riceLate ? 'The manoomin has already dropped its grain. Ricing time is late August to early October.' : 'The manoomin is not ripe yet. Ricing time is late August to early October.', 'info'); }
+        if (!(p.riceSaid > S.t)) { p.riceSaid = S.t + 200; msg(p, SEASONW.riceLate ? 'The manoomin has already dropped its grain. Ricing time is mid August to early October.' : 'The manoomin is not ripe yet. Ricing time is mid August to early October.', 'info'); }
         return;
       }
       p.knocking = !!got;
@@ -1656,7 +1741,7 @@
       ev({ e: 'knock', p: p.id }); p.dirtyInv = 1;
     }
     function leaveRide(p, at) {   /* out of the bow onto the bank: where pointed, else the nearest dry ground */
-      p.boat = 0; p.ride = null; p.knocking = false; ev({ e: 'boat', p: p.id, on: 0 });
+      p.boat = 0; p.ride = null; p.knocking = false; p.knock = false; ev({ e: 'boat', p: p.id, on: 0 });
       if (at) { p.x = at[0]; p.y = at[1]; return; }
       for (let r = 1; r <= 40; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
         const x = p.x + dx, y = p.y + dy; if (inMap(x, y) && !isWet(x, y) && !M.blocked(x, y)) { p.x = x; p.y = y; return; }
@@ -1877,6 +1962,12 @@
     }
     function watchTick() {
       for (const n of M.npcs) {
+        if (n.sapAt) {   /* Nookomis walks up to the sugar camp while the sap runs, and home again after (2026-10-08) */
+          if (n.hx == null) { n.hx = n.x; n.hy = n.y; }
+          const w = NATURE && NATURE.sap && NATURE.sap.season ? n.sapAt : [n.hx, n.hy];
+          if (n.x !== w[0] || n.y !== w[1]) { const x0 = n.x, y0 = n.y; stepNpc(n, w[0], w[1], 0); n.stuck = n.x === x0 && n.y === y0 ? (n.stuck | 0) + 1 : 0; if (n.stuck > 30) { n.x = w[0]; n.y = w[1]; n.stuck = 0; n.path = null; } }   /* no way through: she is there all the same */
+          continue;
+        }
         if (!n.watch) continue;
         if (n.hx == null) { n.hx = n.x; n.hy = n.y; }
         if (n.down) {
@@ -2049,7 +2140,7 @@
       } else if (a && a.k === 'ride') {   /* step from the shore into the bow of a friend's canoe */
         const t = S.players[a.pid];
         if (!t || t.boat !== 1) { p.act = null; }
-        else if (cheb(p.x, p.y, t.x, t.y) <= 2) { p.act = null; p.path = []; p.boat = 2; p.ride = a.pid; p.rideMiss = 0; p.x = t.x; p.y = t.y; ev({ e: 'boat', p: p.id, on: 2 }); msg(p, "You climb into the bow with a paddle, and the bawa'iganaakoog (ricing sticks) at your feet. In the manoomin (wild rice) your partner stands with the gaandakii'iganaak (push pole) and you knock the rice in."); }
+        else if (cheb(p.x, p.y, t.x, t.y) <= 2) { p.act = null; p.path = []; p.boat = 2; p.ride = a.pid; p.knock = invCount(p, 'knockers') > 0 && (t.pole || invCount(t, 'push_pole') > 0); p.rideMiss = 0; p.x = t.x; p.y = t.y; ev({ e: 'boat', p: p.id, on: 2 }); msg(p, p.knock ? "You climb into the bow with a paddle, and the bawa'iganaakoog (ricing sticks) at your feet. In the manoomin (wild rice) your partner stands with the gaandakii'iganaak (push pole) and you knock the rice in." : 'You climb into the bow with a paddle. Two paddling go faster and tire less. Point at the shore beside you to get out.'); }
         else { p.path = findPath(p.x, p.y, (x, y) => cheb(x, y, t.x, t.y) <= 2, t.x, t.y); stepPath(p); if (!p.path.length && cheb(p.x, p.y, t.x, t.y) > 2) { msg(p, "I can't reach that canoe from here.", 'warn'); p.act = null; } }
       } else if (a && a.k === 'board') {   /* walk to the canoe, sit down in it: it floats where it lay */
         if (inReach(p.x, p.y, a.x, a.y, 1)) { const lb = BOATS.get(a.x + ',' + a.y); if (!lb && dockFull(a.x, a.y)) { msg(p, 'There is no canoe at the landing: three are already left at the banks nearby. Take one of those.', 'warn'); p.act = null; return; } if (lb) { p.face = lb.face; takeBoat(a.x, a.y, p.id); } p.act = null; p.path = []; p.boat = 1; p.x = a.x; p.y = a.y; p.land = null; ev({ e: 'boat', p: p.id, on: 1 }); msg(p, 'You sit down in the canoe and take up the paddle. Point at the water to paddle there, or at the shore to land.'); }
@@ -2398,11 +2489,27 @@
         } else { pl.grown = 1; if (owner) msg(owner, 'The shoot has rooted. It will not come back out of the ground.', 'info'); }
       }
     }
+    /* CROSSING A CUT EDGE OF THE NET (handoff/globe_net.md): the ground past it is drawn as its own continuation; CROSS metres in, the
+       player (and a canoe partner, and a hawk) is moved to where that same ground lies natively in the net - the land around them is
+       the same, only the map coordinates jump and the heading turns with the placement */
+    const CROSS = 24;
+    function netCross(p) {
+      if (!p || p.puppet || p.dead || p.lv > 0 || p.boat === 2) return;   /* a rider goes with the canoe */
+      if (!(S.t % 2) || M.netGap(p.x, p.y) < CROSS) return;
+      const a = M.netAcross(p.x, p.y); if (!a) return;
+      let to = [a.x, a.y];
+      const ok = (x, y) => p.boat ? isWet(x, y) : (isHawk(p) || !M.blocked(x, y));
+      if (!ok(to[0], to[1])) { let best = null; for (let r = 1; r <= 4 && !best; r++) for (let dy = -r; dy <= r && !best; dy++) for (let dx = -r; dx <= r; dx++) if (ok(a.x + dx, a.y + dy)) { best = [a.x + dx, a.y + dy]; break; } if (best) to = best; }
+      const from = [p.x, p.y]; p.x = to[0]; p.y = to[1]; p.path = []; p.land = null;
+      for (const q of Object.values(S.players)) if (q.boat === 2 && q.ride === p.id) { q.x = p.x; q.y = p.y; }
+      ev({ e: 'cross', p: p.id, x: p.x, y: p.y, fx: from[0], fy: from[1], turn: a.turn });
+    }
     // ---------------- the tick
     function tick() {
       S.t++; S.ev = [];
       while (queue.length) { const [pid, c] = queue.shift(); const p = S.players[pid]; if (p) apply(p, c); }
       for (const pid of S.order) playerTick(S.players[pid]);
+      if (M.netGap) for (const pid of S.order) netCross(S.players[pid]);   /* the open globe: past a cut edge of the net, carried to where that ground lies */
       if (M.seeded) for (const pid of S.order) wake(S.players[pid]);
       for (const m of S.mobs) mobTick(m);
       patrolTick(); guardTick(); watchTick();
@@ -2434,6 +2541,8 @@
       if (st.st && typeof st.st === 'object') for (const k in p.styles) if (Number.isInteger(st.st[k])) p.styles[k] = st.st[k];
       if (st.bt !== undefined) p.boat = st.bt | 0;   /* in a canoe: 1 poles it, 2 rides in it knocking rice */
       if (st.rd !== undefined) p.ride = st.rd || null;
+      if (st.pl !== undefined) p.pole = !!st.pl;
+      if (st.kn !== undefined) p.knock = !!st.kn;
       if (st.pr !== undefined) p.pray = st.pr && PRAYERS[st.pr] && PRAYERS[st.pr].g === 'head' ? { [st.pr]: 1 } : {};
       if (st.act !== undefined) p.act = st.act && st.act.k === 'attack' && mobByUid(st.act.uid) ? { k: 'attack', uid: st.act.uid } : null;
     }
@@ -2522,7 +2631,7 @@
       return true;
     }
     return {
-      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, setSkyTell, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
+      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, setSkyTell, setNature, setNatureTell, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
