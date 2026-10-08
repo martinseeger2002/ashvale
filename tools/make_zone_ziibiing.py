@@ -60,6 +60,11 @@ def obj(k, x, y, **kw): objects.append(dict(k=k, x=x, y=y, **kw))
 # cannot walk through; its doorway, on the east side, leads into its own round room (the lodges zone below)
 import math
 RING = 11
+# TRUE EAST (2026-10-07: "The wigwams need to be facing the east towards the rising sun"; the world's north was turned to the
+# globe's -z the same day): east at Ziibiing on the tile grid (x right, y down), from the game's true-north compass there
+# (engine trueNorth at 84,606: north = (0.633, 0.774), east = (-north.y, north.x)). Each door looks that way; its tile and the
+# path out of it are the grid cells that way from the wigwam's 3 x 3 floor.
+EAST = (-0.774, 0.633)
 WIGWAMS = [(FIRE[0] + round(math.cos(a) * RING), FIRE[1] + round(math.sin(a) * RING * 0.82)) for a in (math.radians(d) for d in range(15, 375, 60))]
 LODGE_O, ROOM, GAP = (40, 16300), 13, 40   # the lodges: round rooms far under the world, like the Spider Cave, 40 m apart so no room sees another
 lodges = [['^'] * (GAP * (len(WIGWAMS) - 1) + ROOM) for _ in range(ROOM)]
@@ -67,15 +72,17 @@ lobj = []
 for n, (wx, wy) in enumerate(WIGWAMS):
     for yy in range(wy - 1, wy + 2):
         for xx in range(wx - 1, wx + 2): put(xx, yy, 'H')
-    obj('wigwam', wx - 1, wy - 1, w=3, h=3, face='e', seed=wx * 31 + wy)
+    obj('wigwam', wx - 1, wy - 1, w=3, h=3, face='e', dir=[EAST[0], EAST[1]], seed=wx * 31 + wy)
+    dx, dy = round(1.4 * EAST[0]), round(1.4 * EAST[1])          # the door: the floor's edge cell toward the sunrise
+    ox, oy = round(2.6 * EAST[0]), round(2.6 * EAST[1])          # and the ground just outside it
     cx, cy = LODGE_O[0] + n * GAP + ROOM // 2, LODGE_O[1] + ROOM // 2          # the room's centre
     for yy in range(ROOM):
         for xx in range(ROOM):
             if (xx - ROOM // 2) ** 2 + (yy - ROOM // 2) ** 2 <= 3.6 ** 2: lodges[yy][n * GAP + xx] = 'd'
-    obj('wigwamdoor', wx + 1, wy, to=[cx + 2, cy], label='Go inside', name='Wigwam', say='You duck through the doorway into the wigwam. The fire crackles in the middle.')
+    obj('wigwamdoor', wx + dx, wy + dy, to=[cx + 2, cy], label='Go inside', name='Wigwam', say='You duck through the doorway into the wigwam. The fire crackles in the middle.')
     lobj += [dict(k='wigwamroom', x=cx, y=cy, r=4.4), dict(k='campfire', x=cx, y=cy),
-             dict(k='wigwamout', x=cx + 3, y=cy, to=[wx + 2, wy], label='Go outside', name='Doorway', say='You step back out into the daylight.')]
-    if land(wx + 2, wy): put(wx + 2, wy, 'd')
+             dict(k='wigwamout', x=cx + 3, y=cy, to=[wx + ox, wy + oy], label='Go outside', name='Doorway', say='You step back out into the daylight.')]
+    if land(wx + ox, wy + oy): put(wx + ox, wy + oy, 'd')
 obj('campfire', FIRE[0], FIRE[1])
 obj('fishrack', LAND[0] + 2, LAND[1] - 4, w=2, h=1)
 obj('woodpile', FIRE[0] - 3, FIRE[1] - 3)
@@ -101,7 +108,10 @@ for o in objects:
 
 # seven people of the village, in Woodland regalia (their looks: tools/make_parts.py, char.<id>)
 def npc(i, name, x, y, lines, examine):
-    npcs.append({'id': i, 'name': name, 'look': i, 'x': x, 'y': y, 'lines': lines, 'examine': examine})
+    n = {'id': i, 'name': name, 'look': i, 'x': x, 'y': y, 'lines': lines, 'examine': examine}
+    # those round the fire watch the sky (2026-10-07): they end by telling you the next eclipse of the sun and of the moon
+    if (x - FIRE[0]) ** 2 + (y - FIRE[1]) ** 2 <= 36: n['sky'] = True
+    npcs.append(n)
 npc('nookomis', 'Nookomis', FIRE[0] + 2, FIRE[1] + 1,
     ["Boozhoo. Sit by the fire a while, the beads will keep.",
      "These flowers on the vest are the ones that grow along this river. My grandmother sewed them this way, and hers before her.",

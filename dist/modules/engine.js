@@ -186,9 +186,14 @@
             const blob = Array.from({ length: data.n }, (_, i) => parts[i] || '').join('');
             (blob ? unpackSave(blob) : Promise.resolve('')).then(json => {
               const cloud = json ? JSON.parse(json) : null, at = +data.id || 0;
-              if (at > ((local && local.at) || 0)) {   /* newer than this device's: play that one ('' = a New character was made) */
+              /* which to play (2026-10-07: gear changed on another device was gone back on this one): the Bank's, whenever it is not
+                 the very save this device last synced with ('base') - some other device has played since; this device's own, when it
+                 is (it may hold play the Bank has not had yet). A save from before 'base' existed: the newer by its time, as before. */
+              const takeCloud = local && local.base != null ? at !== +local.base : at > ((local && local.at) || 0);
+              if (!takeCloud && local && at) return st.set(SAVE_KEY, JSON.stringify(Object.assign(local, { base: at })));   /* ours goes on from the Bank's current one */
+              if (takeCloud) {   /* play the Bank's ('' = a New character was made) */
                 console.info('ASHVALE: the save from the Bank (' + new Date(at).toISOString() + ') is newer than this device\'s');
-                return st.set(SAVE_KEY, cloud ? JSON.stringify(Object.assign(cloud, { at })) : '');
+                return st.set(SAVE_KEY, cloud ? JSON.stringify(Object.assign(cloud, { at, base: at })) : '');
               }
             }).then(() => { CLOUD_OK = true; }, e => console.warn('ASHVALE: cloud save unreadable', e && e.message)).then(end);
           });
@@ -410,7 +415,7 @@
       const HAWK_ALT = 14, ringHawk = (id) => !!(id && D.items[id] && (D.items[id].attributes || []).some(a => a.trait_type === 'Form' && a.value === 'hawk'));
       /* the hawk's height (2026-10-04): a dive down to its prey on every strike, perched in a tree on the side you
          tapped, standing on the ground (legs and shadow back) when it carries too much */
-      const PERCH_H = 3.0, SIT_SCALE = 0.42;   /* perched or standing, the hawk is bird-sized next to a tree (it flies big to be seen from high up) */
+      const PERCH_H = 1.75, PERCH_OUT = 0.55, SIT_SCALE = 0.42;   /* perched IN the tree (2026-10-07: it stood above the crown): on a branch among the leaves, on the side you chose */   /* perched or standing, the hawk is bird-sized next to a tree (it flies big to be seen from high up) */
       /* height above the ground for a floor: a building's storey is 1.8 m, a castle wall walk its own height (lh); an NPC
          posted up there (a watchman on the wall: lv, lh in the zone) stands on it too */
       function liftOf(e, a) {
@@ -446,6 +451,8 @@
         if (on) { e.canoe = SCENE.canoeMesh(); e.canoe.position.y = 0.0; e.canoe.position.z = 0.95;   /* you sit in the stern: the canoe reaches ahead of you to the bow */ e.root.add(e.canoe); if (e.blob) e.blob.visible = false; }
         else { e.root.remove(e.canoe); e.canoe = null; if (e.blob) e.blob.visible = !settings.shadows; }
       }
+      /* the head turned up or down to where they look: up to 40 degrees each way, eased */
+      function headLook(e, el, dt) { const hd = e.H && e.H._parts && e.H._parts.head; if (!hd) return; const want = -Math.max(-0.7, Math.min(0.7, el)); e.hlR = (e.hlR || 0) + (want - (e.hlR || 0)) * Math.min(1, dt * 8); hd.rotation.x = e.hlR; }
       function hawkAlt(e) {
         if (!e.hawk) return e.alt || 0;
         if (e === myEnt) {
@@ -454,11 +461,11 @@
             e.hawkGround = grounded; e.hawkPerch = perched;
             if (e.hawk.flying) e.hawk.flying(!(grounded || perched));
             if (e.blob) e.blob.visible = grounded && !settings.shadows;
-            e.hawk.play(grounded ? 'walk' : perched ? 'idle' : 'run', { loop: true });
+            e.hawk.play(grounded ? 'walk' : perched ? 'idle' : 'run', { loop: true, speed: perched ? 1e-6 : 1 });   /* perched: still as a stone (no pecking) */
           }
           e.hawk.object.scale.setScalar(grounded || perched ? SIT_SCALE : 1);
           if (grounded) return 0;
-          if (perched) { e.hawk.object.position.set(0.45 * (P.sx || 0), 0, 0.45 * (P.sy || 0)); return PERCH_H; }
+          if (perched) { e.hawk.object.position.set(PERCH_OUT * (P.sx || 0), 0, PERCH_OUT * (P.sy || 0)); return PERCH_H; }
           e.hawk.object.position.set(0, 0, 0);
         }
         if (e.dive) { const t = (performance.now() - e.dive) / 900; if (t >= 1) e.dive = 0; else return HAWK_ALT * (1 - 0.92 * Math.sin(Math.PI * t)); }
@@ -468,7 +475,7 @@
         const on = ringHawk(ring); if (!!e.hawk === on) return;
         if (on) { e.hawk = MOD.monster('hawk'); if (e.hawk.flying) e.hawk.flying(); e.root.add(e.hawk.object); e.hawk.play('run', { loop: true }); e.H.object.visible = false; e.alt = HAWK_ALT; if (e.blob) e.blob.visible = false; }   /* no legs, no shadow (the operator) */
         else { e.root.remove(e.hawk.object); e.hawk = null; e.H.object.visible = true; e.alt = 0; if (e.blob) e.blob.visible = !settings.shadows; }
-        if (e === myEnt) { cam.tdist = on ? 34 : 11; cam.tpitch = on ? 0.75 : 0.6; }
+        if (e === myEnt) { cam.tdist = 11; cam.tpitch = on ? 0.5 : 0.6; }   /* the hawk sees through its own eyes (FPV below), looking a little down */
       }
       function makeEnt(key, H, pick, scale) {
         const e = { key, H, root: new THREE.Group(), from: new THREE.Vector3(), to: new THREE.Vector3(), t0: 0, dur: TICK, yaw: 0, tyaw: 0, loco: null, oneShot: false, dead: false, impacts: [], splats: [], hpT: 0, hp: 1, max: 1, running: false, skill: null, fade: 0, scale: scale || CHAR };
@@ -629,7 +636,7 @@
           const tl = p.boat === 1 ? (ric ? 'push_pole' : 'paddle') : p.boat === 2 ? (p.knocking ? 'ricing_sticks' : 'paddle') : skAnim === 'chop' || skAnim === 'mine' || skAnim === 'fish' ? p.toolId || (sk === 'chop' ? 'hatchet' : sk === 'mine' ? 'pickaxe' : 'net') : null;
           boatLook(e, p.boat === 1); e.boatRole = p.boat | 0; e.rideOf = p.boat === 2 ? p.ride : null; e.knocking = !!p.knocking;
           if (p.path && p.path.length && e.restPose) e.restPose = null;   /* up off the floor once you walk */
-          if (e === myEnt && SCENE.docks) for (const c of SCENE.docks()) c.visible = !p.boat;   /* the landing's canoe is the one you are sitting in */
+          if (e === myEnt) docksShow();   /* the landing's canoe is the one you are sitting in */
           if (skAnim !== e.skill || tl !== e.toolId) { e.skill = skAnim; e.toolId = tl; e.H.setTool && e.H.setTool(tl); }
         }
         for (const n of core.M.npcs) {
@@ -727,8 +734,8 @@
             } else { place(myEnt, e.x, e.y); cam.snap = true; streamRegions(); sfx('equip'); arriveCheck(); }
           } break;
           case 'zoneadd': zoneArrived(e, now); break;
-          case 'boatland': boatShow(e.x, e.y, e.face); if (e.by === PID) { boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, face: e.face, on: 0 }); } break;
-          case 'boatgone': boatHide(e.x, e.y); if (e.by === PID) boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, on: 1 }); break;
+          case 'boatland': boatShow(e.x, e.y, e.face); docksShow(); if (e.by === PID) { boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, face: e.face, on: 0 }); } break;
+          case 'boatgone': boatHide(e.x, e.y); docksShow(); if (e.by === PID) boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, on: 1 }); break;
           case 'chest': if (mine) { const c = ents.get('n:' + e.npc); if (c) c.H.play('open'); hud.openChest(); } break;   /* the town chest */
           case 'shopclose': if (mine) hud.closeShop(); break;
           case 'mobjump': { const t = ents.get('m:' + e.mob); if (t) { place(t, e.x, e.y); if (t.path) t.path = null; } break; }   /* came through a cave opening */
@@ -750,7 +757,7 @@
             if (n && n.pose) myEnt.restPose = n.pose;   /* sit down with him the same way (2026-10-07) */
           } break;
           case 'unhide': { const t = ents.get('n:' + e.npc); if (t) t.root.visible = true; break; }
-          case 'weather': if (e.zone === core.weatherZone(zoneHere())) { const k = seasonal({ kind: e.kind }).kind, say = k === e.kind ? e.say : (((D.rules || {}).weather || {}).say || {})[k] || e.say; if (say && k + ':' + e.intensity !== wxShown) hud.chat(say, 'sys'); showWeather(); } break;
+          case 'weather': if (e.zone === core.weatherZone(zoneHere()) && !(TL.n > 1 || DEMO)) { const k = seasonal({ kind: e.kind }).kind, say = k === e.kind ? e.say : (((D.rules || {}).weather || {}).say || {})[k] || e.say; if (say && k + ':' + e.intensity !== wxShown) hud.chat(say, 'sys'); showWeather(); } break;
           case 'fire': addFire(e.fire, e.x, e.y); if (e.p === PID || !e.p) sfx('sizzle', e.p === PID ? null : { x: e.x, y: e.y }); break;
           case 'fireout': removeFire(e.fire); break;
           case 'fx': { const t = ents.get('m:' + e.mob); if (!t) break; t.fx = t.fx || {}; t.fx[e.fx] = 1; applyTint(t); const el = hud.fxSplat(e.fx); if (el) t.splats.push({ el, t: performance.now(), k: t.splats.length }); if (e.fx === 'freeze') sfx('freeze', t); break; }
@@ -882,6 +889,8 @@
       const SUN_EPOCH = 1791353761, DAY_S = 7200;
       /* THE YEAR (2026-10-07): 365 game days from year 1, day 1 at SUN_EPOCH; the axis leans, so the sun climbs and sinks
          through the year and the hemispheres take turns at summer (the maths: the seasons module, its own inscription) */
+      const SKYM = (() => { try { const SM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('sky'); return SM && SM.create ? SM.create({ epoch: SUN_EPOCH, dayS: DAY_S, north: (DATA.globecfg || {}).north }) : null; } catch (e) { return null; } })();   /* sun, moon, eclipses (src/sky.js) */
+      const NS = (DATA.globecfg || {}).north === -1 ? -1 : 1;   /* the world's north: the globe's -z (2026-10-07: the northern hemisphere) */
       const SEASONS = (() => { try { const SM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('seasons'); return SM && SM.create ? SM.create({ epoch: SUN_EPOCH, dayS: DAY_S }) : null; } catch (e) { return null; } })();
       const SUNL = { dark: 0, dir: [-0.45, 0.8, 0.3], key: '', b: null, lonA: null, base: new THREE.Color(SKY), col: new THREE.Color(), night: new THREE.Color(), phase: null };
       if (SCENE.lampQuery) SCENE.lampQuery((x, y) => core.lampLit ? core.lampLit(x, y) : true);
@@ -893,29 +902,55 @@
         const dl = SEASONS ? SEASONS.declination(tms) : 0, cd = Math.cos(dl);   /* north or south of the equator by the time of year */
         return [Math.cos(L) * cd, Math.sin(L) * cd, Math.sin(dl)];
       }
-      const MOON_P = 29.530588853, MOON_NEW = 947182440;   /* the synodic month; a new moon: 2000-01-06 18:14 UTC */
+      /* THE MOON KEEPS GAME TIME (2026-10-07: "the moon cycle ... should operate on game time"): new to new in 29.53 GAME days -
+         the Earth's month, scaled like the day - about 12.4 moons a game year; a new moon on day 1 of year 1 (SUN_EPOCH) */
+      const MOON_P = 29.530588853;
       function moonAt(tms, s) {   /* {v: its direction, lit: 0 at new moon .. 1 at full} */
-        const ph = (((tms / 1000 - MOON_NEW) / 86400) % MOON_P) / MOON_P, a = 2 * Math.PI * ph, c = Math.cos(a), si = Math.sin(a);
-        return { v: [s[0] * c - s[1] * si, s[0] * si + s[1] * c, 0], lit: (1 - c) / 2, phase: ph };   /* s turned east by the phase */
+        let ph = (((tms / 1000 - SUN_EPOCH) / DAY_S) % MOON_P) / MOON_P; if (ph < 0) ph += 1; const a = 2 * Math.PI * ph, c = Math.cos(a), si = Math.sin(a);
+        return { v: [s[0] * c - s[1] * si, s[0] * si + s[1] * c, s[2]], lit: (1 - c) / 2, phase: ph };   /* s turned east by the phase */
       }
       const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], nrm3 = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
       /* THE STARS: a fixed sky of 1600 points round the camera, shown at night - brightest on a clear moonless night, faint under a
          full moon, gone by day, underground and under cloud */
       const STARS = { pts: null };
+      const SKYV = { v: null, basis: new THREE.Matrix4(), rot: new THREE.Matrix4(), m: new THREE.Matrix4(), flipM: new THREE.Matrix4() };
       /* THE SUN AND THE MOON in the sky (2026-10-07: "Just like the stars are visible in the clear sky at night, so should the
          sun be and the moon, in their position from the Atlas"): two discs far out round the camera in the very directions that
          light the world (the Atlas's sun, the real moon's phase); the moon is drawn lit on its sun side, faint by day, and both
          hide under thick weather and underground */
       const BODIES = { sun: null, moon: null, mph: -1, cv: null };
       function bodyTex(draw) { const cv = document.createElement('canvas'); cv.width = cv.height = 96; draw(cv.getContext('2d'), cv); const t = new THREE.CanvasTexture(cv); if (THREE.SRGBColorSpace) t.colorSpace = THREE.SRGBColorSpace; return { t, cv }; }
-      function drawMoon(phase) {
-        const c = BODIES.cv.getContext('2d'), N = 96, R = 40, img = c.createImageData(N, N), a = 2 * Math.PI * phase, Lx = Math.sin(a), Lz = -Math.cos(a);
+      /* the moon lit by the sun, truly (2026-10-07: the lit side faced away from the sun): drawn with the sunlight coming from the
+         disc's +x side at the real angle between them in the sky (e: 0 = new, the sun behind it; pi = full), and the disc is turned
+         every frame so that +x points at the sun on the screen */
+      /* THE MOON'S FACE (2026-10-07: "the moon should have some sort of moon like texture"): the near side as we know it - the dark
+         maria where they are on our moon (Procellarum, Imbrium, Serenitatis, Tranquillitatis, Crisium ...) and the bright young
+         craters with Tycho's rays - drawn from their selenographic places, north up; no picture to fetch */
+      const MARIA = [[-57, 18, 24], [-16, 33, 15], [18, 28, 9], [31, 8, 11], [59, 17, 6], [51, -8, 9], [35, -15, 5.5], [-17, -21, 9], [-39, -24, 5], [-30, 57, 6], [0, 56, 6], [30, 57, 6], [4, 13, 4], [-5, -4, 3.5], [-60, -2, 7], [-43, 4, 6]];
+      const CRATERS = [[-11, -43, 1.6, 1], [-20, 9.6, 1.7, 0.75], [-38, 8, 1, 0.6], [-47.5, 23.7, 0.8, 0.9], [-9, -39, 0, 0], [26, -11, 1, 0.4]];
+      function moonAlbedo(sx, sy) {   /* sx, sy: on the disc, north up, -1..1 */
+        const lat = Math.asin(Math.max(-1, Math.min(1, sy))), cl = Math.cos(lat), lon = cl > 1e-4 ? Math.asin(Math.max(-1, Math.min(1, sx / cl))) : 0, R2D = 180 / Math.PI;
+        const la = lat * R2D, lo = lon * R2D;
+        let a = 0.8 + 0.06 * Math.sin(lo * 0.31 + la * 0.17) * Math.sin(la * 0.23 - lo * 0.11) + 0.04 * Math.sin(lo * 1.3) * Math.cos(la * 1.1);
+        for (const m of MARIA) { const d = Math.hypot((lo - m[0]) * Math.cos(la / R2D), la - m[1]); if (d < m[2] * 1.25) a -= 0.3 * Math.min(1, (m[2] * 1.25 - d) / (m[2] * 0.45)); }
+        a = Math.max(0.42, a);
+        for (const c of CRATERS) { if (!c[2]) continue; const d = Math.hypot((lo - c[0]) * Math.cos(la / R2D), la - c[1]); if (d < c[2]) a += 0.28 * c[3] * (1 - d / c[2]); }
+        { const d = Math.hypot((lo + 11) * Math.cos(la / R2D), la + 43), ang = Math.atan2(la + 43, lo + 11); if (d > 1.6 && d < 38) a += 0.07 * Math.max(0, Math.cos(ang * 9)) * (1 - d / 38); }   /* Tycho's rays */
+        return Math.min(1.05, a);
+      }
+      /* lit from the side toward the sun (the disc's +x, turned to the sun on the screen by the sprite's rotation rot), the face kept
+         north-up on the sky; in front of the sun its unlit side is a black disc exactly where it covers the sun's disc, and only
+         there - the moon leaves the sun and is gone again (2026-10-07) */
+      function drawMoon(e, rot, sunD, sunR) {
+        const c = BODIES.cv.getContext('2d'), N = 96, R = 40, img = c.createImageData(N, N), Lx = Math.sin(e), Lz = -Math.cos(e), cr = Math.cos(rot), sr = Math.sin(rot);
         for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
           const nx = (x - N / 2 + 0.5) / R, ny = (y - N / 2 + 0.5) / R, r2 = nx * nx + ny * ny, o = (y * N + x) * 4; if (r2 > 1) continue;
           const nz = Math.sqrt(1 - r2), l = nx * Lx + nz * Lz, edge = Math.min(1, (1 - Math.sqrt(r2)) * R / 1.5);
-          const spot = 0.9 + 0.1 * Math.sin(nx * 7.1 + ny * 3.3) * Math.sin(ny * 5.7 - nx * 2.1);   /* a few soft maria */
-          const lit = Math.max(0, Math.min(1, l * 6 + 0.5));
-          img.data[o] = 236 * spot; img.data[o + 1] = 232 * spot; img.data[o + 2] = 214 * spot; img.data[o + 3] = 255 * edge * (0.07 + 0.93 * lit);
+          const qx = nx * cr + ny * sr, qy = -(-nx * sr + ny * cr);   /* this pixel on the sky, north up */
+          const alb = moonAlbedo(qx, qy), lit = Math.max(0, Math.min(1, l * 6 + 0.5));
+          const sh = lit + (1 - lit) * 0.05;
+          const inSun = sunD != null ? Math.max(0, Math.min(1, (sunR - Math.hypot(nx - sunD, ny)) * R / 1.5)) : 0;   /* over the sun's disc: black */
+          img.data[o] = 238 * alb * sh; img.data[o + 1] = 232 * alb * sh; img.data[o + 2] = 214 * alb * (sh + (1 - lit) * 0.04); img.data[o + 3] = 255 * edge * Math.max(inSun, 0.04 + 0.96 * lit);
         }
         c.putImageData(img, 0, 0); BODIES.moon.material.map.needsUpdate = true;
       }
@@ -929,11 +964,79 @@
         const w = core.weatherOf(zoneHere()), clear = !w || w.kind === 'clear' ? 1 : Math.max(0, 1 - w.intensity / 70), D = Math.max(60, camera.far * 0.85), P = camera.position;
         const put = (sp, v, size, alpha) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; sp.position.set(P.x + v[0] / l * D, P.y + v[1] / l * D, P.z + v[2] / l * D); sp.scale.setScalar(D * size); sp.material.opacity = alpha; sp.visible = alpha > 0.01 && !CAVE.on; };
         const sUp = sv[1] / (Math.hypot(sv[0], sv[1], sv[2]) || 1), mUp = mv[1] / (Math.hypot(mv[0], mv[1], mv[2]) || 1);
-        put(BODIES.sun, sv, 0.13, Math.max(0, Math.min(1, (sUp + 0.04) / 0.06)) * clear);
-        if (Math.abs(M.phase - BODIES.mph) > 0.004) { BODIES.mph = M.phase; drawMoon(M.phase); }
-        put(BODIES.moon, mv, 0.085, Math.max(0, Math.min(1, (mUp + 0.03) / 0.06)) * clear * (0.35 + 0.65 * (1 - day)));
+        /* true sizes (2026-10-07: "the same scale as our planet is to the Earth"): each disc half a degree across, as ours are; the sun's
+           glare round it is wider (the disc itself is 0.28 of its sprite) */
+        put(BODIES.sun, sv, 0.00930 / 0.28, Math.max(0, Math.min(1, (sUp + 0.04) / 0.06)) * clear);
+        const sl = Math.hypot(sv[0], sv[1], sv[2]) || 1, ml = Math.hypot(mv[0], mv[1], mv[2]) || 1, sn = [sv[0] / sl, sv[1] / sl, sv[2] / sl], mn = [mv[0] / ml, mv[1] / ml, mv[2] / ml];
+        const cosE = Math.max(-1, Math.min(1, sn[0] * mn[0] + sn[1] * mn[1] + sn[2] * mn[2])), E = Math.acos(cosE);
+        /* which way is the sun from the moon, on the screen: the sky's path from the moon toward the sun, in the camera's frame; and
+           which way is north (up the sky) at the moon, to keep its face north up */
+        const tg = [sn[0] - mn[0] * cosE, sn[1] - mn[1] * cosE, sn[2] - mn[2] * cosE];
+        let rot = BODIES.moon.material.rotation || 0;
+        if (Math.hypot(tg[0], tg[1], tg[2]) > 1e-6) { BODIES.v3 = BODIES.v3 || new THREE.Vector3(); BODIES.v3.set(tg[0], tg[1], tg[2]).transformDirection(camera.matrixWorldInverse); rot = Math.atan2(BODIES.v3.y, BODIES.v3.x); }
+        BODIES.moon.material.rotation = rot;
+        BODIES.nv = BODIES.nv || new THREE.Vector3(); BODIES.nv.set(-mn[0] * mn[1], 1 - mn[1] * mn[1], -mn[2] * mn[1]).transformDirection(camera.matrixWorldInverse);   /* up the sky from the moon */
+        const face = rot - (Math.atan2(BODIES.nv.y, BODIES.nv.x) - Math.PI / 2);   /* the disc's +x against the sky's east-west */
+        const mR = 0.00905 / 2, near = E < 0.012, sunD = near ? E / mR : null, sunR = near ? (0.0093 / 2) / mR : 0;   /* in moon radii */
+        if (near || Math.abs(E - BODIES.mph) > 0.01 || Math.abs(face - (BODIES.face || 0)) > 0.04 || BODIES.near !== near) { BODIES.mph = E; BODIES.face = face; BODIES.near = near; drawMoon(E, face, sunD, sunR); }
+        put(BODIES.moon, mv, 0.00905 / 0.833, Math.max(0, Math.min(1, (mUp + 0.03) / 0.06)) * clear * (0.35 + 0.65 * (1 - day)));
+        /* a lunar eclipse: the moon in the planet's shadow goes dark copper */
+        BODIES.moon.material.color.setRGB(1 - 0.45 * SUNL.lunar, 1 - 0.8 * SUNL.lunar, 1 - 0.88 * SUNL.lunar);
+        BODIES.sun.renderOrder = -2; BODIES.moon.renderOrder = -1;   /* the moon passes in front of the sun */
       }
-      function starsAt(night, moonK) {
+      /* THE REAL SKY (2026-10-07: "actual constellations in the sky ... And the Milky Way"): the stars to magnitude 5.5 in their
+         true places, brightness and colour, and the Milky Way's glow, from d3-celestial (BSD-3, data/starmap.json), turned with the
+         planet: the sky module's sid sets it, so the constellations rise and set with the game's day and the sun walks the zodiac
+         through the year */
+      const SM = DATA.starmap && DATA.starmap.stars ? DATA.starmap : null;
+      function bvRGB(bv) {   /* a star's colour index to a tint: blue-white to orange */
+        const t = Math.max(-0.4, Math.min(2, bv));
+        return t < 0.4 ? [0.72 + 0.7 * (t + 0.4) * 0.35, 0.82 + 0.15 * (t + 0.4) / 0.8, 1] : [1, 1 - 0.32 * (t - 0.4) / 1.6, 1 - 0.65 * (t - 0.4) / 1.6];
+      }
+      function realSky() {
+        const grp = new THREE.Group(); grp.matrixAutoUpdate = false; grp.renderOrder = -3;
+        const dirOf = (ra, dec) => { const a = ra * Math.PI / 180, d = dec * Math.PI / 180; return [Math.cos(d) * Math.cos(a), Math.cos(d) * Math.sin(a), Math.sin(d)]; };
+        for (const [lo, hi, size] of [[-3, 2.0, isPhone ? 3.2 : 3.6], [2.0, 3.6, isPhone ? 2.2 : 2.5], [3.6, 9, isPhone ? 1.4 : 1.6]]) {
+          const L = SM.stars.filter(r => r[2] / 10 >= lo && r[2] / 10 < hi), pos = new Float32Array(L.length * 3), col = new Float32Array(L.length * 3);
+          L.forEach((r, i) => { const v = dirOf(r[0] / 10, r[1] / 10), m = r[2] / 10, b = Math.max(0.28, Math.min(1, 1.25 - 0.17 * m)), c = bvRGB(r[3] / 10); pos.set(v, i * 3); col.set([c[0] * b, c[1] * b, c[2] * b], i * 3); });
+          const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+          const pts = new THREE.Points(g, new THREE.PointsMaterial({ size, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, fog: false }));
+          pts.frustumCulled = false; pts.renderOrder = -3; grp.add(pts);
+        }
+        /* the Milky Way: its outline (five levels of brightness) painted soft onto a sky-sized sphere in the same frame */
+        let mwMesh = null;
+        if (typeof document !== 'undefined' && SM.mw && SM.mw.length) {
+          const W = 2048, H = 1024, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const c = cv.getContext('2d');
+          if ('filter' in c) c.filter = 'blur(7px)';
+          for (const [lvl, flat] of SM.mw) {
+            const pts = []; for (let i = 0; i < flat.length; i += 2) pts.push([flat[i] / 10, flat[i + 1] / 10]);
+            for (let i = 1; i < pts.length; i++) { while (pts[i][0] - pts[i - 1][0] > 180) pts[i][0] -= 360; while (pts[i][0] - pts[i - 1][0] < -180) pts[i][0] += 360; }   /* unwrapped across 0h */
+            c.fillStyle = 'rgba(205,215,255,' + (0.045 + 0.012 * lvl) + ')';
+            for (const sh of [-360, 0, 360]) { c.beginPath(); pts.forEach((p, i) => { const x = (p[0] + sh) / 360 * W, y = (1 - (p[1] + 90) / 180) * H; if (i) c.lineTo(x, y); else c.moveTo(x, y); }); c.closePath(); c.fill(); }
+          }
+          const tex = new THREE.CanvasTexture(cv); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+          const NA = 96, ND = 48, pos = [], uv = [], ind = [];
+          for (let j = 0; j <= ND; j++) for (let i = 0; i <= NA; i++) { const ra = i / NA * 360, dec = -90 + j / ND * 180; pos.push(...dirOf(ra, dec)); uv.push(i / NA, j / ND); }
+          for (let j = 0; j < ND; j++) for (let i = 0; i < NA; i++) { const a = j * (NA + 1) + i, b = a + 1, d = a + NA + 1, e = d + 1; ind.push(a, d, b, b, d, e); }
+          const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(ind);
+          mwMesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, depthWrite: false, fog: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+          mwMesh.frustumCulled = false; mwMesh.renderOrder = -4; grp.add(mwMesh);
+        }
+        scene.add(grp); return { grp, mw: mwMesh, rot: new THREE.Matrix4(), basis: new THREE.Matrix4(), sc: new THREE.Matrix4() };
+      }
+      function starsAt(night, moonK, SK, B) {
+        if (SM && SK && B) {
+          if (!STARS.real) STARS.real = realSky();
+          const R = STARS.real, w = core.weatherOf(zoneHere()), clear = (TL.n > 1 || DEMO) ? 1 : !w || w.kind === 'clear' ? 1 : Math.max(0, 1 - w.intensity / 60);
+          const o = Math.max(0, Math.min(1, (night - 0.5) / 0.4)) * (1 - 0.75 * moonK) * clear;
+          R.grp.visible = o > 0.01 && !CAVE.on; if (!R.grp.visible) return;
+          for (const ch of R.grp.children) ch.material.opacity = ch === R.mw ? o * 0.55 : o;
+          R.basis.set(B.e[0], B.e[1], B.e[2], 0, B.u[0], B.u[1], B.u[2], 0, B.s[0], B.s[1], B.s[2], 0, 0, 0, 0, 1);   /* planet frame -> this place's (east, up, south) */
+          R.rot.makeRotationZ(SK.sid); const D = Math.max(60, camera.far * 0.9);
+          R.grp.matrix.makeTranslation(camera.position.x, camera.position.y, camera.position.z).multiply(R.sc.makeScale(D, D, D)).multiply(R.basis).multiply(R.rot);
+          R.grp.matrixWorldNeedsUpdate = true;
+          return;
+        }
         if (!STARS.pts) {
           const n = 1600, pos = new Float32Array(n * 3), col = new Float32Array(n * 3); let h = 2166136261;
           const rnd = () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return ((h >>> 0) % 100000) / 100000; };
@@ -967,6 +1070,28 @@
          times faster from now, ?skyday=D starts D game days on). Only this viewer's sky moves; nothing is sent */
       const TL = { n: Math.max(1, +q.get('timelapse') || 1), t0: Date.now(), off: (+q.get('skyday') || 0) * DAY_S * 1000 };
       const skyNow = () => TL.t0 + TL.off + (Date.now() - TL.t0) * TL.n;
+      /* ?demo=eclipse (a showing for 2026-10-07; nothing else uses it): the sky jumps to a solar eclipse seen from Ashvale,
+         the camera tilts from behind you into your eyes and up to the sun while the moon crosses it, then to a total lunar eclipse
+         the same way, and round again. Only this viewer's sky and camera; nothing is sent. */
+      const DEMO = q.get('demo') === 'eclipse' ? { i: -1, t: 0, list: [   /* the days: what Ashvale (60 N since the north was turned) can see */
+        { day: 531.470, n: 6, dur: 104000, at: 'sun', zoom: 4.8, say: 'A solar eclipse over Ashvale (game day 531): the moon slides in across the sun from the side and away again.' },
+        { day: 369.050, n: 17, dur: 104000, at: 'moon', zoom: 4.8, say: 'A total lunar eclipse (game day 369): the moon passes through the planet\'s shadow and turns copper.' },
+        { day: 530.105, n: 4, dur: 42000, at: 'sun', zoom: 9.5, say: 'Sunset (game day 530).' },
+        { day: 372.052, n: 4, dur: 42000, at: 'moon', zoom: 9.5, say: 'Moonrise (game day 372), just past full.' }] } : null;
+      function demoTick(now) {
+        if (!DEMO || !SUNL.sv) return;
+        const cur = DEMO.list[DEMO.i];
+        if (DEMO.i < 0 || now - DEMO.t > (cur ? cur.dur || 36000 : 0)) {
+          DEMO.i = (DEMO.i + 1) % DEMO.list.length; DEMO.t = now; const L = DEMO.list[DEMO.i];
+          TL.t0 = Date.now(); TL.off = (SUN_EPOCH + L.day * DAY_S) * 1000 - TL.t0; TL.n = L.n; SEASON.key = ''; SEASON.t = 0; hud.chat(L.say, 'sys');
+          if (core.setWeather) coreCall(() => core.setWeather(zoneHere(), 'clear', 0, 100000));
+          return;
+        }
+        const v = cur.at === 'sun' ? SUNL.sv : SUNL.mv, l = Math.hypot(v[0], v[1], v[2]) || 1, el = Math.asin(Math.max(-1, Math.min(1, v[1] / l))), yaw = Math.atan2(-v[0], -v[2]);
+        const k = Math.min(1, (now - DEMO.t) / 9000), want = 0.1 - Math.max(0.05, el) / 1.07;   /* behind you, then up into your eyes, then up to it */
+        const z = Math.min(1, Math.max(0, (now - DEMO.t - 9000) / 4000));
+        cam.tyaw = cam.yaw = yaw; cam.tdist = cam.dist = 11 - (11 - (cur.zoom || 4.8)) * z * z * (3 - 2 * z); cam.tpitch = cam.pitch = 0.6 + (want - 0.6) * (k * k * (3 - 2 * k));   /* then the binoculars: zoom in on it */
+      }
       /* a fast time-lapse (N of 2000 and up) holds the sun at noon where you stand, so the seasons run without day and night strobing */
       TL.noon = null;
       function sunTime(B) {
@@ -978,12 +1103,11 @@
       function seasonTick(B) {
         if (!SEASONS) return;
         const real = Date.now(); if (real - SEASON.t < (TL.n > 1 ? 250 : 3000)) return; SEASON.t = real; const now = skyNow();
-        const lat = Math.asin(Math.max(-1, Math.min(1, B.u[2]))) * 180 / Math.PI, S = SEASONS.at(lat, now);
+        const lat = NS * Math.asin(Math.max(-1, Math.min(1, B.u[2]))) * 180 / Math.PI, S = SEASONS.at(lat, now);
         const key = [S.name, S.day, Math.round(S.leaf.bud * 20), Math.round(S.leaf.grow * 20), Math.round(S.leaf.colourT * 20), Math.round(S.leaf.springT * 10), Math.round(S.snow * 20), S.frozen].join(':');   /* every game day: in the leaf fall each tree has its own day */
         if (key !== SEASON.key) { SEASON.key = key; const ta = performance.now(); if (SCENE.seasonApply) SCENE.seasonApply(S, SEASONS); SEASON.applyMs = performance.now() - ta; SEASON.applies = (SEASON.applies || 0) + 1; SEASON.snowy = S.name === 'winter' && S.snow > 0.3;   /* it snows only in winter (2026-10-07: "It shouldn't be snowing in the spring time") */ wxShown = ''; if (core.setSeason) core.setSeason({ snowy: SEASON.snowy, rice: !!S.rice, riceLate: S.p > 0.551 && S.p < 0.95 }); showWeather(); }
         if (S.name !== SEASON.name) { if (SEASON.name) { const C = SEASONS.calendar(now); hud.chat(S.name.charAt(0).toUpperCase() + S.name.slice(1) + ' has come: year ' + C.year + ', day ' + C.day + '.', 'sys'); } SEASON.name = S.name; }
         /* a time-lapse runs the weather fast too: every few seconds each region this viewer hosts rolls again (for its season) */
-        if (TL.n > 1 && core.S && core.S.weather && real - (SEASON.wx || 0) > 4000) { SEASON.wx = real; for (const z in core.S.weather) { const w = core.S.weather[z]; if (w) w.until = Math.min(w.until, core.S.t); } }
         if (core.M.setIce && real - SEASON.ice > (TL.n > 1 ? 2000 : 60000)) { SEASON.ice = real; core.M.setIce(la => SEASONS.at(la, skyNow()).frozen); }
       }
       function dayTick() {
@@ -991,18 +1115,35 @@
         if (key !== SUNL.key) { const a = sphereAt(me.x, me.y); SUNL.key = key; SUNL.b = a ? { u: nrm3(a[0]), e: nrm3(sub3(a[1], a[0])), s: nrm3(sub3(a[2], a[0])) } : null; }   /* up, game east (+x), game south (+y) */
         const B = SUNL.b; if (!B) return;
         seasonTick(B);
-        const now = sunTime(B), s = sunAt(now), up = dot3(s, B.u), ex = dot3(s, B.e), so = dot3(s, B.s);
-        const day = Math.min(1, Math.max(0, (up + 0.08) / 0.2)), dusk = Math.max(0, 1 - Math.abs(up) / 0.18);   /* 1 by day, 0 by night; dusk near the horizon */
+        demoTick(performance.now());
+        const now = sunTime(B);
+        /* the sun and the moon from the sky module (true sizes and distances, eclipses); without it the old rule */
+        const SK = SKYM ? (SUNL.lonA == null && sunAt(now), SKYM.at(now, SUNL.lonA)) : null;
+        const s = SK ? SK.sun : sunAt(now), up = dot3(s, B.u), ex = dot3(s, B.e), so = dot3(s, B.s);
+        /* a solar eclipse where you stand: the moon covers that much of the sun, and the day goes that much dark (2026-10-07) */
+        const ecl = SK ? SKYM.solarCover(SK, B.u) : 0; SUNL.eclipse = ecl; SUNL.lunar = SK && SK.lunar ? SK.lunar.umbra : 0;
+        const day = Math.min(1, Math.max(0, (up + 0.08) / 0.2)) * (1 - 0.96 * ecl * ecl), dusk = Math.max(0, 1 - Math.abs(up) / 0.18);   /* 1 by day, 0 by night; dusk near the horizon */
         /* the moon follows the real cycle and adds light when it is up. A moonless night is starlight (2026-10-07: "add stars
            to moonless [nights] so that it is at least navigable, but just barely"): a sky full of stars, and only just enough
            light to make out the ground */
-        const M = moonAt(now, s), mup = dot3(M.v, B.u), moonK = M.lit * Math.min(1, Math.max(0, (mup + 0.03) / 0.15));
+        const M = SK ? { v: SKYM.moonFrom(SK, B.u), lit: (1 - Math.cos(SK.elong)) / 2, phase: SK.phase } : moonAt(now, s), mup = dot3(M.v, B.u), moonK = M.lit * Math.min(1, Math.max(0, (mup + 0.03) / 0.15)) * (1 - 0.85 * SUNL.lunar);   /* in the planet's shadow the moon gives little light */
         const lit = up > -0.02, d = lit ? [ex, Math.max(up, 0.06), so] : [dot3(M.v, B.e), Math.max(mup, 0.2), dot3(M.v, B.s)];
         const l = Math.hypot(d[0], d[1], d[2]); SUNL.dir = [d[0] / l, d[1] / l, d[2] / l];
         sun.intensity = lit ? 0.5 + 1.8 * day : 0.04 + 0.22 * moonK; sun.color.copy(lit ? SUNC : MOONC); if (lit && dusk > 0) sun.color.lerp(DUSKC, dusk * 0.8);
         hemi.intensity = 1.7 * day + (0.08 + 0.13 * moonK) * (1 - day); SUNL.dark = 1 - day;
-        starsAt(1 - day, moonK);
-        skyBodies([ex, up, so], [dot3(M.v, B.e), mup, dot3(M.v, B.s)], day, M);
+        SUNL.sv = [ex, up, so]; SUNL.mv = [dot3(M.v, B.e), mup, dot3(M.v, B.s)];
+        const nightK = Math.max(1 - day, ecl > 0.9 ? (ecl - 0.9) * 10 : 0);
+        if (!SKYV.v && SKYV.v !== false) { try { const SVM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('skyview'); SKYV.v = SVM && SVM.createSkyView && SK ? SVM.createSkyView(THREE, { starmap: SM, phone: isPhone }) : false; } catch (er) { console.warn('skyview', er && er.message); SKYV.v = false; } }
+        if (SKYV.v && SK) {   /* the sky as its own little 3D scene (src/skyview.js): the sun, the moon lit by it, the stars */
+          const w = core.weatherOf(zoneHere()), clear = (TL.n > 1 || DEMO) ? 1 : !w || w.kind === 'clear' ? 1 : Math.max(0, 1 - w.intensity / 60);
+          SKYV.basis.set(B.e[0], B.e[1], B.e[2], 0, B.u[0], B.u[1], B.u[2], 0, B.s[0], B.s[1], B.s[2], 0, 0, 0, 0, 1); SKYV.rot.makeRotationZ(SK.sid); SKYV.m.copy(SKYV.basis).multiply(SKYV.flipM.makeScale(1, NS, NS)).multiply(SKYV.rot);
+          const PLN = SKYM.planets ? SKYM.planets(now, SUNL.lonA).map(P => ({ name: P.name, mag: P.mag, color: P.color, dir: [dot3(P.dir, B.e), dot3(P.dir, B.u), dot3(P.dir, B.s)] })) : null; SKYV.pl = PLN;
+          SKYV.v.update({ planets: PLN, bg: scene.background && scene.background.isColor ? scene.background : null, sun: SUNL.sv, moon: SUNL.mv, north: [NS * B.e[2], NS * B.u[2], NS * B.s[2]], starsM: SKYV.m, night: nightK, moonK, cover: ecl, lunar: SUNL.lunar, clear, under: CAVE.on });
+          if (BODIES.sun) { BODIES.sun.visible = BODIES.moon.visible = false; } if (STARS.real) STARS.real.grp.visible = false; if (STARS.pts) STARS.pts.visible = false;
+        } else {
+          starsAt(nightK, moonK, SK, B);
+          skyBodies(SUNL.sv, SUNL.mv, day, M);
+        }
         if (SCENE.lampGlow) SCENE.lampGlow((SUNL.dark - 0.3) / 0.4);   /* glass warms with the dark; each lamp still waits for its guard */
         if (core.watchPhase) { const night = SUNL.dark >= 0.5; if (SUNL.phase == null) { SUNL.phase = night; core.watchPhase(night, true); } else if (SUNL.phase !== night) { SUNL.phase = night; core.watchPhase(night, false); } }
         /* the sky: the weather's colour (the weather module repaints it every frame), toward dusk orange and the night's blue
@@ -1034,6 +1175,7 @@
       /* what falls where you stand keeps your season, whatever the region's roll was (a region can span latitudes): in a
          snowy winter rain and fog come down as snow; anywhere else snow comes down as rain */
       function seasonal(w) {
+        if (TL.n > 1 || DEMO) return { kind: 'clear', intensity: 0 };   /* no weather in a time-lapse or a showing (2026-10-07) */
         if (SEASON.snowy == null || !w) return w;
         if (SEASON.snowy && (w.kind === 'rain' || w.kind === 'fog')) return Object.assign({}, w, { kind: 'snow' });
         if (!SEASON.snowy && w.kind === 'snow') return Object.assign({}, w, { kind: 'rain' });
@@ -1123,7 +1265,8 @@
         if (t.H.setTint) t.H.setTint(tc ? tc[0] : null, tc ? tc[1] : 0);
         if (t.H.setFrozen) t.H.setFrozen(!!(t.fx && (t.fx.freeze || t.fx.stun)));
       }
-      function faceNpc(id) { const n = ents.get('n:' + id); if (n) { n.tyaw = Math.atan2(myEnt.to.x - n.to.x, myEnt.to.z - n.to.z); n.facing = 1; } }
+      function faceNpc(id) { const nd = NPCN[id]; if (nd && nd.still) return;   /* a wreck or a body does not turn to look at you (2026-10-07) */
+        const n = ents.get('n:' + id); if (n) { n.tyaw = Math.atan2(myEnt.to.x - n.to.x, myEnt.to.z - n.to.z); n.facing = 1; } }
       function npcsTurnBack() { for (const n of core.M.npcs) { const e = ents.get('n:' + n.id); if (e && e.facing && e.homeYaw != null && !n.patrol && !n.guard && Math.max(Math.abs(n.x - me.x), Math.abs(n.y - me.y)) > 6) { e.facing = 0; e.tyaw = e.homeYaw; } } }   /* back to their own spot once you walk off */
       let insideRoof = false;
       /* the floor bar (the operator: "hard to find how to get back down"): while you are in a building with storeys, which floor
@@ -1226,13 +1369,15 @@
       }
 
       /* ---------- camera (RuneScape-style orbit) */
+      const FPV = { v: new THREE.Vector3(), t: new THREE.Vector3(), fw: new THREE.Vector3(), hid: false };
       const cam = { yaw: PI * 0.12, pitch: 0.92, dist: isPhone ? 9 : 11, tyaw: PI * 0.12, tpitch: 0.92, tdist: isPhone ? 9 : 11, snap: true, keys: {} };
       { const cy = +q.get('camyaw'), cp = +q.get('campitch'); if (q.has('camyaw') && isFinite(cy)) cam.yaw = cam.tyaw = cy; if (q.has('campitch') && isFinite(cp)) cam.pitch = cam.tpitch = cp; }   /* a playtest or time-lapse can set the view */
       const camT = new THREE.Vector3();
       function updateCamera(dt) {
         const k = cam.keys;
         if (k.ArrowLeft) cam.tyaw -= 2.2 * dt; if (k.ArrowRight) cam.tyaw += 2.2 * dt; if (k.ArrowUp) cam.tpitch += 1.2 * dt; if (k.ArrowDown) cam.tpitch -= 1.2 * dt;
-        cam.tpitch = Math.max(myEnt.hawk ? 0.72 : 0.3, Math.min(1.42, cam.tpitch)); cam.tdist = Math.max(4.5, Math.min(myEnt.hawk ? 48 : 24, cam.tdist));   /* zoom vision while a hawk: twice as far out, looking down so the view stays on loaded land */
+        const hawkEye = !!myEnt.hawk && !((me.burden || 0) > 0);   /* flying or perched: the hawk's own eyes (2026-10-07); grounded under a load: behind it as usual */
+        cam.tpitch = Math.max(hawkEye || !myEnt.hawk ? -1.3 : 0.3, Math.min(1.42, cam.tpitch)); cam.tdist = Math.max(4.5, Math.min(hawkEye ? 11 : 24, cam.tdist));   /* below 0.3 a walker's camera goes into the eyes and looks up; zoom by distance */
         const s = cam.snap ? 1 : Math.min(1, dt * 10);
         cam.yaw += (cam.tyaw - cam.yaw) * s; cam.pitch += (cam.tpitch - cam.pitch) * s; cam.dist += (cam.tdist - cam.dist) * s;
         const p = myEnt.root.position; const tg = new THREE.Vector3(p.x, p.y + 1.0, p.z);
@@ -1242,9 +1387,41 @@
         }
         if (cam.snap) camT.copy(tg); else camT.lerp(tg, Math.min(1, dt * 12));
         cam.snap = false;
-        camera.position.set(camT.x + Math.sin(cam.yaw) * Math.cos(cam.pitch) * cam.dist, camT.y + Math.sin(cam.pitch) * cam.dist, camT.z + Math.cos(cam.yaw) * Math.cos(cam.pitch) * cam.dist);
+        const cp = Math.max(0.3, cam.pitch);
+        camera.position.set(camT.x + Math.sin(cam.yaw) * Math.cos(cp) * cam.dist, camT.y + Math.sin(cp) * cam.dist, camT.z + Math.cos(cam.yaw) * Math.cos(cp) * cam.dist);
         const gy = heightAt(camera.position.x, camera.position.z) + 0.6; if (camera.position.y < gy) camera.position.y = gy;
-        camera.lookAt(camT);
+        /* LOOK UP AT THE SKY (2026-10-07: "look up past the point where it is currently limited to slide the camera into first person
+           view"): tilting on past the lowest view slides the camera forward into your character's eyes, and from there you look up -
+           to the sun, the moon, the stars, straight overhead. Tilt back down and it slides out again. */
+        const hawkFP = !!myEnt.hawk && !((me.burden || 0) > 0) && cam.mode !== 'creator';
+        const fp = cam.mode === 'creator' || (myEnt.hawk && !hawkFP) ? 0 : hawkFP ? 1 : Math.min(1, Math.max(0, (0.3 - cam.pitch) / 0.2)), fpEl = hawkFP ? Math.max(-1.45, Math.min(1.5, (0.1 - cam.pitch) * 1.07)) : Math.min(1.5, Math.max(0, 0.1 - cam.pitch) * 1.07);   /* the hawk looks down at the ground as well as up */
+        /* looking up, the zoom is a pair of binoculars: the view narrows down to a few degrees, and the sun and the moon (half a degree
+           each, as ours) fill it */
+        if (FPV.fov0 == null) FPV.fov0 = camera.fov;
+        const fovW = fp > 0 ? FPV.fov0 + (FPV.fov0 * Math.max(0.25, Math.min(1, (cam.dist - 4.5) / 6.5)) - FPV.fov0) * fp : FPV.fov0;
+        if (Math.abs(camera.fov - fovW) > 0.01) { camera.fov = fovW; camera.updateProjectionMatrix(); }
+        /* FOLLOW WHAT YOU ZOOMED IN ON (2026-10-07): looking up and zoomed in, the sun, the moon or a planet near the middle of the view
+           is followed across the sky - the view turns with it - until you drag the view away */
+        if (fp > 0.95 && cam.dist < 8 && !ptrs.size && !(cam.keys.ArrowLeft || cam.keys.ArrowRight || cam.keys.ArrowUp || cam.keys.ArrowDown)) {
+          const fw = FPV.fw.set(0, 0, -1).applyQuaternion(camera.quaternion), lim = Math.max(0.05, camera.fov * Math.PI / 180 * 0.35);
+          let best = null, bd = lim;
+          for (const v of [SUNL.sv, SUNL.mv].concat((SKYV.pl || []).map(P => P.dir))) {
+            if (!v) continue; const l = Math.hypot(v[0], v[1], v[2]) || 1, a = Math.acos(Math.max(-1, Math.min(1, (v[0] * fw.x + v[1] * fw.y + v[2] * fw.z) / l)));
+            if (a < bd && v[1] / l > -0.02) { bd = a; best = [v[0] / l, v[1] / l, v[2] / l]; }
+          }
+          if (best) { const el = Math.asin(best[1]); cam.tyaw = Math.atan2(-best[0], -best[2]) + Math.round((cam.tyaw - Math.atan2(-best[0], -best[2])) / (2 * PI)) * 2 * PI; cam.tpitch = 0.1 - Math.max(0, el) / 1.07; }
+        }
+        if (fp > 0) {
+          const ex = p.x, ey = p.y + (hawkFP ? 0.3 : 1.62), ez = p.z, fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw);
+          camera.position.lerp(FPV.v.set(ex - fx * 0.05, ey, ez - fz * 0.05), fp);
+          FPV.t.set(ex + fx * Math.cos(fpEl) * 10, ey + Math.sin(fpEl) * 10, ez + fz * Math.cos(fpEl) * 10);
+          camera.lookAt(FPV.t.lerp(camT, 1 - fp));
+        } else camera.lookAt(camT);
+        /* LOOKING AROUND IN FIRST PERSON (2026-10-07): your character turns the way you look, and its head tilts up (or down) to where
+           you are looking - others see it (the state's f and hl) */
+        if (fp > 0.5 && !myEnt.hawk) { myEnt.tyaw = cam.yaw + PI; myEnt.hl = fpEl; } else myEnt.hl = 0;
+        if (fp > 0.85 && myEnt.root.visible) { myEnt.root.visible = false; FPV.hid = true; }   /* your own head would fill the view */
+        else if (fp <= 0.85 && FPV.hid) { myEnt.root.visible = true; FPV.hid = false; }
         sun.position.set(camT.x + SUNL.dir[0] * 20, camT.y + SUNL.dir[1] * 20, camT.z + SUNL.dir[2] * 20); sun.target.position.copy(camT);   /* from the real sun (or the moon) */
       }
 
@@ -1954,6 +2131,27 @@
         const pk = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.9, 4.4), proxyMat); pk.position.copy(c.position); pk.rotation.y = c.rotation.y; pk.userData.pick = { kind: 'canoe', x, y }; scene.add(pk); proxies.push(pk);
         BOATM.set(k, { c, pk });
       }
+      /* the landing's canoe: not there while you sit in it, nor while three or more are left at the banks nearby (core.dockFull) */
+      /* THE NEXT ECLIPSES, as the people round Ziibiing's fire tell them (2026-10-07): the next eclipse of the sun and of the moon
+         that can be seen from where you stand (the sun or the moon up then), worked out from the sky module once a game day */
+      const SKYT = { day: -1, text: null };
+      function skyTell() {
+        if (!SKYM || !SUNL.b) return null;
+        const now = sunTime(SUNL.b), day = Math.floor((now / 1000 - SUN_EPOCH) / DAY_S); if (day === SKYT.day && SKYT.text) return SKYT.text;
+        const up = SUNL.b.u, d3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; let sol = null, lun = null;
+        for (const e of SKYM.next(now, SUNL.lonA, 365 * 8)) {
+          if (e.kind === 'solar' && !sol) { for (let t = e.t - DAY_S * 600; t <= e.t + DAY_S * 600 && !sol; t += 20000) { const st = SKYM.at(t, SUNL.lonA); if (d3(st.sun, up) > 0.03 && SKYM.solarCover(st, up) > 0.05) sol = t; } }
+          if (e.kind === 'lunar' && !lun && (e.umbra || 0) > 0) { const st = SKYM.at(e.t, SUNL.lonA); if (d3(st.moon, up) > 0.03) lun = e.t; }
+          if (sol && lun) break;
+        }
+        const when = t => { const d = (t / 1000 - SUN_EPOCH) / DAY_S, y = Math.floor(d / 365) + 1, dd = Math.floor(d % 365) + 1, gd = Math.max(0, Math.round((t - now) / 1000 / DAY_S)), rh = (t - now) / TL.n / 3600000;
+          return 'on day ' + dd + ' of year ' + y + ', ' + (gd ? gd + ' days from now' : 'this very day') + ' (' + (rh < 48 ? Math.max(1, Math.round(rh)) + ' hours' : Math.round(rh / 24) + ' days') + ' as you count them)'; };
+        SKYT.day = day;
+        SKYT.text = 'And watch the sky. ' + (sol ? 'Giizis, the sun, will be eaten by the moon ' + when(sol) + '. ' : 'The sun will not be eaten here for many winters. ') + (lun ? 'Dibik-giizis, the night sun, the moon, will turn red ' + when(lun) + '.' : 'The moon will not turn red here for many winters.');
+        return SKYT.text;
+      }
+      if (core.setSkyTell) core.setSkyTell(() => skyTell());
+      function docksShow() { if (!SCENE.docks) return; const mb = core.S.players[PID] && core.S.players[PID].boat; for (const c of SCENE.docks()) c.visible = !mb && !(core.dockFull && c.userData.dock && core.dockFull(c.userData.dock[0], c.userData.dock[1])); }
       function boatHide(x, y) { const k = x + ',' + y, b = BOATM.get(k); if (!b) return; scene.remove(b.c); scene.remove(b.pk); const i = proxies.indexOf(b.pk); if (i >= 0) proxies.splice(i, 1); BOATM.delete(k); }
       function boatTell(o) { bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send(o); }); setTimeout(() => boatsAsk(true), 3000); }
       let boatsT = 0; const boatsGot = {};
@@ -2000,7 +2198,9 @@
           R.on('closed', () => { if (bank.room === R) bank.room = null; });
           R.on('message', ({ from, data }) => {
             const bankFrom = from && (from.address === DATA.assets.issuer || from.address === YOURFIRST_ADDR || from.tag === 'yourfirstname');
-            if (data && data.t === 'boats' && bankFrom && R.me && data.to === R.me.address) { boatsHeard(data); return; }   /* canoes left at the bank near me */
+            if (data && data.t === 'boats' && bankFrom && R.me && data.to === R.me.address) { boatsHeard(data); return; }
+            if (data && data.t === 'svok' && bankFrom && R.me && data.to === R.me.address) { CLOUD.base = +data.id; return; }   /* the Bank took our save: the next continues it */
+            if (data && data.t === 'svx' && bankFrom && R.me && data.to === R.me.address) { console.info('ASHVALE: another device has played since this game loaded: stopping'); evicted(); return; }   /* canoes left at the bank near me */
             if (data && data.t === 'felled' && bankFrom && R.me && data.to === R.me.address) { core.setFelled(data.cells || []); return; }   /* trees others felled */
             if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }   /* persisted drops near me */
             if (!data || data.t !== 'dep' || !bankFrom || !R.me || data.to !== R.me.address) return;   /* only @ashvale or @yourfirstname answers, only to me */
@@ -2119,6 +2319,7 @@
       function stateMsg(now) {
         const p = myEnt.root.position;
         const m = { s: Math.round(now), p: [Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100], f: Math.round(myEnt.yaw * 100) / 100, a: myEnt.oneShot ? myEnt.lastOne || 'idle' : myEnt.loco || 'idle', j: myJoin, hp: me.hp, d: me.dead ? 1 : 0, k: myEnt.toolId || 0 };
+        if (myEnt.hl) m.hl = Math.round(myEnt.hl * 100) / 100;   /* where your head is looking, up or down (first person) */
         if (me.boat) { m.bt = me.boat; if (me.boat === 2) m.rd = me.ride; }   /* in a canoe: 1 poling it, 2 riding in someone's bow (rd: whose) */
         const oh = core.overhead(me) || 0; if (oh || lastPr) { m.pr = oh; lastPr = oh; }   /* the overhead prayer, so hosts' monsters respect it and others see it */
         const cz = combatZone(); if (cz) m.c = cz;   /* the area I am fighting in, when it is not the one I stand in */
@@ -2143,7 +2344,7 @@
         if (d.g && typeof d.g === 'object' && sameSet(d.g, r.e.H.gear) === false) r.e.H.setGear(d.g);
         if (d.g && typeof d.g === 'object') hawkify(r.e, d.g.ring);   /* another player's hawk ring */
         if (d.o && typeof d.o === 'object' && r.e.H.setOutfit && sameSet(d.o, r.e.H.outfit || {}) === false) r.e.H.setOutfit(d.o);
-        if (Array.isArray(d.p) && typeof d.a === 'string') { r.boat = d.bt | 0; r.ride = d.rd || null; }
+        if (Array.isArray(d.p) && typeof d.a === 'string') { r.boat = d.bt | 0; r.ride = d.rd || null; r.hl = isFinite(+d.hl) ? Math.max(-1.5, Math.min(1.5, +d.hl)) : 0; }
         if ('k' in d) { const tl = typeof d.k === 'string' && /^[a-z0-9_]{1,24}$/.test(d.k) ? d.k : null; if (tl !== r.tool) { r.tool = tl; r.e.H.setTool && r.e.H.setTool(tl); } }
         if (d.T != null) r.total = Math.max(0, Math.min(9999, d.T | 0));
         if (d.n || d.T != null) { if (d.n) r.name = cleanName(d.n); if (r.e.tag) setTag(r.e.tag, r.name, from, r.total); }
@@ -2387,6 +2588,7 @@
           r.e.yaw += (((r.e.tyaw - r.e.yaw + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI) * Math.min(1, dt * 10); r.e.root.rotation.y = r.e.yaw;
           if (r.boat === 2) { const T = r.ride === myNetId ? myEnt : (remotes.get(r.ride) || {}).e; if (T) { bowSeat(r.e, T, r.anim === 'knock'); } }
           r.e.H.update(dt); if (r.e.hawk) r.e.hawk.update(dt);
+          headLook(r.e, r.hl || 0, dt);
         }
       }
 
@@ -2426,6 +2628,7 @@
           if (e.dead && e.key.charAt(0) === 'm') { const k = (now - e.deadT) / 1000; if (k > 1.3 && k < 2.2 && e.H.setOpacity) e.H.setOpacity(Math.max(0, 1 - (k - 1.3) / 0.8)); if (k >= 2.2) e.root.visible = false; }
           if (e.spawnT) { const k = Math.min(1, (now - e.spawnT) / 400); e.H.object.scale.setScalar(e.scale * (0.3 + 0.7 * k)); if (k >= 1) e.spawnT = 0; }
           if (e.root.visible) { e.H.update(dt); if (e.hawk) e.hawk.update(dt); }
+          if (e === myEnt) headLook(e, myEnt.hl || 0, dt);
         }
         for (const g of fires.values()) { const u = g.userData, sc = 0.8 + 0.25 * Math.sin(now / 70 + u.ph) + 0.1 * Math.sin(now / 23 + u.ph); u.f1.scale.set(1, sc, 1); u.f2.scale.set(1, 1.1 * sc, 1); }
         if (wxMod && wxMod.update && !CAVE.on) wxMod.update(elapsed);
@@ -2498,7 +2701,14 @@
         scene.fog.near = fn0 * fk + back; scene.fog.far = ff0 * fk + back;
         { const cf = Math.max(90, scene.fog.far + 8); if (Math.abs(camera.far - cf) > 2) { camera.far = cf; camera.updateProjectionMatrix(); } }
         lightBudget();
-        if (!((TRAVEL.on || travelling) && !TRAVEL.warm)) renderer.render(scene, camera);   /* behind a loading screen nothing is drawn: the frame time goes to building the place you are going to */
+        if (!((TRAVEL.on || travelling) && !TRAVEL.warm)) {
+          const bg = scene.background;
+          if (SKYV.v && !CAVE.on && SKYV.v.render(renderer, camera, bg)) {   /* the sky first, then the world over it without clearing */
+            renderer.autoClear = false; renderer.clearDepth(); scene.background = null;
+            renderer.render(scene, camera);
+            scene.background = bg; renderer.autoClear = true;
+          } else renderer.render(scene, camera);
+        }   /* behind a loading screen nothing is drawn: the frame time goes to building the place you are going to */
         scene.fog.near = fn0; scene.fog.far = ff0;
       }
       const arrivedProjs = [];
@@ -2525,7 +2735,7 @@
         const WG = D.wg, C = DATA.globecfg; if (!WG || !WG.toSphere || !C || !C.origin) return TN.v;
         const key = (x >> 4) + ':' + (y >> 4); if (key === TN.key) return TN.v; TN.key = key;
         const fx = x + C.origin[0] + 0.5, fy = -(y + C.origin[1]) - 0.5, u = WG.toSphere(C.face, fx, fy), un = WG.toSphere(C.face, fx, fy + 1), ue = WG.toSphere(C.face, fx + 1, fy);
-        const d = [un[0] - u[0], un[1] - u[1], un[2] - u[2]], e = [ue[0] - u[0], ue[1] - u[1], ue[2] - u[2]], N = [-u[0] * u[2], -u[1] * u[2], 1 - u[2] * u[2]];
+        const d = [un[0] - u[0], un[1] - u[1], un[2] - u[2]], e = [ue[0] - u[0], ue[1] - u[1], ue[2] - u[2]], N = [-NS * u[0] * u[2], -NS * u[1] * u[2], NS * (1 - u[2] * u[2])];   /* toward the world's north */
         const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], dd = dot(d, d), de = dot(d, e), ee = dot(e, e), nd = dot(N, d), ne = dot(N, e), det = dd * ee - de * de;
         if (!(Math.abs(det) > 0)) return TN.v;
         const a = (nd * ee - ne * de) / det, b = (dd * ne - de * nd) / det, gx = b, gy = -a, l = Math.hypot(gx, gy) || 1;   /* N = a*(game north) + b*(game east) */
@@ -2564,21 +2774,21 @@
       }
       setTimeout(() => { reportBook().catch(() => {}); setInterval(() => reportBook().catch(() => {}), 600000); }, 15000);
       /* the save to the Bank (cloudLoad above): only when it changed, at most every 20 s, at once when you leave */
-      const CLOUD = { last: null, at: (save && save.at) || 0, sent: '', t: 0 };
+      const CLOUD = { last: null, at: (save && save.at) || 0, sent: '', t: 0, base: save && save.base != null ? +save.base : null };   /* base: the Bank's save this game continues */
       function cloudPush(json, now) {
         if (!G.arcade || !CLOUD_OK || !json || json === CLOUD.sent || (!now && performance.now() - CLOUD.t < 20000)) return;
         CLOUD.t = performance.now(); const at = CLOUD.at;
         packSave(json).then(b => bankRoom().then(R => {
           if (!R) return; const n = Math.max(1, Math.ceil(b.length / CHUNK));
           if (n > 40) { console.warn('ASHVALE: the save is too big for the Bank (' + b.length + ' B)'); return; }
-          CLOUD.sent = json; for (let i = 0; i < n; i++) R.send({ t: 'sv', id: at, i, n, d: b.slice(i * CHUNK, (i + 1) * CHUNK) });
+          CLOUD.sent = json; for (let i = 0; i < n; i++) R.send(Object.assign({ t: 'sv', id: at, i, n, d: b.slice(i * CHUNK, (i + 1) * CHUNK) }, CLOUD.base != null ? { base: CLOUD.base } : {}));
         })).catch(e => console.warn('ASHVALE: cloud save', e && e.message));
       }
       function persist(leaving) {
         if (stopped) return;
         try { tellHere(leaving === true); } catch (e) { /* the Bank is out of reach: the next save */ }
         const P = core.exportPlayer(PID); if (P && ledger) P.chestLedger = ledgerSnap();   /* the chest ledger saves with the bag it describes */
-        const json = JSON.stringify(P); if (json !== CLOUD.last) { CLOUD.at = Date.now(); CLOUD.last = json; } if (P) P.at = CLOUD.at;
+        const json = JSON.stringify(P); if (json !== CLOUD.last) { CLOUD.at = Date.now(); CLOUD.last = json; } if (P) { P.at = CLOUD.at; if (CLOUD.base != null) P.base = CLOUD.base; }
         cloudPush(json, leaving === true);
         Promise.resolve(store.set(SAVE, JSON.stringify(P))).then(ok => {   /* false: the arcade did not take it */
           if (ok === false) { if (++saveFails === 2) hud.netLost && hud.netLost(true, 'save'); }
@@ -2602,7 +2812,7 @@
           toggle: k => { settings[k] = !settings[k]; store.set(SET, JSON.stringify(settings)); if (k === 'shadows') { sun.castShadow = settings.shadows; for (const e of ents.values()) e.blob.visible = !settings.shadows && !e.hawk; renderer.shadowMap.needsUpdate = true; scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); } },
           resetCamera: () => { cam.tyaw = PI * 0.12; cam.tpitch = 0.92; cam.tdist = isPhone ? 9 : 11; },
           faceNorth: () => { const v = trueNorth(me.x, me.y), want = -PI / 2 - Math.atan2(v[1], v[0]); cam.tyaw = want + Math.round((cam.tyaw - want) / (2 * PI)) * 2 * PI; },   /* true north up, the short way round */
-          newGame: () => { stopped = true; const at = Date.now(); (CLOUD_OK ? bankRoom() : Promise.resolve(null)).then(R => R && R.send({ t: 'sv', id: at, i: 0, n: 1, d: '' })).catch(() => {}).then(() => store.set(SAVE, '')).then(() => location.reload(), () => location.reload()); },   /* the Bank's copy goes too: an empty save, newer than any */
+          newGame: () => { stopped = true; const at = Date.now(); (CLOUD_OK ? bankRoom() : Promise.resolve(null)).then(R => R && R.send(Object.assign({ t: 'sv', id: at, i: 0, n: 1, d: '' }, CLOUD.base != null ? { base: CLOUD.base } : {}))).catch(() => {}).then(() => store.set(SAVE, '')).then(() => location.reload(), () => location.reload()); },   /* the Bank's copy goes too: an empty save, newer than any */
           helpSeen: () => store.set('ashvale3d.help', '1'),
           savesHere: () => store.backend,
           modulesText: () => 'Players: ' + netStatus + '. Saves: ' + ({ arcade: 'on the arcade', browser: 'in this browser', memory: 'not saved (this session only)' }[store.backend] || store.backend) + '. Modules: ' + (opts.report || []).map(r => r[0] + ' v' + r[1]).join(', '),
@@ -2649,6 +2859,7 @@
         tap: tapAt, menuAt, targetsAt, pad: () => PAD && PAD.state(), fps: () => frames, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries }), setCam(y, p, d) { if (y != null) cam.tyaw = cam.yaw = y; if (p != null) cam.tpitch = cam.pitch = p; if (d != null) cam.tdist = cam.dist = d; },
         net: () => ({ host: hostOf(zoneHere()), amHost: !!room && hostOf(zoneHere()) === myNetId, hosts: Object.fromEntries(hosts), hosted: Array.from(hosted), area: zoneHere(), region: roomZone, myId: myNetId, ids: Array.from(remotes.keys()), room: room && room.id, me: room && room.me, neighbours: nb ? nb.rooms().map(R => R.id) : [], viewers: Array.from(remotes).filter(e => e[1].viewOnly).map(e => e[0]), status: netStatus, stats: Object.assign({ perSec: +(netStats.sent / Math.max(1, (performance.now() - netStats.t0) / 1000)).toFixed(2) }, netStats, { times: undefined }), gear: Array.from(remotes.values()).map(r => [r.name, r.e.H.gear || null]), remotes: Array.from(remotes.keys()), names: Array.from(remotes.values()).map(r => r.e.tag && r.e.tag.textContent) }),
         weather: (kind, intensity, ticks) => coreCall(() => core.setWeather(zoneHere(), kind, intensity == null ? 80 : intensity, ticks || 500)),
+        skyDirs: () => ({ north: trueNorth(me.x, me.y), season: SEASON.name, sun: SUNL.sv, moon: SUNL.mv, info: { eclipse: +(SUNL.eclipse || 0).toFixed(3), lunar: +(SUNL.lunar || 0).toFixed(3) } }),   /* a test aims the camera at the sun or the moon */
         wx: () => Object.assign({ season: SEASON.name, snowy: SEASON.snowy }, wxMod && wxMod.state ? wxMod.state() : {}),
         progInfo: () => { const P = renderer.info.programs || [], I = renderer.info; return { n: P.length, calls: I.render.calls, tris: I.render.triangles, geos: I.memory.geometries, tex: I.memory.textures, applyMs: SEASON.applyMs, applies: SEASON.applies }; },
         tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },   /* a test taps a thing as a player would (first option) */

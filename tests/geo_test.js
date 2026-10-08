@@ -62,7 +62,8 @@ const d3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 /* 3. Ashvale's spot, the vale frame */
 {
   const c = Geo.fromVale(40, 58), ll = Geo.latLon(c.f, c.x + 0.5, c.y + 0.5);
-  ok(Math.abs(ll.lat - -60.15) < 0.5 && Math.abs(ll.lon - 25.20) < 0.5, 'Ashvale (vale 40,58) at ' + ll.lat.toFixed(2) + ', ' + ll.lon.toFixed(2) + ' (want about -60.15, 25.20)');
+  /* the world's north is the globe's -z (globecfg.north = -1, 2026-10-07): Ashvale is 60 N, 25 W */
+  ok(Math.abs(ll.lat - 60.15) < 0.5 && Math.abs(ll.lon - -25.20) < 0.5, 'Ashvale (vale 40,58) at ' + ll.lat.toFixed(2) + ', ' + ll.lon.toFixed(2) + ' (want about 60.15, -25.20)');
   const u = W.toSphere(cfg.face, 40 + cfg.origin[0] + 0.5, -(58 + cfg.origin[1]) - 0.5), s = Geo.sphere(c.f, c.x + 0.5, c.y + 0.5);
   ok(d3(u, s) === 0, 'fromVale cell centre = world.js latOf point exactly');
   let bad = 0;
