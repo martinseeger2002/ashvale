@@ -73,6 +73,13 @@
    "kind": "js",
    "file": "playtest/earth/modules/atlas_chunk.js"
   },
+  "sky": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js",
+   "file": "playtest/earth/modules/sky.js"
+  },
   "earth": {
    "id": null,
    "v": "1",
