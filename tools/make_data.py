@@ -934,7 +934,7 @@ TRAIL = {
            "If the mine's lower than the stream by a man's height, the pump'll run on its own weight and I'll want a fire under the joint. If it's the other way round I've wasted your afternoon, and I'd like to hear about a fish walking up a tree instead.",
            "He'll tell you he measured it the year the water came up. He's been waiting eleven years for anybody to ask him that, and he'll make you wait four minutes for it."],
        "progress": [
-           "Modulus, {name}, on the southwest road, measuring it for the third time this morning. Ask for the levels and don't hurry him - that's the only way to get the wrong number."],
+           "Modulus, {name}, out at the new crossroads east of the square, on the Saltmere road, measuring it for the third time this morning. Ask for the levels and don't hurry him - that's the only way to get the wrong number."],
        "complete": [
            "He gave you the number after he gave you the lecture, which is how you know it's the right one. Lower by a man and a half. It'll run on its own weight."]}],
     "done": [
@@ -991,7 +991,7 @@ TRAIL = {
            "So the hawk has to be remembered rather than traced, and the man in this village who remembers things by their colour is Pax. Go and tell him the seam is open. He'll say he has no interest in coin, and then he'll want to know whether there's enough for the sky.",
            "Ask him about the ninth try. The blue door by the well is the last of the village's own gold, leaf on leaf, and if you've the patience he'll show you every one of the nine. Then come back to me, because the first thing off the new die is not going to be a coin."],
        "progress": [
-           "Pax, {name}, by the well, blue to the wrist. Tell him the seam is open, and wait for him to pretend he doesn't care."],
+           "Pax, {name}, in his new house on the Saltmere road, east of the square, blue to the wrist. Tell him the seam is open, and wait for him to pretend he doesn't care."],
        "complete": [
            "He said coin was nothing to him. Then he asked whether there would be enough leaf for the ceiling of the hall, and I wrote that down, because it's the first thing anybody has asked me for in twenty years that I couldn't already answer."]}],
     "done": [

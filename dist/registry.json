@@ -1438,6 +1438,12 @@
     "api": 1,
     "kind": "json"
    },
+   "eastend": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "whisperwood": {
     "id": null,
     "v": 2,

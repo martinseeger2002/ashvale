@@ -494,11 +494,12 @@
    "id": "pax",
    "name": "Pax the painter",
    "look": "pax",
-   "x": 24,
-   "y": 49,
+   "x": 55,
+   "y": 44,
    "examine": "Pax the painter, blue to the wrist and proud of it.",
    "lines": [
-    "Every colour in this village came through my hands. That blue on the door took me nine tries.",
+    "Every colour in this village came through my hands. That blue on the door by the well took me nine tries.",
+    "I moved out here to the new house on the Saltmere road. Room to dry a canvas, and nobody tells me the sky is too blue.",
     "They wanted the sky cheaper. A cheap sky is grey weather, I told them. It's still grey weather."
    ]
   },
@@ -506,11 +507,11 @@
    "id": "modulus",
    "name": "Modulus the surveyor",
    "look": "modulus",
-   "x": 33,
-   "y": 50,
-   "examine": "Modulus the surveyor, measuring the southwest road for the third time this morning.",
+   "x": 62,
+   "y": 48,
+   "examine": "Modulus the surveyor, measuring the new crossroads on the Saltmere road for the third time this morning.",
    "lines": [
-    "I measured this street at a hundred and forty-four feet. They said it needed to be a hundred and forty-three. It is, somehow.",
+    "They laid this crossroads where I said, to the foot. I measured it again anyway, and then once more.",
     "Everything twice, once well. That's the whole trade. Count the ground before you sell it."
    ]
   },
@@ -639,14 +640,15 @@
    "id": "guard_ash_3",
    "name": "Town guard",
    "look": "town_guard",
-   "x": 28,
-   "y": 50,
+   "x": 59,
+   "y": 52,
    "watch": "village",
    "examine": "A town guard. Combat level 33. He keeps the peace, and the lamps.",
    "lines": [
     "The lamps along the street are our work, not the sun's.",
     "Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."
-   ]
+   ],
+   "note": "moved 2026-10-08 to the Eastend crossing (the operator: the square was crowded)"
   },
   {
    "id": "guard_road",
