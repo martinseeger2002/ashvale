@@ -12,7 +12,7 @@
       if (ST.shopId) K.drawShop();
       if (!ST.tab) return;
       if (ST.tab === 'inv') {
-        panel.innerHTML = weightBar(p) + '<div class="inv"></div>'; const g = panel.querySelector('.inv');
+        panel.innerHTML = weightBar(p) + (ST.chest ? '<div class="info" style="margin:0 0 6px">Chest is open. Click puts one in. Right-click: All, or wear.</div>' : '') + '<div class="inv"></div>'; const g = panel.querySelector('.inv');
         p.inv.forEach((it, i) => { const s = K.el('slot', g, K.slotHtml(it)); s.dataset.i = i; if (p.using && p.using.slot === i && it && it.id === p.using.id) s.classList.add('aim'); if (it) K.invPointer(s, i); });
       } else if (ST.tab === 'equip') {
         let h = '<h4>Worn Equipment</h4><div class="equip">';
@@ -118,6 +118,16 @@
         }
         panel.innerHTML = h;
         for (const el of panel.querySelectorAll('[data-q]')) el.onclick = () => K.questStory(el.dataset.q, who);
+      } else if (ST.tab === 'friends') {
+        const F = api.friends ? api.friends() : { rows: [], note: '' };
+        let h = '<h4>Friends List</h4>';
+        if (F.note) h += '<div class="info">' + A.esc(F.note) + '</div>';
+        h += '<div class="friends">';
+        for (const r of F.rows || []) h += '<button class="frnd' + (r.online ? ' on' : '') + '" data-tag="' + A.esc(r.tag) + '">' + A.esc(r.tag) + '</button>';
+        h += '</div>';
+        if (!(F.rows || []).length && !F.note) h += '<div class="info">Looking up your contacts…</div>';
+        panel.innerHTML = h;
+        for (const b of panel.querySelectorAll('.frnd')) b.onclick = () => { if (K.promptSay) K.promptSay('/@' + b.dataset.tag + ' '); };
       } else if (ST.tab === 'prayer') {
         /* the prayer book (2026-10-07): the three overhead protections, melee 1 / missiles 4 / magic 15. Tap one to switch it on or off. */
         const L = core.lv(p, 'prayer'), mx = core.maxPp(p), pv = p.pp | 0;

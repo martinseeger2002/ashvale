@@ -7544,9 +7544,9 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
         case 'npc': { const n = M.npcs.find(q => q.id === c.id); if (n) { p._trade = !!c.trade; p.act = { k: 'npc', id: n.id }; p.skilling = null; closeShop(p); } break; }
         case 'move': moveSlot(p, c.from | 0, c.to | 0); break;
         case 'light': { const s0 = p.inv[c.slot | 0]; if (s0 && IT[s0.id].burnTicks) { p.act = { k: 'light', slot: c.slot | 0, id: s0.id }; p.gT = 0; p.path = []; p.skilling = null; closeShop(p); } break; }
-        case 'gather': { const n = nodeAt(idx(c.x | 0, c.y | 0)); if (n) { p.act = { k: 'gather', i: idx(n.x, n.y) }; p.skilling = null; closeShop(p); p.gT = 0; } break; }
-        case 'plant': p.act = { k: 'plant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); break;
-        case 'unplant': p.act = { k: 'unplant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); break;
+        case 'gather': { const n = nodeAt(idx(c.x | 0, c.y | 0)); if (n) { p.act = { k: 'gather', i: idx(n.x, n.y) }; p.skilling = null; closeShop(p); p.gT = 0; } clearUsing(p); break; }
+        case 'plant': p.act = { k: 'plant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); clearUsing(p); break;
+        case 'unplant': p.act = { k: 'unplant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); clearUsing(p); break;
         case 'unuse': if (p.using) { p.using = null; ev({ e: 'using', p: p.id }); } break;
         case 'takeaxe': {
           const job = plantJob(p), id = job && job.st.axe;
@@ -7571,11 +7571,11 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
         }
         case 'useon': {
           const u = p.using, it = u && p.inv[u.slot];
-          if (!u || !it || it.id !== u.id) { p.using = null; ev({ e: 'using', p: p.id }); break; }
+          if (!u || !it || it.id !== u.id) { clearUsing(p); break; }
           const d = IT[it.id];
-          if (it.id === 'sapling') { p.act = { k: 'plant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); break; }
-          if (d.tool) { msg(p, 'Use it on a ' + (d.tool === 'woodcutting' ? 'tree' : d.tool === 'mining' ? 'rock' : 'fishing spot') + '.'); break; }
-          msg(p, 'Nothing interesting happens.'); p.using = null; ev({ e: 'using', p: p.id }); break;
+          if (it.id === 'sapling') { p.act = { k: 'plant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); clearUsing(p); break; }
+          if (d.tool) { msg(p, 'Use it on a ' + (d.tool === 'woodcutting' ? 'tree' : d.tool === 'mining' ? 'rock' : 'fishing spot') + '.'); clearUsing(p); break; }
+          msg(p, 'Nothing interesting happens.'); clearUsing(p); break;
         }
         case 'use': useItem(p, c.slot | 0); break;
         case 'arms': { const has = p.inv.concat(Object.values(p.eq || {})).some(s => s && IT[s.id] && IT[s.id].arms); if (!has) { msg(p, 'You need the Lake Castle stone to call the guard.', 'warn'); break; } callToArms(p, !!c.on); break; }
@@ -7616,6 +7616,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
     function mobByUid(u) { let m = MIX.get(u); if (m) return m; for (const q of S.mobs) if (q.uid === u) { MIX.set(u, q); return q; } return null; }
     function closeShop(p) { if (p.shop) { p.shop = null; ev({ e: 'shopclose', p: p.id }); } }
 
+    function clearUsing(p) { if (!p.using) return; p.using = null; ev({ e: 'using', p: p.id }); }
     function useItem(p, slot) {
       const s = p.inv[slot]; if (!s) return; const d = IT[s.id];
       if (d.buryXp) { bury(p, slot); return; }
@@ -7694,6 +7695,11 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
         ev({ e: 'inv', p: p.id }); burdenCheck(p);
       }
       ev({ e: 'equip', p: p.id, id: s.id });
+    }
+    function takeOff(p, k) {   /* into the chest, not the bag: the piece leaves what you wear */
+      const e = p.eq[k]; if (!e) return null;
+      if (IT[e.id] && IT[e.id].form === 'hawk' && (M.blocked(p.x, p.y) || M.insideAt(p.x, p.y))) { msg(p, 'Fly to open ground first: there is nowhere to land here.', 'warn'); return null; }
+      delete p.eq[k]; ev({ e: 'equip', p: p.id }); burdenCheck(p); return { id: e.id, n: e.n };
     }
     function unequip(p, k) {
       const e = p.eq[k]; if (!e) return;
@@ -9275,7 +9281,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
       setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
-      applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, setFelled,
+      applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, takeOff: (pid, k) => { const p = S.players[pid]; return p ? takeOff(p, k) : null; }, setFelled,
       hitXp: (pid, cls, dmg, dex) => { const p = S.players[pid]; if (p && !p.puppet) hitXp(p, cls, dmg, null, dex); },
       creditKill: (pid, key) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key); }
     };
@@ -10592,6 +10598,10 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
 .ash .slot .n.k{color:#fff}.ash .slot .n.m{color:#0f8}
 .ash .slot.sel{box-shadow:inset 0 0 0 2px #fff}
 .ash .slot.aim{box-shadow:inset 0 0 0 2px #f07818}
+.ash .friends{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.ash .frnd{display:block;width:100%;text-align:left;padding:5px 8px;background:#2a241c;border:1px solid #1b1610;box-shadow:inset 0 0 0 1px #5a4c38;color:#ff3333;font:700 14px/1.2 "Trebuchet MS",Verdana,sans-serif;cursor:pointer}
+.ash .frnd.on{color:#00e000}
+.ash .frnd:hover{background:#3a3228}
 .ash .slot.ghost{opacity:.45}
 .ash .slot .fb{position:absolute;inset:4px;border-radius:3px;font-size:9px;color:#fff;display:flex;align-items:center;justify-content:center;text-align:center}
 .ash .equip{display:grid;grid-template-columns:repeat(3,var(--slot));grid-auto-rows:var(--slot);gap:6px;justify-content:center;margin:2px 0 8px}
@@ -10647,6 +10657,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
 .ash .ctx div.opt:hover,.ash .ctx div.opt:active{background:#7a6c58}
 .ash .y{color:#ff0}.ash .o{color:#ff9040}.ash .c{color:#0ff}.ash .g{color:#0f0}.ash .r{color:#f44}.ash .w{color:#fff}
 .ash .shop{position:absolute;left:50%;top:calc(8px + env(safe-area-inset-top, 0px));transform:translateX(-50%);width:min(620px,calc(100vw - 16px));max-height:calc(100% - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));padding:8px 10px;display:none;flex-direction:column;z-index:5}
+.ash .shop.chest{left:8px;transform:none;width:min(460px,calc(100vw - 250px))}   /* the bag is the inventory panel, so the chest sits to its left */
 .ash .shop .hd{display:flex;align-items:center;justify-content:space-between;color:#ff981f;font-size:15px;margin-bottom:4px}
 .ash .shop .x{width:28px;height:28px;border-radius:4px;background:#7a2a18;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid #000}
 .ash .shop .cols{display:flex;gap:10px;min-height:0;flex:1;overflow:auto}
@@ -10735,6 +10746,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
     combat: SV('M4 3l9 9-2 2 2 2 2-2 2 2-2 2 3 3 2-2-3-3 2-2-2-2-2 2-2-2 9-9-3 0-8 8-8-8z', '#d9c9a0'),
     skills: SV('M3 20h3V12H3zm5 0h3V6H8zm5 0h3V9h-3zm5 0h3V3h-3z', '#7fd06a'),
     quest: SV('M5 3h11l3 3v15H5z M8 8h8M8 12h8M8 16h5', '#e8dcb0'),
+    friends: SV('M8 11a3 3 0 100-6 3 3 0 000 6zM2 19c0-3 2.5-5 6-5s6 2 6 5M16 11a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM14 14c2.8 0 6 1.6 6 4.5', '#7dcea0'),
     wallet: SV('M3 7h16v12H3z M3 7l3-3h11v3 M15 12h4v3h-4z', '#e8b54a'),
     inv: SV('M7 7c0-3 2-4 5-4s5 1 5 4h2l1 14H4L5 7zm2 0h6c0-2-1-2-3-2S9 5 9 7z', '#b8874a'),
     equip: SV('M6 3h12l1 6-3 3v9H8v-9L5 9z', '#a9b0ba'),
@@ -10796,7 +10808,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       if (ST.shopId) K.drawShop();
       if (!ST.tab) return;
       if (ST.tab === 'inv') {
-        panel.innerHTML = weightBar(p) + '<div class="inv"></div>'; const g = panel.querySelector('.inv');
+        panel.innerHTML = weightBar(p) + (ST.chest ? '<div class="info" style="margin:0 0 6px">Chest is open. Click puts one in. Right-click: All, or wear.</div>' : '') + '<div class="inv"></div>'; const g = panel.querySelector('.inv');
         p.inv.forEach((it, i) => { const s = K.el('slot', g, K.slotHtml(it)); s.dataset.i = i; if (p.using && p.using.slot === i && it && it.id === p.using.id) s.classList.add('aim'); if (it) K.invPointer(s, i); });
       } else if (ST.tab === 'equip') {
         let h = '<h4>Worn Equipment</h4><div class="equip">';
@@ -10902,6 +10914,16 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
         }
         panel.innerHTML = h;
         for (const el of panel.querySelectorAll('[data-q]')) el.onclick = () => K.questStory(el.dataset.q, who);
+      } else if (ST.tab === 'friends') {
+        const F = api.friends ? api.friends() : { rows: [], note: '' };
+        let h = '<h4>Friends List</h4>';
+        if (F.note) h += '<div class="info">' + A.esc(F.note) + '</div>';
+        h += '<div class="friends">';
+        for (const r of F.rows || []) h += '<button class="frnd' + (r.online ? ' on' : '') + '" data-tag="' + A.esc(r.tag) + '">' + A.esc(r.tag) + '</button>';
+        h += '</div>';
+        if (!(F.rows || []).length && !F.note) h += '<div class="info">Looking up your contacts…</div>';
+        panel.innerHTML = h;
+        for (const b of panel.querySelectorAll('.frnd')) b.onclick = () => { if (K.promptSay) K.promptSay('/@' + b.dataset.tag + ' '); };
       } else if (ST.tab === 'prayer') {
         /* the prayer book (2026-10-07): the three overhead protections, melee 1 / missiles 4 / magic 15. Tap one to switch it on or off. */
         const L = core.lv(p, 'prayer'), mx = core.maxPp(p), pv = p.pp | 0;
@@ -11008,8 +11030,8 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
   'use strict';
   function install(K) {
     const { api, core, P, A } = K, esc = A.esc, win = K.shopEl, st = K.st;
-    function openChest() { if (st.shopId) K.closeShop(); st.chest = true; st.chestHtml = null; st.chestSel = null; win.style.display = 'flex'; api.walletRefresh && api.walletRefresh(); drawChest(); }
-    function closeChest() { st.chest = false; win.style.display = 'none'; npClose(); }
+    function openChest() { if (st.shopId) K.closeShop(); st.chest = true; st.chestHtml = null; st.chestSel = null; win.classList.add('chest'); win.style.display = 'flex'; api.walletRefresh && api.walletRefresh(); drawChest(); }
+    function closeChest() { st.chest = false; win.classList.remove('chest'); win.style.display = 'none'; npClose(); if (K.onChestClose) K.onChestClose(); }
     function counts() {   /* the engine keeps the ledger (bag vs chest vs spent) per wallet address: api.chestState() */
       const p = P(), W = api.walletState ? api.walletState() : { status: 'off' }, C = api.chestState ? api.chestState() : { chest: {}, loose: {}, bank: {} };
       return { p, W, D: W.data, B: C.bank || {}, chest: C.chest || {}, loose: C.loose || {}, arriving: C.arriving || 0, bag: C.bag || {}, pend: C.pend || {} };
@@ -11081,16 +11103,10 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       const ck = Object.keys(chest);   /* GOLD too: it can be taken out like anything else (the operator: "no way to withdraw it") */
       for (const k of ck) h += '<div class="slot ' + (sel && sel.take === k ? 'sel' : '') + '" data-t="' + esc(k) + '">' + K.slotHtml({ id: k, n: chest[k] }) + '</div>';
       if (!ck.length) h += '<div class="info" style="grid-column:1/-1">' + (D ? 'Nothing else in your wallet.' : 'Reading your wallet…') + '</div>';
-      h += '</div></div><div class="col"><h5>Your bag (tap to store)</h5><div class="grid iv">';
-      const lo = Object.assign({}, loose);
-      p.inv.forEach((it, i) => {
-        let mark = '';
-        if (it && lo[it.id] > 0) { lo[it.id] -= Math.min(lo[it.id], it.n); mark = ' ghost'; }
-        h += '<div class="slot ' + (sel && sel.slot === i ? 'sel' : '') + mark + '" data-s="' + i + '"' + (mark ? ' title="Not in your wallet yet"' : '') + '>' + K.slotHtml(it) + '</div>';
-      });
       h += '</div></div></div><div class="sel">';
+      h += '<button class="btn" data-dep="inv">Deposit inventory</button><button class="btn" data-dep="worn">Deposit worn equipment</button>';
       const nLoose = Object.values(loose).reduce((a, b) => a + b, 0), nArr = arriving;
-      h += '<span style="color:#c8b48a">Tap to move a thing between your chest and your bag; long-press or right-click for more. Your chest and your bag are one arcade wallet.</span>';
+      h += '<span style="color:#c8b48a">Your bag is the inventory beside this. Click an item to put one in the chest. Right-click for All, or to wear it.</span>';
       h += '</div><div class="sel">';
       /* no deposit button (2026-10-04: "I don't want anything extra, they could cause duplications"): new things go to
          your wallet by themselves; this line only says how far along that is */
@@ -11101,8 +11117,10 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       h += '</div>'; if (h === st.chestHtml && win.style.display === 'flex') return;   /* the HUD refreshes every tick: repaint only on change */
       st.chestHtml = h; win.innerHTML = h;
       win.querySelector('.x').onclick = closeChest;
+      const depI = win.querySelector('[data-dep=inv]'), depW = win.querySelector('[data-dep=worn]');
+      if (depI) depI.onclick = () => api.depositInv && api.depositInv();
+      if (depW) depW.onclick = () => api.depositWorn && api.depositWorn();
       for (const s of win.querySelectorAll('[data-t]')) { const k = s.dataset.t; K.longPress(s, () => tapTake(k), (x, y) => menuTake(k, x, y)); }
-      for (const s of win.querySelectorAll('[data-s]')) { const i = +s.dataset.s; if (P().inv[i]) K.longPress(s, () => tapStore(i), (x, y) => menuStore(i, x, y)); }
     }
     K.openChest = openChest; K.closeChest = closeChest; K.drawChest = drawChest;
   }
@@ -11163,7 +11181,11 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       });
       node.addEventListener('pointerup', e => {
         if (!st) return; e.stopPropagation(); clearTimeout(st.lp); const s0 = st; st = null;
-        if (s0.drag) dropAt(i, e.clientX, e.clientY); else if (!s0.menu && !s0.cancel) api.cmd({ c: 'use', slot: i });
+        if (s0.drag) dropAt(i, e.clientX, e.clientY);
+        else if (!s0.menu && !s0.cancel) {
+          if (K.st.chest && api.chestStore) { const it = P().inv[i]; if (it) api.chestStore(it.id, 1); }
+          else api.cmd({ c: 'use', slot: i });
+        }
       });
       node.addEventListener('pointercancel', () => { if (st) { clearTimeout(st.lp); if (st.drag) endGhost(); st = null; } });
       node.addEventListener('contextmenu', e => { e.preventDefault(); if (st) { clearTimeout(st.lp); st = null; } K.menu(e.clientX, e.clientY, K.itemOptions(i)); });
@@ -11294,9 +11316,13 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
     const dlg = el('dlg stone ui', ui), ctx = el('ctx ui', ui), shopEl = el('shop stone ui', ui), help = el('help stone ui', ui), err = el('err ui', ui);
     const st = { tab: api.isPhone ? null : 'inv', shopId: null, shopSel: null, skillSel: null, newGameArm: 0 };   /* shared with the hud parts */
     let lines = [], dlgQ = null;
-    const TABS = [['combat', 'Combat'], ['skills', 'Skills'], ['quest', 'Quests'], ['inv', 'Inventory'], ['equip', 'Equipment'], ['prayer', 'Prayer'], ['magic', 'Magic'], ['settings', 'Settings']];   /* no Wallet tab (2026-10-05: the chest shows your wallet) */
+    const TABS = [['combat', 'Combat'], ['skills', 'Skills'], ['quest', 'Quests'], ['friends', 'Friends'], ['inv', 'Inventory'], ['equip', 'Equipment'], ['prayer', 'Prayer'], ['magic', 'Magic'], ['settings', 'Settings']];   /* no Wallet tab (2026-10-05: the chest shows your wallet) */
     for (const [k, title] of TABS) { const b = el('tab stone', tabs, A.ICON[k], 'button'); b.title = title; b.dataset.k = k; b.onclick = () => { setTab(st.tab === k ? null : k); api.sfx && api.sfx('click'); }; }
-    function setTab(k) { st.tab = k; for (const b of tabs.children) b.classList.toggle('on', b.dataset.k === k); panel.classList.toggle('open', !!k); K.refresh(k); }
+    function setTab(k) { st.tab = k; for (const b of tabs.children) b.classList.toggle('on', b.dataset.k === k); panel.classList.toggle('open', !!k); K.refresh(k); if (k === 'friends' && api.friendsRefresh) api.friendsRefresh(); }
+    function promptSay(text) {
+      sayRow.classList.add('on'); sayIn.value = text; sayIn.focus();
+      const n = sayIn.value.length; try { sayIn.setSelectionRange(n, n); } catch (e) { /* some browsers */ }
+    }
 
     /* ---------- item icons */
     function slotHtml(it, extra) {
@@ -11317,6 +11343,14 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
     function itemOptions(slot) {
       const p = P(), it = p.inv[slot]; if (!it) return [];
       const d = core.item(it.id), nm = '<span class="o">' + A.esc(d.name) + '</span>', o = [];
+      if (st.chest && api.chestStore) {
+        const n = p.inv.reduce((a, s) => a + (s && s.id === it.id ? s.n : 0), 0);
+        o.push({ html: 'Deposit ' + nm, fn: () => api.chestStore(it.id, 1) });
+        if (n > 1) o.push({ html: 'Deposit all ' + nm, fn: () => api.chestStore(it.id, n) });
+        if (d.eq) o.push({ html: (d.eq === 'weapon' ? 'Wield ' : 'Wear ') + nm, fn: () => api.cmd({ c: 'equip', slot }) });
+        o.push({ html: 'Examine ' + nm, fn: () => chatLine(examine(it.id, it.n), 'sys') });
+        return o;
+      }
       if (d.eq) o.push({ html: (d.eq === 'weapon' ? 'Wield ' : 'Wear ') + nm, fn: () => api.cmd({ c: 'equip', slot }) });
       if (d.edible) o.push({ html: (d.drink ? 'Drink ' : 'Eat ') + nm, fn: () => api.cmd({ c: 'eat', slot }) });
       if (d.buryXp) o.push({ html: 'Bury ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
@@ -11516,9 +11550,10 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
     });
 
     /* ---------- the parts (each its own module/inscription): they get this kit and add their functions to it */
-    const K = { host, api, core, P, A, el, ui, layer, panel, st, shopEl, ccEl, slotHtml, longPress, menu, hideMenu, chatLine, examine, itemOptions, updateOrbs, showHelp,
+    const K = { host, api, core, P, A, el, ui, layer, panel, st, shopEl, ccEl, slotHtml, longPress, menu, hideMenu, chatLine, examine, itemOptions, updateOrbs, showHelp, promptSay,
       refresh() { }, drawShop() { }, openShop() { }, closeShop() { }, openChest() { }, closeChest() { }, drawChest() { }, invPointer() { }, creator() { }, creatorOpen: () => false };
     for (const part of PARTS) part.install(K);
+    K.onChestClose = () => { if (st.tabWas === undefined) return; const back = st.tabWas; st.tabWas = undefined; setTab(back); };
     /* a quest's story so far, in the words of the one who gave it (2026-10-06): every step you finished - what they
        asked and what they said when you came back - then what they asked you last, or their farewell once it is all done.
        Nothing from a step you have not reached. "Remove from quest log" hides it and keeps the progress (core 'qhide'). */
@@ -11541,7 +11576,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
     { const r0 = K.refresh; K.refresh = w => { r0(w); if (st.chest) K.drawChest(); }; }   /* the chest window follows the bag and the wallet */
     setTab(st.tab);
     return {
-      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => K.openChest(), closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
+      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab('inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };
@@ -11643,9 +11678,10 @@ function createModels(THREE, opts) {
     const why = validate(pt); if (why) { if (opts.onReject) opts.onReject(pt && pt.id, why); return false; }
     PARTS[pt.id] = pt;
     const it = pt.items;
-    if (typeof it === 'string' && pt.tiers) for (let t = pt.tiers[0]; t <= pt.tiers[1]; t++) ITEMS[it.replace('{t}', t)] = { part: pt, t };
-    else if (Array.isArray(it)) for (const id of it) ITEMS[id] = { part: pt, t: 0 };
-    else if (it && typeof it === 'object') for (const id in it) ITEMS[id] = { part: pt, t: 0, c: it[id] };
+    const put = (id, rec) => { const prev = ITEMS[id]; if (prev && prev.part && prev.part.kind === 'gear' && pt.kind !== 'gear') return; ITEMS[id] = rec; };   /* a worn model wins over an icon of the same item */
+    if (typeof it === 'string' && pt.tiers) for (let t = pt.tiers[0]; t <= pt.tiers[1]; t++) put(it.replace('{t}', t), { part: pt, t });
+    else if (Array.isArray(it)) for (const id of it) put(id, { part: pt, t: 0 });
+    else if (it && typeof it === 'object') for (const id in it) put(id, { part: pt, t: 0, c: it[id] });
     return true;
   }
   for (const id in (opts.parts || {})) { const p = opts.parts[id]; addPart(p && p.data && p.ashvale3d === 'module' ? p.data : p); }
@@ -14775,12 +14811,32 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         L.bag[k] = (L.bag[k] || 0) + fromReal; L.pchest[k] = (L.pchest[k] || 0) - fromP; L.pend[k] = (L.pend[k] || 0) + fromP; L.lchest[k] = Math.max(0, (L.lchest[k] || 0) - fromL); ledgerSave();
         hud.chat('You take ' + (room0 > 1 ? room0 + ' x ' : '') + d.name + ' from your chest.', 'info'); hud.refresh('all');
       }
-      function chestStore(k, n) {
+      function chestStore(k, n, quiet) {
         chestState(); const L = ledgerFor(walletState.address), have = core.invCount(me, k);
         const fromBag = Math.min(n, L.bag[k] || 0, have), fromPend = Math.min(n - fromBag, L.pend[k] || 0, have - fromBag), fromNew = Math.min(n - fromBag - fromPend, have - fromBag - fromPend), m = fromBag + fromPend + fromNew;   /* settled or not, it can go in the chest (2026-10-05) */
-        if (m <= 0) return;
+        if (m <= 0) return 0;
         core.storeItem(PID, k, m); L.bag[k] = (L.bag[k] || 0) - fromBag; L.pend[k] = (L.pend[k] || 0) - fromPend; L.pchest[k] = (L.pchest[k] || 0) + fromPend; L.lchest[k] = (L.lchest[k] || 0) + fromNew; ledgerSave();
-        hud.chat('You put ' + (m > 1 ? m + ' x ' : '') + core.item(k).name + ' in your chest.', 'info'); hud.refresh('all');
+        if (!quiet) hud.chat('You put ' + (m > 1 ? m + ' x ' : '') + core.item(k).name + ' in your chest.', 'info'); hud.refresh('all');
+        return m;
+      }
+      function depositInv() {
+        const counts = {}; for (const s of me.inv) if (s) counts[s.id] = (counts[s.id] || 0) + s.n;
+        let n = 0; for (const k in counts) n += chestStore(k, counts[k], true);
+        if (n) hud.chat('You put your inventory in your chest.', 'info');
+        hud.refresh('all');
+      }
+      function depositWorn() {
+        if (!walletState.address) { hud.chat('Sign in to use the chest.', 'warn'); return; }
+        chestState(); const L = ledgerFor(walletState.address); let n = 0;
+        for (const slot of Object.keys(me.eq || {})) {
+          const e = core.takeOff && core.takeOff(PID, slot); if (!e) continue;
+          const fromBag = Math.min(e.n, L.bag[e.id] || 0), rest = e.n - fromBag;
+          L.bag[e.id] = (L.bag[e.id] || 0) - fromBag; if (!L.bag[e.id]) delete L.bag[e.id];
+          if (rest) L.lchest[e.id] = (L.lchest[e.id] || 0) + rest;
+          n++;
+        }
+        ledgerSave(); if (n) { hud.chat('You put your worn equipment in your chest.', 'info'); netGear(); }
+        hud.refresh('all');
       }
       /* felled trees, shared by every player for ever (2026-10-05): you tell the @ashvale Bank when you fell one, and
          ask it which trees round you are already down whenever you arrive somewhere new (and every few minutes) */
@@ -14826,6 +14882,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             const bankFrom = from && (from.address === DATA.assets.issuer || from.address === YOURFIRST_ADDR || from.tag === 'yourfirstname');
             if (data && data.t === 'felled' && bankFrom && R.me && data.to === R.me.address) { core.setFelled(data.cells || []); return; }   /* trees others felled */
             if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }   /* persisted drops near me */
+            if (data && data.t === 'pals' && bankFrom && R.me && data.to === R.me.address) { palsHeard(data); return; }
             if (!data || data.t !== 'dep' || !bankFrom || !R.me || data.to !== R.me.address) return;   /* only @ashvale or @yourfirstname answers, only to me */
             const q = bank.sent[data.id]; if (!q) return; delete bank.sent[data.id]; clearTimeout(q.timer);
             if (data.ok) {
@@ -15381,6 +15438,32 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         const R = await bankRoom(); if (!R || !R.me || R.me.guest) return;
         for (let i = 0; i < addrs.length; i += 10) { R.send({ t: 'book', v: 1, a: addrs.slice(i, i + 10) }); await new Promise(ok => setTimeout(ok, 400)); }
       }
+      /* FRIENDS LIST: wallet contacts who also have an Ashvale save. Green when their game said where they stand
+         recently; red otherwise. Clicking a name fills /@tag in the chat box. */
+      const PALS = { tags: new Map(), on: new Map(), rows: [], note: '', q: 0, wait: 0 };
+      function palsHeard(d) {
+        if (String(d.q || '') !== String(PALS.q)) return;
+        for (const row of d.p || []) if (row && PALS.tags.has(row[0])) PALS.on.set(row[0], !!row[1]);
+        PALS.wait--; if (PALS.wait > 0) return;
+        const rows = [];
+        for (const [a, tag] of PALS.tags) if (PALS.on.has(a)) rows.push({ tag, online: PALS.on.get(a) });
+        rows.sort((a, b) => (b.online - a.online) || a.tag.localeCompare(b.tag));
+        PALS.rows = rows; PALS.note = rows.length ? '' : 'None of your contacts have an Ashvale save yet.';
+        if (hud.tab === 'friends') hud.refresh('friends');
+      }
+      async function loadPals() {
+        if (!(G.parent && G.parent !== G) || !/^https?:/.test(location.protocol)) { PALS.note = 'Sign in on the arcade to see your contacts.'; PALS.rows = []; return; }
+        if (!(G.arcade && G.arcade.contacts)) await new Promise(ok => { const s = G.document.createElement('script'); s.src = '/r/contacts.js'; s.onload = s.onerror = () => ok(); G.document.head.appendChild(s); setTimeout(ok, 8000); });
+        if (!(G.arcade && G.arcade.contacts)) { PALS.note = 'Sign in on the arcade to see your contacts.'; PALS.rows = []; return; }
+        let L = []; try { L = await G.arcade.contacts.list(); } catch (e) { PALS.note = 'Could not read your contacts.'; PALS.rows = []; return; }
+        PALS.tags = new Map(); PALS.on = new Map();
+        for (const c of Array.isArray(L) ? L : []) if (c && typeof c.address === 'string' && c.address.length >= 25 && c.tag) PALS.tags.set(c.address, String(c.tag).replace(/^@/, ''));
+        if (!PALS.tags.size) { PALS.rows = []; PALS.note = 'Your address book is empty.'; if (hud.tab === 'friends') hud.refresh('friends'); return; }
+        const R = await bankRoom(); if (!R || !R.me || R.me.guest) { PALS.note = 'Sign in to see which contacts play Ashvale.'; PALS.rows = []; return; }
+        await reportBook().catch(() => {});
+        const all = Array.from(PALS.tags.keys()); PALS.q = (PALS.q + 1) % 100000; PALS.wait = Math.ceil(all.length / 8);
+        for (let i = 0; i < all.length; i += 8) R.send({ t: 'pals?', v: 1, q: PALS.q, a: all.slice(i, i + 8) });
+      }
       setTimeout(() => { reportBook().catch(() => {}); setInterval(() => reportBook().catch(() => {}), 600000); }, 15000);
       /* the save to the Bank (cloudLoad above): only when it changed, at most every 20 s, at once when you leave */
       const CLOUD = { last: null, at: (save && save.at) || 0, sent: '', t: 0 };
@@ -15411,7 +15494,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         return {
           core, pid: PID, isPhone, isTouch,
           walletState: () => walletState, walletRefresh: () => walletRefresh(), pid: PID,
-          chestState, chestTake, chestStore, chestDeposit,
+          chestState, chestTake, chestStore, chestDeposit, depositInv, depositWorn,
+          friends: () => ({ rows: PALS.rows.slice(), note: PALS.note }),
+          friendsRefresh: () => { loadPals().then(() => { if (hud.tab === 'friends') hud.refresh('friends'); }); },
           walletTake: (id) => chestTake(id, 1),   /* the same ledger as the chest (it bypassed it and could duplicate an NFT) */
           icon: id => { try { return MOD.icon(id, 64); } catch (e) { return null; } },
           cmd: c => { send(c); },
@@ -15470,6 +15555,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         weather: (kind, intensity, ticks) => coreCall(() => core.setWeather(zoneHere(), kind, intensity == null ? 80 : intensity, ticks || 500)),
         say, store, models: MOD, allowedAsset, wallet: walletApi(DATA.items.items), walletState: () => walletState, walletRefresh,
         chestEventForTest: chestEvent,
+        showPals(rows, note) { PALS.rows = (rows || []).map(r => ({ tag: String(r.tag || '').replace(/^@/, ''), online: !!r.online })); PALS.note = note || ''; if (hud.tab === 'friends') hud.refresh('friends'); },
         chest: { state: chestState, take: chestTake, store: chestStore, promise: paid => { const L = ledgerFor(walletState.address); for (const k in paid) L.pend[k] = (L.pend[k] || 0) + paid[k]; ledgerSave(); },
           resetLedgerForTest: () => { if (!walletState.address) return; ledger = null; save = null; try { G.localStorage.removeItem(CKEY(walletState.address)); } catch (e) { /* none */ } ledgerFor(walletState.address); },   /* a lost count: the tests' worst case */
           paidForTest: paid => { const L = ledgerFor(walletState.address); for (const k in paid) { const toChest = Math.min(paid[k], L.lchest[k] || 0); L.lchest[k] -= toChest; L.pchest[k] = (L.pchest[k] || 0) + toChest; L.pend[k] = (L.pend[k] || 0) + paid[k] - toChest; } ledgerSave(); } },   /* tests */ trip: () => TRIP && TRIP.state(), trade: () => trade, peers: () => Array.from(remotes.values()).map(r => r.from), _remIds: () => Array.from(remotes.keys()), optionsAt: (cx, cy) => { const L = []; for (const t of targetsAt(cx, cy)) for (const o of optionsFor(t)) L.push(o.html.replace(/<[^>]+>/g, '')); return L; }, _remAnim: () => JSON.stringify(Array.from(remotes.values()).map(r => [r.anim, r.buf.length, r.buf.length && r.buf[r.buf.length - 1].a])),
@@ -16195,7 +16281,7 @@ ASH3D.defineData({"ashvale3d":"module","name":"part.gear.robe","api":1,"v":1,"da
 
 </script>
 <script>
-ASH3D.defineData({"ashvale3d":"module","name":"part.gear.rosary","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"gear.rosary","kind":"gear","slot":"shield","items":{"vorth_rosary":"#e07020"},"mount":{"j":"elL","p":[0.06,-0.12,0.04],"r":[0.4,0.2,0.9]},"ground":{"p":[0,0.02,0],"r":[1.2,0,0]},"shapes":[{"t":"torus","s":[0.11,0.012],"c":"$c","p":[0,0.02,0],"seg":[6,14],"r":[1.5707963267948966,0,0]},{"t":"sphere","s":[0.022],"c":"#f07828","p":[0.11,0.02,0],"seg":[5,4]},{"t":"sphere","s":[0.02],"c":"#c86018","p":[0.078,0.098,0],"seg":[5,4]},{"t":"sphere","s":[0.022],"c":"#e07020","p":[0,0.13,0],"seg":[5,4]},{"t":"sphere","s":[0.02],"c":"#c86018","p":[-0.078,0.098,0],"seg":[5,4]},{"t":"sphere","s":[0.022],"c":"#f07828","p":[-0.11,0.02,0],"seg":[5,4]},{"t":"sphere","s":[0.02],"c":"#c86018","p":[-0.078,-0.058,0],"seg":[5,4]},{"t":"sphere","s":[0.024],"c":"#8a3a10","p":[0,-0.09,0],"seg":[5,4]},{"t":"sphere","s":[0.02],"c":"#c86018","p":[0.078,-0.058,0],"seg":[5,4]}]}});
+ASH3D.defineData({"ashvale3d":"module","name":"part.gear.rosary","api":1,"v":4,"data":{"ashvale3d":"part","api":1,"v":4,"id":"gear.rosary","kind":"gear","slot":"shield","items":{"vorth_rosary":"#e07020"},"mount":{"j":"handL","p":[0,0,0],"r":[0,0,0]},"ground":{"p":[0,0.02,0],"r":[1.2,0,0]},"shapes":[{"t":"tube","s":[0.007],"c":"#c45a14","pts":[[0.02,0.16,0.04],[0.05,0.06,0.09],[0.04,-0.02,0.05]],"seg":8},{"t":"tube","s":[0.007],"c":"#c45a14","pts":[[0.04,-0.02,0.05],[0.02,-0.28,0.02],[-0.01,-0.54,0]],"seg":8},{"t":"sphere","s":[0.026],"c":"#e07020","p":[0.02,0.16,0.04],"seg":[6,5]},{"t":"sphere","s":[0.03],"c":"#f07828","p":[0.035,0.11,0.07],"seg":[6,5]},{"t":"sphere","s":[0.032],"c":"#c86018","p":[0.05,0.06,0.085],"seg":[6,5]},{"t":"sphere","s":[0.03],"c":"#f07828","p":[0.05,0.02,0.07],"seg":[6,5]},{"t":"sphere","s":[0.028],"c":"#e07020","p":[0.04,-0.02,0.05],"seg":[6,5]},{"t":"sphere","s":[0.03],"c":"#f07828","p":[0.035,-0.12,0.03],"seg":[6,5]},{"t":"sphere","s":[0.028],"c":"#c86018","p":[0.025,-0.22,0.015],"seg":[6,5]},{"t":"sphere","s":[0.03],"c":"#e07020","p":[0.012,-0.32,0.006],"seg":[6,5]},{"t":"sphere","s":[0.028],"c":"#f07828","p":[0.0,-0.42,0],"seg":[6,5]},{"t":"sphere","s":[0.034],"c":"#8a3a10","p":[-0.01,-0.52,0],"seg":[6,5]}]}});
 
 </script>
 <script>
@@ -16335,6 +16421,6 @@ ASH3D.defineData({"ashvale3d":"module","name":"part.palette","api":1,"v":1,"data
 
 </script>
 <script>
-ASH3D.boot({ baked: {"ashvale3d":"registry","version":1,"loader":1,"modules":{"three":{"id":null,"v":"0.160.0","api":160,"kind":"esm"},"netretry":{"id":null,"v":"3","api":1,"kind":"js"},"net":{"id":null,"v":"3","api":2,"kind":"js"},"trade":{"id":null,"v":"2","api":1,"kind":"js"},"wallet":{"id":null,"v":"1","api":1,"kind":"js"},"trip":{"id":null,"v":"2","api":1,"kind":"js"},"globe":{"id":null,"v":"V","api":1,"kind":"js"},"wg_geo":{"id":null,"v":1,"api":1,"kind":"js"},"wg_terrain":{"id":null,"v":1,"api":1,"kind":"js"},"wg_paths":{"id":null,"v":1,"api":1,"kind":"js"},"wg_sites":{"id":null,"v":1,"api":1,"kind":"js"},"wg_tiles":{"id":null,"v":1,"api":1,"kind":"js"},"worldgen":{"id":null,"v":1,"api":1,"kind":"js"},"world":{"id":null,"v":"V","api":1,"kind":"js"},"core":{"id":null,"v":"1","api":1,"kind":"js"},"audit":{"id":null,"v":"1","api":1,"kind":"js"},"scene":{"id":null,"v":"1","api":2,"kind":"js"},"hudart":{"id":null,"v":"1","api":1,"kind":"js"},"hudpanels":{"id":null,"v":"1","api":1,"kind":"js"},"hudshop":{"id":null,"v":"1","api":1,"kind":"js"},"hudchest":{"id":null,"v":"2","api":1,"kind":"js"},"huddrag":{"id":null,"v":"1","api":1,"kind":"js"},"hudcreator":{"id":null,"v":"1","api":1,"kind":"js"},"hud":{"id":null,"v":"2","api":1,"kind":"js"},"models":{"id":null,"v":"1","api":1,"kind":"js"},"gamepad":{"id":null,"v":"1","api":1,"kind":"js"},"weather":{"id":null,"v":"1","api":1,"kind":"js"},"fog":{"id":null,"v":"1","api":1,"kind":"js"},"engine":{"id":null,"v":"2","api":1,"kind":"js"},"data":{"items":{"id":null,"v":4,"api":1,"kind":"json"},"monsters":{"id":null,"v":1,"api":1,"kind":"json"},"shops":{"id":null,"v":3,"api":1,"kind":"json"},"quests":{"id":null,"v":2,"api":1,"kind":"json"},"rules":{"id":null,"v":3,"api":1,"kind":"json"},"globecfg":{"id":null,"v":1,"api":1,"kind":"json"},"assets":{"id":null,"v":1,"api":1,"kind":"json"},"housekit":{"id":null,"v":1,"api":1,"kind":"json"},"wg_tables":{"id":null,"v":2,"api":1,"kind":"json"},"zoneindex":{"id":null,"v":1,"api":1,"kind":"json"}},"parts":{"body.human":{"id":null,"v":1,"api":1,"kind":"json"},"char.aldous":{"id":null,"v":1,"api":1,"kind":"json"},"char.animikii":{"id":null,"v":1,"api":1,"kind":"json"},"char.ash_knight":{"id":null,"v":1,"api":1,"kind":"json"},"char.auditor":{"id":null,"v":1,"api":1,"kind":"json"},"char.bandit":{"id":null,"v":1,"api":1,"kind":"json"},"char.bandit_leader":{"id":null,"v":1,"api":1,"kind":"json"},"char.bela":{"id":null,"v":1,"api":1,"kind":"json"},"char.boar":{"id":null,"v":1,"api":1,"kind":"json"},"char.bramble":{"id":null,"v":1,"api":1,"kind":"json"},"char.brannoc":{"id":null,"v":1,"api":1,"kind":"json"},"char.bryce":{"id":null,"v":1,"api":1,"kind":"json"},"char.calder":{"id":null,"v":1,"api":1,"kind":"json"},"char.chest":{"id":null,"v":1,"api":1,"kind":"json"},"char.chicken":{"id":null,"v":1,"api":1,"kind":"json"},"char.cobb":{"id":null,"v":1,"api":1,"kind":"json"},"char.deer":{"id":null,"v":1,"api":1,"kind":"json"},"char.edric_ghost":{"id":null,"v":1,"api":1,"kind":"json"},"char.edric_skel":{"id":null,"v":1,"api":1,"kind":"json"},"char.fenn":{"id":null,"v":1,"api":1,"kind":"json"},"char.gale":{"id":null,"v":1,"api":1,"kind":"json"},"char.garrick":{"id":null,"v":1,"api":1,"kind":"json"},"char.giant_rat":{"id":null,"v":1,"api":1,"kind":"json"},"char.giant_spider":{"id":null,"v":1,"api":1,"kind":"json"},"char.goat":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin_chief":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin_shaman":{"id":null,"v":1,"api":1,"kind":"json"},"char.hale":{"id":null,"v":1,"api":1,"kind":"json"},"char.hare":{"id":null,"v":1,"api":1,"kind":"json"},"char.hawk":{"id":null,"v":1,"api":1,"kind":"json"},"char.hen_brown":{"id":null,"v":1,"api":1,"kind":"json"},"char.hob":{"id":null,"v":1,"api":1,"kind":"json"},"char.hollis":{"id":null,"v":1,"api":1,"kind":"json"},"char.iria":{"id":null,"v":1,"api":1,"kind":"json"},"char.keel":{"id":null,"v":1,"api":1,"kind":"json"},"char.latency":{"id":null,"v":1,"api":1,"kind":"json"},"char.lich":{"id":null,"v":1,"api":1,"kind":"json"},"char.lizard":{"id":null,"v":1,"api":1,"kind":"json"},"char.mabb":{"id":null,"v":1,"api":1,"kind":"json"},"char.maiingan":{"id":null,"v":1,"api":1,"kind":"json"},"char.makak":{"id":null,"v":1,"api":1,"kind":"json"},"char.makwa":{"id":null,"v":1,"api":1,"kind":"json"},"char.maren":{"id":null,"v":1,"api":1,"kind":"json"},"char.marta":{"id":null,"v":1,"api":1,"kind":"json"},"char.migizi":{"id":null,"v":1,"api":1,"kind":"json"},"char.mishoomis":{"id":null,"v":1,"api":1,"kind":"json"},"char.modulus":{"id":null,"v":1,"api":1,"kind":"json"},"char.nessa":{"id":null,"v":1,"api":1,"kind":"json"},"char.nettie":{"id":null,"v":1,"api":1,"kind":"json"},"char.nookomis":{"id":null,"v":1,"api":1,"kind":"json"},"char.odric":{"id":null,"v":1,"api":1,"kind":"json"},"char.orin":{"id":null,"v":1,"api":1,"kind":"json"},"char.pax":{"id":null,"v":1,"api":1,"kind":"json"},"char.perla":{"id":null,"v":1,"api":1,"kind":"json"},"char.pike":{"id":null,"v":1,"api":1,"kind":"json"},"char.pip":{"id":null,"v":1,"api":1,"kind":"json"},"char.portal":{"id":null,"v":1,"api":1,"kind":"json"},"char.rat":{"id":null,"v":1,"api":1,"kind":"json"},"char.rowan":{"id":null,"v":1,"api":1,"kind":"json"},"char.sela":{"id":null,"v":1,"api":1,"kind":"json"},"char.silas":{"id":null,"v":1,"api":1,"kind":"json"},"char.snow_hare":{"id":null,"v":1,"api":1,"kind":"json"},"char.spider":{"id":null,"v":1,"api":1,"kind":"json"},"char.spider_queen":{"id":null,"v":1,"api":1,"kind":"json"},"char.swamp_monster":{"id":null,"v":1,"api":1,"kind":"json"},"char.symmetry":{"id":null,"v":1,"api":1,"kind":"json"},"char.tam":{"id":null,"v":1,"api":1,"kind":"json"},"char.timber_wolf":{"id":null,"v":1,"api":1,"kind":"json"},"char.tolly":{"id":null,"v":1,"api":1,"kind":"json"},"char.town_guard":{"id":null,"v":1,"api":1,"kind":"json"},"char.vael":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan_acolyte":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan_reader":{"id":null,"v":1,"api":1,"kind":"json"},"char.voss":{"id":null,"v":1,"api":1,"kind":"json"},"char.waabigwan":{"id":null,"v":1,"api":1,"kind":"json"},"char.wagon":{"id":null,"v":1,"api":1,"kind":"json"},"char.wenna":{"id":null,"v":1,"api":1,"kind":"json"},"char.wolf":{"id":null,"v":1,"api":1,"kind":"json"},"char.wraith":{"id":null,"v":1,"api":1,"kind":"json"},"char.wren":{"id":null,"v":1,"api":1,"kind":"json"},"char.ziigwan":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.apron":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_full":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_goatee":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_moustache":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_stubble":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.belt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.boots":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.cape":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.gloves":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_bald":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_braids":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_bun":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_curly":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_long":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_mohawk":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_ponytail":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_short":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_ashcrown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_ashshard":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bandana":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_beadband":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bigchief":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bonewrap":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_cap":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_crown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_feather":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_featherband":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_hood":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_otterturban":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_shroud":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_spidercrown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_verdant":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_wizard":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_jingle":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_ribbonskirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_shorts":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_skirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_trousers":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_beadvest":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_jingle":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_ribbon":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_shirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_tunic":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_vest":{"id":null,"v":1,"api":1,"kind":"json"},"gear.angel_wings":{"id":null,"v":1,"api":1,"kind":"json"},"gear.arrows":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bandolier":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bow":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bow_snare":{"id":null,"v":1,"api":1,"kind":"json"},"gear.chainbody":{"id":null,"v":1,"api":1,"kind":"json"},"gear.dagger":{"id":null,"v":1,"api":1,"kind":"json"},"gear.dagger_venom":{"id":null,"v":1,"api":1,"kind":"json"},"gear.fishing_rod":{"id":null,"v":1,"api":1,"kind":"json"},"gear.ghostlight":{"id":null,"v":1,"api":1,"kind":"json"},"gear.hammer":{"id":null,"v":1,"api":1,"kind":"json"},"gear.handdrum":{"id":null,"v":1,"api":1,"kind":"json"},"gear.hatchet":{"id":null,"v":1,"api":1,"kind":"json"},"gear.helmet":{"id":null,"v":1,"api":1,"kind":"json"},"gear.lobster_pot":{"id":null,"v":1,"api":1,"kind":"json"},"gear.longsword":{"id":null,"v":1,"api":1,"kind":"json"},"gear.mace":{"id":null,"v":1,"api":1,"kind":"json"},"gear.net":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pack":{"id":null,"v":1,"api":1,"kind":"json"},"gear.paddle":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pickaxe":{"id":null,"v":1,"api":1,"kind":"json"},"gear.platebody":{"id":null,"v":1,"api":1,"kind":"json"},"gear.platelegs":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pushpole":{"id":null,"v":1,"api":1,"kind":"json"},"gear.ricesticks":{"id":null,"v":1,"api":1,"kind":"json"},"gear.robe":{"id":null,"v":1,"api":1,"kind":"json"},"gear.rosary":{"id":null,"v":1,"api":1,"kind":"json"},"gear.shield":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_ember":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_frost":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_storm":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_verdant":{"id":null,"v":1,"api":1,"kind":"json"},"gear.sword":{"id":null,"v":1,"api":1,"kind":"json"},"gear.tinderbox":{"id":null,"v":1,"api":1,"kind":"json"},"gear.torch":{"id":null,"v":1,"api":1,"kind":"json"},"item.bones":{"id":null,"v":1,"api":1,"kind":"json"},"item.bread":{"id":null,"v":1,"api":1,"kind":"json"},"item.chanterelle":{"id":null,"v":1,"api":1,"kind":"json"},"item.chicken":{"id":null,"v":1,"api":1,"kind":"json"},"item.coins":{"id":null,"v":1,"api":1,"kind":"json"},"item.fish":{"id":null,"v":1,"api":1,"kind":"json"},"item.lobster":{"id":null,"v":1,"api":1,"kind":"json"},"item.logs":{"id":null,"v":1,"api":1,"kind":"json"},"item.manoomin":{"id":null,"v":1,"api":1,"kind":"json"},"item.mouse":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_fly":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_glow":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_porcini":{"id":null,"v":1,"api":1,"kind":"json"},"item.note":{"id":null,"v":1,"api":1,"kind":"json"},"item.ore":{"id":null,"v":1,"api":1,"kind":"json"},"item.pelt":{"id":null,"v":1,"api":1,"kind":"json"},"item.potion":{"id":null,"v":1,"api":1,"kind":"json"},"item.ring":{"id":null,"v":1,"api":1,"kind":"json"},"item.ring_angels":{"id":null,"v":1,"api":1,"kind":"json"},"item.rosary":{"id":null,"v":1,"api":1,"kind":"json"},"item.sapling":{"id":null,"v":1,"api":1,"kind":"json"},"item.shrimp":{"id":null,"v":1,"api":1,"kind":"json"},"item.stone":{"id":null,"v":1,"api":1,"kind":"json"},"palette":{"id":null,"v":1,"api":1,"kind":"json"}}},"lazy":{"zones":{"village":{"id":null,"v":2,"api":1,"kind":"json"},"whisperwood":{"id":null,"v":2,"api":1,"kind":"json"},"saltmere":{"id":null,"v":3,"api":1,"kind":"json"},"wolfden":{"id":null,"v":1,"api":1,"kind":"json"},"cavemouth":{"id":null,"v":1,"api":1,"kind":"json"},"spidercave":{"id":null,"v":1,"api":1,"kind":"json"},"ancientchapel":{"id":null,"v":1,"api":1,"kind":"json"},"evengrove":{"id":null,"v":1,"api":1,"kind":"json"},"ziibiing":{"id":null,"v":1,"api":1,"kind":"json"},"lodges":{"id":null,"v":1,"api":1,"kind":"json"},"ricelake":{"id":null,"v":1,"api":1,"kind":"json"}}}}, registryUrl: window.ASH3D_REGISTRY_URL || null, content: false }).then(function (m) { return m.engine.openStore().then(function (st) { window.ASH = m.engine.start(document.getElementById('ash'), { report: m.$report, store: st }); }); }).catch(function (e) { console.error(e); var d = document.getElementById('ash'); d.innerHTML = '<div style="color:#fff;padding:24px;font:16px sans-serif">ASHVALE could not start: ' + String(e && e.message || e).replace(/</g, '&lt;') + '</div>'; });
+ASH3D.boot({ baked: {"ashvale3d":"registry","version":1,"loader":1,"modules":{"three":{"id":null,"v":"0.160.0","api":160,"kind":"esm"},"netretry":{"id":null,"v":"3","api":1,"kind":"js"},"net":{"id":null,"v":"3","api":2,"kind":"js"},"trade":{"id":null,"v":"2","api":1,"kind":"js"},"wallet":{"id":null,"v":"1","api":1,"kind":"js"},"trip":{"id":null,"v":"2","api":1,"kind":"js"},"globe":{"id":null,"v":"V","api":1,"kind":"js"},"wg_geo":{"id":null,"v":1,"api":1,"kind":"js"},"wg_terrain":{"id":null,"v":1,"api":1,"kind":"js"},"wg_paths":{"id":null,"v":1,"api":1,"kind":"js"},"wg_sites":{"id":null,"v":1,"api":1,"kind":"js"},"wg_tiles":{"id":null,"v":1,"api":1,"kind":"js"},"worldgen":{"id":null,"v":1,"api":1,"kind":"js"},"world":{"id":null,"v":"V","api":1,"kind":"js"},"core":{"id":null,"v":"1","api":1,"kind":"js"},"audit":{"id":null,"v":"1","api":1,"kind":"js"},"scene":{"id":null,"v":"1","api":2,"kind":"js"},"hudart":{"id":null,"v":"1","api":1,"kind":"js"},"hudpanels":{"id":null,"v":"1","api":1,"kind":"js"},"hudshop":{"id":null,"v":"1","api":1,"kind":"js"},"hudchest":{"id":null,"v":"2","api":1,"kind":"js"},"huddrag":{"id":null,"v":"1","api":1,"kind":"js"},"hudcreator":{"id":null,"v":"1","api":1,"kind":"js"},"hud":{"id":null,"v":"2","api":1,"kind":"js"},"models":{"id":null,"v":"1","api":1,"kind":"js"},"gamepad":{"id":null,"v":"1","api":1,"kind":"js"},"weather":{"id":null,"v":"1","api":1,"kind":"js"},"fog":{"id":null,"v":"1","api":1,"kind":"js"},"engine":{"id":null,"v":"2","api":1,"kind":"js"},"data":{"items":{"id":null,"v":4,"api":1,"kind":"json"},"monsters":{"id":null,"v":1,"api":1,"kind":"json"},"shops":{"id":null,"v":3,"api":1,"kind":"json"},"quests":{"id":null,"v":2,"api":1,"kind":"json"},"rules":{"id":null,"v":3,"api":1,"kind":"json"},"globecfg":{"id":null,"v":1,"api":1,"kind":"json"},"assets":{"id":null,"v":1,"api":1,"kind":"json"},"housekit":{"id":null,"v":1,"api":1,"kind":"json"},"wg_tables":{"id":null,"v":2,"api":1,"kind":"json"},"zoneindex":{"id":null,"v":1,"api":1,"kind":"json"}},"parts":{"body.human":{"id":null,"v":1,"api":1,"kind":"json"},"char.aldous":{"id":null,"v":1,"api":1,"kind":"json"},"char.animikii":{"id":null,"v":1,"api":1,"kind":"json"},"char.ash_knight":{"id":null,"v":1,"api":1,"kind":"json"},"char.auditor":{"id":null,"v":1,"api":1,"kind":"json"},"char.bandit":{"id":null,"v":1,"api":1,"kind":"json"},"char.bandit_leader":{"id":null,"v":1,"api":1,"kind":"json"},"char.bela":{"id":null,"v":1,"api":1,"kind":"json"},"char.boar":{"id":null,"v":1,"api":1,"kind":"json"},"char.bramble":{"id":null,"v":1,"api":1,"kind":"json"},"char.brannoc":{"id":null,"v":1,"api":1,"kind":"json"},"char.bryce":{"id":null,"v":1,"api":1,"kind":"json"},"char.calder":{"id":null,"v":1,"api":1,"kind":"json"},"char.chest":{"id":null,"v":1,"api":1,"kind":"json"},"char.chicken":{"id":null,"v":1,"api":1,"kind":"json"},"char.cobb":{"id":null,"v":1,"api":1,"kind":"json"},"char.deer":{"id":null,"v":1,"api":1,"kind":"json"},"char.edric_ghost":{"id":null,"v":1,"api":1,"kind":"json"},"char.edric_skel":{"id":null,"v":1,"api":1,"kind":"json"},"char.fenn":{"id":null,"v":1,"api":1,"kind":"json"},"char.gale":{"id":null,"v":1,"api":1,"kind":"json"},"char.garrick":{"id":null,"v":1,"api":1,"kind":"json"},"char.giant_rat":{"id":null,"v":1,"api":1,"kind":"json"},"char.giant_spider":{"id":null,"v":1,"api":1,"kind":"json"},"char.goat":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin_chief":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin_shaman":{"id":null,"v":1,"api":1,"kind":"json"},"char.hale":{"id":null,"v":1,"api":1,"kind":"json"},"char.hare":{"id":null,"v":1,"api":1,"kind":"json"},"char.hawk":{"id":null,"v":1,"api":1,"kind":"json"},"char.hen_brown":{"id":null,"v":1,"api":1,"kind":"json"},"char.hob":{"id":null,"v":1,"api":1,"kind":"json"},"char.hollis":{"id":null,"v":1,"api":1,"kind":"json"},"char.iria":{"id":null,"v":1,"api":1,"kind":"json"},"char.keel":{"id":null,"v":1,"api":1,"kind":"json"},"char.latency":{"id":null,"v":1,"api":1,"kind":"json"},"char.lich":{"id":null,"v":1,"api":1,"kind":"json"},"char.lizard":{"id":null,"v":1,"api":1,"kind":"json"},"char.mabb":{"id":null,"v":1,"api":1,"kind":"json"},"char.maiingan":{"id":null,"v":1,"api":1,"kind":"json"},"char.makak":{"id":null,"v":1,"api":1,"kind":"json"},"char.makwa":{"id":null,"v":1,"api":1,"kind":"json"},"char.maren":{"id":null,"v":1,"api":1,"kind":"json"},"char.marta":{"id":null,"v":1,"api":1,"kind":"json"},"char.migizi":{"id":null,"v":1,"api":1,"kind":"json"},"char.mishoomis":{"id":null,"v":1,"api":1,"kind":"json"},"char.modulus":{"id":null,"v":1,"api":1,"kind":"json"},"char.nessa":{"id":null,"v":1,"api":1,"kind":"json"},"char.nettie":{"id":null,"v":1,"api":1,"kind":"json"},"char.nookomis":{"id":null,"v":1,"api":1,"kind":"json"},"char.odric":{"id":null,"v":1,"api":1,"kind":"json"},"char.orin":{"id":null,"v":1,"api":1,"kind":"json"},"char.pax":{"id":null,"v":1,"api":1,"kind":"json"},"char.perla":{"id":null,"v":1,"api":1,"kind":"json"},"char.pike":{"id":null,"v":1,"api":1,"kind":"json"},"char.pip":{"id":null,"v":1,"api":1,"kind":"json"},"char.portal":{"id":null,"v":1,"api":1,"kind":"json"},"char.rat":{"id":null,"v":1,"api":1,"kind":"json"},"char.rowan":{"id":null,"v":1,"api":1,"kind":"json"},"char.sela":{"id":null,"v":1,"api":1,"kind":"json"},"char.silas":{"id":null,"v":1,"api":1,"kind":"json"},"char.snow_hare":{"id":null,"v":1,"api":1,"kind":"json"},"char.spider":{"id":null,"v":1,"api":1,"kind":"json"},"char.spider_queen":{"id":null,"v":1,"api":1,"kind":"json"},"char.swamp_monster":{"id":null,"v":1,"api":1,"kind":"json"},"char.symmetry":{"id":null,"v":1,"api":1,"kind":"json"},"char.tam":{"id":null,"v":1,"api":1,"kind":"json"},"char.timber_wolf":{"id":null,"v":1,"api":1,"kind":"json"},"char.tolly":{"id":null,"v":1,"api":1,"kind":"json"},"char.town_guard":{"id":null,"v":1,"api":1,"kind":"json"},"char.vael":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan_acolyte":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan_reader":{"id":null,"v":1,"api":1,"kind":"json"},"char.voss":{"id":null,"v":1,"api":1,"kind":"json"},"char.waabigwan":{"id":null,"v":1,"api":1,"kind":"json"},"char.wagon":{"id":null,"v":1,"api":1,"kind":"json"},"char.wenna":{"id":null,"v":1,"api":1,"kind":"json"},"char.wolf":{"id":null,"v":1,"api":1,"kind":"json"},"char.wraith":{"id":null,"v":1,"api":1,"kind":"json"},"char.wren":{"id":null,"v":1,"api":1,"kind":"json"},"char.ziigwan":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.apron":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_full":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_goatee":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_moustache":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_stubble":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.belt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.boots":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.cape":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.gloves":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_bald":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_braids":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_bun":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_curly":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_long":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_mohawk":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_ponytail":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_short":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_ashcrown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_ashshard":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bandana":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_beadband":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bigchief":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bonewrap":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_cap":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_crown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_feather":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_featherband":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_hood":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_otterturban":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_shroud":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_spidercrown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_verdant":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_wizard":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_jingle":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_ribbonskirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_shorts":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_skirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_trousers":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_beadvest":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_jingle":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_ribbon":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_shirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_tunic":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_vest":{"id":null,"v":1,"api":1,"kind":"json"},"gear.angel_wings":{"id":null,"v":1,"api":1,"kind":"json"},"gear.arrows":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bandolier":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bow":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bow_snare":{"id":null,"v":1,"api":1,"kind":"json"},"gear.chainbody":{"id":null,"v":1,"api":1,"kind":"json"},"gear.dagger":{"id":null,"v":1,"api":1,"kind":"json"},"gear.dagger_venom":{"id":null,"v":1,"api":1,"kind":"json"},"gear.fishing_rod":{"id":null,"v":1,"api":1,"kind":"json"},"gear.ghostlight":{"id":null,"v":1,"api":1,"kind":"json"},"gear.hammer":{"id":null,"v":1,"api":1,"kind":"json"},"gear.handdrum":{"id":null,"v":1,"api":1,"kind":"json"},"gear.hatchet":{"id":null,"v":1,"api":1,"kind":"json"},"gear.helmet":{"id":null,"v":1,"api":1,"kind":"json"},"gear.lobster_pot":{"id":null,"v":1,"api":1,"kind":"json"},"gear.longsword":{"id":null,"v":1,"api":1,"kind":"json"},"gear.mace":{"id":null,"v":1,"api":1,"kind":"json"},"gear.net":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pack":{"id":null,"v":1,"api":1,"kind":"json"},"gear.paddle":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pickaxe":{"id":null,"v":1,"api":1,"kind":"json"},"gear.platebody":{"id":null,"v":1,"api":1,"kind":"json"},"gear.platelegs":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pushpole":{"id":null,"v":1,"api":1,"kind":"json"},"gear.ricesticks":{"id":null,"v":1,"api":1,"kind":"json"},"gear.robe":{"id":null,"v":1,"api":1,"kind":"json"},"gear.rosary":{"id":null,"v":4,"api":1,"kind":"json"},"gear.shield":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_ember":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_frost":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_storm":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_verdant":{"id":null,"v":1,"api":1,"kind":"json"},"gear.sword":{"id":null,"v":1,"api":1,"kind":"json"},"gear.tinderbox":{"id":null,"v":1,"api":1,"kind":"json"},"gear.torch":{"id":null,"v":1,"api":1,"kind":"json"},"item.bones":{"id":null,"v":1,"api":1,"kind":"json"},"item.bread":{"id":null,"v":1,"api":1,"kind":"json"},"item.chanterelle":{"id":null,"v":1,"api":1,"kind":"json"},"item.chicken":{"id":null,"v":1,"api":1,"kind":"json"},"item.coins":{"id":null,"v":1,"api":1,"kind":"json"},"item.fish":{"id":null,"v":1,"api":1,"kind":"json"},"item.lobster":{"id":null,"v":1,"api":1,"kind":"json"},"item.logs":{"id":null,"v":1,"api":1,"kind":"json"},"item.manoomin":{"id":null,"v":1,"api":1,"kind":"json"},"item.mouse":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_fly":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_glow":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_porcini":{"id":null,"v":1,"api":1,"kind":"json"},"item.note":{"id":null,"v":1,"api":1,"kind":"json"},"item.ore":{"id":null,"v":1,"api":1,"kind":"json"},"item.pelt":{"id":null,"v":1,"api":1,"kind":"json"},"item.potion":{"id":null,"v":1,"api":1,"kind":"json"},"item.ring":{"id":null,"v":1,"api":1,"kind":"json"},"item.ring_angels":{"id":null,"v":1,"api":1,"kind":"json"},"item.rosary":{"id":null,"v":1,"api":1,"kind":"json"},"item.sapling":{"id":null,"v":1,"api":1,"kind":"json"},"item.shrimp":{"id":null,"v":1,"api":1,"kind":"json"},"item.stone":{"id":null,"v":1,"api":1,"kind":"json"},"palette":{"id":null,"v":1,"api":1,"kind":"json"}}},"lazy":{"zones":{"village":{"id":null,"v":2,"api":1,"kind":"json"},"whisperwood":{"id":null,"v":2,"api":1,"kind":"json"},"saltmere":{"id":null,"v":3,"api":1,"kind":"json"},"wolfden":{"id":null,"v":1,"api":1,"kind":"json"},"cavemouth":{"id":null,"v":1,"api":1,"kind":"json"},"spidercave":{"id":null,"v":1,"api":1,"kind":"json"},"ancientchapel":{"id":null,"v":1,"api":1,"kind":"json"},"evengrove":{"id":null,"v":1,"api":1,"kind":"json"},"ziibiing":{"id":null,"v":1,"api":1,"kind":"json"},"lodges":{"id":null,"v":1,"api":1,"kind":"json"},"ricelake":{"id":null,"v":1,"api":1,"kind":"json"}}}}, registryUrl: window.ASH3D_REGISTRY_URL || null, content: false }).then(function (m) { return m.engine.openStore().then(function (st) { window.ASH = m.engine.start(document.getElementById('ash'), { report: m.$report, store: st }); }); }).catch(function (e) { console.error(e); var d = document.getElementById('ash'); d.innerHTML = '<div style="color:#fff;padding:24px;font:16px sans-serif">ASHVALE could not start: ' + String(e && e.message || e).replace(/</g, '&lt;') + '</div>'; });
 
 </script>

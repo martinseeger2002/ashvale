@@ -87,9 +87,10 @@ export function createModels(THREE, opts) {
     const why = validate(pt); if (why) { if (opts.onReject) opts.onReject(pt && pt.id, why); return false; }
     PARTS[pt.id] = pt;
     const it = pt.items;
-    if (typeof it === 'string' && pt.tiers) for (let t = pt.tiers[0]; t <= pt.tiers[1]; t++) ITEMS[it.replace('{t}', t)] = { part: pt, t };
-    else if (Array.isArray(it)) for (const id of it) ITEMS[id] = { part: pt, t: 0 };
-    else if (it && typeof it === 'object') for (const id in it) ITEMS[id] = { part: pt, t: 0, c: it[id] };
+    const put = (id, rec) => { const prev = ITEMS[id]; if (prev && prev.part && prev.part.kind === 'gear' && pt.kind !== 'gear') return; ITEMS[id] = rec; };   /* a worn model wins over an icon of the same item */
+    if (typeof it === 'string' && pt.tiers) for (let t = pt.tiers[0]; t <= pt.tiers[1]; t++) put(it.replace('{t}', t), { part: pt, t });
+    else if (Array.isArray(it)) for (const id of it) put(id, { part: pt, t: 0 });
+    else if (it && typeof it === 'object') for (const id in it) put(id, { part: pt, t: 0, c: it[id] });
     return true;
   }
   for (const id in (opts.parts || {})) { const p = opts.parts[id]; addPart(p && p.data && p.ashvale3d === 'module' ? p.data : p); }

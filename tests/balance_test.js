@@ -211,6 +211,11 @@ ok(p.using && p.using.slot === sl && p.using.id === 'sapling', 'using a sapling 
 core.cmd('p1', { c: 'use', slot: sl });
 ticks(1);
 ok(!p.using, 'using the same sapling again puts it away');
+core.cmd('p1', { c: 'use', slot: sl });
+ticks(1);
+core.cmd('p1', { c: 'useon', x: p.x, y: p.y });
+ticks(1);
+ok(!p.using, 'the outline is gone after the next click, whether or not the sapling went in');
 ok(!core.canPlant(p, 197, -45), 'within ten tiles of Vael grass will not take a new tree');
 core.S.dep[core.idx(close[0], close[1])] = 1e15;
 ok(core.hasFlag(p, 'replant') && core.canPlant(p, close[0], close[1]), 'after the quest, any stump still takes a sapling');
