@@ -1,5 +1,5 @@
 """the chest ledger, played through the 2026-10-04 bugs: duplicate, lost on store, Gold stuck"""
-import json
+import json, time
 from playwright.sync_api import sync_playwright
 URL = __import__('os').environ.get('ASH_URL', 'http://127.0.0.1:8738/dist/ashvale3d.html')
 ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']
@@ -64,4 +64,12 @@ with sync_playwright() as p:
     ok(E("ASH.core.invCount(ASH.me, 'sword_t1')") == 1, 'one wallet read without it: the sword stays (a bad read never removes anything)')
     E("(() => { const D = ASH.walletState().data; D.gear = {}; D.at = Date.now() + 30000; })()"); s = S()
     ok(E("ASH.core.invCount(ASH.me, 'sword_t1')") == 0 and not s['loose'].get('sword_t1'), 'a second read agrees: it left your bag, and nothing is deposited again')
+    # sold while WORN (2026-10-09: a helmet sold on the arcade exchange stayed on the seller's head, and he kept what he was paid for)
+    E("(() => { ASH.give('helmet_t1', 1); ASH.chest.promise({ helmet_t1: 1 }); const D = ASH.walletState().data; D.gear = { helmet_t1: ['h1'] }; D.at = Date.now() + 60000; })()"); S()
+    E("ASH.core.cmd('me', { c: 'equip', slot: ASH.me.inv.findIndex(q => q && q.id === 'helmet_t1') })"); time.sleep(2); S()
+    ok(E("!!(ASH.me.eq.head && ASH.me.eq.head.id === 'helmet_t1')"), 'the helmet is worn and in the wallet')
+    E("(() => { const D = ASH.walletState().data; D.gear = {}; D.at = Date.now() + 90000; })()"); S()
+    ok(E("!!(ASH.me.eq.head && ASH.me.eq.head.id === 'helmet_t1')"), 'one wallet read without it: still worn')
+    E("(() => { const D = ASH.walletState().data; D.gear = {}; D.at = Date.now() + 120000; })()"); s = S()
+    ok(E("!(ASH.me.eq.head && ASH.me.eq.head.id === 'helmet_t1')") and E("ASH.core.invCount(ASH.me, 'helmet_t1')") == 0 and not s['loose'].get('helmet_t1'), 'a second read agrees: it comes off your head and is gone, nothing deposited again')
     print('FAILED: %d' % fails if fails else 'ALL OK'); b.close()

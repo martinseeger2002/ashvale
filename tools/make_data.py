@@ -1597,12 +1597,7 @@ HOMES = {
    24048,
    24406
   ],
-  "inv": [
-   [
-    "coins",
-    75
-   ],
-   [
+  "inv": [[
     "venison_cooked",
     1
    ],

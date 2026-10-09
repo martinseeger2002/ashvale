@@ -34,6 +34,7 @@ for (const id in Z.out) { const m = Z.out[id].match(BAD); ok(!m, id + ' never po
 const H = D.rules.homes.ziibiing;
 for (const t of [H.first, H.wakeSay].concat(H.help)) ok(!BAD.test(t), 'home text: ' + String(t).slice(0, 50));
 for (const s of Z.p.inv.filter(Boolean)) { const it = Z.core.item(s.id); ok(!BAD.test(it.examine || it.desc || ''), 'starting kit: ' + it.name); }
+ok(!Z.p.inv.some(s => s && Z.core.item(s.id).category === 'currency' || s && s.id === 'coins'), 'a Ziibiing-born starts with no gold (2026-10-09: no gold currency in the village)');
 ok(Z0[0] === H.spawn[0] && Z0[1] === H.spawn[1], 'a Ziibiing-born wakes in Ningashi\'s wigwam');
 const A = heard('ashvale');
 ok(/stone town/.test(A.out.maiingan), 'an Ashvale-born still hears Ma\'iingan speak of the stone town');
