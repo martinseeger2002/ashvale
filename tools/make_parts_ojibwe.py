@@ -25,6 +25,9 @@ C = "$c"
 RIB = ['#c8202a', '#f2c641', '#2a6fb3', '#f4f1ea', '#3f8a3a']   # ribbon colours
 FLOWER = ['#d8344a', '#f2c641', '#f4f1ea', '#6fb7e6', '#e87ab0', '#3f9a4a']   # beadwork: woodland flowers, leaves
 
+# a woman's top keeps her shape (2026-10-09: "the women in Ashvale have breasts - why not in the village?"): the cloth
+# rounds out over the bust a little more than bare body.human does, so flat beadwork and ribbon bands sit on it, not in front of it
+bust = lambda col: dict(sph(0.072, col, 0.062, 0.33, 0.072, 10, 8, k=[1.0, 0.85, 0.85], mirror=True, **{"if": "fem"}), j='torso')
 # ---- ribbon shirt: long sleeves, ribbon bands across the yoke front and back, ribbon ends hanging from the yoke
 rs = []
 for i, col in enumerate(RIB[:3]):
@@ -33,7 +36,7 @@ for i, col in enumerate(RIB[:3]):
 for i, xo in enumerate((-0.12, -0.08, 0.08, 0.12)):
     rs.append(box(0.022, 0.2, 0.012, RIB[i % 4], xo, 0.27, 0.118, j='torso'))
 part('cloth.shirt_ribbon', 'cloth', slot='shirt', style='ribbon', paint={"torso": C, "bust": C, "shoulder": C, "upperArm": C, "lowerArm": C},
-     shapes=[dict(cyl("0.176*W*(1+0.16*fem)", "0.2*W*(1+0.18*fem)", 0.2, C, 0, -0.08, 0, seg=9, k=[1, 1, 0.72]), j="hips")] + rs)
+     shapes=[bust(C), dict(cyl("0.176*W*(1+0.16*fem)", "0.2*W*(1+0.18*fem)", 0.2, C, 0, -0.08, 0, seg=9, k=[1, 1, 0.72]), j="hips")] + rs)
 
 # ---- velvet vest beaded with woodland flowers (worn over a plain shirt colour on the arms)
 vs = [box(0.07, 0.3, 0.02, '#f4f1ea', 0, 0.3, 0.11, j='torso')]
@@ -45,7 +48,7 @@ for side in (-1, 1):   # a flower on each front panel: five petals round a centr
         vs.append(box(0.022, 0.022, 0.01, FLOWER[0] if side < 0 else FLOWER[4], cx + math.cos(a) * 0.028, cy + math.sin(a) * 0.028, 0.121, j='torso'))
     vs += [box(0.012, 0.09, 0.01, FLOWER[5], cx, cy - 0.08, 0.121, j='torso'),
            box(0.03, 0.016, 0.01, FLOWER[5], cx - 0.022, cy - 0.07, 0.121, r=[0, 0, 0.5], j='torso'), box(0.03, 0.016, 0.01, FLOWER[5], cx + 0.022, cy - 0.1, 0.121, r=[0, 0, -0.5], j='torso')]
-part('cloth.shirt_beadvest', 'cloth', slot='shirt', style='beadvest', paint={"torso": '#1c1a26', "bust": '#1c1a26', "shoulder": C, "upperArm": C, "lowerArm": C}, shapes=vs)
+part('cloth.shirt_beadvest', 'cloth', slot='shirt', style='beadvest', paint={"torso": '#1c1a26', "bust": '#1c1a26', "shoulder": C, "upperArm": C, "lowerArm": C}, shapes=[bust('#1c1a26')] + vs)
 
 # ---- jingle dress: the top with a beaded yoke and a row of cones, the skirt with three rows of rolled tin cones to the hem
 TIN = '#d8dde3'
@@ -115,9 +118,10 @@ part('gear.paddle', 'gear', slot='weapon', items={"paddle": "#b08850"}, tool=Tru
              box(0.13, 0.08, 0.022, '#c8202a', 0, -0.46, 0)])
 
 # ---- the seven people (char.<id>): Woodland regalia, moccasins, warm skin tones, black or greying hair
-def char(i, name, body, skin, hair, hairC, shirt, pants, hat=None, gear=None, belt=None):
+def char(i, name, body, skin, hair, hairC, shirt, pants, hat=None, gear=None, belt=None, feet=None):
     o = {"body": body, "skin": skin, "hair": hair, "hairColor": hairC, "eyes": "#3a2a1e", "shirt": shirt, "pants": pants, "boots": "#b88a58"}
     if hat: o["hat"] = hat
+    if feet: o["feet"] = feet
     if belt: o["belt"] = belt
     d = dict(role='npc', name=name, body='humanoid', build='normal', outfit=o)
     if gear: d['gear'] = gear
@@ -153,6 +157,8 @@ part('item.mouse', 'item', items={"dried_mouse": "#8a7866"},
 # the elder who sends you ricing, sitting cross-legged in his lodge
 char('mishoomis', 'Mishoomis', 'male', '#946038', 'braids', '#cfcac2', {"style": "ribbon", "color": "#3a2a4a"}, {"style": "trousers", "color": "#2a2622"},
      hat={"style": "otterturban", "color": "#4a3424"}, gear={"pack": "bandolier_bag"})
+# Ningashi, your mother (the Ziibiing-born's wardrobe): long loose hair, a ribbon dress over a ribbon skirt, moccasins
+char('ningashi', 'Ningashi', 'female', '#a06a44', 'loose', '#141210', {"style": "ribbondress", "color": "#2f6a6a"}, {"style": "ribbonskirt", "color": "#5b3a7a"}, feet='moccasins')
 # the village's chest: a birch bark makak (models.js chest(), style makak) - it opens the same chest as Ashvale's (2026-10-07)
 part('char.makak', 'char', role='npc', name='Ziibiing makak', body='chest', chest={"style": "makak", "size": 1.0})
 # two things of sadfrog's Red Pyre that had no look (they showed as the purple placeholder): Vorth's rosary, a loop of
@@ -163,4 +169,56 @@ part('item.rosary', 'item', items={"vorth_rosary": "#c4561e"},
 part('item.note', 'item', items={"edric_note": "#d8ccaa"},
      shapes=[box(0.18, 0.008, 0.13, C, 0, 0.006, 0, r=[0, 0.3, 0]), box(0.17, 0.008, 0.12, C + ':0.9', 0.01, 0.014, 0.005, r=[0.08, 0.32, 0]),
              box(0.12, 0.002, 0.008, '#4a3a2a', 0.0, 0.019, -0.02, r=[0, 0.3, 0]), box(0.1, 0.002, 0.008, '#4a3a2a', 0.0, 0.019, 0.01, r=[0, 0.3, 0])])
+# ---- the Ziibiing character creator's everyday wear (homes: offered only by those homes' creators, rules.homes.<h>.creator) (2026-10-08: "not medieval clothing", long hair, a mohawk, braids;
+# a man may go bare-chested; men a breechcloth over leggings, women a ribbon or buckskin skirt; moccasins for everyone)
+HIDE = '#b8895a'   # tanned deer hide
+# long straight hair, loose down the back: the cap, a fall to the shoulders, and a narrower fall behind the shoulder blades
+part('cloth.hair_loose', 'cloth', homes=['ziibiing'], slot='hair', style='loose', shapes=[dict(cap, j='head'),
+     dict(S('cyl', [0.158, 0.19, 0.36], "$hair", [0, 0.02, -0.005], seg=14, open=True, theta=[0.42, 1.16], ds=True), j='head'),
+     dict(S('cyl', [0.19, 0.205, 0.4], "$hair", [0, -0.35, -0.035], seg=12, open=True, theta=[0.7, 0.6], ds=True), j='head')])
+# a mohawk: the head shaved bare at the sides, a tall ridge from brow to nape and a long lock down the back
+mh = []
+for k in range(9):   # the ridge follows the skull from the brow (phi 0.7) over the crown to the nape (phi -1.7)
+    phi = 0.7 - k * 0.3
+    mh.append(dict(box(0.05, 0.11, 0.075, "$hair", 0, round(0.145 + 0.17 * math.cos(phi), 4), round(-0.008 + 0.17 * math.sin(phi), 4), r=[round(phi, 4), 0, 0]), j='head'))
+mh.append(dict(box(0.05, 0.42, 0.035, "$hair", 0, -0.08, -0.19, r=[0.06, 0, 0]), j='head'))   # the long lock down the back
+part('cloth.hair_mohawklong', 'cloth', homes=['ziibiing'], slot='hair', style='mohawklong', shapes=mh)
+# buckskin shirt: hide-coloured, fringe hanging under each sleeve and across the chest yoke
+bk = [dict(cyl("0.176*W*(1+0.16*fem)", "0.2*W*(1+0.18*fem)", 0.2, C, 0, -0.08, 0, seg=9, k=[1, 1, 0.72]), j="hips"),
+      box(0.3, 0.025, 0.02, C + ':0.8', 0, 0.38, 0.112, j='torso'), box(0.3, 0.025, 0.02, C + ':0.8', 0, 0.38, -0.112, j='torso')]
+for i in range(9):
+    x = -0.12 + i * 0.03
+    bk += [box(0.008, 0.07, 0.008, C + ':0.9', x, 0.33, 0.118, j='torso'), box(0.008, 0.07, 0.008, C + ':0.9', x, 0.33, -0.118, j='torso')]
+for jn, y0, n in (('sh*', -0.05, 5), ('el*', -0.03, 5)):
+    for i in range(n):
+        bk.append(box(0.04, 0.008, 0.01, C + ':0.9', -0.075, y0 - i * 0.035, 0, j=jn))
+part('cloth.shirt_buckskin', 'cloth', homes=['ziibiing'], slot='shirt', style='buckskin', paint={"torso": C, "bust": C, "shoulder": C, "upperArm": C, "lowerArm": C}, shapes=[bust(C)] + bk)
+# ribbon dress top: calico with a wide ribbon yoke, elbow sleeves edged in ribbon
+rd = [box(0.3, 0.05, 0.02, RIB[0], 0, 0.39, 0.112, j='torso'), box(0.3, 0.05, 0.02, RIB[0], 0, 0.39, -0.112, j='torso'),
+      box(0.3, 0.018, 0.022, RIB[1], 0, 0.355, 0.113, j='torso'), box(0.3, 0.018, 0.022, RIB[1], 0, 0.355, -0.113, j='torso'),
+      box(0.3, 0.018, 0.022, RIB[2], 0, 0.335, 0.114, j='torso'), box(0.3, 0.018, 0.022, RIB[2], 0, 0.335, -0.114, j='torso'),
+      dict(cyl(0.066, 0.066, 0.03, RIB[1], 0, -0.25, 0, seg=8), j='sh*'),
+      dict(cyl("0.176*W*(1+0.16*fem)", "0.2*W*(1+0.18*fem)", 0.2, C, 0, -0.08, 0, seg=9, k=[1, 1, 0.72]), j="hips")]
+part('cloth.shirt_ribbondress', 'cloth', homes=['ziibiing'], slot='shirt', style='ribbondress', paint={"torso": C, "bust": C, "shoulder": C, "upperArm": C}, shapes=[bust(C)] + rd)
+# breechcloth over hide leggings: a cloth flap front and back hanging from the belt, ribbon at the hem, fringe down the leggings
+bc = [box(0.36, 0.04, 0.26, '#3a2a1c', 0, 0.02, 0, k=[1, 1, 1], j='hips')]
+for z in (0.125, -0.125):
+    bc += [box(0.17, 0.46, 0.014, C, 0, -0.2, z, j='hips'), box(0.17, 0.03, 0.016, RIB[1], 0, -0.4, z, j='hips'), box(0.17, 0.02, 0.016, RIB[0], 0, -0.37, z, j='hips')]
+for jn, y0 in (('hip*', -0.06), ('knee*', -0.04)):
+    for i in range(6):
+        bc.append(box(0.035, 0.008, 0.012, HIDE + ':0.85', -0.09, y0 - i * 0.045, 0, j=jn))
+part('cloth.pants_breechcloth', 'cloth', homes=['ziibiing'], slot='pants', style='breechcloth', paint={"pelvis": C, "thigh": HIDE, "shin": HIDE}, shapes=bc)
+# buckskin skirt: to mid-calf, a band of beadwork above the hem and fringe all round it
+sk = [dict(cyl("0.18*W*(1+0.16*fem)", "0.26*W*(1+0.1*fem)", 0.62, C, 0, -0.32, 0, seg=12, k=[1, 1, 0.75]), j="hips"),
+      dict(cyl(0.252, 0.256, 0.03, FLOWER[3], 0, -0.52, 0, seg=12, k=[1, 1, 0.75]), j="hips")]
+for k in range(24):
+    a = k / 24 * 2 * PI
+    sk.append(dict(box(0.012, 0.08, 0.006, C + ':0.9', round(math.sin(a) * 0.262, 4), -0.66, round(math.cos(a) * 0.262 * 0.75, 4), r=[0, round(a, 4), 0]), j="hips"))
+part('cloth.pants_buckskinskirt', 'cloth', homes=['ziibiing'], slot='pants', style='buckskinskirt', paint={"pelvis": C}, shapes=sk)
+# moccasins: soft hide with a rolled cuff at the ankle and a beaded flower on the vamp
+mc = [dict(cyl(0.075, 0.07, 0.05, C + ':0.85', 0, -0.33, 0.01, seg=8), j='knee*'), dict(box(0.07, 0.012, 0.07, '#f4f1ea', 0, -0.405, 0.12), j='knee*')]
+for k in range(4):
+    a = k / 4 * 2 * PI
+    mc.append(dict(box(0.016, 0.01, 0.016, FLOWER[0] if k % 2 else FLOWER[4], round(math.cos(a) * 0.02, 4), -0.398, round(0.12 + math.sin(a) * 0.02, 4)), j='knee*'))
+part('cloth.boots_moccasins', 'cloth', homes=['ziibiing'], slot='boots', style='moccasins', paint={"foot": C, "toe": C}, shapes=mc)
 print('wrote the Ziibiing parts')

@@ -33,6 +33,31 @@ if '--no-build' not in sys.argv:   # --no-build: release the dist/ already built
 reg = json.load(open(os.path.join(HERE, 'dist', 'registry.json')))
 MOD = os.path.join(HERE, 'dist', 'modules')
 
+def launcher_page(reg, home=None, title='ASHVALE'):
+    """the launcher: loader + arcade SDK scripts + the boot. A HOME launcher (2026-10-09, the Ziibiing card) is the same page with
+    ASH3D_HOME set before boot, so a new character is born there; its own inscription id = its own arcade storage = its own save"""
+    loader = open(os.path.join(HERE, 'src', 'loader.js')).read()
+    css = ("html,body{margin:0;height:100%;background:#0b0906;overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%}"
+           "#ash{position:fixed;left:0;top:0;width:100vw;height:100vh;height:100dvh;touch-action:none}"
+           "#boot{position:fixed;inset:0;display:grid;place-items:center;color:#e8b54a;font:16px system-ui,sans-serif}")
+    boot = (("window.ASH3D_HOME = " + json.dumps(home) + ";\n" if home else "") + "import * as THREE from '/content/" + THREE_ID + "';\n"
+            "ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);\n"
+            "const BAKED = " + json.dumps(reg, separators=(',', ':')) + ";\n"
+            "let reg = BAKED;\n"
+            "/* the newest registry by @ashvale wins: every release is just new modules + a new registry */\n"
+            "try { const L = await (await fetch('/r/inscriptions?creator=" + ASHVALE + "&limit=300')).json();\n"
+            "  for (const p of L || []) { const j = p.json; if (j && j.ashvale3d === 'registry' && (j.loader || 1) <= ASH3D.LOADER && j.version > reg.version) reg = j; } } catch (e) { console.warn('ASHVALE: registry lookup failed, using the built-in one', e); }\n"
+            "ASH3D.boot({ baked: reg, content: true }).then(function (m) { document.getElementById('boot').remove(); return m.engine.openStore().then(function (st) { window.ASH = m.engine.start(document.getElementById('ash'), { report: m.$report, store: st }); }); })\n"
+            ".catch(function (e) { console.error(e); const b = document.getElementById('boot'); b.innerHTML = '<div style=\"text-align:center;padding:20px\"><p>ASHVALE could not finish loading (' + String(e && e.message || e).replace(/</g, '&lt;') + ').</p><p>Check the connection and try again.</p><button onclick=\"location.reload()\" style=\"font:inherit;padding:10px 22px;border-radius:8px;border:1px solid #e8b54a;background:#2a1f0e;color:#e8b54a\">Try again</button></div>'; });\n")
+    page = ('<!doctype html>\n<html lang="en"><head>\n<title>' + title + '</title>\n<meta charset="utf-8">\n'
+            '<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">\n'
+            '<meta name="apple-mobile-web-app-capable" content="yes">\n<style>' + css + '</style>\n</head><body>\n'
+            '<div id="ash"></div><div id="boot">Loading ' + title.title() + '…</div>\n'
+            '<script src="/r/realtime.js"></script>\n<script src="/r/swap.js"></script>\n<script src="/r/storage.js"></script>\n'
+            '<script>\n' + loader.replace('</script', '<\\/script') + '\n</script>\n'
+            '<script type="module">\n' + boot.replace('</script', '<\\/script') + '</script>\n</body></html>\n')
+    return page
+
 def file_of(name, group, entry):
     if group == 'parts': return os.path.join(MOD, 'part.' + name + '.json')
     if group == 'zones': return os.path.join(MOD, 'zone.' + name + '.json')
@@ -199,26 +224,7 @@ try:
     print('REGISTRY v%d %s' % (reg['version'], st['registries'][-1]['id']), flush=True)
     # the launcher, once
     if not st.get('launcher') or '--launcher' in sys.argv:
-        loader = open(os.path.join(HERE, 'src', 'loader.js')).read()
-        css = ("html,body{margin:0;height:100%;background:#0b0906;overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%}"
-               "#ash{position:fixed;left:0;top:0;width:100vw;height:100vh;height:100dvh;touch-action:none}"
-               "#boot{position:fixed;inset:0;display:grid;place-items:center;color:#e8b54a;font:16px system-ui,sans-serif}")
-        boot = ("import * as THREE from '/content/" + THREE_ID + "';\n"
-                "ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);\n"
-                "const BAKED = " + json.dumps(reg, separators=(',', ':')) + ";\n"
-                "let reg = BAKED;\n"
-                "/* the newest registry by @ashvale wins: every release is just new modules + a new registry */\n"
-                "try { const L = await (await fetch('/r/inscriptions?creator=" + ASHVALE + "&limit=300')).json();\n"
-                "  for (const p of L || []) { const j = p.json; if (j && j.ashvale3d === 'registry' && (j.loader || 1) <= ASH3D.LOADER && j.version > reg.version) reg = j; } } catch (e) { console.warn('ASHVALE: registry lookup failed, using the built-in one', e); }\n"
-                "ASH3D.boot({ baked: reg, content: true }).then(function (m) { document.getElementById('boot').remove(); return m.engine.openStore().then(function (st) { window.ASH = m.engine.start(document.getElementById('ash'), { report: m.$report, store: st }); }); })\n"
-                ".catch(function (e) { console.error(e); const b = document.getElementById('boot'); b.innerHTML = '<div style=\"text-align:center;padding:20px\"><p>ASHVALE could not finish loading (' + String(e && e.message || e).replace(/</g, '&lt;') + ').</p><p>Check the connection and try again.</p><button onclick=\"location.reload()\" style=\"font:inherit;padding:10px 22px;border-radius:8px;border:1px solid #e8b54a;background:#2a1f0e;color:#e8b54a\">Try again</button></div>'; });\n")
-        page = ('<!doctype html>\n<html lang="en"><head>\n<title>ASHVALE</title>\n<meta charset="utf-8">\n'
-                '<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">\n'
-                '<meta name="apple-mobile-web-app-capable" content="yes">\n<style>' + css + '</style>\n</head><body>\n'
-                '<div id="ash"></div><div id="boot">Loading Ashvale…</div>\n'
-                '<script src="/r/realtime.js"></script>\n<script src="/r/swap.js"></script>\n<script src="/r/storage.js"></script>\n'
-                '<script>\n' + loader.replace('</script', '<\\/script') + '\n</script>\n'
-                '<script type="module">\n' + boot.replace('</script', '<\\/script') + '</script>\n</body></html>\n')
+        page = launcher_page(reg)
         lp = os.path.join(HERE, 'chain', 'launcher.html'); open(lp, 'w').write(page)
         lid = ids_by_sha({sha(lp)}).get(sha(lp))   # a re-run after the send resumes here instead of paying again
         if not lid and send_only(browser(), lp):
@@ -228,5 +234,18 @@ try:
         if not lid: print('FAILED at the launcher - re-run with --launcher', flush=True); sys.exit(1)
         st['launcher'] = lid; save(); print('LAUNCHER', lid, '%d bytes' % len(page), flush=True)
     print('DONE: launcher', st['launcher'], 'registry v%d' % st['registry_version'], flush=True)
+    if '--home' in sys.argv:   # a second card's launcher, inscribed once per home (never the c879 launcher)
+        h = sys.argv[sys.argv.index('--home') + 1]; t = sys.argv[sys.argv.index('--title') + 1] if '--title' in sys.argv else h.title()
+        hl = st.setdefault('home_launchers', {})
+        if not hl.get(h):
+            page = launcher_page(reg, h, t); lp = os.path.join(HERE, 'chain', 'launcher_' + h + '.html'); open(lp, 'w').write(page)
+            lid = ids_by_sha({sha(lp)}).get(sha(lp))
+            if not lid and send_only(browser(), lp):
+                for _ in range(40):
+                    time.sleep(30); lid = ids_by_sha({sha(lp)}).get(sha(lp))
+                    if lid: break
+            if not lid: print('FAILED at the %s launcher - re-run with --home %s' % (h, h), flush=True); sys.exit(1)
+            hl[h] = lid; save()
+        print('HOME LAUNCHER', h, hl[h], flush=True)
 finally:
     if d is not None: d.quit()

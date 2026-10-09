@@ -80,7 +80,10 @@
       if (st.chest && api.chestStore) {
         const n = p.inv.reduce((a, s) => a + (s && s.id === it.id ? s.n : 0), 0);
         o.push({ html: 'Deposit ' + nm, fn: () => api.chestStore(it.id, 1) });
-        if (n > 1) o.push({ html: 'Deposit all ' + nm, fn: () => api.chestStore(it.id, n) });
+        if (n > 1) {
+          o.push({ html: 'Deposit N ' + nm, fn: () => K.askCount('Deposit ' + d.name, n, m => api.chestStore(it.id, m)) });
+          o.push({ html: 'Deposit all ' + nm, fn: () => api.chestStore(it.id, n) });
+        }
         if (d.eq) o.push({ html: (d.eq === 'weapon' ? 'Wield ' : 'Wear ') + nm, fn: () => api.cmd({ c: 'equip', slot }) });
         o.push({ html: 'Examine ' + nm, fn: () => chatLine(examine(it.id, it.n), 'sys') });
         return o;
@@ -149,17 +152,22 @@
     host.addEventListener('pointerdown', e => { if (ctx.style.display === 'block' && !ctx.contains(e.target) && performance.now() - menuOpenT > 200) hideMenu(); }, true);
 
     /* ---------- NPC dialogue */
-    function dialog(name, linesIn, onClose) {
+    function dialog(name, linesIn, onClose, choices) {
       if (dlgQ && dlgQ.onClose) { const prev = dlgQ.onClose; dlgQ.onClose = null; prev(); }
-      dlgQ = { name, lines: (linesIn || []).slice(), i: 0, onClose: onClose || null }; drawDlg();
+      dlgQ = { name, lines: (linesIn || []).slice(), i: 0, onClose: onClose || null, choices: choices && choices.length ? choices : null }; drawDlg();
     }
     function drawDlg() {
       if (!dlgQ || dlgQ.i >= dlgQ.lines.length) {
         const done = dlgQ && dlgQ.onClose; dlg.style.display = 'none'; dlgQ = null; if (done) done(); return;
       }
-      dlg.style.display = 'block'; dlg.innerHTML = '<div class="nm">' + A.esc(dlgQ.name) + '</div><div class="ln">' + A.esc(dlgQ.lines[dlgQ.i]) + '</div><div class="go">' + (dlgQ.i < dlgQ.lines.length - 1 ? 'Tap here to continue' : 'Tap here to close') + '</div>';
+      const last = dlgQ.i >= dlgQ.lines.length - 1, pick = last && dlgQ.choices;
+      dlg.style.display = 'block';
+      dlg.innerHTML = '<div class="nm">' + A.esc(dlgQ.name) + '</div><div class="ln">' + A.esc(dlgQ.lines[dlgQ.i]) + '</div>' +
+        (pick ? '<div class="go">' + dlgQ.choices.map(c => '<button type="button" class="btn" data-pick="' + A.esc(c.id) + '">' + A.esc(c.label) + '</button>').join(' ') + '</div>'
+          : '<div class="go">' + (last ? 'Tap here to close' : 'Tap here to continue') + '</div>');
+      if (pick) dlg.querySelectorAll('[data-pick]').forEach(b => { b.onclick = (ev) => { ev.stopPropagation(); const id = b.getAttribute('data-pick'), fn = dlgQ && dlgQ.onClose; dlg.style.display = 'none'; dlgQ = null; if (fn) fn(id); }; });
     }
-    dlg.onclick = () => { if (dlgQ) { dlgQ.i++; drawDlg(); K.refresh('quest'); } };
+    dlg.onclick = () => { if (!dlgQ) return; if (dlgQ.choices && dlgQ.i >= dlgQ.lines.length - 1) return; dlgQ.i++; drawDlg(); K.refresh('quest'); };
 
     /* ---------- another player's stats (long-press / right-click > View stats): their own levels as their game sent them */
     function confirm(title, body, yesLabel, noLabel, onYes) {
@@ -183,11 +191,12 @@
       /* The store falls to memory when there is no arcade storage bridge and no localStorage, which is
          what a page drawn inside a feed post's sandboxed iframe gets. Only the diagnostics panel said
          so, so a whole session off a feed card could be played and lost without a word about it. */
-      help.innerHTML = '<h3>Welcome to Ashvale</h3>' +
+      const HM = (api.home && api.home()) || null;   /* the home you were born in (handoff/ziibiing_start_plan.md): its own welcome */
+      help.innerHTML = '<h3>Welcome to ' + A.esc(HM ? HM.name : 'Ashvale') + '</h3>' +
         (api.savesHere && api.savesHere() === 'memory' ? '<ul><li><span class="y">This window cannot keep your progress</span> - it ends when you close it. Open ASHVALE from the Games tab and press <b>Play</b> there to keep your character.</li></ul>' : '') +
         (api.isTouch ? '<ul><li><b>Tap</b> to walk, <b>double-tap</b> to run. Tap the ground to walk there, a monster to fight it, an item to pick it up, a person to talk or trade.</li><li><b>Drag</b> to turn the camera, <b>pinch</b> to zoom.</li><li><b>Press and hold</b> anything for more options.</li></ul>'
           : '<ul><li><b>Click</b> to walk, <b>double-click</b> to run. Click the ground to walk there, a monster to fight, loot to pick it up, a person to talk or trade.</li><li><b>Right-click</b> for more options. <b>Arrow keys</b> or <b>middle-drag</b> (or left-drag) turn the camera, the <b>wheel</b> zooms.</li><li>Hold <b>Shift</b> while you click for the opposite of that click - walk with Run switched on, run with it off. Settings can keep running on so you do not have to double-click.</li><li>Keys: I inventory, E equipment, S skills, C combat, Q quests, P prayer, M magic, Esc close.</li></ul>') +
-        '<ul><li>Other players you see are real people on the arcade. Monsters are your own for now.' + (api.isTouch ? '' : ' Press <b>Enter</b> to talk to them.') + '</li><li>Talk to <span class="y">Elder Maren</span> by the well: wolves are taking the flock.</li><li>Buy weapons and armour from <span class="y">Garrick</span> (Armoury, north-east), food and tools from <span class="y">Tam</span> (General Store, north-west).</li><li>Seven others here built this village and never left it: <span class="y">Silas</span> by the well, <span class="y">Pip</span> on the street, <span class="y">Latency</span> at the north gate, the rest about the roads. Right-click one and talk.</li><li>Giant rats lurk where the path enters Whisperwood, wolves further north. Eat when your hitpoints run low.</li></ul>' +
+        '<ul><li>Other players you see are real people on the arcade. Monsters are your own for now.' + (api.isTouch ? '' : ' Press <b>Enter</b> to talk to them.') + '</li>' + (HM && HM.help ? HM.help.map(t => '<li>' + t + '</li>').join('') : '<li>Talk to <span class="y">Elder Maren</span> by the well: wolves are taking the flock.</li><li>Buy weapons and armour from <span class="y">Garrick</span> (Armoury, north-east), food and tools from <span class="y">Tam</span> (General Store, north-west).</li><li>Seven others here built this village and never left it: <span class="y">Silas</span> by the well, <span class="y">Pip</span> on the street, <span class="y">Latency</span> at the north gate, the rest about the roads. Right-click one and talk.</li><li>Giant rats lurk where the path enters Whisperwood, wolves further north. Eat when your hitpoints run low.</li>') + '</ul>' +
         '<button class="btn">Play</button>';
       help.querySelector('.btn').onclick = () => { showHelp(false); api.helpSeen && api.helpSeen(); };
     }
@@ -295,7 +304,7 @@
        Nothing from a step you have not reached. "Remove from quest log" hides it and keeps the progress (core 'qhide'). */
     K.questStory = (id, who) => {
       const p = K.P(), Q = core.D.quests.quests[id], q = p && p.quests[id]; if (!Q || !q) return;
-      const fill = (L, st) => (L || []).map(l => String(l).replace(/\{(n|goal|left|name)\}/g, (m, k) => k === 'name' ? (p.name || 'traveller') : !st ? '' : k === 'goal' ? (st.goal.n || 1) : k === 'n' ? (q.n | 0) : Math.max(0, (st.goal.n || 1) - (q.n | 0))));
+      const fill = (L, st) => (L || []).map(l => !l || typeof l !== 'object' ? l : ((p.home || 'ashvale') in l ? l[p.home || 'ashvale'] : l['*'])).filter(l => l != null).map(l => String(l).replace(/\{(n|goal|left|name)\}/g, (m, k) => k === 'name' ? (p.name || 'traveller') : !st ? '' : k === 'goal' ? (st.goal.n || 1) : k === 'n' ? (q.n | 0) : Math.max(0, (st.goal.n || 1) - (q.n | 0))));
       let h = '<h3>' + A.esc(Q.name) + '</h3><div class="info" style="margin:0 0 8px">As told by <span class="y">' + who(Q.giver) + '</span></div>';
       const para = (L) => { for (const l of L) h += '<p style="margin:0 0 8px;line-height:1.45">' + A.esc(l) + '</p>'; };
       for (let i = 0; i < Q.steps.length && i < q.step; i++) {
@@ -312,7 +321,7 @@
     { const r0 = K.refresh; K.refresh = w => { r0(w); if (st.chest) K.drawChest(); }; }   /* the chest window follows the bag and the wallet */
     setTab(st.tab);
     return {
-      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab('inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
+      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab(api.isPhone ? null : 'inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };

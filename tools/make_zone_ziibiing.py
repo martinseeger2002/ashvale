@@ -183,10 +183,22 @@ at('ziigwan')['craft'] = [
 
 npcs.append({'id': 'makak', 'name': 'Ziibiing makak', 'look': 'makak', 'x': FIRE[0] + 3, 'y': FIRE[1] - 1, 'chest': True,
              'examine': 'A birch bark makak, sewn with spruce root, quill flowers on its side. Like the chest in Ashvale, it holds everything you own in your arcade wallet.'})
+# WHERE YOU COME FROM (2026-10-09: "the dialogue for the NPCs should be different and aware of the origins of the character"):
+# an NPC's `from: {<home>: {...}}` replaces its own words for a character born in that home (core npcFor). The people of Ziibiing
+# speak to one of their own as family, and nothing they say to them points past the woods.
+mi = at('maiingan')
+mi['from'] = {'ziibiing': {'lines': ["Boozhoo. Your mother was up before the sun, sewing ribbon by her fire. I could hear her humming from the river."] + mi['lines'][1:]}}
+mk = next(n for n in npcs if n['id'] == 'makak')
+mk['from'] = {'ziibiing': {'examine': 'A birch bark makak, sewn with spruce root, quill flowers on its side. It holds everything you own in your arcade wallet.'}}
 # Mishoomis, the elder: he lives in the first wigwam, sitting cross-legged west of its fire, and sends you ricing
 c0 = LODGE_O[0] + ROOM // 2, LODGE_O[1] + ROOM // 2
 lnpcs = [{'id': 'mishoomis', 'name': 'Mishoomis', 'look': 'mishoomis', 'x': c0[0] - 2, 'y': c0[1], 'face': 'e', 'pose': 'crosslegged', 'talk': 'quest', 'quest': 'manoomin',
           'examine': 'Mishoomis, the grandfather of Ziibiing, sitting cross-legged by his fire in an otter fur turban, a beaded bandolier bag across his chest.'}]
+# Ningashi ("my mother"), in the second wigwam: a Ziibiing-born wakes by her fire and changes hair and clothes with her (the operator
+# 2026-10-08: Wren's part in Ashvale; basic clothing only - headwear, capes and robes are earned later, so no counter)
+lnpcs.append({'id': 'ningashi', 'name': 'Ningashi', 'look': 'ningashi', 'x': c0[0] + GAP - 2, 'y': c0[1], 'face': 'e', 'pose': 'crosslegged', 'tailor': True,
+              'greet': 'Boozhoo. Come and sit by me. Let me see to your hair and your clothes.',
+              'examine': 'Ningashi, your mother, sitting by her fire with a ribbon skirt half sewn across her knees.'})
 lz = {'name': 'Wigwam', 'level': '1-10', 'origin': list(LODGE_O), 'size': [GAP * (len(WIGWAMS) - 1) + ROOM, ROOM], 'ground': 'grass', 'under': True, 'style': 'wigwam',
       'surface': list(WIGWAMS[0]), 'tiles': [''.join(r) for r in lodges], 'objects': lobj, 'npcs': lnpcs, 'spawns': [], 'fishing': []}
 json.dump({'ashvale3d': 'module', 'name': 'zone.lodges', 'api': 1, 'v': 1, 'data': lz}, open(os.path.join(HERE, 'data', 'zone.lodges.json'), 'w'), separators=(',', ':'))

@@ -308,7 +308,7 @@ KG_ID = {"potion": 0.3, "bread": 0.4, "shrimp": 0.1, "trout": 0.4, "salmon": 1.0
          "willow_logs": 3, "maple_logs": 3.5, "yew_logs": 4, "pelt": 1.5, "rat_pelt": 0.3, "hatchet": 1.2, "pickaxe": 2.2, "net": 0.5,
          "fishing_rod": 0.4, "lobster_pot": 1.5, "tinderbox": 0.1, "ashvale_stone": 0.2, "saltmere_stone": 0.2, "castle_stone": 0.2, "chicken": 0.5, "chicken_cooked": 0.5,
          "rat_meat": 0.2, "rat_meat_cooked": 0.2, "hare": 0.4, "hare_cooked": 0.4, "goat": 0.8, "goat_cooked": 0.8, "venison": 0.8, "venison_cooked": 0.8, "boar": 1.0, "boar_cooked": 1.0,
-         "hare_pelt": 0.2, "snow_hare_pelt": 0.2, "goat_hide": 1.0, "deer_hide": 1.4, "boar_hide": 1.8, "timber_wolf_pelt": 1.8, "lizard_skin": 0.3, "spider_silk": 0.1, "antidote": 0.3, "dragon_bones": 1.2}   # a chicken: raw, cooked or burnt
+         "hare_pelt": 0.2, "snow_hare_pelt": 0.2, "goat_hide": 1.0, "deer_hide": 1.4, "boar_hide": 1.8, "timber_wolf_pelt": 1.8, "lizard_skin": 0.3, "spider_silk": 0.1, "antidote": 0.3, "dragon_bones": 1.2, "prayer_potion": 0.3}   # a chicken: raw, cooked or burnt
 METAL_KINDS = {"dagger", "sword", "longsword", "mace", "shield", "helmet", "body", "chainbody", "legs"}
 METAL_F = [0, 1.1, 1.0, 1.0, 0.6, 1.05]
 for k, d in items.items():
@@ -1585,6 +1585,150 @@ for L in range(1, 99):
     pts += math.floor(L + 300 * 2 ** (L / 7))
     xp.append(pts // 4)
 assert xp[:61] == WORLD['xp_table'][:61], 'xp curve must match the original ASHVALE world'
+# Homes: where a character is born (p.home). Each home gives its own spawn, wake spot, starting kit, help lines and the
+# character creator's choices (styles per body, labels, swatches, defaults). A new home is data only (Ziibiing, 2026-10-09).
+HOMES = {
+ "ashvale": {
+  "name": "Ashvale"
+ },
+ "ziibiing": {
+  "name": "Ziibiing",
+  "spawn": [
+   24048,
+   24406
+  ],
+  "inv": [
+   [
+    "coins",
+    75
+   ],
+   [
+    "venison_cooked",
+    1
+   ],
+   [
+    "venison_cooked",
+    1
+   ],
+   [
+    "wild_rice",
+    3
+   ]
+  ],
+  "first": "Ningashi, your mother, sits by the fire. Tap her to change your hair and clothes.",
+  "help": [
+   "You open your eyes by the fire in your mother's wigwam. <span class=\"y\">Ningashi</span> sees to your hair and clothes. When you are ready, go and see <span class=\"y\">Mishoomis</span> in his wigwam.",
+   "Ziibiing means \"at the river\". The people of the village each know their own part of the world: the canoe, the fish, the rice, the plants, the sky, the drum. Right-click one and talk.",
+   "The <span class=\"y\">makak</span> by the village fire holds everything you own in your arcade wallet.",
+   "Eat when your hitpoints run low."
+  ],
+  "creator": {
+   "note": "2026-10-08: everyday Anishinaabe wear, never medieval clothing; long hair; a man may go bare-chested; dance regalia is earned later. A list may be split by body.",
+   "styles": {
+    "hair": [
+     "loose",
+     "braids",
+     "mohawklong"
+    ],
+    "beard": [
+     None
+    ],
+    "shirt": {
+     "male": [
+      None,
+      "ribbon",
+      "beadvest",
+      "buckskin"
+     ],
+     "female": [
+      "ribbondress",
+      "ribbon",
+      "beadvest",
+      "buckskin"
+     ]
+    },
+    "pants": {
+     "male": [
+      "breechcloth"
+     ],
+     "female": [
+      "ribbonskirt",
+      "buckskinskirt"
+     ]
+    },
+    "feet": [
+     "moccasins"
+    ]
+   },
+   "labels": {
+    "loose": "long",
+    "braids": "braids",
+    "mohawklong": "mohawk",
+    "": "bare chest",
+    "ribbon": "ribbon shirt",
+    "beadvest": "beaded vest",
+    "buckskin": "buckskin shirt",
+    "ribbondress": "ribbon dress",
+    "breechcloth": "breechcloth",
+    "ribbonskirt": "ribbon skirt",
+    "buckskinskirt": "buckskin skirt",
+    "moccasins": "moccasins",
+    "boots": "Feet"
+   },
+   "colors": {
+    "buckskin": "#b8895a",
+    "buckskinskirt": "#b8895a",
+    "breechcloth": "#2a2f5a",
+    "ribbondress": "#3f5d8a",
+    "ribbonskirt": "#5b3a7a",
+    "ribbon": "#8a3030",
+    "beadvest": "#3f5d8a"
+   },
+   "cloth": [
+    "#b8895a",
+    "#8a6a4a",
+    "#2a2f5a",
+    "#3f5d8a",
+    "#8a3030",
+    "#5b3a7a",
+    "#2f6a6a",
+    "#4f6d3a",
+    "#c8a040",
+    "#f4f1ea",
+    "#3a3430",
+    "#c86a2a"
+   ],
+   "boots": [
+    "#b8895a",
+    "#c8a070",
+    "#8a6a4a",
+    "#5a3a22",
+    "#3a2a1c"
+   ],
+   "defaults": {
+    "skin": "#a86f48",
+    "hair": "loose",
+    "hairColor": "#1c1612",
+    "eyes": "#3a2a1e",
+    "beard": None,
+    "feet": "moccasins",
+    "boots": "#b8895a",
+    "belt": None,
+    "shirt": {
+     "style": "ribbon",
+     "color": "#8a3030"
+    },
+    "pants": {
+     "style": "breechcloth",
+     "color": "#2a2f5a"
+    }
+   }
+  },
+  "wake": "home",
+  "wakeSay": "You wake by the fire in your mother's wigwam."
+ }
+}
+
 module('rules', 3, {
     "xp": xp,
     # ^ mountain rock and K standing stones / ruin walls come from the seeded land (worldgen, globe P2): both block
@@ -1676,6 +1820,7 @@ module('rules', 3, {
     "dexterity": {"drainPerLevelPermille": 5, "drainMaxPermille": 400, "dodgePerTenLevels": 1, "fastAt": 50, "fastKinds": ["dagger", "bow"],
                   "xpPerRunTile": 2, "xpPerDamage": 10},
     "speechcraft": {"pctPerLevelPermille": 4, "maxPermille": 300, "xpPerGold": 1, "xpQuestTalk": 250},
+    "homes": HOMES,
     "yard": {"note": "2026-10-04: chickens wherever there are buildings - n birds per `per` buildings, by a building, at most max per town", "kinds": ["house", "shop", "smithy", "inn", "tavern", "hall"], "per": 2, "n": 2, "max": 14, "birds": ["chicken", "hen"]},   # town birds (2026-10-04): n per `per` buildings, by a building (src/world.js)
 })
 

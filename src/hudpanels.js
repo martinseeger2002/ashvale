@@ -12,7 +12,7 @@
       if (ST.shopId) K.drawShop();
       if (!ST.tab) return;
       if (ST.tab === 'inv') {
-        panel.innerHTML = weightBar(p) + (ST.chest ? '<div class="info" style="margin:0 0 6px">Chest is open. Click puts one in. Right-click: All, or wear.</div>' : '') + '<div class="inv"></div>'; const g = panel.querySelector('.inv');
+        panel.innerHTML = weightBar(p) + (ST.chest ? '<div class="info" style="margin:0 0 6px">Chest is open. Click puts one in. Right-click: N, All, or wear.</div>' : '') + '<div class="inv"></div>'; const g = panel.querySelector('.inv');
         p.inv.forEach((it, i) => { const s = K.el('slot', g, K.slotHtml(it)); s.dataset.i = i; if (p.using && p.using.slot === i && it && it.id === p.using.id) s.classList.add('aim'); if (it) K.invPointer(s, i); });
       } else if (ST.tab === 'equip') {
         let h = '<h4>Worn Equipment</h4><div class="equip">';

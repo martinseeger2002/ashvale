@@ -189,14 +189,14 @@ function createModels(THREE, opts) {
     }
     return out;
   }
-  const styleOf = slot => Object.values(PARTS).filter(p => p.kind === 'cloth' && p.slot === slot).map(p => p.style);
-  const clothPart = (slot, style) => PARTS['cloth.' + (['boots', 'gloves', 'belt', 'cape', 'apron'].includes(slot) ? slot : slot + '_' + style)];
+  const styleOf = slot => Object.values(PARTS).filter(p => p.kind === 'cloth' && p.slot === slot && !p.homes).map(p => p.style);   /* a part with homes is offered only by those homes' creators */
+  const clothPart = (slot, style) => (slot === 'boots' && style && PARTS['cloth.boots_' + style]) || PARTS['cloth.' + (['boots', 'gloves', 'belt', 'cape', 'apron'].includes(slot) ? slot : slot + '_' + style)];   /* boots may have a cut (look.feet, e.g. moccasins) */
   function info(id) {
     const e = ITEMS[id]; if (!e) return { kind: id, tier: 0 };
     const p = e.part, kind = p.kind === 'cloth' ? p.slot : (p.items && typeof p.items === 'string' ? p.items.split('_')[0] : p.slot);
     return { kind, tier: e.t, family: p.family, part: p, color: e.c != null ? e.c : p.family ? TIERS[p.family][e.t] : p.color, slot: p.slot };
   }
-  const OUTFIT_STYLES = { hair: styleOf('hair'), beard: [null].concat(styleOf('beard')), hat: [null].concat(styleOf('hat')), shirt: styleOf('shirt'), pants: styleOf('pants') };
+  const OUTFIT_STYLES = { hair: styleOf('hair'), beard: [null].concat(styleOf('beard')), hat: [null].concat(styleOf('hat')), shirt: styleOf('shirt'), pants: styleOf('pants'), feet: styleOf('boots') };
   const PALETTE = PAL.creator;
   const DEFAULT_OUTFIT = PAL.defaultOutfit;
 
@@ -257,7 +257,7 @@ function createModels(THREE, opts) {
       const sh = O.shirt && clothPart('shirt', O.shirt.style), pa = O.pants && clothPart('pants', O.pants.style);
       if (pa) pieces.push([pa, O.pants.color]);
       if (sh) pieces.push([sh, O.shirt.color]);
-      for (const sl of ['boots', 'gloves', 'belt', 'apron', 'cape']) if (O[sl]) pieces.push([clothPart(sl), O[sl]]);
+      for (const sl of ['boots', 'gloves', 'belt', 'apron', 'cape']) if (O[sl]) pieces.push([clothPart(sl, sl === 'boots' ? O.feet : null), O[sl]]);
       const hairP = clothPart('hair', O.hair || 'short'), beardP = O.beard ? clothPart('beard', O.beard) : null, hatP = O.hat ? clothPart('hat', O.hat.style) : null;
       const gearParts = [];
       const add = (id, slot) => { const I = info(id); if (I.part && I.part.kind === 'gear') gearParts.push({ I, slot }); };
