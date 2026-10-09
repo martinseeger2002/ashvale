@@ -50,8 +50,9 @@
       const pd = PI.length ? ctx.pathDist(f, cx, cy) : 1e9;
       /* rivers: a creek is shallow water you wade through ('v'); a river is deep ('~') but for a ford now and then, and a
          path over it is a bridge */
-      if (PI.length && ctx.wallAt && !(TF[16] > 0.5 && TF[16] <= 2.5) && h > WATER - 3) {   /* a wall of old woods (globecfg.walls): no path, no clearing,
-        nothing chops these; no lake or pond inside it either (2026-10-09: a hawk flew in to a lake there) - only the river runs through, and the sea */
+      if (PI.length && ctx.wallAt && !(TF[16] > 0.5) && h >= WATER) {   /* a wall of old woods (globecfg.walls): no path, no clearing,
+        nothing chops these. On dry land only (2026-10-09: never into the sea or across the river - a buffer, not a cage); a pond
+        left inside is out of reach anyway, since hawks cannot fly over these trees (rules.tiles.noFly) */
         const WL = ctx.wallAt(f, cx, cy);
         if (WL && (WL.k >= 1 || g.u01(g.hash3(cx, cy, (f * 31337) ^ ctx.S.tl ^ 0x77a1)) < WL.k * 0.8)) { FOREST_HIT = true; return WL.sp[Math.floor(g.u01(g.hash3(cy, cx, f ^ 0x1d2b)) * WL.sp.length)]; }
       }
