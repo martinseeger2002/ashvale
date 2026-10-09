@@ -8504,28 +8504,13 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       msg(p, 'You learn ' + FLAGS[k].name + '.' + (FLAGS[k].desc ? ' ' + FLAGS[k].desc : ''), 'quest');
     }
     function ensureStep(p, q, st) { openStep(p, q, st); }
-    const VAEL_CLEAR = 10;
-    function vaelTile() { const n = M.npcs.find(q => q.id === 'vael'); return n ? [n.x, n.y] : null; }
-    /* the walk the chapel carves: one tile west of the altar, then toward the grove (map-north / true south-southwest since the north was turned), three tiles wide */
-    function onChapelPath(x, y) { return x >= 196 && x <= 198 && y <= 14 && y >= -40; }
-    function townAt(x, y) {
-      for (const z of ZINDEX) {
-        if (!z || z.level !== 'safe' || !z.origin || !z.size) continue;
-        if (x >= z.origin[0] && y >= z.origin[1] && x < z.origin[0] + z.size[0] && y < z.origin[1] + z.size[1]) return z;
-      }
-      return null;
-    }
+    function isStump(x, y) { const i = idx(x, y); return isWood(x, y) && !!S.dep[i]; }
     function plantWhy(x, y) {
-      const v = vaelTile();
-      if (v && cheb(x, y, v[0], v[1]) <= VAEL_CLEAR) return 'Within ten tiles of Vael the ground stays clear, so the rope is never walled in.';
-      if (onChapelPath(x, y)) return 'That tile is on the path from the Ancient Chapel. It stays open.';
-      const town = townAt(x, y);
-      if (town) return 'Inside ' + (town.name || 'town') + ' the town limits will not take a tree.';
       if (M.insideAt && M.insideAt(x, y)) return 'Not indoors.';
       const t = M.tileAt(x, y);
-      if (t === 'p') return 'The path will not take a tree.';
-      if (t !== '.') return 'A sapling only takes in grass.';
+      if (t === '~' || t === 'v' || t === 'B') return 'A sapling will not take in the water.';
       const i = idx(x, y);
+      if (isStump(x, y)) return S.plants[i] ? 'Something is already planted there.' : null;
       if (M.blocked(x, y) || nodeAt(i)) return 'That ground will not take a shoot.';
       if (S.plants[i]) return 'Something is already planted there.';
       return null;
@@ -8550,22 +8535,15 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
     function stumpWhy(p, x, y) {
       if (!canReplant(p)) return null;
       if (S.plants[idx(x, y)]) return 'Something is already planted there.';
-      if (isWood(x, y) && S.dep[idx(x, y)]) return 'The stump is still settling. In an hour the ground will be open grass, and a sapling can go there.';
       return null;
     }
     function canPlant(p, x, y) {
       if (invCount(p, 'sapling') < 1) return false;
       const i = idx(x, y);
       if (S.plants[i]) return false;
-      if (isWood(x, y) && S.dep[i]) return false;
-      if (isCleared(x, y) && canReplant(p)) return true;
-      const job = plantJob(p);
-      if (job && job.st.goal.plant === 'stump') return false;
+      if (isWood(x, y) && !S.dep[i]) return false;
+      if (isStump(x, y) || isCleared(x, y)) return canReplant(p);
       if (plantWhy(x, y)) return false;
-      if (job && job.st.goal.plant === 'open') {
-        const near = job.st.near;
-        if (near && cheb(x, y, near[0], near[1]) > (near[2] == null ? 16 : near[2])) return false;
-      }
       return true;
     }
     function takeSapling(p) {
@@ -8578,8 +8556,19 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
     }
     function plantAt(p, x, y) {
       if (!canPlant(p, x, y)) { msg(p, (isWood(x, y) && !canReplant(p) ? 'You have not learned to set a shoot in a stump.' : null) || stumpWhy(p, x, y) || plantWhy(x, y) || 'That ground will not take a shoot.', 'warn'); return; }
-      const job = plantJob(p), i = idx(x, y), cleared = isCleared(x, y);
-      const count = !!(job && ((job.st.goal.plant === 'stump' && cleared) || (job.st.goal.plant === 'open' && !cleared)));
+      const job = plantJob(p), i = idx(x, y);
+      const wasStump = isStump(x, y);
+      if (wasStump) {
+        if (M.clearTree) M.clearTree(x, y);
+        delete S.dep[i]; delete S.fell[i];
+        S.cleared[i] = 1;
+        ev({ e: 'clear', x, y, node: i });
+      }
+      const cleared = isCleared(x, y);
+      const onStump = wasStump || cleared;
+      const near = job && job.st.near;
+      const inGrove = !near || cheb(x, y, near[0], near[1]) <= (near[2] == null ? 16 : near[2]);
+      const count = !!(job && ((job.st.goal.plant === 'stump' && onStump) || (job.st.goal.plant === 'open' && !onStump && inGrove)));
       if (!takeSapling(p)) return;
       const rec = { x, y, at: S.t, tile: M.tileAt(x, y), stump: 0, owner: p.id, grown: 0 };
       if (count) { rec.qid = job.qid; rec.step = job.q.step; rec.counted = 1; }
@@ -8702,7 +8691,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
         S.dep[i] = nd.regrow < 0 ? FOREVER : S.t + nd.regrow;
         if (nd.skill === 'woodcutting') S.fell[i] = S.t;
         ev({ e: 'deplete', node: i, p: p.id, x: n.x, y: n.y, forever: nd.regrow < 0 ? 1 : 0 });
-        if (nd.skill === 'woodcutting' && canReplant(p)) msg(p, 'A stump is left. In an hour it will be open grass, and a sapling can go there.', 'quest');
+        if (nd.skill === 'woodcutting' && canReplant(p)) msg(p, 'A stump is left. A sapling can go there.', 'quest');
         p.act = null; p.skilling = null;
       }   /* regrow < 0: felled for good (2026-10-05) */
     }

@@ -90,7 +90,7 @@ function chop(x, y) {
   }
 }
 for (const [x, y] of stumps) chop(x, y);
-ok(stumps.every(([x, y]) => !core.canPlant(p, x, y)), 'a fresh stump is not ready for a sapling');
+ok(stumps.every(([x, y]) => core.canPlant(p, x, y)), 'a fresh stump takes a sapling at once');
 function settle(x, y) { core.S.fell[core.idx(x, y)] = core.S.t - core.plantHour; ticks(1); }
 for (const [x, y] of stumps) settle(x, y);
 ok(stumps.every(([x, y]) => core.M.tileAt(x, y) === '.' && !core.M.blocked(x, y) && !core.nodeAt(core.idx(x, y)) && core.canPlant(p, x, y)), 'after an hour the stump is open grass');
@@ -104,6 +104,13 @@ for (let y = -67; y <= -35 && !other; y++) for (let x = 181; x <= 213; x++) {
 }
 ok(!!other && !core.canPlant(p, other[0], other[1]), 'another standing pine is not a stump yet');
 core.S.dep[core.idx(other[0], other[1])] = 1e15;
+ok(core.canPlant(p, other[0], other[1]), 'any felled tree takes a sapling on the stump step');
+core.grantItem('p1', 'sapling', 1);
+plant(other[0], other[1]);
+ok(p.quests.even_grove.n === 1, 'a stump that is not one of the two still counts');
+core.cmd('p1', { c: 'unplant', x: other[0], y: other[1] });
+ticks(4);
+ok(p.quests.even_grove.n === 0, 'picking that sapling back up reopens the step');
 ok(core.hasFlag(p, 'replant'), 'replanting is learned when the stump step opens');
 let close = null;
 for (let y = -61; y <= -41 && !close; y++) for (let x = 187; x <= 207; x++) {
@@ -216,15 +223,18 @@ ticks(1);
 core.cmd('p1', { c: 'useon', x: p.x, y: p.y });
 ticks(1);
 ok(!p.using, 'the outline is gone after the next click, whether or not the sapling went in');
-ok(!core.canPlant(p, 197, -45), 'within ten tiles of Vael grass will not take a new tree');
+ok(core.canPlant(p, 197, -45), 'grass beside Vael takes a sapling');
 core.S.dep[core.idx(close[0], close[1])] = 1e15;
 ok(core.hasFlag(p, 'replant') && core.canPlant(p, close[0], close[1]), 'after the quest, any stump still takes a sapling');
 delete core.S.dep[core.idx(close[0], close[1])];
-ok(!core.canPlant(p, 197, 0), 'the path south from the chapel stays open');
-let town = null;
 const vill = zones.find(z => z.id === 'village');
-for (let y = vill.origin[1]; y < vill.origin[1] + vill.size[1] && !town; y++) for (let x = vill.origin[0]; x < vill.origin[0] + vill.size[0]; x++) if (core.M.tileAt(x, y) === '.') { town = [x, y]; break; }
-ok(!!town && !core.canPlant(p, town[0], town[1]), 'Ashvale town limits will not take a tree');
+let road = null;
+for (let y = vill.origin[1]; y < vill.origin[1] + vill.size[1] && !road; y++) for (let x = vill.origin[0]; x < vill.origin[0] + vill.size[0]; x++) if (core.M.tileAt(x, y) === 'p' && !core.M.blocked(x, y)) { road = [x, y]; break; }
+ok(!!road && core.canPlant(p, road[0], road[1]), 'a path takes a sapling');
+ok(!core.canPlant(p, 40, 54), 'water still will not take a sapling');
+let town = null;
+for (let y = vill.origin[1]; y < vill.origin[1] + vill.size[1] && !town; y++) for (let x = vill.origin[0]; x < vill.origin[0] + vill.size[0]; x++) if (core.M.tileAt(x, y) === '.' && !core.nodeAt(core.idx(x, y))) { town = [x, y]; break; }
+ok(!!town && core.canPlant(p, town[0], town[1]), 'Ashvale town grass takes a sapling');
 let spot = null;
 for (let y = -67; y <= -35 && !spot; y++) for (let x = 181; x <= 213; x++) if (core.M.tileAt(x, y) === '.' && !core.S.cleared[core.idx(x, y)] && core.canPlant(p, x, y)) { spot = [x, y]; break; }
 ok(!!spot, 'grass outside those limits will take a sapling');
