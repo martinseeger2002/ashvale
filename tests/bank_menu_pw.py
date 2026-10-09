@@ -3,7 +3,7 @@ import os, sys
 os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', '/home/name/.cache/ms-playwright')
 from playwright.sync_api import sync_playwright
 
-URL = 'http://127.0.0.1:8099/ashvale3d.html?fresh&nocreator&seed=bankmenu'
+URL = 'http://127.0.0.1:8731/dist/ashvale3d.html?fresh&nocreator&seed=bankmenu'
 OUT = os.path.join(os.path.dirname(__file__), 'shots')
 os.makedirs(OUT, exist_ok=True)
 fails = []

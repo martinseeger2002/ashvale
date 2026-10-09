@@ -13477,7 +13477,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
          Games tab and come back in. */
       const VER = { mine: ((G.ASH3D && G.ASH3D._values && G.ASH3D._values.$registry) || {}).version | 0, told: 0 };
       async function versionCheck() {
-        if (stopped || !VER.mine || VER.told || !/^https?:/.test(location.protocol) || !G.arcade) return;   /* only on the arcade, which has /r/inscriptions (a page served elsewhere got a 404 every 3 min) */
+        if (stopped || !VER.mine || VER.told || !/^https?:/.test(location.protocol) || !(G.arcade || G.ASH3D_VERCHECK)) return;   /* only on the arcade, which has /r/inscriptions (a page served elsewhere got a 404 every 3 min); tests set ASH3D_VERCHECK */
         try {
           const L = await (await fetch('/r/inscriptions?creator=nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c&limit=10')).json();
           let v = 0; for (const x of L || []) { const j = x && x.json; if (j && j.ashvale3d === 'registry' && (j.loader || 1) <= (G.ASH3D.LOADER || 1)) v = Math.max(v, j.version | 0); }

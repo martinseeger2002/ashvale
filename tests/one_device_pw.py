@@ -35,7 +35,7 @@ with sync_playwright() as P:
     # new version: the arcade lists a registry one newer than ours
     v = C.evaluate('ASH.oneDevice().version'); check(v > 0, 'the page knows its registry version (%s)' % v)
     C.route('**/r/inscriptions*', lambda r: r.fulfill(status=200, content_type='application/json', body='[{"json":{"ashvale3d":"registry","loader":1,"version":%d}}]' % (v + 1)))
-    C.evaluate('ASH.versionCheck()')
+    C.evaluate('window.ASH3D_VERCHECK = 1; ASH.versionCheck()')   # outside the arcade the check is off (no /r/inscriptions there)
     check(until(lambda: shown(C, 'newver'), 8), 'the new-version banner shows')
     check('refresh your Games tab' in C.evaluate("document.querySelector('.newver').textContent"), 'it says to refresh the Games tab: %r' % C.evaluate("document.querySelector('.newver').textContent")[:140])
     C.screenshot(path='tests/shots/one_device_newver.png'); B.screenshot(path='tests/shots/one_device_elsewhere.png')
