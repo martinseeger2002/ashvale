@@ -8,6 +8,11 @@
   function engineFactory(deps) {
     const THREE = deps.three, AshCore = deps.core, net = deps.net, SCENE = deps.scene, HUD = deps.hud, DATA = deps.data;
     const TICK = 600, CHAR = 0.8, PI = Math.PI;
+    /* THIS GAME'S HOME (handoff/ziibiing_start_plan.md): the Ziibiing card's launcher sets ASH3D_HOME before boot; on a page of its
+       own (never framed in the arcade) ?home= does it. null = Ashvale, every save from before homes. A second character on the same
+       wallet: its own save here (key suffix) and at the Bank (sv/ld? carry h), its own one-device room message (dev h). */
+    const HOME = (() => { const h = G.ASH3D_HOME || (!(G.parent && G.parent !== G) && G.location && new URLSearchParams(G.location.search).get('home')); return h && h !== 'ashvale' && /^[a-z]{2,16}$/.test(h) ? h : null; })();
+    const withHome = o => HOME ? Object.assign(o, { h: HOME }) : o, homeIs = d => (d && d.h || null) === HOME;   /* replies for the other character are not ours */
     /* HARD RULE (2026-10-01): "only items that were inscribed and tokens created by @ashvale should be allowed in
        the game". Anything read from a wallet (NFTs, tokens) must pass allowedAsset() before it reaches the game. */
     const ASHVALE_ADDR = 'nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c';
@@ -150,7 +155,7 @@
        by the @ashvale Bank under your wallet address, in pieces small enough for a room message. Starting, the game asks the Bank
        first and takes its copy when it is newer than this device's; playing, it hands the Bank each new save (at most every 20 s,
        and as you leave). The Bank keeps the newest per address and never reads inside it. */
-    const SAVE_KEY = 'ashvale3d.save.v1', CHUNK = 340;
+    const SAVE_KEY = 'ashvale3d.save.v1' + (HOME ? '.' + HOME : ''), CHUNK = 340;
     const slim = v => {   /* drop what a save does not need to say: nulls and empty objects (every value kept exactly) */
       if (Array.isArray(v)) return v.map(slim);
       if (v && typeof v === 'object') { const o = {}; for (const k in v) { const x = slim(v[k]); if (x == null || (typeof x === 'object' && !Array.isArray(x) && !Object.keys(x).length)) continue; o[k] = x; } return o; }
@@ -184,7 +189,7 @@
           if (fin || !res || !res.online) return end();
           R = res.room; const me = R.me && R.me.address; if (!me) return end();
           R.on('message', ({ from, data }) => {
-            if (fin || !data || data.t !== 'ld' || data.to !== me || !bankSays(from)) return;
+            if (fin || !data || data.t !== 'ld' || data.to !== me || !bankSays(from) || !homeIs(data)) return;
             if (!data.n) { CLOUD_OK = true; return end(); }   /* the Bank holds no save for this address */
             parts[data.i] = data.d;
             if (Object.keys(parts).length < data.n) return;
@@ -204,7 +209,7 @@
           });
           /* ask again every 2.5 s until the Bank answers: on a cold start the first question, sent the moment the room opens,
              is often lost (live test 2026-10-07: joined at 6.7 s, the Bank never heard it) */
-          const ask = () => { if (fin || Object.keys(parts).length) return; R.send({ t: 'ld?' }); setTimeout(ask, 2500); }; ask();
+          const ask = () => { if (fin || Object.keys(parts).length) return; R.send(withHome({ t: 'ld?' })); setTimeout(ask, 2500); }; ask();
         }, end);
       });
     }
@@ -238,7 +243,7 @@
       const isTouch = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
       const isPhone = isTouch && Math.min(innerWidth, innerHeight) < 600;
       const store = opts.store || memoryStore();
-      const SAVE = 'ashvale3d.save.v1', SET = 'ashvale3d.settings.v1';
+      const SAVE = SAVE_KEY, SET = 'ashvale3d.settings.v1';
       let save = null; try { save = JSON.parse(store.get(SAVE) || 'null'); } catch (e) { save = null; }
       if (opts.fresh || q.has('fresh')) save = null;
       let settings = { sound: true, shadows: !isPhone, runToggle: false }; try { Object.assign(settings, JSON.parse(store.get(SET) || '{}')); } catch (e) { /* defaults */ }
@@ -256,6 +261,9 @@
         if (WGM && AG && AW && AW.seededWorldgen && !q.has('flat')) { try { D.wg = AW.seededWorldgen(WGM, AG, D); } catch (er) { console.warn('worldgen', er && er.message); } } }
       const core = AshCore.create(D, { seed });
       const PID = 'me';
+      /* where a new character is born (handoff/ziibiing_start_plan.md): the Ziibiing card's launcher sets ASH3D_HOME; on this machine's
+         preview ?home=ziibiing does the same */
+      if (HOME && core.setNewHome) core.setNewHome(HOME);
       const me = core.addPlayer(PID, save);
       function syncMounts() {   /* wall-hung quest rewards (Aldric's sword) stay on the wall until they're given */
         for (const r of regions) if (r.built && r.built.mounts) for (const m of r.built.mounts) { const q = me.quests && me.quests[m.quest]; m.obj.visible = !(q && q.step >= m.untilStep); }
@@ -784,12 +792,12 @@
           case 'boatland': boatShow(e.x, e.y, e.face); docksShow(); if (e.by === PID) { boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, face: e.face, on: 0 }); } break;
           case 'cross': if (e.p === PID) { place(myEnt, e.x, e.y); cam.yaw += e.turn || 0; cam.tyaw += e.turn || 0; cam.snap = true; streamRegions(); TN.key = ''; } break;   /* over a cut edge of the net: the same ground, new map coordinates, the view turned with them */
           case 'boatgone': boatHide(e.x, e.y); docksShow(); if (e.by === PID) boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, on: 1 }); break;
-          case 'chest': if (mine) { const c = ents.get('n:' + e.npc); if (c) c.H.play('open'); hud.openChest(); } break;   /* the town chest */
+          case 'chest': if (mine) { const c = ents.get('n:' + e.npc); if (c) c.H.play('open'); hud.openChest(); holdsAsk(); } break;   /* the town chest */
           case 'shopclose': if (mine) hud.closeShop(); break;
           case 'mobjump': { const t = ents.get('m:' + e.mob); if (t) { place(t, e.x, e.y); if (t.path) t.path = null; } break; }   /* came through a cave opening */
           case 'poison': if (mine) { hud.setPoison && hud.setPoison(e.on); if (e.on) sfx('miss'); } break;   /* the green Hitpoints orb (2026-10-07) */
           case 'mobeat': { const t = ents.get('m:' + e.mob); if (t && !t.dead) { playOnce(t, 'eat'); sfx('eat', t); } break; }
-          case 'tailor': if (mine) { faceNpc(e.npc); openWardrobe(false); } break;
+          case 'tailor': if (mine) { faceNpc(e.npc); openWardrobe(false, (NPCN[e.npc] || {}).name); } break;
           case 'look': if (mine) { if (me.look && myEnt.H.setOutfit) myEnt.H.setOutfit(me.look); netGear(); } break;
           case 'dialog': if (mine) {
             const n = e.npc && NPCN[e.npc];
@@ -800,7 +808,15 @@
               }
               if (e.axe) hud.confirm('An axe', 'Vael asks if you need an axe. Take the bronze hatchet?', 'Take it', 'I have one', () => send({ c: 'takeaxe' }));
             } : null;
-            hud.dialog(e.name, e.lines, after);
+            const choices = (e.offer || e.recall) ? [
+              { id: 'yes', label: e.warn ? 'I understand. Call them.' : 'Yes. I will do it.' },
+              { id: 'no', label: 'Not now.' }
+            ] : null;
+            hud.dialog(e.name, e.lines, (pick) => {
+              if (pick === 'no') return;
+              if (pick === 'yes') send({ c: 'acceptq', q: e.offer || e.recall, recall: e.recall ? 1 : 0, replay: e.replay ? 1 : 0 });
+              if (after) after();
+            }, choices);
             faceNpc(e.npc); sfx('click');
             if (n && n.pose) myEnt.restPose = n.pose;   /* sit down with him the same way (2026-10-07) */
           } break;
@@ -1247,7 +1263,7 @@
       function optionsForRaw(t) {
         const esc = s => String(s).replace(/</g, '&lt;');
         if (t.kind === 'mob') { const m = core.mobByUid(t.uid), d = D.monsters[m.key], cb = core.mobCombat(d); const nm = '<span class="y">' + esc(d.name) + '</span> <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>'; const o = [{ html: 'Attack ' + nm, act: { c: 'attack', uid: t.uid }, red: 1 }]; if (d.lines) o.push({ html: 'Talk-to ' + nm, fn: () => hud.dialog(d.name, d.lines) }); o.push({ html: 'Examine ' + nm, fn: () => hud.chat(d.name + ': combat ' + cb + ' (' + (cb > core.combatLevel(me) ? 'stronger than you' : cb === core.combatLevel(me) ? 'evenly matched' : 'weaker than you') + '), ' + d.hp + ' hitpoints, hits up to ' + d.max + '.' + (d.aggro ? ' Aggressive.' : '') + (d.cast ? ' It breathes fire as well as biting.' : '') + (d.hint ? ' ' + d.hint : ''), 'sys') }); return o; }
-        if (t.kind === 'npc') { const n = NPCN[t.id]; if (!n || !npcShown(n)) return []; const cb = n.watch ? (core.guardCb || 33) : 0; const nm = '<span class="y">' + esc(n.name) + '</span>' + (cb ? ' <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>' : ''); const o = []; if (n.watch) o.push({ html: 'Attack ' + nm, act: { c: 'attack', id: n.id }, red: 1 }); if (n.tailor) { o.push({ html: 'Change-look ' + nm, act: { c: 'npc', id: n.id }, red: 1 }); o.push({ html: 'Trade ' + nm, act: { c: 'npc', id: n.id, trade: 1 }, red: 1 }); }
+        if (t.kind === 'npc') { const n = NPCN[t.id]; if (!n || !npcShown(n)) return []; const cb = n.watch ? (core.guardCb || 33) : 0; const nm = '<span class="y">' + esc(n.name) + '</span>' + (cb ? ' <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>' : ''); const o = []; if (n.watch) o.push({ html: 'Attack ' + nm, act: { c: 'attack', id: n.id }, red: 1 }); if (n.tailor) { o.push({ html: 'Change-look ' + nm, act: { c: 'npc', id: n.id }, red: 1 }); if (n.shop) o.push({ html: 'Trade ' + nm, act: { c: 'npc', id: n.id, trade: 1 }, red: 1 }); }
           else if (n.chest) o.push({ html: 'Open ' + nm, act: { c: 'npc', id: n.id }, red: 1 });
           else if (n.portal) o.push({ html: 'Use ' + nm, act: { c: 'npc', id: n.id }, red: 1 });
           else if (n.shop) o.push({ html: 'Trade ' + nm, act: { c: 'npc', id: n.id }, red: 1 });
@@ -1255,9 +1271,15 @@
           if (n.escape && core.searchOpen(me, n)) o.push({ html: 'Escape cave', fn: () => hud.confirm('Leave the cave?', 'Climb back out to the mouth of the Spider Cave?', 'Leave', 'Stay', () => send({ c: 'escape', id: n.id })) });
           o.push({ html: 'Examine ' + nm, fn: () => {
             if (n.search && !core.searchOpen(me, n)) hud.chat('We should probably leave him alone.', 'sys');
-            else hud.chat(n.shop ? n.name + ' runs the ' + core.shop(n.shop).name + '.' : (n.examine || n.name + ', the village elder.'), 'sys');
+            else { const nn = core.npcFor ? core.npcFor(me, n) : n; hud.chat(nn.shop ? nn.name + ' runs the ' + core.shop(nn.shop).name + '.' : (nn.examine || nn.name + ', the village elder.'), 'sys'); }
           } }); return o; }
-        if (t.kind === 'item') { const g = core.S.ground.find(q2 => q2.uid === t.uid); if (!g) return []; const d = core.item(g.id), nm = '<span class="o">' + esc(d.name) + (g.n > 1 ? ' (' + g.n + ')' : '') + '</span>'; return [{ html: 'Take ' + nm, act: { c: 'take', uid: g.uid }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(hud.examine(g.id, g.n), 'sys') }]; }
+        if (t.kind === 'item') {
+          const g = core.S.ground.find(q2 => q2.uid === t.uid); if (!g) return [];
+          const here = core.S.ground.filter(q => q.x === g.x && q.y === g.y && !q.sunk);
+          const o = here.map(q => { const d = core.item(q.id), nm = '<span class="o">' + esc(d.name) + (q.n > 1 ? ' (' + q.n + ')' : '') + '</span>'; return { html: 'Take ' + nm, act: { c: 'take', uid: q.uid }, red: q.uid === g.uid ? 1 : 0 }; });
+          const d0 = core.item(g.id); o.push({ html: 'Examine <span class="o">' + esc(d0.name) + '</span>', fn: () => hud.chat(hud.examine(g.id, g.n), 'sys') });
+          return o;
+        }
         if (t.kind === 'node' && core.isHawk(me)) { const n = core.nodeAt(t.i); if (n && core.nodeDef(n).skill === 'woodcutting') {
           const hp = t.hp || [n.x + 0.5, n.y + 0.5], dx = hp[0] - (n.x + 0.5), dy = hp[1] - (n.y + 0.5), sx = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0, sy = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
           return [{ html: 'Perch in <span class="c">tree</span>', act: { c: 'perch', x: n.x, y: n.y, sx: sx || 1, sy } }]; } }
@@ -1556,13 +1578,13 @@
         const res = await net.join('one.' + who.address, { game: 'ashvale', loopback: q.has('loopback') });
         if (!res || !res.online || stopped) return;
         const R = ONE.room = res.room;
-        const say = claim => { if (ONE.room === R && !stopped) { ONE.said = Date.now(); R.send({ t: 'dev', s: ONE.sid, at: ONE.at, claim: !!claim }); } };
+        const say = claim => { if (ONE.room === R && !stopped) { ONE.said = Date.now(); R.send(withHome({ t: 'dev', s: ONE.sid, at: ONE.at, claim: !!claim })); } };
         R.on('message', ev => {
           const m = ev.data || {};
           if (!stopped && m.t === 'dm' && ev.from && ev.from.address && ev.from.address !== who.address && !ev.from.guest && typeof m.text === 'string') {   /* a direct message to us */
             hud.chat('From ' + (ev.from.tag ? '@' + ev.from.tag : ev.from.address.slice(0, 8) + '...') + ': ' + m.text.slice(0, 120), 'dm'); sfx('click'); return;
           }
-          if (stopped || m.t !== 'dev' || m.s === ONE.sid || !ev.from || ev.from.address !== who.address) return;
+          if (stopped || m.t !== 'dev' || m.s === ONE.sid || !ev.from || ev.from.address !== who.address || !homeIs(m)) return;   /* the other character on this wallet is not another device */
           /* the newest session wins on its start time alone (2026-10-08): a 'claim' only says "I just opened" - a stale one (a
              replay, a game that opened before us) must not stop a newer game, which is what kept stopping @cinderwalker */
           if (m.at > ONE.at || (m.at === ONE.at && String(m.s) > ONE.sid)) { G.__evictedBy = { s: m.s, at: m.at, claim: !!m.claim, ours: ONE.at, from: ev.from && (ev.from.id || ev.from.address) }; try { console.warn('ASHVALE: stopped by a newer session', JSON.stringify(G.__evictedBy)); } catch (e) { /* no console */ } evicted(); }
@@ -1733,9 +1755,9 @@
       }
       /* ASHVALE 3D engine part: THE TOWN CHEST AND THE @ashvale BANK (split out of engine.js, 2026-10-08). The chest ledger, returns, - in its own module (src/engbank.js, 2026-10-08) */
       const ENGBANK = deps.engbank.install({ get BANK_LOAD_ROOM() { return BANK_LOAD_ROOM; }, set BANK_LOAD_ROOM(v) { BANK_LOAD_ROOM = v; }, DATA, SCENE, THREE, YOURFIRST_ADDR, net, netGear, palsHeard, D, DAY_S, MOD, PID, SEASON, SEASONS, SKYM, SUNL, SUN_EPOCH, TL, WAL, carriedHeard, core, coreCall, evicted, hud, me, proxies, proxyMat, q, scene, skyNow, sunTime, walletRefresh, walletState, waterY,
-        get CLOUD() { return CLOUD; },
+        get CLOUD() { return CLOUD; }, HOME, withHome, homeIs,
         get save() { return save; } });
-      const { CKEY, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone } = ENGBANK;
+      const { CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone } = ENGBANK;
       const netStats = { sent: 0, dropped: 0, t0: performance.now(), times: [], max1s: 0, max2s: 0 };
       window.addEventListener('pagehide', () => { if (nb) nb.close(); if (room) { const r = room; room = null; r.leave(); } });
       let lastSend = 0;
@@ -1958,13 +1980,15 @@
         return rows;
       }
       const sizeOf = o => new TextEncoder().encode(JSON.stringify(o)).length;
-      function packSend(base, key, rows, max) {   /* fill messages up to ~470 B */
+      const gSnap = new Map();   /* a host's ground list arriving in pieces (sadfrogltc 2026-10-09: 'Gend' marks the last) */
+      function packSend(base, key, rows, max, endFlag) {   /* fill messages up to ~470 B. endFlag marks the last piece, so a ground list is not applied until every piece has arrived */
         let cur = Object.assign({}, base), list = [], sent = 0;
+        const more = () => { const n = Object.assign({}, base); if (endFlag) n[endFlag] = 0; return n; };
         for (const r of rows) {
           list.push(r); cur[key] = list;
-          if (sizeOf(cur) > (max || 470)) { list.pop(); cur[key] = list; if (list.length) { netSend(cur); sent++; } cur = {}; list = [r]; cur[key] = list; }
+          if (sizeOf(cur) > (max || 470)) { list.pop(); cur[key] = list; if (list.length) { if (endFlag) cur[endFlag] = 0; netSend(cur); sent++; } cur = more(); list = [r]; cur[key] = list; }
         }
-        if (list.length || Object.keys(base).length) { if (!list.length) delete cur[key]; netSend(cur); sent++; }
+        if (list.length || Object.keys(base).length) { if (!list.length) delete cur[key]; if (endFlag) cur[endFlag] = 1; netSend(cur); sent++; }
         return sent;
       }
       function hostSend(now) {
@@ -1984,7 +2008,7 @@
         packSend({ F: seq }, 'M', mobRows(true));
         for (const a of hosted) {
           const G = core.S.ground.filter(g => areaAt(g.x, g.y) === a).map(g => [g.uid, g.id, g.n, g.x, g.y, g.from ? toNet(g.from) : 0, g.sunk || 0]);
-          packSend({ F: seq, Gr: a }, 'G', G);
+          packSend({ F: seq, Gr: a }, 'G', G, 470, 'Gend');
           const wz = core.weatherOf(a); if (wz) netSend({ F: seq, W: [a, wz.kind, wz.intensity, Math.max(1, wz.until - core.S.t)] });
         }
         const Fi = core.S.fires.filter(f => iHostAt(f.x, f.y)).map(f => [f.uid, f.x, f.y, f.until - core.S.t, f.log]);
@@ -2016,7 +2040,16 @@
         if (Array.isArray(d.M)) { const rows = d.M.filter(w => Array.isArray(w) && fromHostOf(id, mobArea(w[0]))); if (rows.length) coreCall(() => core.applyMobs(rows)); }
         if (Array.isArray(d.W) && fromHostOf(id, d.W[0])) coreCall(() => core.setWeather(d.W[0], String(d.W[1]), d.W[2] | 0, d.W[3] | 0));
         if (Array.isArray(d.Fi)) coreCall(() => { for (const f of d.Fi) if (fromHostOf(id, areaAt(f[1], f[2]))) core.fireAdd(f[0], f[1], f[2], f[3], f[4]); });
-        if (Array.isArray(d.G)) coreCall(() => { if (d.Gr) { if (fromHostOf(id, d.Gr)) core.groundFull(d.Gr, d.G); } else for (const g of d.G) if (fromHostOf(id, areaAt(g[3], g[4]))) core.groundAdd(g[0], g[1], g[2], g[3], g[4], g[5] ? fromNet(g[5]) : null, g[6] || 0); });
+        if (Array.isArray(d.G)) coreCall(() => {
+          if (d.Gr && fromHostOf(id, d.Gr)) {
+            if (d.Gend == null) core.groundFull(d.Gr, d.G);   /* a host from before the pile was sent in pieces */
+            else {
+              const key = id + '|' + (d.F || 0) + '|' + d.Gr, buf = gSnap.get(key) || [];
+              buf.push.apply(buf, d.G);
+              if (d.Gend === 1) { gSnap.delete(key); core.groundFull(d.Gr, buf); } else gSnap.set(key, buf);
+            }
+          } else if (!d.Gr) for (const g of d.G) if (fromHostOf(id, areaAt(g[3], g[4]))) core.groundAdd(g[0], g[1], g[2], g[3], g[4], g[5] ? fromNet(g[5]) : null, g[6] || 0);
+        });
         if (Array.isArray(d.E)) coreCall(() => { for (const a of d.E) if (Array.isArray(a) && eventFromHost(id, a)) applyEvent(a); });
       }
       function eventFromHost(id, a) {   /* is the sender the host of the area this event is about? */
@@ -2116,7 +2149,7 @@
           if (e.key.charAt(0) === 'r') continue;
           const a = Math.min(1, (now - e.t0) / e.dur);
           if (!e.dead || a < 1) { e.root.position.lerpVectors(e.from, e.to, a); smoothPos(e, elapsed, a < 1); e.root.position.y = (e.canoe ? waterY(e.root.position.x, e.root.position.z) + (e.ricing ? 0.14 : 0) : footY(e.root.position.x, e.root.position.z) + liftOf(e, a)) + hawkAlt(e); }   /* the poler stands on the canoe's floor */   /* on an upper floor; a hawk over the trees */
-          let d = e.tyaw - e.yaw; d = ((d + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI; e.yaw += d * Math.min(1, dt * 12); e.root.rotation.y = e.yaw;
+          let d = e.tyaw - e.yaw; d = ((d + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI; e.yaw += d * Math.min(1, dt * 12); e.root.rotation.y = e.yaw + (e === myEnt && cam.mode === 'creator' ? cam.spin || 0 : 0);   /* the creator's Turn spins only the model; the camera stays (walls) */
           const moving = a < 1 && e.from.distanceToSquared(e.to) > 1e-4;
           if (!e.dead && !e.oneShot && !e.prone && !e.held) { const want = e.boatRole === 2 ? (e.knocking ? 'knock' : moving ? 'paddle' : 'sit') : e.canoe ? (e.ricing ? (moving ? 'pole' : 'idle') : moving ? 'paddle' : 'sit') : moving ? (e.running ? 'run' : 'walk') : (e.restPose || e.skill || 'idle'); if (want !== e.loco) { e.loco = want; e.H.play(want, { loop: true }); } }
           if (e.boatRole === 2 && e.rideOf != null) { const T = (remotes.get(e.rideOf) || {}).e; if (T) bowSeat(e, T, e.knocking); }
@@ -2311,7 +2344,7 @@
           if (n > 40) { console.warn('ASHVALE: the save is too big for the Bank (' + b.length + ' B)'); return; }
           /* mine: the last save THIS game sent - if the Bank's 'svok' for it never reached us, the Bank still knows no other device
              came between (2026-10-08: a lost svok left base one save behind and the next save was refused as another device's) */
-          const mine = CLOUD.mine; CLOUD.sent = json; CLOUD.mine = at; for (let i = 0; i < n; i++) R.send(Object.assign({ t: 'sv', id: at, i, n, d: b.slice(i * CHUNK, (i + 1) * CHUNK) }, CLOUD.base != null ? { base: CLOUD.base } : {}, mine != null ? { mine } : {}));
+          const mine = CLOUD.mine; CLOUD.sent = json; CLOUD.mine = at; for (let i = 0; i < n; i++) R.send(Object.assign(withHome({ t: 'sv', id: at, i, n, d: b.slice(i * CHUNK, (i + 1) * CHUNK) }), CLOUD.base != null ? { base: CLOUD.base } : {}, mine != null ? { mine } : {})); holdSend();
         })).catch(e => console.warn('ASHVALE: cloud save', e && e.message));
       }
       const SAVEZ = { zone: undefined, t: 0 };
@@ -2333,7 +2366,7 @@
         return {
           core, pid: PID, isPhone, isTouch,
           walletState: () => walletState, walletRefresh: () => walletRefresh(), pid: PID,
-          chestState: (...a) => chestState(...a), chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a), depositInv: () => depositInv(), depositWorn: () => depositWorn(),   /* the Bank part installs after the HUD is made */
+          chestState: (...a) => chestState(...a), chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a), depositInv: () => depositInv(), depositWorn: () => depositWorn(), withdrawAll: () => withdrawAll(),   /* the Bank part installs after the HUD is made */
           friends: () => ({ rows: PALS.rows.slice(), note: PALS.note }),
           friendsRefresh: () => { loadPals().then(() => { if (hud.tab === 'friends') hud.refresh('friends'); }); },
           walletTake: (id) => chestTake(id, 1),   /* the same ledger as the chest (it bypassed it and could duplicate an NFT) */
@@ -2345,25 +2378,28 @@
           toggle: k => { settings[k] = !settings[k]; store.set(SET, JSON.stringify(settings)); if (k === 'shadows') { sun.castShadow = settings.shadows; for (const e of ents.values()) e.blob.visible = !settings.shadows && !e.hawk; renderer.shadowMap.needsUpdate = true; scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); } },
           resetCamera: () => { cam.tyaw = PI * 0.12; cam.tpitch = 0.92; cam.tdist = isPhone ? 9 : 11; },
           faceNorth: () => { const v = trueNorth(me.x, me.y), want = -PI / 2 - Math.atan2(v[1], v[0]); cam.tyaw = want + Math.round((cam.tyaw - want) / (2 * PI)) * 2 * PI; },   /* true north up, the short way round */
-          newGame: () => { stopped = true; const at = Date.now(); (CLOUD_OK ? bankRoom() : Promise.resolve(null)).then(R => R && R.send(Object.assign({ t: 'sv', id: at, i: 0, n: 1, d: '' }, CLOUD.base != null ? { base: CLOUD.base } : {}))).catch(() => {}).then(() => store.set(SAVE, '')).then(() => location.reload(), () => location.reload()); },   /* the Bank's copy goes too: an empty save, newer than any */
+          newGame: () => { stopped = true; const at = Date.now(); (CLOUD_OK ? bankRoom() : Promise.resolve(null)).then(R => R && R.send(Object.assign(withHome({ t: 'sv', id: at, i: 0, n: 1 }), { d: '' }, CLOUD.base != null ? { base: CLOUD.base } : {}))).catch(() => {}).then(() => store.set(SAVE, '')).then(() => location.reload(), () => location.reload()); },   /* the Bank's copy goes too: an empty save, newer than any */
           helpSeen: () => store.set('ashvale3d.help', '1'),
           savesHere: () => store.backend,
+          home: () => { const HD = (D.rules.homes || {})[core.homeOf(me)]; return HD && HD.help ? HD : null; },
           modulesText: () => 'Players: ' + netStatus + '. Saves: ' + ({ arcade: 'on the arcade', browser: 'in this browser', memory: 'not saved (this session only)' }[store.backend] || store.backend) + '. Modules: ' + (opts.report || []).map(r => r[0] + ' v' + r[1]).join(', '),
           minimapTap: (dx, dy, k) => { const c = Math.cos(-cam.yaw), s = Math.sin(-cam.yaw); const tx = Math.floor(myEnt.root.position.x + (dx * c - dy * s) / k), ty = Math.floor(myEnt.root.position.z + (dx * s + dy * c) / k); send({ c: 'walk', x: tx, y: ty }); flag = [tx, ty]; }
         };
       }
       let stopped = false;
       /* ---------- character creator (first start) and the tailor's wardrobe */
-      function openWardrobe(first) {
+      function openWardrobe(first, who) {
         if (!myEnt.H.setOutfit || !MOD.outfitStyles) return;
         const before = myEnt.H.outfit;
         cam.mode = 'creator'; cam.save = { yaw: cam.tyaw, pitch: cam.tpitch, dist: cam.tdist };
-        hud.creator({ first, title: 'Wren the tailor', look: before, startPoints: first && core.START ? core.START.points : 0, startMax: core.START ? core.START.max : 5, name: first ? '' : me.name, styles: MOD.outfitStyles, palette: MOD.palette,
-          onChange: look => myEnt.H.setOutfit(look),
-          onDone: (look, name, start) => { send({ c: 'look', look, name }); if (start && Object.keys(start).length) send({ c: 'start', pts: start }); cam.mode = null; cam.tyaw = cam.save.yaw; cam.tpitch = cam.save.pitch; cam.tdist = cam.save.dist; if (first) { hud.showHelp(true); } } });
+        const HC = ((D.rules.homes || {})[core.homeOf(me)] || {}).creator || null;   /* the home's own creator: styles, labels, defaults */
+        hud.creator({ first, home: HC, title: who || 'Wardrobe', look: before, startPoints: first && core.START ? core.START.points : 0, startMax: core.START ? core.START.max : 5, name: first ? '' : me.name, styles: MOD.outfitStyles, palette: MOD.palette,
+          onChange: look => myEnt.H.setOutfit(look), onTurn: () => { cam.spin = ((cam.spin || 0) + Math.PI / 2) % (2 * Math.PI); },   /* see the back of your hair and clothes */
+          onDone: (look, name, start) => { cam.spin = 0; send({ c: 'look', look, name }); if (start && Object.keys(start).length) send({ c: 'start', pts: start }); cam.mode = null; cam.tyaw = cam.save.yaw; cam.tpitch = cam.save.pitch; cam.tdist = cam.save.dist; if (first) { hud.showHelp(true); } } });
       }
-      hud.chat('Welcome to Ashvale.', 'sys');
-      if (!save) hud.chat('Elder Maren waits by the well. Tap her to talk.', 'sys');
+      { const HD = (D.rules.homes || {})[core.homeOf(me)] || {};
+        hud.chat('Welcome to ' + (HD.name || 'Ashvale') + '.', 'sys');
+        if (!save) hud.chat(HD.first || 'Elder Maren waits by the well. Tap her to talk.', 'sys'); }
       if (!save && MOD.outfitStyles && !q.has('nocreator')) { myEnt.yaw = myEnt.tyaw = cam.yaw = cam.tyaw; openWardrobe(true); }
       else if (!store.get('ashvale3d.help') || !save) hud.showHelp(true);
       hud.refresh('all');
@@ -2389,6 +2425,7 @@
         teleport(x, y) { me.x = x; me.y = y; me.path = []; place(myEnt, x, y); cam.snap = true; streamRegions(); arriveCheck(); },
         netHealth: () => ({ online: !!room, lost: NW.lost, heardAgo: NW.heard ? Math.round(performance.now() - NW.heard) : null, fails: NW.fails, saveFails }), _netBreak: () => { if (room) { const R = room; R.send = () => Promise.resolve(false); } },
         zones: () => ({ loaded: (core.D.zones || []).map(z => z.id), index: ZINDEX ? ZINDEX.map(z => z.id) : null, waiting: Object.keys(LZ_WAIT), travelling }),
+        _ent: k => ents.get(k),   /* tests: an entity by key ('n:<npc id>', 'm:<uid>') */
         tap: tapAt, menuAt, targetsAt, pad: () => PAD && PAD.state(), fps: () => frames, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries }), setCam(y, p, d) { if (y != null) cam.tyaw = cam.yaw = y; if (p != null) cam.tpitch = cam.pitch = p; if (d != null) cam.tdist = cam.dist = d; },
         myPos: () => [myEnt.root.position.x, myEnt.root.position.z, myEnt.yaw],   /* tests: where I am drawn (fluid travel) */
         remotesInfo: () => Array.from(remotes).map(([id, r]) => ({ id, boat: r.boat, ride: r.ride, offline: !!r.offline, name: r.name, via: r.via || null, at: [Math.round(r.e.root.position.x), Math.round(r.e.root.position.z)] })),   /* tests: who rides with whom, and who is a dropped-out partner */

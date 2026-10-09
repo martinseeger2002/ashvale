@@ -9,8 +9,8 @@
   'use strict';
   function install(K) {
     const { api, core, P, A } = K, esc = A.esc, win = K.shopEl, st = K.st;
-    function openChest() { if (st.shopId) K.closeShop(); st.chest = true; st.chestHtml = null; st.chestSel = null; win.classList.add('chest'); win.style.display = 'flex'; api.walletRefresh && api.walletRefresh(); drawChest(); }
-    function closeChest() { st.chest = false; win.classList.remove('chest'); win.style.display = 'none'; npClose(); if (K.onChestClose) K.onChestClose(); }
+    function openChest() { if (st.shopId) K.closeShop(); st.chest = true; st.chestHtml = null; st.chestSel = null; win.classList.add('chest'); win.classList.toggle('phone', !!api.isPhone); win.style.display = 'flex'; api.walletRefresh && api.walletRefresh(); drawChest(); }
+    function closeChest() { st.chest = false; win.classList.remove('chest'); win.classList.remove('phone'); win.style.display = 'none'; npClose(); if (K.onChestClose) K.onChestClose(); }
     function counts() {   /* the engine keeps the ledger (bag vs chest vs spent) per wallet address: api.chestState() */
       const p = P(), W = api.walletState ? api.walletState() : { status: 'off' }, C = api.chestState ? api.chestState() : { chest: {}, loose: {}, bank: {} };
       return { p, W, D: W.data, B: C.bank || {}, chest: C.chest || {}, loose: C.loose || {}, arriving: C.arriving || 0, bag: C.bag || {}, pend: C.pend || {} };
@@ -31,17 +31,14 @@
     function menuTake(k, x, y) {
       const n = inChest(k); if (!n) return;
       const o = [{ html: 'Take 1 ' + nm(k), fn: () => take(k, 1) }];
-      if (n > 1) o.push({ html: 'Take N ' + nm(k), fn: () => numpad('Take ' + core.item(k).name, n, m => take(k, m), fits(k)) });
+      if (n > 1) {
+        o.push({ html: 'Take N ' + nm(k), fn: () => numpad('Take ' + core.item(k).name, n, m => take(k, m), fits(k)) });
+        o.push({ html: 'Withdraw all ' + nm(k), fn: () => take(k, n) });
+      }
       o.push({ html: 'Examine ' + nm(k), fn: () => K.chatLine(K.examine(k, n), 'sys') });
       K.menu(x, y, o);
     }
-    function menuStore(i, x, y) {
-      const it = P().inv[i]; if (!it) return; const k = it.id, n = inBag(k);
-      const o = [{ html: 'Store 1 ' + nm(k), fn: () => store(k, 1) }];
-      if (n > 1) o.push({ html: 'Store N ' + nm(k), fn: () => numpad('Store ' + core.item(k).name, n, m => store(k, m)) });
-      o.push({ html: 'Examine ' + nm(k), fn: () => K.chatLine(K.examine(k, it.n), 'sys') });
-      K.menu(x, y, o);
-    }
+    function menuStore(i, x, y) { const o = K.itemOptions(i); if (o.length) K.menu(x, y, o); }
     /* the number pad: the game's own keys on screen (no phone keyboard), a screen with the amount, Max, OK */
     const pad = K.el('numpad ui', K.ui);
     pad.innerHTML = '<div class="np stone"><div class="t"></div><div class="scr"><span class="v">0</span><small></small></div><div class="keys">' +
@@ -78,14 +75,27 @@
         win.innerHTML = h + '<div class="sel"><span>The chest is your arcade wallet. Sign in to DogecoinArcade and play from the Games tab to open it.</span></div>';
         win.querySelector('.x').onclick = closeChest; return;
       }
+      const phone = !!api.isPhone, ck = Object.keys(chest);   /* GOLD too: it can be taken out like anything else (the operator: "no way to withdraw it") */
       h += '<div class="cols"><div class="col"><h5>In your chest (tap to take)</h5><div class="grid">';
-      const ck = Object.keys(chest);   /* GOLD too: it can be taken out like anything else (the operator: "no way to withdraw it") */
       for (const k of ck) h += '<div class="slot ' + (sel && sel.take === k ? 'sel' : '') + '" data-t="' + esc(k) + '">' + K.slotHtml({ id: k, n: chest[k] }) + '</div>';
       if (!ck.length) h += '<div class="info" style="grid-column:1/-1">' + (D ? 'Nothing else in your wallet.' : 'Reading your wallet…') + '</div>';
-      h += '</div></div></div><div class="sel">';
-      h += '<button class="btn" data-dep="inv">Deposit inventory</button><button class="btn" data-dep="worn">Deposit worn equipment</button>';
+      h += '</div></div>';
+      if (phone) {   /* the old window: chest and bag side by side, because the inventory panel does not fit on a phone */
+        h += '<div class="col"><h5>Your bag (tap to store)</h5><div class="grid iv">';
+        const lo = Object.assign({}, loose);
+        p.inv.forEach((it, i) => {
+          let mark = '';
+          if (it && lo[it.id] > 0) { lo[it.id] -= Math.min(lo[it.id], it.n); mark = ' ghost'; }
+          h += '<div class="slot ' + (sel && sel.slot === i ? 'sel' : '') + mark + '" data-s="' + i + '"' + (mark ? ' title="Not in your wallet yet"' : '') + '>' + K.slotHtml(it) + '</div>';
+        });
+        h += '</div></div>';
+      }
+      h += '</div><div class="sel">';
+      h += '<button class="btn" data-dep="inv">Deposit inventory</button><button class="btn" data-dep="worn">Deposit worn equipment</button><button class="btn" data-wd="all">Withdraw all</button>';
       const nLoose = Object.values(loose).reduce((a, b) => a + b, 0), nArr = arriving;
-      h += '<span style="color:#c8b48a">Your bag is the inventory beside this. Click an item to put one in the chest. Right-click for All, or to wear it.</span>';
+      h += phone
+        ? '<span style="color:#c8b48a">Tap to move a thing. Long-press for N or All, or to wear it. Long-press a chest item for Withdraw all.</span>'
+        : '<span style="color:#c8b48a">Your bag is the inventory beside this. Click an item to put one in the chest. Right-click for N or All, or to wear it. Right-click a chest item for Withdraw all.</span>';
       h += '</div><div class="sel">';
       /* no deposit button (2026-10-04: "I don't want anything extra, they could cause duplications"): new things go to
          your wallet by themselves; this line only says how far along that is */
@@ -99,9 +109,12 @@
       const depI = win.querySelector('[data-dep=inv]'), depW = win.querySelector('[data-dep=worn]');
       if (depI) depI.onclick = () => api.depositInv && api.depositInv();
       if (depW) depW.onclick = () => api.depositWorn && api.depositWorn();
+      const wd = win.querySelector('[data-wd=all]');
+      if (wd) wd.onclick = () => api.withdrawAll && api.withdrawAll();
       for (const s of win.querySelectorAll('[data-t]')) { const k = s.dataset.t; K.longPress(s, () => tapTake(k), (x, y) => menuTake(k, x, y)); }
+      for (const s of win.querySelectorAll('[data-s]')) { const i = +s.dataset.s; if (P().inv[i]) K.longPress(s, () => tapStore(i), (x, y) => menuStore(i, x, y)); }
     }
-    K.openChest = openChest; K.closeChest = closeChest; K.drawChest = drawChest;
+    K.openChest = openChest; K.closeChest = closeChest; K.drawChest = drawChest; K.askCount = numpad;
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('hudchest', { api: 1, v: 2 }, () => ({ api: 1, install }));
 })(typeof globalThis !== 'undefined' ? globalThis : this);

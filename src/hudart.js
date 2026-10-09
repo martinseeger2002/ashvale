@@ -24,8 +24,9 @@
 .ash .compass b:nth-child(4){left:4px;top:50%;margin-top:-5px}
 .ash .compass i{position:absolute;left:50%;top:15px;width:0;height:0;margin-left:-4px;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:12px solid #e23;filter:drop-shadow(0 0 1px #000)}
 .ash .compass i::after{content:'';position:absolute;left:-3px;top:9px;border-left:3px solid transparent;border-right:3px solid transparent;border-top:7px solid #f3ecdf}
-.ash .orbs{position:absolute;right:calc(var(--tab) + 22px + var(--mm) + 56px);top:10px;display:flex;flex-direction:column;gap:6px}
-.ash .orb{width:calc(var(--mm)*.36);height:calc(var(--mm)*.36);min-width:34px;min-height:34px;border-radius:50%;border:2px solid #1b1610;box-shadow:0 0 0 1px #6b5d48;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;cursor:pointer;position:relative;overflow:hidden;background:#222}
+.ash .orbs{position:absolute;right:calc(var(--tab) + 14px);top:8px;width:var(--mm);height:var(--mm);pointer-events:none;z-index:2}   /* the same box as the minimap, so the orbs can sit on its rim */
+.ash .orb{position:absolute;left:50%;top:50%;width:calc(var(--mm)*.34);height:calc(var(--mm)*.34);margin-left:calc(var(--mm)*-.17);margin-top:calc(var(--mm)*-.17);border-radius:50%;border:2px solid #1b1610;box-shadow:0 0 0 1px #6b5d48;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;cursor:pointer;overflow:hidden;background:#222;pointer-events:auto;transform:rotate(var(--a)) translateX(calc(var(--mm)/2 + 4px)) rotate(calc(var(--a)*-1))}   /* on the rim: under the compass, then along the lower border */
+.ash .orb.hp{--a:150deg}.ash .orb.run{--a:108deg}.ash .orb.pray{--a:66deg}
 .ash .orb i{position:absolute;left:0;right:0;bottom:0;display:block}
 .ash .orb b{position:relative;text-shadow:1px 1px 0 #000}
 .ash .orb.hp.poison{box-shadow:0 0 0 2px #3fbf3a,0 0 10px #3fbf3a}.ash .orb.hp.poison i{background:linear-gradient(#5fd84a,#2e8a26)!important}.ash .orb.hp.poison b{color:#e8ffd8}
@@ -47,7 +48,7 @@
 .ash .tab{width:var(--tab);height:var(--tab);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
 .ash .tab svg{width:62%;height:62%}
 .ash .tab.on{background:linear-gradient(#7a3a22,#5a2a18);box-shadow:inset 0 0 0 1px #d08050}
-.ash .panel{position:absolute;right:calc(var(--tab) + 14px);top:calc(var(--mm) + 20px);max-height:calc(100% - var(--mm) - 28px);width:calc(var(--slot)*4 + 34px);padding:8px;overflow:auto;display:none}
+.ash .panel{position:absolute;right:calc(var(--tab) + 14px);top:calc(var(--mm) + 46px);max-height:calc(100% - var(--mm) - 54px);width:calc(var(--slot)*4 + 34px);padding:8px;overflow:auto;display:none}
 .ash .panel.open{display:block}
 .ash .inv{display:grid;grid-template-columns:repeat(4,var(--slot));grid-auto-rows:var(--slot);gap:3px;justify-content:center}
 .ash .slot{position:relative;border-radius:4px;background:#2c251c;box-shadow:inset 0 0 0 1px #4b4032;cursor:pointer}
@@ -109,6 +110,7 @@
 .ash .dlg .nm{color:#801;font-size:14px;margin-bottom:4px}
 .ash .dlg .ln{font-size:14px;font-weight:600;line-height:1.35}
 .ash .dlg .go{color:#00c;font-size:12px;margin-top:6px}
+.ash .dlg .go .btn{margin:4px 4px 0;cursor:pointer}
 .ash .ctx{position:absolute;display:none;min-width:150px;padding:2px;background:#5d5447;border:1px solid #000;box-shadow:0 2px 8px #000b;border-radius:3px;z-index:9}
 .ash .ctx .h{background:#000;color:#5d5447;padding:2px 6px;font-size:12px}
 .ash .ctx div.opt{padding:5px 8px;color:#fff;cursor:pointer;white-space:nowrap;font-size:13px}
@@ -116,6 +118,7 @@
 .ash .y{color:#ff0}.ash .o{color:#ff9040}.ash .c{color:#0ff}.ash .g{color:#0f0}.ash .r{color:#f44}.ash .w{color:#fff}
 .ash .shop{position:absolute;left:50%;top:calc(8px + env(safe-area-inset-top, 0px));transform:translateX(-50%);width:min(620px,calc(100vw - 16px));max-height:calc(100% - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));padding:8px 10px;display:none;flex-direction:column;z-index:5}
 .ash .shop.chest{left:8px;transform:none;width:min(460px,calc(100vw - 250px))}   /* the bag is the inventory panel, so the chest sits to its left */
+.ash .shop.chest.phone{left:50%;transform:translateX(-50%);width:min(620px,calc(100vw - 16px))}   /* a phone keeps the old centred chest, bag and all: the side panel does not fit beside it */
 .ash .shop .hd{display:flex;align-items:center;justify-content:space-between;color:#ff981f;font-size:15px;margin-bottom:4px}
 .ash .shop .x{width:28px;height:28px;border-radius:4px;background:#7a2a18;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid #000}
 .ash .shop .cols{display:flex;gap:10px;min-height:0;flex:1;overflow:auto}

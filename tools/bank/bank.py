@@ -53,6 +53,7 @@ def db():
         create table if not exists marks(k text, x integer, y integer, p integer, by text, at real, primary key(k, x, y));   -- the sugar bush: a maple's sap day, a birch's bark year, shared (2026-10-08)   -- trees felled for good, shared (2026-10-05)
         create table if not exists boats(x integer, y integer, face integer, by text, at real, primary key(x, y));   -- canoes left at the bank, kept a game year (2026-10-07)
         create table if not exists wheres(addr text primary key, x integer, y integer, at real);
+        create table if not exists holds(addr text, h text, b text, at real, primary key(addr, h));   -- what each character of a wallet carries (a second home, Ziibiing 2026-10-09)
         create table if not exists saves(addr text primary key, id integer, blob text, at real);   -- each player's whole game, packed (2026-10-07)   -- where each player last stood, for the Atlas (2026-10-06)
         create table if not exists drops(n integer primary key, addr text, item text, piece text, x integer, y integer, at real, taken_by text, taken_at real);
         create table if not exists ghosts(n integer primary key, addr text, item text, units integer, x integer, y integer, at real, left integer);   -- picked-up copies of drops somebody else already took (2026-10-06)""")
@@ -295,8 +296,19 @@ def handle_contacts(c, addr, msg):
 # (about 1 KB) and sends it in pieces ('sv' {id, i, n, d}: id = when it was saved, in ms); the Bank keeps the newest per address
 # and never reads inside it. 'ld?': the game, starting, asks for its own; the pieces go back to that address only ('ld').
 SV_PART = {}       # address -> {id, n, parts} while the pieces of one save come in (memory only)
+# HOMES (Ziibiing, 2026-10-09): a wallet may have a character in each home; a save naming its home ('h', e.g. 'ziibiing') is kept
+# under 'addr#h', its own lineage, and the replies carry the same 'h' so the other character's game ignores them. No 'h' (every
+# game before homes, and Ashvale) is the address itself, exactly as before.
+def home_of(msg):
+    h = msg.get('h')
+    return h if isinstance(h, str) and h != 'ashvale' and re.fullmatch(r'[a-z]{2,16}', h) else None
 SV_MAX = 48        # pieces: 48 x 340 B - ten times the biggest save today
 def handle_save(c, addr, msg):
+    h = home_of(msg)
+    if h:   # the same rules under the character's own key; the answers go to the address, marked with the home
+        out = handle_save(c, addr + '#' + h, dict(msg, h=None))
+        for o in (out if isinstance(out, list) else [out] if out else []): o['to'] = addr; o['h'] = h
+        return out
     if msg.get('t') == 'sv':
         try: sid, i, n, d = int(msg['id']), int(msg['i']), int(msg['n']), str(msg.get('d') or '')
         except (KeyError, TypeError, ValueError): return None
@@ -332,6 +344,24 @@ def handle_save(c, addr, msg):
     b, N = r['blob'], 340
     parts = [b[k:k + N] for k in range(0, len(b), N)] or ['']
     return [{'t': 'ld', 'to': addr, 'id': r['id'], 'i': k, 'n': len(parts), 'd': p} for k, p in enumerate(parts)]
+def handle_holds(c, addr, msg):
+    """ONE CHEST, TWO BAGS: 'hold' {h?, b: {key: n}} - what this character carries of the wallet (bag + worn, as its game counts
+    it); 'holds?' {h?} -> {t: 'holds', to, h, o: {key: n} summed over the wallet's OTHER characters, multi: another exists}."""
+    h = home_of(msg) or 'ashvale'
+    if msg.get('t') == 'hold':
+        b = msg.get('b')
+        if not isinstance(b, dict) or len(b) > 400: return None
+        b = {str(k)[:40]: int(v) for k, v in b.items() if isinstance(v, (int, float)) and 0 < v < 10**9}
+        c.execute('insert into holds values(?,?,?,?) on conflict(addr, h) do update set b=excluded.b, at=excluded.at', (addr, h, json.dumps(b), time.time())); c.commit()
+        return None
+    o, multi = {}, False
+    for r in c.execute('select h, b from holds where addr=? and h<>?', (addr, h)).fetchall():
+        multi = True
+        for k, v in json.loads(r['b'] or '{}').items(): o[k] = o.get(k, 0) + int(v)
+    if not multi: multi = bool(c.execute("select 1 from saves where addr like ? and addr<>?", (addr + '#%' if h == 'ashvale' else addr, addr + '#' + h if h != 'ashvale' else addr)).fetchone())
+    rep = {'t': 'holds', 'to': addr, 'o': o, 'multi': multi}
+    if h != 'ashvale': rep['h'] = h
+    return rep
 def handle(c, addr, msg):
     """-> reply dict (or a list of them). Queues jobs; never touches the chain itself."""
     if msg.get('t') == 'drop': handle_drop(c, addr, msg); return None
@@ -344,6 +374,7 @@ def handle(c, addr, msg):
     if msg.get('t') in ('here', 'where?'): return handle_where(c, addr, msg)
     if msg.get('t') in ('book', 'friends?', 'pals?'): return handle_contacts(c, addr, msg)
     if msg.get('t') in ('sv', 'ld?'): return handle_save(c, addr, msg)
+    if msg.get('t') in ('hold', 'holds?'): return handle_holds(c, addr, msg)
     rid = str(msg.get('id') or '')[:40]
     if not rid: return None
     old = c.execute('select paid from reqs where addr=? and id=?', (addr, rid)).fetchone()
@@ -544,7 +575,7 @@ def room_loop(stop):
                     if fr.evaluate("window.__bankClosed || null"): raise RuntimeError('room closed')
                     for m in fr.evaluate("window.__bankQ.splice(0)"):
                         d, f = m.get('data') or {}, m.get('from') or {}
-                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'boat', 'boats?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'pals?', 'sv', 'ld?', 'mark', 'marks?', 'carry', 'carried?'): continue
+                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'boat', 'boats?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'pals?', 'sv', 'ld?', 'mark', 'marks?', 'carry', 'carried?', 'hold', 'holds?'): continue
                         if f.get('guest') or not f.get('address'): continue
                         try: rep = handle(c, f['address'], d)
                         except Exception: log('HANDLE ERROR', traceback.format_exc()[-400:]); rep = {'t': 'dep', 'id': d.get('id'), 'to': f['address'], 'ok': False, 'note': 'The bank hit an error; try again later.'}

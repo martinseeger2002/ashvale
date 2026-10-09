@@ -478,18 +478,18 @@
      "home": [
       197,
       -51,
-      24
+      50
      ],
      "reward": "verdant_wreath",
      "talk": [
       "You came back level. Listen, and try not to fall off the sentence.",
       "Balance is not a stillness. It is a hand moving to the side that is about to drop. Overhead prayers are that hand.",
       "Protect from Magic stills the heavy blow. Protect from Missiles stills the arrow that never hurries and never misses its time. Protect from Melee stills the one who swings like a drunk tree.",
-      "I will call three. They last while you stay in this open ground. Walk away, or fall, and they were never here. Any order will do. The sensible order is the heavy one first.",
+      "I will not call them until you say you want it. If you accept, three come for you and they will not stop. Die, or leave fifty tiles of this rope, and they vanish. Ask me again and I will call them back, even after the wreath is yours. You need Prayer 15. Any order will do. The sensible order is the heavy one first.",
       "Gale hits hard and does not fidget. Keel hits true and ordinary. Bramble hits ordinary and then forgets how. Pray, then strike."
      ],
      "progress": [
-      "They are still in the field. {n} of {goal} down. Magic first, if you like living. Then the arrow. Then the swing. Leave this ground and they go with the wind."
+      "They are still in the field, or the wind has taken them. {n} of {goal} down. If they are gone, say so and I will call whoever is left. Fifty tiles from this rope, or a death, and they leave."
      ],
      "complete": [
       "You wore the prayers like a person who means to live. I am pleased. The wind is also pleased, which is rarer.",
@@ -499,7 +499,7 @@
     }
    ],
    "done": [
-    "The wreath remembers. The chapel too. Try not to tip the scale for fun."
+    "The wreath remembers. The chapel too. Say the word and I will call the three again. Same warning: they fight until you fall, or you leave fifty tiles of this rope."
    ]
   },
   "manoomin": {
@@ -558,7 +558,10 @@
       "Boozhoo, {name}. Sit by me. Can you smell it? Under the snow the ground is waking.",
       "When the nights still freeze and the days begin to thaw, the ziinzibaakwadwaaboo (maple sap) runs. It is the first gift of the year, before the leaves, before anything else is green.",
       "We go to the iskigamizigan (sugar bush) in the woods up the trail, where the ininaatig (maple) and the wiigwaasaatig (birch) stand together.",
-      "You need something to catch it in. Migizi can fold you a biskitenaagan (birch bark sap bucket) from two sheets of wiigwaas (birch bark) and some ojiitad (sinew) - ask Ma'iingan for that. Or buy an akik (pail) at the store in Ashvale.",
+      {
+       "*": "You need something to catch it in. Migizi can fold you a biskitenaagan (birch bark sap bucket) from two sheets of wiigwaas (birch bark) and some ojiitad (sinew) - ask Ma'iingan for that. Or buy an akik (pail) at the store in Ashvale.",
+       "ziibiing": "You need something to catch it in. Migizi can fold you a biskitenaagan (birch bark sap bucket) from two sheets of wiigwaas (birch bark) and some ojiitad (sinew) - ask Ma'iingan for that."
+      },
       "Each ininaatig gives once a day, and only on a day that thaws after a night that froze. Bring me one bucket of sap."
      ],
      "progress": [
@@ -581,7 +584,10 @@
      },
      "reward": "xp:cooking:800",
      "talk": [
-      "Now boil it. Any fire will do - ours here, one you light yourself, even Hob's range up in Ashvale - but watch it. Hang the akik from the iskigamiziganaak (kettle frame) and keep the fire high.",
+      {
+       "*": "Now boil it. Any fire will do - ours here, one you light yourself, even Hob's range up in Ashvale - but watch it. Hang the akik from the iskigamiziganaak (kettle frame) and keep the fire high.",
+       "ziibiing": "Now boil it. Any fire will do - ours here, or one you light yourself - but watch it. Hang the akik from the iskigamiziganaak (kettle frame) and keep the fire high."
+      },
       "When it is thick and gold, it is zhiiwaagamizigan (maple syrup). Bring me a bucket of it."
      ],
      "progress": [
@@ -610,7 +616,10 @@
      ],
      "complete": [
       "Ahh. That is the taste of the iskigamizigewigamig (sap-boiling lodge) when I was a little girl.",
-      "I sewed this makak (birch bark box) for you this winter. Wiigwaas (birch bark), spruce root, and gaaway (porcupine quill) dyed for the flowers. Carry it on your back - it holds more than any pack the stone towns make.",
+      {
+       "*": "I sewed this makak (birch bark box) for you this winter. Wiigwaas (birch bark), spruce root, and gaaway (porcupine quill) dyed for the flowers. Carry it on your back - it holds more than any pack the stone towns make.",
+       "ziibiing": "I sewed this makak (birch bark box) for you this winter. Wiigwaas (birch bark), spruce root, and gaaway (porcupine quill) dyed for the flowers. Carry it on your back - it holds more than any other pack."
+      },
       "Come back to the iskigamizigan every spring, {name}. The trees will remember you."
      ]
     }

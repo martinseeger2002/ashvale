@@ -15,8 +15,19 @@
          duplicated and stored ones were lost while deliveries were still on their way). A deposit asks the Bank (realtime
          room 'bank', its sender proved by the mesh) to mint or grant the loose things to your own address. */
       const bank = { room: null, joining: null, sent: {}, busy: false, note: '', arriving: 0 };
-      const CKEY = a => 'ashvale3d.chest.' + a;
+      const CKEY = a => 'ashvale3d.chest.' + a + (K.HOME ? '#' + K.HOME : '');   /* each character's own ledger (a second home on the wallet) */
       let ledger = null;
+      /* ONE CHEST, TWO BAGS (handoff/ziibiing_start_plan.md step 4): a wallet may have a character in each home, each with its own bag
+         and ledger. Every save also tells the Bank, in the open, what this character carries of the wallet ('hold' {k: n}); 'holds?'
+         answers what the OTHER characters carry, and this character's chest leaves that out - neither can take what the other holds.
+         Asked when the chest opens, every minute, and again just before a take. */
+      const HOLDS = { o: {}, at: 0, wait: [], multi: false, sent: '' };   /* multi: the Bank knows another character on this wallet */
+      function holdsHeard(d) { HOLDS.o = d.o && typeof d.o === 'object' ? d.o : {}; HOLDS.multi = !!d.multi; HOLDS.at = Date.now(); const w = HOLDS.wait; HOLDS.wait = []; for (const f of w) f(); hud.refresh && hud.refresh('chest'); }
+      function holdsAsk() { return new Promise(res => { HOLDS.wait.push(res); setTimeout(res, 3000); bankRoom().then(R => R && R.send(K.withHome({ t: 'holds?' }))).catch(() => res()); }); }
+      function holdSend() { if (!ledger || !walletState.address) return; const b = {}; for (const k in ledger.bag) if (ledger.bag[k] > 0) b[k] = ledger.bag[k]; for (const k in ledger.pend) if (ledger.pend[k] > 0) b[k] = (b[k] || 0) + ledger.pend[k];
+        const j = JSON.stringify(b); if (j === HOLDS.sent) return; HOLDS.sent = j;   /* only when what is carried changed: saves go out often (the mesh allows ~5 messages a second) */
+        bankRoom().then(R => R && R.send(K.withHome({ t: 'hold', b }))).catch(() => { HOLDS.sent = ''; }); }
+      setInterval(() => { if (walletState.address) holdsAsk(); }, 60000);
       const walCounts = () => { const D = walletState.data, o = {}; if (D) { for (const k in D.gear) o[k] = D.gear[k].length; for (const k in D.tokens) o[k] = (o[k] || 0) + D.tokens[k]; o.coins = D.gold || 0; } return o; };
       const carriedOf = k => core.invCount(me, k) + Object.values(me.eq || {}).filter(q => q && q.id === k).length;
       function ledgerFor(addr) {
@@ -74,7 +85,7 @@
           /* what you dropped and is still lying on the ground is not in the chest, whatever the count says (2026-10-07: everything
              he dropped "showed up in his chest" too) */
           const onGround = core.S.ground.reduce((a, q) => a + (q.id === k && q.from === PID ? q.n : 0), 0);
-          const lch = g(L.lchest, k), ch = wk - bag - spent - gone + pch + lch - onGround; if (ch > 0) chest[k] = ch;   /* + what you stored before it arrived, or before it was even deposited */
+          const lch = g(L.lchest, k), ch = wk - bag - spent - gone + pch + lch - onGround - Math.max(0, +HOLDS.o[k] || 0); if (ch > 0) chest[k] = ch;   /* less what the wallet's other character carries */   /* + what you stored before it arrived, or before it was even deposited */
           if (lch > 0) loose[k] = (loose[k] || 0) + lch;   /* stored-but-new still goes to the Bank */
           const ownBack = (L.picks || []).reduce((a, q) => a + (q.own && q.k === k && Date.now() - q.t < 7200000 ? q.n : 0), 0);   /* picked up from your own drop in the last two hours: never new */
           const lo = Math.min(c - bag - pend, c - ownBack - pend); if (lo > 0) loose[k] = (loose[k] || 0) + lo;
@@ -145,7 +156,12 @@
         if (!core.persists || e.x == null || !core.persists(e.id, e.n || 1)) return;
         const tell = o => bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send(o); });
         if (e.e === 'take' && e.p === PID) tell({ t: 'took', v: 1, id: e.id, n: e.n || 1, x: e.x, y: e.y });
-        else if ((e.e === 'drop' || e.e === 'xdrop') && (e.owner === PID || e.from === PID) && core.item(e.id) && core.item(e.id).stack) tell({ t: 'drop', v: 3, items: [[e.id, '', e.n || 1]], x: e.x, y: e.y, sunk: e.sunk || undefined });
+        else if ((e.e === 'drop' || e.e === 'xdrop') && (e.owner === PID || e.from === PID)) {
+          const d = core.item(e.id); if (!d) return;
+          const pieces = walletState.data && walletState.data.gear && walletState.data.gear[e.id];
+          if (pieces && pieces.length) return;   /* an inscribed piece is named below, so the Bank keeps that exact one */
+          tell({ t: 'drop', v: 3, items: [[e.id, '', e.n || 1]], x: e.x, y: e.y, sunk: e.sunk || undefined });   /* Gold, and a town stone: it does not stack, and it still has to lie there until someone takes it */
+        }
       }
       function chestEvent(e) {
         persistTell(e);
@@ -227,13 +243,26 @@
           if (k && n > 0) { const m = core.storeItem(PID, k, n); L.pend[k] = Math.max(0, (L.pend[k] || 0) - m); } }
         ledgerSave(); hud.refresh('all'); hud.chat('The trade did not go through: your things are back where they were.', 'warn');
       }
-      function chestTake(k, n) {
-        const C = chestState(); n = Math.min(n, C.chest[k] || 0); if (n <= 0) return;
+      function chestTake(k, n) { if (HOLDS.multi && Date.now() - HOLDS.at > 5000) holdsAsk().then(() => chestTake0(k, n)); else chestTake0(k, n); }   /* with a second character on the wallet, ask the Bank first: it may have just taken it */
+      function chestTake0(k, n, quiet) {
+        const C = chestState(); n = Math.min(n, C.chest[k] || 0); if (n <= 0) return 0;
         const d = core.item(k), free = me.inv.filter(s => !s).length, room0 = d.stack ? (core.invCount(me, k) || free ? n : 0) : Math.min(n, free);
-        if (room0 <= 0) { hud.chat('Your bag is full.', 'warn'); return; }
+        if (room0 <= 0) { if (!quiet) hud.chat('Your bag is full.', 'warn'); return 0; }
         core.grantItem(PID, k, room0); const L = ledgerFor(walletState.address), real = Math.max(0, (C.chest[k] || 0) - (L.pchest[k] || 0) - (L.lchest[k] || 0)), fromReal = Math.min(room0, real), fromP = Math.min(room0 - fromReal, L.pchest[k] || 0), fromL = room0 - fromReal - fromP;
         L.bag[k] = (L.bag[k] || 0) + fromReal; L.pchest[k] = (L.pchest[k] || 0) - fromP; L.pend[k] = (L.pend[k] || 0) + fromP; L.lchest[k] = Math.max(0, (L.lchest[k] || 0) - fromL); ledgerSave();
-        hud.chat('You take ' + (room0 > 1 ? room0 + ' x ' : '') + d.name + ' from your chest.', 'info'); hud.refresh('all');
+        if (!quiet) hud.chat('You take ' + (room0 > 1 ? room0 + ' x ' : '') + d.name + ' from your chest.', 'info'); hud.refresh('all');
+        return room0;
+      }
+      function withdrawAll() {   /* the chest's Withdraw all (sadfrogltc 2026-10-09); with a second character, the Bank's count first */
+        if (!walletState.address) { hud.chat('Sign in to use the chest.', 'warn'); return; }
+        const go = () => {
+          const C = chestState(); let n = 0;
+          for (const k of Object.keys(C.chest)) n += chestTake0(k, C.chest[k] || 0, true);
+          if (n) hud.chat('You take what you can carry from your chest.', 'info');
+          else if (Object.keys(C.chest).length) hud.chat('Your bag is full.', 'warn');
+          hud.refresh('all');
+        };
+        if (HOLDS.multi && Date.now() - HOLDS.at > 5000) holdsAsk().then(go); else go();
       }
       function chestStore(k, n, quiet) {
         chestState(); const L = ledgerFor(walletState.address), have = core.invCount(me, k);
@@ -410,8 +439,9 @@
           R.on('message', ({ from, data }) => {
             const bankFrom = from && (from.address === DATA.assets.issuer || from.address === YOURFIRST_ADDR || from.tag === 'yourfirstname');
             if (data && data.t === 'boats' && bankFrom && R.me && data.to === R.me.address) { boatsHeard(data); return; }
-            if (data && data.t === 'svok' && bankFrom && R.me && data.to === R.me.address) { K.CLOUD.base = +data.id; return; }   /* the Bank took our save: the next continues it */
-            if (data && data.t === 'svx' && bankFrom && R.me && data.to === R.me.address) { console.info('ASHVALE: another device has played since this game loaded: stopping'); evicted(); return; }   /* canoes left at the bank near me */
+            if (data && data.t === 'svok' && bankFrom && R.me && data.to === R.me.address && K.homeIs(data)) { K.CLOUD.base = +data.id; return; }   /* the Bank took our save: the next continues it */
+            if (data && data.t === 'svx' && bankFrom && R.me && data.to === R.me.address && K.homeIs(data)) { console.info('ASHVALE: another device has played since this game loaded: stopping'); evicted(); return; }   /* canoes left at the bank near me */
+            if (data && data.t === 'holds' && bankFrom && R.me && data.to === R.me.address && K.homeIs(data)) { holdsHeard(data); return; }   /* what the wallet's other characters carry */
             if (data && data.t === 'felled' && bankFrom && R.me && data.to === R.me.address) { core.setFelled(data.cells || []); return; }
             if (data && data.t === 'carried' && bankFrom && R.me && data.to === R.me.address) { carriedHeard(data); return; }   /* carried in someone's canoe while away */
             if (data && data.t === 'marks' && bankFrom && R.me && data.to === R.me.address) { if (core.setMarks) core.setMarks(data.k, data.cells || []); return; }   /* maples tapped today, birches peeled this year */   /* trees others felled */
@@ -459,7 +489,7 @@
           R.send({ t: 'dep', v: 3, id, items, carried, chest, spent, reward, pend: pendOf(Object.keys(items)), from: fromAll(Object.keys(items)) });
         });
       }
-    return { CKEY, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone };
+    return { CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engbank', { api: 1, v: 1, needs: {} }, () => ({ api: 1, install }));
   if (typeof module !== 'undefined' && module.exports) module.exports = { install };

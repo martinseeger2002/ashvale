@@ -27,7 +27,8 @@
     const matCache = new Map();
     /* see-through (2026-10-05: "anything that gets in the way of the camera view of the avatar become transparent"):
        across the whole view (the operator: "the see-through circle should definitely be the entire viewport"), everything more
-       than 2 m nearer the camera than the avatar dissolves, fading over 1.5 m with a dither. The engine sets the uniforms each frame (SCENE.see). */
+       than 2 m nearer the camera than the avatar dissolves completely (2026-10-09: a half-dissolved wigwam pole in front of the
+       camera was in the way; the dither edge is only 0.25 m now, was 1.5 m). The engine sets the uniforms each frame (SCENE.see). */
     /* gas street lamps (2026-10-07): one shared glass material, lit warm at night and dull by day (engine: lampGlow) */
     const LAMPG = new THREE.MeshBasicMaterial({ color: 0x8a8670 }), LAMP_OFF = new THREE.Color(0x8a8670), LAMP_ON = new THREE.Color(0xffd27a);
     let NIGHTK = 0;
@@ -228,7 +229,7 @@
         Object.assign(sh.uniforms, SEE);
         sh.vertexShader = 'varying float vSeeY;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  { vec4 sp = vec4(transformed, 1.0);\n  #ifdef USE_INSTANCING\n  sp = instanceMatrix * sp;\n  #endif\n  vSeeY = (modelMatrix * sp).y; }');
         sh.fragmentShader = 'uniform vec2 uSeeP;\nuniform float uSeeR;\nuniform float uSeeD;\nuniform float uSeeY;\nvarying float vSeeY;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>',
-          '#include <clipping_planes_fragment>\n  if (uSeeR > 0.0 && vSeeY > uSeeY) { float vd = length(vViewPosition); if (vd < uSeeD) { float f = smoothstep(uSeeD - 1.5, uSeeD, vd); float nz = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453); if (nz > f) discard; } }');
+          '#include <clipping_planes_fragment>\n  if (uSeeR > 0.0 && vSeeY > uSeeY) { float vd = length(vViewPosition); if (vd < uSeeD) { float f = smoothstep(uSeeD - 0.25, uSeeD, vd); float nz = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453); if (nz > f) discard; } }');
       };
       m.customProgramCacheKey = () => 'see2';
       return m;

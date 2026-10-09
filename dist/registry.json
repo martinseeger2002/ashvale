@@ -594,6 +594,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.ningashi": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.nookomis": {
     "id": null,
     "v": 1,
@@ -834,6 +840,12 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.boots_moccasins": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.cape": {
     "id": null,
     "v": 1,
@@ -876,7 +888,19 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.hair_loose": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.hair_mohawk": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "cloth.hair_mohawklong": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -990,6 +1014,18 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.pants_breechcloth": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "cloth.pants_buckskinskirt": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.pants_jingle": {
     "id": null,
     "v": 1,
@@ -1038,6 +1074,12 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.shirt_buckskin": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.shirt_jingle": {
     "id": null,
     "v": 1,
@@ -1045,6 +1087,12 @@
     "kind": "json"
    },
    "cloth.shirt_ribbon": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "cloth.shirt_ribbondress": {
     "id": null,
     "v": 1,
     "api": 1,
