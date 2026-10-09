@@ -47,6 +47,13 @@ ok(here.map(g => g.id).sort().join(',') === 'bones,pelt', 'wolf dropped its pelt
 const pelt = here.find(g => g.id === 'pelt'), before = core.invCount(p, 'pelt');
 core.cmd('p1', { c: 'take', uid: pelt.uid }); run(5);
 ok(core.invCount(p, 'pelt') === before + 1, 'picked up the pelt');
+{ const cs = AshCore.create(D, { seed: 'silk' }), qs = cs.addPlayer('silk', null);
+  for (let i = 0; i < qs.inv.length - 3; i++) qs.inv[i] = { id: 'logs', n: 1 };
+  const pile = cs.hostDrop({ id: 'spider_silk', n: 10, x: qs.x, y: qs.y });
+  cs.cmd('silk', { c: 'take', uid: pile.uid }); cs.tick();
+  ok(cs.invCount(qs, 'spider_silk') === 3 && pile.n === 7, 'a pile of 10 silk fills the 3 free slots and leaves 7 (' + cs.invCount(qs, 'spider_silk') + ' taken, ' + pile.n + ' left)');
+  cs.cmd('silk', { c: 'take', uid: pile.uid }); cs.tick();
+  ok(cs.invCount(qs, 'spider_silk') === 3 && pile.n === 7, 'with no free slot the rest stays on the ground'); }
 ok(p.xp.attack > save0.xp.attack, 'gained attack XP');
 // bow test: give a bow + arrows (debug), equip, shoot a wolf
 const c2 = AshCore.create(D, { seed: 'bow' });
@@ -588,6 +595,9 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
   ok(it('bow_t3').class === 'ranged' && it('bow_t3').twoHanded && it('staff_t1').class === 'magic' && it('mace_t2').anim === 'crush' && it('dagger_t1').anim === 'stab', 'weapon class and animation come from the subcategory');
   ok(it('coins').stack && it('arrows_t2').stack && !it('logs').stack && !it('sword_t1').stack, 'stacking comes from the schema flag');
   ok(it('potion').edible && it('potion').drink && it('bread').edible && !it('bread').drink && it('shrimp_raw').cooks === 'shrimp', 'eat/drink/cook from category and attributes');
+  ok(it('prayer_potion').drink && it('prayer_potion').prayPct === 25 && c.priceBuy('general', 'prayer_potion', null) === 3 * c.priceBuy('general', 'potion', null) && c.priceBuy('salt_general', 'prayer_potion', null) === 90 && c.priceBuy('castle_general', 'prayer_potion', null) === 90, 'a prayer potion costs three times a healing potion at the general stores');
+  { const q = c.addPlayer('pp', { xp: { prayer: D.rules.xp[12] * 10 } }); q.pp = 1; q.inv[0] = { id: 'prayer_potion', n: 1 }; const mx = c.maxPp(q); c.cmd('pp', { c: 'eat', slot: 0 }); c.tick();
+    ok(q.pp === 1 + Math.floor(mx / 4) && !q.inv[0], 'drinking it restores a quarter of your Prayer points (' + q.pp + '/' + mx + ')'); }
   ok(c.priceSell('armoury', 'chain_t1', null) > 0 && c.priceSell('armoury', 'logs', null) === -1 && c.priceSell('tailor', 'hat_cap', null) > 0 && c.priceSell('tailor', 'sword_t1', null) === -1, 'shops buy by category (Armoury: weapon/armour/ammo/pack; Tailor: cosmetic)');
   const evil = JSON.parse(JSON.stringify(raw.sword_t1)); evil.attributes[0].value = 999; evil.weight = 0;
   const v = AshCore.validItem(evil, RI); ok(!v.ok && v.errors.some(e => /Attack/.test(e)) && v.errors.includes('weight'), 'validItem rejects a tier-1 sword with Attack 999 and no weight: ' + v.errors.join(', '));

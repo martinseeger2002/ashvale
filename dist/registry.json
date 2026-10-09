@@ -348,6 +348,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.chain_dragon": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.chest": {
     "id": null,
     "v": 1,
@@ -1547,6 +1553,12 @@
     "kind": "json"
    },
    "sugarcamp": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "dragonkeep": {
     "id": null,
     "v": 1,
     "api": 1,

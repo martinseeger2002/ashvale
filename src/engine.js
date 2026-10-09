@@ -492,7 +492,7 @@
         H.onEvent((type, name) => { if (type === 'impact') onImpact(e, name); else if (type === 'done' && name !== 'death' && name !== 'sprawl') e.oneShot = false; });
         ents.set(key, e); return e;
       }
-      function removeEnt(e) { if (e.bub) e.bub.el.remove(); scene.remove(e.root); const i = proxies.indexOf(e.proxy); if (i >= 0) proxies.splice(i, 1); e.H.dispose && e.H.dispose(); for (const s of e.splats) s.el.remove(); if (e.bar) e.bar.remove(); if (e.tag) e.tag.remove(); if (e.ohd) e.ohd.remove(); ents.delete(e.key); }
+      function removeEnt(e) { if (e.bub) e.bub.el.remove(); scene.remove(e.root); const i = proxies.indexOf(e.proxy); if (i >= 0) proxies.splice(i, 1); e.H.dispose && e.H.dispose(); for (const s of e.splats) s.el.remove(); if (e.chain) for (const lk of e.chain.links) scene.remove(lk); if (e.bar) e.bar.remove(); if (e.tag) e.tag.remove(); if (e.ohd) e.ohd.remove(); ents.delete(e.key); }
       function place(e, x, y) { e.trail = null; const v = new THREE.Vector3(x + 0.5, 0, y + 0.5); v.y = footY(v.x, v.z); e.from.copy(v); e.to.copy(v); e.root.position.copy(v); e.tx = x; e.ty = y; }
       function moveTo(e, x, y, now) {
         if (e.tx === x && e.ty === y) return false;
@@ -549,7 +549,15 @@
       for (const n of core.M.npcs) npcEnt(n);   /* gear: what an NPC carries (the castle's watchmen hold bows) */
       /* monsters get a model while they are within MOB_NEAR tiles (seeded land wakes camps everywhere you have been) */
       const MOB_NEAR = 60, MOB_FAR = 90;
-      function mobEnt(m) { const e = makeEnt('m:' + m.uid, MOD.monster((D.monsters[m.key] || {}).look || m.key), { kind: 'mob', uid: m.uid }); place(e, m.x, m.y); e.yaw = e.tyaw = faceYaw(m.face); e.max = D.monsters[m.key].hp; if (m.dead) { e.dead = true; e.root.visible = false; } return e; }
+      function mobEnt(m) {
+        const e = makeEnt('m:' + m.uid, MOD.monster((D.monsters[m.key] || {}).look || m.key), { kind: 'mob', uid: m.uid }); place(e, m.x, m.y); e.yaw = e.tyaw = faceYaw(m.face); e.max = D.monsters[m.key].hp; if (m.dead) { e.dead = true; e.root.visible = false; }
+        if (D.monsters[m.key] && D.monsters[m.key].chain) {
+          const links = [];
+          for (let i = 0; i < 10; i++) { const lk = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.028, 5, 8), new THREE.MeshLambertMaterial({ color: 0x3a3e44 })); scene.add(lk); links.push(lk); }
+          e.chain = { ax: m.sx + 0.5, az: m.sy + 0.5, links };
+        }
+        return e;
+      }
       function syncMobEnts() {
         for (const m of core.S.mobs) {
           const d = Math.max(Math.abs(m.x - me.x), Math.abs(m.y - me.y)), e = ents.get('m:' + m.uid);
@@ -680,9 +688,20 @@
         if (mine && e.e === 'reward' && walletState.address) { const L = ledgerFor(walletState.address); L.rewards = L.rewards || {}; (L.rewards[e.id] = L.rewards[e.id] || []).push(e.collection); ledgerSave(); }   /* a quest reward: its own collection */
         if (mine && (e.e === 'take' || e.e === 'trade' || e.e === 'gather' || e.e === 'inv')) depositSoon();   /* into your wallet the moment it is in your bag (the operator: "as soon as you pick them up") */
         switch (e.e) {
+          case 'tell': {
+            const te = ents.get('m:' + e.mob);
+            if (te && !te.dead) {
+              const name = e.mode === 'magic' ? 'breath' : 'rear';
+              te.oneShot = true; te.lastOne = name; te.oneT = performance.now(); te.tellUntil = performance.now() + 2600; te.loco = name;
+              te.H.play(name, { loop: true }); if (te.H.tell) te.H.tell(e.mode);
+            }
+            if (e.dst === PID) hud.chat(e.mode === 'magic' ? 'The chained dragon draws a long breath. Blue fire gathers in its jaws.' : 'The chained dragon rears, the chain clinking, and swings its head to bite.', 'warn');
+            break;
+          }
           case 'attack': {
             if (e.cls === 'hawk') { const he = entOf(e.src); if (he && he.hawk) he.dive = performance.now(); }   /* the hawk dives to strike */
             const src = entOf(e.src), dst = entOf(e.dst); if (!src) break;
+            if (src.H && src.H.tell) { src.H.tell(null); src.tellUntil = 0; }
             if (dst) src.tyaw = Math.atan2(dst.to.x - src.to.x, dst.to.z - src.to.z);
             if (typeof e.src === 'number' && src.H.gear && src.H.setGear) {   /* archers: bow out to shoot, sword back for melee */
               if (src.w0 === undefined) src.w0 = src.H.gear.weapon || null;
@@ -1558,7 +1577,7 @@
       function lvColor(l) { const d = l - core.combatLevel(me); return d > 9 ? '#ff0000' : d > 6 ? '#ff3000' : d > 3 ? '#ff7000' : d > 0 ? '#ffb000' : d === 0 ? '#ffff00' : d > -4 ? '#c0ff00' : d > -7 ? '#80ff00' : '#40ff00'; }
       function optionsForRaw(t) {
         const esc = s => String(s).replace(/</g, '&lt;');
-        if (t.kind === 'mob') { const m = core.mobByUid(t.uid), d = D.monsters[m.key], cb = core.mobCombat(d); const nm = '<span class="y">' + esc(d.name) + '</span> <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>'; return [{ html: 'Attack ' + nm, act: { c: 'attack', uid: t.uid }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(d.name + ': combat ' + cb + ' (' + (cb > core.combatLevel(me) ? 'stronger than you' : cb === core.combatLevel(me) ? 'evenly matched' : 'weaker than you') + '), ' + d.hp + ' hitpoints, hits up to ' + d.max + '.' + (d.aggro ? ' Aggressive.' : '') + (d.hint ? ' ' + d.hint : ''), 'sys') }]; }
+        if (t.kind === 'mob') { const m = core.mobByUid(t.uid), d = D.monsters[m.key], cb = core.mobCombat(d); const nm = '<span class="y">' + esc(d.name) + '</span> <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>'; const o = [{ html: 'Attack ' + nm, act: { c: 'attack', uid: t.uid }, red: 1 }]; if (d.lines) o.push({ html: 'Talk-to ' + nm, fn: () => hud.dialog(d.name, d.lines) }); o.push({ html: 'Examine ' + nm, fn: () => hud.chat(d.name + ': combat ' + cb + ' (' + (cb > core.combatLevel(me) ? 'stronger than you' : cb === core.combatLevel(me) ? 'evenly matched' : 'weaker than you') + '), ' + d.hp + ' hitpoints, hits up to ' + d.max + '.' + (d.aggro ? ' Aggressive.' : '') + (d.cast ? ' It breathes fire as well as biting.' : '') + (d.hint ? ' ' + d.hint : ''), 'sys') }); return o; }
         if (t.kind === 'npc') { const n = NPCN[t.id]; if (!n || !npcShown(n)) return []; const cb = n.watch ? (core.guardCb || 33) : 0; const nm = '<span class="y">' + esc(n.name) + '</span>' + (cb ? ' <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>' : ''); const o = []; if (n.watch) o.push({ html: 'Attack ' + nm, act: { c: 'attack', id: n.id }, red: 1 }); if (n.tailor) { o.push({ html: 'Change-look ' + nm, act: { c: 'npc', id: n.id }, red: 1 }); o.push({ html: 'Trade ' + nm, act: { c: 'npc', id: n.id, trade: 1 }, red: 1 }); }
           else if (n.chest) o.push({ html: 'Open ' + nm, act: { c: 'npc', id: n.id }, red: 1 });
           else if (n.portal) o.push({ html: 'Use ' + nm, act: { c: 'npc', id: n.id }, red: 1 });
@@ -2865,11 +2884,16 @@
           const moving = a < 1 && e.from.distanceToSquared(e.to) > 1e-4;
           if (!e.dead && !e.oneShot && !e.prone && !e.held) { const want = e.boatRole === 2 ? (e.knocking ? 'knock' : moving ? 'paddle' : 'sit') : e.canoe ? (e.ricing ? (moving ? 'pole' : 'idle') : moving ? 'paddle' : 'sit') : moving ? (e.running ? 'run' : 'walk') : (e.restPose || e.skill || 'idle'); if (want !== e.loco) { e.loco = want; e.H.play(want, { loop: true }); } }
           if (e.boatRole === 2 && e.rideOf != null) { const T = (remotes.get(e.rideOf) || {}).e; if (T) bowSeat(e, T, e.knocking); }
-          if (e.oneShot && e.oneT && now - e.oneT > 2500 && !e.dead) e.oneShot = false;
+          if (e.tellUntil && now >= e.tellUntil) { e.tellUntil = 0; e.oneShot = false; if (e.H.tell) e.H.tell(null); }
+          if (e.oneShot && e.oneT && now - e.oneT > 2500 && !e.dead && !(e.tellUntil && now < e.tellUntil)) e.oneShot = false;
           for (const rec of e.impacts) if (!rec.fired && now - rec.t > 850) { fireImpact(e, rec); break; }
           if (e.dead && e.key.charAt(0) === 'm') { const k = (now - e.deadT) / 1000; if (k > 1.3 && k < 2.2 && e.H.setOpacity) e.H.setOpacity(Math.max(0, 1 - (k - 1.3) / 0.8)); if (k >= 2.2) e.root.visible = false; }
           if (e.spawnT) { const k = Math.min(1, (now - e.spawnT) / 400); e.H.object.scale.setScalar(e.scale * (0.3 + 0.7 * k)); if (k >= 1) e.spawnT = 0; }
           if (e.root.visible) { e.H.update(dt); if (e.hawk) e.hawk.update(dt); }
+          if (e.chain && e.root.visible) {
+            const ax = e.chain.ax, az = e.chain.az, ay = heightAt(ax, az) + 3.5, bx = e.root.position.x, by = e.root.position.y + 1.15, bz = e.root.position.z;
+            e.chain.links.forEach((lk, i) => { const t = (i + 1) / (e.chain.links.length + 1), sag = Math.sin(Math.PI * t) * 0.85; lk.position.set(ax + (bx - ax) * t, ay + (by - ay) * t - sag, az + (bz - az) * t); lk.rotation.y = Math.atan2(bx - ax, bz - az); lk.visible = true; });
+          }
           if (e === myEnt) headLook(e, myEnt.hl || 0, dt);
         }
         for (const g of fires.values()) { const u = g.userData, sc = 0.8 + 0.25 * Math.sin(now / 70 + u.ph) + 0.1 * Math.sin(now / 23 + u.ph); u.f1.scale.set(1, sc, 1); u.f2.scale.set(1, 1.1 * sc, 1); }

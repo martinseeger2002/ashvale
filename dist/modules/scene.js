@@ -831,6 +831,26 @@
         const x = o.x + (o.w || 1) / 2, z = o.y + (o.h || 1) / 2; let y = heightAt(x, z);
         switch (o.k) {
           case 'house': case 'shop': case 'smithy': case 'church': building(o); break;
+          case 'truins': {   /* a tall ruined keep: broken towers, no roof, a pole in the yard */
+            const ST = 0x8c8880, DK = 0x5a564e, x0 = o.x, z0 = o.y, w = o.w || 16, h = o.h || 16, yb = y;
+            B.add('box', 0xa39e92, x0 + w / 2, yb + 0.05, z0 + h / 2, (w - 6) * 0.98, 0.1, (h - 6) * 0.98);
+            const towers = [[3.2, 3.2, 9.4], [w - 3.2, 3.2, 7.2], [3.2, h - 3.2, 6.4], [w - 3.2, h - 3.2, 8.6]];
+            for (const [tx, tz, th] of towers) {
+              B.add('box', ST, x0 + tx, yb + th / 2, z0 + tz, 2.15, th, 2.15);
+              B.add('box', DK, x0 + tx + 0.55, yb + th + 0.28, z0 + tz - 0.2, 1.15, 0.55, 0.9);
+              B.add('box', 0x6e6a62, x0 + tx, yb + th * 0.62, z0 + tz + 1.05, 0.55, 0.7, 0.12);
+            }
+            const gap = o.door || [x0 + Math.floor(w / 2), z0 + h - 4];
+            const wall = (x, z, ww, dd, hh) => { if (Math.abs(x - gap[0]) < 1.2 && Math.abs(z - gap[1]) < 1.2) return; B.add('box', ST, x, yb + hh / 2, z, ww, hh, dd); };
+            for (let i = 4; i < w - 4; i += 2) { wall(x0 + i + 0.5, z0 + 3.15, 1.7, 0.55, 2.2 + (i % 4)); wall(x0 + i + 0.5, z0 + h - 3.15, 1.7, 0.55, 1.6 + ((i + 2) % 5)); }
+            for (let i = 4; i < h - 4; i += 2) { wall(x0 + 3.15, z0 + i + 0.5, 0.55, 1.7, 2.4 + (i % 3)); wall(x0 + w - 3.15, z0 + i + 0.5, 0.55, 1.7, 1.8 + ((i + 1) % 4)); }
+            B.add('box', DK, x0 + 6.2, yb + 0.22, z0 + 6.4, 1.3, 0.36, 0.8);
+            B.add('box', 0x4e4a44, x0 + w - 6, yb + 0.28, z0 + h - 6.2, 0.9, 0.45, 0.7);
+            const px = (o.pole ? o.pole[0] : x0 + w / 2) + 0.5, pz = (o.pole ? o.pole[1] : z0 + h / 2) + 0.5, py = heightAt(px, pz);
+            B.add('cyl', 0x2c2e32, px, py + 1.85, pz, 0.11, 3.7, 0.11);
+            B.add('cyl', 0xc8ccd0, px, py + 3.55, pz, 0.28, 0.06, 0.28);
+            break;
+          }
           case 'ruin': {
             const STN = 0x8d8880, RUB = 0x6a655e, w = o.w || 7, h = o.h || 6, x0 = o.x, z0 = o.y;
             B.add('box', 0xb0aa9e, x0 + w / 2, y + 0.05, z0 + h / 2, w - 0.15, 0.1, h - 0.15);

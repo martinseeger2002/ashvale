@@ -430,6 +430,9 @@ function createModels(THREE, opts) {
     walk: { loop: true, dur: 0.8, fn: t => { const s = Math.sin(TAU * t); return { legFL: [0.5 * s], legBR: [0.5 * s], legFR: [-0.5 * s], legBL: [-0.5 * s], tail: [0.3, 0.2 * s, 0], lift: [0.015 * Math.abs(Math.cos(TAU * t))] }; } },
     run: { loop: true, dur: 0.5, fn: t => { const s = Math.sin(TAU * t); return { legFL: [0.9 * s], legFR: [0.8 * s], legBL: [-0.9 * s], legBR: [-0.8 * s], pitch: [0.12 * s], tail: [0.6, 0, 0], lift: [0.05 * Math.abs(Math.cos(TAU * t))] }; } },
     bite: { dur: 0.7, impact: 0.55, fn: K(0, {}, 0.4, { neck: [0.35], legFL: [0.3], legFR: [0.3], legBL: [-0.2], legBR: [-0.2], dz: [-0.06] }, 0.55, { neck: [-0.45], dz: [0.14], legFL: [-0.5], legFR: [-0.5], pitch: [-0.1] }, 1, {}) },
+    /* a chained dragon's tells: the whole body, held until the blow. A bite rears. Dragonfire opens the wings and the jaw. */
+    rear: { loop: true, dur: 0.7, fn: t => { const s = Math.sin(TAU * t); return { lift: [1.15 + 0.12 * s], pitch: [-1.05], neck: [-1.45 + 0.12 * s], jaw: [0.35], legFL: [-1.5], legFR: [-1.5], legBL: [0.55], legBR: [0.55], wingL: [0, 0, 0.7], wingR: [0, 0, -0.7], tail: [-0.6] }; } },
+    breath: { loop: true, dur: 0.45, fn: t => { const s = Math.sin(TAU * t); return { lift: [0.18], pitch: [0.35], neck: [0.15], jaw: [1.15 + 0.15 * s], wingL: [0, 0, 1.15 + 0.2 * s], wingR: [0, 0, -1.15 - 0.2 * s], tail: [0.15, 0.55 * s, 0] }; } },
     hit: { dur: 0.4, fn: K(0, {}, 0.3, { neck: [-0.4], dz: [-0.06], pitch: [0.1] }, 1, {}) },
     death: { dur: 1, hold: true, fn: K(0, {}, 0.3, { neck: [-0.3], legFL: [-0.4], legFR: [0.4] }, 1, { roll: [1.5], lift: [0.02], legFL: [-0.7], legFR: [-0.4], legBL: [0.6], legBR: [0.3], neck: [0.3], tail: [0, 0, 0] }) }
   };
@@ -556,20 +559,63 @@ function createModels(THREE, opts) {
       ab.add(box(0.02 * S, 0.12 * S, 0.02 * S, o.antlers, 0, 0.14 * S, 0.05 * S), box(0.02 * S, 0.1 * S, 0.02 * S, o.antlers, 0, 0.26 * S, -0.04 * S));
     }
     if (o.ears === 'round') { neck.add(ball(0.05 * S, o.inner || dk, -0.1 * S, 0.17 * S, 0.06 * S)); neck.add(ball(0.05 * S, o.inner || dk, 0.1 * S, 0.17 * S, 0.06 * S)); }
-    else { neck.add(cone(0.05 * S, 0.12 * S, dk, -0.08 * S, 0.21 * S, 0.06 * S, 4)); neck.add(cone(0.05 * S, 0.12 * S, dk, 0.08 * S, 0.21 * S, 0.06 * S, 4)); }
+    else if (o.ears !== 'none') { neck.add(cone(0.05 * S, 0.12 * S, dk, -0.08 * S, 0.21 * S, 0.06 * S, 4)); neck.add(cone(0.05 * S, 0.12 * S, dk, 0.08 * S, 0.21 * S, 0.06 * S, 4)); }
+    if (o.horns) for (const sd of [-1, 1]) { const hn = cone(0.045 * S, 0.28 * S, o.horns, sd * 0.08 * S, 0.22 * S, 0.02 * S, 5); hn.rotation.z = -sd * 0.35; hn.rotation.x = -0.4; neck.add(hn); }
+    if (o.sad) neck.rotation.x = 0.42;   /* head hung, the chain has been on a long time */
+    let jaw = null;
+    if (o.wings) { jaw = group(0, -0.05 * S, 0.26 * S); neck.add(jaw); jaw.add(box(0.15 * S, 0.04 * S, 0.2 * S, o.snout || dk, 0, -0.02 * S, 0.08 * S)); }
     const tail = group(0, 0.08 * S, -0.35 * S); trunk.add(tail);
     const tl = o.tailLen || 0.32;
     const tm = box(o.tailW || 0.07 * S, o.tailW || 0.07 * S, tl * S, o.tail || c, 0, 0, -tl * S / 2); tail.add(tm);
     function leg(x, z) { const g = group(x * S, -0.08 * S, z * S); trunk.add(g); g.add(box(0.09 * S, hipY - 0.02 * S, 0.1 * S, dk, 0, -(hipY - 0.02 * S) / 2 + 0.02 * S, 0)); g.add(box(0.1 * S, 0.04 * S, 0.12 * S, shade(c, 0.55), 0, -hipY + 0.06 * S, 0.01 * S)); return g; }
     const FL = leg(-0.11, 0.25), FR = leg(0.11, 0.25), BL = leg(-0.11, -0.25), BR = leg(0.11, -0.25);
-    root.traverse(m => { if (m.isMesh) m.castShadow = true; });
+    let wingL = null, wingR = null;
+    if (o.wings) {
+      const wing = (sd) => {
+        const g = group(sd * 0.16 * S, 0.1 * S, 0); trunk.add(g); g.rotation.z = sd * 1.05;
+        g.add(box(0.62 * S, 0.025 * S, 0.42 * S, o.wings, sd * 0.32 * S, 0, -0.02 * S));
+        g.add(box(0.38 * S, 0.02 * S, 0.22 * S, shade(o.wings, 0.8), sd * 0.2 * S, 0, 0.16 * S));
+        return g;
+      };
+      wingL = wing(-1); wingR = wing(1);
+    }
+    let maw = null, flame = null, plume = null, ring = null, glowMat = null, owned = null;
+    if (o.wings) {
+      glowMat = new THREE.MeshBasicMaterial({ color: 0xffe080, transparent: true, opacity: 0, depthWrite: false });
+      maw = new THREE.Mesh(new THREE.SphereGeometry(0.11 * S, 8, 6), glowMat); maw.position.set(0, -0.02 * S, 0.34 * S); jaw.add(maw);
+      flame = new THREE.Mesh(new THREE.ConeGeometry(0.12 * S, 1.1 * S, 7), glowMat); flame.position.set(0, -0.06 * S, 0.9 * S); flame.rotation.x = Math.PI / 2; jaw.add(flame);
+      plume = new THREE.Mesh(new THREE.ConeGeometry(0.28 * S, 2.1 * S, 8), glowMat); plume.position.set(0, 1.5 * S, 0.15 * S); body.add(plume);
+      ring = new THREE.Mesh(new THREE.TorusGeometry(0.72 * S, 0.07 * S, 6, 12), glowMat); ring.rotation.x = Math.PI / 2; ring.position.set(0, 0.15 * S, 0); body.add(ring);
+      owned = [];
+      root.traverse(m => { if (m.isMesh && m.material && m.material.emissive && m.material !== glowMat) { m.material = m.material.clone(); owned.push(m.material); } });
+    }
+    root.traverse(m => { if (m.isMesh) m.castShadow = m !== maw && m !== flame && m !== plume && m !== ring; });
     const rot = obj => ({ kind: 'rot', o: obj, r0: [obj.rotation.x, obj.rotation.y, obj.rotation.z] });
     const joints = {
       neck: rot(neck), tail: rot(tail), legFL: rot(FL), legFR: rot(FR), legBL: rot(BL), legBR: rot(BR),
       lift: { kind: 'y', o: body, p0: hipY }, dz: { kind: 'z', o: trunk, p0: 0 }, pitch: { kind: 'rx', o: trunk }, roll: { kind: 'rz', o: roll }
     };
+    if (wingL) { joints.wingL = rot(wingL); joints.wingR = rot(wingR); }
+    if (jaw) joints.jaw = rot(jaw);
     const H = character(root, joints, BEAST);
     H.setGear = () => H; H.setTool = () => H; H.attackAnim = () => 'bite';
+    if (glowMat) {
+      let tell = null, tt = 0; const up = H.update;
+      const paint = (hex, inten) => { for (const m of owned) { m.emissive.setHex(hex); m.emissiveIntensity = inten; } };
+      H.tell = (mode) => { tell = mode || null; tt = 0; if (!tell) { glowMat.opacity = 0; flame.scale.set(0.01, 0.01, 0.01); plume.scale.set(0.01, 0.01, 0.01); ring.scale.set(0.01, 0.01, 0.01); paint(0, 0); } };
+      H.update = function (dt) {
+        up(dt);
+        if (!tell) return;
+        tt += dt; const p = 0.4 + 0.6 * Math.abs(Math.sin(tt * 9));
+        if (tell === 'magic') {
+          glowMat.color.setHex(0x3ec0ff); glowMat.opacity = 0.95; paint(0x1a6ae0, 0.7);
+          flame.scale.set(0.8 + p, 0.7 + p * 1.4, 0.8 + p); plume.scale.set(0.85 + 0.3 * p, 0.75 + 0.55 * p, 0.85 + 0.3 * p); ring.scale.set(0.01, 0.01, 0.01); maw.scale.setScalar(1.2 + 0.5 * p);
+        } else {
+          glowMat.color.setHex(0xffc24a); glowMat.opacity = 0.95 * p; paint(0xc45a10, 0.65 * p);
+          flame.scale.set(0.2, 0.15, 0.2); plume.scale.set(0.01, 0.01, 0.01); ring.scale.set(1, 1 + 0.35 * p, 1); maw.scale.setScalar(0.85 + 0.4 * p);
+        }
+      };
+    }
     H.muzzle = out => (out = out || new THREE.Vector3(), neck.getWorldPosition(out));
     Object.defineProperty(H, 'height', { get: () => (hipY + 0.42 * S) * root.scale.y });
     H.play('idle'); H.update(0);

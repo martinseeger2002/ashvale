@@ -4,8 +4,8 @@
    "id": "edric_skel",
    "name": "A dead man",
    "look": "edric_skel",
-   "x": 24054,
-   "y": 24005,
+   "x": 24044,
+   "y": 24044,
    "verb": "Search",
    "lie": true,
    "search": {
