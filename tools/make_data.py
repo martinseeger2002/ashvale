@@ -1752,7 +1752,7 @@ HOMES = {
 module('rules', 3, {
     "xp": xp,
     # ^ mountain rock and K standing stones / ruin walls come from the seeded land (worldgen, globe P2): both block
-    "tiles": {"block": T_BLOCK + "^KZD", "los": T_LOS + "^KZD", "tree": T_TREE, "rock": T_ROCK, "floor": "i"},
+    "tiles": {"noFly": "ZD", "block": T_BLOCK + "^KZD", "los": T_LOS + "^KZD", "tree": T_TREE, "rock": T_ROCK, "floor": "i"},
     "nodes": {
         # a felled tree stays felled, for every player, forever (2026-10-05): regrow -1; the @ashvale Bank keeps the shared list
         "T": {"skill": "woodcutting", "name": "Tree", "item": "logs", "req": 1, "xp": 250, "speed": 4, "deplete": 6, "regrow": -1},
