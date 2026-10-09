@@ -1661,7 +1661,8 @@ module('rules', 3, {
     # town portals (2026-10-04: "put a town portal in each of the towns"): stand by one and travel to any other;
     # `to` is where you arrive. The Ashvale stone (Teleport "ashvale") takes you to the same spot.
     "portals": [{"id": "ashvale", "name": "Ashvale", "x": 19, "y": 55, "to": [19, 56]},
-                {"id": "saltmere", "name": "Saltmere", "x": 462, "y": 28, "to": [462, 29]}],   # the lake castle's portal is added by tools/castle/make_castle.js when the castle ships
+                {"id": "saltmere", "name": "Saltmere", "x": 462, "y": 28, "to": [462, 29]},
+                {"id": "castle", "name": "the Lake Castle", "x": 4048, "y": 8419, "to": [4049, 8418]}],   # the lake castle's portal, here for good (2026-10-08: make_castle.js added it, every later make_data run dropped it, and the castle stone said "Nothing happens")
     # 2026-10-04: "logs, pelts arrows potions should all de spawn. Only Gear and tools and Gold should persist."
     # 2026-10-06: "Gold, and valuable items should stay there until somebody picks them up" (by value, 100 GOLD);
     # "All teleport or rune stone must always persist". The @ashvale Bank keeps them in the world across sessions.
