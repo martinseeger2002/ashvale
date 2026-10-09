@@ -164,7 +164,7 @@
 .ash .splat.fx{width:30px;height:30px;font-size:10px;color:#003;text-shadow:none}
 .ash .netlost{position:absolute;left:50%;top:max(8px,env(safe-area-inset-top));transform:translateX(-50%);width:min(560px,calc(100vw - 24px));z-index:18;display:none;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:10px;background:#5a1414f0;box-shadow:0 0 0 2px #e05a4a,0 6px 20px #000a;color:#fde9e4;font:14px/1.35 system-ui,sans-serif}
 .ash .netlost b{color:#fff}
-.ash .netlost .btn{flex:none;margin:0;padding:8px 14px}
+.ash .netlost>div{flex:1 1 auto;min-width:0}.ash .netlost .btn{flex:none;width:auto;margin:0;padding:8px 14px}
 .ash .newver{position:absolute;left:50%;top:max(8px,env(safe-area-inset-top));transform:translateX(-50%);width:min(560px,calc(100vw - 24px));z-index:17;display:none;padding:10px 14px;border-radius:10px;background:#3b2c08f2;box-shadow:0 0 0 2px #e8b33a,0 6px 20px #000a;color:#fbefcf;font:14px/1.35 system-ui,sans-serif}
 .ash .newver b{color:#ffd76a}
 .ash .elsewhere{position:absolute;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:#0b0907e8;padding:16px}
