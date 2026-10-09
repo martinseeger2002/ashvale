@@ -618,7 +618,10 @@
           { geo: new THREE.CylinderGeometry(0.1, 0.1, 0.36, 7).rotateZ(1.5708), m: M4(0.3, 1.05, 0, 1) }, { geo: new THREE.CylinderGeometry(0.1, 0.11, 0.55, 7), m: M4(0.46, 1.3, 0, 1) }, { geo: new THREE.SphereGeometry(0.1, 7, 4, 0, 6.29, 0, 1.6), m: M4(0.46, 1.57, 0, 1) },
           { geo: new THREE.CylinderGeometry(0.09, 0.09, 0.3, 7).rotateZ(1.5708), m: M4(-0.27, 1.4, 0, 1) }, { geo: new THREE.CylinderGeometry(0.09, 0.1, 0.42, 7), m: M4(-0.4, 1.6, 0, 1) }, { geo: new THREE.SphereGeometry(0.09, 7, 4, 0, 6.29, 0, 1.6), m: M4(-0.4, 1.81, 0, 1) }]), tc: 0x4f7a34, cc: 0x5f8f40 },
       };
-      const treeList = { T: [], P: [], O: [], W: [], M: [], Y: [], U: [], E: [], L: [], Q: [] };
+      /* the walls of old woods (globecfg.walls, 2026-10-09): tall dark old pines (Z) and cedars (D) that nothing chops */
+      if (!treeKinds.Z) { treeKinds.Z = Object.assign({}, treeKinds.P, { trunk: treeKinds.P.trunk.clone().scale(1.3, 1.55, 1.3), crown: treeKinds.P.crown.clone().scale(1.45, 1.75, 1.45), cc: 0x2a4a30 });
+        treeKinds.D = Object.assign({}, treeKinds.Q, { trunk: treeKinds.Q.trunk.clone().scale(1.3, 1.5, 1.3), crown: treeKinds.Q.crown.clone().scale(1.4, 1.6, 1.4), cc: 0x223f2a }); }
+      const treeList = { T: [], P: [], O: [], W: [], M: [], Y: [], U: [], E: [], L: [], Q: [], Z: [], D: [] };
       for (let y = Y0; y < Y1; y++) for (let x = X0; x < X1; x++) { const c = at(x, y); if (treeList[c] && mine(x, y)) treeList[c].push({ x, y, i: K(x, y) }); }
       if (!seeded) for (let y = -7; y < H + 7; y++) for (let x = -7; x < W + 7; x++) {   /* the wild woods beyond the map edge (belong to the nearest region); seeded land has real woods there */
         if (x >= 0 && y >= 0 && x < W && y < H) continue;
@@ -637,7 +640,7 @@
       const qOf = t => chunk ? Math.min(1, (t.x - X0) >> 5) + 2 * Math.min(1, (t.y - Y0) >> 5) : 0;
       for (const k in treeKinds) for (let q = 0; q < (chunk ? 4 : 1); q++) {
         const L = treeList[k].filter(t => qOf(t) === q), tk = treeKinds[k]; if (!L.length) continue;
-        const trunk = new THREE.InstancedMesh(tk.trunk, lam(tk.tc), L.length), crown = new THREE.InstancedMesh(tk.crown, 'PY'.indexOf(k) >= 0 ? snowyLam(0xffffff, -0.15, 0.3) : lam(0xffffff), L.length);
+        const trunk = new THREE.InstancedMesh(tk.trunk, lam(tk.tc), L.length), crown = new THREE.InstancedMesh(tk.crown, 'PYZD'.indexOf(k) >= 0 ? snowyLam(0xffffff, -0.15, 0.3) : lam(0xffffff), L.length);
         const tiles = new Float64Array(L.length);
         L.forEach((t, n) => {
           const jx = (hash2(t.x, t.y) - 0.5) * 0.3, jz = (hash2(t.y, t.x + 3) - 0.5) * 0.3, s = 0.85 + hash2(t.x + 5, t.y + 9) * 0.35 + (t.i < 0 ? 0.25 : 0);

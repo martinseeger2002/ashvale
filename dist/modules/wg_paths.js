@@ -16,7 +16,7 @@
 (function (root) {
   'use strict';
   const META = { api: 1, v: 3, needs: { wg_geo: 1 } };
-  const TREES = 'TPOWMYUELQ';
+  const TREES = 'TPOWMYUELQZD';
   function attach(ctx) {
     const g = ctx.geo, T = ctx.T, PT = T.paths, PC = T.pieces, BK = 32;
     const bkey = (f, bx, by) => (f * 8192 + (bx + 4096)) * 8192 + (by + 4096);
@@ -65,6 +65,36 @@
         if (d >= 1) continue;
         const e = Math.max(0.05, (q.edge || 30) / Math.min(q.rx, q.ry)), t = Math.min(1, (1 - d) / e);
         GROVE.k = t * t * (3 - 2 * t); GROVE.sp = q.sp || 'M'; GROVE.dens = q.dens == null ? 0.6 : q.dens; return GROVE;
+      }
+      return null;
+    }
+    /* WALLS OF OLD WOODS (2026-10-09: "a natural looking dense forest separating the two regions. Dense enough that players
+       cannot walk through it ... a couple kilometers in each direction following the river path"): a band along a line of points
+       (globecfg.walls: {piece, pts: [[x, y], ...], w, edge, sp}, game tiles). Inside its core every land tile is an old tree
+       nothing chops; its edges wander with noise and thin out over `edge` metres, like a forest's own margin. Returns {k, sp}:
+       k = 1 in the core, 0..1 in the margin; or null */
+    const WALL = { k: 0, sp: '' };
+    function wallAt(f, x0, y0) {
+      /* the line wanders (2026-10-09: "Don't make the line of trees so straight"): the ground is warped before it is
+         measured - big slow bends of up to ~60 m and small ones of ~15 m - so the band curves like a forest edge, never a ruler */
+      const sx = x0, sy = -y0, S0 = ctx.S.pa ^ 0x51ed;
+      const gx = sx + 60 * (2 * g.vnoise(sx / 230, sy / 230, f, S0) - 1) + 15 * (2 * g.vnoise(sx / 47, sy / 47, f, S0 ^ 0x9e37) - 1);
+      const gy = sy + 60 * (2 * g.vnoise(sx / 230 + 17.3, sy / 230 - 9.1, f, S0 ^ 0x3c6e) - 1) + 15 * (2 * g.vnoise(sx / 47 - 5.7, sy / 47 + 3.3, f, S0 ^ 0x85eb) - 1);
+      for (const pc of ctx.PIECES) if (pc.face === f && pc.walls && pc.walls.length) for (const q of pc.walls) {
+        const P = q.pts, half0 = (q.w || 40) / 2, edge = q.edge || 12, wide = q.wide || 0, pad = half0 * 1.3 + edge + 80 + wide;
+        if (!q.bb) { let a = 1e18, b = -1e18, c = 1e18, d = -1e18; for (const p of P) { a = Math.min(a, p[0]); b = Math.max(b, p[0]); c = Math.min(c, p[1]); d = Math.max(d, p[1]); } q.bb = [a - pad, b + pad, c - pad, d + pad]; }
+        if (gx < q.bb[0] || gx > q.bb[1] || gy < q.bb[2] || gy > q.bb[3]) continue;
+        let best = 1e18, left = false;
+        for (let i = 1; i < P.length; i++) {
+          const ax = P[i - 1][0], ay = P[i - 1][1], dx = P[i][0] - ax, dy = P[i][1] - ay, L2 = dx * dx + dy * dy;
+          const t = L2 ? Math.max(0, Math.min(1, ((gx - ax) * dx + (gy - ay) * dy) / L2)) : 0, ex = gx - ax - t * dx, ey = gy - ay - t * dy;
+          const e2 = ex * ex + ey * ey; if (e2 < best) { best = e2; left = dx * ey - dy * ex < 0; }
+        }
+        /* `wide`: extra depth on the left of the line as it is walked (the Ashvale side, 2026-10-09: "so wide that the trees on the
+           far side don't render in the players view") */
+        const d = Math.sqrt(best), half = half0 * (0.8 + 0.45 * g.vnoise(gx / 53, gy / 53, f, ctx.S.pa ^ 0x2f17)) + (left ? wide : 0);
+        if (d >= half + edge) continue;
+        WALL.sp = q.sp || 'ZZD'; WALL.k = d <= half ? 1 : 1 - (d - half) / edge; return WALL;
       }
       return null;
     }
@@ -133,7 +163,7 @@
         }
       }
       for (const sp of (list || [])) {
-        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, groves: sp.groves || [], links: sp.links || [], linkStyles: sp.linkStyles || {} };
+        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, groves: sp.groves || [], walls: sp.walls || [], links: sp.links || [], linkStyles: sp.linkStyles || {} };
         pc.px0 = pc.x; pc.px1 = pc.x + pc.w; pc.py0 = -(pc.y + pc.h); pc.py1 = -pc.y;
         PIECES.push(pc); ctx.PIECE_BY_ID.set(pc.id, pc);
       }
@@ -344,7 +374,7 @@
       if (ctx.clearCaches) ctx.clearCaches();
       return PIECES.map(p => ({ id: p.id, face: p.face, x: p.x, y: p.y, w: p.w, h: p.h, hb: p.hb }));
     }
-    Object.assign(ctx, { pieceDist, pieceTile, pathDist, roadDist, bridgeDist, waterCarve, pieceFlora, groveAt, setSetPieces, pathCount: () => SEG.length / NS, roadObjects: () => ctx.ROAD_OBJ || [] });
+    Object.assign(ctx, { pieceDist, pieceTile, pathDist, roadDist, bridgeDist, waterCarve, pieceFlora, groveAt, wallAt, setSetPieces, pathCount: () => SEG.length / NS, roadObjects: () => ctx.ROAD_OBJ || [] });
     return ctx;
   }
   const api = { api: 1, attach };
