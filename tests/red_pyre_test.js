@@ -24,7 +24,7 @@ function talk(id, out) {
 
 ok(!!npc('pike') && npc('pike').x === 27 && npc('pike').y === 2, 'Pike stands outside the west gate');
 ok(!!npc('vorthan_reader') && !!npc('vorthan_acolyte'), 'two Vorthans stand in the red church');
-ok(!!npc('edric_skel') && npc('edric_skel').x === 24054 && npc('edric_skel').lie, 'Edric\'s bones lie halfway along the cave tunnel');
+ok(!!npc('edric_skel') && npc('edric_skel').x === 24044 && npc('edric_skel').y === 24044 && npc('edric_skel').lie, 'Edric\'s bones lie in the cave');
 ok(!!npc('edric_ghost') && npc('edric_ghost').hideFlag === 'vorth_bag' && npc('edric_ghost').vanish && npc('edric_ghost').goneFlag === 'vorth_spoke', 'Edric\'s shade is hidden until the bag is searched, then gone after he speaks');
 const ww = D.zones.find(z => z.id === 'whisperwood');
 const church = (ww.objects || []).find(o => o.k === 'church' && o.sign === 'The Red Pyre');
@@ -111,7 +111,7 @@ d = talk('wenna');
 ok(p.quests.red_pyre.step === 4 && p.xp.prayer - x0 === 6930, 'Wenna takes the note: 693 Prayer XP, level 4 to 9');
 ok(core.lv(p, 'prayer') === 9, 'Prayer is 9');
 
-p.x = 24054; p.y = 24006;
+p.x = 24044; p.y = 24045;
 core.cmd('p1', { c: 'escape', id: 'edric_skel' });
 for (let i = 0; i < 4; i++) core.tick();
 ok(p.x === -124 && p.y === 10, 'escaping the cave returns you to the mouth');

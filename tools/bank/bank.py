@@ -271,6 +271,16 @@ def handle_contacts(c, addr, msg):
         for m in BOOK.values():
             for x in [x for x, at in m.items() if at < now - BOOK_TTL]: m.pop(x, None)
         return None
+    # 'pals?': of the asker's own address book, who has an Ashvale save, and who is playing now
+    if msg.get('t') == 'pals?':
+        mine = BOOK.get(addr, {})
+        pals = []
+        for x in _addrs(msg):
+            if x not in mine or mine[x] < now - BOOK_TTL: continue
+            if not c.execute('select 1 from saves where addr=?', (x,)).fetchone(): continue
+            w = c.execute('select at from wheres where addr=?', (x,)).fetchone()
+            pals.append([x, 1 if w and w['at'] > now - ONLINE else 0])
+        return {'t': 'pals', 'to': addr, 'q': str(msg.get('q') or '')[:12], 'p': pals}
     # 'friends?': which of these (the asker's contacts) have the asker in their book too, and are playing now
     out = []
     mine = BOOK.get(addr, {})
@@ -332,7 +342,7 @@ def handle(c, addr, msg):
     if msg.get('t') in ('carry', 'carried?'): return handle_carry(c, addr, msg)
     if msg.get('t') in ('boat', 'boats?'): return handle_boats(c, addr, msg)
     if msg.get('t') in ('here', 'where?'): return handle_where(c, addr, msg)
-    if msg.get('t') in ('book', 'friends?'): return handle_contacts(c, addr, msg)
+    if msg.get('t') in ('book', 'friends?', 'pals?'): return handle_contacts(c, addr, msg)
     if msg.get('t') in ('sv', 'ld?'): return handle_save(c, addr, msg)
     rid = str(msg.get('id') or '')[:40]
     if not rid: return None
@@ -534,7 +544,7 @@ def room_loop(stop):
                     if fr.evaluate("window.__bankClosed || null"): raise RuntimeError('room closed')
                     for m in fr.evaluate("window.__bankQ.splice(0)"):
                         d, f = m.get('data') or {}, m.get('from') or {}
-                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'boat', 'boats?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'sv', 'ld?', 'mark', 'marks?', 'carry', 'carried?'): continue
+                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'boat', 'boats?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'pals?', 'sv', 'ld?', 'mark', 'marks?', 'carry', 'carried?'): continue
                         if f.get('guest') or not f.get('address'): continue
                         try: rep = handle(c, f['address'], d)
                         except Exception: log('HANDLE ERROR', traceback.format_exc()[-400:]); rep = {'t': 'dep', 'id': d.get('id'), 'to': f['address'], 'ok': False, 'note': 'The bank hit an error; try again later.'}

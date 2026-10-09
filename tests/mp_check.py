@@ -14,6 +14,7 @@ def two_players(browser, url_a, url_b, shot_path, check, sandbox=False, ctx_opts
     # single-threaded, so the second page's request queues behind the first page's module fetches; at load 10+
     # that queue outlasts the 30 s default and the run dies in a goto instead of a check.
     pa.goto(url_a, timeout=120000); pb.goto(url_b, timeout=120000)
+    for pg in (pa, pb): pg.wait_for_function('window.ASH && ASH.hud && ASH.core', timeout=120000)   # the page boots its modules first (a fixed 5 s was too short)
     pa.wait_for_timeout(5000)
     for pg, nm in ((pa, 'Alice'), (pb, 'Bob')):
         pg.evaluate('ASH.hud.showHelp(false); ASH.core.cmd("me", {c: "look", name: "%s"})' % nm)

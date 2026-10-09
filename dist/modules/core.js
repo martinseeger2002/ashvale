@@ -42,7 +42,7 @@
     if (!j || !j.category || !RI) return j;   /* pre-schema data (old saves/pages): already in the internal shape */
     const cs = j.category + '/' + j.subcategory;
     const d = { id, name: j.name, category: j.category, subcategory: j.subcategory, kind: j.subcategory, tier: j.tier || 0, weight: j.weight | 0,
-      value: j.value | 0, req: j.req || {}, stack: !!j.stackable, model: j.model, nft: j.nft || null };
+      value: j.value | 0, req: j.req || {}, stack: !!j.stackable, model: j.model, nft: j.nft || null, ward: j.ward || null };
     d.eq = RI.slots[cs] || RI.slots[j.category] || null;
     if (j.category === 'weapon') Object.assign(d, RI.weapons[j.subcategory] || {});
     if (j.category === 'tool') d.tool = RI.tools[j.subcategory] || null;
@@ -720,9 +720,9 @@
         case 'npc': { const n = M.npcs.find(q => q.id === c.id); if (n) { p._trade = !!c.trade; p.act = { k: 'npc', id: n.id }; p.skilling = null; closeShop(p); } break; }
         case 'move': moveSlot(p, c.from | 0, c.to | 0); break;
         case 'light': { const s0 = p.inv[c.slot | 0]; if (s0 && IT[s0.id].burnTicks) { p.act = { k: 'light', slot: c.slot | 0, id: s0.id }; p.gT = 0; p.path = []; p.skilling = null; closeShop(p); } break; }
-        case 'gather': { const n = nodeAt(idx(c.x | 0, c.y | 0)); if (n) { p.act = { k: 'gather', i: idx(n.x, n.y), peel: c.peel ? 1 : 0, tap: c.tap ? 1 : 0 }; p.skilling = null; closeShop(p); p.gT = 0; } break; }
-        case 'plant': p.act = { k: 'plant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); break;
-        case 'unplant': p.act = { k: 'unplant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); break;
+        case 'gather': { const n = nodeAt(idx(c.x | 0, c.y | 0)); if (n) { p.act = { k: 'gather', i: idx(n.x, n.y), peel: c.peel ? 1 : 0, tap: c.tap ? 1 : 0 }; p.skilling = null; closeShop(p); p.gT = 0; } clearUsing(p); break; }
+        case 'plant': p.act = { k: 'plant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); clearUsing(p); break;
+        case 'unplant': p.act = { k: 'unplant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); clearUsing(p); break;
         case 'unuse': if (p.using) { p.using = null; ev({ e: 'using', p: p.id }); } break;
         case 'takeaxe': {
           const job = plantJob(p), id = job && job.st.axe;
@@ -747,11 +747,11 @@
         }
         case 'useon': {
           const u = p.using, it = u && p.inv[u.slot];
-          if (!u || !it || it.id !== u.id) { p.using = null; ev({ e: 'using', p: p.id }); break; }
+          if (!u || !it || it.id !== u.id) { clearUsing(p); break; }
           const d = IT[it.id];
-          if (it.id === 'sapling') { p.act = { k: 'plant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); break; }
-          if (d.tool) { msg(p, 'Use it on a ' + (d.tool === 'woodcutting' ? 'tree' : d.tool === 'mining' ? 'rock' : 'fishing spot') + '.'); break; }
-          msg(p, 'Nothing interesting happens.'); p.using = null; ev({ e: 'using', p: p.id }); break;
+          if (it.id === 'sapling') { p.act = { k: 'plant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); clearUsing(p); break; }
+          if (d.tool) { msg(p, 'Use it on a ' + (d.tool === 'woodcutting' ? 'tree' : d.tool === 'mining' ? 'rock' : 'fishing spot') + '.'); clearUsing(p); break; }
+          msg(p, 'Nothing interesting happens.'); clearUsing(p); break;
         }
         case 'use': useItem(p, c.slot | 0); break;
         case 'arms': { const has = p.inv.concat(Object.values(p.eq || {})).some(s => s && IT[s.id] && IT[s.id].arms); if (!has) { msg(p, 'You need the Lake Castle stone to call the guard.', 'warn'); break; } callToArms(p, !!c.on); break; }
@@ -792,6 +792,7 @@
     function mobByUid(u) { let m = MIX.get(u); if (m) return m; for (const q of S.mobs) if (q.uid === u) { MIX.set(u, q); return q; } return null; }
     function closeShop(p) { if (p.shop) { p.shop = null; ev({ e: 'shopclose', p: p.id }); } }
 
+    function clearUsing(p) { if (!p.using) return; p.using = null; ev({ e: 'using', p: p.id }); }
     function useItem(p, slot) {
       const s = p.inv[slot]; if (!s) return; const d = IT[s.id];
       if (d.buryXp) { bury(p, slot); return; }
@@ -871,6 +872,11 @@
       }
       ev({ e: 'equip', p: p.id, id: s.id });
     }
+    function takeOff(p, k) {   /* into the chest, not the bag: the piece leaves what you wear */
+      const e = p.eq[k]; if (!e) return null;
+      if (IT[e.id] && IT[e.id].form === 'hawk' && (M.blocked(p.x, p.y) || M.insideAt(p.x, p.y))) { msg(p, 'Fly to open ground first: there is nowhere to land here.', 'warn'); return null; }
+      delete p.eq[k]; ev({ e: 'equip', p: p.id }); burdenCheck(p); return { id: e.id, n: e.n };
+    }
     function unequip(p, k) {
       const e = p.eq[k]; if (!e) return;
       if (!canAdd(p, e.id, 1)) { msg(p, 'Not enough space in your inventory.', 'warn'); return; }
@@ -882,9 +888,11 @@
       const mx = maxHp(p), heal = d.healPct ? Math.floor(mx * d.healPct / 100) : (d.heal | 0);   /* an antidote heals nothing: 0, never undefined (it made hitpoints NaN, 2026-10-07) */
       removeItem(p, s.id, 1);
       const before = p.hp; p.hp = Math.min(mx, p.hp + heal);
+      const beforeP = p.pp | 0;
+      if (d.prayPct) { const gain = Math.floor(maxPp(p) * d.prayPct / 100), cap = Math.max(maxPp(p), beforeP); p.pp = Math.min(cap, beforeP + gain); }
       if (d.energy) p.energy = Math.min(10000, (p.energy || 0) + d.energy);   /* maple candy: a run's worth of energy */
       p.atk = Math.max(p.atk, 0) + 3;
-      msg(p, (d.drink ? 'You drink the ' : 'You eat the ') + d.name.toLowerCase() + '.' + (p.hp > before ? ' It heals some health.' : ''));
+      msg(p, (d.drink ? 'You drink the ' : 'You eat the ') + d.name.toLowerCase() + '.' + (p.hp > before ? ' It heals some health.' : '') + ((p.pp | 0) > beforeP ? ' It restores some Prayer.' : ''));
       ev({ e: 'eat', p: p.id, id: s.id, heal: p.hp - before });
       if (d.cures === 'poison') {
         p.cd = p.cd || {}; p.cd.antidote = S.t + ANTIDOTE_TICKS;   /* three minutes, saved with the other cooldowns */
@@ -1013,7 +1021,11 @@
       if (md.gold) dropGround('coins', md.gold, m.x, m.y, owner, 300);
       const bn = md.bones === undefined ? PRAY.bones : md.bones; if (bn && IT[bn]) dropGround(bn, 1, m.x, m.y, owner, 300);   /* every monster leaves bones (2026-10-07) */
       for (const k in m.carry || {}) if (m.carry[k] > 0 && IT[k]) dropGround(k, m.carry[k], m.x, m.y, owner, 300);
-      for (const d of md.drops) if (!(m.carry0 && d.item in m.carry0) && R.int(d.one_in) === 0) { const n = d.n ? d.n[0] + R.int(d.n[1] - d.n[0] + 1) : 1; dropGround(d.item, n, m.x, m.y, owner, 300); }
+      for (const d of md.drops) if (!(m.carry0 && d.item && (d.item in m.carry0)) && R.int(d.one_in) === 0) {
+        const id = d.any && d.any.length ? d.any[R.int(d.any.length)] : d.item;
+        if (!id || !IT[id]) continue;
+        const n = d.n ? d.n[0] + R.int(d.n[1] - d.n[0] + 1) : 1; dropGround(id, n, m.x, m.y, owner, 300);
+      }
     }
     function mobAttack(m, p, mode) {
       const md = MON[m.key], b = bonuses(p), st = style(p), magic = mode === 'magic', ranged = !!mode && !magic, cls = magic ? 'magic' : ranged ? 'ranged' : 'melee', C = magic ? md.cast || {} : null;
@@ -1028,12 +1040,14 @@
          also stops what the spell would do to you. `raw` is the roll before the prayer, so a player whose prayer went out
          between the host's roll and the hit still takes it (applyHit). */
       if (dmg > 0 && md.miss && R.int(100) < md.miss) dmg = 0;   /* a swing that forgets itself (Bramble) */
-      const raw = dmg, prot = protects(p, cls); if (prot) dmg = 0;
-      const fx = magic && hit && C.fx && !prot && !hk && (!C.fxChance || R.int(C.fxChance) === 0) ? C.fx : null;
+      const raw = dmg, prot = protects(p, cls), ward = magic && p.eq && p.eq.cape && IT[p.eq.cape.id] && IT[p.eq.cape.id].ward === m.key;
+      if (prot || ward) dmg = 0;
+      const fx = magic && hit && C.fx && !prot && !ward && !hk && (!C.fxChance || R.int(C.fxChance) === 0) ? C.fx : null;
       ev({ e: 'attack', src: m.uid, dst: p.id, anim: ranged ? 'bow' : magic ? 'cast' : md.anim, delay: ranged || magic ? 1 : 0, cls, ammo: ranged ? m._ammo : null, spell: magic ? C.name || 'Shadow bolt' : null });
       if (!p.puppet) { if (hk) p.hawkHp -= dmg; else p.hp -= dmg; }
-      ev({ e: 'hit', dst: p.id, src: m.uid, dmg, max: hk ? HK.hp : maxHp(p), hp: hk ? p.hawkHp : p.puppet ? Math.max(0, p.hp - dmg) : p.hp, hawk: hk ? 1 : 0, cls, blocked: !hit && !!p.eq.shield, dodged, prot: prot ? 1 : 0, raw, fx, fxt: fx ? C.fxTicks || 5 : 0 });
+      ev({ e: 'hit', dst: p.id, src: m.uid, dmg, max: hk ? HK.hp : maxHp(p), hp: hk ? p.hawkHp : p.puppet ? Math.max(0, p.hp - dmg) : p.hp, hawk: hk ? 1 : 0, cls, blocked: !hit && !!p.eq.shield, dodged, prot: prot || ward ? 1 : 0, raw, fx, fxt: fx ? C.fxTicks || 5 : 0 });
       if (p.puppet) return;
+      if (ward && raw > 0 && !p.puppet) msg(p, 'The dragonfire breaks on your cape.');
       if (fx) magicFx(p, fx, C.fxTicks || 5, md.name);
       if (dodged) msg(p, 'You dodge the ' + md.name.toLowerCase() + "'s attack.");
       if (dmg > 0 && !hk && md.venom && p.hp > 0 && R.int(100) < (md.venom.chance | 0)) poisonPlayer(p, md.venom, md.name);
@@ -1455,28 +1469,13 @@
       msg(p, 'You learn ' + FLAGS[k].name + '.' + (FLAGS[k].desc ? ' ' + FLAGS[k].desc : ''), 'quest');
     }
     function ensureStep(p, q, st) { openStep(p, q, st); }
-    const VAEL_CLEAR = 10;
-    function vaelTile() { const n = M.npcs.find(q => q.id === 'vael'); return n ? [n.x, n.y] : null; }
-    /* the walk the chapel carves: one tile west of the altar, then toward the grove (map-north / true south-southwest since the north was turned), three tiles wide */
-    function onChapelPath(x, y) { return x >= 196 && x <= 198 && y <= 14 && y >= -40; }
-    function townAt(x, y) {
-      for (const z of ZINDEX) {
-        if (!z || z.level !== 'safe' || !z.origin || !z.size) continue;
-        if (x >= z.origin[0] && y >= z.origin[1] && x < z.origin[0] + z.size[0] && y < z.origin[1] + z.size[1]) return z;
-      }
-      return null;
-    }
+    function isStump(x, y) { const i = idx(x, y); return isWood(x, y) && !!S.dep[i]; }
     function plantWhy(x, y) {
-      const v = vaelTile();
-      if (v && cheb(x, y, v[0], v[1]) <= VAEL_CLEAR) return 'Within ten tiles of Vael the ground stays clear, so the rope is never walled in.';
-      if (onChapelPath(x, y)) return 'That tile is on the path from the Ancient Chapel. It stays open.';
-      const town = townAt(x, y);
-      if (town) return 'Inside ' + (town.name || 'town') + ' the town limits will not take a tree.';
       if (M.insideAt && M.insideAt(x, y)) return 'Not indoors.';
       const t = M.tileAt(x, y);
-      if (t === 'p') return 'The path will not take a tree.';
-      if (t !== '.') return 'A sapling only takes in grass.';
+      if (t === '~' || t === 'v' || t === 'B') return 'A sapling will not take in the water.';
       const i = idx(x, y);
+      if (isStump(x, y)) return S.plants[i] ? 'Something is already planted there.' : null;
       if (M.blocked(x, y) || nodeAt(i)) return 'That ground will not take a shoot.';
       if (S.plants[i]) return 'Something is already planted there.';
       return null;
@@ -1501,22 +1500,15 @@
     function stumpWhy(p, x, y) {
       if (!canReplant(p)) return null;
       if (S.plants[idx(x, y)]) return 'Something is already planted there.';
-      if (isWood(x, y) && S.dep[idx(x, y)]) return 'The stump is still settling. In an hour the ground will be open grass, and a sapling can go there.';
       return null;
     }
     function canPlant(p, x, y) {
       if (invCount(p, 'sapling') < 1) return false;
       const i = idx(x, y);
       if (S.plants[i]) return false;
-      if (isWood(x, y) && S.dep[i]) return false;
-      if (isCleared(x, y) && canReplant(p)) return true;
-      const job = plantJob(p);
-      if (job && job.st.goal.plant === 'stump') return false;
+      if (isWood(x, y) && !S.dep[i]) return false;
+      if (isStump(x, y) || isCleared(x, y)) return canReplant(p);
       if (plantWhy(x, y)) return false;
-      if (job && job.st.goal.plant === 'open') {
-        const near = job.st.near;
-        if (near && cheb(x, y, near[0], near[1]) > (near[2] == null ? 16 : near[2])) return false;
-      }
       return true;
     }
     function takeSapling(p) {
@@ -1529,8 +1521,19 @@
     }
     function plantAt(p, x, y) {
       if (!canPlant(p, x, y)) { msg(p, (isWood(x, y) && !canReplant(p) ? 'You have not learned to set a shoot in a stump.' : null) || stumpWhy(p, x, y) || plantWhy(x, y) || 'That ground will not take a shoot.', 'warn'); return; }
-      const job = plantJob(p), i = idx(x, y), cleared = isCleared(x, y);
-      const count = !!(job && ((job.st.goal.plant === 'stump' && cleared) || (job.st.goal.plant === 'open' && !cleared)));
+      const job = plantJob(p), i = idx(x, y);
+      const wasStump = isStump(x, y);
+      if (wasStump) {
+        if (M.clearTree) M.clearTree(x, y);
+        delete S.dep[i]; delete S.fell[i];
+        S.cleared[i] = 1;
+        ev({ e: 'clear', x, y, node: i });
+      }
+      const cleared = isCleared(x, y);
+      const onStump = wasStump || cleared;
+      const near = job && job.st.near;
+      const inGrove = !near || cheb(x, y, near[0], near[1]) <= (near[2] == null ? 16 : near[2]);
+      const count = !!(job && ((job.st.goal.plant === 'stump' && onStump) || (job.st.goal.plant === 'open' && !onStump && inGrove)));
       if (!takeSapling(p)) return;
       const rec = { x, y, at: S.t, tile: M.tileAt(x, y), stump: 0, owner: p.id, grown: 0 };
       if (count) { rec.qid = job.qid; rec.step = job.q.step; rec.counted = 1; }
@@ -1653,7 +1656,7 @@
         S.dep[i] = nd.regrow < 0 ? FOREVER : S.t + nd.regrow;
         if (nd.skill === 'woodcutting') S.fell[i] = S.t;
         ev({ e: 'deplete', node: i, p: p.id, x: n.x, y: n.y, forever: nd.regrow < 0 ? 1 : 0 });
-        if (nd.skill === 'woodcutting' && canReplant(p)) msg(p, 'A stump is left. In an hour it will be open grass, and a sapling can go there.', 'quest');
+        if (nd.skill === 'woodcutting' && canReplant(p)) msg(p, 'A stump is left. A sapling can go there.', 'quest');
         p.act = null; p.skilling = null;
       }   /* regrow < 0: felled for good (2026-10-05) */
     }
@@ -2137,8 +2140,16 @@
             p.act = null;
           }
           if (p.act && p.x === g.x && p.y === g.y) {
-            if (!canAdd(p, g.id, g.n)) msg(p, "You don't have enough inventory space to hold that item.", 'warn');
-            else { const left = addItem(p, g.id, g.n); ev({ e: 'take', p: p.id, g: g.uid, id: g.id, n: g.n - left, x: g.x, y: g.y, own: g.from === p.id ? 1 : 0 }); if (left) g.n = left; else { S.ground.splice(S.ground.indexOf(g), 1); if (g.bank != null) BANK_GONE.add(g.bank); } }   /* a persisted drop taken here: no host's copy brings it back (2026-10-06: the same 200 Gold, picked up again and again) */
+            /* a pile that does not stack (spider silk (10), and any drop like it) fills the free slots and leaves the rest (2026-10-08) */
+            const room = (g.bank != null || IT[g.id].stack) ? (canAdd(p, g.id, g.n) ? g.n : 0) : Math.min(g.n, invFree(p));
+            if (!room) msg(p, "You don't have enough inventory space to hold that item.", 'warn');
+            else {
+              const left = addItem(p, g.id, room), got = room - left;
+              ev({ e: 'take', p: p.id, g: g.uid, id: g.id, n: got, x: g.x, y: g.y, own: g.from === p.id ? 1 : 0 });
+              g.n -= got;
+              if (g.n > 0) ev({ e: 'ground', g: g.uid, n: g.n, x: g.x, y: g.y });
+              else { S.ground.splice(S.ground.indexOf(g), 1); if (g.bank != null) BANK_GONE.add(g.bank); }   /* a persisted drop taken here: no host's copy brings it back (2026-10-06: the same 200 Gold, picked up again and again) */
+            }
             p.act = null;
           }
         }
@@ -2190,6 +2201,7 @@
       const tries = dx && dy ? [[dx, dy], [dx, 0], [0, dy]] : dx ? [[dx, 0], [dx, 1], [dx, -1]] : [[0, dy], [1, dy], [-1, dy]];
       for (const [sx, sy] of tries) {
         if (!sx && !sy) continue;
+        if (MON[m.key].chain && cheb(m.x + sx, m.y + sy, m.sx, m.sy) > MON[m.key].chain) continue;   /* a chained beast stays on its pole */
         if (canStep(m.x, m.y, sx, sy) && !M.insideAt(m.x + sx, m.y + sy) && !occupied(m.x + sx, m.y + sy, m) && (m.crossing || m.summon || M.zoneAt(m.x + sx, m.y + sy) === M.zoneAt(m.sx, m.sy))) { m.face = faceTo(m.x, m.y, m.x + sx, m.y + sy); m.x += sx; m.y += sy; m.step = 1; return true; }
       }
       return false;
@@ -2408,8 +2420,9 @@
          has you it ignores its area and its leash, and only stops when you die (or leave the game) */
       if (md.relentless) { m.crossing = !!p; if (p && p.dead) { m.tgt = 0; m.back = 1; p = null; } }
       else {
-        m.crossing = retaliating(m, 10);
-        if (p && !(m.crossing && p.id === m.hurt) && (p.dead || cheb(m.x, m.y, m.sx, m.sy) > 10 || cheb(p.x, p.y, m.sx, m.sy) > 14)) { m.tgt = 0; m.back = 1; p = null; }
+        const leash = md.chain || 10;
+        m.crossing = retaliating(m, leash);
+        if (p && !(m.crossing && p.id === m.hurt) && (p.dead || cheb(m.x, m.y, m.sx, m.sy) > leash || cheb(p.x, p.y, m.sx, m.sy) > leash + 4)) { m.tgt = 0; m.back = 1; p = null; }
       }
       if (p && airborne(p) && !shooter(m, md)) { m.tgt = 0; m.back = 1; p = null; }   /* the hawk flew off: no bite or blow reaches it (2026-10-08) */
       if (!p && !m.back && md.aggro > 0) {
@@ -2424,7 +2437,24 @@
         if (q) { m.wx = null; if (stepAway(m, q, 10)) stepAway(m, q, 10); if (m.hp < md.hp && S.t % 10 === 0) m.hp++; return; }
       }
       if (p) {
-        if (m.x === p.x && m.y === p.y) { for (const [dx, dy] of DIRS.slice(0, 4)) if (canStep(m.x, m.y, dx, dy) && !occupied(m.x + dx, m.y + dy, m)) { m.x += dx; m.y += dy; m.step = 1; break; } return; }
+        if (m.x === p.x && m.y === p.y) { for (const [dx, dy] of DIRS.slice(0, 4)) if (canStep(m.x, m.y, dx, dy) && !occupied(m.x + dx, m.y + dy, m) && !(md.chain && cheb(m.x + dx, m.y + dy, m.sx, m.sy) > md.chain)) { m.x += dx; m.y += dy; m.step = 1; break; } return; }
+        if (m.wind) {   /* the blow was shown already; it lands when the windup ends, and only if you are still where that style can reach */
+          m.face = faceTo(m.x, m.y, p.x, p.y);
+          if (S.t < m.wind.at) return;
+          const mode = m.wind.mode; m.wind = null; m.form = (m.form | 0) + 1;
+          const rng = (md.cast && md.cast.range) || 5, d = cheb(m.x, m.y, p.x, p.y);
+          const ok = !p.dead && (mode === 'magic' ? d <= rng && lineOfSight(m.x, m.y, p.x, p.y) : inReach(m.x, m.y, p.x, p.y, 1));
+          if (ok) { mobAttack(m, p, mode === 'magic' ? 'magic' : null); m.atk = md.speed; }
+          return;
+        }
+        if (md.windup) {   /* bite and dragonfire take turns, and each is plain to see before it lands */
+          const rng = (md.cast && md.cast.range) || 5, d = cheb(m.x, m.y, p.x, p.y), odd = (m.form | 0) % 2 === 1;
+          const seen = md.cast && d <= rng && lineOfSight(m.x, m.y, p.x, p.y), close = inReach(m.x, m.y, p.x, p.y, 1);
+          const mode = close && !odd ? 'melee' : seen ? 'magic' : close ? 'melee' : null;
+          if (mode && m.atk <= 0) { m.wind = { mode, at: S.t + md.windup }; m.face = faceTo(m.x, m.y, p.x, p.y); ev({ e: 'tell', mob: m.uid, mode, dst: p.id }); return; }
+          if (!(md.chain && cheb(m.x, m.y, m.sx, m.sy) >= md.chain && cheb(p.x, p.y, m.sx, m.sy) > cheb(m.x, m.y, m.sx, m.sy))) mobStepToward(m, p.x, p.y);
+          return;
+        }
         if (md.cast) {
           const rng = md.cast.range || 5, d = cheb(m.x, m.y, p.x, p.y);
           if (d <= rng && lineOfSight(m.x, m.y, p.x, p.y)) { m.face = faceTo(m.x, m.y, p.x, p.y); if (m.atk <= 0) { mobAttack(m, p, 'magic'); m.atk = md.speed; } return; }
@@ -2438,7 +2468,8 @@
       if (md.ownDice) {   /* wildlife wanders on its own dice (uid + tick), so a hen in a yard never shifts the fight rolls */
         const h = Math.imul((m.uid % 2147483647) ^ Math.imul(S.t, 0x9e3779b1), 0x85ebca6b) >>> 0, r = md.roam || 3;
         if (h % (md.roamEvery || 10) === 0) { m.wx = m.sx + ((h >>> 8) % (2 * r + 1)) - r; m.wy = m.sy + ((h >>> 16) % (2 * r + 1)) - r; }   /* roamEvery: birds potter about */
-      } else if (R.int(10) === 0) { const tx = m.sx + R.int(7) - 3, ty = m.sy + R.int(7) - 3; m.wx = tx; m.wy = ty; }
+      } else if (md.chain) { if (R.int(8) === 0) { const r = md.chain; m.wx = m.sx + R.int(r * 2 + 1) - r; m.wy = m.sy + R.int(r * 2 + 1) - r; } }
+      else if (R.int(10) === 0) { const tx = m.sx + R.int(7) - 3, ty = m.sy + R.int(7) - 3; m.wx = tx; m.wy = ty; }
       if (m.wx != null && !(m.x === m.wx && m.y === m.wy)) { if (!mobStepToward(m, m.wx, m.wy)) m.wx = null; }
       if (m.hp < md.hp && S.t % 10 === 0) m.hp++;
     }
@@ -2646,7 +2677,7 @@
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
       setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
-      applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, setFelled,
+      applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, takeOff: (pid, k) => { const p = S.players[pid]; return p ? takeOff(p, k) : null; }, setFelled,
       hitXp: (pid, cls, dmg, dex) => { const p = S.players[pid]; if (p && !p.puppet) hitXp(p, cls, dmg, null, dex); },
       creditKill: (pid, key) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key); }
     };

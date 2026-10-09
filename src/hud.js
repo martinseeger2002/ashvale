@@ -50,9 +50,13 @@
     const dlg = el('dlg stone ui', ui), ctx = el('ctx ui', ui), shopEl = el('shop stone ui', ui), help = el('help stone ui', ui), err = el('err ui', ui);
     const st = { tab: api.isPhone ? null : 'inv', shopId: null, shopSel: null, skillSel: null, newGameArm: 0 };   /* shared with the hud parts */
     let lines = [], dlgQ = null;
-    const TABS = [['combat', 'Combat'], ['skills', 'Skills'], ['quest', 'Quests'], ['inv', 'Inventory'], ['equip', 'Equipment'], ['prayer', 'Prayer'], ['magic', 'Magic'], ['settings', 'Settings']];   /* no Wallet tab (2026-10-05: the chest shows your wallet) */
+    const TABS = [['combat', 'Combat'], ['skills', 'Skills'], ['quest', 'Quests'], ['friends', 'Friends'], ['inv', 'Inventory'], ['equip', 'Equipment'], ['prayer', 'Prayer'], ['magic', 'Magic'], ['settings', 'Settings']];   /* no Wallet tab (2026-10-05: the chest shows your wallet) */
     for (const [k, title] of TABS) { const b = el('tab stone', tabs, A.ICON[k], 'button'); b.title = title; b.dataset.k = k; b.onclick = () => { setTab(st.tab === k ? null : k); api.sfx && api.sfx('click'); }; }
-    function setTab(k) { st.tab = k; for (const b of tabs.children) b.classList.toggle('on', b.dataset.k === k); panel.classList.toggle('open', !!k); K.refresh(k); }
+    function setTab(k) { st.tab = k; for (const b of tabs.children) b.classList.toggle('on', b.dataset.k === k); panel.classList.toggle('open', !!k); K.refresh(k); if (k === 'friends' && api.friendsRefresh) api.friendsRefresh(); }
+    function promptSay(text) {
+      sayRow.classList.add('on'); sayIn.value = text; sayIn.focus();
+      const n = sayIn.value.length; try { sayIn.setSelectionRange(n, n); } catch (e) { /* some browsers */ }
+    }
 
     /* ---------- item icons */
     function slotHtml(it, extra) {
@@ -73,6 +77,14 @@
     function itemOptions(slot) {
       const p = P(), it = p.inv[slot]; if (!it) return [];
       const d = core.item(it.id), nm = '<span class="o">' + A.esc(d.name) + '</span>', o = [];
+      if (st.chest && api.chestStore) {
+        const n = p.inv.reduce((a, s) => a + (s && s.id === it.id ? s.n : 0), 0);
+        o.push({ html: 'Deposit ' + nm, fn: () => api.chestStore(it.id, 1) });
+        if (n > 1) o.push({ html: 'Deposit all ' + nm, fn: () => api.chestStore(it.id, n) });
+        if (d.eq) o.push({ html: (d.eq === 'weapon' ? 'Wield ' : 'Wear ') + nm, fn: () => api.cmd({ c: 'equip', slot }) });
+        o.push({ html: 'Examine ' + nm, fn: () => chatLine(examine(it.id, it.n), 'sys') });
+        return o;
+      }
       if (d.eq) o.push({ html: (d.eq === 'weapon' ? 'Wield ' : 'Wear ') + nm, fn: () => api.cmd({ c: 'equip', slot }) });
       if (d.edible) o.push({ html: (d.drink ? 'Drink ' : 'Eat ') + nm, fn: () => api.cmd({ c: 'eat', slot }) });
       if (d.buryXp) o.push({ html: 'Bury ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
@@ -91,7 +103,7 @@
       if (d.prayer) b.push('Prayer +' + d.prayer);
       if (d.prayerSec) b.push('+' + d.prayerSec + 's per prayer point');
       if (d.ppHold) b.push('+' + d.ppHold + 's before each point, for every Prayer point you still hold');
-      if (d.heal) b.push('Heals ' + d.heal); if (d.healPct) b.push('Heals ' + d.healPct + '% of your hitpoints');
+      if (d.heal) b.push('Heals ' + d.heal); if (d.healPct) b.push('Heals ' + d.healPct + '% of your hitpoints'); if (d.prayPct) b.push('Restores ' + d.prayPct + '% of your Prayer points');
       const req = d.req ? Object.keys(d.req).filter(k => d.req[k] > 1).map(k => A.cap(k) + ' ' + d.req[k]).join(', ') : '';
       if (d.weight) b.push((d.weight * Math.max(1, n || 1) / 1000).toFixed(d.weight * (n || 1) < 1000 ? 2 : 1) + ' kg');
       if (d.carry) b.push('Carry +' + (d.carry / 1000) + ' kg');
@@ -274,9 +286,10 @@
     });
 
     /* ---------- the parts (each its own module/inscription): they get this kit and add their functions to it */
-    const K = { host, api, core, P, A, el, ui, layer, panel, st, shopEl, ccEl, slotHtml, longPress, menu, hideMenu, chatLine, examine, itemOptions, updateOrbs, showHelp,
+    const K = { host, api, core, P, A, el, ui, layer, panel, st, shopEl, ccEl, slotHtml, longPress, menu, hideMenu, chatLine, examine, itemOptions, updateOrbs, showHelp, promptSay,
       refresh() { }, drawShop() { }, openShop() { }, closeShop() { }, openChest() { }, closeChest() { }, drawChest() { }, invPointer() { }, creator() { }, creatorOpen: () => false };
     for (const part of PARTS) part.install(K);
+    K.onChestClose = () => { if (st.tabWas === undefined) return; const back = st.tabWas; st.tabWas = undefined; setTab(back); };
     /* a quest's story so far, in the words of the one who gave it (2026-10-06): every step you finished - what they
        asked and what they said when you came back - then what they asked you last, or their farewell once it is all done.
        Nothing from a step you have not reached. "Remove from quest log" hides it and keeps the progress (core 'qhide'). */
@@ -299,7 +312,7 @@
     { const r0 = K.refresh; K.refresh = w => { r0(w); if (st.chest) K.drawChest(); }; }   /* the chest window follows the bag and the wallet */
     setTab(st.tab);
     return {
-      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => K.openChest(), closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
+      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab('inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };

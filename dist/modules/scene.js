@@ -661,7 +661,7 @@
           { const bt = new Float64Array(L.length * BRANCH_TIPS.length); for (let i = 0; i < bt.length; i++) bt[i] = tiles[Math.floor(i / BRANCH_TIPS.length)]; buds.userData.pick = { kind: 'tree', tiles: bt }; treeMeshes.push(buds); }   /* tap the leaves to chop, as the crown was */
         }
         L.forEach(t => { t.h = hash2(t.x + 31, t.y + 77); t.branches = branches; });   /* t.h: this tree's day in the leaf fall */
-        const reg = { kind: k, crown, branches, buds, list: L }; TREE_REG.push(reg); L.forEach(t => { t.reg = reg; }); treeSeason(reg);
+        const reg = { kind: k, crown, branches, buds, list: L, g: group }; TREE_REG.push(reg); L.forEach(t => { t.reg = reg; }); treeSeason(reg);
       }
       /* ---------- rocks */
       const rockAt = new Map(), pickables = [terrainMesh].concat(treeMeshes);
@@ -831,6 +831,26 @@
         const x = o.x + (o.w || 1) / 2, z = o.y + (o.h || 1) / 2; let y = heightAt(x, z);
         switch (o.k) {
           case 'house': case 'shop': case 'smithy': case 'church': building(o); break;
+          case 'truins': {   /* a tall ruined keep: broken towers, no roof, a pole in the yard */
+            const ST = 0x8c8880, DK = 0x5a564e, x0 = o.x, z0 = o.y, w = o.w || 16, h = o.h || 16, yb = y;
+            B.add('box', 0xa39e92, x0 + w / 2, yb + 0.05, z0 + h / 2, (w - 6) * 0.98, 0.1, (h - 6) * 0.98);
+            const towers = [[3.2, 3.2, 9.4], [w - 3.2, 3.2, 7.2], [3.2, h - 3.2, 6.4], [w - 3.2, h - 3.2, 8.6]];
+            for (const [tx, tz, th] of towers) {
+              B.add('box', ST, x0 + tx, yb + th / 2, z0 + tz, 2.15, th, 2.15);
+              B.add('box', DK, x0 + tx + 0.55, yb + th + 0.28, z0 + tz - 0.2, 1.15, 0.55, 0.9);
+              B.add('box', 0x6e6a62, x0 + tx, yb + th * 0.62, z0 + tz + 1.05, 0.55, 0.7, 0.12);
+            }
+            const gap = o.door || [x0 + Math.floor(w / 2), z0 + h - 4];
+            const wall = (x, z, ww, dd, hh) => { if (Math.abs(x - gap[0]) < 1.2 && Math.abs(z - gap[1]) < 1.2) return; B.add('box', ST, x, yb + hh / 2, z, ww, hh, dd); };
+            for (let i = 4; i < w - 4; i += 2) { wall(x0 + i + 0.5, z0 + 3.15, 1.7, 0.55, 2.2 + (i % 4)); wall(x0 + i + 0.5, z0 + h - 3.15, 1.7, 0.55, 1.6 + ((i + 2) % 5)); }
+            for (let i = 4; i < h - 4; i += 2) { wall(x0 + 3.15, z0 + i + 0.5, 0.55, 1.7, 2.4 + (i % 3)); wall(x0 + w - 3.15, z0 + i + 0.5, 0.55, 1.7, 1.8 + ((i + 1) % 4)); }
+            B.add('box', DK, x0 + 6.2, yb + 0.22, z0 + 6.4, 1.3, 0.36, 0.8);
+            B.add('box', 0x4e4a44, x0 + w - 6, yb + 0.28, z0 + h - 6.2, 0.9, 0.45, 0.7);
+            const px = (o.pole ? o.pole[0] : x0 + w / 2) + 0.5, pz = (o.pole ? o.pole[1] : z0 + h / 2) + 0.5, py = heightAt(px, pz);
+            B.add('cyl', 0x2c2e32, px, py + 1.85, pz, 0.11, 3.7, 0.11);
+            B.add('cyl', 0xc8ccd0, px, py + 3.55, pz, 0.28, 0.06, 0.28);
+            break;
+          }
           case 'ruin': {
             const STN = 0x8d8880, RUB = 0x6a655e, w = o.w || 7, h = o.h || 6, x0 = o.x, z0 = o.y;
             B.add('box', 0xb0aa9e, x0 + w / 2, y + 0.05, z0 + h / 2, w - 0.15, 0.1, h - 0.15);
@@ -1206,10 +1226,10 @@
         else if (c === ',' && r > 0.965) { const fx = x + 0.3 + hash2(x, y + 7) * 0.4, fz = y + 0.3 + hash2(x + 7, y) * 0.4, fy = heightAt(fx, fz); BF.add('cyl6', 0xe8e0c8, fx, fy + 0.05, fz, 0.05, 0.1, 0.05); BF.add('cone', 0xb83a2a, fx, fy + 0.12, fz, 0.14, 0.07, 0.14); }
       }
       B.finish();
-      { const reg = { sets: BF.finish() }; FLORA_REG.push(reg); floraSeason(reg); }
+      { const reg = { sets: BF.finish(), g: group }; FLORA_REG.push(reg); floraSeason(reg); }
       if (RICEP.length) {   /* the manoomin: stalk, a blade off it, and the head on top; tinted per plant by the season */
         const mk = () => { const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0xffffff), RICEP.length); im.castShadow = true; im.frustumCulled = false; im.setColorAt(0, new THREE.Color()); group.add(im); return im; };
-        const reg = { plants: RICEP, stalk: mk(), blade: mk(), head: mk() }; RICE_REG.push(reg); riceSeason(reg);
+        const reg = { plants: RICEP, stalk: mk(), blade: mk(), head: mk(), g: group }; RICE_REG.push(reg); riceSeason(reg);
       }
       /* fishing spots: rippling rings */
       const spots = [];
@@ -1233,7 +1253,13 @@
             for (const m of quads[q]) m.visible = on;
           }
         },
-        dispose() { group.traverse(o => { if (o.geometry) o.geometry.dispose(); }); },
+        /* a region left behind goes for good (2026-10-08: the season lists kept every region ever built - its trees, plants and
+           rice, with their meshes - so a long walk or a few trips to the Spider Cave filled an iPhone's memory until iOS closed
+           the game; the instanced meshes also hold their per-instance buffers on the GPU until disposed) */
+        dispose() {
+          group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); const mt = o.material; if (mt && mt.map && mt.map.isCanvasTexture) { mt.map.dispose(); mt.dispose(); } });   /* painted signs are this region's own */
+          for (const L of [TREE_REG, FLORA_REG, RICE_REG]) for (let i = L.length - 1; i >= 0; i--) if (L[i].g === group) L.splice(i, 1);
+        },
         pickInfo(hit) {
           const u = hit.object.userData.pick; if (!u) return null;
           if (u.kind === 'tree') { const i = u.tiles[hit.instanceId]; return i >= 0 ? { kind: 'node', i } : { kind: 'ground', point: hit.point }; }

@@ -56,6 +56,10 @@
 .ash .slot .n.k{color:#fff}.ash .slot .n.m{color:#0f8}
 .ash .slot.sel{box-shadow:inset 0 0 0 2px #fff}
 .ash .slot.aim{box-shadow:inset 0 0 0 2px #f07818}
+.ash .friends{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.ash .frnd{display:block;width:100%;text-align:left;padding:5px 8px;background:#2a241c;border:1px solid #1b1610;box-shadow:inset 0 0 0 1px #5a4c38;color:#ff3333;font:700 14px/1.2 "Trebuchet MS",Verdana,sans-serif;cursor:pointer}
+.ash .frnd.on{color:#00e000}
+.ash .frnd:hover{background:#3a3228}
 .ash .slot.ghost{opacity:.45}
 .ash .slot .fb{position:absolute;inset:4px;border-radius:3px;font-size:9px;color:#fff;display:flex;align-items:center;justify-content:center;text-align:center}
 .ash .equip{display:grid;grid-template-columns:repeat(3,var(--slot));grid-auto-rows:var(--slot);gap:6px;justify-content:center;margin:2px 0 8px}
@@ -111,6 +115,7 @@
 .ash .ctx div.opt:hover,.ash .ctx div.opt:active{background:#7a6c58}
 .ash .y{color:#ff0}.ash .o{color:#ff9040}.ash .c{color:#0ff}.ash .g{color:#0f0}.ash .r{color:#f44}.ash .w{color:#fff}
 .ash .shop{position:absolute;left:50%;top:calc(8px + env(safe-area-inset-top, 0px));transform:translateX(-50%);width:min(620px,calc(100vw - 16px));max-height:calc(100% - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));padding:8px 10px;display:none;flex-direction:column;z-index:5}
+.ash .shop.chest{left:8px;transform:none;width:min(460px,calc(100vw - 250px))}   /* the bag is the inventory panel, so the chest sits to its left */
 .ash .shop .hd{display:flex;align-items:center;justify-content:space-between;color:#ff981f;font-size:15px;margin-bottom:4px}
 .ash .shop .x{width:28px;height:28px;border-radius:4px;background:#7a2a18;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid #000}
 .ash .shop .cols{display:flex;gap:10px;min-height:0;flex:1;overflow:auto}
@@ -204,6 +209,7 @@
     combat: SV('M4 3l9 9-2 2 2 2 2-2 2 2-2 2 3 3 2-2-3-3 2-2-2-2-2 2-2-2 9-9-3 0-8 8-8-8z', '#d9c9a0'),
     skills: SV('M3 20h3V12H3zm5 0h3V6H8zm5 0h3V9h-3zm5 0h3V3h-3z', '#7fd06a'),
     quest: SV('M5 3h11l3 3v15H5z M8 8h8M8 12h8M8 16h5', '#e8dcb0'),
+    friends: SV('M8 11a3 3 0 100-6 3 3 0 000 6zM2 19c0-3 2.5-5 6-5s6 2 6 5M16 11a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM14 14c2.8 0 6 1.6 6 4.5', '#7dcea0'),
     wallet: SV('M3 7h16v12H3z M3 7l3-3h11v3 M15 12h4v3h-4z', '#e8b54a'),
     inv: SV('M7 7c0-3 2-4 5-4s5 1 5 4h2l1 14H4L5 7zm2 0h6c0-2-1-2-3-2S9 5 9 7z', '#b8874a'),
     equip: SV('M6 3h12l1 6-3 3v9H8v-9L5 9z', '#a9b0ba'),

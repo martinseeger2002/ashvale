@@ -9,8 +9,8 @@
   'use strict';
   function install(K) {
     const { api, core, P, A } = K, esc = A.esc, win = K.shopEl, st = K.st;
-    function openChest() { if (st.shopId) K.closeShop(); st.chest = true; st.chestHtml = null; st.chestSel = null; win.style.display = 'flex'; api.walletRefresh && api.walletRefresh(); drawChest(); }
-    function closeChest() { st.chest = false; win.style.display = 'none'; npClose(); }
+    function openChest() { if (st.shopId) K.closeShop(); st.chest = true; st.chestHtml = null; st.chestSel = null; win.classList.add('chest'); win.style.display = 'flex'; api.walletRefresh && api.walletRefresh(); drawChest(); }
+    function closeChest() { st.chest = false; win.classList.remove('chest'); win.style.display = 'none'; npClose(); if (K.onChestClose) K.onChestClose(); }
     function counts() {   /* the engine keeps the ledger (bag vs chest vs spent) per wallet address: api.chestState() */
       const p = P(), W = api.walletState ? api.walletState() : { status: 'off' }, C = api.chestState ? api.chestState() : { chest: {}, loose: {}, bank: {} };
       return { p, W, D: W.data, B: C.bank || {}, chest: C.chest || {}, loose: C.loose || {}, arriving: C.arriving || 0, bag: C.bag || {}, pend: C.pend || {} };
@@ -82,16 +82,10 @@
       const ck = Object.keys(chest);   /* GOLD too: it can be taken out like anything else (the operator: "no way to withdraw it") */
       for (const k of ck) h += '<div class="slot ' + (sel && sel.take === k ? 'sel' : '') + '" data-t="' + esc(k) + '">' + K.slotHtml({ id: k, n: chest[k] }) + '</div>';
       if (!ck.length) h += '<div class="info" style="grid-column:1/-1">' + (D ? 'Nothing else in your wallet.' : 'Reading your wallet…') + '</div>';
-      h += '</div></div><div class="col"><h5>Your bag (tap to store)</h5><div class="grid iv">';
-      const lo = Object.assign({}, loose);
-      p.inv.forEach((it, i) => {
-        let mark = '';
-        if (it && lo[it.id] > 0) { lo[it.id] -= Math.min(lo[it.id], it.n); mark = ' ghost'; }
-        h += '<div class="slot ' + (sel && sel.slot === i ? 'sel' : '') + mark + '" data-s="' + i + '"' + (mark ? ' title="Not in your wallet yet"' : '') + '>' + K.slotHtml(it) + '</div>';
-      });
       h += '</div></div></div><div class="sel">';
+      h += '<button class="btn" data-dep="inv">Deposit inventory</button><button class="btn" data-dep="worn">Deposit worn equipment</button>';
       const nLoose = Object.values(loose).reduce((a, b) => a + b, 0), nArr = arriving;
-      h += '<span style="color:#c8b48a">Tap to move a thing between your chest and your bag; long-press or right-click for more. Your chest and your bag are one arcade wallet.</span>';
+      h += '<span style="color:#c8b48a">Your bag is the inventory beside this. Click an item to put one in the chest. Right-click for All, or to wear it.</span>';
       h += '</div><div class="sel">';
       /* no deposit button (2026-10-04: "I don't want anything extra, they could cause duplications"): new things go to
          your wallet by themselves; this line only says how far along that is */
@@ -102,8 +96,10 @@
       h += '</div>'; if (h === st.chestHtml && win.style.display === 'flex') return;   /* the HUD refreshes every tick: repaint only on change */
       st.chestHtml = h; win.innerHTML = h;
       win.querySelector('.x').onclick = closeChest;
+      const depI = win.querySelector('[data-dep=inv]'), depW = win.querySelector('[data-dep=worn]');
+      if (depI) depI.onclick = () => api.depositInv && api.depositInv();
+      if (depW) depW.onclick = () => api.depositWorn && api.depositWorn();
       for (const s of win.querySelectorAll('[data-t]')) { const k = s.dataset.t; K.longPress(s, () => tapTake(k), (x, y) => menuTake(k, x, y)); }
-      for (const s of win.querySelectorAll('[data-s]')) { const i = +s.dataset.s; if (P().inv[i]) K.longPress(s, () => tapStore(i), (x, y) => menuStore(i, x, y)); }
     }
     K.openChest = openChest; K.closeChest = closeChest; K.drawChest = drawChest;
   }

@@ -5,7 +5,7 @@
 (function (G) {
   'use strict';
   function install(K) {
-    const { DATA, SCENE, THREE, YOURFIRST_ADDR, net, D, DAY_S, MOD, PID, SEASON, SEASONS, SKYM, SUNL, SUN_EPOCH, TL, WAL, carriedHeard, core, coreCall, evicted, hud, me, proxies, proxyMat, q, scene, skyNow, sunTime, walletRefresh, walletState, waterY } = K;
+    const { DATA, SCENE, THREE, YOURFIRST_ADDR, net, netGear, palsHeard, D, DAY_S, MOD, PID, SEASON, SEASONS, SKYM, SUNL, SUN_EPOCH, TL, WAL, carriedHeard, core, coreCall, evicted, hud, me, proxies, proxyMat, q, scene, skyNow, sunTime, walletRefresh, walletState, waterY } = K;
       /* ---------- the town chest + the @ashvale Bank (handoff/bank_plan.md; 2026-10-04: bag and chest are one
          arcade wallet, "we just have to keep the game state"). The ledger, per wallet address, in this browser:
            bag[k]    delivered wallet units you carry     spent[k]   delivered units eaten/sold/dropped (not yet back with @ashvale)
@@ -235,12 +235,35 @@
         L.bag[k] = (L.bag[k] || 0) + fromReal; L.pchest[k] = (L.pchest[k] || 0) - fromP; L.pend[k] = (L.pend[k] || 0) + fromP; L.lchest[k] = Math.max(0, (L.lchest[k] || 0) - fromL); ledgerSave();
         hud.chat('You take ' + (room0 > 1 ? room0 + ' x ' : '') + d.name + ' from your chest.', 'info'); hud.refresh('all');
       }
-      function chestStore(k, n) {
+      function chestStore(k, n, quiet) {
         chestState(); const L = ledgerFor(walletState.address), have = core.invCount(me, k);
         const fromBag = Math.min(n, L.bag[k] || 0, have), fromPend = Math.min(n - fromBag, L.pend[k] || 0, have - fromBag), fromNew = Math.min(n - fromBag - fromPend, have - fromBag - fromPend), m = fromBag + fromPend + fromNew;   /* settled or not, it can go in the chest (2026-10-05) */
-        if (m <= 0) return;
+        if (m <= 0) return 0;
         core.storeItem(PID, k, m); L.bag[k] = (L.bag[k] || 0) - fromBag; L.pend[k] = (L.pend[k] || 0) - fromPend; L.pchest[k] = (L.pchest[k] || 0) + fromPend; L.lchest[k] = (L.lchest[k] || 0) + fromNew; ledgerSave();
-        hud.chat('You put ' + (m > 1 ? m + ' x ' : '') + core.item(k).name + ' in your chest.', 'info'); hud.refresh('all');
+        if (!quiet) hud.chat('You put ' + (m > 1 ? m + ' x ' : '') + core.item(k).name + ' in your chest.', 'info'); hud.refresh('all');
+        return m;
+      }
+      /* the chest's two buttons (sadfrogltc 2026-10-08): everything in the bag, or everything worn, into the chest */
+      function depositInv() {
+        const counts = {}; for (const s of me.inv) if (s) counts[s.id] = (counts[s.id] || 0) + s.n;
+        let n = 0; for (const k in counts) n += chestStore(k, counts[k], true);
+        if (n) hud.chat('You put your inventory in your chest.', 'info');
+        hud.refresh('all');
+      }
+      function depositWorn() {
+        if (!walletState.address) { hud.chat('Sign in to use the chest.', 'warn'); return; }
+        chestState(); const L = ledgerFor(walletState.address); let n = 0;
+        for (const slot of Object.keys(me.eq || {})) {
+          const e = core.takeOff && core.takeOff(PID, slot); if (!e) continue;
+          /* the same three counts as chestStore: settled, still arriving (stays a promise, now in the chest), or new */
+          const fromBag = Math.min(e.n, L.bag[e.id] || 0), fromPend = Math.min(e.n - fromBag, L.pend[e.id] || 0), rest = e.n - fromBag - fromPend;
+          L.bag[e.id] = (L.bag[e.id] || 0) - fromBag; if (!L.bag[e.id]) delete L.bag[e.id];
+          if (fromPend) { L.pend[e.id] -= fromPend; if (!L.pend[e.id]) delete L.pend[e.id]; L.pchest[e.id] = (L.pchest[e.id] || 0) + fromPend; }
+          if (rest) L.lchest[e.id] = (L.lchest[e.id] || 0) + rest;
+          n++;
+        }
+        ledgerSave(); if (n) { hud.chat('You put your worn equipment in your chest.', 'info'); netGear(); }
+        hud.refresh('all');
       }
       /* felled trees, shared by every player for ever (2026-10-05): you tell the @ashvale Bank when you fell one, and
          ask it which trees round you are already down whenever you arrive somewhere new (and every few minutes) */
@@ -393,6 +416,7 @@
             if (data && data.t === 'carried' && bankFrom && R.me && data.to === R.me.address) { carriedHeard(data); return; }   /* carried in someone's canoe while away */
             if (data && data.t === 'marks' && bankFrom && R.me && data.to === R.me.address) { if (core.setMarks) core.setMarks(data.k, data.cells || []); return; }   /* maples tapped today, birches peeled this year */   /* trees others felled */
             if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }   /* persisted drops near me */
+            if (data && data.t === 'pals' && bankFrom && R.me && data.to === R.me.address) { palsHeard(data); return; }   /* the friends list */
             if (!data || data.t !== 'dep' || !bankFrom || !R.me || data.to !== R.me.address) return;   /* only @ashvale or @yourfirstname answers, only to me */
             const q = bank.sent[data.id]; if (!q) return; delete bank.sent[data.id]; clearTimeout(q.timer);
             if (data.ok) {
@@ -435,7 +459,7 @@
           R.send({ t: 'dep', v: 3, id, items, carried, chest, spent, reward, pend: pendOf(Object.keys(items)), from: fromAll(Object.keys(items)) });
         });
       }
-    return { CKEY, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone };
+    return { CKEY, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engbank', { api: 1, v: 1, needs: {} }, () => ({ api: 1, install }));
   if (typeof module !== 'undefined' && module.exports) module.exports = { install };

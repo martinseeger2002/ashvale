@@ -194,11 +194,11 @@
               /* which to play (2026-10-07: gear changed on another device was gone back on this one): the Bank's, whenever it is not
                  the very save this device last synced with ('base') - some other device has played since; this device's own, when it
                  is (it may hold play the Bank has not had yet). A save from before 'base' existed: the newer by its time, as before. */
-              const takeCloud = local && local.base != null ? at !== +local.base : at > ((local && local.at) || 0);
+              const takeCloud = local && local.base != null ? at !== +local.base && !(local.mine != null && at === +local.mine) : at > ((local && local.at) || 0);   /* the Bank holding this device's own last save (its 'svok' lost on the way): this device's copy is as new or newer */
               if (!takeCloud && local && at) return st.set(SAVE_KEY, JSON.stringify(Object.assign(local, { base: at })));   /* ours goes on from the Bank's current one */
               if (takeCloud) {   /* play the Bank's ('' = a New character was made) */
                 console.info('ASHVALE: the save from the Bank (' + new Date(at).toISOString() + ') is newer than this device\'s');
-                return st.set(SAVE_KEY, cloud ? JSON.stringify(Object.assign(cloud, { at, base: at })) : '');
+                return st.set(SAVE_KEY, cloud ? JSON.stringify(Object.assign(cloud, { at, base: at, mine: undefined })) : '');   /* another device's 'mine' is not ours */
               }
             }).then(() => { CLOUD_OK = true; }, e => console.warn('ASHVALE: cloud save unreadable', e && e.message)).then(end);
           });
@@ -492,7 +492,7 @@
         H.onEvent((type, name) => { if (type === 'impact') onImpact(e, name); else if (type === 'done' && name !== 'death' && name !== 'sprawl') e.oneShot = false; });
         ents.set(key, e); return e;
       }
-      function removeEnt(e) { if (e.bub) e.bub.el.remove(); scene.remove(e.root); const i = proxies.indexOf(e.proxy); if (i >= 0) proxies.splice(i, 1); e.H.dispose && e.H.dispose(); for (const s of e.splats) s.el.remove(); if (e.bar) e.bar.remove(); if (e.tag) e.tag.remove(); if (e.ohd) e.ohd.remove(); ents.delete(e.key); }
+      function removeEnt(e) { if (e.bub) e.bub.el.remove(); scene.remove(e.root); const i = proxies.indexOf(e.proxy); if (i >= 0) proxies.splice(i, 1); e.H.dispose && e.H.dispose(); for (const s of e.splats) s.el.remove(); if (e.chain) for (const lk of e.chain.links) scene.remove(lk); if (e.bar) e.bar.remove(); if (e.tag) e.tag.remove(); if (e.ohd) e.ohd.remove(); ents.delete(e.key); }
       function place(e, x, y) { e.trail = null; const v = new THREE.Vector3(x + 0.5, 0, y + 0.5); v.y = footY(v.x, v.z); e.from.copy(v); e.to.copy(v); e.root.position.copy(v); e.tx = x; e.ty = y; }
       function moveTo(e, x, y, now) {
         if (e.tx === x && e.ty === y) return false;
@@ -517,7 +517,7 @@
          the street or the square rather than a wall - leaning toward paths, where people walk up to them. Indoors only the room
          counts. Ties break on the id, so neighbours do not all turn alike. */
       function homeYaw(n) {
-        if (n.face != null) return n.face;
+        if (n.face != null) return typeof n.face === 'string' ? ({ n: PI, e: PI / 2, s: 0, w: -PI / 2 })[n.face] || 0 : n.face;   /* a compass letter (Mishoomis 'e') was NaN and drew him faint (found by the Ziibiing session, 2026-10-09) */
         const M = core.M, inside = !!(M.insideAt && M.insideAt(n.x, n.y)); let best = -1, yaw = PI, hv = 0;
         for (let i = 0; i < String(n.id).length; i++) hv = (hv * 31 + String(n.id).charCodeAt(i)) >>> 0;
         for (let d = 0; d < 8; d++) {
@@ -549,7 +549,16 @@
       for (const n of core.M.npcs) npcEnt(n);   /* gear: what an NPC carries (the castle's watchmen hold bows) */
       /* monsters get a model while they are within MOB_NEAR tiles (seeded land wakes camps everywhere you have been) */
       const MOB_NEAR = 60, MOB_FAR = 90;
-      function mobEnt(m) { const e = makeEnt('m:' + m.uid, MOD.monster((D.monsters[m.key] || {}).look || m.key), { kind: 'mob', uid: m.uid }); place(e, m.x, m.y); e.yaw = e.tyaw = faceYaw(m.face); e.max = D.monsters[m.key].hp; if (m.dead) { e.dead = true; e.root.visible = false; } return e; }
+      const CHAIN_GEO = new THREE.TorusGeometry(0.11, 0.028, 5, 8), CHAIN_MAT = new THREE.MeshLambertMaterial({ color: 0x3a3e44 });
+      function mobEnt(m) {
+        const e = makeEnt('m:' + m.uid, MOD.monster((D.monsters[m.key] || {}).look || m.key), { kind: 'mob', uid: m.uid }); place(e, m.x, m.y); e.yaw = e.tyaw = faceYaw(m.face); e.max = D.monsters[m.key].hp; if (m.dead) { e.dead = true; e.root.visible = false; }
+        if (D.monsters[m.key] && D.monsters[m.key].chain) {
+          const links = [];
+          for (let i = 0; i < 10; i++) { const lk = new THREE.Mesh(CHAIN_GEO, CHAIN_MAT); scene.add(lk); links.push(lk); }   /* one shared ring for every link: nothing to free when the beast goes out of sight */
+          e.chain = { ax: m.sx + 0.5, az: m.sy + 0.5, links };
+        }
+        return e;
+      }
       function syncMobEnts() {
         for (const m of core.S.mobs) {
           const d = Math.max(Math.abs(m.x - me.x), Math.abs(m.y - me.y)), e = ents.get('m:' + m.uid);
@@ -679,7 +688,13 @@
         if (dirty.inv || dirty.eq) { hud.refresh('all'); dirty = {}; } else hud.refresh('orbs');
         if (hud.tab === 'skills' || hud.tab === 'quest') hud.refresh(hud.tab);
         roofCheck(); showWeather();
-        if (core.S.t % 25 === 0) persist();
+        /* SAVE OFTEN (2026-10-08: iOS closed the game for memory in the Spider Cave and the reload put the operator back at its mouth, in
+           older gear): a crash never says goodbye, so this device's copy is kept every 10 ticks (6 s), and the moments that matter -
+           gear changed, a teleport or a portal, into or out of an area - go to the Bank at once as well */
+        { const pl = core.S.players[PID], zn = pl ? core.zoneOf(pl.x, pl.y) : null, big = evs.some(ev => ev.p === PID && (ev.e === 'equip' || ev.e === 'teleport' || ev.e === 'portal' || ev.e === 'cross' || ev.e === 'chest' || ev.e === 'boat')) || zn !== SAVEZ.zone;
+          SAVEZ.zone = zn;
+          if (big && performance.now() - SAVEZ.t > 3000) { SAVEZ.t = performance.now(); persist(true); }
+          else if (core.S.t % 10 === 0) persist(); }
         if ((SEEDED || core.S.t % 5 === 0) && !CAVE.hold) streamRegions();
         lazyTick();
         netWatch();
@@ -692,9 +707,20 @@
         if (mine && e.e === 'reward' && walletState.address) { const L = ledgerFor(walletState.address); L.rewards = L.rewards || {}; (L.rewards[e.id] = L.rewards[e.id] || []).push(e.collection); ledgerSave(); }   /* a quest reward: its own collection */
         if (mine && (e.e === 'take' || e.e === 'trade' || e.e === 'gather' || e.e === 'inv')) depositSoon();   /* into your wallet the moment it is in your bag (the operator: "as soon as you pick them up") */
         switch (e.e) {
+          case 'tell': {
+            const te = ents.get('m:' + e.mob);
+            if (te && !te.dead) {
+              const name = e.mode === 'magic' ? 'breath' : 'rear';
+              te.oneShot = true; te.lastOne = name; te.oneT = performance.now(); te.tellUntil = performance.now() + 2600; te.loco = name;
+              te.H.play(name, { loop: true }); if (te.H.tell) te.H.tell(e.mode);
+            }
+            if (e.dst === PID) hud.chat(e.mode === 'magic' ? 'The chained dragon draws a long breath. Blue fire gathers in its jaws.' : 'The chained dragon rears, the chain clinking, and swings its head to bite.', 'warn');
+            break;
+          }
           case 'attack': {
             if (e.cls === 'hawk') { const he = entOf(e.src); if (he && he.hawk) he.dive = performance.now(); }   /* the hawk dives to strike */
             const src = entOf(e.src), dst = entOf(e.dst); if (!src) break;
+            if (src.H && src.H.tell) { src.H.tell(null); src.tellUntil = 0; }
             if (dst) src.tyaw = Math.atan2(dst.to.x - src.to.x, dst.to.z - src.to.z);
             if (typeof e.src === 'number' && src.H.gear && src.H.setGear) {   /* archers: bow out to shoot, sword back for melee */
               if (src.w0 === undefined) src.w0 = src.H.gear.weapon || null;
@@ -1220,7 +1246,7 @@
       function lvColor(l) { const d = l - core.combatLevel(me); return d > 9 ? '#ff0000' : d > 6 ? '#ff3000' : d > 3 ? '#ff7000' : d > 0 ? '#ffb000' : d === 0 ? '#ffff00' : d > -4 ? '#c0ff00' : d > -7 ? '#80ff00' : '#40ff00'; }
       function optionsForRaw(t) {
         const esc = s => String(s).replace(/</g, '&lt;');
-        if (t.kind === 'mob') { const m = core.mobByUid(t.uid), d = D.monsters[m.key], cb = core.mobCombat(d); const nm = '<span class="y">' + esc(d.name) + '</span> <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>'; return [{ html: 'Attack ' + nm, act: { c: 'attack', uid: t.uid }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(d.name + ': combat ' + cb + ' (' + (cb > core.combatLevel(me) ? 'stronger than you' : cb === core.combatLevel(me) ? 'evenly matched' : 'weaker than you') + '), ' + d.hp + ' hitpoints, hits up to ' + d.max + '.' + (d.aggro ? ' Aggressive.' : '') + (d.hint ? ' ' + d.hint : ''), 'sys') }]; }
+        if (t.kind === 'mob') { const m = core.mobByUid(t.uid), d = D.monsters[m.key], cb = core.mobCombat(d); const nm = '<span class="y">' + esc(d.name) + '</span> <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>'; const o = [{ html: 'Attack ' + nm, act: { c: 'attack', uid: t.uid }, red: 1 }]; if (d.lines) o.push({ html: 'Talk-to ' + nm, fn: () => hud.dialog(d.name, d.lines) }); o.push({ html: 'Examine ' + nm, fn: () => hud.chat(d.name + ': combat ' + cb + ' (' + (cb > core.combatLevel(me) ? 'stronger than you' : cb === core.combatLevel(me) ? 'evenly matched' : 'weaker than you') + '), ' + d.hp + ' hitpoints, hits up to ' + d.max + '.' + (d.aggro ? ' Aggressive.' : '') + (d.cast ? ' It breathes fire as well as biting.' : '') + (d.hint ? ' ' + d.hint : ''), 'sys') }); return o; }
         if (t.kind === 'npc') { const n = NPCN[t.id]; if (!n || !npcShown(n)) return []; const cb = n.watch ? (core.guardCb || 33) : 0; const nm = '<span class="y">' + esc(n.name) + '</span>' + (cb ? ' <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>' : ''); const o = []; if (n.watch) o.push({ html: 'Attack ' + nm, act: { c: 'attack', id: n.id }, red: 1 }); if (n.tailor) { o.push({ html: 'Change-look ' + nm, act: { c: 'npc', id: n.id }, red: 1 }); o.push({ html: 'Trade ' + nm, act: { c: 'npc', id: n.id, trade: 1 }, red: 1 }); }
           else if (n.chest) o.push({ html: 'Open ' + nm, act: { c: 'npc', id: n.id }, red: 1 });
           else if (n.portal) o.push({ html: 'Use ' + nm, act: { c: 'npc', id: n.id }, red: 1 });
@@ -1550,7 +1576,7 @@
          Games tab and come back in. */
       const VER = { mine: ((G.ASH3D && G.ASH3D._values && G.ASH3D._values.$registry) || {}).version | 0, told: 0 };
       async function versionCheck() {
-        if (stopped || !VER.mine || VER.told || !/^https?:/.test(location.protocol)) return;
+        if (stopped || !VER.mine || VER.told || !/^https?:/.test(location.protocol) || !G.arcade) return;   /* only on the arcade, which has /r/inscriptions (a page served elsewhere got a 404 every 3 min) */
         try {
           const L = await (await fetch('/r/inscriptions?creator=nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c&limit=10')).json();
           let v = 0; for (const x of L || []) { const j = x && x.json; if (j && j.ashvale3d === 'registry' && (j.loader || 1) <= (G.ASH3D.LOADER || 1)) v = Math.max(v, j.version | 0); }
@@ -1706,10 +1732,10 @@
         hud.refresh('wallet'); return walletState;
       }
       /* ASHVALE 3D engine part: THE TOWN CHEST AND THE @ashvale BANK (split out of engine.js, 2026-10-08). The chest ledger, returns, - in its own module (src/engbank.js, 2026-10-08) */
-      const ENGBANK = deps.engbank.install({ get BANK_LOAD_ROOM() { return BANK_LOAD_ROOM; }, set BANK_LOAD_ROOM(v) { BANK_LOAD_ROOM = v; }, DATA, SCENE, THREE, YOURFIRST_ADDR, net, D, DAY_S, MOD, PID, SEASON, SEASONS, SKYM, SUNL, SUN_EPOCH, TL, WAL, carriedHeard, core, coreCall, evicted, hud, me, proxies, proxyMat, q, scene, skyNow, sunTime, walletRefresh, walletState, waterY,
+      const ENGBANK = deps.engbank.install({ get BANK_LOAD_ROOM() { return BANK_LOAD_ROOM; }, set BANK_LOAD_ROOM(v) { BANK_LOAD_ROOM = v; }, DATA, SCENE, THREE, YOURFIRST_ADDR, net, netGear, palsHeard, D, DAY_S, MOD, PID, SEASON, SEASONS, SKYM, SUNL, SUN_EPOCH, TL, WAL, carriedHeard, core, coreCall, evicted, hud, me, proxies, proxyMat, q, scene, skyNow, sunTime, walletRefresh, walletState, waterY,
         get CLOUD() { return CLOUD; },
         get save() { return save; } });
-      const { CKEY, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone } = ENGBANK;
+      const { CKEY, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone } = ENGBANK;
       const netStats = { sent: 0, dropped: 0, t0: performance.now(), times: [], max1s: 0, max2s: 0 };
       window.addEventListener('pagehide', () => { if (nb) nb.close(); if (room) { const r = room; room = null; r.leave(); } });
       let lastSend = 0;
@@ -2094,11 +2120,16 @@
           const moving = a < 1 && e.from.distanceToSquared(e.to) > 1e-4;
           if (!e.dead && !e.oneShot && !e.prone && !e.held) { const want = e.boatRole === 2 ? (e.knocking ? 'knock' : moving ? 'paddle' : 'sit') : e.canoe ? (e.ricing ? (moving ? 'pole' : 'idle') : moving ? 'paddle' : 'sit') : moving ? (e.running ? 'run' : 'walk') : (e.restPose || e.skill || 'idle'); if (want !== e.loco) { e.loco = want; e.H.play(want, { loop: true }); } }
           if (e.boatRole === 2 && e.rideOf != null) { const T = (remotes.get(e.rideOf) || {}).e; if (T) bowSeat(e, T, e.knocking); }
-          if (e.oneShot && e.oneT && now - e.oneT > 2500 && !e.dead) e.oneShot = false;
+          if (e.tellUntil && now >= e.tellUntil) { e.tellUntil = 0; e.oneShot = false; if (e.H.tell) e.H.tell(null); }
+          if (e.oneShot && e.oneT && now - e.oneT > 2500 && !e.dead && !(e.tellUntil && now < e.tellUntil)) e.oneShot = false;
           for (const rec of e.impacts) if (!rec.fired && now - rec.t > 850) { fireImpact(e, rec); break; }
           if (e.dead && e.key.charAt(0) === 'm') { const k = (now - e.deadT) / 1000; if (k > 1.3 && k < 2.2 && e.H.setOpacity) e.H.setOpacity(Math.max(0, 1 - (k - 1.3) / 0.8)); if (k >= 2.2) e.root.visible = false; }
           if (e.spawnT) { const k = Math.min(1, (now - e.spawnT) / 400); e.H.object.scale.setScalar(e.scale * (0.3 + 0.7 * k)); if (k >= 1) e.spawnT = 0; }
           if (e.root.visible) { e.H.update(dt); if (e.hawk) e.hawk.update(dt); }
+          if (e.chain && e.root.visible) {
+            const ax = e.chain.ax, az = e.chain.az, ay = heightAt(ax, az) + 3.5, bx = e.root.position.x, by = e.root.position.y + 1.15, bz = e.root.position.z;
+            e.chain.links.forEach((lk, i) => { const t = (i + 1) / (e.chain.links.length + 1), sag = Math.sin(Math.PI * t) * 0.85; lk.position.set(ax + (bx - ax) * t, ay + (by - ay) * t - sag, az + (bz - az) * t); lk.rotation.y = Math.atan2(bx - ax, bz - az); lk.visible = true; });
+          }
           if (e === myEnt) headLook(e, myEnt.hl || 0, dt);
         }
         for (const g of fires.values()) { const u = g.userData, sc = 0.8 + 0.25 * Math.sin(now / 70 + u.ph) + 0.1 * Math.sin(now / 23 + u.ph); u.f1.scale.set(1, sc, 1); u.f2.scale.set(1, 1.1 * sc, 1); }
@@ -2243,9 +2274,35 @@
         const R = await bankRoom(); if (!R || !R.me || R.me.guest) return;
         for (let i = 0; i < addrs.length; i += 10) { R.send({ t: 'book', v: 1, a: addrs.slice(i, i + 10) }); await new Promise(ok => setTimeout(ok, 400)); }
       }
+      /* FRIENDS LIST: wallet contacts who also have an Ashvale save. Green when their game said where they stand
+         recently; red otherwise. Clicking a name fills /@tag in the chat box. */
+      const PALS = { tags: new Map(), on: new Map(), rows: [], note: '', q: 0, wait: 0 };
+      function palsHeard(d) {
+        if (String(d.q || '') !== String(PALS.q)) return;
+        for (const row of d.p || []) if (row && PALS.tags.has(row[0])) PALS.on.set(row[0], !!row[1]);
+        PALS.wait--; if (PALS.wait > 0) return;
+        const rows = [];
+        for (const [a, tag] of PALS.tags) if (PALS.on.has(a)) rows.push({ tag, online: PALS.on.get(a) });
+        rows.sort((a, b) => (b.online - a.online) || a.tag.localeCompare(b.tag));
+        PALS.rows = rows; PALS.note = rows.length ? '' : 'None of your contacts have an Ashvale save yet.';
+        if (hud.tab === 'friends') hud.refresh('friends');
+      }
+      async function loadPals() {
+        if (!(G.parent && G.parent !== G) || !/^https?:/.test(location.protocol)) { PALS.note = 'Sign in on the arcade to see your contacts.'; PALS.rows = []; return; }
+        if (!(G.arcade && G.arcade.contacts)) await new Promise(ok => { const s = G.document.createElement('script'); s.src = '/r/contacts.js'; s.onload = s.onerror = () => ok(); G.document.head.appendChild(s); setTimeout(ok, 8000); });
+        if (!(G.arcade && G.arcade.contacts)) { PALS.note = 'Sign in on the arcade to see your contacts.'; PALS.rows = []; return; }
+        let L = []; try { L = await G.arcade.contacts.list(); } catch (e) { PALS.note = 'Could not read your contacts.'; PALS.rows = []; return; }
+        PALS.tags = new Map(); PALS.on = new Map();
+        for (const c of Array.isArray(L) ? L : []) if (c && typeof c.address === 'string' && c.address.length >= 25 && c.tag) PALS.tags.set(c.address, String(c.tag).replace(/^@/, ''));
+        if (!PALS.tags.size) { PALS.rows = []; PALS.note = 'Your address book is empty.'; if (hud.tab === 'friends') hud.refresh('friends'); return; }
+        const R = await bankRoom(); if (!R || !R.me || R.me.guest) { PALS.note = 'Sign in to see which contacts play Ashvale.'; PALS.rows = []; return; }
+        await reportBook().catch(() => {});
+        const all = Array.from(PALS.tags.keys()); PALS.q = (PALS.q + 1) % 100000; PALS.wait = Math.ceil(all.length / 8);
+        for (let i = 0; i < all.length; i += 8) R.send({ t: 'pals?', v: 1, q: PALS.q, a: all.slice(i, i + 8) });
+      }
       setTimeout(() => { reportBook().catch(() => {}); setInterval(() => reportBook().catch(() => {}), 600000); }, 15000);
       /* the save to the Bank (cloudLoad above): only when it changed, at most every 20 s, at once when you leave */
-      const CLOUD = { last: null, at: (save && save.at) || 0, sent: '', t: 0, mine: null, base: save && save.base != null ? +save.base : null };   /* base: the Bank's save this game continues */
+      const CLOUD = { last: null, at: (save && save.at) || 0, sent: '', t: 0, mine: save && save.mine != null ? +save.mine : null, base: save && save.base != null ? +save.base : null };   /* base: the Bank's save this game continues */
       function cloudPush(json, now) {
         if (!G.arcade || !CLOUD_OK || !json || json === CLOUD.sent || (!now && performance.now() - CLOUD.t < 20000)) return;
         CLOUD.t = performance.now(); const at = CLOUD.at;
@@ -2257,11 +2314,12 @@
           const mine = CLOUD.mine; CLOUD.sent = json; CLOUD.mine = at; for (let i = 0; i < n; i++) R.send(Object.assign({ t: 'sv', id: at, i, n, d: b.slice(i * CHUNK, (i + 1) * CHUNK) }, CLOUD.base != null ? { base: CLOUD.base } : {}, mine != null ? { mine } : {}));
         })).catch(e => console.warn('ASHVALE: cloud save', e && e.message));
       }
+      const SAVEZ = { zone: undefined, t: 0 };
       function persist(leaving) {
         if (stopped) return;
         try { tellHere(leaving === true); } catch (e) { /* the Bank is out of reach: the next save */ }
         const P = core.exportPlayer(PID), LS = ledgerSnap(); if (P && LS) P.chestLedger = LS;   /* the chest ledger saves with the bag it describes */
-        const json = JSON.stringify(P); if (json !== CLOUD.last) { CLOUD.at = Date.now(); CLOUD.last = json; } if (P) { P.at = CLOUD.at; if (CLOUD.base != null) P.base = CLOUD.base; }
+        const json = JSON.stringify(P); if (json !== CLOUD.last) { CLOUD.at = Date.now(); CLOUD.last = json; } if (P) { P.at = CLOUD.at; if (CLOUD.base != null) P.base = CLOUD.base; if (CLOUD.mine != null) P.mine = CLOUD.mine; }
         cloudPush(json, leaving === true);
         Promise.resolve(store.set(SAVE, JSON.stringify(P))).then(ok => {   /* false: the arcade did not take it */
           if (ok === false) { if (++saveFails === 2) hud.netLost && hud.netLost(true, 'save'); }
@@ -2275,7 +2333,9 @@
         return {
           core, pid: PID, isPhone, isTouch,
           walletState: () => walletState, walletRefresh: () => walletRefresh(), pid: PID,
-          chestState: (...a) => chestState(...a), chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a),   /* the Bank part installs after the HUD is made */
+          chestState: (...a) => chestState(...a), chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a), depositInv: () => depositInv(), depositWorn: () => depositWorn(),   /* the Bank part installs after the HUD is made */
+          friends: () => ({ rows: PALS.rows.slice(), note: PALS.note }),
+          friendsRefresh: () => { loadPals().then(() => { if (hud.tab === 'friends') hud.refresh('friends'); }); },
           walletTake: (id) => chestTake(id, 1),   /* the same ledger as the chest (it bypassed it and could duplicate an NFT) */
           icon: id => { try { return MOD.icon(id, 64); } catch (e) { return null; } },
           cmd: c => { send(c); },
@@ -2332,7 +2392,7 @@
         tap: tapAt, menuAt, targetsAt, pad: () => PAD && PAD.state(), fps: () => frames, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries }), setCam(y, p, d) { if (y != null) cam.tyaw = cam.yaw = y; if (p != null) cam.tpitch = cam.pitch = p; if (d != null) cam.tdist = cam.dist = d; },
         myPos: () => [myEnt.root.position.x, myEnt.root.position.z, myEnt.yaw],   /* tests: where I am drawn (fluid travel) */
         remotesInfo: () => Array.from(remotes).map(([id, r]) => ({ id, boat: r.boat, ride: r.ride, offline: !!r.offline, name: r.name, via: r.via || null, at: [Math.round(r.e.root.position.x), Math.round(r.e.root.position.z)] })),   /* tests: who rides with whom, and who is a dropped-out partner */
-        net: () => ({ host: hostOf(zoneHere()), amHost: !!room && hostOf(zoneHere()) === myNetId, hosts: Object.fromEntries(hosts), hosted: Array.from(hosted), area: zoneHere(), region: roomZone, myId: myNetId, ids: Array.from(remotes.keys()), room: room && room.id, me: room && room.me, neighbours: nb ? nb.rooms().map(R => R.id) : [], viewers: Array.from(remotes).filter(e => e[1].viewOnly).map(e => e[0]), status: netStatus, stats: Object.assign({ perSec: +(netStats.sent / Math.max(1, (performance.now() - netStats.t0) / 1000)).toFixed(2) }, netStats, { times: undefined }), gear: Array.from(remotes.values()).map(r => [r.name, r.e.H.gear || null]), remotes: Array.from(remotes.keys()), names: Array.from(remotes.values()).map(r => r.e.tag && r.e.tag.textContent) }),
+        net: () => ({ host: hostOf(zoneHere()), amHost: !!room && hostOf(zoneHere()) === myNetId, hosts: Object.fromEntries(hosts), hosted: Array.from(hosted), area: zoneHere(), region: roomZone, myId: myNetId, ids: Array.from(remotes.keys()), room: room && room.id, me: room && room.me, neighbours: nb ? nb.rooms().map(R => R.id) : [], viewers: Array.from(remotes).filter(e => e[1].viewOnly).map(e => e[0]), status: netStatus, stats: Object.assign({ perSec: +(netStats.sent / Math.max(1, (performance.now() - netStats.t0) / 1000)).toFixed(2) }, netStats, { times: undefined }), gear: Array.from(remotes.values()).map(r => [r.name, r.e.H.gear || null]), remotes: Array.from(remotes.keys()), names: Array.from(remotes.values()).map(r => r.e.tag && r.e.tag.textContent.replace(/^Total level \d+/, '')) }),   /* the name itself, without the level line above it */
         weather: (kind, intensity, ticks) => coreCall(() => core.setWeather(zoneHere(), kind, intensity == null ? 80 : intensity, ticks || 500)),
         skyDirs: () => ({ north: trueNorth(me.x, me.y), season: SEASON.name, sun: SUNL.sv, moon: SUNL.mv, info: { eclipse: +(SUNL.eclipse || 0).toFixed(3), lunar: +(SUNL.lunar || 0).toFixed(3) } }),   /* a test aims the camera at the sun or the moon */
         wx: () => Object.assign({ season: SEASON.name, snowy: SEASON.snowy }, wxMod && wxMod.state ? wxMod.state() : {}),
@@ -2341,6 +2401,8 @@
         travelShown: () => { const el = host.querySelector('.travel'); return el && el.style.display !== 'none' ? el.className + ' | ' + el.querySelector('.tt').textContent : null; },
         say, store, models: MOD, allowedAsset, wallet: walletApi(DATA.items.items), walletState: () => walletState, walletRefresh,
         chestEventForTest: chestEvent,
+        renderInfo: () => { let meshes = 0; scene.traverse(o => { if (o.isMesh) meshes++; }); return { geo: renderer.info.memory.geometries, tex: renderer.info.memory.textures, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, meshes, programs: (renderer.info.programs || []).length }; },   /* memory probes (2026-10-08: iPhone out-of-memory crashes) */
+        showPals(rows, note) { PALS.rows = (rows || []).map(r => ({ tag: String(r.tag || '').replace(/^@/, ''), online: !!r.online })); PALS.note = note || ''; if (hud.tab === 'friends') hud.refresh('friends'); },
         chest: { state: chestState, take: chestTake, store: chestStore, promise: paid => { const L = ledgerFor(walletState.address); for (const k in paid) L.pend[k] = (L.pend[k] || 0) + paid[k]; ledgerSave(); },
           resetLedgerForTest: () => { if (!walletState.address) return; ledgerDrop(); save = null; try { G.localStorage.removeItem(CKEY(walletState.address)); } catch (e) { /* none */ } ledgerFor(walletState.address); },   /* a lost count: the tests' worst case */
           paidForTest: paid => { const L = ledgerFor(walletState.address); for (const k in paid) { const toChest = Math.min(paid[k], L.lchest[k] || 0); L.lchest[k] -= toChest; L.pchest[k] = (L.pchest[k] || 0) + toChest; L.pend[k] = (L.pend[k] || 0) + paid[k] - toChest; } ledgerSave(); } },   /* tests */ trip: () => TRIP && TRIP.state(), trade: () => trade, peers: () => Array.from(remotes.values()).map(r => r.from), _remIds: () => Array.from(remotes.keys()), optionsAt: (cx, cy) => { const L = []; for (const t of targetsAt(cx, cy)) for (const o of optionsFor(t)) L.push(o.html.replace(/<[^>]+>/g, '')); return L; }, _remAnim: () => JSON.stringify(Array.from(remotes.values()).map(r => [r.anim, r.buf.length, r.buf.length && r.buf[r.buf.length - 1].a])),

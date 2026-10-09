@@ -35,7 +35,7 @@ def side_by_side(pages, name):
     pth = os.path.join(OUT, name); out.save(pth); print('     shot', pth)
 
 def open_page(ctx, url, errs, tag):
-    pg = ctx.new_page(); pg.on('pageerror', lambda e: errs.append(tag + ' PAGEERROR ' + str(e))); pg.on('console', lambda m: m.type == 'error' and errs.append(tag + ' ' + m.text))
+    pg = ctx.new_page(); pg.on('pageerror', lambda e: errs.append(tag + ' PAGEERROR ' + str(e))); pg.on('console', lambda m: m.type == 'error' and errs.append(tag + ' ' + m.text + ' @ ' + (m.location or {}).get('url', '')))
     pg.goto(url, wait_until='domcontentloaded', timeout=120000); wait(pg, '!!(window.ASH && ASH.core)', 90); return pg
 
 def session(b, url_for, label, sandbox=False):

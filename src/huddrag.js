@@ -50,7 +50,11 @@
       });
       node.addEventListener('pointerup', e => {
         if (!st) return; e.stopPropagation(); clearTimeout(st.lp); const s0 = st; st = null;
-        if (s0.drag) dropAt(i, e.clientX, e.clientY); else if (!s0.menu && !s0.cancel) api.cmd({ c: 'use', slot: i });
+        if (s0.drag) dropAt(i, e.clientX, e.clientY);
+        else if (!s0.menu && !s0.cancel) {
+          if (K.st.chest && api.chestStore) { const it = P().inv[i]; if (it) api.chestStore(it.id, 1); }
+          else api.cmd({ c: 'use', slot: i });
+        }
       });
       node.addEventListener('pointercancel', () => { if (st) { clearTimeout(st.lp); if (st.drag) endGhost(); st = null; } });
       node.addEventListener('contextmenu', e => { e.preventDefault(); if (st) { clearTimeout(st.lp); st = null; } K.menu(e.clientX, e.clientY, K.itemOptions(i)); });
