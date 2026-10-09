@@ -478,18 +478,18 @@
      "home": [
       197,
       -51,
-      24
+      50
      ],
      "reward": "verdant_wreath",
      "talk": [
       "You came back level. Listen, and try not to fall off the sentence.",
       "Balance is not a stillness. It is a hand moving to the side that is about to drop. Overhead prayers are that hand.",
       "Protect from Magic stills the heavy blow. Protect from Missiles stills the arrow that never hurries and never misses its time. Protect from Melee stills the one who swings like a drunk tree.",
-      "I will call three. They last while you stay in this open ground. Walk away, or fall, and they were never here. Any order will do. The sensible order is the heavy one first.",
+      "I will not call them until you say you want it. If you accept, three come for you and they will not stop. Die, or leave fifty tiles of this rope, and they vanish. Ask me again and I will call them back, even after the wreath is yours. You need Prayer 15. Any order will do. The sensible order is the heavy one first.",
       "Gale hits hard and does not fidget. Keel hits true and ordinary. Bramble hits ordinary and then forgets how. Pray, then strike."
      ],
      "progress": [
-      "They are still in the field. {n} of {goal} down. Magic first, if you like living. Then the arrow. Then the swing. Leave this ground and they go with the wind."
+      "They are still in the field, or the wind has taken them. {n} of {goal} down. If they are gone, say so and I will call whoever is left. Fifty tiles from this rope, or a death, and they leave."
      ],
      "complete": [
       "You wore the prayers like a person who means to live. I am pleased. The wind is also pleased, which is rarer.",
@@ -499,7 +499,7 @@
     }
    ],
    "done": [
-    "The wreath remembers. The chapel too. Try not to tip the scale for fun."
+    "The wreath remembers. The chapel too. Say the word and I will call the three again. Same warning: they fight until you fall, or you leave fifty tiles of this rope."
    ]
   },
   "manoomin": {

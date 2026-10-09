@@ -34,7 +34,9 @@ const od = npc('odric'); ok(od.x > 150 && od.x < 260, 'Odric is out on the road,
 /* before the quest: Wenna and Odric only have their own lines */
 let d = talk('wenna'); ok(d && /Eleven years/.test(d.lines[0]) && !Q(), 'Wenna before the quest: her own lines, no quest');
 
-d = talk('aldous'); ok(d && Q() && Q().step === 1 && /Symmetry/.test(d.lines.join(' ')), 'Aldous starts the quest and sends you to Symmetry');
+d = talk('aldous'); ok(d && d.offer === 'wayside_prayer' && !Q() && /Symmetry/.test(d.lines.join(' ')), 'Aldous offers the quest and sends you to Symmetry');
+core.cmd('p1', { c: 'acceptq', q: 'wayside_prayer' }); core.tick();
+ok(Q() && Q().step === 1, 'saying yes begins it');
 d = talk('aldous'); ok(Q().step === 1 && /Symmetry/.test(d.lines[0]), 'before Symmetry: Aldous repeats where to go');
 d = talk('odric'); ok(Q().n === 0 && /wheelwright/.test(d.lines[0]), 'Odric too early: his own lines, nothing counted');
 
@@ -55,7 +57,9 @@ const slot = p.inv.findIndex(s => s && s.id === 'monk_robe');
 ok(slot >= 0, "she gives you the Monk's robe");
 ok(evs.some(e => e.e === 'reward' && e.id === 'monk_robe' && e.collection === 'ASHVALE The Wayside Prayer'), 'the Bank mints it into "ASHVALE The Wayside Prayer"');
 d = talk('aldous'); ok(/chapel in Saltmere is open/.test(d.lines[0]), 'afterwards Aldous has the done lines');
-d = talk('wenna'); ok(Q().step === 4 && p.quests.red_pyre && /Pike|bandit|gate|Bright Three/.test(d.lines.join(' ')), 'afterwards Wenna sends you to the gated lookout (The Red Pyre)');
+d = talk('wenna'); ok(d && d.offer === 'red_pyre' && !p.quests.red_pyre && /Pike|bandit|gate|Bright Three/.test(d.lines.join(' ')), 'afterwards Wenna offers the gated lookout');
+core.cmd('p1', { c: 'acceptq', q: 'red_pyre' }); core.tick();
+ok(Q().step === 4 && p.quests.red_pyre && p.quests.red_pyre.step === 1, 'saying yes begins The Red Pyre');
 ok(p.inv.filter(s => s && s.id === 'monk_robe').length === 1, 'still one robe');
 
 /* the robe */

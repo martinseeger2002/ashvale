@@ -80,7 +80,10 @@
       if (st.chest && api.chestStore) {
         const n = p.inv.reduce((a, s) => a + (s && s.id === it.id ? s.n : 0), 0);
         o.push({ html: 'Deposit ' + nm, fn: () => api.chestStore(it.id, 1) });
-        if (n > 1) o.push({ html: 'Deposit all ' + nm, fn: () => api.chestStore(it.id, n) });
+        if (n > 1) {
+          o.push({ html: 'Deposit N ' + nm, fn: () => K.askCount('Deposit ' + d.name, n, m => api.chestStore(it.id, m)) });
+          o.push({ html: 'Deposit all ' + nm, fn: () => api.chestStore(it.id, n) });
+        }
         if (d.eq) o.push({ html: (d.eq === 'weapon' ? 'Wield ' : 'Wear ') + nm, fn: () => api.cmd({ c: 'equip', slot }) });
         o.push({ html: 'Examine ' + nm, fn: () => chatLine(examine(it.id, it.n), 'sys') });
         return o;
@@ -149,17 +152,22 @@
     host.addEventListener('pointerdown', e => { if (ctx.style.display === 'block' && !ctx.contains(e.target) && performance.now() - menuOpenT > 200) hideMenu(); }, true);
 
     /* ---------- NPC dialogue */
-    function dialog(name, linesIn, onClose) {
+    function dialog(name, linesIn, onClose, choices) {
       if (dlgQ && dlgQ.onClose) { const prev = dlgQ.onClose; dlgQ.onClose = null; prev(); }
-      dlgQ = { name, lines: (linesIn || []).slice(), i: 0, onClose: onClose || null }; drawDlg();
+      dlgQ = { name, lines: (linesIn || []).slice(), i: 0, onClose: onClose || null, choices: choices && choices.length ? choices : null }; drawDlg();
     }
     function drawDlg() {
       if (!dlgQ || dlgQ.i >= dlgQ.lines.length) {
         const done = dlgQ && dlgQ.onClose; dlg.style.display = 'none'; dlgQ = null; if (done) done(); return;
       }
-      dlg.style.display = 'block'; dlg.innerHTML = '<div class="nm">' + A.esc(dlgQ.name) + '</div><div class="ln">' + A.esc(dlgQ.lines[dlgQ.i]) + '</div><div class="go">' + (dlgQ.i < dlgQ.lines.length - 1 ? 'Tap here to continue' : 'Tap here to close') + '</div>';
+      const last = dlgQ.i >= dlgQ.lines.length - 1, pick = last && dlgQ.choices;
+      dlg.style.display = 'block';
+      dlg.innerHTML = '<div class="nm">' + A.esc(dlgQ.name) + '</div><div class="ln">' + A.esc(dlgQ.lines[dlgQ.i]) + '</div>' +
+        (pick ? '<div class="go">' + dlgQ.choices.map(c => '<button type="button" class="btn" data-pick="' + A.esc(c.id) + '">' + A.esc(c.label) + '</button>').join(' ') + '</div>'
+          : '<div class="go">' + (last ? 'Tap here to close' : 'Tap here to continue') + '</div>');
+      if (pick) dlg.querySelectorAll('[data-pick]').forEach(b => { b.onclick = (ev) => { ev.stopPropagation(); const id = b.getAttribute('data-pick'), fn = dlgQ && dlgQ.onClose; dlg.style.display = 'none'; dlgQ = null; if (fn) fn(id); }; });
     }
-    dlg.onclick = () => { if (dlgQ) { dlgQ.i++; drawDlg(); K.refresh('quest'); } };
+    dlg.onclick = () => { if (!dlgQ) return; if (dlgQ.choices && dlgQ.i >= dlgQ.lines.length - 1) return; dlgQ.i++; drawDlg(); K.refresh('quest'); };
 
     /* ---------- another player's stats (long-press / right-click > View stats): their own levels as their game sent them */
     function confirm(title, body, yesLabel, noLabel, onYes) {
@@ -312,7 +320,7 @@
     { const r0 = K.refresh; K.refresh = w => { r0(w); if (st.chest) K.drawChest(); }; }   /* the chest window follows the bag and the wallet */
     setTab(st.tab);
     return {
-      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab('inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
+      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab(api.isPhone ? null : 'inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };

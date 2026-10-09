@@ -781,7 +781,15 @@
               }
               if (e.axe) hud.confirm('An axe', 'Vael asks if you need an axe. Take the bronze hatchet?', 'Take it', 'I have one', () => send({ c: 'takeaxe' }));
             } : null;
-            hud.dialog(e.name, e.lines, after);
+            const choices = (e.offer || e.recall) ? [
+              { id: 'yes', label: e.warn ? 'I understand. Call them.' : 'Yes. I will do it.' },
+              { id: 'no', label: 'Not now.' }
+            ] : null;
+            hud.dialog(e.name, e.lines, (pick) => {
+              if (pick === 'no') return;
+              if (pick === 'yes') send({ c: 'acceptq', q: e.offer || e.recall, recall: e.recall ? 1 : 0, replay: e.replay ? 1 : 0 });
+              if (after) after();
+            }, choices);
             faceNpc(e.npc); sfx('click');
             if (n && n.pose) myEnt.restPose = n.pose;   /* sit down with him the same way (2026-10-07) */
           } break;
@@ -1588,7 +1596,13 @@
             if (n.search && !core.searchOpen(me, n)) hud.chat('We should probably leave him alone.', 'sys');
             else hud.chat(n.shop ? n.name + ' runs the ' + core.shop(n.shop).name + '.' : (n.examine || n.name + ', the village elder.'), 'sys');
           } }); return o; }
-        if (t.kind === 'item') { const g = core.S.ground.find(q2 => q2.uid === t.uid); if (!g) return []; const d = core.item(g.id), nm = '<span class="o">' + esc(d.name) + (g.n > 1 ? ' (' + g.n + ')' : '') + '</span>'; return [{ html: 'Take ' + nm, act: { c: 'take', uid: g.uid }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(hud.examine(g.id, g.n), 'sys') }]; }
+        if (t.kind === 'item') {
+          const g = core.S.ground.find(q2 => q2.uid === t.uid); if (!g) return [];
+          const here = core.S.ground.filter(q => q.x === g.x && q.y === g.y && !q.sunk);
+          const o = here.map(q => { const d = core.item(q.id), nm = '<span class="o">' + esc(d.name) + (q.n > 1 ? ' (' + q.n + ')' : '') + '</span>'; return { html: 'Take ' + nm, act: { c: 'take', uid: q.uid }, red: q.uid === g.uid ? 1 : 0 }; });
+          const d0 = core.item(g.id); o.push({ html: 'Examine <span class="o">' + esc(d0.name) + '</span>', fn: () => hud.chat(hud.examine(g.id, g.n), 'sys') });
+          return o;
+        }
         if (t.kind === 'node' && core.isHawk(me)) { const n = core.nodeAt(t.i); if (n && core.nodeDef(n).skill === 'woodcutting') {
           const hp = t.hp || [n.x + 0.5, n.y + 0.5], dx = hp[0] - (n.x + 0.5), dy = hp[1] - (n.y + 0.5), sx = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0, sy = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
           return [{ html: 'Perch in <span class="c">tree</span>', act: { c: 'perch', x: n.x, y: n.y, sx: sx || 1, sy } }]; } }
@@ -2200,7 +2214,12 @@
         if (!core.persists || e.x == null || !core.persists(e.id, e.n || 1)) return;
         const tell = o => bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send(o); });
         if (e.e === 'take' && e.p === PID) tell({ t: 'took', v: 1, id: e.id, n: e.n || 1, x: e.x, y: e.y });
-        else if ((e.e === 'drop' || e.e === 'xdrop') && (e.owner === PID || e.from === PID) && core.item(e.id) && core.item(e.id).stack) tell({ t: 'drop', v: 3, items: [[e.id, '', e.n || 1]], x: e.x, y: e.y, sunk: e.sunk || undefined });
+        else if ((e.e === 'drop' || e.e === 'xdrop') && (e.owner === PID || e.from === PID)) {
+          const d = core.item(e.id); if (!d) return;
+          const pieces = walletState.data && walletState.data.gear && walletState.data.gear[e.id];
+          if (pieces && pieces.length) return;   /* an inscribed piece is named below, so the Bank keeps that exact one */
+          tell({ t: 'drop', v: 3, items: [[e.id, '', e.n || 1]], x: e.x, y: e.y, sunk: e.sunk || undefined });   /* Gold, and a town stone: it does not stack, and it still has to lie there until someone takes it */
+        }
       }
       function chestEvent(e) {
         persistTell(e);
@@ -2272,13 +2291,22 @@
           if (k) L.autoTake[k] = { n: ((L.autoTake[k] || {}).n || 0) + n, until: Date.now() + 1800000 }; }   /* into your bag when it lands */
         ledgerSave(); hud.refresh('all'); for (const t of [20000, 60000, 120000]) setTimeout(walletRefresh, t);
       }
-      function chestTake(k, n) {
-        const C = chestState(); n = Math.min(n, C.chest[k] || 0); if (n <= 0) return;
+      function chestTake(k, n, quiet) {
+        const C = chestState(); n = Math.min(n, C.chest[k] || 0); if (n <= 0) return 0;
         const d = core.item(k), free = me.inv.filter(s => !s).length, room0 = d.stack ? (core.invCount(me, k) || free ? n : 0) : Math.min(n, free);
-        if (room0 <= 0) { hud.chat('Your bag is full.', 'warn'); return; }
+        if (room0 <= 0) { if (!quiet) hud.chat('Your bag is full.', 'warn'); return 0; }
         core.grantItem(PID, k, room0); const L = ledgerFor(walletState.address), real = Math.max(0, (C.chest[k] || 0) - (L.pchest[k] || 0) - (L.lchest[k] || 0)), fromReal = Math.min(room0, real), fromP = Math.min(room0 - fromReal, L.pchest[k] || 0), fromL = room0 - fromReal - fromP;
         L.bag[k] = (L.bag[k] || 0) + fromReal; L.pchest[k] = (L.pchest[k] || 0) - fromP; L.pend[k] = (L.pend[k] || 0) + fromP; L.lchest[k] = Math.max(0, (L.lchest[k] || 0) - fromL); ledgerSave();
-        hud.chat('You take ' + (room0 > 1 ? room0 + ' x ' : '') + d.name + ' from your chest.', 'info'); hud.refresh('all');
+        if (!quiet) hud.chat('You take ' + (room0 > 1 ? room0 + ' x ' : '') + d.name + ' from your chest.', 'info'); hud.refresh('all');
+        return room0;
+      }
+      function withdrawAll() {
+        if (!walletState.address) { hud.chat('Sign in to use the chest.', 'warn'); return; }
+        const C = chestState(); let n = 0;
+        for (const k of Object.keys(C.chest)) n += chestTake(k, C.chest[k] || 0, true);
+        if (n) hud.chat('You take what you can carry from your chest.', 'info');
+        else if (Object.keys(C.chest).length) hud.chat('Your bag is full.', 'warn');
+        hud.refresh('all');
       }
       function chestStore(k, n, quiet) {
         chestState(); const L = ledgerFor(walletState.address), have = core.invCount(me, k);
@@ -2420,7 +2448,7 @@
       setInterval(() => marksAsk(false), 15000); setTimeout(() => marksAsk(true), 9000);
       /* persisted drops near you, from the @ashvale Bank: asked when you arrive somewhere new and every minute (the operator
          2026-10-06: dropped Gold and valuables "should persist ... in the exact same location until a player picks them up") */
-      let gAt = null, gT = 0, gSeq = 0; const gGot = {};
+      let gAt = null, gT = 0, gSeq = 0; const gGot = {}, gSnap = new Map();
       function groundAsk(force) {
         const k = Math.floor(me.x / 48) + ',' + Math.floor(me.y / 48); if (!force && k === gAt && performance.now() - gT < 60000) return;
         gAt = k; gT = performance.now(); const q = 'g' + (++gSeq);
@@ -2723,13 +2751,14 @@
         return rows;
       }
       const sizeOf = o => new TextEncoder().encode(JSON.stringify(o)).length;
-      function packSend(base, key, rows, max) {   /* fill messages up to ~470 B */
+      function packSend(base, key, rows, max, endFlag) {   /* fill messages up to ~470 B. endFlag marks the last piece, so a ground list is not applied until every piece has arrived */
         let cur = Object.assign({}, base), list = [], sent = 0;
+        const more = () => { const n = Object.assign({}, base); if (endFlag) n[endFlag] = 0; return n; };
         for (const r of rows) {
           list.push(r); cur[key] = list;
-          if (sizeOf(cur) > (max || 470)) { list.pop(); cur[key] = list; if (list.length) { netSend(cur); sent++; } cur = {}; list = [r]; cur[key] = list; }
+          if (sizeOf(cur) > (max || 470)) { list.pop(); cur[key] = list; if (list.length) { if (endFlag) cur[endFlag] = 0; netSend(cur); sent++; } cur = more(); list = [r]; cur[key] = list; }
         }
-        if (list.length || Object.keys(base).length) { if (!list.length) delete cur[key]; netSend(cur); sent++; }
+        if (list.length || Object.keys(base).length) { if (!list.length) delete cur[key]; if (endFlag) cur[endFlag] = 1; netSend(cur); sent++; }
         return sent;
       }
       function hostSend(now) {
@@ -2749,7 +2778,7 @@
         packSend({ F: seq }, 'M', mobRows(true));
         for (const a of hosted) {
           const G = core.S.ground.filter(g => areaAt(g.x, g.y) === a).map(g => [g.uid, g.id, g.n, g.x, g.y, g.from ? toNet(g.from) : 0, g.sunk || 0]);
-          packSend({ F: seq, Gr: a }, 'G', G);
+          packSend({ F: seq, Gr: a }, 'G', G, 470, 'Gend');
           const wz = core.weatherOf(a); if (wz) netSend({ F: seq, W: [a, wz.kind, wz.intensity, Math.max(1, wz.until - core.S.t)] });
         }
         const Fi = core.S.fires.filter(f => iHostAt(f.x, f.y)).map(f => [f.uid, f.x, f.y, f.until - core.S.t, f.log]);
@@ -2781,7 +2810,16 @@
         if (Array.isArray(d.M)) { const rows = d.M.filter(w => Array.isArray(w) && fromHostOf(id, mobArea(w[0]))); if (rows.length) coreCall(() => core.applyMobs(rows)); }
         if (Array.isArray(d.W) && fromHostOf(id, d.W[0])) coreCall(() => core.setWeather(d.W[0], String(d.W[1]), d.W[2] | 0, d.W[3] | 0));
         if (Array.isArray(d.Fi)) coreCall(() => { for (const f of d.Fi) if (fromHostOf(id, areaAt(f[1], f[2]))) core.fireAdd(f[0], f[1], f[2], f[3], f[4]); });
-        if (Array.isArray(d.G)) coreCall(() => { if (d.Gr) { if (fromHostOf(id, d.Gr)) core.groundFull(d.Gr, d.G); } else for (const g of d.G) if (fromHostOf(id, areaAt(g[3], g[4]))) core.groundAdd(g[0], g[1], g[2], g[3], g[4], g[5] ? fromNet(g[5]) : null, g[6] || 0); });
+        if (Array.isArray(d.G)) coreCall(() => {
+          if (d.Gr && fromHostOf(id, d.Gr)) {
+            if (d.Gend == null) core.groundFull(d.Gr, d.G);   /* a host from before the pile was sent in pieces */
+            else {
+              const key = id + '|' + (d.F || 0) + '|' + d.Gr, buf = gSnap.get(key) || [];
+              buf.push.apply(buf, d.G);
+              if (d.Gend === 1) { gSnap.delete(key); core.groundFull(d.Gr, buf); } else gSnap.set(key, buf);
+            }
+          } else if (!d.Gr) for (const g of d.G) if (fromHostOf(id, areaAt(g[3], g[4]))) core.groundAdd(g[0], g[1], g[2], g[3], g[4], g[5] ? fromNet(g[5]) : null, g[6] || 0);
+        });
         if (Array.isArray(d.E)) coreCall(() => { for (const a of d.E) if (Array.isArray(a) && eventFromHost(id, a)) applyEvent(a); });
       }
       function eventFromHost(id, a) {   /* is the sender the host of the area this event is about? */
@@ -3096,7 +3134,7 @@
         return {
           core, pid: PID, isPhone, isTouch,
           walletState: () => walletState, walletRefresh: () => walletRefresh(), pid: PID,
-          chestState, chestTake, chestStore, chestDeposit, depositInv, depositWorn,
+          chestState, chestTake, chestStore, chestDeposit, depositInv, depositWorn, withdrawAll,
           friends: () => ({ rows: PALS.rows.slice(), note: PALS.note }),
           friendsRefresh: () => { loadPals().then(() => { if (hud.tab === 'friends') hud.refresh('friends'); }); },
           walletTake: (id) => chestTake(id, 1),   /* the same ledger as the chest (it bypassed it and could duplicate an NFT) */
