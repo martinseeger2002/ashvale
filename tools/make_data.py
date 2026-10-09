@@ -1727,7 +1727,7 @@ HOMES = {
 module('rules', 3, {
     "xp": xp,
     # ^ mountain rock and K standing stones / ruin walls come from the seeded land (worldgen, globe P2): both block
-    "tiles": {"block": T_BLOCK + "^K", "los": T_LOS + "^K", "tree": T_TREE, "rock": T_ROCK, "floor": "i"},
+    "tiles": {"block": T_BLOCK + "^KZD", "los": T_LOS + "^KZD", "tree": T_TREE, "rock": T_ROCK, "floor": "i"},
     "nodes": {
         # a felled tree stays felled, for every player, forever (2026-10-05): regrow -1; the @ashvale Bank keeps the shared list
         "T": {"skill": "woodcutting", "name": "Tree", "item": "logs", "req": 1, "xp": 250, "speed": 4, "deplete": 6, "regrow": -1},
@@ -1834,7 +1834,8 @@ module('rules', 3, {
 # then to the coast of one of two continents on a mostly-ocean globe (2026-10-03 evening): face 19, Saltmere's shore parcel next door.
 module('globecfg', 1, {"seed": "ashvale", "n": 128, "radius_m": 36110, "face": 19, "north": -1, "origin": [8811, -3368], "grid": [8619, -3560],
                        "chunk": 64, "area": 128, "region": 512, "belt": {"whisperwood": 90, "village": 30},
-                       "links": [["eastend", "saltmere"], ["ziibiing", "village", "trail"]],
+                       "links": [["eastend", "saltmere"]],   # the trail to Ziibiing is gone (2026-10-09: a wall of old woods between the two)
+                       "walls": [{"piece": "ziibiing", "w": 40, "wide": 70, "edge": 14, "sp": "ZZD", "pts": [[-1840, -140], [-1200, -108], [-640, -122], [-520, 70], [-360, 320], [-150, 330], [60, 335], [260, 340], [330, 450], [420, 600], [480, 676], [600, 720], [800, 748], [920, 760]]}],
                        # the maple and birch woods (2026-10-08: "a large deciduous forest with maple and Birch", on Ziibiing's own side of
                        # the river, between it and Ashvale; the trail runs through) - game tiles, an ellipse with a wandering edge
                        "groves": [{"piece": "ziibiing", "x": 70, "y": 470, "rx": 160, "ry": 105, "sp": "MMMEE", "dens": 0.6, "edge": 35},

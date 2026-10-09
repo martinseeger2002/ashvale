@@ -393,7 +393,7 @@
     const C = Object.assign({}, DEF_CFG, D.globecfg || {});
     const G = AG.createGlobe({ n: C.n, radius_m: C.radius_m, seed: C.seed });
     const W = WGM.createWorldgen(G, { seed: C.seed });
-    W.setSetPieces(W.piecesFromZones(pieceZones(D), C.face, C.origin[0], C.origin[1], { belt: C.belt || {}, links: C.links || [], groves: C.groves || [] }));
+    W.setSetPieces(W.piecesFromZones(pieceZones(D), C.face, C.origin[0], C.origin[1], { belt: C.belt || {}, links: C.links || [], groves: C.groves || [], walls: C.walls || [] }));
     return W;
   }
   /* the zones worldgen places, in a fixed order: with a zone index (area loading, handoff/area_loading.md) EVERY zone of the
@@ -409,7 +409,7 @@
   function arriveWorldgen(W, D, z) {
     if (z && z.under) return false;   /* an underground area is not on the land */
     const C = Object.assign({}, DEF_CFG, D.globecfg || {});
-    const sp = W.piecesFromZones([z], C.face, C.origin[0], C.origin[1], { belt: C.belt || {}, links: C.links || [], groves: C.groves || [] })[0];
+    const sp = W.piecesFromZones([z], C.face, C.origin[0], C.origin[1], { belt: C.belt || {}, links: C.links || [], groves: C.groves || [], walls: C.walls || [] })[0];
     return W.replacePiece ? W.replacePiece(sp) : false;
   }
   const AshWorld = { API, V, CH, createWorld, seededWorldgen, pieceZones, stubZone, arriveWorldgen, key, kx, ky };

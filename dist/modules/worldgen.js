@@ -174,7 +174,7 @@
         return zones.map(z => {
           const ox = z.origin[0], oy = z.origin[1], w = z.size[0], h = z.size[1];
           const objs = (z.objects || []).filter(o => o.x >= ox && o.y >= oy && o.x < ox + w && o.y < oy + h).map(o => Object.assign({}, o, { x: o.x + gx, y: o.y + gy }, o.x2 != null ? { x2: o.x2 + gx, y2: o.y2 + gy } : null));   /* a run (a castle wall) moves both ends */
-          return { id: z.id, face, x: gx + ox, y: gy + oy, w, h, tiles: decks(z), objects: objs, belt: belt[z.id] || 0, groves: ((popts && popts.groves) || []).filter(q => q.piece === z.id).map(q => Object.assign({}, q, { x: q.x + gx, y: q.y + gy })), links: links.filter(l => l[0] === z.id).map(l => l[1]), linkStyles: Object.fromEntries(links.filter(l => l[0] === z.id && l[2]).map(l => [l[1], l[2]])) };   /* a third word: 'trail' = a skinny dirt trail, no cobbles, no lamps */
+          return { id: z.id, face, x: gx + ox, y: gy + oy, w, h, tiles: decks(z), objects: objs, belt: belt[z.id] || 0, groves: ((popts && popts.groves) || []).filter(q => q.piece === z.id).map(q => Object.assign({}, q, { x: q.x + gx, y: q.y + gy })), walls: ((popts && popts.walls) || []).filter(q => q.piece === z.id).map(q => Object.assign({}, q, { pts: (q.pts || []).map(p => [p[0] + gx, p[1] + gy]) })), links: links.filter(l => l[0] === z.id).map(l => l[1]), linkStyles: Object.fromEntries(links.filter(l => l[0] === z.id && l[2]).map(l => [l[1], l[2]])) };   /* a third word: 'trail' = a skinny dirt trail, no cobbles, no lamps */
         });
       }
       if (O.setPieces) { LASTPC = O.setPieces; ctx.setSetPieces(O.setPieces); }

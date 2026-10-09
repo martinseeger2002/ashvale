@@ -59,6 +59,10 @@
       }
       if (h < WATER - 0.05) return pd < 0 && ctx.bridgeDist(f, cx, cy) < 0 ? 'B' : '~';   /* a bridge: wg_paths lays one only across a stream */
       if (TF[3] > 0.1) return '^';
+      if (PI.length && ctx.wallAt) {   /* a wall of old woods (globecfg.walls): no path, no clearing, nothing chops these */
+        const WL = ctx.wallAt(f, cx, cy);
+        if (WL && (WL.k >= 1 || g.u01(g.hash3(cx, cy, (f * 31337) ^ ctx.S.tl ^ 0x77a1)) < WL.k * 0.8)) { FOREST_HIT = true; return WL.sp[Math.floor(g.u01(g.hash3(cy, cx, f ^ 0x1d2b)) * WL.sp.length)]; }
+      }
       if (pd < 0) return ctx.roadDist && ctx.roadDist(f, cx, cy) < 0 ? 'c' : 'p';   /* 'c': cobbles on a road between towns */
       if (TF[2] > 0.5 || (TF[2] > 0.3 && h < WATER + 0.3)) {
         /* the open desert: sand with a saguaro here and there (2026-10-06), never on a beach or a path */
