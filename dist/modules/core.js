@@ -505,6 +505,7 @@
     }
     let LV_LIMIT = -1;
     const LIFT_STEP = 2.3;   /* the most you can step up or down between two tiles of raised ground (stairs are 0.6 m a tile) */   /* while a player on an upper floor moves, the building they are in (they cannot step out of it) */
+    const NOFLY = (RU.tiles && RU.tiles.noFly) || '';
     let FLY = false;   /* while a hawk moves: every step is open (the operator's hawk ring) */
     /* THE CANOE (2026-10-07, Ziibiing): while you sit in one, only water is open - rivers, lakes, the shallows, under a
        bridge - and never across a corner of land */
@@ -526,7 +527,7 @@
     }
     function canStep(x, y, dx, dy) {
       const nx = x + dx, ny = y + dy;
-      if (FLY) return inMap(nx, ny);   /* a hawk flies over trees, walls and water */
+      if (FLY) return inMap(nx, ny) && (!NOFLY || NOFLY.indexOf(M.tileAt(nx, ny)) < 0);   /* a hawk flies over trees, walls and water - but not the old woods' wall (rules.tiles.noFly, 2026-10-09: a hawk crossed it to a lake inside and died there) */
       if (BOAT) return inMap(nx, ny) && isWet(nx, ny) && (!dx || !dy || (isWet(x + dx, y) && isWet(x, y + dy)));
       if (M.lifts && LV_LIMIT < 0) {   /* raised ground (a castle's stairs and wall walk): heights decide, not the wall tiles */
         const la = M.liftAt(x, y), lb = M.liftAt(nx, ny);
