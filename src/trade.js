@@ -65,6 +65,12 @@
     const itemOf = opts.itemOf || (() => null);
     const send = opts.send || (() => false);
     const onSettled = opts.onSettled || (() => {});
+    const onUndone = opts.onUndone || (() => {});
+    /* DEALS: every swap this game took part in, by the arcade's swap id, so the items move even when the trade window is
+       closed before the chain answers. 2026-10-08: "as soon as the trade transaction hits the mempool the game should
+       reflect it" - a deal is applied once, at 'broadcast' (or 'settled' if that comes first), and undone if it then fails. */
+    const DEALS = new Map();
+    const remember = (id, T) => { if (id && T && !DEALS.has(id)) DEALS.set(id, { gave: T.mine.offer, got: T.theirs.offer, withId: T.with.id, done: false }); };
     if (!document.getElementById('ash-trade-css')) { const st = document.createElement('style'); st.id = 'ash-trade-css'; st.textContent = CSS; document.head.appendChild(st); }
     const box = document.createElement('div'); box.className = 'ash-trade'; box.hidden = true; (opts.host || document.body).appendChild(box);
     /* T: the one trade in progress {with: player, sid, starter, mine: {offer, ok}, theirs: {offer, ok}, wallet, swap} */
@@ -132,7 +138,7 @@
       if (!T || !T.mine.ok || !T.theirs.ok || T.swap || !T.starter) return;   /* the one who asked sends the swap; the other answers it */
       T.swap = 'sending'; T.note = 'Settling: check your arcade wallet if it asks you to confirm.'; draw();
       try { const give = T.mine.offer ? strip(T.mine.offer) : null, get = T.theirs.offer ? strip(T.theirs.offer) : null;
-        const r = await S().trade({ with: T.with.id, give, get }); T.swapId = r && r.id; }
+        const T0 = T, r = await S().trade({ with: T.with.id, give, get }); T0.swapId = r && r.id; remember(T0.swapId, T0); }
       catch (e) { T.swap = null; T.mine.ok = false; T.note = 'Not settled: ' + (e && e.message || e); send(T.with.id, { k: 'unaccept', sid: T.sid }); draw(); }
     }
     function cancel(tell) { if (T && tell) send(T.with.id, { k: 'cancel', sid: T.sid }); T = null; box.hidden = true; box.innerHTML = ''; }
@@ -193,11 +199,19 @@
         if (t.status === 'incoming') {
           const ok = T && !T.starter && T.mine.ok && T.theirs.ok && t.with && t.with.id === T.with.id &&
             (!t.give ? !T.mine.offer : same(t.give, T.mine.offer && strip(T.mine.offer))) && (!t.get ? !T.theirs.offer : same(t.get, T.theirs.offer && strip(T.theirs.offer)));
-          if (ok) { T.swap = t.id; T.note = 'Settling: check your arcade wallet if it asks you to confirm.'; draw(); S().answer(t.id, true).catch(e => { if (T) { T.swap = null; T.mine.ok = false; T.note = 'Not settled: ' + (e && e.message || e); draw(); } }); }
+          if (ok) { T.swap = t.id; remember(t.id, T); T.note = 'Settling: check your arcade wallet if it asks you to confirm.'; draw(); S().answer(t.id, true).catch(e => { if (T) { T.swap = null; T.mine.ok = false; T.note = 'Not settled: ' + (e && e.message || e); draw(); } }); }
           else S().answer(t.id, false, 'not the deal in the trade window').catch(() => {});
           return;
         }
-        if (t.status === 'settled') { const got = T && T.theirs.offer; if (T) onSettled(T.mine.offer, T.theirs.offer); toast('Trade with ' + nameOf(t.with && t.with.id) + ' complete' + (got ? ': you got ' + label(got) + '.' : '.'), 'trade'); if (T) cancel(false); return; }
+        /* the starter's own swap can report before trade() resolves: the open window's deal is that swap */
+        if (!DEALS.has(t.id) && T && T.swap && t.with && t.with.id === T.with.id) remember(t.id, T);
+        const d = DEALS.get(t.id);
+        if (t.status === 'broadcast' || t.status === 'settled') {
+          if (d && !d.done) { d.done = true; onSettled(d.gave, d.got); toast('Trade with ' + nameOf(d.withId) + ' complete' + (d.got ? ': you got ' + label(d.got) + '.' : '.') + (t.status === 'broadcast' ? ' (on its way: the chain confirms it in a block)' : ''), 'trade'); if (T && T.swap) cancel(false); }
+          else if (!d && t.status === 'settled') toast('Trade with ' + nameOf(t.with && t.with.id) + ' complete.', 'trade');
+          return;
+        }
+        if (d && d.done && (t.status === 'failed' || t.status === 'cancelled')) { d.done = false; onUndone(d.gave, d.got); }   /* applied at broadcast, then refused by the chain: everything goes back */
         const say = SAY[t.status]; if (say) { toast('Trade ' + say + (t.why ? ' (' + t.why + ')' : ''), t.status === 'failed' || t.status === 'declined' ? 'warn' : 'trade'); if (T && (t.status === 'failed' || t.status === 'declined' || t.status === 'cancelled')) { T.swap = null; T.mine.ok = false; T.theirs.ok = false; draw(); } }
       });
     }

@@ -77,9 +77,7 @@ t = work(trees.M[2] ? trees.M[2][0] : trees.M[1][0], trees.M[2] ? trees.M[2][1] 
 ok(/empty/.test(t), 'with no empty bucket left there is nothing to catch the sap in');
 /* the quest, and boiling */
 t = talk('nookomis');
-ok(!p.quests.sugar_bush && /ziinzibaakwadwaaboo/.test(t), 'Nookomis offers the sugar bush quest');
-core.cmd('p1', { c: 'acceptq', q: 'sugar_bush' }); run(2);
-ok(p.quests.sugar_bush && p.quests.sugar_bush.step === 1, 'saying yes begins it');
+ok(p.quests.sugar_bush && p.quests.sugar_bush.step === 1 && /ziinzibaakwadwaaboo/.test(t), 'Nookomis gives the sugar bush quest');
 t = talk('nookomis');
 ok(p.quests.sugar_bush.step === 2 && has('sap_bark') + has('sap_pail') === 1, 'she takes one bucket of sap (step 1 done)');
 const fire = npc('nookomis') && core.M.npcs ? null : null; void fire;

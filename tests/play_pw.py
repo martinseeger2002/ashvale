@@ -33,7 +33,7 @@ def wait(pg, js, timeout=30, step=0.25):
 def desktop(p):
     b = p.chromium.launch(args=ARGS)
     pg = b.new_page(viewport={'width': 1280, 'height': 800}); errs = []
-    pg.on('pageerror', lambda e: errs.append('PAGEERROR ' + str(e))); pg.on('console', lambda m: m.type == 'error' and errs.append(m.text))
+    pg.on('pageerror', lambda e: errs.append('PAGEERROR ' + str(e))); pg.on('console', lambda m: m.type == 'error' and errs.append(m.text + ' @ ' + (m.location or {}).get('url', '')))
     pg.goto(URL); pg.wait_for_timeout(4500)
     # 1. character creator
     check(ev(pg, 'ASH.hud.creatorOpen'), 'character creator opens on a fresh start')
@@ -213,7 +213,8 @@ def desktop(p):
     rat2 = ev(pg, 'ASH.core.S.mobs.find(m => m.key === "rat" && !m.dead).uid')
     # 13. weight: buy platebodies until overburdened, then drop them to recover
     ev(pg, 'ASH.teleport(29, 46); ASH.give("coins", 2000)'); pg.wait_for_timeout(600)
-    click_world(pg, 'npc', 'garrick'); wait(pg, '!!ASH.hud.shopOpen', 20); pg.wait_for_timeout(300)
+    # (the camera still faces the character from the hat-and-cape shot, so Garrick is behind it: talk to him by command)
+    ev(pg, 'ASH.core.cmd("me", {c: "npc", id: "garrick", trade: true})'); check(wait(pg, 'ASH.hud.shopOpen === "armoury"', 20), "Garrick's Armoury opens"); pg.wait_for_timeout(300)
     pg.click('.shop [data-b="body_t1"]')
     for _ in range(8):
         if ev(pg, 'ASH.me.burden') == 1: break
@@ -275,7 +276,7 @@ def phone(p):
     b = p.chromium.launch(args=ARGS)
     ctx = b.new_context(viewport={'width': 844, 'height': 390}, device_scale_factor=2, is_mobile=True, has_touch=True)
     pg = ctx.new_page(); errs = []
-    pg.on('pageerror', lambda e: errs.append('PAGEERROR ' + str(e))); pg.on('console', lambda m: m.type == 'error' and errs.append(m.text))
+    pg.on('pageerror', lambda e: errs.append('PAGEERROR ' + str(e))); pg.on('console', lambda m: m.type == 'error' and errs.append(m.text + ' @ ' + (m.location or {}).get('url', '')))
     pg.goto(URL.replace('playtest1', 'phone1')); pg.wait_for_timeout(4500)
     shot(pg, '20_phone_creator')
     pg.tap('.cc [data-a=done]'); pg.wait_for_timeout(400); shot(pg, '20b_phone_points')
@@ -343,7 +344,7 @@ def v04(p):
     """v0.4: inventory drag and drop (mouse and touch), a campfire to cook on, the Frost staff freezing a wolf."""
     b = p.chromium.launch(args=ARGS)
     pg = b.new_page(viewport={'width': 1100, 'height': 700}); errs = []
-    pg.on('pageerror', lambda e: errs.append('PAGEERROR ' + str(e))); pg.on('console', lambda m: m.type == 'error' and errs.append(m.text))
+    pg.on('pageerror', lambda e: errs.append('PAGEERROR ' + str(e))); pg.on('console', lambda m: m.type == 'error' and errs.append(m.text + ' @ ' + (m.location or {}).get('url', '')))
     pg.goto(URL.replace('playtest1', 'v04') + '&nocreator'); pg.wait_for_timeout(5000)
     ev(pg, 'ASH.hud.showHelp(false); ASH.hud.setTab("inv"); ASH.give("sword_t1", 1); ASH.give("shield_t1", 1)'); pg.wait_for_timeout(500)
     box = lambda i: pg.locator('.panel .inv .slot >> nth=%d' % i).bounding_box()
@@ -418,7 +419,7 @@ def bandits(p):
     """Two bandits: hit the swordsman, his friend with the bow joins in from range (group aggro) and keeps his distance."""
     b = p.chromium.launch(args=ARGS)
     pg = b.new_page(viewport={'width': 1100, 'height': 700}); errs = []
-    pg.on('pageerror', lambda e: errs.append('PAGEERROR ' + str(e))); pg.on('console', lambda m: m.type == 'error' and errs.append(m.text))
+    pg.on('pageerror', lambda e: errs.append('PAGEERROR ' + str(e))); pg.on('console', lambda m: m.type == 'error' and errs.append(m.text + ' @ ' + (m.location or {}).get('url', '')))
     pg.goto(URL.replace('playtest1', 'bandits1') + '&nocreator'); pg.wait_for_timeout(5000)
     ev(pg, 'ASH.hud.showHelp(false); for (const [s, l] of [["attack", 30], ["strength", 30], ["defence", 40], ["hitpoints", 60]]) ASH.setLevel(s, l); ASH.me.hp = 60; ASH.core.cmd("me", {c: "retal", on: false})')
     arch = ev(pg, 'ASH.core.S.mobs.find(m => m.carry && m.carry.arrows_t1 && m.sx === 25 && m.sy === 9).uid')
@@ -457,7 +458,7 @@ def globe(p):
         if vp: ctx = b.new_context(viewport=vp)
         else: ctx = b.new_context(viewport={'width': 844, 'height': 390}, device_scale_factor=2, is_mobile=True, has_touch=True)
         pg = ctx.new_page(); errs = []
-        pg.on('pageerror', lambda e: errs.append('PAGEERROR ' + str(e))); pg.on('console', lambda m: m.type == 'error' and errs.append(m.text))
+        pg.on('pageerror', lambda e: errs.append('PAGEERROR ' + str(e))); pg.on('console', lambda m: m.type == 'error' and errs.append(m.text + ' @ ' + (m.location or {}).get('url', '')))
         pg.goto(G_URL.replace('globe1', 'globe' + label), timeout=120000); wait(pg, '!!(window.ASH && ASH.core)', 90); pg.wait_for_timeout(2500)
         ev(pg, 'ASH.hud.showHelp(false); for (const [s, l] of [["attack", 60], ["strength", 60], ["defence", 60], ["hitpoints", 70], ["woodcutting", 30]]) ASH.setLevel(s, l); ASH.give("hatchet", 1); ASH.hud.setTab(null)')
         check(ev(pg, 'ASH.core.M.seeded'), '%s: the game starts with seeded land around the old map' % label)

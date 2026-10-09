@@ -99,6 +99,12 @@
    "api": 1,
    "kind": "js"
   },
+  "castle": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
   "scene": {
    "id": null,
    "v": "1",
@@ -166,6 +172,18 @@
    "kind": "js"
   },
   "seasons": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "engsky": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "engbank": {
    "id": null,
    "v": "1",
    "api": 1,
@@ -1501,6 +1519,12 @@
    "saltmere": {
     "id": null,
     "v": 3,
+    "api": 1,
+    "kind": "json"
+   },
+   "castle": {
+    "id": null,
+    "v": 1,
     "api": 1,
     "kind": "json"
    },

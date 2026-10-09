@@ -229,7 +229,7 @@
     }
     function repopulate(z) {   /* the operator: monsters come back only when you leave the area and come back */
       for (const m of S.mobs) {
-        if (m.zone !== z || m.summon) continue;   /* a called fighter stays gone until the caller asks for them again */
+        if (m.zone !== z) continue;
         const md = MON[m.key];
         if (m.dead) { m.dead = 0; m.dropAt = 0; m.x = m.sx; m.y = m.sy; ev({ e: 'spawn', mob: m.uid }); }
         m.hp = md.hp; m.tgt = 0; m.back = 0; m.atk = 0; m.hurt = null; m.flight = null; m.homeAt = 0; if (m.home) { m.sx = m.home[0]; m.sy = m.home[1]; m.home = null; } m.carry = m.carry0 ? Object.assign({}, m.carry0) : null; m.fx = null; m.drank = 0; m.fled = 0; m.fleeing = 0; m.path = null;
@@ -718,24 +718,6 @@
         case 'take': { const g = S.ground.find(q => q.uid === c.uid); if (g) { p.act = { k: 'take', uid: g.uid }; p.skilling = null; closeShop(p); } break; }
         case 'enter': { const o = passageAt(c.x, c.y); if (o && !p.dead) { p.act = { k: 'enter', x: o.x, y: o.y }; p.skilling = null; closeShop(p); } break; }   /* a cave mouth, a way out */
         case 'npc': { const n = M.npcs.find(q => q.id === c.id); if (n) { p._trade = !!c.trade; p.act = { k: 'npc', id: n.id }; p.skilling = null; closeShop(p); } break; }
-        case 'acceptq': {   /* yes on a starting dialogue, or yes when Vael asks before calling the three again */
-          const qid = String(c.q || ''), Q = D.quests.quests[qid];
-          if (!Q || !prereqDone(Q, p)) { msg(p, 'That is not yours to begin.', 'warn'); break; }
-          const bout = (Q.steps || []).find(s => s.summon);
-          if (c.recall) {
-            if (!bout || !p.quests[qid]) { msg(p, 'Begin it before you ask for them again.', 'warn'); break; }
-            p.summonBye = 0;
-            summonFor(p, p.quests[qid], bout, { replay: !!c.replay || p.quests[qid].step > Q.steps.length });
-            break;
-          }
-          if (p.quests[qid]) break;
-          const q = p.quests[qid] = { step: 1, n: 0 };
-          ev({ e: 'quest', p: p.id, q: qid, step: 1 }); addXp(p, 'speechcraft', SPEECH.xpQuestTalk || 250);
-          openStep(p, q, Q.steps[0]);
-          if (Q.steps[0] && Q.steps[0].summon) summonFor(p, q, Q.steps[0], {});
-          msg(p, Q.name + ': you take it on.', 'quest');
-          break;
-        }
         case 'move': moveSlot(p, c.from | 0, c.to | 0); break;
         case 'light': { const s0 = p.inv[c.slot | 0]; if (s0 && IT[s0.id].burnTicks) { p.act = { k: 'light', slot: c.slot | 0, id: s0.id }; p.gT = 0; p.path = []; p.skilling = null; closeShop(p); } break; }
         case 'gather': { const n = nodeAt(idx(c.x | 0, c.y | 0)); if (n) { p.act = { k: 'gather', i: idx(n.x, n.y), peel: c.peel ? 1 : 0, tap: c.tap ? 1 : 0 }; p.skilling = null; closeShop(p); p.gT = 0; } clearUsing(p); break; }
@@ -838,7 +820,7 @@
         p.using = null; msg(p, 'You put the ' + d.name.toLowerCase() + ' away.'); ev({ e: 'using', p: p.id }); return;
       }
       p.using = { slot, id: s.id }; ev({ e: 'using', p: p.id });
-      if (s.id === 'sapling') msg(p, 'The sapling is outlined. Click grass to plant it. You can pick it up for one hour; after that, grass grows a tree that stays. Not on a path, not inside a town, and not within ten tiles of a person or an entrance.');
+      if (s.id === 'sapling') msg(p, 'The sapling is outlined. Click grass to plant it. You can pick it up for one hour; after that, grass grows a tree that stays. Not within ten tiles of Vael, not on the path from the chapel, and not inside a town.');
       else if (d.tool) msg(p, 'The ' + d.name.toLowerCase() + ' is outlined. Click a ' + (d.tool === 'woodcutting' ? 'tree' : d.tool === 'mining' ? 'rock' : 'fishing spot') + ' to use it.');
       else msg(p, 'The ' + d.name.toLowerCase() + ' is outlined. Click what you want to use it on.');
     }
@@ -1393,11 +1375,7 @@
         };
         const fill = (L, st) => L.map(l => String(l).replace(/\{(n|goal|left|name)\}/g, (m, k) => k === 'name' ? (p.name || 'traveller') : !st ? '' : k === 'n' ? counted(st) : k === 'goal' ? need(st) : Math.max(0, need(st) - counted(st))));
         const open = (st) => st && ZINDEX.some(z => z.id === st.zone);   /* a step opens when its zone EXISTS (it may not be loaded yet) */
-        if (!q) {   /* a quest begins only when the player says yes; the first talk is the offer */
-          lines = fill(Q.steps[0].talk, Q.steps[0]);
-          ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines, offer: qid, warn: Q.steps[0] && Q.steps[0].summon ? 1 : 0 });
-          return;
-        }
+        if (!q) { q = p.quests[qid] = { step: 1, n: 0 }; lines = fill(Q.steps[0].talk, Q.steps[0]); ev({ e: 'quest', p: p.id, q: qid, step: 1 }); addXp(p, 'speechcraft', SPEECH.xpQuestTalk || 250); openStep(p, q, Q.steps[0]); }
         else {
           const st = Q.steps[q.step - 1];
           if (!st) lines = fill(Q.done, null);
@@ -1426,15 +1404,7 @@
           if (hasWoodTool(p)) lines = lines.concat(['You already carry an axe. Keep it, and cut the two pines with that.']);
           else axe = cur.axe;
         }
-        let recall = 0, replay = 0;
-        const bout = (Q.steps || []).find(s => s.summon);
-        if (bout) {
-          const live = S.mobs.some(m => m.summon && m.owner === p.id && !m.gone && !m.dead);
-          const done = q.step > Q.steps.length;
-          const here = cur && cur.summon;
-          if ((done || here) && !live) { recall = 1; replay = done ? 1 : 0; }
-        }
-        ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines, axe, recall: recall ? qid : 0, replay, warn: recall ? 1 : 0 });
+        ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines, axe });
       }
     }
     function giveReward(p, r, giver, quest) {
@@ -1475,35 +1445,22 @@
         S.dep[i] = FOREVER; ev({ e: 'deplete', node: i, x, y, forever: 1 });
       }
     }
-    function summonFor(p, q, st, opts) {
-      if (!st || !st.summon) return 0;
-      opts = opts || {};
-      if (st.pray && lv(p, 'prayer') < st.pray) { msg(p, 'Your Prayer is not high enough for what he would call. It must be at least ' + st.pray + '.', 'warn'); return 0; }
-      const home = (st.home || [p.x, p.y, 50]).slice();
-      if (!home[2]) home[2] = 50;
-      let n = 0;
+    function summonFor(p, q, st) {
+      if (!st || !st.summon) return;
+      if (st.pray && lv(p, 'prayer') < st.pray) { msg(p, 'Your Prayer is not high enough for what he would call. It must be at least ' + st.pray + '.', 'warn'); return; }
+      const home = st.home || [p.x, p.y, 24];
       for (const sp of st.summon) {
         const need = (st.goal.kills && st.goal.kills[sp.m]) || 1;
-        if (!opts.replay && ((q.kn && q.kn[sp.m]) | 0) >= need) continue;
-        for (let i = S.mobs.length - 1; i >= 0; i--) { const old = S.mobs[i]; if (old.summon && old.owner === p.id && old.key === sp.m && (old.gone || old.dead)) S.mobs.splice(i, 1); }
-        if (S.mobs.some(m => m.summon && m.owner === p.id && m.key === sp.m && !m.gone && !m.dead)) continue;
+        if (((q.kn && q.kn[sp.m]) | 0) >= need) continue;
+        if (S.mobs.some(m => m.summon && m.owner === p.id && m.key === sp.m && !m.gone)) continue;
         const md = MON[sp.m]; if (!md) continue;
         const uid = S.uid++;
         const mob = { uid, key: sp.m, x: sp.x, y: sp.y, sx: sp.x, sy: sp.y, hp: md.hp, tgt: p.id, atk: 0, dead: 0, back: 0, face: 2, step: 0, zone: M.zoneAt(sp.x, sp.y),
           carry0: sp.carry || null, carry: sp.carry ? Object.assign({}, sp.carry) : null, summon: 1, owner: p.id, home: home };
-        S.mobs.push(mob); ev({ e: 'mobadd', mob: uid }); n++;
+        S.mobs.push(mob); ev({ e: 'mobadd', mob: uid });
       }
-      if (n) msg(p, 'They step out of the wind. Stay within fifty tiles of the rope, and do not fall.', 'warn');
-      return n;
     }
-    function dismissSummon(m) {
-      if (m.gone) return;
-      m.gone = 1; m.dead = S.t || 1; m.hp = 0; m.dropAt = 0; m.tgt = 0;
-      ev({ e: 'gone', mob: m.uid });
-      const own = S.players[m.owner];
-      if (own && !own.summonBye) { own.summonBye = 1; msg(own, 'They vanish. A death, or fifty tiles from the rope, undoes the call. Ask again if you want them back.', 'warn'); }
-    }
-    function openStep(p, q, st) { if (!st || !q) return; topUp(p, q, st); fellStumps(q, st); learnFlag(p, st); }
+    function openStep(p, q, st) { if (!st || !q) return; topUp(p, q, st); fellStumps(q, st); learnFlag(p, st); summonFor(p, q, st); }
     function learnFlag(p, st) {
       const k = st && st.flag;
       if (!k || !FLAGS[k] || hasFlag(p, k)) return;
@@ -1513,32 +1470,15 @@
     }
     function ensureStep(p, q, st) { openStep(p, q, st); }
     function isStump(x, y) { const i = idx(x, y); return isWood(x, y) && !!S.dep[i]; }
-    const TOWN = {}; for (const z of ZINDEX) if (z.level === 'safe') TOWN[z.id] = 1;
-    const GATES = [];
-    for (const o of M.objects || []) {
-      if (o.k === 'iwall') continue;
-      if (o.door) GATES.push(o.door);
-      else if (o.to) GATES.push([o.x, o.y]);
-    }
-    for (const z of ZINDEX) if (Array.isArray(z.surface)) GATES.push(z.surface);
-    function plantBan(x, y) {
-      const t = M.tileAt(x, y);
-      if (t === 'p' || t === 'c') return 'A sapling will not take on a path.';
-      const zid = M.zoneAt ? M.zoneAt(x, y) : null;
-      if (zid && TOWN[zid]) return 'A sapling will not take inside a town.';
-      for (const n of M.npcs) if (n.x != null && cheb(x, y, n.x | 0, n.y | 0) <= 10) return 'A sapling will not take within ten tiles of ' + (n.name || 'someone') + '.';
-      for (const g of GATES) if (cheb(x, y, g[0], g[1]) <= 10) return 'A sapling will not take within ten tiles of an entrance.';
-      return null;
-    }
     function plantWhy(x, y) {
       if (M.insideAt && M.insideAt(x, y)) return 'Not indoors.';
       const t = M.tileAt(x, y);
       if (t === '~' || t === 'v' || t === 'B') return 'A sapling will not take in the water.';
       const i = idx(x, y);
-      if (isStump(x, y)) return S.plants[i] ? 'Something is already planted there.' : plantBan(x, y);
+      if (isStump(x, y)) return S.plants[i] ? 'Something is already planted there.' : null;
       if (M.blocked(x, y) || nodeAt(i)) return 'That ground will not take a shoot.';
       if (S.plants[i]) return 'Something is already planted there.';
-      return plantBan(x, y);
+      return null;
     }
     function plantJob(p) {
       for (const qid in p.quests) {
@@ -1567,7 +1507,7 @@
       const i = idx(x, y);
       if (S.plants[i]) return false;
       if (isWood(x, y) && !S.dep[i]) return false;
-      if (isStump(x, y) || isCleared(x, y)) return canReplant(p) && !plantWhy(x, y);
+      if (isStump(x, y) || isCleared(x, y)) return canReplant(p);
       if (plantWhy(x, y)) return false;
       return true;
     }
@@ -1648,8 +1588,9 @@
           ];
           if (questFinished(p, 'even_grove')) lines.push('The carving is still there. When the Red Pyre is known, the one on the rope will teach the harder balance.');
           if (!p.quests.even_grove && D.quests.quests.even_grove) {
-            ev({ e: 'dialog', p: p.id, name: 'You', lines: lines, offer: 'even_grove' });
-            return;
+            p.quests.even_grove = { step: 1, n: 0 };
+            ev({ e: 'quest', p: p.id, q: 'even_grove', step: 1 });
+            msg(p, 'The Even Grove: a path is carved behind your eyes.', 'quest');
           }
           ev({ e: 'dialog', p: p.id, name: 'You', lines: lines });
           return;
@@ -2435,14 +2376,16 @@
     function mobTick(m) {
       const md = MON[m.key];
       m.step = 0;
-      if (m.summon) {   /* death or fifty tiles from the rope ends the call, whether or not this zone is the one being stepped */
-        const own = S.players[m.owner], home = m.home || [m.sx, m.sy, 50];
-        const left = !own || !!own.dead || cheb(own.x, own.y, home[0], home[1]) > (home[2] || 50);
-        if (left || m.gone) { if (!m.gone) dismissSummon(m); return; }
-        if (m.dead) return;
-        m.tgt = own.id; m.back = 0;
-      }
       if (!isAuth(m.zone)) return;
+      if (m.summon) {
+        const own = S.players[m.owner], home = m.home || [m.sx, m.sy, 24];
+        const left = !own || own.dead || cheb(own.x, own.y, home[0], home[1]) > (home[2] || 24);
+        if (left || m.gone) {
+          if (!m.gone) { m.gone = 1; m.dead = S.t || 1; m.hp = 0; m.dropAt = 0; m.tgt = 0; ev({ e: 'gone', mob: m.uid }); }
+          return;
+        }
+        if (m.dead) return;
+      }
       if (m.dead) {   /* stays dead a while: back when the area empties (repopulate), or after DEAD_TICKS at its post when nobody stands near it */
         if (m.dropAt && S.t >= m.dropAt) { m.dropAt = 0; mobDrops(m); }
         if (S.t - m.dead >= DEAD_TICKS && !m.dropAt && (S.t + m.uid) % 10 === 0) {

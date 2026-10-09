@@ -661,7 +661,7 @@
           { const bt = new Float64Array(L.length * BRANCH_TIPS.length); for (let i = 0; i < bt.length; i++) bt[i] = tiles[Math.floor(i / BRANCH_TIPS.length)]; buds.userData.pick = { kind: 'tree', tiles: bt }; treeMeshes.push(buds); }   /* tap the leaves to chop, as the crown was */
         }
         L.forEach(t => { t.h = hash2(t.x + 31, t.y + 77); t.branches = branches; });   /* t.h: this tree's day in the leaf fall */
-        const reg = { kind: k, crown, branches, buds, list: L }; TREE_REG.push(reg); L.forEach(t => { t.reg = reg; }); treeSeason(reg);
+        const reg = { kind: k, crown, branches, buds, list: L, g: group }; TREE_REG.push(reg); L.forEach(t => { t.reg = reg; }); treeSeason(reg);
       }
       /* ---------- rocks */
       const rockAt = new Map(), pickables = [terrainMesh].concat(treeMeshes);
@@ -1226,10 +1226,10 @@
         else if (c === ',' && r > 0.965) { const fx = x + 0.3 + hash2(x, y + 7) * 0.4, fz = y + 0.3 + hash2(x + 7, y) * 0.4, fy = heightAt(fx, fz); BF.add('cyl6', 0xe8e0c8, fx, fy + 0.05, fz, 0.05, 0.1, 0.05); BF.add('cone', 0xb83a2a, fx, fy + 0.12, fz, 0.14, 0.07, 0.14); }
       }
       B.finish();
-      { const reg = { sets: BF.finish() }; FLORA_REG.push(reg); floraSeason(reg); }
+      { const reg = { sets: BF.finish(), g: group }; FLORA_REG.push(reg); floraSeason(reg); }
       if (RICEP.length) {   /* the manoomin: stalk, a blade off it, and the head on top; tinted per plant by the season */
         const mk = () => { const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0xffffff), RICEP.length); im.castShadow = true; im.frustumCulled = false; im.setColorAt(0, new THREE.Color()); group.add(im); return im; };
-        const reg = { plants: RICEP, stalk: mk(), blade: mk(), head: mk() }; RICE_REG.push(reg); riceSeason(reg);
+        const reg = { plants: RICEP, stalk: mk(), blade: mk(), head: mk(), g: group }; RICE_REG.push(reg); riceSeason(reg);
       }
       /* fishing spots: rippling rings */
       const spots = [];
@@ -1253,7 +1253,13 @@
             for (const m of quads[q]) m.visible = on;
           }
         },
-        dispose() { group.traverse(o => { if (o.geometry) o.geometry.dispose(); }); },
+        /* a region left behind goes for good (2026-10-08: the season lists kept every region ever built - its trees, plants and
+           rice, with their meshes - so a long walk or a few trips to the Spider Cave filled an iPhone's memory until iOS closed
+           the game; the instanced meshes also hold their per-instance buffers on the GPU until disposed) */
+        dispose() {
+          group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); const mt = o.material; if (mt && mt.map && mt.map.isCanvasTexture) { mt.map.dispose(); mt.dispose(); } });   /* painted signs are this region's own */
+          for (const L of [TREE_REG, FLORA_REG, RICE_REG]) for (let i = L.length - 1; i >= 0; i--) if (L[i].g === group) L.splice(i, 1);
+        },
         pickInfo(hit) {
           const u = hit.object.userData.pick; if (!u) return null;
           if (u.kind === 'tree') { const i = u.tiles[hit.instanceId]; return i >= 0 ? { kind: 'node', i } : { kind: 'ground', point: hit.point }; }

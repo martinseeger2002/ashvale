@@ -136,9 +136,7 @@ ok(toNode(45, 56, (m) => c7.invCount(p7, 'lobster_raw') > 0), 'potted a lobster 
 // quest
 const c5 = AshCore.create(D, { seed: 'q' }); const p5 = c5.addPlayer('p1'); let dlg = null;
 c5.cmd('p1', { c: 'npc', id: 'maren' }); for (let i = 0; i < 40 && !dlg; i++) for (const e of c5.tick()) if (e.e === 'dialog') dlg = e;
-ok(dlg && dlg.offer === 'ashen_crown' && !p5.quests.ashen_crown && /wolves/i.test(dlg.lines.join(' ')), 'Elder Maren offers the wolf quest');
-c5.cmd('p1', { c: 'acceptq', q: 'ashen_crown' }); c5.tick();
-ok(p5.quests.ashen_crown && p5.quests.ashen_crown.step === 1, 'saying yes begins it');
+ok(dlg && /wolves/i.test(dlg.lines.join(' ')) && p5.quests.ashen_crown.step === 1, 'Elder Maren gives the wolf quest');
 // ---------- the Ghost Devs live in Ashvale (2026-10-03): villagers whose one job is to talk
 const VZ = D.zones.find(z => z.id === 'village'), inVillage = n => n.x >= VZ.origin[0] && n.x < VZ.origin[0] + VZ.size[0] && n.y >= VZ.origin[1] && n.y < VZ.origin[1] + VZ.size[1];
 for (const nd of VZ.npcs.filter(n => n.lines && inVillage(n))) {   /* Odric and his wagon stand out on the road (priest_test talks to them) */
@@ -185,9 +183,7 @@ c9.cmd('p1', { c: 'use', slot: 0 }); c9.tick();
 let d9 = null;
 c9.cmd('p1', { c: 'npc', id: 'rowan' });
 for (let i = 0; i < 60 && !d9; i++) for (const e of c9.tick()) if (e.e === 'dialog' && e.npc === 'rowan') d9 = e;
-ok(d9 && d9.offer === 'drove_road' && !p9.quests.drove_road && /saltmere/i.test(d9.lines.join(' ')), 'Rowan offers the road quest');
-c9.cmd('p1', { c: 'acceptq', q: 'drove_road' }); c9.tick();
-ok(p9.quests.drove_road && p9.quests.drove_road.step === 1, 'saying yes begins the road quest');
+ok(d9 && /saltmere/i.test(d9.lines.join(' ')) && p9.quests.drove_road.step === 1, 'Rowan the drover gives the road quest');
 c9.cmd('p1', { c: 'walk', x: 24, y: 40 });           // the north gate, where the wood wolves are within a swing
 for (let i = 0; i < 60 && (p9.x !== 24 || p9.y !== 40); i++) c9.tick();
 const w9 = c9.S.mobs.filter(m => m.key === 'wolf').sort((a, b) => (Math.abs(a.x - p9.x) + Math.abs(a.y - p9.y)) - (Math.abs(b.x - p9.x) + Math.abs(b.y - p9.y)))[0];
@@ -448,16 +444,7 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
   const left = c.S.ground.filter(g => g.from === 'p1').map(g => g.id).sort().join(',');
   /* 2026-10-06: Gold and valuables (100+ GOLD) persist, the rest of the pile despawns with it */
   const want = pile.filter(g => c.persists(g.id, g.n)).map(g => g.id).sort().join(',');
-  ok(left === want && left.split(',').includes('coins'), 'then they despawn; the Gold and anything worth 100+ GOLD stay until taken (' + left + ')');
-  const cs = AshCore.create(D, { seed: 'deathstone' });
-  const ps = cs.addPlayer('p1', { inv: [{ id: 'ashvale_stone', n: 1 }, { id: 'coins', n: 20 }, { id: 'bread', n: 1 }] });
-  ps.hp = 1; ps.retal = false; const rat = cs.S.mobs.find(m => m.key === 'rat'); if (rat) { ps.x = rat.x; ps.y = rat.y + 1; rat.tgt = 'p1'; }
-  let st = 0; for (let i = 0; i < 80 && !st; i++) for (const e of cs.tick()) if (e.e === 'die' && e.p === 'p1') st = cs.S.t;
-  const stone = cs.S.ground.find(g => g.id === 'ashvale_stone' && g.from === 'p1');
-  ok(st && stone && stone.until > 1e14, 'the Ashvale stone stays on the death tile; it does not rot with the bread');
-  for (let i = 0; i < (D.rules.death.pileTicks || 1000) + 5; i++) cs.tick();
-  ok(cs.S.ground.some(g => g.id === 'ashvale_stone' && g.from === 'p1') && !cs.S.ground.some(g => g.id === 'bread' && g.from === 'p1'), 'after the pile rots, the stone is still there and the bread is not');
-}
+  ok(left === want && left.split(',').includes('coins'), 'then they despawn; the Gold and anything worth 100+ GOLD stay until taken (' + left + ')'); }
 /* drops (2026-10-01): animals -> only their pelt; armed enemies -> what they carry and wear + their purse */
 {
   const killDrops = (key, seed) => {

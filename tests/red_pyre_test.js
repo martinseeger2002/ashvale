@@ -52,9 +52,7 @@ p.quests.wayside_prayer = { step: 4, n: 0 };
 d = talk('pike');
 ok(d && /Wenna|Saltmere/.test(d.lines.join(' ')) && !(p.flags && p.flags.vorth_gate), 'after Wayside, Pike waits for Wenna to send you');
 d = talk('wenna');
-ok(d && d.offer === 'red_pyre' && !p.quests.red_pyre && /Bright Three|Althas|gate/.test(d.lines.join(' ')), 'Wenna offers The Red Pyre and names the Bright Three');
-core.cmd('p1', { c: 'acceptq', q: 'red_pyre' }); core.tick();
-ok(p.quests.red_pyre && p.quests.red_pyre.step === 1, 'saying yes begins The Red Pyre');
+ok(p.quests.red_pyre && p.quests.red_pyre.step === 1 && /Bright Three|Althas|gate/.test(d.lines.join(' ')), 'Wenna starts The Red Pyre and names the Bright Three');
 
 d = talk('pike');
 ok(p.quests.red_pyre.n === 1 && /Brother Pike|Caelen|Vorthan/.test(d.lines.join(' ')), 'Pike names himself and will not have you strike');

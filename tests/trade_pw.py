@@ -7,7 +7,7 @@ STUB = """(() => { const I = '%s'; let cb = null; window.__swap = { trades: [], 
   const P = (id, n, key) => ({ id, number: n, creator: I, held: true, json: { collection: 'ASHVALE Armoury', attributes: [{ trait_type: 'Key', value: key }] } });
   window.arcade = Object.assign(window.arcade || {}, { swap: {
     items: async () => ({ address: 'nX', inscriptions: (window.__mine || []), balances: [{ propertyid: 26, units: 500, balance: 500 }] }),
-    trade: async (o) => { window.__swap.trades.push(o); return { id: 'sw1' }; },
+    trade: async (o) => { window.__swap.trades.push(o); return { id: 'sw' + window.__swap.trades.length }; },
     answer: async (id, yes) => { window.__swap.answers.push([id, yes]); },
     onTrade: f => { cb = f; }, _fire: t => cb && cb(t) } });
   window.__P = P; })()""" % I
@@ -47,12 +47,32 @@ with sync_playwright() as p:
     B.evaluate("id => arcade.swap._fire({ status: 'incoming', id: 'swX', with: { id }, give: { inscription: 'b2' }, get: { inscription: 'a1' } })", aid); time.sleep(1)
     B.evaluate("id => arcade.swap._fire({ status: 'incoming', id: 'sw1', with: { id }, give: { inscription: 'b1' }, get: { inscription: 'a1' } })", aid); time.sleep(1)
     an = B.evaluate("window.__swap.answers"); ok(an == [['swX', False], ['sw1', True]], "B's game refuses a swap that is not the deal and says yes to the deal: %s" % json.dumps(an))
+    # 2026-10-08: "as soon as the trade transaction hits the mempool the game should reflect it" - even with the window closed
+    B.evaluate("ASH.trade().close()"); time.sleep(1)
+    for pg in (A, B): pg.evaluate("arcade.swap._fire({ status: 'broadcast', id: 'sw1', with: { id: 'x' } })")
+    time.sleep(1); ok(A.evaluate("ASH.core.invCount(ASH.me, 'sword_t3')") == 1, 'in the mempool (window already closed): the sword left A\'s bag at once (1 of 2 left)')
+    ok(B.evaluate("ASH.core.invCount(ASH.me, 'sword_t3')") == 1 and B.evaluate("ASH.core.invCount(ASH.me, 'ring_hawk')") == 0, 'and is in B\'s bag at once, the ring gone from it, before any block')
     for pg in (A, B): pg.evaluate("arcade.swap._fire({ status: 'settled', id: 'sw1', with: { id: 'x' } })")
-    time.sleep(1); ok(A.evaluate("ASH.core.invCount(ASH.me, 'sword_t3')") == 1, 'settled: the sword left A\'s bag at once (1 of 2 left)')
+    time.sleep(1); ok(A.evaluate("ASH.core.invCount(ASH.me, 'sword_t3')") == 1 and B.evaluate("ASH.core.invCount(ASH.me, 'sword_t3')") == 1, 'the block confirming it moves nothing twice')
     B.evaluate("(() => { const D = ASH.walletState().data; D.gear.sword_t3 = ['a1']; D.at = Date.now(); })()"); B.evaluate("ASH.chest.state()")
-    ok(B.evaluate("ASH.core.invCount(ASH.me, 'sword_t3')") == 1, 'and it lands in B\'s bag as soon as B\'s wallet shows it')
+    ok(B.evaluate("ASH.core.invCount(ASH.me, 'sword_t3')") == 1, 'B\'s wallet showing it later adds no second sword')
+    cb = B.evaluate("JSON.stringify(ASH.chest.state().chest)"); ok('sword_t3' not in cb, 'nor offers one in B\'s chest (%s)' % cb)
     A.evaluate("(() => { const D = ASH.walletState().data; D.gear.sword_t3 = ['a2']; D.at = Date.now(); })()"); cs = A.evaluate("ASH.chest.state().chest")
     ok(not cs.get('sword_t3'), 'A\'s chest does not offer the traded sword back (%s)' % json.dumps(cs))
+    hA, hB = A.evaluate("ASH.core.invCount(ASH.me, 'helmet_t2')"), B.evaluate("ASH.core.invCount(ASH.me, 'helmet_t2')")
+    A.evaluate("p => ASH.trade().open(p)", peerB); time.sleep(2); B.click('.ash-trade [data-y]'); time.sleep(3)
+    A.locator('.ash-trade .slot[data-k="helmet_t2"]').click(); time.sleep(2)
+    A.click('.ash-trade [data-ok]'); time.sleep(1); B.click('.ash-trade [data-ok]'); time.sleep(3)
+    # one-sided (2026-10-08: "If both agree, a trade can be one-sided"): A gives the helmet, B gives nothing
+    gv = A.evaluate("window.__swap.trades.at(-1)"); ok(gv['give'] and gv['give'].get('inscription') and gv['get'] is None, 'a one-sided deal both accepted is sent: %s' % json.dumps(gv))
+    B.evaluate("([id, g]) => arcade.swap._fire({ status: 'incoming', id: 'sw2', with: { id }, give: null, get: g })", [aid, gv['give']]); time.sleep(1)
+    for pg in (A, B): pg.evaluate("arcade.swap._fire({ status: 'broadcast', id: 'sw2', with: { id: 'x' } })")
+    time.sleep(1)
+    moved = (A.evaluate("ASH.core.invCount(ASH.me, 'helmet_t2')"), B.evaluate("ASH.core.invCount(ASH.me, 'helmet_t2')"))
+    for pg in (A, B): pg.evaluate("arcade.swap._fire({ status: 'failed', id: 'sw2', with: { id: 'x' }, why: 'test' })")
+    time.sleep(1)
+    back = (A.evaluate("ASH.core.invCount(ASH.me, 'helmet_t2')"), B.evaluate("ASH.core.invCount(ASH.me, 'helmet_t2')"))
+    ok(moved == (hA - 1, hB + 1), 'the one-sided gift moves at broadcast: %s' % (moved,)); ok(back == (hA, hB), 'a swap the chain refuses after the mempool: each side gets its own back (before %s, moved %s, after %s)' % ((hA, hB), moved, back))
     # a stack: choose how many (2026-10-04)
     A.evaluate("(() => { ASH.give('logs', 20); ASH.chest.promise({ logs: 20 }); const D = ASH.walletState().data; D.tokens = { logs: 20 }; D.pids.logs = 31; D.at = Date.now(); ASH.chest.state(); })()")
     A.evaluate("p => ASH.trade().open(p)", peerB); time.sleep(2); B.click('.ash-trade [data-y]'); time.sleep(3)
@@ -63,5 +83,5 @@ with sync_playwright() as p:
         time.sleep(0.5)
     ok('5 Logs' in B.inner_text('.ash-trade .side >> nth=1'), 'B sees "5 Logs" offered: ' + B.inner_text('.ash-trade .side >> nth=1').split('\n')[1])
     A.click('.ash-trade [data-ok]'); time.sleep(1); B.click('.ash-trade [data-ok]'); time.sleep(3)   # (B's ring left in the first trade: a gift this time)
-    tr = A.evaluate("window.__swap.trades"); ok(len(tr) == 2 and tr[-1]['give'] == {'token': 31, 'amount': '5'}, 'A settles exactly 5 of its 20 logs: %s' % json.dumps(tr[-1]))
+    tr = A.evaluate("window.__swap.trades"); ok(len(tr) == 3 and tr[-1]['give'] == {'token': 31, 'amount': '5'}, 'A settles exactly 5 of its 20 logs: %s' % json.dumps(tr[-1]))
     b.close()

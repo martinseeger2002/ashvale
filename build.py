@@ -25,6 +25,8 @@ if os.path.exists(os.path.join(SRC, 'weather.js')):   # weather visuals (local a
     JS_MODULES.insert(JS_MODULES.index('engine'), 'weather')      # load order does not matter (factories), kept stable
 if os.path.exists(os.path.join(SRC, 'seasons.js')):   # the year and its seasons (2026-10-07): its own module/inscription
     JS_MODULES.insert(JS_MODULES.index('engine'), 'seasons')
+JS_MODULES.insert(JS_MODULES.index('engine'), 'engsky')
+JS_MODULES.insert(JS_MODULES.index('engine'), 'engbank')   # the chest and the @ashvale Bank client   # the engine's sky, its own inscription (2026-10-08: the engine split into parts)
 if os.path.exists(os.path.join(SRC, 'sky.js')):
     JS_MODULES.insert(JS_MODULES.index('engine'), 'sky')
 if os.path.exists(os.path.join(SRC, 'skyview.js')):   # the sky drawn as a 3D scene of its own: sun, moon, stars (2026-10-07)
