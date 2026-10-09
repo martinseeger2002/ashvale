@@ -37,17 +37,19 @@ ok(['campfire', 'kettle', 'barklodge'].every(k => cz.objects.some(o => o.k === k
 const day = 500, year = 2, nature = (sap, dd, yy) => core.setNature({ day: dd || day, year: yy || year, sap });
 const RUN = { season: true, day: true, low: -5, high: 6, left: 6 }, OFF = { season: false, day: false, low: -15, high: -6, left: 0 };
 nature(OFF);
-/* birch bark */
-let t = work(trees.E[0][0], trees.E[0][1]);
-ok(has('wiigwaas') === 1 && /wiigwaas/.test(t), 'no axe: tapping a birch peels a sheet of wiigwaas (' + t.slice(0, 60) + ')');
-t = work(trees.E[0][0], trees.E[0][1]);
-ok(has('wiigwaas') === 1 && /this year/.test(t), 'the same birch will not give again this year');
+/* birch bark: it wants a blade (2026-10-09: a tomahawk or an axe in the pack) */
+let t = work(trees.E[0][0], trees.E[0][1], { peel: 1 });
+ok(!has('wiigwaas') && /tomahawk or an axe/.test(t), 'no axe: no bark comes off a birch (' + t.slice(0, 60) + ')');
 p.inv[20] = { id: 'hatchet', n: 1 };
+t = work(trees.E[0][0], trees.E[0][1], { peel: 1 });
+ok(has('wiigwaas') === 1 && /wiigwaas/.test(t), 'with an axe in the bag, "Peel bark" peels a sheet of wiigwaas (' + t.slice(0, 50) + ')');
+t = work(trees.E[0][0], trees.E[0][1], { peel: 1 });
+ok(has('wiigwaas') === 1 && /this year/.test(t), 'the same birch will not give again this year');
 t = work(trees.E[1][0], trees.E[1][1], { peel: 1 });
-ok(has('wiigwaas') === 2, 'with an axe in the bag, "Peel bark" still peels (' + t.slice(0, 50) + ')');
-p.inv[20] = null;
+ok(has('wiigwaas') === 2, 'another birch gives another sheet');
 core.setMarks('bark', [[trees.E[2] ? trees.E[2][0] : trees.E[0][0], trees.E[2] ? trees.E[2][1] : trees.E[0][1], year]]);
-if (trees.E[2]) { t = work(trees.E[2][0], trees.E[2][1]); ok(has('wiigwaas') === 2 && /this year/.test(t), 'a birch someone else peeled this year (from the Bank) will not give'); }
+if (trees.E[2]) { t = work(trees.E[2][0], trees.E[2][1], { peel: 1 }); ok(has('wiigwaas') === 2 && /this year/.test(t), 'a birch someone else peeled this year (from the Bank) will not give'); }
+p.inv[20] = null;
 /* sinew and the bucket */
 p.inv[10] = { id: 'deer_hide', n: 1 };
 t = talk('maiingan');

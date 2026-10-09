@@ -169,9 +169,12 @@ for (const [qid, Q] of Object.entries(D.quests.quests)) {
                     : s.goal.bring ? ([].concat(s.goal.bring).every(b => D.items[b]) && many(s.goal.n) && (!s.goal.with || D.items[s.goal.with]))   /* a list: any of them will do (sap in a bucket or a pail) */
                     : s.goal.talk ? !!keeperZone(s.goal.talk)
                     : s.goal.plant ? (s.goal.plant === 'open' || s.goal.plant === 'stump') && many(s.goal.n)   /* sadfrog's Even Grove: saplings on open ground or stumps */
-                    : s.goal.kills ? Object.keys(s.goal.kills).every(m => D.monsters[m]) && many(s.goal.n) : false),
+                    : s.goal.kills ? Object.keys(s.goal.kills).every(m => D.monsters[m]) && many(s.goal.n)
+                    : s.goal.light ? (s.goal.light === '*' || !!D.items[s.goal.light]) && many(s.goal.n)   /* a fire you light (Mishoomis's flint) */
+                    : s.goal.wait != null ? s.goal.wait > 0 : false),   /* game hours while the giver makes something (Mitigwaabiike's bow) */
      qid + ': every reachable step wants something that exists');
-  ok(live.every(s => !s.reward || (s.reward.indexOf('xp:') === 0 ? D.rules.skills.indexOf(s.reward.split(':')[1]) >= 0 : s.reward.indexOf('flag:') === 0 ? !!(D.rules.flags || {})[s.reward.slice(5)] : !!D.items[s.reward])),
+  const payOk = (r) => Array.isArray(r) ? r.every(payOk) : r.indexOf('xp:') === 0 ? D.rules.skills.indexOf(r.split(':')[1]) >= 0 : r.indexOf('flag:') === 0 ? !!(D.rules.flags || {})[r.slice(5)] : /^[a-z0-9_]+:\d+$/.test(r) ? !!D.items[r.split(':')[0]] : !!D.items[r];   /* a list, or "id:n" */
+  ok(live.every(s => !s.reward || payOk(s.reward)),
      qid + ': every reachable step pays in XP and items that exist');
   ok(live.every(s => (s.talk || []).length > 1 && (s.complete || []).length > 0 && (s.progress || []).length > 0),
      qid + ': every reachable step says something when it starts, while it goes, and when it ends');
@@ -279,11 +282,12 @@ for (const S of Object.values(D.shops.shops)) {
       if (g.kill) { const m = D.monsters[g.kill]; if (!m || !m.name) nameless(where + ' wants ' + (g.n || 1) + ' ' + g.kill + ', which is not in the monsters table' + (s.zone && !built.has(s.zone) ? ' (zone ' + s.zone + ' is not built)' : '')); else ok(true, where + ' slays ' + m.name); }
       if (g.bring) for (const b of [].concat(g.bring)) { const it = D.items[b]; if (!it || !it.name) nameless(where + ' wants ' + (g.n || 1) + ' of ' + b + ', which is not an item'); else ok(true, where + ' asks for ' + it.name); }
       if (g.talk) { if (!npcHere[g.talk]) nameless(where + ' sends you to ' + g.talk + ', who stands nowhere'); else ok(true, where + ' sends you to ' + g.talk + ' in ' + npcHere[g.talk]); }
-      if (!g.kill && !g.bring && !g.talk && !g.plant && !g.kills) ok(false, where + ' has a goal the panel cannot describe: ' + JSON.stringify(g));
-      const r = s.reward;
+      if (!g.kill && !g.bring && !g.talk && !g.plant && !g.kills && !g.light && g.wait == null) ok(false, where + ' has a goal the panel cannot describe: ' + JSON.stringify(g));
+      for (const r of [].concat(s.reward || [])) {
       if (typeof r === 'string' && r.startsWith('xp:')) { const [, sk] = r.split(':'); ok(D.rules.skills.indexOf(sk) >= 0 || sk === 'hitpoints', where + ' pays ' + r + ' in a skill the game has'); }
       else if (typeof r === 'string' && r.startsWith('flag:')) ok(!!(D.rules.flags || {})[r.slice(5)], where + ' leaves the ' + r.slice(5) + ' flag, which the rules define');
-      else if (typeof r === 'string' && !r.startsWith('coins')) { const it = D.items[r]; if (!it) nameless(where + ' pays ' + r + ', which is not an item'); else ok(true, where + ' pays ' + it.name); }
+      else if (typeof r === 'string' && !r.startsWith('coins')) { const it = D.items[r.replace(/:\d+$/, '')]; if (!it) nameless(where + ' pays ' + r + ', which is not an item'); else ok(true, where + ' pays ' + it.name); }
+      }
     }
     for (const l of q.done || []) ok(!/undefined/.test(l), q.name + "'s last word names everything it says");
   }
@@ -318,14 +322,15 @@ ok(!!D.shops.shops.salt_general && !!D.shops.shops.salt_armoury, 'Saltmere has a
   }
 }
 { /* quest givers and town stones (2026-10-05: "Have the final quest in Saltmere. Give you a Saltmere town portal stone")
-     talk() checks a gift, a shop and a NPC's own lines before it looks for a quest, so a giver must have none of them. */
+     talk() checks a gift and a shop before it looks for a quest, so a giver must have neither. A giver's own lines are said only
+     when there is no quest of theirs on offer or under way (a quest for one home: those born elsewhere hear the lines). */
   ok(D.rules.effects.known.every(e => core.EFFECTS.indexOf(e) >= 0), 'the effect library in the data matches the one in the rules');
   for (const [qid, Q] of Object.entries(D.quests.quests)) {
     const gz = allZones.find(z => (z.npcs || []).some(n => n.id === Q.giver));
     const g = gz && gz.npcs.find(n => n.id === Q.giver);
     ok(!!g, Q.name + ' is given by ' + Q.giver + ', who stands in ' + (gz ? gz.name : 'nobody'));
-    ok(!!g && g.quest === qid && !g.lines && !g.shop && !g.tailor,
-       Q.name + ': ' + ((g || {}).name || Q.giver) + ' sells nothing, chats of nothing and gives exactly one quest');
+    ok(!!g && (g.quest === qid || (g.quests || []).indexOf(qid) >= 0) && (!g.lines || !!Q.homes) && !g.shop && !g.tailor,
+       Q.name + ': ' + ((g || {}).name || Q.giver) + ' sells nothing, and gives this quest before any chat');
   }
   for (const P of D.rules.portals) {
     if (P.stone === false) continue;   /* a town whose quest (and stone) is not written yet: the lake castle */
@@ -1346,7 +1351,7 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
      'and Saltmere sells a bow it calls Yew out of a town with ' + yewInSaltmere.length + ' yews in it - which is the whole quest in one line');
   ok(!Object.values(D.shops.shops).some(s => (s.stock || []).some(i => (i.id || i) === 'bow_t5')),
      'tier 5 is on no counter in the game, so it is a reward and not a price: ' + D.items.bow_t5.name + ', worth ' + D.items.bow_t5.value);
-  const ladder = ['oak_logs', 'willow_logs', 'maple_logs', 'yew_logs'].map(i => D.rules.nodes[byCh[i]].req);
+  const ladder = ['oak_logs', 'willow_logs', 'maple_logs', 'yew_logs'].map(i => Math.max(D.rules.nodes[byCh[i]].req, D.rules.nodes[byCh[i]].hard || 0));   /* a maple anyone may cut still bites like a level-30 tree (hard, 2026-10-09) */
   ok(ladder.every((r, i) => i === 0 || r > ladder[i - 1]),
      'the woods really do go up the hill in the order the bows go up the counter: req ' + ladder.join(' < '));
   const ck = AshCore.create(Object.assign({}, D, { wg: AshWorld.seededWorldgen(WGM, AG, D) }), { seed: 'elder-bow' });

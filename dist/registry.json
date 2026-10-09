@@ -576,6 +576,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.mitigwaabiike": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.modulus": {
     "id": null,
     "v": 1,
@@ -1140,6 +1146,12 @@
     "api": 1,
     "kind": "json"
    },
+   "gear.bikwak": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "gear.bow": {
     "id": null,
     "v": 1,
@@ -1219,6 +1231,12 @@
     "kind": "json"
    },
    "gear.mace": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "gear.mitigwaab": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1338,7 +1356,19 @@
     "api": 1,
     "kind": "json"
    },
+   "gear.tomahawk": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "gear.torch": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.birchlogs": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1387,6 +1417,12 @@
     "kind": "json"
    },
    "item.fish": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.flint": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1447,6 +1483,12 @@
     "kind": "json"
    },
    "item.note": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.obsidian": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1625,6 +1667,18 @@
     "kind": "json"
    },
    "sugarcamp": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "flintbank": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "obsidianbank": {
     "id": null,
     "v": 1,
     "api": 1,

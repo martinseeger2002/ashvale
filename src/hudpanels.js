@@ -85,13 +85,15 @@
         for (const id in Q) {
           const q = p.quests[id], st = q ? Q[id].steps[q.step - 1] : null;
           if (q && q.hid) continue;   /* removed from the log; the progress is still there */
+          if (!q && Q[id].homes && Q[id].homes.indexOf(p.home || 'ashvale') < 0) continue;   /* another home's quest: never shown */
           const col = !q ? 'r' : !st ? 'g' : 'y';
           /* a quest you have started opens its story (2026-10-06: "each one of the quests should be clickable") */
           h += '<div class="qrow"' + (q ? ' data-q="' + A.esc(id) + '" style="cursor:pointer"' : '') + '><div class="' + col + '" style="margin-bottom:4px">' + A.esc(Q[id].name) + (q ? ' <span style="opacity:.6">&#9656;</span>' : '') + '</div><div class="info" style="margin:0 0 8px">';
           const held = (iid) => { if (Array.isArray(iid)) return iid.reduce((a, k) => a + held(k), 0); let c = 0; for (const s of p.inv || []) if (s && s.id === iid) c += s.n; return c; };   /* a list: any of them (sap in a bucket or a pail) */
           const g = st && st.goal, need = g ? (g.n == null ? 1 : g.n) : 1;
           const killsLeft = (gg) => { let n = 0; for (const k in gg.kills || {}) n += Math.max(0, gg.kills[k] - ((q && q.kn && q.kn[k]) | 0)); return n; };
-          const ready = !!(st && g && (!((g.kill || g.cook || g.talk || g.plant) && (q.n | 0) < need)) && !(g.kills && killsLeft(g) > 0) && !(g.bring && held(g.bring) < (g.bn == null ? need : g.bn)) && !(g.with && held(g.with) < (g.wn == null ? 1 : g.wn)));
+          const waited = !(g && g.wait != null) || (core.natureHours && core.natureHours() >= (q.t0 == null ? Infinity : q.t0) + g.wait);
+          const ready = !!(st && g && waited && (!((g.kill || g.cook || g.talk || g.plant || g.light) && (q.n | 0) < need)) && !(g.kills && killsLeft(g) > 0) && !(g.bring && held(g.bring) < (g.bn == null ? need : g.bn)) && !(g.with && held(g.with) < (g.wn == null ? 1 : g.wn)));
           if (!q) h += 'Speak to ' + who(Q[id].giver) + '.';
           else if (!st) { h += 'Completed!'; const FL = (core.D.rules && core.D.rules.flags) || {}; for (const k in FL) if (FL[k].quest === id && core.hasFlag(p, k)) h += '<br><span class="g">' + A.esc(A.cap(FL[k].name)) + '</span> is on you.' + (FL[k].desc ? ' ' + A.esc(FL[k].desc.replace(/^[^:]*: /, '')).replace(/^./, c => c.toUpperCase()) : ''); }
           else if (ready) h += 'Return to ' + who(st.ends || Q[id].giver) + '.';
@@ -109,6 +111,8 @@
               h += 'Step ' + q.step + ': bring ' + many(iname(g.bring), bn) + ' (' + held(g.bring) + '/' + bn + ')' + (g.with ? ' and ' + many(iname(g.with), g.wn == null ? 1 : g.wn) + ' (' + held(g.with) + '/' + (g.wn == null ? 1 : g.wn) + ')' : '') + '.';
             }
             else if (g.talk) h += 'Step ' + q.step + ': talk to ' + who(g.talk) + (need > 1 ? ' ' + need + ' times' : '') + '.';
+            else if (g.light) h += 'Step ' + q.step + ': light ' + (need > 1 ? need + ' fires' : 'a fire') + ' (' + have + '/' + need + ').';
+            else if (g.wait != null) { const left = Math.max(0, (q.t0 == null ? 0 : q.t0) + g.wait - (core.natureHours ? core.natureHours() : 0)); h += 'Step ' + q.step + ': ' + who(st.ends || Q[id].giver) + ' is at work. Come back in ' + (left >= 1 ? Math.ceil(left) + ' game hour' + (Math.ceil(left) > 1 ? 's' : '') : 'a little while') + '.'; }
             /* sadfrog's Even Grove: plant saplings (on open ground, or on stumps); slay several named foes, each counted */
             else if (g.plant) h += 'Step ' + q.step + ': plant ' + (need > 1 ? need + ' saplings' : 'a sapling') + (g.plant === 'stump' ? ' where trees were cut down' : ' on open ground') + ' (' + have + '/' + need + ').';
             else if (g.kills) h += 'Step ' + q.step + ': slay ' + Object.keys(g.kills).map(k => { const m = core.D.monsters[k], n2 = g.kills[k]; return many(A.esc((m ? m.name : k).toLowerCase()), n2) + ' (' + Math.min(n2, (q.kn && q.kn[k]) | 0) + '/' + n2 + ')'; }).join(', ') + '.';

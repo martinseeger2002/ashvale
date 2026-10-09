@@ -6,7 +6,7 @@
 const fs = require('fs'), path = require('path');
 const AshCore = require('../src/core.js');
 const DD = path.join(__dirname, '..', 'data'), mod = (n) => JSON.parse(fs.readFileSync(path.join(DD, n + '.json'), 'utf8')).data;
-const HOMEZ = ['ziibiing', 'lodges', 'ricelake', 'sugarcamp'];
+const HOMEZ = ['ziibiing', 'lodges', 'ricelake', 'sugarcamp', 'flintbank', 'obsidianbank'];
 const zones = ['village'].concat(HOMEZ).map(z => Object.assign({ id: z }, mod('zone.' + z)));
 const D = { items: mod('items').items, monsters: mod('monsters').monsters, shops: mod('shops'), quests: mod('quests'), rules: mod('rules'), zones, globecfg: mod('globecfg') };
 const BAD = /ashvale|stone town|the town|the valley|town up|over the hill/i;
@@ -36,6 +36,9 @@ for (const t of [H.first, H.wakeSay].concat(H.help)) ok(!BAD.test(t), 'home text
 for (const s of Z.p.inv.filter(Boolean)) { const it = Z.core.item(s.id); ok(!BAD.test(it.examine || it.desc || ''), 'starting kit: ' + it.name); }
 ok(!Z.p.inv.some(s => s && Z.core.item(s.id).category === 'currency' || s && s.id === 'coins'), 'a Ziibiing-born starts with no gold (2026-10-09: no gold currency in the village)');
 ok(Z0[0] === H.spawn[0] && Z0[1] === H.spawn[1], 'a Ziibiing-born wakes in Ningashi\'s wigwam');
+for (const id of ['tomahawk', 'mitigwaab', 'birch_arrows', 'obsidian_arrows', 'flint', 'obsidian']) ok(!BAD.test(D.items[id].description), 'a Ziibiing thing never says it was made elsewhere: ' + D.items[id].name);
+ok(['biiwaanag', 'mitigwaab', 'deer_hunt', 'obsidian_arrows'].every(q => D.quests.quests[q] && (D.quests.quests[q].homes || []).join() === 'ziibiing'), 'the four beginning quests are for the Ziibiing-born only');
+ok(!!Z.core.M.npcs.find(n => n.id === 'mitigwaabiike'), 'Mitigwaabiike works in the village');
 const A = heard('ashvale');
 ok(/stone town/.test(A.out.maiingan), 'an Ashvale-born still hears Ma\'iingan speak of the stone town');
 console.log(fails ? fails + ' FAILED' : 'ALL OK'); process.exit(fails ? 1 : 0);

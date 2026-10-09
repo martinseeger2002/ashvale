@@ -221,4 +221,40 @@ for k in range(4):
     a = k / 4 * 2 * PI
     mc.append(dict(box(0.016, 0.01, 0.016, FLOWER[0] if k % 2 else FLOWER[4], round(math.cos(a) * 0.02, 4), -0.398, round(0.12 + math.sin(a) * 0.02, 4)), j='knee*'))
 part('cloth.boots_moccasins', 'cloth', homes=['ziibiing'], slot='boots', style='moccasins', paint={"foot": C, "toe": C}, shapes=mc)
+# ---- THE BOW, THE FIRE AND THE DEER (2026-10-09, handoff/ziibiing_bow_quests_plan.md)
+MAPLE, BIRCH, OBS = '#c47c3a', '#ece6d8', '#16161c'
+# tomahawk: a hickory haft wrapped in hide near the grip, a dark iron head with its edge forward, a single feather at the butt
+part('gear.tomahawk', 'gear', slot='weapon', items=["tomahawk"], attack='slash', tool=True, mount={"j": "handR", "r": [2.1, 0, 0]},
+     ground={"p": [0.15, 0.04, 0], "r": [0, 0.5, PI / 2]},
+     shapes=[box(0.034, 0.56, 0.034, '#7a5a3a', 0, 0.14, 0), box(0.042, 0.12, 0.042, '#5a3a24', 0, -0.06, 0),
+             box(0.03, 0.09, 0.16, '#45454c', 0, 0.38, 0.07), box(0.032, 0.13, 0.025, '#5a5a62', 0, 0.38, 0.155),
+             box(0.012, 0.1, 0.03, '#f4f1ea', 0, -0.17, 0, r=[0.3, 0, 0]), box(0.013, 0.04, 0.032, '#1a1614', 0, -0.21, 0.01, r=[0.3, 0, 0])])
+# mitigwaab (a bow): maple, longer than the town's shortbows, the grip wrapped in red wool, a beaded band at each limb
+bl = 0.56
+part('gear.mitigwaab', 'gear', slot='weapon', items=["mitigwaab"], attack='bow', twoHanded=True, mount={"j": "handL"},
+     carry={"elL": [-1.25], "shL": [-0.15, 0, 0.05]}, ground={"p": [0, 0.06, 0], "r": [0, 0, PI / 2]},
+     shapes=[dict(t='tube', s=[0.024], c=MAPLE, pts=[[0, 0.05, -bl], [0, -0.28, 0], [0, 0.05, bl]]),
+             box(0.052, 0.052, 0.13, '#a8202a', 0, -0.11, 0), box(0.04, 0.04, 0.03, RIB[1], 0, -0.02, -0.32), box(0.04, 0.04, 0.03, RIB[2], 0, -0.02, 0.32),
+             dict(box(0.008, 0.008, bl * 2, '#e8e0cc', 0, 0.05, 0), shadow=False), dict(t='group', p=[0, 0.05, 0], name='tip')])
+# bikwak (arrows): a hide quiver with a fringe, birch shafts fletched with turkey feathers; the heads take the arrow's own colour
+qv = [cyl(0.055, 0.045, 0.42, '#9a7448', seg=7), cyl(0.058, 0.058, 0.03, RIB[0], 0, 0.15, 0, seg=7)]
+for i, xo in enumerate((-0.025, -0.008, 0.009, 0.026)):
+    qv += [box(0.012, 0.13, 0.012, BIRCH, xo, 0.26, (i % 2) * 0.01), box(0.03, 0.04, 0.008, '#6a4a2a' if i % 2 else '#e8e0cc', xo, 0.31, 0)]
+for k in range(5): qv.append(box(0.01, 0.07, 0.006, '#7a5a3a', -0.05 + k * 0.025, -0.22, 0.045))
+arrow = [box(0.014, 0.014, 0.42, BIRCH), dict(cone(0.022, 0.06, "$c", 0, 0, 0.24, seg=4), r=[PI / 2, 0, 0]),
+         box(0.004, 0.04, 0.08, '#e8e0cc', 0, 0.012, -0.18), box(0.04, 0.004, 0.08, '#6a4a2a', 0, 0, -0.18)]
+part('gear.bikwak', 'gear', slot='ammo', items={"birch_arrows": BIRCH, "obsidian_arrows": OBS}, mount={"j": "torso", "p": [0.1, 0.32, -0.15], "r": [0, 0, -0.35]},
+     shapes=qv, groundShapes=[dict(t='group', p=[-0.035 + k * 0.035, 0.02, 0], r=[-PI / 2, 0, -0.18 + k * 0.18], children=arrow) for k in range(3)], projectile=arrow)
+# biiwaanag (flint): a pale chalky nodule broken open on a grey-black glassy face; obsidian: a black glassy lump, sharp-edged
+part('item.flint', 'item', items={"flint": '#3a3a40'}, shapes=[S('ico', [0.1], '#d8d2c2', [0, 0.08, 0]), S('ico', [0.075], "$c", [0.05, 0.1, 0.04]), S('ico', [0.04], '#cfc8b6', [-0.07, 0.06, 0.02])])
+part('item.obsidian', 'item', items={"obsidian": OBS}, shapes=[S('ico', [0.11], "$c", [0, 0.09, 0]), S('ico', [0.06], '#2a2a36', [0.07, 0.12, 0.04]), S('ico', [0.045], '#0e0e12', [-0.06, 0.07, -0.05])])
+# birch logs: white bark, a few dark lenticels
+bg = []
+for k, (x, y) in enumerate(((-0.07, 0.06), (0.0, 0.06), (0.035, 0.16))):
+    bg.append(dict(cyl(0.06, 0.06, 0.5, "$c", x, y, 0, seg=7), r=[PI / 2, 0, 0]))
+    for m in range(3): bg.append(box(0.03, 0.008, 0.01, '#2a2622', x, y + 0.058, -0.15 + m * 0.14))
+part('item.birchlogs', 'item', items={"birch_logs": BIRCH}, shapes=bg)
+# Mitigwaabiike ("he makes bows"), the bow maker: a buckskin shirt, a quiver on his back, his own bow in his hand
+char('mitigwaabiike', 'Mitigwaabiike', 'male', '#9a6440', 'mohawklong', '#141210', {"style": "buckskin", "color": "#a88058"}, {"style": "breechcloth", "color": "#2a2f5a"},
+     gear={"weapon": "mitigwaab", "ammo": "birch_arrows"}, feet='moccasins')
 print('wrote the Ziibiing parts')
