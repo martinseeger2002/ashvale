@@ -53,6 +53,7 @@
         const L = ledgerFor(walletState.address), w = walCounts(), keys = new Set(Object.keys(w).concat(Object.keys(L.bag), Object.keys(L.spent), Object.keys(L.pend), Object.keys(L.pspent), Object.keys(L.gone), Object.keys(L.autoTake), Object.keys(L.pchest), Object.keys(L.lchest)));
         for (const s of me.inv) if (s) keys.add(s.id);
         for (const q of Object.values(me.eq || {})) if (q) keys.add(q.id);
+        for (const k of [...keys]) { const d = core.item(k); if (d && d.bound) keys.delete(k); }   /* made for this character (bound): never in the chest, never minted */
         const chest = {}, loose = {}, before = JSON.stringify([L.bag, L.spent, L.pend, L.pspent, L.gone, L.autoTake, L.pchest, L.lchest]); let arriving = 0;
         const g = (o, k) => o[k] || 0, put = (o, k, v) => { if (v > 0) o[k] = v; else delete o[k]; };
         for (const k of keys) {
@@ -265,6 +266,7 @@
         if (HOLDS.multi && Date.now() - HOLDS.at > 5000) holdsAsk().then(go); else go();
       }
       function chestStore(k, n, quiet) {
+        if (core.item(k) && core.item(k).bound) { if (!quiet) hud.chat(core.item(k).name + ' was made for you. It stays with you.', 'warn'); return 0; }
         chestState(); const L = ledgerFor(walletState.address), have = core.invCount(me, k);
         const fromBag = Math.min(n, L.bag[k] || 0, have), fromPend = Math.min(n - fromBag, L.pend[k] || 0, have - fromBag), fromNew = Math.min(n - fromBag - fromPend, have - fromBag - fromPend), m = fromBag + fromPend + fromNew;   /* settled or not, it can go in the chest (2026-10-05) */
         if (m <= 0) return 0;
@@ -283,6 +285,7 @@
         if (!walletState.address) { hud.chat('Sign in to use the chest.', 'warn'); return; }
         chestState(); const L = ledgerFor(walletState.address); let n = 0;
         for (const slot of Object.keys(me.eq || {})) {
+          if (me.eq[slot] && core.item(me.eq[slot].id) && core.item(me.eq[slot].id).bound) continue;   /* made for you: stays on */
           const e = core.takeOff && core.takeOff(PID, slot); if (!e) continue;
           /* the same three counts as chestStore: settled, still arriving (stays a promise, now in the chest), or new */
           const fromBag = Math.min(e.n, L.bag[e.id] || 0), fromPend = Math.min(e.n - fromBag, L.pend[e.id] || 0), rest = e.n - fromBag - fromPend;

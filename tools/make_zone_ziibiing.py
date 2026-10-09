@@ -181,6 +181,32 @@ at('ziigwan')['craft'] = [
      'ready': ["Here are your bawa'iganaakoog (knockers), {name}. Bend the stalks over the canoe with one and tap the heads with the other. Never beat them - what does not fall is for next year."],
      'lack': ["Bawa'iganaakoog (knockers) take two logs of giizhik (cedar). It grows in the wet ground along the river."]}]
 
+# THE BOW, THE FIRE AND THE DEER (2026-10-09, handoff/ziibiing_bow_quests_plan.md): Mitigwaabiike ("he makes bows") works
+# by his bow rack on the west side of the village, near the water. He gives a Ziibiing-born a tomahawk and makes the mitigwaab (bow)
+# and bikwak (arrows); later, obsidian-tipped bikwak. After those quests he goes on making arrows for anyone of the village.
+BOWYER = (64, 615)
+obj('bowrack', BOWYER[0] - 1, BOWYER[1] - 2)
+for xx in range(BOWYER[0] - 3, BOWYER[0] + 2):
+    for yy in range(BOWYER[1] - 3, BOWYER[1] + 1):
+        if g[yy - OY][xx - OX] not in WET + 'B': put(xx, yy, 'd')   # (at() is the npc lookup from here on)
+npc('mitigwaabiike', 'Mitigwaabiike', BOWYER[0], BOWYER[1],
+    ["Boozhoo. A good mitigwaab (bow) comes from an ininaatig (maple) that grew slowly on a hill.",
+     "The bikwak (arrows) I make from wiigwaasaatig (birch): straight grain, light, and it does not warp when it dries.",
+     "Look at the staves on my rack. Each one waits a season before it bends."],
+    'Mitigwaabiike, the bow maker, in a buckskin shirt, a quiver of birch arrows on his back.')
+at('mitigwaabiike')['quests'] = ['mitigwaab', 'obsidian_arrows']
+at('mitigwaabiike')['craft'] = [   # after the quests: more bikwak whenever you bring the wood (and the obsidian)
+    {'take': {'birch_logs': 1}, 'give': 'birch_arrows', 'n': 15, 'hours': 2, 'after': 'mitigwaab', 'hint': True,
+     'say': ["A wiigwaasaatig (birch) log. Good.", "I will split it and shave fifteen bikwak (arrows). Come back in two hours, {name}."],
+     'wait': ["The bikwak (arrows) are drying by the fire. Come back a little later, {name}."],
+     'ready': ["Fifteen bikwak (arrows), {name}. Birch without a point - it still brings down a waawaashkeshi (deer) in two."],
+     'lack': ["Bring me a wiigwaasaatig (birch) log and I will make you fifteen bikwak (arrows)."]},
+    {'take': {'birch_logs': 1, 'obsidian': 1}, 'give': 'obsidian_arrows', 'n': 15, 'hours': 2, 'after': 'obsidian_arrows', 'hint': True,
+     'say': ["Obsidian and a birch log.", "I will knap fifteen points and set them with ojiitad (sinew) and pitch. Come back in two hours, {name}."],
+     'wait': ["I am still knapping the points. Come back a little later, {name}."],
+     'ready': ["Fifteen obsidian bikwak (arrows), {name}. One is enough for a waawaashkeshi (deer)."],
+     'lack': ["Obsidian bikwak (arrows) take a wiigwaasaatig (birch) log and a piece of obsidian from the bank upriver by the cairn."]}]
+at('maiingan')['quest'] = 'deer_hunt'   # a Ziibiing-born with a bow is sent hunting first (his sinew trade stays for everyone)
 npcs.append({'id': 'makak', 'name': 'Ziibiing makak', 'look': 'makak', 'x': FIRE[0] + 3, 'y': FIRE[1] - 1, 'chest': True,
              'examine': 'A birch bark makak, sewn with spruce root, quill flowers on its side. Like the chest in Ashvale, it holds everything you own in your arcade wallet.'})
 # WHERE YOU COME FROM (2026-10-09: "the dialogue for the NPCs should be different and aware of the origins of the character"):
@@ -192,7 +218,7 @@ mk = next(n for n in npcs if n['id'] == 'makak')
 mk['from'] = {'ziibiing': {'examine': 'A birch bark makak, sewn with spruce root, quill flowers on its side. It holds everything you own in your arcade wallet.'}}
 # Mishoomis, the elder: he lives in the first wigwam, sitting cross-legged west of its fire, and sends you ricing
 c0 = LODGE_O[0] + ROOM // 2, LODGE_O[1] + ROOM // 2
-lnpcs = [{'id': 'mishoomis', 'name': 'Mishoomis', 'look': 'mishoomis', 'x': c0[0] - 2, 'y': c0[1], 'face': 'e', 'pose': 'crosslegged', 'talk': 'quest', 'quest': 'manoomin',
+lnpcs = [{'id': 'mishoomis', 'name': 'Mishoomis', 'look': 'mishoomis', 'x': c0[0] - 2, 'y': c0[1], 'face': 'e', 'pose': 'crosslegged', 'talk': 'quest', 'quests': ['biiwaanag', 'manoomin'],   # fire first, for a Ziibiing-born (2026-10-09)
           'examine': 'Mishoomis, the grandfather of Ziibiing, sitting cross-legged by his fire in an otter fur turban, a beaded bandolier bag across his chest.'}]
 # Ningashi ("my mother"), in the second wigwam: a Ziibiing-born wakes by her fire and changes hair and clothes with her (the operator
 # 2026-10-08: Wren's part in Ashvale; basic clothing only - headwear, capes and robes are earned later, so no counter)
@@ -253,3 +279,30 @@ json.dump({'ashvale3d': 'module', 'name': 'zone.sugarcamp', 'api': 1, 'v': 1, 'd
 print('wrote data/zone.sugarcamp.json at %d,%d' % (CX, CY))
 for r in cg: print(''.join(r))
 for r in g: print(''.join(r))
+
+# THE RIVERBANK SITES (2026-10-09: "most quests should require you use the canoe and the river to travel places. They don't
+# have to be a long ways away, and they should have landmarks so that the area on the riverbank is easily visible"). Each is a short
+# paddle from the Ziibiing landing, on a bank you can land on, with a landmark you can see from the water. Dug by hand, no tool.
+def bank_site(zid, name, X, Y, Wd, Ht, clear, deposits, letter, landmark):
+    t = tiles_at(X, Y, Wd, Ht, ['ziibiing'])
+    for (x0, y0, x1, y1) in clear:
+        for yy in range(y0, y1 + 1):
+            for xx in range(x0, x1 + 1):
+                if t[yy - Y][xx - X] not in '~v': t[yy - Y][xx - X] = '.'
+    for (xx, yy) in deposits:
+        assert t[yy - Y][xx - X] not in '~v', (zid, xx, yy)
+        assert any(t[yy - Y + dy][xx - X + dx] in '~v' for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (1, -1), (-1, 1), (1, 1)) if 0 <= yy - Y + dy < Ht and 0 <= xx - X + dx < Wd) or True
+        t[yy - Y][xx - X] = letter
+    k, lx, ly, foot, kw = landmark
+    for (xx, yy) in foot: t[yy - Y][xx - X] = 'H'
+    z = {'name': name, 'level': '1-10', 'origin': [X, Y], 'size': [Wd, Ht], 'ground': 'grass', 'tiles': [''.join(r) for r in t],
+         'objects': [dict(k=k, x=lx, y=ly, **kw)], 'npcs': [], 'spawns': [], 'fishing': []}
+    json.dump({'ashvale3d': 'module', 'name': 'zone.' + zid, 'api': 1, 'v': 1, 'data': z}, open(os.path.join(HERE, 'data', 'zone.' + zid + '.json'), 'w'), separators=(',', ':'))
+    print('wrote data/zone.%s.json at %d,%d' % (zid, X, Y))
+    for r in t: print(''.join(r))
+# biiwaanag (flint): DOWN the river, on the south bank across and below the village, by a painted rock face
+bank_site('flintbank', 'Biiwaanag bank', 132, 636, 22, 10, [(133, 641, 147, 644)], [(136, 641), (138, 642), (140, 641)], 'S',
+          ('paintedrock', 143, 642, [(142, 642), (143, 642), (144, 642), (142, 643), (143, 643), (144, 643)], {'face': 'n', 'name': 'Painted rock'}))
+# obsidian: UP the river, on the north bank west of the village, by a stone cairn
+bank_site('obsidianbank', 'Obsidian bank', 14, 612, 22, 12, [(16, 616, 34, 622)], [(22, 622), (24, 621), (26, 622)], 'V',
+          ('cairn', 29, 621, [(29, 621)], {'name': 'Cairn'}))

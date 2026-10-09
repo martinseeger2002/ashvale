@@ -292,6 +292,26 @@ items.update({
     "push_pole": {"name": "Gaandakii'iganaak", "kind": "tool", "value": 60, "_kg": 2.5, "model": "item.pushpole"},
     "knockers": {"name": "Bawa'iganaakoog", "kind": "tool", "value": 50, "_kg": 0.6, "model": "item.knockers"},
 })
+# ---- THE BOW, THE FIRE AND THE DEER (2026-10-09, handoff/ziibiing_bow_quests_plan.md): the Ziibiing beginning quests.
+# Mitigwaabiike ("he makes bows") gives a tomahawk, and makes a mitigwaab (bow) and fifteen bikwak (arrows) from a maple log and a
+# birch log; fifteen obsidian-tipped bikwak from a birch log and a piece of obsidian. Biiwaanag (flint) lights a log like a
+# tinderbox and is never used up. Words: Ojibwe People's Dictionary; the OPD has no word for tomahawk or obsidian.
+#   alsoTool -> trait Tool: a weapon that is also a tool (the tomahawk chops and peels like any axe)
+#   bound -> trait Bound: made for one character - never traded, sold, dropped, put in the chest or minted, and kept at death
+#   made -> where the description says it was made
+items.update({
+    "birch_logs": {"name": "Birch logs", "kind": "resource", "value": 4, "_kg": 2.5, "fireReq": 1, "burnTicks": 100, "fireXp": 40, "model": "item.birchlogs"},
+    "tomahawk": {"name": "Tomahawk", "kind": "tomahawk", "tier": 1, "eq": "weapon", "req": {"attack": 1}, "attack": 4, "strength": 3, "value": 30, "_kg": 0.9,
+                 "speed": 4, "range": 1, "class": "melee", "anim": "slash", "alsoTool": "woodcutting", "made": "Ziibiing", "model": "gear.tomahawk"},
+    "mitigwaab": {"name": "Mitigwaab", "kind": "bow", "tier": 3, "eq": "weapon", "req": {"ranged": 1}, "ranged": 22, "value": 480, "_kg": 0.8,
+                  "speed": 4, "range": 7, "class": "ranged", "anim": "bow", "twoHanded": True, "bound": 1, "english": "maple bow", "made": "Ziibiing", "model": "gear.mitigwaab"},
+    "birch_arrows": {"name": "Bikwak", "kind": "arrows", "tier": 1, "eq": "ammo", "stack": True, "rstr": 3, "value": 1, "req": {"ranged": 1},
+                     "english": "birch arrows, no tips", "made": "Ziibiing", "model": "gear.bikwak"},
+    "obsidian_arrows": {"name": "Obsidian bikwak", "kind": "arrows", "tier": 2, "eq": "ammo", "stack": True, "rstr": 10, "value": 3, "req": {"ranged": 1},
+                        "english": "obsidian-tipped arrows", "made": "Ziibiing", "model": "gear.bikwak"},
+    "flint": {"name": "Biiwaanag", "kind": "tool", "value": 5, "_kg": 0.15, "english": "flint", "made": "Ziibiing", "model": "item.flint"},
+    "obsidian": {"name": "Obsidian", "kind": "resource", "value": 10, "_kg": 0.4, "made": "Ziibiing", "model": "item.obsidian"},
+})
 # English names, shown in brackets when an item with an Ojibwe name is examined (2026-10-08)
 for _k, _e in {"wiigwaas": "birch bark", "sinew": "sinew", "bucket_bark": "birch bark sap bucket", "sap_bark": "birch bark sap bucket of maple sap", "syrup_bark": "birch bark sap bucket of maple syrup", "pail": "pail", "sap_pail": "pail of maple sap", "syrup_pail": "pail of maple syrup", "maple_candy": "maple sugar candy", "quill_makak": "birch bark box with porcupine quillwork", "push_pole": "push pole", "knockers": "ricing sticks"}.items(): items[_k]['english'] = _e
 
@@ -330,8 +350,8 @@ CAT = {  # internal kind -> (category, subcategory)
     "bow": ("weapon", "bow"), "staff": ("weapon", "staff"), "helmet": ("armour", "helmet"), "body": ("armour", "platebody"),
     "chainbody": ("armour", "chainbody"), "legs": ("armour", "platelegs"), "shield": ("armour", "kiteshield"), "torch": ("armour", "torch"),
     "arrows": ("ammo", "arrow"), "coins": ("currency", "gold"), "hat": ("cosmetic", "hat"), "cape": ("cosmetic", "cape"), "robe": ("cosmetic", "robe"),
-    "pack": ("pack", "pack"), "ring": ("jewellery", "ring")}
-SUB_OF_ID = {"push_pole": "pole", "knockers": "knocker", "wiigwaas": "bark", "sinew": "sinew", "bucket_bark": "bucket", "sap_bark": "bucket", "syrup_bark": "bucket", "pail": "bucket", "sap_pail": "bucket", "syrup_pail": "bucket", "maple_candy": "candy", "spider_silk": "silk", "dragon_bones": "bones", "ashvale_stone": "stone", "saltmere_stone": "stone", "castle_stone": "stone", "tinderbox": "tinderbox", "hatchet": "hatchet", "pickaxe": "pickaxe", "net": "net", "fishing_rod": "rod", "lobster_pot": "pot", "bread": "bread", "coal": "coal"}
+    "pack": ("pack", "pack"), "ring": ("jewellery", "ring"), "tomahawk": ("weapon", "tomahawk")}
+SUB_OF_ID = {"flint": "flint", "obsidian": "stone", "push_pole": "pole", "knockers": "knocker", "wiigwaas": "bark", "sinew": "sinew", "bucket_bark": "bucket", "sap_bark": "bucket", "syrup_bark": "bucket", "pail": "bucket", "sap_pail": "bucket", "syrup_pail": "bucket", "maple_candy": "candy", "spider_silk": "silk", "dragon_bones": "bones", "ashvale_stone": "stone", "saltmere_stone": "stone", "castle_stone": "stone", "tinderbox": "tinderbox", "hatchet": "hatchet", "pickaxe": "pickaxe", "net": "net", "fishing_rod": "rod", "lobster_pot": "pot", "bread": "bread", "coal": "coal"}
 MODEL = {"weapon": lambda sub, k: "gear." + sub, "armour": lambda sub, k: "gear." + {"kiteshield": "shield"}.get(sub, sub),
          "ammo": lambda sub, k: "gear.arrows", "pack": lambda sub, k: "gear.pack", "currency": lambda sub, k: "item.coins",
          "cosmetic": lambda sub, k: "cloth." + (k if sub == "hat" else "robe" if sub == "robe" else "cape"),
@@ -342,7 +362,7 @@ MODEL = {"weapon": lambda sub, k: "gear." + sub, "armour": lambda sub, k: "gear.
 TRAIT = [("attack", "Attack", 1), ("strength", "Strength", 1), ("defence", "Defence", 1), ("ranged", "Ranged", 1), ("magic", "Magic", 1),
          ("rstr", "Ranged strength", 1), ("speed", "Speed", 1), ("range", "Range", 1), ("carry", "Carry", 0.001), ("heal", "Heal", 1),
          ("healPct", "Heal %", 1), ("prayPct", "Prayer %", 1), ("buryXp", "Prayer XP", 1), ("cooks", "Cooks into", None), ("burns", "Burns into", None), ("cookReq", "Cooking level", 1),
-         ("cookXp", "Cooking XP", 1), ("vessel", "Container", None), ("fills", "Fills into", None), ("english", "English", None), ("energy", "Energy", 1), ("fireReq", "Firemaking level", 1), ("burnTicks", "Burn ticks", 1), ("fireXp", "Firemaking XP", 1),
+         ("cookXp", "Cooking XP", 1), ("alsoTool", "Tool", None), ("bound", "Bound", 1), ("vessel", "Container", None), ("fills", "Fills into", None), ("english", "English", None), ("energy", "Energy", 1), ("fireReq", "Firemaking level", 1), ("burnTicks", "Burn ticks", 1), ("fireXp", "Firemaking XP", 1),
          ("form", "Form", None), ("cures", "Cures", None), ("light", "Light", 1), ("teleport", "Teleport", None), ("cooldown", "Cooldown ticks", 1), ("arms", "Call to arms", 1), ("effect", "Effect", None), ("effectTicks", "Effect ticks", 1), ("effectChance", "Effect chance", 1), ("effectDamage", "Effect damage", 1), ("edition", "Edition", None)]
 ARMOURY = "ASHVALE Armoury"
 MEAT_BASES = {'chicken', 'rat_meat', 'hare', 'goat', 'venison', 'boar'}
@@ -378,7 +398,7 @@ for k, d in items.items():
     if d.get('nft'): j['nft'] = d['nft']
     if d.get('ward'): j['ward'] = d['ward']
     stats = ', '.join('%s %s' % (a['trait_type'], ('+' if isinstance(a['value'], (int, float)) and a['trait_type'] in ('Attack', 'Strength', 'Defence', 'Ranged', 'Magic') else '') + str(a['value'])) for a in attrs if a['trait_type'] not in ('Cooks into', 'Burns into'))
-    j['description'] = ('%s, %s %s' % (d['name'], cat, sub)) + (' (tier %d)' % d['tier'] if d.get('tier') else '') + ('. ' + stats if stats else '') + '. Made in the valley of Ashvale.'
+    j['description'] = ('%s, %s %s' % (d['name'], cat, sub)) + (' (tier %d)' % d['tier'] if d.get('tier') else '') + ('. ' + stats if stats else '') + '. Made ' + ('at ' + d['made'] if d.get('made') else 'in the valley of Ashvale') + '.'
     schema[k] = j
 assert all(j['category'] for j in schema.values())
 items_out = schema
@@ -443,6 +463,10 @@ for k in ('chicken', 'hen'): WILDLIFE[k]['drops'] = [{"item": "chicken_raw", "on
 WILDLIFE['hare']['drops'] = [{"item": "hare_raw", "one_in": 1}, {"item": "hare_pelt", "one_in": 2}]
 WILDLIFE['snow_hare']['drops'] = [{"item": "hare_raw", "one_in": 1}, {"item": "snow_hare_pelt", "one_in": 2}]
 WILDLIFE['deer']['drops'] = [{"item": "venison_raw", "one_in": 1}, {"item": "deer_hide", "one_in": 1}]
+# HUNTED (2026-10-09): an arrow that hits a deer brings it down in a set number of hits, whatever the roll - tipless birch
+# bikwak and the softer metals in two, steel and up and obsidian in one. The hit itself is rolled on Ranged: about half at
+# Ranged 1, certain from `sure` on. Ranged XP is paid as for an ordinary roll, so deer are no shortcut. (src/core.js playerAttack)
+WILDLIFE['deer']['hunt'] = {"sure": 10, "hits": {"birch_arrows": 2, "arrows_t1": 2, "arrows_t2": 2, "arrows_t3": 1, "arrows_t4": 1, "arrows_t5": 1, "obsidian_arrows": 1}}
 WILDLIFE['goat']['drops'] = [{"item": "goat_raw", "one_in": 1}, {"item": "goat_hide", "one_in": 2}]
 WILDLIFE['boar']['drops'] = [{"item": "boar_raw", "one_in": 1}, {"item": "boar_hide", "one_in": 1}]
 WILDLIFE['timber_wolf']['drops'] = [{"item": "timber_wolf_pelt", "one_in": 1}]
@@ -493,7 +517,7 @@ module('monsters', 1, {"monsters": monsters})
 
 # ---------------------------------------------------------------- shops
 armoury_stock = [k for k in items if items[k].get('tier', 9) <= 3 and items[k]['kind'] in
-                 ('sword', 'dagger', 'longsword', 'mace', 'bow', 'staff', 'shield', 'helmet', 'body', 'chainbody', 'legs', 'arrows')]
+                 ('sword', 'dagger', 'longsword', 'mace', 'bow', 'staff', 'shield', 'helmet', 'body', 'chainbody', 'legs', 'arrows') and not items[k].get('made')]   # made at Ziibiing: not on a town counter
 # Nessa's four stay off the valley's counter and off Saltmere's armoury: the Enchantery is the only counter that
 # has them. The plain ladder is what Garrick sells.
 for k in ('staff_ember', 'dagger_venom', 'bow_snare'):
@@ -1267,8 +1291,8 @@ R = random.Random(20260930)
 
 # the tile legend, in one place: which letters stop you walking, and which stop you seeing. scene.js
 # draws the same letters (trees, rocks with ore), rules.json ships this same set.
-T_BLOCK = "TPORNIr~FHXWMYCGAU"   # U: a desert cactus (blocks the way, not the view)
-T_LOS = "TPORNIrHXWMYCGA"
+T_BLOCK = "TPORNIr~FHXWMYCGAUSV"   # U: a desert cactus (blocks the way, not the view)
+T_LOS = "TPORNIrHXWMYCGASV"
 T_TREE = "TPOMWY"
 T_ROCK = "RNICGA"
 
@@ -1720,7 +1744,8 @@ HOMES = {
    }
   },
   "wake": "home",
-  "wakeSay": "You wake by the fire in your mother's wigwam."
+  "wakeSay": "You wake by the fire in your mother's wigwam.",
+  "noFire": "You need biiwaanag (flint) to light a fire. Mishoomis knows where it lies along the riverbank."
  }
 }
 
@@ -1734,7 +1759,7 @@ module('rules', 3, {
         "P": {"skill": "woodcutting", "name": "Pine tree", "item": "logs", "req": 1, "xp": 250, "speed": 4, "deplete": 6, "regrow": -1},
         "O": {"skill": "woodcutting", "name": "Oak tree", "item": "oak_logs", "req": 15, "xp": 375, "speed": 4, "deplete": 8, "regrow": -1},
         "W": {"skill": "woodcutting", "name": "Willow", "item": "willow_logs", "req": 20, "xp": 500, "speed": 4, "deplete": 8, "regrow": -1},
-        "M": {"skill": "woodcutting", "name": "Maple", "item": "maple_logs", "req": 30, "xp": 675, "speed": 5, "deplete": 8, "regrow": -1,
+        "M": {"skill": "woodcutting", "name": "Maple", "item": "maple_logs", "req": 1, "hard": 30, "xp": 675, "speed": 5, "deplete": 8, "regrow": -1,   # anyone may chop a maple (2026-10-09), but it bites like a level-30 tree: slow until you are
               "tap": {"xp": 200, "ticks": 5, "per": "day", "mark": "sap", "season": "sap", "verb": "Collect sap from",
                       "say": "Ziinzibaakwadwaaboo drips from the cut into your {bucket} until it is full.",
                       "again": "This ininaatig has given its sap today. Try another tree.",
@@ -1743,10 +1768,11 @@ module('rules', 3, {
                       "cold": "The day never thawed: the sap is not running today.", "warm": "The night did not freeze: the sap is not running today."}},   # fills an empty bucket (an item that "fills" into another)
         "Q": {"skill": "woodcutting", "name": "Cedar", "item": "cedar_logs", "req": 20, "xp": 500, "speed": 4, "deplete": 8, "regrow": -1},   # giizhik (2026-10-08)
         "L": {"skill": "woodcutting", "name": "Tamarack", "item": "tamarack_logs", "req": 20, "xp": 500, "speed": 4, "deplete": 8, "regrow": -1},   # mashkiigwaatig
-        "E": {"skill": "woodcutting", "name": "Birch", "item": "logs", "req": 1, "xp": 250, "speed": 4, "deplete": 6, "regrow": -1,
+        "E": {"skill": "woodcutting", "name": "Birch", "item": "birch_logs", "req": 1, "xp": 250, "speed": 4, "deplete": 6, "regrow": -1,
               "peel": {"item": "wiigwaas", "xp": 150, "ticks": 4, "per": "year", "mark": "bark", "verb": "Peel bark from",
                        "say": "You cut round the trunk and ease off a sheet of wiigwaas. The birch will heal by next year.",
-                       "again": "This birch has given its wiigwaas this year. Leave it to heal and find another."}},   # wiigwaasaatig (2026-10-08); long-press peels its bark
+                       "again": "This birch has given its wiigwaas this year. Leave it to heal and find another.",
+                       "tool": "woodcutting", "noTool": "You need a tomahawk or an axe to cut the wiigwaas (birch bark) from the tree."}},   # a blade to cut it (2026-10-09)   # wiigwaasaatig (2026-10-08); long-press peels its bark
         "Y": {"skill": "woodcutting", "name": "Yew", "item": "yew_logs", "req": 40, "xp": 900, "speed": 5, "deplete": 10, "regrow": -1},
         "R": {"skill": "mining", "name": "Copper rocks", "item": "copper_ore", "req": 1, "xp": 175, "speed": 4, "deplete": 1, "regrow": 8},
         "N": {"skill": "mining", "name": "Tin rocks", "item": "tin_ore", "req": 1, "xp": 175, "speed": 4, "deplete": 1, "regrow": 8},
@@ -1754,6 +1780,11 @@ module('rules', 3, {
         "C": {"skill": "mining", "name": "Coal rocks", "item": "coal", "req": 20, "xp": 250, "speed": 4, "deplete": 1, "regrow": 20},
         "G": {"skill": "mining", "name": "Gold rocks", "item": "gold_ore", "req": 30, "xp": 420, "speed": 4, "deplete": 1, "regrow": 30},
         "A": {"skill": "mining", "name": "Mithril rocks", "item": "mithril_ore", "req": 40, "xp": 600, "speed": 5, "deplete": 1, "regrow": 45},
+        # gathered by hand on the riverbank below Ziibiing (2026-10-09): no tool, a little Mining XP. bare: needs no tool
+        "S": {"skill": "mining", "name": "Biiwaanag (flint)", "item": "flint", "req": 1, "xp": 50, "speed": 3, "deplete": 1, "regrow": 12, "bare": True,
+              "say": "You pry a nodule of biiwaanag (flint) out of the chalky bank."},
+        "V": {"skill": "mining", "name": "Obsidian", "item": "obsidian", "req": 1, "xp": 100, "speed": 4, "deplete": 1, "regrow": 15, "bare": True,
+              "say": "You work a piece of black obsidian loose from the bank. Its broken edge is sharper than any knife."},
         "fish": {"skill": "fishing", "name": "Fishing spot", "req": 1, "xp": 100, "speed": 5, "deplete": 0},
         "range": {"skill": "cooking", "name": "Cooking range", "speed": 4},
         "fire": {"skill": "cooking", "name": "Campfire", "speed": 4, "burnBonus": 10}},
@@ -1767,20 +1798,20 @@ module('rules', 3, {
               "points": 10, "maxPerSkill": 5,
               "skills": ["attack", "strength", "defence", "ranged", "magic", "hitpoints", "dexterity", "speechcraft"]},
     "items": {
-        "categories": {"weapon": ["sword", "dagger", "longsword", "mace", "bow", "staff"], "armour": ["helmet", "platebody", "chainbody", "platelegs", "kiteshield", "torch"],
-                       "tool": ["hatchet", "pickaxe", "net", "rod", "pot", "tinderbox", "stone", "pole", "knocker"], "pack": ["pack"], "cosmetic": ["hat", "cape", "robe"],
-                       "resource": ["logs", "ore", "coal", "bar", "pelt", "fish", "mushroom", "meat", "silk", "grain", "bark", "sinew", "bucket"], "food": ["bread", "fish", "mushroom", "meat", "candy"], "potion": ["healing"],
+        "categories": {"weapon": ["sword", "dagger", "longsword", "mace", "bow", "staff", "tomahawk"], "armour": ["helmet", "platebody", "chainbody", "platelegs", "kiteshield", "torch"],
+                       "tool": ["hatchet", "pickaxe", "net", "rod", "pot", "tinderbox", "stone", "pole", "knocker", "flint"], "pack": ["pack"], "cosmetic": ["hat", "cape", "robe"],
+                       "resource": ["logs", "ore", "coal", "bar", "pelt", "fish", "mushroom", "meat", "silk", "grain", "bark", "sinew", "bucket", "stone"], "food": ["bread", "fish", "mushroom", "meat", "candy"], "potion": ["healing"],
                        "ammo": ["arrow"], "currency": ["gold"], "jewellery": ["ring"]},
         "slots": {"weapon": "weapon", "armour/helmet": "head", "armour/platebody": "body", "armour/chainbody": "body", "armour/platelegs": "legs",
                   "armour/kiteshield": "shield", "armour/torch": "shield", "ammo": "ammo", "pack": "pack", "cosmetic/hat": "head", "cosmetic/cape": "cape", "cosmetic/robe": "body", "jewellery/ring": "ring"},
         "weapons": {"sword": {"class": "melee", "anim": "slash"}, "dagger": {"class": "melee", "anim": "stab"}, "longsword": {"class": "melee", "anim": "slash"},
-                    "mace": {"class": "melee", "anim": "crush"}, "bow": {"class": "ranged", "anim": "bow", "twoHanded": True}, "staff": {"class": "magic", "anim": "cast"}},
-        "tools": {"hatchet": "woodcutting", "pickaxe": "mining", "net": "fishing", "rod": "fishing", "pot": "fishing", "tinderbox": "firemaking"},
+                    "mace": {"class": "melee", "anim": "crush"}, "tomahawk": {"class": "melee", "anim": "slash"}, "bow": {"class": "ranged", "anim": "bow", "twoHanded": True}, "staff": {"class": "magic", "anim": "cast"}},
+        "tools": {"hatchet": "woodcutting", "pickaxe": "mining", "net": "fishing", "rod": "fishing", "pot": "fishing", "tinderbox": "firemaking", "flint": "firemaking"},
         "edible": ["food", "potion"], "drink": ["potion"],
         "traits": {"Edition": "edition", "Cures": "cures", "Light": "light", "Form": "form", "Teleport": "teleport", "Cooldown ticks": "cooldown", "Call to arms": "arms", "Attack": "attack", "Strength": "strength", "Defence": "defence", "Ranged": "ranged", "Magic": "magic", "Ranged strength": "rstr",
                    "Speed": "speed", "Range": "range", "Carry": ["carry", 1000], "Heal": "heal", "Heal %": "healPct", "Prayer %": "prayPct", "Cooks into": "cooks",
                    "Burns into": "burns", "Container": "vessel", "Fills into": "fills", "English": "english", "Energy": "energy", "Cooking level": "cookReq", "Cooking XP": "cookXp", "Firemaking level": "fireReq", "Burn ticks": "burnTicks",
-                   "Firemaking XP": "fireXp", "Effect": "effect", "Effect ticks": "effectTicks", "Effect chance": "effectChance", "Effect damage": "effectDamage"},
+                   "Firemaking XP": "fireXp", "Tool": "tool", "Bound": "bound", "Effect": "effect", "Effect ticks": "effectTicks", "Effect chance": "effectChance", "Effect damage": "effectDamage"},
         "limits": {"perTier": {"Attack": 12, "Strength": 12, "Ranged": 12, "Magic": 12, "Defence": 16, "Ranged strength": 8},
                    "flat": {"Speed": [2, 7], "Range": [1, 10], "Carry": [0, 100], "Heal": [0, 40], "Heal %": [0, 100], "Prayer %": [0, 100], "Cooking level": [1, 99], "Cooking XP": [0, 500],
                             "Firemaking level": [1, 99], "Burn ticks": [10, 600], "Firemaking XP": [0, 500], "Effect ticks": [1, 50], "Effect chance": [0, 100], "Effect damage": [0, 20]},

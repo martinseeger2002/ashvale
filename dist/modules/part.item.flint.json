@@ -1,0 +1,1 @@
+{"ashvale3d":"module","name":"part.item.flint","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"item.flint","kind":"item","items":{"flint":"#3a3a40"},"shapes":[{"t":"ico","s":[0.1],"c":"#d8d2c2","p":[0,0.08,0]},{"t":"ico","s":[0.075],"c":"$c","p":[0.05,0.1,0.04]},{"t":"ico","s":[0.04],"c":"#cfc8b6","p":[-0.07,0.06,0.02]}]}}

@@ -632,6 +632,196 @@
     "Boozhoo, {name}. The sugar is put away in its makak for the year. Sit by the fire.",
     "When the sap runs again next spring, come and find me."
    ]
+  },
+  "biiwaanag": {
+   "name": "Biiwaanag",
+   "giver": "mishoomis",
+   "homes": [
+    "ziibiing"
+   ],
+   "note": "2026-10-09 (handoff/ziibiing_bow_quests_plan.md): flint from the riverbank below the painted rock, a canoe trip down the river; a fire of your own",
+   "steps": [
+    {
+     "id": 1,
+     "zone": "ziibiing",
+     "goal": {
+      "light": "*",
+      "n": 1
+     },
+     "kit": {
+      "logs": 1
+     },
+     "reward": "xp:firemaking:300",
+     "talk": [
+      "Boozhoo, {name}. Sit. The fire in this wigwam was lit by my grandfather's hand, and it has never been let go out.",
+      "One of the people of Ziibiing (at the river) must be able to make a fire of their own. For that you need biiwaanag (flint).",
+      "Take the jiimaan (canoe) at the landing and paddle down the river, east, a little way. On the far bank, the south side, a rock face is painted with red figures. The bank under it is chalky, and biiwaanag (flint) lies in it. Pry it out with your fingers.",
+      "Here is a log from my woodpile. Lay it down, strike the biiwaanag (flint) over it until it catches, and come and tell me."
+     ],
+     "progress": [
+      "A fire of your own, {name}. Biiwaanag (flint) lies in the chalky bank below the painted rock, down the river on the south side. Strike it over a log."
+     ],
+     "complete": [
+      "I can smell the smoke on you. Good.",
+      "Keep the biiwaanag (flint). It does not wear out the way we do."
+     ]
+    }
+   ],
+   "done": [
+    "Boozhoo, {name}. Is your fire still going? Ishkode (fire) is a relative. Feed it and it looks after you."
+   ]
+  },
+  "mitigwaab": {
+   "name": "Mitigwaab",
+   "giver": "mitigwaabiike",
+   "homes": [
+    "ziibiing"
+   ],
+   "note": "2026-10-09: a maple log and a birch log; two game hours later a maple bow (bound) and fifteen birch arrows; the tomahawk at the start",
+   "steps": [
+    {
+     "id": 1,
+     "zone": "ziibiing",
+     "goal": {
+      "bring": "maple_logs",
+      "n": 1,
+      "with": "birch_logs"
+     },
+     "kit": {
+      "tomahawk": 1
+     },
+     "talk": [
+      "Boozhoo, {name}. No mitigwaab (bow) yet? Then you can feed nobody but yourself.",
+      "Take this tomahawk. It cuts wood, and it cuts the wiigwaas (birch bark) off a tree when you need some.",
+      "Bring me one log of ininaatig (maple) for the bow and one log of wiigwaasaatig (birch) for the bikwak (arrows). The sugar bush up the trail is full of both.",
+      "Ininaatig (maple) is hard wood. Your arm is young, so it will take many swings. Keep at it."
+     ],
+     "progress": [
+      "One ininaatig (maple) log and one wiigwaasaatig (birch) log, {name}. The sugar bush up the trail has both. The tomahawk will do it, slowly."
+     ],
+     "complete": [
+      "Good wood. Feel the weight of that maple - it will bend for you and come back."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "ziibiing",
+     "goal": {
+      "wait": 2
+     },
+     "reward": [
+      "mitigwaab",
+      "birch_arrows:15"
+     ],
+     "talk": [
+      "Now leave me with it. A bow is shaved, not chopped, and the arrows want straightening over the fire.",
+      "Come back in two hours. Go and see Mishoomis, or cut yourself some wiigwaas (birch bark) with that tomahawk while you wait."
+     ],
+     "progress": [
+      "Not yet, {name}. I am still working the bow. Come back a little later."
+     ],
+     "complete": [
+      "Here. Your mitigwaab (bow), and fifteen bikwak (arrows) of birch.",
+      "They have no points. Birch is enough for a waawaashkeshi (deer) if the arrow finds it - two, and it is yours. Ma'iingan will want to see you hunt.",
+      "This bow was made for you. It will not go to anyone else."
+     ]
+    }
+   ],
+   "done": [
+    "Boozhoo, {name}. Bring me a wiigwaasaatig (birch) log whenever you need more bikwak (arrows)."
+   ]
+  },
+  "deer_hunt": {
+   "name": "Waawaashkeshi",
+   "giver": "maiingan",
+   "homes": [
+    "ziibiing"
+   ],
+   "after": "mitigwaab",
+   "note": "2026-10-09: with the bow, hunt a deer and bring its hide for sinew - the sinew for Migizi's birch bark sap bucket",
+   "steps": [
+    {
+     "id": 1,
+     "zone": "ziibiing",
+     "goal": {
+      "bring": "deer_hide",
+      "n": 1
+     },
+     "reward": [
+      "sinew:2",
+      "xp:ranged:300"
+     ],
+     "talk": [
+      "Boozhoo, {name}! Mitigwaabiike made you a mitigwaab (bow)? Then come hunting.",
+      "The waawaashkeshi (deer) graze in the open ground in the woods round the village. Go slowly. Two of the birch bikwak (arrows) bring one down, if they find it.",
+      "Bring me its hide, and I will give you ojiitad (sinew) from my rack. Migizi sews the sap buckets with it.",
+      "And cook the meat. Nobody hunts only for the hide."
+     ],
+     "progress": [
+      "The hide of a waawaashkeshi (deer), {name}. The deer graze in the open ground in the woods. Two birch bikwak (arrows) bring one down."
+     ],
+     "complete": [
+      "A good hide, cleanly taken. Miigwech (thank you).",
+      "Here, two lengths of ojiitad (sinew). Take them to Migizi with two sheets of wiigwaas (birch bark), and he will fold you a biskitenaagan (birch bark sap bucket) for the sugar bush."
+     ]
+    }
+   ],
+   "done": [
+    "Boozhoo, {name}. Any time you bring me the hide of a waawaashkeshi (deer), there is ojiitad (sinew) for you."
+   ]
+  },
+  "obsidian_arrows": {
+   "name": "Obsidian bikwak",
+   "giver": "mitigwaabiike",
+   "homes": [
+    "ziibiing"
+   ],
+   "after": "mitigwaab",
+   "note": "2026-10-09: obsidian from the bank upriver by the cairn and a birch log; two game hours later fifteen obsidian-tipped arrows",
+   "steps": [
+    {
+     "id": 1,
+     "zone": "ziibiing",
+     "goal": {
+      "bring": "obsidian",
+      "n": 1,
+      "with": "birch_logs"
+     },
+     "talk": [
+      "You have been shooting birch, {name}. Now I will show you a point.",
+      "Paddle up the river, west, on this side. A cairn of stones stands on the bank. Below it the bank is full of obsidian - black stone that breaks sharper than any knife. You need no pick; work it loose with your hands.",
+      "Bring me a piece of obsidian and another wiigwaasaatig (birch) log, and I will make you fifteen bikwak (arrows) with obsidian points."
+     ],
+     "progress": [
+      "A piece of obsidian from below the cairn up the river, and a wiigwaasaatig (birch) log, {name}."
+     ],
+     "complete": [
+      "Black as a winter night. Good."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "ziibiing",
+     "goal": {
+      "wait": 2
+     },
+     "reward": "obsidian_arrows:15",
+     "talk": [
+      "Knapping takes patience. Each point is struck a hundred times before it is sharp enough.",
+      "Come back in two hours and they will be ready."
+     ],
+     "progress": [
+      "The points are not all knapped yet. Come back a little later, {name}."
+     ],
+     "complete": [
+      "Fifteen obsidian bikwak (arrows). One of these brings down a waawaashkeshi (deer).",
+      "Whenever you need more, bring me the obsidian and the birch."
+     ]
+    }
+   ],
+   "done": [
+    "Boozhoo, {name}. Obsidian and birch, and I will make you more obsidian bikwak (arrows)."
+   ]
   }
  }
 }

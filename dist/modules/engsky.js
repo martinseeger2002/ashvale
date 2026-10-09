@@ -226,7 +226,7 @@
           const trees = (k) => { const out = []; for (let y = 530; y < 560; y++) for (let x = 78; x < 106; x++) if (core.M.tileAt(x, y) === k && core.nodeAt(core.M.key(x, y)) && nb(x, y)[0] !== x + 0.5) { const o = nb(x, y); if (o[0] !== x || o[1] !== y) out.push([x, y]); } out.sort((a, b) => Math.hypot(a[0] - 92, a[1] - 545) - Math.hypot(b[0] - 92, b[1] - 545)); return out; };
           hud.showHelp && hud.showHelp(false); if (core.setWeather) coreCall(() => core.setWeather(zoneHere(), 'clear', 0, 100000));
           goto(sapDays()); await wait(3000); follow(9, 0.55);
-          coreCall(() => { core.grantItem(PID, 'deer_hide', 1); core.grantItem(PID, 'pail', 1); });
+          coreCall(() => { core.grantItem(PID, 'deer_hide', 1); core.grantItem(PID, 'pail', 1); core.grantItem(PID, 'tomahawk', 1); });   /* the bark wants a blade (2026-10-09) */
           say('The sugar bush, start to finish. A thaw after a frost: the sap is running.'); await wait(3500);
           const E = trees('E'), Mp = trees('M');
           say('A long press on a wiigwaasaatig (birch): Peel bark. Each birch gives once a year.');
@@ -307,7 +307,7 @@
             SEASON.noonDay = gday; SEASON.noon = bk / 96;
           }
           SEASON.lat = lat; SEASON.lon = SEASON.noon != null ? (0.5 - SEASON.noon) * 360 : Math.atan2(B.u[1], B.u[0]) * 180 / Math.PI;
-          if (core.setNature && SEASONS.sap) { const C = SEASONS.calendar(now); core.setNature({ day: Math.floor((now / 1000 - SUN_EPOCH) / DAY_S), year: C.year, sap: SEASONS.sap(lat, now) }); }   /* the sugar bush rules: which day and year it is, and whether the sap runs */
+          if (core.setNature && SEASONS.sap) { const C = SEASONS.calendar(now); core.setNature({ day: Math.floor((now / 1000 - SUN_EPOCH) / DAY_S), hours: 24 * (now / 1000 - SUN_EPOCH) / DAY_S, year: C.year, sap: SEASONS.sap(lat, now) }); }   /* the sugar bush rules: which day and year it is, and whether the sap runs */
           if (TL.n > 1 && SEASONS.temperature) {   /* a time-lapse shows the date, the temperature and the sap run (2026-10-08) */
             let el = document.getElementById('tl-clock');
             if (!el) { el = document.createElement('div'); el.id = 'tl-clock'; el.style.cssText = 'position:fixed;left:12px;top:12px;z-index:50;padding:6px 10px;border-radius:6px;background:rgba(10,14,20,.72);color:#f2ead8;font:600 15px/1.35 system-ui,sans-serif;pointer-events:none;white-space:pre'; document.body.appendChild(el); }

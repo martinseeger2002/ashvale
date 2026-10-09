@@ -13,7 +13,7 @@
     const TILE_COL = { i: 0x8a7a5a, '.': 0x5f9e3f, f: 0x62a242, F: 0x5c9a3e, ',': 0x4a7f34, T: 0x40702c, P: 0x3e6c2c, O: 0x43732e, p: 0xa98a5a, c: 0x6c675f, d: 0x8f7b5e, B: 0x7a5a36, g: 0xb8ac62, q: 0xa9b29c, v: 0x6a8a75, J: 0xd9e9f2,
       s: 0xcdbb84, '~': 0x6a7a55, H: 0x8a7a5a, X: 0x7d8a52, R: 0x7e7a6a, N: 0x7e7a6a, I: 0x7e7a6a, r: 0x6f7a55,
       W: 0x4a7a3a, M: 0x4c7030, Y: 0x36612a, U: 0xc9b47c, C: 0x74716e, G: 0x7e7a6a, A: 0x767a82, '^': 0x74716a, K: 0x6f8f4a, E: 0x5a8a3a, L: 0x5b7a3a, Q: 0x2f5a34 };
-    const ORE = { R: 0xc8702c, N: 0xd8d8d0, I: 0x8a4632, C: 0x33333c, G: 0xd9a930, A: 0x6f86c8 };
+    const ORE = { R: 0xc8702c, N: 0xd8d8d0, I: 0x8a4632, C: 0x33333c, G: 0xd9a930, A: 0x6f86c8, S: 0x3a3a40, V: 0x0e0e14 };
     const WATER_Y = -0.16;
     let LAMPQ = null;   /* (x, y) -> whether a tended lamp or town torch is lit; the engine sets this from the guards */
     const SNOWC = new THREE.Color(0xf2f1ec);
@@ -670,10 +670,10 @@
       /* ---------- rocks */
       const rockAt = new Map(), pickables = [terrainMesh].concat(treeMeshes);
       for (let y = Y0; y < Y1; y++) for (let x = X0; x < X1; x++) {
-        const c = at(x, y); if ('RNIrCGA'.indexOf(c) < 0 || !mine(x, y)) continue;
-        const g = new THREE.Group(), big = c === 'r' ? 1.35 : 1;
-        const rk = mesh(new THREE.DodecahedronGeometry(0.42 * big, 0), ({ r: 0x8a8a80, C: 0x585860, A: 0x767f8c })[c] || 0x7a7468); rk.scale.set(1.1, 0.75, 1); rk.rotation.y = hash2(x, y) * 3; rk.position.y = 0.22 * big; g.add(rk);
-        const rk2 = mesh(new THREE.DodecahedronGeometry(0.26 * big, 0), 0x8a857a); rk2.position.set(0.25, 0.14, 0.18); g.add(rk2);
+        const c = at(x, y); if ('RNIrCGASV'.indexOf(c) < 0 || !mine(x, y)) continue;
+        const g = new THREE.Group(), big = c === 'r' ? 1.35 : 1;   /* S: biiwaanag (flint) in a chalky bank, V: obsidian - both dug by hand on the riverbank below Ziibiing */
+        const rk = mesh(new THREE.DodecahedronGeometry(0.42 * big, 0), ({ r: 0x8a8a80, C: 0x585860, A: 0x767f8c, S: 0xd8d0bc, V: 0x3a3a42 })[c] || 0x7a7468); rk.scale.set(1.1, 0.75, 1); rk.rotation.y = hash2(x, y) * 3; rk.position.y = 0.22 * big; g.add(rk);
+        const rk2 = mesh(new THREE.DodecahedronGeometry(0.26 * big, 0), ({ S: 0xcfc6ae, V: 0x16161c })[c] || 0x8a857a); rk2.position.set(0.25, 0.14, 0.18); g.add(rk2);
         const ore = new THREE.Group();
         if (ORE[c]) for (let k = 0; k < 4; k++) { const o = mesh(new THREE.OctahedronGeometry(0.09, 0), ORE[c], Math.cos(k * 1.7) * 0.28, 0.3 + (k % 2) * 0.12, Math.sin(k * 1.7) * 0.26); ore.add(o); }
         g.add(ore);
@@ -1026,6 +1026,24 @@
               BF.add('box', 0x5f7a34, sx, base + hh / 2, sz, 0.018, hh, 0.018, a, lean, 0);   /* cattails die back in winter and grow again in spring, like the small flora (2026-10-08) */
               if (k % 2 === 0) BF.add('cyl6', 0x5a3a20, sx, base + hh - 0.1, sz, 0.06, 0.22, 0.06, a, lean, 0);
             }
+            break;
+          }
+          case 'bowrack': {   /* Mitigwaabiike's rack (2026-10-09): two forked posts and a rail, bow staves and a strung bow hung to season, a bundle of arrow shafts */
+            for (const e of [-1, 1]) { B.add('box', 0x5a4430, x + e, y + 0.8, z, 0.07, 1.6, 0.07); B.add('box', 0x5a4430, x + e - 0.07, y + 1.6, z, 0.05, 0.25, 0.05, 0, 0, 0.5); B.add('box', 0x5a4430, x + e + 0.07, y + 1.6, z, 0.05, 0.25, 0.05, 0, 0, -0.5); }
+            B.add('cyl6', 0x6a4a2a, x, y + 1.55, z, 0.06, 2.3, 0.06, 0, 0, Math.PI / 2);
+            for (let k = 0; k < 4; k++) B.add('box', k === 2 ? 0xa8202a : 0xc47c3a, x - 0.6 + k * 0.4, y + 0.95, z + 0.05, 0.05, 1.2, 0.04, 0, 0, (k - 1.5) * 0.05);
+            B.add('box', 0xece6d8, x + 0.75, y + 0.5, z + 0.3, 0.2, 1.0, 0.2, 0, 0, 0.15);
+            break;
+          }
+          case 'paintedrock': {   /* a landmark on the riverbank, seen from the water: a tall grey rock face with red ochre figures on it (2026-10-09) */
+            B.add('rock', 0x7a7670, x, y + 1.2, z, 2.6, 2.6, 1.8, hash2(o.x, o.y) * 6); B.add('rock', 0x6e6a64, x + 1.1, y + 0.6, z + 0.5, 1.5, 1.3, 1.3, 1.3);
+            for (const [dx, dy, w, h] of [[-0.5, 1.6, 0.12, 0.5], [-0.3, 1.9, 0.5, 0.1], [0.1, 1.4, 0.1, 0.6], [0.35, 1.75, 0.35, 0.1], [-0.1, 1.05, 0.6, 0.08]])
+              B.add('box', 0xa8302a, x + dx, y + dy, z + (o.face === 'n' ? -0.92 : 0.92), w, h, 0.03);   /* the figures face the water (face 'n' or 's') */
+            break;
+          }
+          case 'cairn': {   /* a landmark on the riverbank, seen from the water: stones stacked man-high, a strip of red cloth tied at the top (2026-10-09) */
+            for (let k = 0; k < 6; k++) { const r = 0.62 - k * 0.09; B.add('rock', k % 2 ? 0x8a857a : 0x6f6b64, x, y + 0.25 + k * 0.38, z, r * 2, 0.42, r * 2, k * 1.7); }
+            B.add('box', 0x5a4430, x, y + 2.75, z, 0.05, 0.6, 0.05); B.add('box', 0xc8202a, x + 0.18, y + 2.9, z, 0.35, 0.12, 0.02);
             break;
           }
           case 'woodpile': for (let k = 0; k < 9; k++) { const row = k < 4 ? 0 : k < 7 ? 1 : 2, i = row === 0 ? k : row === 1 ? k - 4 : k - 7; B.add('cyl', k % 3 ? 0x7a5a3a : 0x8a6a46, x - 0.36 + i * 0.24 + row * 0.12, y + 0.1 + row * 0.19, z, 0.2, 0.9, 0.2, 0, Math.PI / 2, 0); } break;
