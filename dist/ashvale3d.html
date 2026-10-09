@@ -6253,8 +6253,9 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
       const pd = PI.length ? ctx.pathDist(f, cx, cy) : 1e9;
       /* rivers: a creek is shallow water you wade through ('v'); a river is deep ('~') but for a ford now and then, and a
          path over it is a bridge */
-      if (PI.length && ctx.wallAt && !(TF[16] > 0.5 && TF[16] <= 2.5) && h > WATER - 3) {   /* a wall of old woods (globecfg.walls): no path, no clearing,
-        nothing chops these; no lake or pond inside it either (2026-10-09: a hawk flew in to a lake there) - only the river runs through, and the sea */
+      if (PI.length && ctx.wallAt && !(TF[16] > 0.5) && h >= WATER) {   /* a wall of old woods (globecfg.walls): no path, no clearing,
+        nothing chops these. On dry land only (2026-10-09: never into the sea or across the river - a buffer, not a cage); a pond
+        left inside is out of reach anyway, since hawks cannot fly over these trees (rules.tiles.noFly) */
         const WL = ctx.wallAt(f, cx, cy);
         if (WL && (WL.k >= 1 || g.u01(g.hash3(cx, cy, (f * 31337) ^ ctx.S.tl ^ 0x77a1)) < WL.k * 0.8)) { FOREST_HIT = true; return WL.sp[Math.floor(g.u01(g.hash3(cy, cx, f ^ 0x1d2b)) * WL.sp.length)]; }
       }
@@ -11814,7 +11815,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
 .ash .splat.fx{width:30px;height:30px;font-size:10px;color:#003;text-shadow:none}
 .ash .netlost{position:absolute;left:50%;top:max(8px,env(safe-area-inset-top));transform:translateX(-50%);width:min(560px,calc(100vw - 24px));z-index:18;display:none;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:10px;background:#5a1414f0;box-shadow:0 0 0 2px #e05a4a,0 6px 20px #000a;color:#fde9e4;font:14px/1.35 system-ui,sans-serif}
 .ash .netlost b{color:#fff}
-.ash .netlost .btn{flex:none;margin:0;padding:8px 14px}
+.ash .netlost>div{flex:1 1 auto;min-width:0}.ash .netlost .btn{flex:none;width:auto;margin:0;padding:8px 14px}
 .ash .newver{position:absolute;left:50%;top:max(8px,env(safe-area-inset-top));transform:translateX(-50%);width:min(560px,calc(100vw - 24px));z-index:17;display:none;padding:10px 14px;border-radius:10px;background:#3b2c08f2;box-shadow:0 0 0 2px #e8b33a,0 6px 20px #000a;color:#fbefcf;font:14px/1.35 system-ui,sans-serif}
 .ash .newver b{color:#ffd76a}
 .ash .elsewhere{position:absolute;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:#0b0907e8;padding:16px}
