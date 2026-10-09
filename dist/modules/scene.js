@@ -12,7 +12,7 @@
     const THREE = deps.three;
     const TILE_COL = { i: 0x8a7a5a, '.': 0x5f9e3f, f: 0x62a242, F: 0x5c9a3e, ',': 0x4a7f34, T: 0x40702c, P: 0x3e6c2c, O: 0x43732e, p: 0xa98a5a, c: 0x6c675f, d: 0x8f7b5e, B: 0x7a5a36, g: 0xb8ac62, q: 0xa9b29c, v: 0x6a8a75, J: 0xd9e9f2,
       s: 0xcdbb84, '~': 0x6a7a55, H: 0x8a7a5a, X: 0x7d8a52, R: 0x7e7a6a, N: 0x7e7a6a, I: 0x7e7a6a, r: 0x6f7a55,
-      W: 0x4a7a3a, M: 0x4c7030, Y: 0x36612a, U: 0xc9b47c, C: 0x74716e, G: 0x7e7a6a, A: 0x767a82, '^': 0x74716a, K: 0x6f8f4a };
+      W: 0x4a7a3a, M: 0x4c7030, Y: 0x36612a, U: 0xc9b47c, C: 0x74716e, G: 0x7e7a6a, A: 0x767a82, '^': 0x74716a, K: 0x6f8f4a, E: 0x5a8a3a, L: 0x5b7a3a, Q: 0x2f5a34 };
     const ORE = { R: 0xc8702c, N: 0xd8d8d0, I: 0x8a4632, C: 0x33333c, G: 0xd9a930, A: 0x6f86c8 };
     const WATER_Y = -0.16;
     let LAMPQ = null;   /* (x, y) -> whether a tended lamp or town torch is lit; the engine sets this from the guards */
@@ -111,6 +111,117 @@
       }
       return g;
     }
+    /* THE SEASONS (2026-10-07; the maths: the `seasons` module). Shared uniforms the ground and still water read, and a
+       register of every tree crown built, so a change of season recolours the woods in place - no rebuild. */
+    const SEASON_U = { uGround: { value: new THREE.Color(1, 1, 1) }, uSnow: { value: 0 }, uIce: { value: 0 }, uLitter: { value: 0 }, uTreeSnow: { value: 0 } };
+    let SEASON_CUR = null, SEASON_LIB = null; const TREE_REG = [], FLORA_REG = [], RICE_REG = [];
+    const BRANCH_TIPS = [];   /* where each branch ends: spring's first leaves grow out from here */
+    const BRANCH_GEO = (() => { const parts = [[0.35, 0.0], [-0.3, 0.6], [0.05, -0.4], [0.3, 0.45], [-0.25, -0.35]].map(([dx, dz], i) => {
+      const L = 0.85 + 0.1 * i % 0.3, g = new THREE.CylinderGeometry(0.025, 0.045, L, 5); g.translate(0, L / 2, 0); g.rotateZ(-dx * 1.2); g.rotateX(dz * 1.2); g.translate(0, 0.92, 0);
+      const tip = new THREE.Vector3(0, L, 0).applyAxisAngle(new THREE.Vector3(0, 0, 1), -dx * 1.2).applyAxisAngle(new THREE.Vector3(1, 0, 0), dz * 1.2); tip.y += 0.92; BRANCH_TIPS.push(tip);
+      return { geo: g }; });
+      return parts; })();
+    const BUD_GEO = new THREE.IcosahedronGeometry(0.26, 0);
+    function seasonGround(mat) {   /* grass takes the season's tint; snow lies on all ground, a little thinner on paths and sand */
+      const prev = mat.onBeforeCompile;
+      mat.onBeforeCompile = (sh, r) => { if (prev) prev(sh, r);
+        sh.uniforms.uGround = SEASON_U.uGround; sh.uniforms.uSnow = SEASON_U.uSnow; sh.uniforms.uLitter = SEASON_U.uLitter;
+        /* the fallen leaves (2026-10-07: "covering the ground with the color of the leaves"): grass under a patchwork of
+           gold, russet and scarlet, a hand's breadth per patch, from the fall until the spring grass comes through */
+        sh.vertexShader = 'attribute float aLeafy;\nvarying float vLeafy;\nvarying vec2 vLitW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vLitW = (modelMatrix * vec4(transformed, 1.0)).xz; vLeafy = aLeafy;');
+        sh.fragmentShader = 'uniform vec3 uGround;\nuniform float uSnow;\nuniform float uLitter;\nvarying float vLeafy;\nvarying vec2 vLitW;\nfloat litH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\nfloat snowN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(litH(i), litH(i + vec2(1.0, 0.0)), f.x), mix(litH(i + vec2(0.0, 1.0)), litH(i + vec2(1.0, 1.0)), f.x), f.y); }\n' + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n  { vec3 c0 = diffuseColor.rgb; float grassy = smoothstep(0.0, 0.05, c0.g - max(c0.r, c0.b)); vec3 c1 = mix(c0, clamp(c0 * uGround, 0.0, 1.0), grassy);\n    if (uLitter > 0.0) { vec2 q = floor(vLitW * 3.3); float h = litH(q), h2 = litH(q + 17.0); vec3 lc = h < 0.4 ? vec3(0.78, 0.56, 0.16) : h < 0.75 ? vec3(0.55, 0.30, 0.11) : vec3(0.70, 0.17, 0.08); lc *= 0.8 + 0.3 * h2; c1 = mix(c1, lc, grassy * uLitter * vLeafy * (0.62 + 0.3 * h2)); }\n    float nz = 0.08 + 0.84 * (0.65 * snowN(vLitW * 0.18) + 0.35 * snowN(vLitW * 0.61 + 7.3)); float cover = smoothstep(nz - 0.05, nz + 0.05, uSnow);\n    diffuseColor.rgb = mix(c1, vec3(0.92, 0.94, 0.97), cover * (0.75 + 0.25 * grassy)); }'); };   /* snow lies and melts in patches (2026-10-07: "it should melt over several days and expose the green grass") */
+      mat.customProgramCacheKey = () => 'season-ground'; return mat;
+    }
+    /* snow on the trees (2026-10-07: "Evergreen trees should stay green throughout the winter, but just have some patchy
+       snow buildup on them ... a line of snow on the part [of the branches] that faces the sky"): only the faces that look up
+       take snow, in patches; lo/hi: how steep a face still holds it (needles hold it on gentle slopes, a branch only on top) */
+    const SNOWMAT = new Map();
+    function snowyLam(color, lo, hi) {
+      const k = color + ':' + lo + ':' + hi; if (SNOWMAT.has(k)) return SNOWMAT.get(k);
+      const mat = seeThrough(new THREE.MeshLambertMaterial({ color, flatShading: true })), prev = mat.onBeforeCompile;
+      mat.onBeforeCompile = (sh, r) => { if (prev) prev(sh, r);
+        sh.uniforms.uTreeSnow = SEASON_U.uTreeSnow;
+        sh.vertexShader = 'varying vec3 vSnW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n#ifdef USE_INSTANCING\n  vSnW = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;\n#else\n  vSnW = (modelMatrix * vec4(transformed, 1.0)).xyz;\n#endif');
+        sh.fragmentShader = 'uniform float uTreeSnow;\nvarying vec3 vSnW;\nfloat tsH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\nfloat tsN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(tsH(i), tsH(i + vec2(1.0, 0.0)), f.x), mix(tsH(i + vec2(0.0, 1.0)), tsH(i + vec2(1.0, 1.0)), f.x), f.y); }\n' +
+          sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n  if (uTreeSnow > 0.0) { vec3 wn = normalize(cross(dFdx(vSnW), dFdy(vSnW))); float up = smoothstep(' + lo.toFixed(2) + ', ' + hi.toFixed(2) + ', wn.y); float tpat = smoothstep(0.3, 0.5, tsN(vSnW.xz * 2.3 + vSnW.y * 1.7) + 0.55 * uTreeSnow - 0.2);   /* deep winter: most of each upper face white, a few green breaks */ diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.95, 0.98), up * tpat * uTreeSnow); }'); };
+      mat.customProgramCacheKey = () => 'tree-snow:' + k; SNOWMAT.set(k, mat); return mat;
+    }
+    function seasonIce(mat) {   /* still water (lakes, ponds) turns to ice when frozen; rivers and the sea never do */
+      mat.onBeforeCompile = (sh) => { sh.uniforms.uIce = SEASON_U.uIce;
+        sh.fragmentShader = 'uniform float uIce;\n' + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.80, 0.88, 0.95), uIce); diffuseColor.a = mix(diffuseColor.a, 1.0, uIce);'); };
+      mat.customProgramCacheKey = () => 'season-ice'; return mat;
+    }
+    /* one kind of tree to the current season (2026-10-07). The branches are always there (under the leaves in summer).
+       Autumn: the crown keeps its full size while it turns, then each tree drops every leaf on its own day (its hash h in the
+       couple-of-days window) - no shrinking. Spring: small clusters of leaf grow out from the end of every branch (bud), then
+       the crown fills in round them (grow). A felled tree stays gone whatever the season. */
+    const TS_M = new THREE.Matrix4(), TS_S = new THREE.Matrix4(), TS_T = new THREE.Matrix4(), TS_T2 = new THREE.Matrix4(), CROWN_Y = { T: 1.3, O: 1.45, W: 1.42, M: 1.32, E: 1.6 }, TS_Z = new THREE.Matrix4().makeScale(0, 0, 0), TS_C = new THREE.Color(), TS_B = new THREE.Color();
+    function treeSeason(reg) {
+      const S = SEASON_CUR, L = SEASON_LIB; if (!S || !L) return;
+      const dec = L.deciduous(reg.kind), lf = S.leaf, nb = BRANCH_TIPS.length;
+      for (const t of reg.list) {
+        const c = L.leafColour(reg.kind, t.base, S, (t.h * 7.13) % 1);   /* each tree its own autumn shade */ TS_C.setRGB(c[0], c[1], c[2]);
+   /* snow on the evergreens, white once the frost is hard */
+        reg.crown.setColorAt(t.n, TS_C);
+        if (!dec) continue;
+        const gone = !!t.felled, bare = !lf.dropped ? false : lf.dropped(t.h), sp = !bare && lf.spring ? lf.spring(t.h, reg.kind) : null;   /* the whole kind together */
+        /* a broadleaf tree's leaves ARE the clusters at its branch tips (2026-10-07: they sprout at the ends of the branches,
+           swell, and "when they are at their fully grown state they should just stay like that"): the old one-piece crown is
+           never shown for these kinds; the clusters turn colour in autumn and drop on the tree's day */
+        reg.crown.setMatrixAt(t.n, TS_Z);
+        if (reg.branches) reg.branches.setMatrixAt(t.n, gone ? TS_Z : t.m);
+        if (reg.buds) {
+          const b = sp && !gone ? sp.bud * (1 + 1.1 * sp.swell) : 0; TS_B.copy(TS_C);   /* sprout, then swell to full leaf, and stay */
+          for (let k = 0; k < nb; k++) {
+            const i = t.n * nb + k, tip = BRANCH_TIPS[k];
+            reg.buds.setMatrixAt(i, b <= 0.01 ? TS_Z : TS_M.copy(t.m).multiply(TS_S.makeTranslation(tip.x, tip.y, tip.z)).multiply(TS_S.makeScale(b, b, b)));
+            reg.buds.setColorAt(i, TS_B);
+          }
+        }
+      }
+      reg.crown.instanceColor.needsUpdate = true; reg.crown.instanceMatrix.needsUpdate = true; reg.crown.boundingSphere = null;   /* bounds again: an InstancedMesh keeps the bounds of its first draw, and a bud or a crown that was nothing then was culled for good */
+      if (reg.branches) reg.branches.instanceMatrix.needsUpdate = true;
+      if (reg.buds) { reg.buds.instanceMatrix.needsUpdate = true; reg.buds.boundingSphere = null; if (reg.buds.instanceColor) reg.buds.instanceColor.needsUpdate = true; reg.buds.visible = dec; }
+    }
+    /* the small flora (flowers, grass tufts, mushrooms; 2026-10-07: "removed in the fall and grow back in the spring"):
+       each plant has its own moment (h) in spring to come back, and grows up from nothing */
+    function floraSeason(reg) {
+      const S = SEASON_CUR; if (!S || !S.flora) return;
+      for (const st of reg.sets) {
+        for (let i = 0; i < st.ms.length; i++) {
+          const f = S.flora(hash2(i * 7 + 3, st.ms.length + i));
+          st.im.setMatrixAt(i, f <= 0.01 ? TS_Z : f >= 1 ? st.ms[i] : TS_M.copy(st.ms[i]).multiply(TS_S.makeScale(f, f, f)));
+        }
+        st.im.instanceMatrix.needsUpdate = true; st.im.boundingSphere = null;
+      }
+    }
+    /* MANOOMIN THROUGH THE YEAR (2026-10-07: "a seasonal growth with the dark burgundy grain only harvestable in late August
+       to early October"): shoots after the ice goes out, tall by early summer; green heads in midsummer that darken to burgundy;
+       ripe late August to early October (the ricing season, S.rice); then the grain drops, the stalks go to straw and lie down;
+       nothing over the winter. Each plant a few days apart (h). */
+    const RS_Q = new THREE.Quaternion(), RS_E = new THREE.Euler(), RS_P = new THREE.Vector3(), RS_S = new THREE.Vector3(), RS_C = new THREE.Color();
+    const RICE_GREEN = new THREE.Color(0x6f8a3a), RICE_STRAW = new THREE.Color(0xb59a5a), RICE_HEADG = new THREE.Color(0x7d9a44), RICE_RIPE = new THREE.Color(0x4a1626), RICE_RIPE2 = new THREE.Color(0x5c1e2e);
+    function riceSeason(reg) {
+      const S = SEASON_CUR; if (!S || !S.riceAt) return;
+      const set = (im, i, x, y, z, sx, sy, sz, ry, rx, col) => { if (sy <= 0.002) { im.setMatrixAt(i, TS_Z); return; } RS_E.set(rx, ry, 0); RS_Q.setFromEuler(RS_E); TS_M.compose(RS_P.set(x, y, z), RS_Q, RS_S.set(sx, sy, sz)); im.setMatrixAt(i, TS_M); im.setColorAt(i, col); };
+      reg.plants.forEach((q, i) => {
+        const R = S.riceAt(q.h), hh = q.hh * R.tall, lean = q.lean + R.lie * 1.1;
+        RS_C.copy(RICE_GREEN).lerp(RICE_STRAW, R.straw);
+        set(reg.stalk, i, q.x, q.base + Math.cos(lean) * hh / 2, q.z, 0.018, hh, 0.018, q.a, lean, RS_C);
+        set(reg.blade, i, q.x, q.base + hh * 0.4, q.z, 0.12 * Math.min(1, R.tall * 1.5), 0.012, 0.02, q.a + 0.8, 0.9, RS_C);
+        const tx = q.x + Math.sin(q.a) * Math.sin(lean) * hh, tz = q.z + Math.cos(q.a) * Math.sin(lean) * hh;
+        RS_C.copy(RICE_HEADG).lerp(q.dark ? RICE_RIPE2 : RICE_RIPE, R.ripe);
+        set(reg.head, i, tx, q.base + Math.cos(lean) * hh + 0.09, tz, 0.035, 0.22 * R.head, 0.03, q.a, lean + 0.35, RS_C);
+      });
+      for (const im of [reg.stalk, reg.blade, reg.head]) { im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
+    }
+    function seasonApply(S, lib) {   /* the engine, when the season where you stand has moved on */
+      SEASON_CUR = S; SEASON_LIB = lib;
+      SEASON_U.uGround.value.setRGB(S.ground[0], S.ground[1], S.ground[2]); SEASON_U.uSnow.value = S.frozen ? 1 : Math.min(1, S.snow * 2); SEASON_U.uIce.value = S.frozen ? 1 : 0;   /* the moment the leaves on the ground go (the freeze), the ground is white (2026-10-07) */ SEASON_U.uLitter.value = S.litter || 0; SEASON_U.uTreeSnow.value = Math.min(1, S.snow * 1.6);
+      for (let i = TREE_REG.length - 1; i >= 0; i--) { const r = TREE_REG[i]; if (!r.crown.parent) { TREE_REG.splice(i, 1); continue; } treeSeason(r); }
+      for (let i = RICE_REG.length - 1; i >= 0; i--) { const r = RICE_REG[i]; if (!r.head.parent) { RICE_REG.splice(i, 1); continue; } riceSeason(r); }
+      for (let i = FLORA_REG.length - 1; i >= 0; i--) { const r = FLORA_REG[i]; if (r.sets.length && !r.sets[0].im.parent) { FLORA_REG.splice(i, 1); continue; } floraSeason(r); }
+    }
     const SEE = { uSeeP: { value: new THREE.Vector2(-1e4, -1e4) }, uSeeR: { value: 0 }, uSeeD: { value: 0 }, uSeeY: { value: -1e9 } };   /* uSeeY: the avatar's feet - the floor and ground you stand on never dissolve (the operator: upstairs it looked like standing outside the house) */
     function seeThrough(m) {
       m.onBeforeCompile = (sh) => {
@@ -192,7 +303,7 @@
             geos[kind] = new THREE.CylinderGeometry(1, 1, 1, 3, 1, true, Math.PI / 2 - th / 2, th);
           }
           const k = kind + ':' + color; if (!sets.has(k)) sets.set(k, { kind, color, ms: [] }); const m = new THREE.Matrix4(); m.compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx || 0, ry || 0, rz || 0, 'YXZ')), new THREE.Vector3(sx, sy, sz)); sets.get(k).ms.push(m); },
-        finish(shadow) { for (const s of sets.values()) { const im = new THREE.InstancedMesh(geos[s.kind], lam(s.color), s.ms.length); s.ms.forEach((m, i) => im.setMatrixAt(i, m)); im.castShadow = shadow !== false; im.receiveShadow = true; group.add(im); } }
+        finish(shadow) { const out = []; for (const s of sets.values()) { const im = new THREE.InstancedMesh(geos[s.kind], lam(s.color), s.ms.length); s.ms.forEach((m, i) => im.setMatrixAt(i, m)); im.castShadow = shadow !== false; im.receiveShadow = true; group.add(im); out.push({ im, ms: s.ms }); } return out; }
       };
     }
     function textSprite(text, w, h, bg, fg) {
@@ -282,13 +393,13 @@
           return own(cx, cy) * w + sh * (1 - w);
         };
         const wLevel = map.waterH() - 0.05;
-        /* the level of the nearest river or lake water connected to this tile through water, within 24 m (cached per tile) */
+        /* the level of the nearest river or lake water connected to this tile through water, within 10 m (cached per tile) */
         const NS = new Map(), wetT = (x, y) => { const t = at(x, y); return t === '~' || t === 'v' || t === 'B'; };
         const nearSurf = (tx, ty) => {
           const k = tx + ',' + ty; if (NS.has(k)) return NS.get(k);
           let res = null; if (wetT(tx, ty)) {
             const seen = new Set([k]); let ring = [[tx, ty]];
-            for (let d = 0; d < 24 && ring.length && res == null; d++) {
+            for (let d = 0; d < 10 && ring.length && res == null; d++) {
               const next = [];
               for (const [x, y] of ring) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
                 const nx = x + dx, ny = y + dy, nk = nx + ',' + ny; if (seen.has(nk) || !wetT(nx, ny)) continue; seen.add(nk);
@@ -297,7 +408,12 @@
               }
               ring = next;
             }
+            /* open water with no river or lake level near (the sea): every tile this search crossed is the same open water, so
+               none of them searches again - one search per stretch of sea, not one per tile (a jump to the sea-side wigwam
+               rooms spent 35 s here) */
+            if (res == null) for (const q of seen) NS.set(q, null);
           }
+          if (NS.size > 400000) NS.clear();
           NS.set(k, res); return res;
         };
         surfOf = (tx, ty) => {   /* where the water's skin stands over this tile, the same curve build draws and rings ride */
@@ -305,7 +421,7 @@
           const bed = (fade(tx, ty) + fade(tx + 1, ty) + fade(tx, ty + 1) + fade(tx + 1, ty + 1)) / 4;
           let ws = map.waterSurf ? map.waterSurf(tx, ty) : null;   /* rivers and lakes stand at their own level, flat (2026-10-04: "the rivers are dry"; a hollow's water "follows the contour") */
           if (ws == null && map.waterSurf) ws = nearSurf(tx, ty);   /* water with no level of its own beside a river or lake (a side channel, a bay) is part of it: its level, not a step down (2026-10-07: "Fix the sinking water tiles") */
-          if (ws != null) return Math.max(wLevel, ws + 0.2);   /* one height for a whole lake: never the bed's */
+          if (ws != null) return Math.max(wLevel, ws + 0.03 + 0.17 * Math.min(1, Math.max(0, (ws - wLevel) / 0.5)));   /* one height for a whole lake: never the bed's; a river's own level all the way down, the skin easing onto the sea at its mouth */
           /* a pond of the seeded land is a hollow dug below the world's water line, and its tiles are water exactly where the
              ground is below that line: its skin IS the line, flat, meeting the shore where the ground crosses it. Riding the
              bed (+0.6, capped at the old pond line) stepped the sheet tile by tile, floating at the rim and sunk in the middle
@@ -390,8 +506,17 @@
           const a = (y - Y0) * (RW + 1) + (x - X0), b = a + 1, c = a + RW + 1, d = c + 1;
           if ((x + y) & 1) ind.push(a, c, b, b, c, d); else ind.push(a, c, d, a, d, b);
         }
-        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setIndex(ind); g.computeVertexNormals();
-        const terrain = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+        /* leaf litter lies only under the trees that drop their leaves (2026-10-07): each corner's share of broadleaf
+           crowns within 2.6 m, from the tiles themselves so it runs on across chunk edges */
+        const leafy = new Float32Array((RW + 1) * (RH + 1)), PAD = 3, GW = RW + 2 * PAD, dec = new Uint8Array(GW * (RH + 2 * PAD));
+        for (let y = 0; y < RH + 2 * PAD; y++) for (let x = 0; x < GW; x++) { const t = at(X0 - PAD + x, Y0 - PAD + y); dec[y * GW + x] = t === 'T' || t === 'O' || t === 'W' || t === 'M' || t === 'E' ? 1 : 0; }
+        for (let cy = Y0; cy <= Y1; cy++) for (let cx = X0; cx <= X1; cx++) {
+          let w = 0;
+          for (let dy = -3; dy <= 2; dy++) for (let dx = -3; dx <= 2; dx++) { const gx = cx + dx - X0 + PAD, gy = cy + dy - Y0 + PAD; if (gx < 0 || gy < 0 || gx >= GW || gy >= RH + 2 * PAD || !dec[gy * GW + gx]) continue; const d = Math.hypot(dx + 0.5, dy + 0.5); if (d < 2.6) w += 1 - d / 2.6; }
+          leafy[(cy - Y0) * (RW + 1) + (cx - X0)] = Math.min(1, w * 0.7);
+        }
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('aLeafy', new THREE.BufferAttribute(leafy, 1)); g.setIndex(ind); g.computeVertexNormals();
+        const terrain = new THREE.Mesh(g, seasonGround(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })));
         terrain.receiveShadow = true; terrain.userData.pick = { kind: 'ground' }; group.add(terrain);
         var terrainMesh = terrain;
         if (opts.outer && !seeded) { const outer = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshLambertMaterial({ color: 0x3d6a2a }));
@@ -437,13 +562,13 @@
             const n = run.x1 - run.x0; let bed = 0;
             for (let x = run.x0; x < run.x1; x++) bed += (gH(x, y) + gH(x + 1, y) + gH(x, y + 1) + gH(x + 1, y + 1)) / 4;
             bed /= n;
-            parts.push({ geo: new THREE.PlaneGeometry(n, 1).rotateX(-Math.PI / 2), m: M4((run.x0 + run.x1) / 2, run.yy, y + 0.5, 1), col: tint(run.yy, bed) });
+            parts.push({ geo: new THREE.PlaneGeometry(n, 1).rotateX(-Math.PI / 2), m: M4((run.x0 + run.x1) / 2, run.yy, y + 0.5, 1), col: tint(run.yy, bed), still: run.still });
             run = null;
           };
           for (let x = X0; x <= X1; x++) {
-            const w = x < X1 && isWt[(y - Y0) * RW + (x - X0)], yy = w ? surfC[(y - Y0) * RW + (x - X0)] : 0;
-            if (run && (!w || Math.abs(yy - run.yy) > 1e-6)) flush();
-            if (w && !run) run = { x0: x, x1: x + 1, yy }; else if (w) run.x1 = x + 1;
+            const w = x < X1 && isWt[(y - Y0) * RW + (x - X0)], yy = w ? surfC[(y - Y0) * RW + (x - X0)] : 0, still = w && map.waterKind ? map.waterKind(x, y) === 'lake' : false;
+            if (run && (!w || Math.abs(yy - run.yy) > 1e-6 || still !== run.still)) flush();
+            if (w && !run) run = { x0: x, x1: x + 1, yy, still }; else if (w) run.x1 = x + 1;
           }
           flush();
         }
@@ -453,14 +578,21 @@
           const sa = surfC[ja], sb = surfC[jb]; if (Math.abs(sa - sb) < 0.004) return;
           const bed = (gH(Math.min(xa, xb) + 0.5, Math.min(ya_, yb_) + 0.5) + gH(Math.max(xa, xb) + 0.5, Math.max(ya_, yb_) + 0.5)) / 2;
           const midY = (sa + sb) / 2;
-          if (xb !== xa) parts.push({ geo: new THREE.PlaneGeometry(1, Math.abs(sb - sa)).rotateY(Math.PI / 2), m: M4(Math.max(xa, xb) + 1, midY, ya_ + 0.5, 1), col: tint(midY, bed) });
-          else parts.push({ geo: new THREE.PlaneGeometry(1, Math.abs(sb - sa)), m: M4(xa + 0.5, midY, Math.max(ya_, yb_) + 1, 1), col: tint(midY, bed) });
+          const still = map.waterKind ? map.waterKind(xa, ya_) === 'lake' : false;
+          if (xb !== xa) parts.push({ geo: new THREE.PlaneGeometry(1, Math.abs(sb - sa)).rotateY(Math.PI / 2), m: M4(Math.max(xa, xb) + 1, midY, ya_ + 0.5, 1), col: tint(midY, bed), still });
+          else parts.push({ geo: new THREE.PlaneGeometry(1, Math.abs(sb - sa)), m: M4(xa + 0.5, midY, Math.max(ya_, yb_) + 1, 1), col: tint(midY, bed), still });
         };
         for (let y = Y0; y < Y1; y++) for (let x = X0; x < X1 - 1; x++) skirt(x, y, x + 1, y);
         for (let y = Y0; y < Y1 - 1; y++) for (let x = X0; x < X1; x++) skirt(x, y, x, y + 1);
-        if (parts.length) {
-          const wm = new THREE.Mesh(mergeGeos(parts), new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.86, emissive: 0x0a2a4a }));
+        /* moving water (rivers, the sea) and still water (lakes, ponds: they freeze in a hard winter) are two sheets */
+        const flowing = parts.filter(q => !q.still), stillP = parts.filter(q => q.still);
+        if (flowing.length) {
+          const wm = new THREE.Mesh(mergeGeos(flowing), new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.86, emissive: 0x0a2a4a }));
           wm.receiveShadow = true; group.add(wm); var waterMesh = wm;
+        }
+        if (stillP.length) {
+          const im = new THREE.Mesh(mergeGeos(stillP), seasonIce(new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.86, emissive: 0x0a2a4a })));
+          im.receiveShadow = true; group.add(im); if (!waterMesh) var waterMesh = im;
         }
       }
       /* ---------- trees (instanced) */
@@ -470,7 +602,13 @@
         O: { trunk: mergeGeos([{ geo: new THREE.CylinderGeometry(0.14, 0.22, 1.1, 7), m: M4(0, 0.55, 0, 1) }]), crown: mergeGeos([{ geo: new THREE.IcosahedronGeometry(0.75, 0), m: M4(0, 1.45, 0, 1, 0.8, 1) }, { geo: new THREE.IcosahedronGeometry(0.5, 0), m: M4(-0.4, 1.35, 0.25, 1) }, { geo: new THREE.IcosahedronGeometry(0.5, 0), m: M4(0.4, 1.55, -0.2, 1) }]), tc: 0x5a3e24, cc: 0x5a7f2a },
         /* willow: a broad flat crown with curtains of twig hanging off it. maple: round and orange. yew: a dark column. */
         W: { trunk: mergeGeos([{ geo: new THREE.CylinderGeometry(0.1, 0.18, 1.15, 6), m: M4(0, 0.57, 0, 1) }]), crown: mergeGeos([{ geo: new THREE.IcosahedronGeometry(0.66, 0).scale(1.15, 0.55, 1.15), m: M4(0, 1.42, 0, 1) }].concat([[0.52, 0.16], [-0.5, 0.1], [0.14, -0.5], [-0.18, 0.48]].map(([dx, dz]) => ({ geo: new THREE.ConeGeometry(0.16, 0.62, 6).rotateX(Math.PI).translate(dx, 1.12, dz), m: M4(0, 0, 0, 1) })))), tc: 0x6b5a38, cc: 0x87a752 },
-        M: { trunk: mergeGeos([{ geo: new THREE.CylinderGeometry(0.1, 0.16, 1.05, 6), m: M4(0, 0.52, 0, 1) }]), crown: mergeGeos([{ geo: new THREE.IcosahedronGeometry(0.68, 0), m: M4(0, 1.32, 0, 1, 0.92, 1) }, { geo: new THREE.IcosahedronGeometry(0.4, 0), m: M4(-0.34, 1.74, 0.16, 1) }]), tc: 0x6a4526, cc: 0xb8722c },
+        M: { trunk: mergeGeos([{ geo: new THREE.CylinderGeometry(0.1, 0.16, 1.05, 6), m: M4(0, 0.52, 0, 1) }]), crown: mergeGeos([{ geo: new THREE.IcosahedronGeometry(0.68, 0), m: M4(0, 1.32, 0, 1, 0.92, 1) }, { geo: new THREE.IcosahedronGeometry(0.4, 0), m: M4(-0.34, 1.74, 0.16, 1) }]), tc: 0x6a4526, cc: 0x4f8a2e },   /* green in summer; the seasons turn it scarlet (2026-10-08) */
+        /* tamarack (mashkiigwaatig): a slim spire of soft light-green needles that turns gold in autumn; cedar (giizhik): a dense
+           narrow dark-green cone on a fluted red-brown trunk (2026-10-08, for the push pole and the knockers) */
+        L: { trunk: mergeGeos([{ geo: new THREE.CylinderGeometry(0.05, 0.1, 1.3, 6), m: M4(0, 0.65, 0, 1) }]), crown: mergeGeos([{ geo: new THREE.ConeGeometry(0.46, 1.2, 7), m: M4(0, 1.25, 0, 1) }, { geo: new THREE.ConeGeometry(0.3, 0.8, 7), m: M4(0, 1.85, 0, 1) }]), tc: 0x6a4a34, cc: 0x86b04e },
+        Q: { trunk: mergeGeos([{ geo: new THREE.CylinderGeometry(0.08, 0.15, 0.9, 7), m: M4(0, 0.45, 0, 1) }]), crown: mergeGeos([{ geo: new THREE.ConeGeometry(0.55, 1.5, 8), m: M4(0, 1.3, 0, 1) }, { geo: new THREE.ConeGeometry(0.34, 0.8, 8), m: M4(0, 2.0, 0, 1) }]), tc: 0x7a4a32, cc: 0x2f5c34 },
+        /* birch (wiigwaasaatig, 2026-10-08): a slender white trunk, a light airy crown high up */
+        E: { trunk: mergeGeos([{ geo: new THREE.CylinderGeometry(0.06, 0.1, 1.45, 6), m: M4(0, 0.72, 0, 1) }]), crown: mergeGeos([{ geo: new THREE.IcosahedronGeometry(0.46, 0), m: M4(0, 1.6, 0, 0.9, 1.15, 0.9) }, { geo: new THREE.IcosahedronGeometry(0.32, 0), m: M4(0.18, 2.02, -0.08, 1) }, { geo: new THREE.IcosahedronGeometry(0.28, 0), m: M4(-0.2, 1.35, 0.14, 1) }]), tc: 0xe6e1d4, cc: 0x6f9f3e },
         Y: { trunk: mergeGeos([{ geo: new THREE.CylinderGeometry(0.12, 0.2, 1.35, 6), m: M4(0, 0.67, 0, 1) }]), crown: mergeGeos([{ geo: new THREE.CylinderGeometry(0.5, 0.62, 0.6, 7), m: M4(0, 1.05, 0, 1) }, { geo: new THREE.ConeGeometry(0.55, 1.15, 7), m: M4(0, 1.5, 0, 1) }, { geo: new THREE.ConeGeometry(0.4, 0.95, 7), m: M4(0, 2.15, 0, 1) }]), tc: 0x4a3826, cc: 0x27502e },
         /* a saguaro for the desert (2026-10-06: "in the desert, we need to have cactuses not pine trees"): a ribbed
            column with two arms that turn up; it blocks the way like a tree but nothing chops it */
@@ -479,7 +617,7 @@
           { geo: new THREE.CylinderGeometry(0.1, 0.1, 0.36, 7).rotateZ(1.5708), m: M4(0.3, 1.05, 0, 1) }, { geo: new THREE.CylinderGeometry(0.1, 0.11, 0.55, 7), m: M4(0.46, 1.3, 0, 1) }, { geo: new THREE.SphereGeometry(0.1, 7, 4, 0, 6.29, 0, 1.6), m: M4(0.46, 1.57, 0, 1) },
           { geo: new THREE.CylinderGeometry(0.09, 0.09, 0.3, 7).rotateZ(1.5708), m: M4(-0.27, 1.4, 0, 1) }, { geo: new THREE.CylinderGeometry(0.09, 0.1, 0.42, 7), m: M4(-0.4, 1.6, 0, 1) }, { geo: new THREE.SphereGeometry(0.09, 7, 4, 0, 6.29, 0, 1.6), m: M4(-0.4, 1.81, 0, 1) }]), tc: 0x4f7a34, cc: 0x5f8f40 },
       };
-      const treeList = { T: [], P: [], O: [], W: [], M: [], Y: [], U: [] };
+      const treeList = { T: [], P: [], O: [], W: [], M: [], Y: [], U: [], E: [], L: [], Q: [] };
       for (let y = Y0; y < Y1; y++) for (let x = X0; x < X1; x++) { const c = at(x, y); if (treeList[c] && mine(x, y)) treeList[c].push({ x, y, i: K(x, y) }); }
       if (!seeded) for (let y = -7; y < H + 7; y++) for (let x = -7; x < W + 7; x++) {   /* the wild woods beyond the map edge (belong to the nearest region); seeded land has real woods there */
         if (x >= 0 && y >= 0 && x < W && y < H) continue;
@@ -498,7 +636,7 @@
       const qOf = t => chunk ? Math.min(1, (t.x - X0) >> 5) + 2 * Math.min(1, (t.y - Y0) >> 5) : 0;
       for (const k in treeKinds) for (let q = 0; q < (chunk ? 4 : 1); q++) {
         const L = treeList[k].filter(t => qOf(t) === q), tk = treeKinds[k]; if (!L.length) continue;
-        const trunk = new THREE.InstancedMesh(tk.trunk, lam(tk.tc), L.length), crown = new THREE.InstancedMesh(tk.crown, lam(0xffffff), L.length);
+        const trunk = new THREE.InstancedMesh(tk.trunk, lam(tk.tc), L.length), crown = new THREE.InstancedMesh(tk.crown, 'PY'.indexOf(k) >= 0 ? snowyLam(0xffffff, -0.15, 0.3) : lam(0xffffff), L.length);
         const tiles = new Float64Array(L.length);
         L.forEach((t, n) => {
           const jx = (hash2(t.x, t.y) - 0.5) * 0.3, jz = (hash2(t.y, t.x + 3) - 0.5) * 0.3, s = 0.85 + hash2(t.x + 5, t.y + 9) * 0.35 + (t.i < 0 ? 0.25 : 0);
@@ -507,13 +645,23 @@
           trunk.setMatrixAt(n, m); crown.setMatrixAt(n, m);
           C.setHex(tk.cc).offsetHSL((hash2(t.x + 9, t.y) - 0.5) * 0.04, 0, (hash2(t.x, t.y + 9) - 0.5) * 0.12);
           if (chunk && map.snowH < 1e8) { const sn = Math.min(1, Math.max(0, (py - map.snowH + 55) / 27)) * 0.6; if (sn > 0) C.lerp(SNOWC, sn); }   /* snow on the crowns higher up */
-          crown.setColorAt(n, C);
+          crown.setColorAt(n, C); t.base = [C.r, C.g, C.b];
           tiles[n] = t.i; t.m = m; t.k = k; t.n = n; t.trunk = trunk; t.crown = crown;
           if (t.i >= 0) { treeAt.set(t.i, t); stumps.setMatrixAt(t.stump, ZERO); t.sm = M4(px, py, pz, 1); }
         });
         trunk.castShadow = crown.castShadow = true; trunk.receiveShadow = crown.receiveShadow = true;
         trunk.userData.pick = crown.userData.pick = { kind: 'tree', tiles };
         group.add(trunk, crown); treeMeshes.push(trunk, crown); quads[q].push(trunk, crown);
+        /* winter: bare branches over the trunk (deciduous kinds), shown while the leaves are down */
+        let branches = null;
+        let buds = null;
+        if ('TOWME'.indexOf(k) >= 0) {
+          branches = new THREE.InstancedMesh(mergeGeos(BRANCH_GEO), snowyLam(0x4a3a2c, 0.2, 0.55), L.length); L.forEach((t, n) => branches.setMatrixAt(n, t.m)); branches.castShadow = true; group.add(branches); quads[q].push(branches);
+          buds = new THREE.InstancedMesh(BUD_GEO, lam(0xffffff), L.length * BRANCH_TIPS.length); buds.visible = false; buds.castShadow = true; buds.receiveShadow = true; buds.setColorAt(0, C); group.add(buds); quads[q].push(buds);
+          { const bt = new Float64Array(L.length * BRANCH_TIPS.length); for (let i = 0; i < bt.length; i++) bt[i] = tiles[Math.floor(i / BRANCH_TIPS.length)]; buds.userData.pick = { kind: 'tree', tiles: bt }; treeMeshes.push(buds); }   /* tap the leaves to chop, as the crown was */
+        }
+        L.forEach(t => { t.h = hash2(t.x + 31, t.y + 77); t.branches = branches; });   /* t.h: this tree's day in the leaf fall */
+        const reg = { kind: k, crown, branches, buds, list: L }; TREE_REG.push(reg); L.forEach(t => { t.reg = reg; }); treeSeason(reg);
       }
       /* ---------- rocks */
       const rockAt = new Map(), pickables = [terrainMesh].concat(treeMeshes);
@@ -530,7 +678,7 @@
         rockAt.set(K(x, y), { g, ore }); group.add(g);
       }
       /* ---------- buildings, fences and props */
-      const B = Batcher(group), anim = [];
+      const B = Batcher(group), BF = Batcher(group), anim = [], RICEP = [];   /* RICEP: the wild rice plants, grown by the seasons */   /* BF: the small flora, which the seasons take away and give back */
       const roofs = [];
       const floor = HG.floor;
       function building(o) {
@@ -786,7 +934,7 @@
           }
           /* ZIIBIING, the Ojibwe village on the river (2026-10-07) */
           case 'wigwam': {   /* waaginogaan (2026-10-07): the bark-over-ironwood shell, its door east, a hide over it, the smoke hole */
-            const D = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] }[o.face || 'e'], ry = Math.atan2(D[0], D[1]), R0 = 1.45, HT = 2.15;
+            const D = Array.isArray(o.dir) ? o.dir : { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] }[o.face || 'e'], ry = Math.atan2(D[0], D[1]), R0 = 1.45, HT = 2.15;   /* dir: the true east the generator worked out (toward the sunrise) */
             const g = wigwamShell(R0, HT, false, o.seed | 0); g.position.set(x, y, z); g.rotation.y = ry; group.add(g);
             g.add(mesh(new THREE.BoxGeometry(0.72, 1.1, 0.3), 0x1a140e, 0, 0.55, R0 - 0.2));          /* the dark of the doorway */
             const flap = mesh(new THREE.BoxGeometry(0.5, 1.05, 0.04), 0x8a6238, -0.48, 0.58, R0 + 0.03); flap.rotation.y = -0.35; g.add(flap);   /* the hide, tied back */
@@ -815,13 +963,25 @@
           case 'canoe': case 'canoe_up': {   /* the landing's canoe, afloat in the shallows; a second turned over on the bank to dry */
             const c = canoeMesh(); group.add(c);
             if (o.k === 'canoe') {
-              DOCKS.push(c);   /* you paddle off in this one: the engine hides it while you are out on the water */
+              DOCKS.push(c); c.userData.dock = [o.x, o.y];   /* you paddle off in this one: the engine hides it while you are out on the water, or while the landing has none to give */
               const sf = surfOfMap(o.x, o.y); c.position.set(x, sf - 0.02, z); c.rotation.y = 1.45 + hash2(o.x, o.y) * 0.2;
               const pk = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.9, 4.4), new THREE.MeshBasicMaterial({ visible: false })); pk.position.copy(c.position); pk.rotation.y = c.rotation.y; pk.userData.pick = { kind: 'canoe', x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
             } else {
               c.position.set(x, y + 0.62, z); c.rotation.set(0, 0.4, Math.PI);
               for (const e of [-1, 1]) B.add('cyl', 0x6a4a2a, x + Math.sin(0.4) * e * 1.1, y + 0.2, z + Math.cos(0.4) * e * 1.1, 0.22, 0.4, 0.22, 0, Math.PI / 2, 0);
             }
+            break;
+          }
+          case 'kettle': {   /* the iskigamiziganaak (2026-10-08, the sugar camp): two forked posts and a pole, two akik (kettles) of sap hung over the fire */
+            for (const e of [-1.1, 1.1]) { B.add('box', 0x5a4430, x + e, y + 0.75, z, 0.08, 1.5, 0.08); B.add('box', 0x5a4430, x + e - 0.08, y + 1.45, z, 0.05, 0.3, 0.05, 0, 0, 0.5); B.add('box', 0x5a4430, x + e + 0.08, y + 1.45, z, 0.05, 0.3, 0.05, 0, 0, -0.5); }
+            B.add('cyl6', 0x6a4a2a, x, y + 1.42, z, 0.07, 2.5, 0.07, 0, 0, Math.PI / 2);
+            for (const e of [-0.45, 0.45]) { B.add('box', 0x2a2a2a, x + e, y + 1.1, z, 0.012, 0.62, 0.012); B.add('cyl12', 0x2b2b2e, x + e, y + 0.6, z, 0.5, 0.42, 0.5); B.add('cyl12', 0xb5651d, x + e, y + 0.8, z, 0.44, 0.02, 0.44); }
+            break;
+          }
+          case 'barklodge': {   /* iskigamizigewigamig, the sap-boiling lodge: a low birch bark lodge, rolls of bark on a pole frame, a dark door */
+            B.add('stone', 0xe2dccb, x, y + 0.2, z, 3.0, 2.4, 2.6); B.add('cyl12', 0x6a5236, x, y + 0.02, z, 3.05, 0.04, 2.65);
+            for (let k = 0; k < 4; k++) B.add('box', 0x3a3a3a, x - 1.05 + k * 0.7, y + 0.9 + (k % 2) * 0.25, z + 1.1 - Math.abs(k - 1.5) * 0.2, 0.2, 0.02, 0.02);
+            B.add('box', 0x1a140e, x, y + 0.55, z + 1.25, 0.7, 1.1, 0.06);
             break;
           }
           case 'fishrack': {   /* two crossed-pole ends and a rail, fish split and hung to dry over a smudge */
@@ -835,12 +995,12 @@
             for (let k = 0; k < n; k++) {
               const a = k * 2.4 + r0 * 6, rr = 0.12 + 0.36 * hash2(o.x + k, o.y - k), sx = x + Math.cos(a) * rr, sz = z + Math.sin(a) * rr, hh = (o.k === 'rice' ? 0.75 : 1.3) + 0.35 * hash2(o.x - k, o.y + k);
               const lean = (hash2(o.x * k, o.y) - 0.5) * 0.3, base = o.k === 'rice' ? sf - 0.05 : Math.min(sf, y + 0.1);
-              B.add('box', o.k === 'rice' ? 0x6f8a3a : 0x5f7a34, sx, base + hh / 2, sz, 0.018, hh, 0.018, a, lean, 0);
-              if (o.k === 'rice') {
-                const tx = sx + Math.sin(a) * Math.sin(lean) * hh, tz = sz + Math.cos(a) * Math.sin(lean) * hh;
-                B.add('box', k % 3 ? 0x4a1626 : 0x5c1e2e, tx, base + hh + 0.09, tz, 0.035, 0.22, 0.03, a, lean + 0.35, 0);   /* the head, drooping a little */
-                B.add('box', 0x7d9a44, sx, base + hh * 0.4, sz, 0.12, 0.012, 0.02, a + 0.8, 0.9, 0);   /* a blade off the stalk */
-              } else if (k % 2 === 0) B.add('cyl6', 0x5a3a20, sx, base + hh - 0.1, sz, 0.06, 0.22, 0.06, a, lean, 0);
+              if (o.k === 'rice') {   /* its own instances, so the year can grow it (riceSeason) */
+                RICEP.push({ x: sx, z: sz, base, hh, a, lean, dark: !(k % 3), h: hash2(o.x * 7 + k, o.y * 3 - k) });
+                continue;
+              }
+              BF.add('box', 0x5f7a34, sx, base + hh / 2, sz, 0.018, hh, 0.018, a, lean, 0);   /* cattails die back in winter and grow again in spring, like the small flora (2026-10-08) */
+              if (k % 2 === 0) BF.add('cyl6', 0x5a3a20, sx, base + hh - 0.1, sz, 0.06, 0.22, 0.06, a, lean, 0);
             }
             break;
           }
@@ -1001,6 +1161,7 @@
             for (let k = 0; k < 6; k++) B.add('box', 0x6a6a6a, x + Math.cos(k) * 0.45, y + 0.07, z + Math.sin(k) * 0.45, 0.16, 0.14, 0.16, k);
             if (o.smoke !== false) anim.push({ smoke: true, x, y: y + 0.8, z, parts: [] });   /* a camp's fire smokes */
             const f = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 6), new THREE.MeshBasicMaterial({ color: 0xff8a20 })); f.position.set(x, y + 0.35, z); group.add(f); torches.push({ f, ph: 1, x, y, z });
+            if (map.nodes && map.nodes.get && map.nodes.get(K(o.x, o.y))) { const pk = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.8, 8), new THREE.MeshBasicMaterial({ visible: false })); pk.position.set(x, y + 0.4, z); pk.userData.pick = { kind: 'node', i: K(o.x, o.y) }; group.add(pk); pickables.push(pk); }   /* a town's campfire: cook on it */
             break;
           }
         }
@@ -1040,18 +1201,23 @@
         }
         if (c === '^' && map.underNear && map.underNear(x, y)) continue;   /* underground the rock is the raised ground itself */
         if (c === '^') { if (r < 0.4) B.add('pyr', 0x76736b, x + 0.5, heightAt(x + 0.5, y + 0.5) + 0.5, y + 0.5, 1.4, 1 + r * 2, 1.4, r * 6); continue; }   /* mountain rock */
-        if (c === 'f') for (let k = 0; k < 5; k++) { const fx = x + 0.2 + hash2(x + k, y) * 0.6, fz = y + 0.2 + hash2(x, y + k) * 0.6, fy = heightAt(fx, fz); B.add('box', 0x3a7a2a, fx, fy + 0.08, fz, 0.03, 0.16, 0.03); B.add('box', FL[(x + y + k) % 5], fx, fy + 0.18, fz, 0.09, 0.07, 0.09); }
-        else if ((c === '.' || c === ',') && r < 0.28) { const fx = x + 0.2 + hash2(x, y + 2) * 0.6, fz = y + 0.2 + hash2(x + 2, y) * 0.6; B.add('cone', c === ',' ? 0x3a6a26 : 0x4a8a30, fx, heightAt(fx, fz) + 0.1, fz, 0.22, 0.22, 0.22, r * 9); }
-        else if (c === ',' && r > 0.965) { const fx = x + 0.3 + hash2(x, y + 7) * 0.4, fz = y + 0.3 + hash2(x + 7, y) * 0.4, fy = heightAt(fx, fz); B.add('cyl6', 0xe8e0c8, fx, fy + 0.05, fz, 0.05, 0.1, 0.05); B.add('cone', 0xb83a2a, fx, fy + 0.12, fz, 0.14, 0.07, 0.14); }
+        if (c === 'f') for (let k = 0; k < 5; k++) { const fx = x + 0.2 + hash2(x + k, y) * 0.6, fz = y + 0.2 + hash2(x, y + k) * 0.6, fy = heightAt(fx, fz); BF.add('box', 0x3a7a2a, fx, fy + 0.08, fz, 0.03, 0.16, 0.03); BF.add('box', FL[(x + y + k) % 5], fx, fy + 0.18, fz, 0.09, 0.07, 0.09); }
+        else if ((c === '.' || c === ',') && r < 0.28) { const fx = x + 0.2 + hash2(x, y + 2) * 0.6, fz = y + 0.2 + hash2(x + 2, y) * 0.6; BF.add('cone', c === ',' ? 0x3a6a26 : 0x4a8a30, fx, heightAt(fx, fz) + 0.1, fz, 0.22, 0.22, 0.22, r * 9); }
+        else if (c === ',' && r > 0.965) { const fx = x + 0.3 + hash2(x, y + 7) * 0.4, fz = y + 0.3 + hash2(x + 7, y) * 0.4, fy = heightAt(fx, fz); BF.add('cyl6', 0xe8e0c8, fx, fy + 0.05, fz, 0.05, 0.1, 0.05); BF.add('cone', 0xb83a2a, fx, fy + 0.12, fz, 0.14, 0.07, 0.14); }
       }
       B.finish();
+      { const reg = { sets: BF.finish() }; FLORA_REG.push(reg); floraSeason(reg); }
+      if (RICEP.length) {   /* the manoomin: stalk, a blade off it, and the head on top; tinted per plant by the season */
+        const mk = () => { const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0xffffff), RICEP.length); im.castShadow = true; im.frustumCulled = false; im.setColorAt(0, new THREE.Color()); group.add(im); return im; };
+        const reg = { plants: RICEP, stalk: mk(), blade: mk(), head: mk() }; RICE_REG.push(reg); riceSeason(reg);
+      }
       /* fishing spots: rippling rings */
       const spots = [];
       for (const [i, n] of map.nodes) if (n.kind === 'fish' && inR(n.x, n.y) && mine(n.x, n.y)) {
         const g = new THREE.Group(); g.position.set(n.x + 0.5, wsurf(n.x, n.y) + 0.02, n.y + 0.5); group.add(g);   /* sit on the water's actual skin, sea or pond */
         const rings = [0, 1, 2].map(k => { const r = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.26, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xdff4ff, transparent: true, opacity: 0.7, depthWrite: false })); g.add(r); return r; });
         const p = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.4, 8), new THREE.MeshBasicMaterial({ visible: false })); p.userData.pick = { kind: 'node', i }; g.add(p); pickables.push(p);
-        spots.push({ rings, ph: hash2(n.x, n.y) * 3 });
+        spots.push({ rings, ph: hash2(n.x, n.y) * 3, x: n.x, y: n.y, g });
       }
       /* torch light: two warm lights at the village plaza (more would cost too much on phones) */
       const lights = [];
@@ -1081,7 +1247,7 @@
         },
         setDepleted(i, on) {
           const t = treeAt.get(i);
-          if (t) { t.trunk.setMatrixAt(t.n, on ? ZERO : t.m); t.crown.setMatrixAt(t.n, on ? ZERO : t.m); t.trunk.instanceMatrix.needsUpdate = t.crown.instanceMatrix.needsUpdate = true; stumps.setMatrixAt(t.stump, on ? t.sm : ZERO); stumps.instanceMatrix.needsUpdate = true; if (stumps.computeBoundingSphere) stumps.computeBoundingSphere(); return; }
+          if (t) { t.felled = !!on; t.trunk.setMatrixAt(t.n, on ? ZERO : t.m); t.crown.setMatrixAt(t.n, on ? ZERO : t.m); if (t.reg) treeSeason(t.reg); t.trunk.instanceMatrix.needsUpdate = t.crown.instanceMatrix.needsUpdate = true; stumps.setMatrixAt(t.stump, on ? t.sm : ZERO); stumps.instanceMatrix.needsUpdate = true; if (stumps.computeBoundingSphere) stumps.computeBoundingSphere(); return; }
           const r = rockAt.get(i); if (r) r.ore.visible = !on;
         },
         update(dt, time) {
@@ -1093,7 +1259,8 @@
           }
           for (const L of street) { const on = LAMPQ ? !!LAMPQ(L.x, L.y) : NIGHTK > 0.04; L.mat.color.copy(LAMP_OFF).lerp(LAMP_ON, on ? 1 : 0); }
           for (const L of lights) L.intensity = 2.6 + Math.sin(time * 11 + L.position.x) * 0.4;
-          for (const s of spots) s.rings.forEach((r, k) => { const p = ((time * 0.6 + s.ph + k / 3) % 1); r.scale.setScalar(0.6 + p * 2.2); r.material.opacity = 0.75 * (1 - p); });
+          for (const s of spots) { const ice = !!(map.iceAt && map.iceAt(s.x, s.y)); s.rings.forEach(r => { r.visible = !ice; }); }   /* a frozen pond does not ripple: you fish through the ice */
+          for (const s of spots) if (s.rings[0].visible) s.rings.forEach((r, k) => { const p = ((time * 0.6 + s.ph + k / 3) % 1); r.scale.setScalar(0.6 + p * 2.2); r.material.opacity = 0.75 * (1 - p); });
           if (waterMesh) waterMesh.material.emissive.setHSL(0.58, 0.6, 0.08 + 0.02 * Math.sin(time * 1.5));
           if (waterMesh) waterMesh.position.y = Math.sin(time * 0.55) * 0.014;   /* the whole sheet rides a slow swell, some water sits on it */
           for (const a of anim) if (a.bob) a.bob.position.y = a.y0 + 0.12 * Math.sin(time * 2.6);
@@ -1108,13 +1275,13 @@
       const RC = rect || [0, 0, map.W, map.H], X0 = RC[0], Y0 = RC[1], W = RC[2], H = RC[3], at = (x, y) => map.tileAt(x, y);
       const mm = document.createElement('canvas'); mm.width = W * 4; mm.height = H * 4;
       {
-        const g = mm.getContext('2d'), MC = { '.': '#4e8a32', f: '#4e8a32', F: '#6a4a2a', ',': '#3e7428', p: '#a08458', c: '#8a857c', d: '#857254', B: '#6e4f2e', g: '#a99d58', q: '#9aa38d', v: '#3f7ab8', J: '#d4e6f0', s: '#c4b07a', '~': '#2f6aa8', H: '#8a6a50', X: '#7a6a5a', R: '#6a6a66', N: '#6a6a66', I: '#6a6a66', r: '#6a6a66', T: '#2a5a1e', P: '#22501e', O: '#2e5a1c', W: '#5d7f3a', M: '#8a5a26', Y: '#1f4722', U: '#c4b07a', C: '#4a4a52', G: '#8a7a4a', A: '#6a7488', '^': '#77736a', K: '#8a877c' };
+        const g = mm.getContext('2d'), MC = { '.': '#4e8a32', f: '#4e8a32', F: '#6a4a2a', ',': '#3e7428', p: '#a08458', c: '#8a857c', d: '#857254', B: '#6e4f2e', g: '#a99d58', q: '#9aa38d', v: '#3f7ab8', J: '#d4e6f0', s: '#c4b07a', '~': '#2f6aa8', H: '#8a6a50', X: '#7a6a5a', R: '#6a6a66', N: '#6a6a66', I: '#6a6a66', r: '#6a6a66', T: '#2a5a1e', P: '#22501e', O: '#2e5a1c', W: '#5d7f3a', M: '#8a5a26', E: '#7fa457', L: '#7a9a4a', Q: '#2f5a34', Y: '#1f4722', U: '#c4b07a', C: '#4a4a52', G: '#8a7a4a', A: '#6a7488', '^': '#77736a', K: '#8a877c' };
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const c = at(X0 + x, Y0 + y); g.fillStyle = MC[c] || '#4e8a32'; g.fillRect(x * 4, y * 4, 4, 4); if ('TPOMWYU'.indexOf(c) >= 0) { g.fillStyle = c === 'U' ? '#3f6a2a' : '#183a12'; g.fillRect(x * 4 + 1, y * 4 + 1, 2, 2); } }
         for (const o of map.objects) if (o.k === 'house' || o.k === 'shop' || o.k === 'smithy' || o.k === 'church') { const ox = o.x - X0, oy = o.y - Y0; g.fillStyle = '#b8a890'; g.fillRect(ox * 4, oy * 4, o.w * 4, o.h * 4); g.strokeStyle = '#ffffff'; g.lineWidth = 1; g.strokeRect(ox * 4 + 0.5, oy * 4 + 0.5, o.w * 4 - 1, o.h * 4 - 1); }
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, canoeMesh, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, canoeMesh, seasonApply, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

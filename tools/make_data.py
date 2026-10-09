@@ -33,7 +33,7 @@ def overlay(base, extra):
     return extra
 
 
-TREES = 'TPOWMY'   # the tree letters; the rest of the blocking letters (water, rock, fences, graves, walls) are never cleared
+TREES = 'TPOWMYELQ'   # E: birch, L: tamarack, Q: cedar; the tree letters; the rest of the blocking letters (water, rock, fences, graves, walls) are never cleared
 BLOCKS = 'TPORNIr~FHXWMYCGA^K'
 def open_ways(tiles):
     """No walled-in ground in a drawn area (2026-10-06: "Animals keep getting stuck in the woods because there's no way
@@ -255,6 +255,43 @@ for t, (nm, carry, w, v) in enumerate([("Leather satchel", 10, 0.8, 40), ("Canva
                                          ("Frame pack", 55, 3.5, 2000), ("Enchanted pack", 80, 2.0, 8000)], 1):
     items["pack_t%d" % t] = {"name": nm, "kind": "pack", "tier": t, "eq": "pack", "carry": carry * 1000, "value": v, "_kg": w}
 
+# ---- THE SUGAR BUSH (2026-10-08, handoff/sugarbush_plan.md): birch bark (wiigwaas) peeled off a birch, sinew (ojiitad)
+# traded from Ma'iingan for a deer hide, the bark sap bucket (biskitenaagan) Migizi folds from two wiigwaas and a sinew, the pail
+# (akik) at the Ashvale store. Each holds ONE sap: empty -> sap (a maple, in the run) -> syrup (boiled at any fire) -> candy
+# (boiled again), and the bucket comes back empty. 'vessel' (trait Container): the empty bucket a full one is in - it comes back when
+# the contents are boiled into something that is not in a bucket, or handed to someone (Nookomis keeps the sap, not your bucket). Names are Ojibwe nouns (Ojibwe People's Dictionary spellings).
+items.update({
+    "wiigwaas": {"name": "Wiigwaas", "kind": "resource", "value": 6, "_kg": 0.2, "model": "item.wiigwaas"},
+    "sinew": {"name": "Ojiitad", "kind": "resource", "value": 8, "_kg": 0.05, "model": "item.sinew"},
+    "bucket_bark": {"name": "Biskitenaagan", "kind": "resource", "value": 20, "_kg": 0.3, "model": "item.sapbucket", "fills": "sap_bark"},
+    "sap_bark": {"name": "Biskitenaagan of sap", "kind": "resource", "value": 24, "_kg": 2.3, "model": "item.sapbucket",
+                 "cooks": "syrup_bark", "burns": "syrup_bark", "vessel": "bucket_bark", "cookReq": 1, "cookXp": 30},
+    "syrup_bark": {"name": "Biskitenaagan of syrup", "kind": "resource", "value": 40, "_kg": 0.6, "model": "item.sapbucket",
+                   "cooks": "maple_candy", "burns": "maple_candy", "vessel": "bucket_bark", "cookReq": 1, "cookXp": 45},
+    "pail": {"name": "Akik", "kind": "resource", "value": 25, "_kg": 0.9, "model": "item.pail", "fills": "sap_pail"},
+    "sap_pail": {"name": "Akik of sap", "kind": "resource", "value": 29, "_kg": 2.9, "model": "item.pail",
+                 "cooks": "syrup_pail", "burns": "syrup_pail", "vessel": "pail", "cookReq": 1, "cookXp": 30},
+    "syrup_pail": {"name": "Akik of syrup", "kind": "resource", "value": 45, "_kg": 1.2, "model": "item.pail",
+                   "cooks": "maple_candy", "burns": "maple_candy", "vessel": "pail", "cookReq": 1, "cookXp": 45},
+    "maple_candy": {"name": "Ziinzibaakwadoons", "kind": "food", "heal": 3, "energy": 2500, "value": 15, "_kg": 0.1, "model": "item.candy"},
+    # Nookomis's thanks the first spring you finish her sugar bush (one per player, minted fresh and numbered): birch bark sewn
+    # with spruce root, porcupine quill (gaaway) flowers on its sides; worn on the back it carries more than any pack
+    "quill_makak": {"name": "Quillwork makak", "kind": "pack", "tier": 5, "eq": "pack", "carry": 100 * 1000, "value": 12000, "_kg": 1.2,
+                    "collection": "ASHVALE Quillwork Makak", "nft": {"key": "quill_makak"}, "model": "gear.quillmakak"},
+})
+
+# THE RICING TOOLS (2026-10-08): Ziigwan carves a gaandakii'iganaak (push pole) from two tamarack logs and a pair of
+# bawa'iganaakoog (knockers) from two cedar logs, each ready the next game day. Two in a canoe rice only with them: the stern with
+# the pole, the bow with the knockers; without them two just paddle together.
+items.update({
+    "cedar_logs": {"name": "Cedar logs", "kind": "resource", "value": 30, "_kg": 2.5, "fireReq": 20, "burnTicks": 130, "fireXp": 100},
+    "tamarack_logs": {"name": "Tamarack logs", "kind": "resource", "value": 30, "_kg": 3.0, "fireReq": 20, "burnTicks": 140, "fireXp": 100},
+    "push_pole": {"name": "Gaandakii'iganaak", "kind": "tool", "value": 60, "_kg": 2.5, "model": "item.pushpole"},
+    "knockers": {"name": "Bawa'iganaakoog", "kind": "tool", "value": 50, "_kg": 0.6, "model": "item.knockers"},
+})
+# English names, shown in brackets when an item with an Ojibwe name is examined (2026-10-08)
+for _k, _e in {"wiigwaas": "birch bark", "sinew": "sinew", "bucket_bark": "birch bark sap bucket", "sap_bark": "birch bark sap bucket of maple sap", "syrup_bark": "birch bark sap bucket of maple syrup", "pail": "pail", "sap_pail": "pail of maple sap", "syrup_pail": "pail of maple syrup", "maple_candy": "maple sugar candy", "quill_makak": "birch bark box with porcupine quillwork", "push_pole": "push pole", "knockers": "ricing sticks"}.items(): items[_k]['english'] = _e
+
 # ---- WEIGHT (2026-10-01: "Each item should be assigned weight ... according to what they would probably weigh").
 # Stored as integer GRAMS in `weight` (the rules use integer maths). Worn equipment counts too, as in RuneScape.
 # Table (kg): coins 0.002 each, arrows 0.02 each, potion 0.3, bread 0.4, shrimp 0.1, trout 0.4, salmon 1.0, lobster 0.7
@@ -291,18 +328,18 @@ CAT = {  # internal kind -> (category, subcategory)
     "chainbody": ("armour", "chainbody"), "legs": ("armour", "platelegs"), "shield": ("armour", "kiteshield"), "torch": ("armour", "torch"),
     "arrows": ("ammo", "arrow"), "coins": ("currency", "gold"), "hat": ("cosmetic", "hat"), "cape": ("cosmetic", "cape"), "robe": ("cosmetic", "robe"),
     "pack": ("pack", "pack"), "ring": ("jewellery", "ring")}
-SUB_OF_ID = {"spider_silk": "silk", "ashvale_stone": "stone", "saltmere_stone": "stone", "castle_stone": "stone", "tinderbox": "tinderbox", "hatchet": "hatchet", "pickaxe": "pickaxe", "net": "net", "fishing_rod": "rod", "lobster_pot": "pot", "bread": "bread", "coal": "coal"}
+SUB_OF_ID = {"push_pole": "pole", "knockers": "knocker", "wiigwaas": "bark", "sinew": "sinew", "bucket_bark": "bucket", "sap_bark": "bucket", "syrup_bark": "bucket", "pail": "bucket", "sap_pail": "bucket", "syrup_pail": "bucket", "maple_candy": "candy", "spider_silk": "silk", "ashvale_stone": "stone", "saltmere_stone": "stone", "castle_stone": "stone", "tinderbox": "tinderbox", "hatchet": "hatchet", "pickaxe": "pickaxe", "net": "net", "fishing_rod": "rod", "lobster_pot": "pot", "bread": "bread", "coal": "coal"}
 MODEL = {"weapon": lambda sub, k: "gear." + sub, "armour": lambda sub, k: "gear." + {"kiteshield": "shield"}.get(sub, sub),
          "ammo": lambda sub, k: "gear.arrows", "pack": lambda sub, k: "gear.pack", "currency": lambda sub, k: "item.coins",
          "cosmetic": lambda sub, k: "cloth." + (k if sub == "hat" else "robe" if sub == "robe" else "cape"),
-         "tool": lambda sub, k: "item.stone" if sub == "stone" else "gear." + {"rod": "fishing_rod", "pot": "lobster_pot"}.get(sub, sub),
+         "tool": lambda sub, k: ("item.castlestone" if k == "castle_stone" else "item.stone") if sub == "stone" else "gear." + {"rod": "fishing_rod", "pot": "lobster_pot"}.get(sub, sub),
          "food": lambda sub, k: "item." + ("chicken" if sub == "meat" else "bread" if sub == "bread" else "lobster" if k.startswith("lobster") else "shrimp" if k.startswith("shrimp") else "fish"),
          "potion": lambda sub, k: "item.potion", "jewellery": lambda sub, k: "item.ring",
          "resource": lambda sub, k: "item." + {"logs": "logs", "ore": "ore", "coal": "ore", "pelt": "pelt", "silk": "pelt", "meat": "chicken"}.get(sub, "lobster" if k.startswith("lobster") else "shrimp" if k.startswith("shrimp") else "fish")}
 TRAIT = [("attack", "Attack", 1), ("strength", "Strength", 1), ("defence", "Defence", 1), ("ranged", "Ranged", 1), ("magic", "Magic", 1),
          ("rstr", "Ranged strength", 1), ("speed", "Speed", 1), ("range", "Range", 1), ("carry", "Carry", 0.001), ("heal", "Heal", 1),
          ("healPct", "Heal %", 1), ("cooks", "Cooks into", None), ("burns", "Burns into", None), ("cookReq", "Cooking level", 1),
-         ("cookXp", "Cooking XP", 1), ("fireReq", "Firemaking level", 1), ("burnTicks", "Burn ticks", 1), ("fireXp", "Firemaking XP", 1),
+         ("cookXp", "Cooking XP", 1), ("vessel", "Container", None), ("fills", "Fills into", None), ("english", "English", None), ("energy", "Energy", 1), ("fireReq", "Firemaking level", 1), ("burnTicks", "Burn ticks", 1), ("fireXp", "Firemaking XP", 1),
          ("form", "Form", None), ("cures", "Cures", None), ("light", "Light", 1), ("teleport", "Teleport", None), ("cooldown", "Cooldown ticks", 1), ("arms", "Call to arms", 1), ("effect", "Effect", None), ("effectTicks", "Effect ticks", 1), ("effectChance", "Effect chance", 1), ("effectDamage", "Effect damage", 1), ("edition", "Edition", None)]
 ARMOURY = "ASHVALE Armoury"
 MEAT_BASES = {'chicken', 'rat_meat', 'hare', 'goat', 'venison', 'boar'}
@@ -327,7 +364,7 @@ for k, d in items.items():
     if d.get('tier'): j['tier'] = d['tier']
     j['weight'] = d['weight']
     if d.get('req'): j['req'] = d['req']
-    j['model'] = MODEL[cat](sub, k)
+    j['model'] = d.get('model') or MODEL[cat](sub, k)
     j['value'] = d['value']
     if d.get('stack'): j['stackable'] = True
     attrs = []
@@ -470,7 +507,7 @@ salt_armoury_stock = [k for k in armoury_stock if k != 'pack_t3'] + \
            key=lambda k: order.index(items[k]['kind'])) + ['pack_t3']
 shop0 = WORLD['shop']
 module('shops', 3, {"currency": "coins", "shops": {
-    "general": {"name": "Ashvale General Store", "keeper": "tam", "stock": ["bread", "potion", "antidote", "torch", "tinderbox", "hatchet", "pickaxe", "net", "fishing_rod", "lobster_pot", "pack_t1", "pack_t2"],
+    "general": {"name": "Ashvale General Store", "keeper": "tam", "stock": ["bread", "potion", "antidote", "torch", "tinderbox", "hatchet", "pickaxe", "net", "fishing_rod", "lobster_pot", "pack_t1", "pack_t2", "pail"],
                 "buys": "any", "buyRate": 40, "sellRate": 100,
                 "greet": "Bread, potions and good honest tools. What'll it be?"},
     "tailor": {"name": "Wren's Tailoring", "keeper": "wren", "stock": ["hat_cap", "hat_bandana", "hat_hood", "hat_feather", "hat_wizard",
@@ -526,7 +563,7 @@ DIALOGUE = {
         "Something is wrong in Whisperwood. Every night the wolves come down to the fold and take a lamb. Always one. Always at the same hour.",
         "Hungry wolves are never that tidy. These hunt as if someone tells them when.",
         "My late husband's blade hangs over my hearth. Thin out ten of the grey wolves in the wood and it is yours. Plain bronze, but honest.",
-        "Whisperwood begins past the northwest gate. Tam sells bread if you need it. And come back alive; I hate writing names in the records."],
+        "Whisperwood begins past the southwest gate. Tam sells bread if you need it. And come back alive; I hate writing names in the records."],
       "progress": [
         "{left} more of the grey wolves, {name}. They run in threes near the old stumps.",
         "If they bite deep, eat. Tam's bread mends a torn arm faster than any prayer."],
@@ -543,15 +580,15 @@ DIALOGUE = {
         "He won't be alone. Thin his men first, and keep your strength up."],
       "complete": [
         "You're back, and with blood on your sleeve. Not all of it yours, I hope.",
-        "A map, sewn into the lining of his coat? Let me see... These marks are the goblin camp, southwest of the old forest.",
+        "A map, sewn into the lining of his coat? Let me see... These marks are the goblin camp, northwest of the old forest.",
         "Bandits buying from goblins. Whatever passes between them, it starts in that camp. You have earned this, and more."],
       "locked": [
-        "The goblins have dug in at their camp southwest of the old forest. Garrick says go in strong, or not at all.",
+        "The goblins have dug in at their camp northwest of the old forest. Garrick says go in strong, or not at all.",
         "Train while you wait. Chop, fish, swing that sword. When the way under the hill opens, come and find me."]},
   3: {"talk": [
-        "The goblin camp lies southwest of the old forest, through the gap in its southwest edge. Goblins fight dirty; their Chief fights dirtier.",
+        "The goblin camp lies northwest of the old forest, through the gap in its northwest edge. Goblins fight dirty; their Chief fights dirtier.",
         "The map names a Chief. Whatever the goblins trade the bandits, he decides it. Find him."],
-      "progress": ["The Goblin Chief still holds the camp southwest of the old forest. His goblins rally to him; thin them first."],
+      "progress": ["The Goblin Chief still holds the camp northwest of the old forest. His goblins rally to him; thin them first."],
       "complete": [
         "The Chief wore this round his neck? A shard of black glass... no. Not glass. Ash, hard as iron.",
         "I have read of this. The Ashen Crown. Take this shield; you'll need it where this leads."]},
@@ -588,20 +625,20 @@ TRAIL = {
       {"id": 1, "zone": "whisperwood", "goal": {"kill": "wolf", "n": 5}, "reward": "xp:strength:600",
        "talk": [
            "Mind you stand between me and the gate. That heifer spooks at strangers and she's twenty stones of stranger.",
-           "Rowan. I take beasts down the southwest road and sell 'em at Saltmere, eleven seasons running. This season I can't get a drove out of Ashvale.",
+           "Rowan. I take beasts down the northwest road and sell 'em at Saltmere, eleven seasons running. This season I can't get a drove out of Ashvale.",
            "Grey wolves come off the wood at dusk and run at the near side. They don't kill so much as scatter. Two miles an hour, and you'll walk 'em back twice over before dark.",
            "Five of 'em. That's what it took last season and what it'll take now: thin the pack till the pack takes notice of a quieter road.",
-           "Northwest gate, then keep the old stumps on your left. Come back with five and I'll stand you shoeing at Garrick's."],
+           "Southwest gate, then keep the old stumps on your left. Come back with five and I'll stand you shoeing at Garrick's."],
        "progress": [
            "{left} more wolf, {name}. The drove's nervous enough as it stands.",
            "They run in threes. Two at a time suits me better."],
        "complete": [
-           "Five. That's the northeast run, the lot of 'em, by the look of that pelt.",
+           "Five. That's the southeast run, the lot of 'em, by the look of that pelt.",
            "Beast walked two mile further today than it did last week. That's the whole of this trade, that is."]},
       {"id": 2, "zone": "saltmere", "goal": {"kill": "boar", "n": 6}, "reward": "pack_t1",
        "talk": [
            "Aye, the beasts are calmer. The next trouble's further down the road, and it's closer to Saltmere than anyone down there will admit.",
-           "There's grazing northeast of the town - good grass, with a marsh drain running through it. Boar root the whole of it at night. Six acres this year, turned over like a kitchen garden.",
+           "There's grazing southeast of the town - good grass, with a marsh drain running through it. Boar root the whole of it at night. Six acres this year, turned over like a kitchen garden.",
            "Nettie feeds half the town off those marshes and Sela sells the reeds. They'll back me, but they're not going out at dusk to say it themselves.",
            "Six boar. Quick, for the weight they carry, and they'll charge if you back them onto the drain bank. Keep a way back to the path open."],
        "progress": [
@@ -618,7 +655,7 @@ TRAIL = {
        "progress": [
            "{left} more of the big wolves. Listen for the bells - if the drove's gone quiet, they're behind it."],
        "complete": [
-           "Four. And they came off the northwest trail, not the road, which is the difference between a loss and a story.",
+           "Four. And they came off the southwest trail, not the road, which is the difference between a loss and a story.",
            "Wear that. You've earned the weight of it."]},
       {"id": 4, "zone": "saltmere", "goal": {"kill": "bandit", "n": 6}, "reward": "xp:attack:1800",
        "talk": [
@@ -631,7 +668,7 @@ TRAIL = {
            "The camp's broken. That's my living handed back to me, and I don't know what to do with the thanks.",
            "Go and sit in the Saltmere Tap and tell Hollis Rowan sent you. Whatever he's got for a traveller like you, you've earned it twice over."]}],
     "done": [
-        "The drove went southwest with all six beasts and none of them lost. That's what the road looks like now, {name}.",
+        "The drove went northwest with all six beasts and none of them lost. That's what the road looks like now, {name}.",
         "When you've a mind for more of it, ask after you in Saltmere. A town on the coast has its own way of being in trouble."]},
   # The coast end of the trail (2026-10-05: "Have the final quest in Saltmere"). Two things a step can
   # want besides a kill: an item handed over, and a message carried to somebody. Both are core goal kinds.
@@ -641,9 +678,9 @@ TRAIL = {
       {"id": 1, "zone": "saltmere", "goal": {"bring": "logs", "n": 8}, "reward": "xp:woodcutting:1000",
        "talk": [
            "Eight sound logs and a boy to carry them, which is the same trouble twice. I can't get the boy either.",
-           "Bryce. I build boats here and mend them when the coast disagrees. The northwest boat came home last month with her rudder on the tide and nothing on the sternpost but iron.",
+           "Bryce. I build boats here and mend them when the coast disagrees. The southwest boat came home last month with her rudder on the tide and nothing on the sternpost but iron.",
            "I've a blank in the shed and no timber for it. Pine twists, and oak wants a season lying under cover, which is a season I don't have.",
-           "Eight ordinary logs, seasoned, stacked by the shed. Not the green stuff off the northwest road, and not pine. I'll know the difference and so will the sea."],
+           "Eight ordinary logs, seasoned, stacked by the shed. Not the green stuff off the southwest road, and not pine. I'll know the difference and so will the sea."],
        "progress": [
            "The shed wall is still empty, {name}. Eight logs, and I'll take them wherever you found them."],
        "complete": [
@@ -662,7 +699,7 @@ TRAIL = {
            "Take the strength you got out of it. It's the only thing a boat doesn't need a licence for."]},
       {"id": 3, "zone": "saltmere", "goal": {"talk": "tolly", "n": 1}, "reward": "helmet_t2",
        "talk": [
-           "It's hung. Rudder's on the northwest boat, hung and shipped, and I've not told the man who has to sail her.",
+           "It's hung. Rudder's on the southwest boat, hung and shipped, and I've not told the man who has to sail her.",
            "Go down the third pier and tell Tolly she floats. He's pulled her six winters and won't ask me, and I won't go down there and watch him find out.",
            "Say it plain: Bryce says she floats. That's all he wants and all he'll get out of me."],
        "progress": [
@@ -671,7 +708,7 @@ TRAIL = {
            "He said the same back to you? Then it's true and we're both out of a excuse.",
            "Here. Iron, off the old sternwork. On a boat a helm is the thing that turns her; on your head it's the same metal and I've no further use for it."]}],
     "done": [
-        "The northwest boat's out on the evening tide with a rudder that stays on. That's my name on the water again, {name}.",
+        "The southwest boat's out on the evening tide with a rudder that stays on. That's my name on the water again, {name}.",
         "When you've a mind for the whole of it - the town, the harbour, and what the coast is short of - go and find Cobb by the portal. He's the elder, and he's been waiting for someone to ask."]},
   "salt_road": {
     "name": "The Salt Road", "giver": "cobb",
@@ -680,10 +717,10 @@ TRAIL = {
        "talk": [
            "Sixty years I've kept the accounts of a town that never once asked what it wanted. Now somebody's walked the whole road and you're the first to ask me.",
            "Cobb. I say where the boats may tie up, which is the whole of the trade, and it has taken me this long to notice we're the end of something.",
-           "Ashvale sends its beasts southwest and calls it a favour. We send fish northeast and call it Tuesday. Both of them are lying, and the road between has never had a name.",
-           "Walk back up to the southwest gate and tell Rowan Saltmere will take his drove on Tuesdays, at one price, every Tuesday, while I'm drawing breath. He'll want it from someone who came down it."],
+           "Ashvale sends its beasts northwest and calls it a favour. We send fish southeast and call it Tuesday. Both of them are lying, and the road between has never had a name.",
+           "Walk back up to the northwest gate and tell Rowan Saltmere will take his drove on Tuesdays, at one price, every Tuesday, while I'm drawing breath. He'll want it from someone who came down it."],
        "progress": [
-           "Rowan, {name}. Up the trail at the southwest gate, and Tuesdays in your mouth."],
+           "Rowan, {name}. Up the trail at the northwest gate, and Tuesdays in your mouth."],
        "complete": [
            "He said yes before you'd finished the sentence, I'll wager. Then the road has a price on it, which is most of what a road is."]},
       {"id": 2, "zone": "saltmere", "goal": {"bring": "iron_ore", "n": 6}, "reward": "xp:mining:1500",
@@ -698,7 +735,7 @@ TRAIL = {
            "That's a year of hinges in that stack, and work on the anvil that isn't selling swords to boys."]},
       {"id": 3, "zone": "saltmere", "goal": {"kill": "bandit", "n": 5}, "reward": "chain_t2",
        "talk": [
-           "There's a company on the northwest beach, and they call what they do salvage.",
+           "There's a company on the southwest beach, and they call what they do salvage.",
            "Wreck's wreck. The town's rule is the crew comes first and the cargo's ours, and we've held to that since before the church had a roof.",
            "They take it off the sand before anyone's rowed out, and they've learned that nobody rows out in the dark. Five of them, and don't go at them where the shingle gives you no room to back up.",
            "I'm not asking you to hang anybody. The town does that itself when it catches them. I'm asking you to make the beach unpleasant."],
@@ -728,7 +765,7 @@ TRAIL = {
            "Last spring the harbour had the town's marks moved out past the pier heads - ten metres of open water from the last plank, and they called it letting the shoal rest. The shoal rested. So did every net in Saltmere.",
            "Net holes are like a ledger: you find the small one early or the whole thing runs open. What I couldn't work out was why nobody could land a fish to prove the nets were worth mending.",
            "I've had the marks hauled back in, to where a person can stand and cast from a plank or a quay wall. Two weeks of arguing and I've had them hauled in. Go and prove it was worth the argument.",
-           "Twelve shrimp. The northwest pier heads and the quay wall, both - shallow water, a net, and you'll see them go past your feet."],
+           "Twelve shrimp. The southwest pier heads and the quay wall, both - shallow water, a net, and you'll see them go past your feet."],
        "progress": [
            "{left} more shrimp, {name}. They're the marks with the little floats on now, and they're under your arms, I'll warrant."],
        "complete": [
@@ -777,12 +814,12 @@ TRAIL = {
     "steps": [
       {"id": 1, "zone": "village", "goal": {"bring": "oak_logs", "n": 8}, "reward": "xp:woodcutting:1800",
        "talk": [
-           "You want to know what's wrong with the northwest gate. So do I, and it's thirty-one years since I last had a scaffold up on it.",
-           "There's a centering of green pine inside that arch, put in by me in a hurry in a wet spring. Pine moves when it dries. Oak doesn't. Eight lengths off the northeast slope.",
+           "You want to know what's wrong with the southwest gate. So do I, and it's thirty-one years since I last had a scaffold up on it.",
+           "There's a centering of green pine inside that arch, put in by me in a hurry in a wet spring. Pine moves when it dries. Oak doesn't. Eight lengths off the southeast slope.",
            "Modulus measured it twice and says the arch is sound. The arch is sound the way a promise is sound. It has been holding its own weight on a lie about a tree since before you were born.",
            "And while you're about it, the mortar I laid that gate with was burnt wrong. I know that now. That's the second thing you're bringing me."],
        "progress": [
-           "{left} more oak, {name}. Northeast slope, and if Pax asks, no, you did not take the ones he painted."],
+           "{left} more oak, {name}. Southeast slope, and if Pax asks, no, you did not take the ones he painted."],
        "complete": [
            "That's the centering. From the road it'll look like I'm building a new gate. I'm not. I'm telling an old one the truth for the first time."]},
       {"id": 2, "zone": "village", "goal": {"bring": "coal", "n": 6}, "reward": "xp:mining:1500",
@@ -802,7 +839,7 @@ TRAIL = {
            "Leave the rest in the hill. There's no sense working a seam flat for the sake of twelve pins, and the pit's mine to keep, not mine to empty.",
            "The tin is the problem, and the tin is Garrick's, which is a longer story than a hinge has any right to be."],
        "progress": [
-           "{left} more copper. By the pit mouth, all four faces of them, southwest of the gate you're standing under."],
+           "{left} more copper. By the pit mouth, all four faces of them, northwest of the gate you're standing under."],
        "complete": [
            "Twelve copper. That's the pins, the straps and the hinges, and now I need the one thing in this village I cannot go and fetch myself."]},
       {"id": 4, "zone": "village", "goal": {"talk": "garrick", "n": 1}, "reward": "shield_t2",
@@ -812,11 +849,11 @@ TRAIL = {
            "He'll want to know why I didn't come myself. Tell him my knees are on an arch and his are by an anvil and neither of us is wrong.",
            "He'll weigh it, because that's the man's whole goodness and he's never once mentioned it. And he'll hand you the boss off the first gate to carry up the ladder - bronze, off a door that's had its day. Take it if he offers it you."],
        "progress": [
-           "Garrick, {name}, at the anvil on the northeast street. Say the word scale out loud. With him that's the whole introduction."],
+           "Garrick, {name}, at the anvil on the southeast street. Say the word scale out loud. With him that's the whole introduction."],
        "complete": [
            "He weighed it in front of you so neither of us had to say anything about six years of nothing. That's it settled, by a man who minds his own business."]}],
     "done": [
-        "The northwest gate, then: oak inside it, bronze on the outside, and mortar burnt at a heat worth calling a heat. It'll be standing when there's nobody left who remembers either of us.",
+        "The southwest gate, then: oak inside it, bronze on the outside, and mortar burnt at a heat worth calling a heat. It'll be standing when there's nobody left who remembers either of us.",
         "Nobody gets a statue for this work. You get a wall that still stands and a gate that shuts, and fair enough. Mind the hinge on your way out, {name} - it'll want a year to settle."]},
   # Mabb the sailmaker only ever chatted (handoff/qwen_trail_log.md, next item 1). The harbour fishes again and the
   # trail has two threads, so she gets the third: a Saltmere job that uses the boats, the canvas and Perla's marks
@@ -840,7 +877,7 @@ TRAIL = {
       {"id": 1, "zone": "saltmere", "goal": {"bring": "willow_logs", "n": 8}, "reward": "xp:woodcutting:2000",
        "talk": [
            "Mabb. I make sails in this town, which is one sail a year and nine mends, and the loft's cold so stand where the wind doesn't come through the boards.",
-           "What's wrong with the northwest boat's sail is the lower third. It's battened with oak, and oak is the right wood for a gate and the wrong wood for a wing. Oak snaps when a gust arrives all at once. Willow bends and comes back.",
+           "What's wrong with the southwest boat's sail is the lower third. It's battened with oak, and oak is the right wood for a gate and the wrong wood for a wing. Oak snaps when a gust arrives all at once. Willow bends and comes back.",
            "Eight lengths of willow, thin as your thumb and as long as my arm. They'll be along the channel where the water goes slow. Soft wood, any level takes it, and it doesn't fight the saw.",
            "Strip the bark where you cut it. Bark holds wet, and wet is how a loft rots from the rafter down - I'd rather learn that from you than from the ceiling."],
        "progress": [
@@ -851,17 +888,17 @@ TRAIL = {
        "talk": [
            "Before I cut a thing there's an ask, and it isn't a favour to me, it's a tool. Two of the red deer off the marsh grazing, and I'll tell you what they're for rather than have you guess.",
            "A sewger's palm is leather. Salt water eats a cloth pad in a week and a wet pad tears the thread more than your needle does. Deer leather takes the wax and keeps its shape when your hand sweats, which is most of the day in a loft in summer.",
-           "Southeast of the last houses, where the marsh grass comes up short because that's what they leave of it. There's a flight of them on that marsh, a hundred and fourteen paces from where I'm standing, four and twenty head and a few limbers gone over into the reeds, and you do not walk into a herd like that. They're red deer, level five, and they've no appetite for you - but they go at the first wrong step in the mud, so take the one you're beside and let the other three and twenty be a problem for the town's supper.",
+           "Northeast of the last houses, where the marsh grass comes up short because that's what they leave of it. There's a flight of them on that marsh, a hundred and fourteen paces from where I'm standing, four and twenty head and a few limbers gone over into the reeds, and you do not walk into a herd like that. They're red deer, level five, and they've no appetite for you - but they go at the first wrong step in the mud, so take the one you're beside and let the other three and twenty be a problem for the town's supper.",
            "Take the hides and leave the venison where it falls - Nettie's stall has been thin since the storm and the marsh is the town's larder, not my cabinet. I want the skin, and I want it salted before it heats."],
        "progress": [
-           "{left} more deer, {name}. Southeast of the town and one at a time - the marsh is a bad place to chase anything."],
+           "{left} more deer, {name}. Northeast of the town and one at a time - the marsh is a bad place to chase anything."],
        "complete": [
            "That's palms for the season. Hide off them, salt it, and bring it up before it sets - a stiff hide is a hide you wasted, and I don't like wasting anything that lived in the same town as me."]},
       {"id": 3, "zone": "saltmere", "goal": {"bring": "net", "n": 3}, "reward": "xp:speechcraft:1500",
        "talk": [
            "Now the thread, and this is the part where I need your mouth rather than your hands.",
            "Canvas wants warp before it wants weft, and warp wants line that's already been stretched and salted. Since the harbour moved the marks back in there are nets in the sheds that were mended twice and are easier replaced than mended a third time.",
-           "Three of them. Nobody throws a net away and nobody sells one easy, so ask for the ones with torn skirts off the northwest boats - a fisherman will sell you a bad net at a fair price and thank you for the custom.",
+           "Three of them. Nobody throws a net away and nobody sells one easy, so ask for the ones with torn skirts off the southwest boats - a fisherman will sell you a bad net at a fair price and thank you for the custom.",
            "Shake the salt out before you bring them up the ladder. Salt in a loft is a season of stiff canvas and a mender with a sore thumb."],
        "progress": [
            "{left} more net, {name}. Look for the mending that was never finished - that's a net that knows it's finished and hasn't been told."],
@@ -872,13 +909,13 @@ TRAIL = {
            "Last one, and it's an errand of words. Go down to Bela's and tell her Mabb says the loft's clear, the warp's on, and she can put the price back on the three bolts she's had off the top shelf since spring.",
            "She bought them back off me in the hungry month, and they're my cloth. She'll sell one to somebody as a curtain and I'll hear about it every market day until the day I die.",
            "Tell her I said the word warp out loud. With Bela that's the whole introduction, and it settles an account without either of us having to say what the hungry month was.",
-           "Come back up to me after. There's a cape cut off the offcut of the northwest boat's sail and it's red because I ran out of white - that's a sailmaker's finishing, and you've earned the offcut."],
+           "Come back up to me after. There's a cape cut off the offcut of the southwest boat's sail and it's red because I ran out of white - that's a sailmaker's finishing, and you've earned the offcut."],
        "progress": [
-           "Bela, {name}, at the counter on the northeast street. Say warp. And don't let her talk you into buying a curtain."],
+           "Bela, {name}, at the counter on the southeast street. Say warp. And don't let her talk you into buying a curtain."],
        "complete": [
            "She laughed, then she pretended she hadn't. That's the account settled and the bolts staying where they are."]}],
     "done": [
-        "The northwest boat's sail, then: willow in the lower third, thread that was salted once already, and not one rat's hole in the leech. She'll hold a wind that takes the masts off the other two.",
+        "The southwest boat's sail, then: willow in the lower third, thread that was salted once already, and not one rat's hole in the leech. She'll hold a wind that takes the masts off the other two.",
         "A sail is a wall that has learned to fly, {name}. Wear the red - same cloth, better cutting than most, and it'll keep the rain off you until the next one's cut."]},
   # Pip the apprentice is the fourth thread out of Ashvale village and the first one that is made of neither a beast
   # nor a building. He is one of the ghost devs and has never had an errand of his own (handoff/qwen_trail_log.md,
@@ -901,16 +938,16 @@ TRAIL = {
            "You found a thing that shouldn't work? That'll be mine. I'm Pip. I've been down the pit with a candle since I was nine, and I keep a list of everything in this village that's been built wrong.",
            "The low seam went under in February. Three feet of winter water in the coal end, and the town's answer was to stop mining coal, which is an answer about the weather and not about the water.",
            "What it wants is a pump. A pump is a pipe, a leather, and a fall of ground, and I've got the forge, which is two of the three out of a boy who's had four years of anvil.",
-           "Six lumps of tin. There's three tinstones in the village mine, southwest of the pit mouth in the old stopes where they took the copper out first, and any level of mining takes them - it's the soft grey one, it marks if you bite it.",
+           "Six lumps of tin. There's three tinstones in the village mine, northwest of the pit mouth in the old stopes where they took the copper out first, and any level of mining takes them - it's the soft grey one, it marks if you bite it.",
            "Garrick's kept a cake of it since he cut the wheel off the mill. If he asks, I didn't say you were coming, because I've used up the last of his and I'd rather not have that conversation twice."],
        "progress": [
-           "{left} more tin, {name}. Southwest of the pit mouth, the soft grey ones. Bring them rough - washed I can't tell one from a stone, which is how I lost a week."],
+           "{left} more tin, {name}. Northwest of the pit mouth, the soft grey ones. Bring them rough - washed I can't tell one from a stone, which is how I lost a week."],
        "complete": [
            "That's a pipe and a spare, and it's the only metal in this parish that forgives being soldered. Tin doesn't rust, and rust is the whole story of everything else in this town."]},
       {"id": 2, "zone": "village", "goal": {"kill": "hare", "n": 4}, "reward": "xp:ranged:1200",
        "talk": [
            "Now the leather, and this is where the list gets silly. A pump is a tube with a thing in it that fits, and a thing-that-fits is cut out of a hare's skin. Hare leather closes when it's wet. Goatskin swells and staggers, and I've tried goatskin.",
-           "Four hares. Up the northwest road where the stubble's standing and the grass goes short - they're out there at dusk in the open, worse luck, they'd be out there in the open if this village had any sense about fences.",
+           "Four hares. Up the southwest road where the stubble's standing and the grass goes short - they're out there at dusk in the open, worse luck, they'd be out there in the open if this village had any sense about fences.",
            "They'll outwalk your legs, so if you've a bow, bring it and stand downwind of where you think they are rather than where you can see them. They go by the grass moving, not by you arriving.",
            "Three washers out of a good skin, so four skins is two nights' work and one bad cut. Take the meat if you want it - there's a range at the end of the street and I won't tell anyone you cooked them in a quest."],
        "progress": [
@@ -920,7 +957,7 @@ TRAIL = {
       {"id": 3, "zone": "village", "goal": {"bring": "pelt", "n": 2}, "reward": "xp:strength:1500",
        "talk": [
            "The washers are hare because they have to be soft. The bellows behind them wants something that isn't, and I have ruined every rat pelt in this village finding that out.",
-           "Two wolf pelts, unrolled and not scraped - the fur side goes inboard. Grey wolves, in Whisperwood, and they're thirty-odd paces up from the northwest gate where the ferns come out of the path.",
+           "Two wolf pelts, unrolled and not scraped - the fur side goes inboard. Grey wolves, in Whisperwood, and they're thirty-odd paces up from the southwest gate where the ferns come out of the path.",
            "It's the nearest thing in this village that's pleased to see a reason to bite you, so take the one that stands up when you arrive. It's the one that was coming to you anyway.",
            "A wet wolf pelt weighs a stone and there's a ladder between the wood and my loft, which is why the next thing you carry is your own arms. Not scraped, {name}. I can tell, and I'd rather not say."],
        "progress": [
@@ -934,12 +971,12 @@ TRAIL = {
            "If the mine's lower than the stream by a man's height, the pump'll run on its own weight and I'll want a fire under the joint. If it's the other way round I've wasted your afternoon, and I'd like to hear about a fish walking up a tree instead.",
            "He'll tell you he measured it the year the water came up. He's been waiting eleven years for anybody to ask him that, and he'll make you wait four minutes for it."],
        "progress": [
-           "Modulus, {name}, on the southwest road, measuring it for the third time this morning. Ask for the levels and don't hurry him - that's the only way to get the wrong number."],
+           "Modulus, {name}, out at the new crossroads northwest of the square, on the Saltmere road, measuring it for the third time this morning. Ask for the levels and don't hurry him - that's the only way to get the wrong number."],
        "complete": [
            "He gave you the number after he gave you the lecture, which is how you know it's the right one. Lower by a man and a half. It'll run on its own weight."]}],
     "done": [
         "It works. Three buckets in a minute and a half, out of a pipe, a hare's ear and a wolf I've said sorry to. It has no business doing that. It shouldn't work, {name} - which isn't the same as not working.",
-        "Take the box with the spark in it. It's been in my pocket through three winters and I've no need of it now; the pit wants a fire under the joint and I can light that off the forge. And if anybody calls it a simple thing, invite them up the ladder to watch a hare pelt lift the northwest road."]},
+        "Take the box with the spark in it. It's been in my pocket through three winters and I've no need of it now; the pit wants a fire under the joint and I can light that off the forge. And if anybody calls it a simple thing, invite them up the ladder to watch a hare pelt lift the southwest road."]},
   # Auditor the clerk is the fifth thread out of Ashvale and the second one hung on a metal the game never used: the
   # survey (probe, 2026-10-05) says the village's own coin is described on the chain as "GOLD, currency gold. Made in
   # the valley of Ashvale", while the mine's gold seam has never been wanted by a single quest, shelf or gift in the
@@ -957,11 +994,11 @@ TRAIL = {
        "talk": [
            "Every coin, every catch, every word in this village gets written down somewhere. It mostly balances. There is one line in it that has not balanced since before you were walking, and in forty years I have decided I would rather see it closed than die with it open.",
            "Gold drawn out of the Ashvale seam: nil. Gold struck in Ashvale: nine hundred and forty coin, every one of them out of the old lord's hoard, and the hoard is spent. So the money in your purse was made in this valley and none of it was ever mined in it, which is the sort of sentence that keeps a clerk awake.",
-           "Six lumps, out of three stones, in the southwest end of the mine past the copper stopes where they went in first. Twenty-two paces from the well, and it wants thirty of mining to mark the rock - it's the grey one with the yellow in the vein, and it isn't a metal you'll find by looking, it's a metal you find by weighing.",
+           "Six lumps, out of three stones, in the northwest end of the mine past the copper stopes where they went in first. Twenty-two paces from the well, and it wants thirty of mining to mark the rock - it's the grey one with the yellow in the vein, and it isn't a metal you'll find by looking, it's a metal you find by weighing.",
            "Bring them up rough with the quartz on them. I'm not assaying polished stones; I'm weighing what this parish owns, and a washed stone tells me about your polishing and nothing whatever about my seam.",
            "Ticket, please. No? Then we'll do it without paperwork, which is how everything gets done in this village - it's already closed and nobody told either of us."],
        "progress": [
-           "{left} more gold, {name}. Southwest of the pit mouth, twenty-two paces from the well, thirty mining. And no, what the general store sells is brass, and I've weighed it twice."],
+           "{left} more gold, {name}. Northwest of the pit mouth, twenty-two paces from the well, thirty mining. And no, what the general store sells is brass, and I've weighed it twice."],
        "complete": [
            "That's the seam, and it's real, and it's the first line in this book I've closed with a witness standing over it. Six lumps, unpolished, exactly the way the rock sends them up."]},
       {"id": 2, "zone": "village", "goal": {"bring": "mithril_ore", "n": 2}, "reward": "xp:mining:1600",
@@ -991,7 +1028,7 @@ TRAIL = {
            "So the hawk has to be remembered rather than traced, and the man in this village who remembers things by their colour is Pax. Go and tell him the seam is open. He'll say he has no interest in coin, and then he'll want to know whether there's enough for the sky.",
            "Ask him about the ninth try. The blue door by the well is the last of the village's own gold, leaf on leaf, and if you've the patience he'll show you every one of the nine. Then come back to me, because the first thing off the new die is not going to be a coin."],
        "progress": [
-           "Pax, {name}, by the well, blue to the wrist. Tell him the seam is open, and wait for him to pretend he doesn't care."],
+           "Pax, {name}, in his new house on the Saltmere road, northwest of the square, blue to the wrist. Tell him the seam is open, and wait for him to pretend he doesn't care."],
        "complete": [
            "He said coin was nothing to him. Then he asked whether there would be enough leaf for the ceiling of the hall, and I wrote that down, because it's the first thing anybody has asked me for in twenty years that I couldn't already answer."]}],
     "done": [
@@ -1022,7 +1059,7 @@ TRAIL = {
     "steps": [
       {"id": 1, "zone": "village", "goal": {"kill": "hare", "n": 6}, "reward": "xp:ranged:1800",
        "talk": [
-           "Northwest gate, the torches, the path up the range. I'm late to everything and I still get there before you do. Six hares, and you shoot them, and that's not me being short of a labourer - it's me finding out whether you can hold a bow steady at ninety paces in a wind.",
+           "Southwest gate, the torches, the path up the range. I'm late to everything and I still get there before you do. Six hares, and you shoot them, and that's not me being short of a labourer - it's me finding out whether you can hold a bow steady at ninety paces in a wind.",
            "There's a ladder in this village that nobody ever climbed to the top of, and it's made of wood. Oak bows at the gate, willow bows, maple bows - every bow in the shops is named after a tree, and the trees go up the hill in the same order the bows go up the counter.",
            "Six hares, out on the stubble where the grass goes short. They're a hundred and thirty paces from where I stand, two to a form and three at a push, and there are forms of them all the way round this parish - four hundred and ninety-three of them - which is a thing the fences have not managed to do anything about.",
            "Stand downwind of where you think they are rather than where you can see them. Hares go by the grass moving, not by you arriving, and a bow that's aimed at the hare you saw is aimed at where the hare was.",
@@ -1050,7 +1087,7 @@ TRAIL = {
        "progress": [
            "{left} more yew, {name}. Up the range where the path ends, forty of woodcutting, cut on the bend. Nineteen trees, and you'll see them before you've counted to a hundred from my post."],
        "complete": [
-           "Six, on the bend, unbuilt, and there's the ladder's top rung lying in the grass at the northwest gate. Nineteen trees in this parish. I've wanted to say that sentence to somebody for eleven years."]},
+           "Six, on the bend, unbuilt, and there's the ladder's top rung lying in the grass at the southwest gate. Nineteen trees in this parish. I've wanted to say that sentence to somebody for eleven years."]},
       {"id": 4, "zone": "village", "goal": {"talk": "orin", "n": 1}, "reward": "bow_t5",
        "talk": [
            "Last thing, and it isn't metalwork, it's arithmetic. Down the trail at Saltmere there's an armoury, and on its shelf is a bow they call a Yew shortbow, and it sells at sixteen hundred. There is no yew inside their map. There is no yew within a day's walk of their counter. The nearest yew is standing forty paces behind me.",
@@ -1058,11 +1095,11 @@ TRAIL = {
            "He won't like it. He'll be decent about not liking it, which is more than most of them manage, and he'll want to see a stave. Tell him Ashvale's got nineteen, and tell him the warden sent me, and tell him the road's open.",
            "Then come up the gatehouse, because if you've carried a message that far with a stave on your shoulder, you've earned the peg at the top of it, and there's only ever been one of those."],
        "progress": [
-           "Orin, {name}, by the anvil at Saltmere, third counter down the northeast street. Ask him about the yew and don't let him talk you onto a shelf instead."],
+           "Orin, {name}, by the anvil at Saltmere, third counter down the southeast street. Ask him about the yew and don't let him talk you onto a shelf instead."],
        "complete": [
-           "He said his came from a merchant out of the southwest, which is what a man says when he has never asked. Then he asked whether the wood was seasoned, and I'd say that's the beginning of somebody who'll buy it off us."]}],
+           "He said his came from a merchant out of the northwest, which is what a man says when he has never asked. Then he asked whether the wood was seasoned, and I'd say that's the beginning of somebody who'll buy it off us."]}],
     "done": [
-        "That's the peg. The elder bow - not elder as in a tree, there's no elder wood in this valley, elder as in old. It was old before the torches were hung on the northwest gate and there's no counter on the trail that would know what to do with it. Ranged forty-four, and it has never been off the wood it was cut from.",
+        "That's the peg. The elder bow - not elder as in a tree, there's no elder wood in this valley, elder as in old. It was old before the torches were hung on the southwest gate and there's no counter on the trail that would know what to do with it. Ranged forty-four, and it has never been off the wood it was cut from.",
         "Take it up there and stand on the gatehouse if you like; you can see the whole road from there, the stubble the hares are on, the pasture, the wood line, and Saltmere if the weather's honest. If the road closes, that's me. If the road's fine, you never heard of me. That's the job done right, {name}, and it's done right today because a stranger carried a stave down it."]},
   # The Kitchen Range (a tester, 2026-10-05, increment 12). Cooking is the one thing the trail never touched. The
   # engine has a whole ladder of it - seven raw things that cook into food, a fire in each town, and a burn curve that
@@ -1094,7 +1131,7 @@ TRAIL = {
       {"id": 2, "zone": "village", "goal": {"bring": "hare_cooked", "n": 3}, "reward": "xp:fishing:2600",
        "talk": [
            "Fish is the easy half of a kitchen because a fish is already clean. Now the meat, and the nearest meat in this parish is the thing the warden is shooting half the year.",
-           "Three hares, cooked through. The nearest of them are a hundred and seventeen paces southeast of this wall, there are more on the stubble than there are of us, and they want cooking five, which is where you'll already be standing by the time you come back from the lake.",
+           "Three hares, cooked through. The nearest of them are a hundred and seventeen paces northeast of this wall, there are more on the stubble than there are of us, and they want cooking five, which is where you'll already be standing by the time you come back from the lake.",
            "A hare is small and it dries out, and drying out is just burning with better manners. Four counts a side at a range this size, so work it and don't wander off it - the people who lose a hare are the people who started a conversation next to a fire.",
            "The warden takes four of them off the same field to prove that a bow can be held steady. I take three to prove that a person can be fed. Same grass, honest work, both of it. Paid in fishing again, and don't look at me like that - it's the level you're short of, and I'd rather you had the mark next week than the praise today."],
        "progress": [
@@ -1114,21 +1151,21 @@ TRAIL = {
       {"id": 4, "zone": "village", "goal": {"bring": "venison_cooked", "n": 2}, "reward": "xp:cooking:1600",
        "talk": [
            "Last of the ladder, and it isn't on the water. Two haunches, cooked - you want fifteen on the fire for venison, and there's your ladder: a shrimp at one, a hare at five, a trout at five, and a stag at fifteen degrees of my heat. Four things, four ways to fill a kitchen, and one number that goes down the longer you stand here.",
-           "The deer are a hundred and twenty paces from this wall, due southwest of it. They're quieter than the boars and they run sooner, and the pasture they're on is the same ground the drover walks his beasts across, so you'll know the way and he'll have told you the rest.",
+           "The deer are a hundred and twenty paces from this wall, due northwest of it. They're quieter than the boars and they run sooner, and the pasture they're on is the same ground the drover walks his beasts across, so you'll know the way and he'll have told you the rest.",
            "Fifteen is where a haunch will take the heat, and at fifteen the fire still takes two in five of them - forty at the rung, nothing at all ten degrees over it. So expect one black in the pan, mind the pigs, and know that the number goes down the longer you stand here. That's the point of the whole errand.",
            "Bring the haunches here and not to the tap. Saltmere would cook them beautifully, and then they'd sell them back to you as somebody else's dinner, at a price, with a sprig on the top."],
        "progress": [
-           "{left} more venison on the fire, {name}. The deer are a hundred and twenty paces due southwest and the fire wants fifteen - neither of them will come to you."],
+           "{left} more venison on the fire, {name}. The deer are a hundred and twenty paces due northwest and the fire wants fifteen - neither of them will come to you."],
        "complete": [
            "Two haunches off a stag, a hundred and twenty paces from this wall, and no black on either of them. That's the ladder and you're at the top of it without having noticed, which is how it works."]},
       {"id": 5, "zone": "village", "goal": {"talk": "symmetry", "n": 1}, "reward": "pack_t4",
        "talk": [
-           "Now carry the last of it five paces northeast to the curator, and don't ask me why. It's eleven years of a kitchen; he's got a room of pots and I've got a fire, and one morning a year ago we agreed he'd eat what the fire made.",
+           "Now carry the last of it five paces southeast to the curator, and don't ask me why. It's eleven years of a kitchen; he's got a room of pots and I've got a fire, and one morning a year ago we agreed he'd eat what the fire made.",
            "He'll want to know how it was cooked. Tell him a range, seven paces from the well, and nine marks in our lake, and a trout that Saltmere has never once landed - he writes that sort of thing down, that's the whole of his trade.",
            "And take the frame pack off my wall going. Tier four of a ladder that stops at three on the counter and never starts again at five, eight stone of it it'll carry, and it held the supper across the marsh for eleven years before I hung it up.",
            "It's yours, and it's not a gift, it's the pay for two haunches and a stranger who stood at my range long enough to stop burning the food."],
        "progress": [
-           "Symmetry, {name}, five paces northeast along the wall with the lake behind him. Take the last of the supper and tell him the range is lit again."],
+           "Symmetry, {name}, five paces southeast along the wall with the lake behind him. Take the last of the supper and tell him the range is lit again."],
        "complete": [
            "He'll have written it down wrong, in pencil, on the back of something. He took the story, and you took the pack off my wall, and that is the whole of how this village keeps a record."]}
     ],
@@ -1194,7 +1231,7 @@ TRAIL = {
        "talk": [
            "Two timber wolf pelts. This is the one I'd not ask of a stranger if I hadn't watched you come up that road twice. Level fourteen, twenty-eight hitpoints, hits at thirteen. Two hundred and thirty-six packs in this parish and not one inside six hundred paces of the well; the nearest stands seven hundred and seventy-four paces out, and they go eleven to a pack.",
            "I ask for two because one is a coat and two is a bargain, and their pelts come off one for one, which puts a wolf's skin at forty-five pennies against a hare's five - and tells you exactly what the extra forty buys you.",
-           "Bring them whole and I'll pay you in something you cannot buy. There's a tier four of a skinner's knife in the ledgers of this village. One to three hang on the armourer's wall by the northwest gate; four is on no counter in Ashvale, Saltmere or the castle; five is on no counter anywhere. It exists, {name}. It was simply never made for anybody - and the reason it exists at all is that it's the tool of the only trade here that works with a blade.",
+           "Bring them whole and I'll pay you in something you cannot buy. There's a tier four of a skinner's knife in the ledgers of this village. One to three hang on the armourer's wall by the southwest gate; four is on no counter in Ashvale, Saltmere or the castle; five is on no counter anywhere. It exists, {name}. It was simply never made for anybody - and the reason it exists at all is that it's the tool of the only trade here that works with a blade.",
            "So it's yours. You'll find it's quicker than anything you've been carrying, and the faster it is, the more of these you'll take off a beast before it decides otherwise. Two pelts, and take the knife off my belt before I change my mind."],
        "progress": [
            "{left} more timber wolf pelt, {name}. Seven hundred and seventy-four paces, none nearer than six hundred, and the pelt comes off one for one - forty-five pennies on four legs, and it will spend every one of them."],
@@ -1486,7 +1523,7 @@ npcs = [
     # The Ghost Devs (2026-10-03): the seven who built Ashvale, living in it. They are villagers with jobs,
     # not a booth: `lines` is ordinary talk (core.js), `examine` is what Looking gives. Keep them off the feed.
     {"id": "silas", "name": "Silas the mason", "look": "silas", "x": 18, "y": 50, "talk": "quest", "quest": "bronze_gate",
-     "examine": "Silas the mason. He laid the well, the two shops and the northwest gate, and he means you to know it."},
+     "examine": "Silas the mason. He laid the well, the two shops and the southwest gate, and he means you to know it."},
     {"id": "pip", "name": "Pip the apprentice", "look": "pip", "x": 20, "y": 52, "talk": "quest", "quest": "tin_pipe",
      "examine": "Pip the apprentice, holding something that very likely shouldn't work."},
     {"id": "pax", "name": "Pax the painter", "look": "pax", "x": 24, "y": 49,
@@ -1498,7 +1535,7 @@ npcs = [
      "lines": ["I measured this street at a hundred and forty-four feet. They said it needed to be a hundred and forty-three. It is, somehow.",
                "Everything twice, once well. That's the whole trade. Count the ground before you sell it."]},
     {"id": "latency", "name": "Latency the warden", "look": "latency", "x": 22, "y": 44, "talk": "quest", "quest": "elder_bow",
-     "examine": "Latency the warden, on the northwest road. Late to everything, and there before you are."},
+     "examine": "Latency the warden, on the southwest road. Late to everything, and there before you are."},
     {"id": "symmetry", "name": "Symmetry the curator", "look": "symmetry", "x": 16, "y": 57,
      "examine": "Symmetry the curator, watching the way the light comes in over the lake.",
      "lines": ["I keep the things that look right and I hide the ones that don't. The lake is the best thing here; it took four of us a fortnight.",
@@ -1514,7 +1551,7 @@ npcs = [
     # where the skins go. He stands on the free ground east of the east road, downwind of the street and beside the
     # lane a cart would take the hides down; `look` reuses an existing face, as the trail's other NPCs do.
     {"id": "fenn", "name": "Fenn the tanner", "look": "fenn", "x": 36, "y": 48, "talk": "quest", "quest": "skinning_knife",
-     "examine": "Fenn the tanner, on the lane below the southwest road, with frames of skins that nobody in this village knew he had."},
+     "examine": "Fenn the tanner, on the lane below the northwest road, with frames of skins that nobody in this village knew he had."},
     # The town chest (2026-10-04: "a chest in town" holding your arcade wallet; bag and chest share one wallet,
     # the game only remembers which holdings you carry). Opening it is engine-side (event 'chest').
     {"id": "chest", "name": "Ashvale chest", "look": "chest", "x": 24, "y": 53, "chest": True,
@@ -1553,7 +1590,19 @@ module('rules', 3, {
         "P": {"skill": "woodcutting", "name": "Pine tree", "item": "logs", "req": 1, "xp": 250, "speed": 4, "deplete": 6, "regrow": -1},
         "O": {"skill": "woodcutting", "name": "Oak tree", "item": "oak_logs", "req": 15, "xp": 375, "speed": 4, "deplete": 8, "regrow": -1},
         "W": {"skill": "woodcutting", "name": "Willow", "item": "willow_logs", "req": 20, "xp": 500, "speed": 4, "deplete": 8, "regrow": -1},
-        "M": {"skill": "woodcutting", "name": "Maple", "item": "maple_logs", "req": 30, "xp": 675, "speed": 5, "deplete": 8, "regrow": -1},
+        "M": {"skill": "woodcutting", "name": "Maple", "item": "maple_logs", "req": 30, "xp": 675, "speed": 5, "deplete": 8, "regrow": -1,
+              "tap": {"xp": 200, "ticks": 5, "per": "day", "mark": "sap", "season": "sap", "verb": "Collect sap from",
+                      "say": "Ziinzibaakwadwaaboo drips from the cut into your {bucket} until it is full.",
+                      "again": "This ininaatig has given its sap today. Try another tree.",
+                      "none": "You need an empty biskitenaagan or an akik (pail) to catch the sap.",
+                      "off": "The sap is not running. It runs in the spring, in the days before the maples bud.",
+                      "cold": "The day never thawed: the sap is not running today.", "warm": "The night did not freeze: the sap is not running today."}},   # fills an empty bucket (an item that "fills" into another)
+        "Q": {"skill": "woodcutting", "name": "Cedar", "item": "cedar_logs", "req": 20, "xp": 500, "speed": 4, "deplete": 8, "regrow": -1},   # giizhik (2026-10-08)
+        "L": {"skill": "woodcutting", "name": "Tamarack", "item": "tamarack_logs", "req": 20, "xp": 500, "speed": 4, "deplete": 8, "regrow": -1},   # mashkiigwaatig
+        "E": {"skill": "woodcutting", "name": "Birch", "item": "logs", "req": 1, "xp": 250, "speed": 4, "deplete": 6, "regrow": -1,
+              "peel": {"item": "wiigwaas", "xp": 150, "ticks": 4, "per": "year", "mark": "bark", "verb": "Peel bark from",
+                       "say": "You cut round the trunk and ease off a sheet of wiigwaas. The birch will heal by next year.",
+                       "again": "This birch has given its wiigwaas this year. Leave it to heal and find another."}},   # wiigwaasaatig (2026-10-08); long-press peels its bark
         "Y": {"skill": "woodcutting", "name": "Yew", "item": "yew_logs", "req": 40, "xp": 900, "speed": 5, "deplete": 10, "regrow": -1},
         "R": {"skill": "mining", "name": "Copper rocks", "item": "copper_ore", "req": 1, "xp": 175, "speed": 4, "deplete": 1, "regrow": 8},
         "N": {"skill": "mining", "name": "Tin rocks", "item": "tin_ore", "req": 1, "xp": 175, "speed": 4, "deplete": 1, "regrow": 8},
@@ -1575,8 +1624,8 @@ module('rules', 3, {
               "skills": ["attack", "strength", "defence", "ranged", "magic", "hitpoints", "dexterity", "speechcraft"]},
     "items": {
         "categories": {"weapon": ["sword", "dagger", "longsword", "mace", "bow", "staff"], "armour": ["helmet", "platebody", "chainbody", "platelegs", "kiteshield", "torch"],
-                       "tool": ["hatchet", "pickaxe", "net", "rod", "pot", "tinderbox", "stone"], "pack": ["pack"], "cosmetic": ["hat", "cape", "robe"],
-                       "resource": ["logs", "ore", "coal", "bar", "pelt", "fish", "mushroom", "meat"], "food": ["bread", "fish", "mushroom", "meat"], "potion": ["healing"],
+                       "tool": ["hatchet", "pickaxe", "net", "rod", "pot", "tinderbox", "stone", "pole", "knocker"], "pack": ["pack"], "cosmetic": ["hat", "cape", "robe"],
+                       "resource": ["logs", "ore", "coal", "bar", "pelt", "fish", "mushroom", "meat", "silk", "grain", "bark", "sinew", "bucket"], "food": ["bread", "fish", "mushroom", "meat", "candy"], "potion": ["healing"],
                        "ammo": ["arrow"], "currency": ["gold"], "jewellery": ["ring"]},
         "slots": {"weapon": "weapon", "armour/helmet": "head", "armour/platebody": "body", "armour/chainbody": "body", "armour/platelegs": "legs",
                   "armour/kiteshield": "shield", "armour/torch": "shield", "ammo": "ammo", "pack": "pack", "cosmetic/hat": "head", "cosmetic/cape": "cape", "cosmetic/robe": "body", "jewellery/ring": "ring"},
@@ -1586,7 +1635,7 @@ module('rules', 3, {
         "edible": ["food", "potion"], "drink": ["potion"],
         "traits": {"Edition": "edition", "Cures": "cures", "Light": "light", "Form": "form", "Teleport": "teleport", "Cooldown ticks": "cooldown", "Call to arms": "arms", "Attack": "attack", "Strength": "strength", "Defence": "defence", "Ranged": "ranged", "Magic": "magic", "Ranged strength": "rstr",
                    "Speed": "speed", "Range": "range", "Carry": ["carry", 1000], "Heal": "heal", "Heal %": "healPct", "Cooks into": "cooks",
-                   "Burns into": "burns", "Cooking level": "cookReq", "Cooking XP": "cookXp", "Firemaking level": "fireReq", "Burn ticks": "burnTicks",
+                   "Burns into": "burns", "Container": "vessel", "Fills into": "fills", "English": "english", "Energy": "energy", "Cooking level": "cookReq", "Cooking XP": "cookXp", "Firemaking level": "fireReq", "Burn ticks": "burnTicks",
                    "Firemaking XP": "fireXp", "Effect": "effect", "Effect ticks": "effectTicks", "Effect chance": "effectChance", "Effect damage": "effectDamage"},
         "limits": {"perTier": {"Attack": 12, "Strength": 12, "Ranged": 12, "Magic": 12, "Defence": 16, "Ranged strength": 8},
                    "flat": {"Speed": [2, 7], "Range": [1, 10], "Carry": [0, 100], "Heal": [0, 40], "Heal %": [0, 100], "Cooking level": [1, 99], "Cooking XP": [0, 500],
@@ -1612,7 +1661,8 @@ module('rules', 3, {
     # town portals (2026-10-04: "put a town portal in each of the towns"): stand by one and travel to any other;
     # `to` is where you arrive. The Ashvale stone (Teleport "ashvale") takes you to the same spot.
     "portals": [{"id": "ashvale", "name": "Ashvale", "x": 19, "y": 55, "to": [19, 56]},
-                {"id": "saltmere", "name": "Saltmere", "x": 462, "y": 28, "to": [462, 29]}],   # the lake castle's portal is added by tools/castle/make_castle.js when the castle ships
+                {"id": "saltmere", "name": "Saltmere", "x": 462, "y": 28, "to": [462, 29]},
+                {"id": "castle", "name": "the Lake Castle", "x": 4048, "y": 8419, "to": [4049, 8418]}],   # the lake castle's portal, here for good (2026-10-08: make_castle.js added it, every later make_data run dropped it, and the castle stone said "Nothing happens")
     # 2026-10-04: "logs, pelts arrows potions should all de spawn. Only Gear and tools and Gold should persist."
     # 2026-10-06: "Gold, and valuable items should stay there until somebody picks them up" (by value, 100 GOLD);
     # "All teleport or rune stone must always persist". The @ashvale Bank keeps them in the world across sessions.
@@ -1637,6 +1687,10 @@ module('rules', 3, {
 # point, grid = origin - [192, 192] (tests/core_test.js checks both against the globe). Ashvale moved to the shore of
 # the inland sea when the reserved land became a network (2026-10-03), so the face and the tiles moved with it;
 # then to the coast of one of two continents on a mostly-ocean globe (2026-10-03 evening): face 19, Saltmere's shore parcel next door.
-module('globecfg', 1, {"seed": "ashvale", "n": 128, "radius_m": 36110, "face": 19, "origin": [8811, -3368], "grid": [8619, -3560],
+module('globecfg', 1, {"seed": "ashvale", "n": 128, "radius_m": 36110, "face": 19, "north": -1, "origin": [8811, -3368], "grid": [8619, -3560],
                        "chunk": 64, "area": 128, "region": 512, "belt": {"whisperwood": 90, "village": 30},
-                       "links": [["village", "saltmere"], ["ziibiing", "village", "trail"]]})   # + the skinny trail up from Ziibiing (2026-10-07)   # the trail from Ashvale down to Saltmere (2026-10-03)
+                       "links": [["eastend", "saltmere"], ["ziibiing", "village", "trail"]],
+                       # the maple and birch woods (2026-10-08: "a large deciduous forest with maple and Birch", on Ziibiing's own side of
+                       # the river, between it and Ashvale; the trail runs through) - game tiles, an ellipse with a wandering edge
+                       "groves": [{"piece": "ziibiing", "x": 70, "y": 470, "rx": 160, "ry": 105, "sp": "MMMEE", "dens": 0.6, "edge": 35},
+                                  {"piece": "ziibiing", "x": 22, "y": 602, "rx": 30, "ry": 18, "sp": "QQLL", "dens": 0.6, "edge": 10}]})   # the road to Saltmere leaves from Eastend, one straight cobbled road (2026-10-08); village and Eastend touch, one street   # + the skinny trail up from Ziibiing (2026-10-07)   # the trail from Ashvale down to Saltmere (2026-10-03)   # a cedar and tamarack stand by the river (the push pole and the knockers)

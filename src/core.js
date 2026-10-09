@@ -166,7 +166,7 @@
        "weather" {kinds: {kind: weight}, min, max}; rules.weather.kinds[kind] = generic multipliers that the rules read
        (sight, range, fireFail, fireBurn, run). Rolled from the seeded RNG by the zone's host; replicas take it from the host. */
     const WX = RU.weather || { kinds: {}, intensity: [50, 100] };
-    const ZW = {}; for (const z of ZINDEX) if (z.weather) ZW[z.id] = z.weather;
+    const ZW = {}; for (const z of ZINDEX) if (z.weather && z.weather.kinds) ZW[z.id] = z.weather;   /* a cave's {none: true}: no weather at all */
     /* 2026-10-03: the weather follows the world's climate. On seeded land every area and every set piece belongs
        to the weather region of its climate zone ('cz<n>', tables in rules.weather.climate), and coasts are a little
        foggier; each region rolls like a zone does, so everyone in it agrees */
@@ -196,11 +196,25 @@
       if (key === 'fireFail') return (k || 0) * w.intensity / 100;
       return k == null ? 1 : 1 + (k - 1) * w.intensity / 100;
     }
+    /* THE WEATHER KEEPS THE SEASON (2026-10-07: "It should only snow in the winter at the latitude that it should snow. It's
+       not rain or be foggy in the winter. It should not snow where it is not winter"): the engine tells the core whether it is a
+       snowy winter where the roller stands (setSeason); in one, rain and fog become snow (or clear); anywhere else snow becomes
+       rain. Weather that no longer fits the season ends at once and is rolled again. */
+    let SEASONW = null;
+    const wrongFor = k => SEASONW && (SEASONW.snowy ? (k === 'rain' || k === 'fog') : k === 'snow');
+    function setSeason(st) { SEASONW = st || null; for (const z in S.weather) { const w = S.weather[z]; if (w && wrongFor(w.kind)) w.until = S.t; } }
+    function seasonKinds(K) {
+      if (!SEASONW) return K;
+      const o = Object.assign({}, K);
+      if (SEASONW.snowy) { o.snow = (o.snow || 0) + (o.rain || 0) + (o.fog || 0); delete o.rain; delete o.fog; if (!o.snow) o.snow = 1; }
+      else { o.rain = (o.rain || 0) + (o.snow || 0); delete o.snow; if (!o.rain) delete o.rain; }
+      return o;
+    }
     function weatherTick() {
       for (const z in ZW) {
         const w = S.weather[z]; if (!isAuth(z) || S.t < w.until) continue;
-        const ks = Object.keys(ZW[z].kinds), tot = ks.reduce((a, k) => a + ZW[z].kinds[k], 0); let r = R.int(tot), kind = ks[0];
-        for (const k of ks) { if (r < ZW[z].kinds[k]) { kind = k; break; } r -= ZW[z].kinds[k]; }
+        const KK = seasonKinds(ZW[z].kinds || {}), ks = Object.keys(KK), tot = ks.reduce((a, k) => a + KK[k], 0); let r = R.int(Math.max(1, tot)), kind = ks[0] || 'clear';
+        for (const k of ks) { if (r < KK[k]) { kind = k; break; } r -= KK[k]; }
         const I = kind === 'clear' ? 0 : WX.intensity[0] + R.int(WX.intensity[1] - WX.intensity[0] + 1);
         const len = ZW[z].min + R.int(Math.max(1, ZW[z].max - ZW[z].min + 1));
         const was = w.kind; S.weather[z] = { kind, intensity: I, until: S.t + len };
@@ -441,11 +455,19 @@
        character comes back where it was, kilometres out if need be. v1 (v0.5 and older) stored no position: those load at
        the village well as they always did; a v1 save that carries old map x, y keeps them (the old map is the vale frame:
        the village and Whisperwood keep their coordinates through the fixed globecfg origin). */
+    /* THE UNDERGROUND MOVED (2026-10-08): when the globe opened, the Spider Cave and the wigwam rooms of Ziibiing left their old spots
+       (now open sea) for the empty space of the flat net. A position saved inside an old spot is carried along. */
+    const UNDER_MOVES = [[-200, 16100, -80, 16184, 24200, 7900], [40, 16300, 253, 16313, 23960, 8100]];
+    function underMove(x, y) { for (const r of UNDER_MOVES) if (x >= r[0] && x < r[2] && y >= r[1] && y < r[3]) return [x + r[4], y + r[5]]; return [x, y]; }
     function placeFrom(p, s) {
       let xy = null;
       if ((s.v | 0) >= 2 && Array.isArray(s.pos) && s.pos.length === 3) xy = M.fromFace(s.pos[0] | 0, s.pos[1] | 0, s.pos[2] | 0);
       else if ((s.v | 0) <= 1 && Number.isInteger(s.x) && Number.isInteger(s.y)) xy = [s.x, s.y];
+      if (xy) xy = underMove(xy[0], xy[1]);   /* saved inside the Spider Cave or a wigwam before they moved */
       if (!xy || !inMap(xy[0], xy[1])) return;   /* outside the world: the spawn */
+      /* in your canoe when you left (2026-10-07: "if you're in a canoe that needs to save ... so when you reload the game, you're not on
+         the shore without your canoe"): you come back sitting in it, on the water where you were */
+      if (s.boat === 1 && !isHawk(p) && isWet(xy[0], xy[1])) { p.x = xy[0]; p.y = xy[1]; p.boat = 1; p.face = s.face | 0; ev({ e: 'boat', p: p.id, on: 1 }); return; }
       /* 2026-10-06: "I flew over the ocean and the game lost track of my position ... My position should be kept no
          matter where on the globe I am." A hawk (the ring is restored before this) keeps its exact spot over sea, lake or
          woods; anyone else on a tile they cannot stand on goes to the nearest open ground, not back to the village. */
@@ -462,7 +484,7 @@
     function exportPlayer(id) {
       const p = S.players[id]; if (!p) return null;
       const at = p.dead ? wakeSpot(p).at : [p.x, p.y];
-      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, town: p.town || null, hawkHp: p.hawkHp == null ? null : p.hawkHp, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
+      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
     }
 
     // ---------------- pathfinding: BFS over the tile grid, 8 directions, no corner cutting (RuneScape-style)
@@ -483,13 +505,14 @@
        bridge - and never across a corner of land */
     let BOAT = false;
     let GATE_P = null;   /* while a player paths: an open gate (need flag met) is walkable even though its tile is F */
-    const isWet = (x, y) => { const t = M.tileAt(x, y); return t === '~' || t === 'v' || t === 'B'; };
+    const isWet = (x, y) => { const t = M.tileAt(x, y); return (t === '~' || t === 'v' || t === 'B') && !(M.iceAt && M.iceAt(x, y)); };   /* a frozen lake is no water for a canoe */
     /* the hawk (2026-10-04): its own stats. hp 4; a strike every `strike` ticks with a hitPct % chance of hitDmg; a
        strike costs `energy` run energy (Dexterity) and leaves it open to a hit for those ticks; a third of the carrying
        capacity and `slots` bag slots; overburdened it lands and walks one step every groundEvery ticks */
     const HK = Object.assign({ hp: 4, slots: 9, carry: 0.34, strike: 3, exposed: 1, hitPct: 25, hitDmg: 4, energy: 250, groundEvery: 4, regenEvery: 50 }, RU.hawk || {});   /* exposed: ticks it is down within reach */
     const slotLimit = (p) => isHawk(p) ? Math.min(HK.slots, p.inv.length) : p.inv.length;
     const airborne = (p) => isHawk(p) && !(p.burden > 0) && !(p.striking > S.t);   /* in the air: no land animal can touch it */
+    const shooter = (m, md) => !!(md.cast || (m.carry && Object.keys(m.carry).some(k => /^arrows_/.test(k) && m.carry[k] > 0)));   /* can reach a hawk in the sky */
     const isHawk = (p) => !!(p && p.eq && p.eq.ring && IT[p.eq.ring.id] && IT[p.eq.ring.id].form === 'hawk');
     function gateOpen(x, y) {
       if (!GATE_P) return false;
@@ -517,8 +540,35 @@
     /* BFS in a window around the start (the map has no edge any more): (2L+5)^2 cells for a depth limit L, buffers kept
        and stamped per search, so a search costs what it visits. Same order and ties as the old whole-map BFS. */
     let PB = null, PGEN = 0;
+    /* A CANOE KEEPS TO THE RIVER (2026-10-07: "When I'm traveling in the canoe and I click down the river, it tries to go diagonal
+       to the shore. It should just travel down the river"): its own search, by cost - water beside the bank costs more, so the
+       way runs down the middle of the river and comes in to the bank only at the end; a diagonal costs its length. */
+    function boatPath(sx, sy, goal, ax, ay, limit) {
+      const L = limit || 400, near = new Map(), shoreCost = (x, y) => { const k = x * 65536 + y; let c = near.get(k); if (c != null) return c; c = 0;
+        for (let r = 1; r <= 2 && !c; r++) for (let dy = -r; dy <= r && !c; dy++) for (let dx = -r; dx <= r; dx++) if (!isWet(x + dx, y + dy)) { c = r === 1 ? 2.5 : 0.8; break; }
+        near.set(k, c); return c; };
+      const key = (x, y) => (x + 32768) * 65536 + (y + 32768), dist = new Map(), prev = new Map(), H = [];   /* binary heap of [cost, x, y] */
+      const push = (c, x, y) => { H.push([c, x, y]); let i = H.length - 1; while (i > 0) { const j = (i - 1) >> 1; if (H[j][0] <= H[i][0]) break; [H[i], H[j]] = [H[j], H[i]]; i = j; } };
+      const pop = () => { const top = H[0], last = H.pop(); if (H.length) { H[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < H.length && H[l][0] < H[m][0]) m = l; if (r < H.length && H[r][0] < H[m][0]) m = r; if (m === i) break; [H[i], H[m]] = [H[m], H[i]]; i = m; } } return top; };
+      dist.set(key(sx, sy), 0); push(0, sx, sy); let found = null, best = null, bestD = 1e18, n = 0;
+      while (H.length && n++ < 30000) {
+        const [c, x, y] = pop(), k = key(x, y); if (c > dist.get(k)) continue;
+        if ((x !== sx || y !== sy) && goal(x, y)) { found = k; break; }
+        if (ax != null) { const d = (x - ax) * (x - ax) + (y - ay) * (y - ay); if (d < bestD) { bestD = d; best = k; } }
+        if (Math.max(Math.abs(x - sx), Math.abs(y - sy)) >= L) continue;
+        for (let q = 0; q < 8; q++) {
+          const dx = DIRS[q][0], dy = DIRS[q][1]; if (!canStep(x, y, dx, dy)) continue;
+          const nx = x + dx, ny = y + dy, nk = key(nx, ny), nc = c + (dx && dy ? 1.42 : 1) + shoreCost(nx, ny) + (prev.has(k) && prev.get(k)[2] !== q ? 0.15 : 0);   /* a small cost to change course: straight runs, not a zigzag */
+          if (nc < (dist.has(nk) ? dist.get(nk) : 1e18)) { dist.set(nk, nc); prev.set(nk, [x, y, q]); push(nc, nx, ny); }
+        }
+      }
+      let end = found != null ? found : best; if (end == null || end === key(sx, sy)) return [];
+      const path = []; while (end !== key(sx, sy)) { const pv = prev.get(end); const ex = Math.floor(end / 65536) - 32768, ey = (end % 65536) - 32768; path.push(idx(ex, ey)); end = key(pv[0], pv[1]); }
+      return path.reverse();
+    }
     function findPath(sx, sy, goal, ax, ay, limit) {
       if (goal(sx, sy)) return [];
+      if (BOAT && !FLY) return boatPath(sx, sy, goal, ax, ay, Math.min(limit || 400, 400));
       const L = limit || 120, R2 = L + 2, S2 = 2 * R2 + 1, N = S2 * S2, X0 = sx - R2, Y0 = sy - R2;
       if (!PB || PB.n < N) PB = { n: N, prev: new Int32Array(N), dist: new Int32Array(N), q: new Int32Array(N), st: new Uint32Array(N) };
       if (++PGEN > 4294967000) { PB.st.fill(0); PGEN = 1; }
@@ -539,7 +589,30 @@
       }
       let end = found >= 0 ? found : best; if (end < 0 || end === s0) return [];
       const path = []; while (end !== s0) { path.push(idx(X0 + end % S2, Y0 + ((end / S2) | 0))); end = prev[end]; }
-      return path.reverse();
+      return straightPath(sx, sy, path.reverse());
+    }
+    /* WALK STRAIGHT (2026-10-08: "fix the character movement so the character doesn't jog back-and-forth so much"): the search
+       finds a shortest way, but among the many equally short ones it takes the first, which bunches its diagonal steps and turns
+       at every chance. The way is redrawn as straight lines wherever every step of the line can be taken, the diagonals spread
+       evenly along each line - never longer than before, and only through tiles a step may enter anyway. */
+    function lineSteps(ax, ay, bx, by) {
+      const dx = bx - ax, dy = by - ay, n = Math.max(Math.abs(dx), Math.abs(dy)), out = [];
+      for (let k = 1; k <= n; k++) out.push([ax + Math.round(dx * k / n), ay + Math.round(dy * k / n)]);
+      return out;
+    }
+    function lineOk(ax, ay, steps) { let px = ax, py = ay; for (const [x, y] of steps) { if (!canStep(px, py, x - px, y - py)) return false; px = x; py = y; } return true; }
+    function straightPath(sx, sy, path) {
+      if (path.length < 3) return path;
+      const pts = [[sx, sy]].concat(path.map(k => [kx(k), ky(k)])), out = [];
+      let i = 0;
+      while (i < pts.length - 1) {
+        let j = Math.min(pts.length - 1, i + 48), seg = null;
+        for (; j > i + 1; j--) { const st = lineSteps(pts[i][0], pts[i][1], pts[j][0], pts[j][1]); if (st.length <= j - i && lineOk(pts[i][0], pts[i][1], st)) { seg = st; break; } }
+        if (!seg) { seg = [pts[i + 1]]; j = i + 1; }
+        for (const [x, y] of seg) out.push(idx(x, y));
+        i = j;
+      }
+      return out.length <= path.length ? out : path;
     }
     function lineOfSight(ax, ay, bx, by) {
       let x = ax, y = ay; const dx = Math.abs(bx - ax), dy = Math.abs(by - ay), sx = ax < bx ? 1 : -1, sy = ay < by ? 1 : -1; let err = dx - dy;
@@ -573,12 +646,13 @@
     };
     function dropGround(id, n, x, y, owner, life, extra) {
       if (!isAuth(zoneOf(x, y))) { ev(Object.assign({ e: 'xdrop', id, n, x, y, life: life || 300, owner: owner || null }, extra || {})); return null; }
-      const g = S.ground.find(q => q.x === x && q.y === y && q.id === id && IT[id].stack);
-      const keep = !perishable(id, g ? g.n + n : n);   /* gear, tools and Gold (rules.persist) and every magical item lie where they fell until someone takes them; the rest despawns (2026-10-04) */
+      const sunk = extra && extra.sunk || 0;
+      const g = S.ground.find(q => q.x === x && q.y === y && q.id === id && IT[id].stack && (q.sunk || 0) === sunk);
+      const keep = sunk || !perishable(id, g ? g.n + n : n);   /* what lies at the bottom of a lake stays there until it is fished up */   /* gear, tools and Gold (rules.persist) and every magical item lie where they fell until someone takes them; the rest despawns (2026-10-04) */
       if (g) { g.n += n; g.until = keep ? 1e15 : S.t + (life || 300); ev({ e: 'ground', g: g.uid, n: g.n, x, y }); return g; }
       const ng = { uid: nuid(), id, n, x, y, owner: owner || null, until: keep ? 1e15 : S.t + (life || 300) };
       if (extra) Object.assign(ng, extra);
-      S.ground.push(ng); ev({ e: 'drop', g: ng.uid, id, n, x, y, from: ng.from || null, owner: owner || null }); return ng;   /* owner: who let it fall (the chest's exact-NFT drops) */
+      S.ground.push(ng); ev({ e: 'drop', g: ng.uid, id, n, x, y, from: ng.from || null, owner: owner || null, sunk: ng.sunk || 0 }); return ng;   /* owner: who let it fall (the chest's exact-NFT drops) */
     }
 
     // ---------------- commands
@@ -596,7 +670,7 @@
           const tx = c.x | 0, ty = c.y | 0;
           if (p.boat === 2) {   /* riding: your partner steers; pointing at the shore beside the canoe gets you out */
             if (!isWet(tx, ty) && cheb(p.x, p.y, tx, ty) <= 2 && !M.blocked(tx, ty)) { leaveRide(p, [tx, ty]); break; }
-            msg(p, "Your partner steers the jiimaan (canoe) with the gaandakii'iganaak (push pole). You knock the manoomin (wild rice) as you pass it - or point at the shore beside you to get out.", 'info'); break;
+            msg(p, p.knock ? "Your partner steers the jiimaan (canoe) with the gaandakii'iganaak (push pole). You knock the manoomin (wild rice) as you pass it - or point at the shore beside you to get out." : 'Your partner steers the jiimaan (canoe). Point at the shore beside you to get out.', 'info'); break;
           }
           /* in a canoe: water - paddle there; land - paddle to the water nearest it, step out, walk on to it (2026-10-07) */
           p.land = p.boat && !isWet(tx, ty) ? [tx, ty] : null;
@@ -606,11 +680,11 @@
         case 'ride': {   /* climb into a friend's canoe to knock rice (2026-10-07: "two people in the canoe, one with a push pole and one with a set of rice knockers") */
           const t = S.players[c.pid];
           if (!t || t === p || t.boat !== 1 || t.dead || p.boat || isHawk(p)) { msg(p, "There's no canoe to climb into there.", 'warn'); break; }
-          if (Object.values(S.players).some(q => q !== p && q.boat === 2 && q.ride === c.pid)) { msg(p, 'That canoe already has someone knocking rice in it.', 'warn'); break; }
+          if (Object.values(S.players).some(q => q !== p && q.boat === 2 && q.ride === c.pid)) { msg(p, 'That canoe already has two in it.', 'warn'); break; }
           p.act = { k: 'ride', pid: c.pid }; p.skilling = null; closeShop(p); break;
         }
         case 'board': {   /* get into a canoe at the landing */
-          const o = M.objects.find(q => q.k === 'canoe' && q.x === (c.x | 0) && q.y === (c.y | 0));
+          const o = M.objects.find(q => q.k === 'canoe' && q.x === (c.x | 0) && q.y === (c.y | 0)) || BOATS.get((c.x | 0) + ',' + (c.y | 0));
           if (o && !p.dead && !p.boat && !isHawk(p) && p.lv === 0) { p.act = { k: 'board', x: o.x, y: o.y }; p.skilling = null; closeShop(p); }
           break;
         }
@@ -646,7 +720,7 @@
         case 'npc': { const n = M.npcs.find(q => q.id === c.id); if (n) { p._trade = !!c.trade; p.act = { k: 'npc', id: n.id }; p.skilling = null; closeShop(p); } break; }
         case 'move': moveSlot(p, c.from | 0, c.to | 0); break;
         case 'light': { const s0 = p.inv[c.slot | 0]; if (s0 && IT[s0.id].burnTicks) { p.act = { k: 'light', slot: c.slot | 0, id: s0.id }; p.gT = 0; p.path = []; p.skilling = null; closeShop(p); } break; }
-        case 'gather': { const n = nodeAt(idx(c.x | 0, c.y | 0)); if (n) { p.act = { k: 'gather', i: idx(n.x, n.y) }; p.skilling = null; closeShop(p); p.gT = 0; } clearUsing(p); break; }
+        case 'gather': { const n = nodeAt(idx(c.x | 0, c.y | 0)); if (n) { p.act = { k: 'gather', i: idx(n.x, n.y), peel: c.peel ? 1 : 0, tap: c.tap ? 1 : 0 }; p.skilling = null; closeShop(p); p.gT = 0; } clearUsing(p); break; }
         case 'plant': p.act = { k: 'plant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); clearUsing(p); break;
         case 'unplant': p.act = { k: 'unplant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); clearUsing(p); break;
         case 'unuse': if (p.using) { p.using = null; ev({ e: 'using', p: p.id }); } break;
@@ -763,7 +837,7 @@
     function passageAt(x, y) { for (const o of M.objects) if (o.to && o.x === x && o.y === y) return o; return null; }
     function teleport(p, P, text) {
       const ox = p.x, oy = p.y, passage = P.id === 'cavemouth' || P.id === 'caveexit';
-      p.x = P.to[0]; p.y = P.to[1]; p.path = []; p.act = null; p.skilling = null; p.lv = 0; p.bld = -1; closeShop(p); if (p.boat) { p.boat = 0; p.land = null; p.ride = null; ev({ e: 'boat', p: p.id, on: 0 }); }
+      p.x = P.to[0]; p.y = P.to[1]; p.path = []; p.act = null; p.skilling = null; p.lv = 0; p.bld = -1; closeShop(p); if (p.boat === 1) landBoat(ox, oy, p.face, p.id); if (p.boat) { p.boat = 0; p.land = null; p.ride = null; ev({ e: 'boat', p: p.id, on: 0 }); }
       let k = 0;
       for (const m of S.mobs) if (m.tgt === p.id) {
         /* through a cave opening, the relentless ones close behind you come too, a few ticks apart (the operator: "Follow you up") */
@@ -814,6 +888,7 @@
       const mx = maxHp(p), heal = d.healPct ? Math.floor(mx * d.healPct / 100) : (d.heal | 0);   /* an antidote heals nothing: 0, never undefined (it made hitpoints NaN, 2026-10-07) */
       removeItem(p, s.id, 1);
       const before = p.hp; p.hp = Math.min(mx, p.hp + heal);
+      if (d.energy) p.energy = Math.min(10000, (p.energy || 0) + d.energy);   /* maple candy: a run's worth of energy */
       p.atk = Math.max(p.atk, 0) + 3;
       msg(p, (d.drink ? 'You drink the ' : 'You eat the ') + d.name.toLowerCase() + '.' + (p.hp > before ? ' It heals some health.' : ''));
       ev({ e: 'eat', p: p.id, id: s.id, heal: p.hp - before });
@@ -952,7 +1027,7 @@
       /* a spell is rolled against magic defence as in RuneScape: 70% Magic, 30% Defence */
       const A = magic ? ((C.att || md.att) + 9) * ((C.attb || md.attb) + 64) : (md.att + 9) * (md.attb + 64);
       const Dr = magic ? (Math.floor(eff(p, 'magic') * 0.7 + eff(p, 'defence') * 0.3) + 9) * (b.defence + 64) : (eff(p, 'defence') + (st.def || 0) + 9) * (b.defence + 64);
-      if (airborne(p)) return;   /* a hawk in the air: no land animal can touch it */
+      if (airborne(p) && !mode) return;   /* a hawk in the air: no blow can reach it - only an arrow or a spell, shot up at it (2026-10-08) */
       const hk = isHawk(p), hit = rollAttack(A, Dr); let dmg = hit ? Math.min(R.int((magic && C.max != null ? C.max : md.max) + 1), hk ? p.hawkHp : p.hp) : 0, dodged = false;
       if (dmg > 0 && R.int(100) < Math.floor(lv(p, 'dexterity') / 10) * (DEX.dodgePerTenLevels || 1)) { dmg = 0; dodged = true; }   /* Dexterity: a dodge turns a hit into a 0 */
       /* an overhead protection prayer stops a monster's blows of its kind entirely, as in RuneScape; against a spell it
@@ -1037,7 +1112,33 @@
       if (angelSave(p)) { /* the ring carried them home - still poisoned */ }
       else if (p.hp <= 0) killPlayer(p);
     }
-    function killPlayer(p) {
+    /* LAKES (2026-10-07): a lake is one body of still water; its key is its lowest tile index, found once by a flood fill
+       and kept for every tile of it. Things that sink in it lie on its bottom (ground items with .sunk = the key), unseen,
+       until somebody fishing anywhere on that lake hooks one. */
+    const LAKE = new Map();
+    function lakeKey(x, y) {
+      const k0 = idx(x, y); if (LAKE.has(k0)) return LAKE.get(k0);
+      const wet = (a, b) => { const t = M.tileAt(a, b); return t === '~' || t === 'v'; };
+      if (!wet(x, y) || (M.waterKind && M.waterKind(x, y) !== 'lake')) { LAKE.set(k0, 0); return 0; }
+      const seen = [], q = [[x, y]], vis = new Set([k0]); let lo = k0;
+      while (q.length && seen.length < 8000) {
+        const [a, b] = q.pop(); seen.push(idx(a, b)); lo = Math.min(lo, idx(a, b));
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = a + dx, ny = b + dy, ki = idx(nx, ny); if (!vis.has(ki) && wet(nx, ny)) { vis.add(ki); q.push([nx, ny]); } }
+      }
+      const key = 'L' + lo; for (const ki of seen) LAKE.set(ki, key); return key;
+    }
+    /* THROUGH THE ICE (2026-10-07: "If you're walking on the ice during spring thaw and it melts and you fall through the lake,
+       you should respawn at the nearest town portal as if you died. All of your items should be lost in the bottom of the lake"):
+       a death, but what you carried and wore sinks into that lake instead of lying in a pile */
+    function fallThrough(pid) {
+      const p = S.players[pid]; if (!p || p.dead || p.boat) return false;
+      const key = lakeKey(p.x, p.y) || 'L' + idx(p.x, p.y);
+      msg(p, 'The ice cracks under your feet and gives way! You plunge into the freezing water.', 'warn');
+      killPlayer(p, key);
+      return true;
+    }
+    function sunkIn(key) { let n = 0; for (const g of S.ground) if (g.sunk === key) n++; return n; }
+    function killPlayer(p, sunkKey) {
       if (p.poison) { delete p.poison; ev({ e: 'poison', p: p.id, on: false }); }
       p.dead = S.t; p.act = null; p.path = []; p.skilling = null; closeShop(p); prayersOff(p); p.pfx = null;
       ev({ e: 'die', p: p.id });
@@ -1046,8 +1147,9 @@
       const pile = [];
       for (let i = 0; i < p.inv.length; i++) { const s = p.inv[i]; if (s) { pile.push(s); p.inv[i] = null; } }
       for (const k of EQ_SLOTS) { const e = p.eq[k]; if (e) { pile.push(e); delete p.eq[k]; } }
-      for (const it of pile) dropGround(it.id, it.n, p.x, p.y, null, DEATH.pileTicks || 1000, { from: p.id, diedAt: S.t });
-      if (pile.length) {
+      for (const it of pile) dropGround(it.id, it.n, p.x, p.y, null, DEATH.pileTicks || 1000, sunkKey ? { from: p.id, diedAt: S.t, sunk: sunkKey } : { from: p.id, diedAt: S.t });
+      if (pile.length && sunkKey) { msg(p, 'Everything you carried sinks to the bottom of the lake. Someone fishing here might hook it one day.', 'warn'); ev({ e: 'inv', p: p.id }); ev({ e: 'equip', p: p.id }); }
+      else if (pile.length) {
         const z = M.zoneAt(p.x, p.y);
         msg(p, 'Your belongings lie where you fell (' + (z || 'the wild') + ', ' + p.x + ',' + p.y + ') for ' + Math.round((DEATH.pileTicks || 1000) * 0.6 / 60) + ' minutes. Others will be able to take them once shared loot arrives.', 'warn');
         p.deathPile = { x: p.x, y: p.y, t: S.t };
@@ -1095,7 +1197,82 @@
       const C = md.cover, q = p.quests && p.quests[C.quest];
       return !(q && q.step >= (C.step || 1));
     }
+    /* ---------------- THE SUGAR BUSH (2026-10-08, handoff/sugarbush_plan.md) ----------------
+       NATURE: the engine's word on the season where the player stands ({day, year, sap: {season, day, low, high, left}}), as it
+       has the sky and the clock; NATTELL(kind, p): a line on the weather, the plants and birds, the moon, or the sun, stars and
+       planets, for the people who watch them. MARKS: which maples gave sap (on which game day) and which birches gave bark (in
+       which year), shared with everyone through the @ashvale Bank: a maple gives sap once a day and a birch its bark once a year,
+       to whoever comes first. */
+    let NATURE = null, NATTELL = null;
+    function setNature(o) { NATURE = o || null; }
+    function setNatureTell(fn) { NATTELL = typeof fn === 'function' ? fn : null; }
+    const MARKS = {};   /* mark kind -> Map(tile -> period) */
+    function setMarks(k, cells) { if (!/^[a-z]{1,12}$/.test(String(k))) return 0; const m = MARKS[k] = MARKS[k] || new Map(); let n = 0; for (const c of cells || []) { const i = idx(c[0] | 0, c[1] | 0), v = c[2] | 0; if (!(m.get(i) >= v)) { m.set(i, v); n++; } } return n; }
+    /* a tree's extra yield, all data (rules.nodes.<kind>.peel / .tap; 2026-10-08: the rules ride in the JSON): peel takes an
+       item off the tree, tap fills an empty bucket (an item with "Fills into"); each tree once per `per` (day | year) for anyone,
+       `season` must be on (sap: the run, from NATURE), and the words come with it */
+    const emptyBucket = (p) => p.inv.findIndex(sl => sl && IT[sl.id] && IT[sl.id].fills && IT[IT[sl.id].fills]);
+    function natureDay() { return NATURE && NATURE.day != null ? NATURE.day : Math.floor(S.t / 12000); }
+    function natureYear() { return NATURE && NATURE.year != null ? NATURE.year : 1 + Math.floor(S.t / (12000 * 365)); }
+    const period = (per) => per === 'year' ? natureYear() : natureDay();
+    function yieldTick(p, n, i, Y, how) {
+      p.face = faceTo(p.x, p.y, n.x, n.y);
+      const stop = (t) => { if (t) msg(p, t, 'warn'); p.act = null; p.skilling = null; };
+      const b = how === 'tap' ? emptyBucket(p) : -1;
+      if (how === 'tap' && b < 0) return stop(Y.none);
+      if (Y.season) {
+        const sp = NATURE && NATURE[Y.season];
+        if (!sp || !sp.season) return stop(Y.off);
+        if (!sp.day) return stop(sp.high <= 0 ? Y.cold : Y.warm);
+      }
+      const M0 = MARKS[Y.mark] = MARKS[Y.mark] || new Map();
+      if (M0.get(i) === period(Y.per)) return stop(Y.again);
+      if (how === 'peel' && !canAdd(p, Y.item, 1)) return stop('Your bag is full.');
+      p.skilling = 'chop';
+      if (!p.gT) { p.gT = S.t + (Y.ticks || 4); return; }
+      if (S.t < p.gT) return;
+      p.gT = 0; p.act = null; p.skilling = null;
+      let got = Y.item, was = null;
+      if (how === 'tap') { was = p.inv[b].id; got = IT[was].fills; removeItem(p, was, 1); }
+      addItem(p, got, 1); addXp(p, 'woodcutting', (Y.xp || 0) | 0);
+      M0.set(i, period(Y.per)); ev({ e: 'mark', p: p.id, k: Y.mark, x: n.x, y: n.y, v: period(Y.per) });
+      if (Y.say) msg(p, String(Y.say).replace('{bucket}', was ? IT[was].name.toLowerCase() : ''));
+      ev({ e: 'gather', p: p.id, node: i, ok: true, item: got }); ev({ e: 'inv', p: p.id });
+    }
+    /* TRADES AND CRAFTS by the people (data on the NPC): trade {take: {id: n}, give: {id: n}, say, lack} at once; craft {take,
+       give, days, say, wait, ready, lack} - made for you and ready to collect after `days` game days (Migizi's biskitenaagan) */
+    function tradeTalk(p, n) {
+      const T = n.trade, C = n.craft, f = (L) => (L || []).map(l => String(l).replace(/\{name\}/g, p.name || 'traveller'));
+      const has = (take) => Object.keys(take || {}).every(k => invCount(p, k) >= take[k]);
+      const say = (L) => { ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: f(L) }); return true; };
+      if (C) {   /* one craft, or a list (Ziigwan carves the push pole and the knockers); an order is kept per thing made */
+        p.orders = p.orders || {}; const L0 = Array.isArray(C) ? C : [C], key = (c) => L0.length > 1 ? n.id + ':' + c.give : n.id;
+        for (const c of L0) { const o = p.orders[key(c)]; if (!o || natureDay() < o.ready) continue;
+          if (!canAdd(p, c.give, 1)) { msg(p, 'Your bag is full: make room for what ' + n.name + ' made you.', 'warn'); return true; }
+          delete p.orders[key(c)]; addItem(p, c.give, 1); ev({ e: 'inv', p: p.id }); msg(p, n.name + ' gives you ' + IT[c.give].name + '.', 'info');
+          return say(c.ready); }
+        for (const c of L0) { if (p.orders[key(c)] || !has(c.take)) continue;
+          for (const k in c.take) removeItem(p, k, c.take[k]); ev({ e: 'inv', p: p.id });
+          p.orders[key(c)] = { ready: natureDay() + (c.days || 1) };
+          msg(p, 'You hand ' + n.name + ' ' + Object.keys(c.take).map(k => c.take[k] + ' x ' + IT[k].name).join(' and ') + '.', 'info');
+          return say(c.say); }
+        const w = L0.find(c => p.orders[key(c)]); if (w) return say(w.wait);
+        const part = L0.find(c => c.hint && Object.keys(c.take).some(k => invCount(p, k) > 0)); if (part) return say(part.lack);
+      }
+      if (T && has(T.take)) {
+        for (const k in T.give) if (!canAdd(p, k, T.give[k])) { msg(p, 'Your bag is full.', 'warn'); return true; }
+        for (const k in T.take) removeItem(p, k, T.take[k]); for (const k in T.give) addItem(p, k, T.give[k]); ev({ e: 'inv', p: p.id });
+        msg(p, 'You trade ' + Object.keys(T.take).map(k => IT[k].name).join(', ') + ' for ' + Object.keys(T.give).map(k => IT[k].name).join(', ') + '.', 'info');
+        return say(T.say);
+      }
+      return false;
+    }
+    let SKYTELL = null;   /* the engine's word on the next eclipses (it has the sky); NPCs marked `sky` end with it */
+    function setSkyTell(fn) { SKYTELL = typeof fn === 'function' ? fn : null; }
     function talk(p, n) {
+      /* a step's kit is never lost for good (the Arcade session 2026-10-07: The Even Grove soft-locked when its three saplings were
+         sold): talking to the quest's giver while the step is open hands back what is missing of it, as logging in already did */
+      for (const qid in p.quests || {}) { const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.giver === n.id && Q.steps[q.step - 1]; if (st && st.kit && !questFinished(p, qid)) topUp(p, q, st); }
       if (n.hideFlag && !hasFlag(p, n.hideFlag)) return;
       if (n.search) {
         if (!searchOpen(p, n)) {
@@ -1151,9 +1328,10 @@
       }   /* the town chest: the engine opens the wallet view (2026-10-04) */
       if (n.tailor && !(p._trade) && !ends) { ev({ e: 'tailor', p: p.id, npc: n.id }); msg(p, n.name + ': ' + (n.greet || 'Fancy a new look? Pick anything you like.'), 'npc'); return; }
       if (n.shop && !ends) { const sh = shopOf(n.shop); p.shop = n.shop; ev({ e: 'shop', p: p.id, shop: n.shop, npc: n.id }); msg(p, n.name + ': ' + sh.greet, 'npc'); return; }
+      if ((n.trade || n.craft) && !ends && tradeTalk(p, n)) return;
       const idle = npcIdleLines(n, p), offered = nextOffered(n, p);
       const hadQuest = (n.quests || []).concat(n.quest ? [n.quest] : []).some(id => p.quests[id]);
-      if (idle && idle.length && !ends && !offered && !hadQuest) { ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: idle }); return; }   /* dialogue straight off the zone data, checked after shop and quest */
+      if (idle && idle.length && !ends && !offered && !hadQuest) { let tell = null; if (n.sky && SKYTELL) try { tell = SKYTELL(p); } catch (e) { tell = null; } let nat = null; if (n.nature && NATTELL) try { nat = NATTELL(n.nature, p); } catch (e) { nat = null; } ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: idle.concat(nat ? [nat] : [], tell ? [tell] : []) }); return; }   /* the sky-watchers end with the next eclipses */   /* dialogue straight off the zone data, checked after shop and quest */
       /* an NPC may offer the next quest only after the one before it is finished (Iria's supper, then the Gift of Angels) */
       let qid = ends || offered || n.quest;
       if (!qid && n.quests && n.quests.length) {
@@ -1161,6 +1339,10 @@
       }
       if (qid && D.quests.quests[qid]) {
         const Q = D.quests.quests[qid]; let q = p.quests[qid]; let lines;
+        if (q && Q.repeat === 'spring' && q.step > Q.steps.length && NATURE && NATURE.sap && NATURE.sap.season && natureYear() > (q.yr | 0)) {   /* Nookomis asks again every spring (2026-10-08) */
+          q = p.quests[qid] = { step: 1, n: 0, again: 1, yr: q.yr }; lines = (Q.again || Q.steps[0].talk).map(l => String(l).replace(/\{name\}/g, p.name || 'traveller')); ev({ e: 'quest', p: p.id, q: qid, step: 1 }); openStep(p, q, Q.steps[0]);
+          ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines }); return;
+        }
         if (q && q.hid) delete q.hid;   /* back in the log, at the step it was left on */
         /* goal kinds, all data: {"kill":key,"n":n} counted by creditKill, {"cook":item,"n":n} by a successful cook,
            {"bring":item,"n":n} counted in your bag, {"talk":npc} by the loop above. A step may ask for a kill and a
@@ -1168,16 +1350,18 @@
         const need = (st) => st.goal.n == null ? 1 : st.goal.n;
         const bringN = (st) => st.goal.bn == null ? need(st) : st.goal.bn;
         const withN = (st) => st.goal.wn == null ? 1 : st.goal.wn;
+        const bids = (g) => (Array.isArray(g.bring) ? g.bring : [g.bring]).filter(id => IT[id]);   /* bring: one item, or a list where any will do */
+        const bringHave = (g) => bids(g).reduce((a, id) => a + invCount(p, id), 0);
         const counted = (st) => {
           if (st.goal.kills) { let n = 0; for (const k in st.goal.kills) n += Math.min(st.goal.kills[k], (q.kn && q.kn[k]) | 0); return n; }
-          return (st.goal.kill || st.goal.cook || st.goal.talk || st.goal.plant) ? (q.n | 0) : (st.goal.bring && IT[st.goal.bring] ? invCount(p, st.goal.bring) : (q.n | 0));
+          return (st.goal.kill || st.goal.cook || st.goal.talk || st.goal.plant) ? (q.n | 0) : (st.goal.bring && bids(st.goal).length ? bringHave(st.goal) : (q.n | 0));
         };
         const killsMet = (st) => { const K = st.goal.kills; if (!K) return true; for (const k in K) if (((q.kn && q.kn[k]) | 0) < K[k]) return false; return true; };
         const met = (st) => {
           const g = st.goal;
           if ((g.kill || g.cook || g.talk || g.plant) && (q.n | 0) < need(st)) return false;
           if (g.kills && !killsMet(st)) return false;
-          if (g.bring && (!IT[g.bring] || invCount(p, g.bring) < bringN(st))) return false;
+          if (g.bring && (!bids(g).length || bringHave(g) < bringN(st))) return false;
           if (g.with && (!IT[g.with] || invCount(p, g.with) < withN(st))) return false;
           return !!(g.kill || g.cook || g.talk || g.bring || g.plant || g.kills);
         };
@@ -1190,15 +1374,14 @@
           else if (!open(st)) { const prev = Q.steps[q.step - 2]; lines = prev && prev.locked && prev.locked.length ? fill(prev.locked, st) : ['The road to that place is not open yet. Come back another day.']; }
           else if (met(st) && (!st.ends || st.ends === n.id)) {
             if (st.goal.bring) {   /* the goods change hands here, and only here: a step cannot be handed in twice */
-              removeItem(p, st.goal.bring, bringN(st));
-              msg(p, 'You hand over ' + bringN(st) + ' x ' + IT[st.goal.bring].name + '.', 'quest');
+              let left = bringN(st); for (const id of bids(st.goal)) { const k = Math.min(left, invCount(p, id)); if (k > 0) { removeItem(p, id, k); left -= k; msg(p, 'You hand over ' + k + ' x ' + IT[id].name + '.', 'quest'); if (IT[id].vessel && IT[IT[id].vessel]) { if (addItem(p, IT[id].vessel, k)) dropGround(IT[id].vessel, k, p.x, p.y, p.id, 600); msg(p, 'You get your ' + IT[IT[id].vessel].name.toLowerCase() + ' back, empty.', 'quest'); } } }   /* she keeps the sap, not your bucket */
             }
             if (st.goal.with) { removeItem(p, st.goal.with, withN(st)); msg(p, 'You hand over ' + withN(st) + ' x ' + IT[st.goal.with].name + '.', 'quest'); }
             if (st.goal.bring || st.goal.with) ev({ e: 'inv', p: p.id });
             let done = st.complete && st.complete.length ? fill(st.complete, st) : (st.fold ? [] : ['Well done, traveller. Take this, you have earned it.']);
             if (st.fold && st.say && st.say.length) done = fill(st.say, st).concat(done);
-            giveReward(p, st.reward, n.name, Q.name);
-            q.step++; q.n = 0;
+            giveReward(p, q.again && st.againReward ? st.againReward : st.reward, n.name, Q.name);
+            q.step++; q.n = 0; if (q.step > Q.steps.length && Q.repeat) q.yr = natureYear();
             const nx = Q.steps[q.step - 1];
             openStep(p, q, nx);
             if (!nx) lines = done.concat(fill(Q.done, null));
@@ -1280,7 +1463,7 @@
     function ensureStep(p, q, st) { openStep(p, q, st); }
     const VAEL_CLEAR = 10;
     function vaelTile() { const n = M.npcs.find(q => q.id === 'vael'); return n ? [n.x, n.y] : null; }
-    /* the walk the chapel carves: one tile west of the altar, then toward the grove (map-north / true northwest), three tiles wide */
+    /* the walk the chapel carves: one tile west of the altar, then toward the grove (map-north / true south-southwest since the north was turned), three tiles wide */
     function onChapelPath(x, y) { return x >= 196 && x <= 198 && y <= 14 && y >= -40; }
     function townAt(x, y) {
       for (const z of ZINDEX) {
@@ -1403,7 +1586,7 @@
           }
           const lines = [
             'A mighty headache. It sits behind the eyes and will not blink.',
-            'When it eases, a path is carved there. Forty-nine paces north. Thirty-seven paces west. The tile reads 197, -51.',
+            'When it eases, a path is carved there. Forty-nine paces south. Thirty-eight paces west. The tile reads 197, -51.',
             'The altar will not have you. You are out of balance.'
           ];
           if (questFinished(p, 'even_grove')) lines.push('The carving is still there. When the Red Pyre is known, the one on the rope will teach the harder balance.');
@@ -1427,12 +1610,19 @@
         if (S.t < p.gT) return;
         p.gT = S.t + nd.speed;
         const rd = IT[p.inv[raw].id]; p.inv[raw] = null;
-        const burnPct = Math.max(0, 40 - 4 * (lv(p, 'cooking') - rd.cookReq)) + (nd.burnBonus || 0);   /* an open fire burns a little more often */
+        const burnPct = rd.burns === rd.cooks ? 0 : Math.max(0, 40 - 4 * (lv(p, 'cooking') - rd.cookReq)) + (nd.burnBonus || 0);   /* an open fire burns a little more often; sap only boils down */
+        const back = rd.vessel && IT[rd.vessel] && !(IT[rd.cooks] && IT[rd.cooks].vessel) ? rd.vessel : null;   /* the bucket comes back when what is made is not in it (syrup boiled to candy) */
+        if (back) addItem(p, back, 1);
         if (R.int(100) < burnPct) { addItem(p, rd.burns, 1); msg(p, 'You accidentally burn the ' + IT[rd.cooks].name.toLowerCase() + '.'); }
-        else { addItem(p, rd.cooks, 1); addXp(p, 'cooking', rd.cookXp * 10); msg(p, 'You cook the ' + IT[rd.cooks].name.toLowerCase() + '.'); creditCook(p, rd.cooks); }
+        else { addItem(p, rd.cooks, 1); addXp(p, 'cooking', rd.cookXp * 10); msg(p, (rd.burns === rd.cooks ? 'You boil it down: ' + IT[rd.cooks].name + '.' : 'You cook the ' + IT[rd.cooks].name.toLowerCase() + '.') + (back ? ' Your ' + IT[back].name.toLowerCase() + ' is empty again.' : '')); creditCook(p, rd.cooks); }
+        if (rd.burns === rd.cooks) { p.act = null; p.skilling = null; }   /* sap and syrup: one boil a click, so the syrup is not boiled on into candy */
         ev({ e: 'gather', p: p.id, node: i, ok: true });
         return;
       }
+      /* a birch: peel its bark when asked, or always without an axe; a maple: tap it when asked, or without an axe but with an
+         empty bucket (2026-10-08) */
+      if (nd.peel && (p.act && p.act.peel || !hasWoodTool(p))) return yieldTick(p, n, i, nd.peel, 'peel');
+      if (nd.tap && (p.act && p.act.tap || !hasWoodTool(p))) return yieldTick(p, n, i, nd.tap, 'tap');
       const skill = nd.skill, L = lv(p, skill), req = n.req == null ? nd.req : n.req, want = n.tool || null;
       if (L < req) { msg(p, 'You need a ' + cap(skill) + ' level of ' + req + ' to do that.', 'warn'); p.act = null; return; }
       const toolSlot = p.inv.find(s => s && IT[s.id].tool === skill && (!want || s.id === want)), tool = !!toolSlot || (isHawk(p) && skill === 'fishing');   /* a hawk swoops for fish, no tool */
@@ -1446,6 +1636,22 @@
       p.gT = S.t + nd.speed;
       const pct = Math.max(8, Math.min(92, 30 + 2 * (L - req)));
       if (R.int(100) >= pct) { ev({ e: 'gather', p: p.id, node: i, ok: false }); return; }
+      /* a lake gives back what sank in it (2026-10-07): the more lies on its bottom, the likelier a cast brings one up
+         instead of a fish - 3 % for one thing, 2 % more for each other, at most 40 % */
+      if (skill === 'fishing') {
+        const lk = lakeKey(n.x, n.y) || [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => lakeKey(n.x + dx, n.y + dy)).find(Boolean), cnt = lk ? sunkIn(lk) : 0;
+        if (cnt && R.int(100) < Math.min(40, 1 + 2 * cnt)) {
+          const pool = S.ground.filter(q => q.sunk === lk && (isAuth(zoneOf(q.x, q.y)) || q.bank != null)), g = pool.length ? pool[R.int(pool.length)] : null;
+          if (g && canAdd(p, g.id, g.n)) {
+            const left = addItem(p, g.id, g.n); addXp(p, skill, n.xp || nd.xp);
+            ev({ e: 'take', p: p.id, g: g.uid, id: g.id, n: g.n - left, x: g.x, y: g.y, own: g.from === p.id ? 1 : 0, fished: 1 });
+            if (left) g.n = left; else { S.ground.splice(S.ground.indexOf(g), 1); if (g.bank != null) BANK_GONE.add(g.bank); ev({ e: 'vanish', g: g.uid, x: g.x, y: g.y }); }
+            msg(p, 'Something heavy on the line... you haul up ' + (g.n - left > 1 ? (g.n - left) + ' x ' : '') + IT[g.id].name + ' from the bottom of the lake!', 'quest');
+            ev({ e: 'gather', p: p.id, node: i, ok: true, item: g.id });
+            return;
+          }
+        }
+      }
       addItem(p, n.item, 1); addXp(p, skill, n.xp || nd.xp);
       msg(p, skill === 'woodcutting' ? 'You get some ' + IT[n.item].name.toLowerCase() + '.' : skill === 'mining' ? 'You manage to mine some ' + IT[n.item].name.split(' ')[0].toLowerCase() + '.' : 'You catch some ' + IT[n.item].name.toLowerCase().replace('raw ', '') + '.');
       ev({ e: 'gather', p: p.id, node: i, ok: true, item: n.item });
@@ -1528,9 +1734,17 @@
       if (!t || t.boat !== 1 || t.dead) { if (++p.rideMiss < 30) return; leaveRide(p, null); msg(p, 'Your partner has left the canoe, so you climb out onto the bank.', 'info'); return; }   /* a few ticks' grace: a late message is not a landing */
       p.rideMiss = 0;
       p.x = t.x; p.y = t.y; p.path = []; p.act = null;
+      if (!p.knock) { p.knocking = false; return; }   /* paddling along: rice only with the knockers in the bow and the push pole in the stern */
       if (S.t % 3) return;
       let got = null;
       for (const o of M.objects) if (o.k === 'rice' && cheb(o.x, o.y, p.x, p.y) <= 2 && !(RICED[o.x + ',' + o.y] > S.t)) { got = o; break; }
+      /* ricing only in its season (2026-10-07: "only harvestable in late August to early October"): out of it the sticks
+         knock nothing loose */
+      if (got && SEASONW && SEASONW.rice === false) {
+        p.knocking = false;
+        if (!(p.riceSaid > S.t)) { p.riceSaid = S.t + 200; msg(p, SEASONW.riceLate ? 'The manoomin has already dropped its grain. Ricing time is mid August to early October.' : 'The manoomin is not ripe yet. Ricing time is mid August to early October.', 'info'); }
+        return;
+      }
       p.knocking = !!got;
       if (!got) return;
       RICED[got.x + ',' + got.y] = S.t + RICE_CD;
@@ -1538,13 +1752,37 @@
       ev({ e: 'knock', p: p.id }); p.dirtyInv = 1;
     }
     function leaveRide(p, at) {   /* out of the bow onto the bank: where pointed, else the nearest dry ground */
-      p.boat = 0; p.ride = null; p.knocking = false; ev({ e: 'boat', p: p.id, on: 0 });
+      p.boat = 0; p.ride = null; p.knocking = false; p.knock = false; ev({ e: 'boat', p: p.id, on: 0 });
       if (at) { p.x = at[0]; p.y = at[1]; return; }
       for (let r = 1; r <= 40; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
         const x = p.x + dx, y = p.y + dy; if (inMap(x, y) && !isWet(x, y) && !M.blocked(x, y)) { p.x = x; p.y = y; return; }
       }
     }
     /* out of the canoe at the shore: onto the dry tile next to it that is nearest where you pointed, then walk on there */
+    /* LANDED CANOES (2026-10-07: "the canoe despawns when the player gets out ... it leaves the player stranded. Landed canoes
+       should persist for one game year"): where you step out, the canoe stays, afloat at the bank, for anyone to take again. The
+       engine tells the @ashvale Bank (it keeps them a game year) and puts down the ones the Bank lists near you (setBoats). */
+    const BOATS = new Map();   /* 'x,y' -> {x, y, face} */
+    /* a canoe left at the bank lies along it (2026-10-07: "parked parallel with the river bank automatically"): the bank's line is
+       across the way the land lies from it; of the eight headings, the one nearest that line, the end nearest the way it was going */
+    function bankFace(x, y, face) {
+      let nx = 0, ny = 0; for (let k = 0; k < 8; k++) { const [dx, dy] = DIRS[k]; if (!isWet(x + dx, y + dy)) { const l = Math.hypot(dx, dy); nx += dx / l; ny += dy / l; } }
+      if (!nx && !ny) return face | 0;
+      const tx = -ny, ty = nx, [hx, hy] = DIRS[face | 0] || DIRS[0], sg = tx * hx + ty * hy < 0 ? -1 : 1; let best = face | 0, bd = -2;
+      for (let k = 0; k < 8; k++) { const [dx, dy] = DIRS[k], l = Math.hypot(dx, dy), d = (dx * tx + dy * ty) * sg / (l * Math.hypot(tx, ty)); if (d > bd) { bd = d; best = k; } }
+      return best;
+    }
+    function landBoat(x, y, face, by) { const k = x + ',' + y; if (BOATS.has(k)) return; const f = by ? bankFace(x, y, face) : face | 0; BOATS.set(k, { x, y, face: f }); ev({ e: 'boatland', x, y, face: f, by: by || null }); }
+    /* the landing gives no new canoe while three or more are left at the banks within 500 feet of it (2026-10-07) */
+    const DOCK_R = 152, DOCK_MAX = 3;
+    function dockFull(x, y) { let n = 0; for (const b of BOATS.values()) if (Math.hypot(b.x - x, b.y - y) <= DOCK_R && ++n >= DOCK_MAX) return true; return false; }
+    function takeBoat(x, y, by) { const k = x + ',' + y; if (!BOATS.has(k)) return false; BOATS.delete(k); ev({ e: 'boatgone', x, y, by: by || null }); return true; }
+    function setBoats(box, list) {   /* the Bank's word for a rectangle: these lie there, the rest in it are gone */
+      const want = new Set();
+      for (const r of list || []) { const x = r[0] | 0, y = r[1] | 0; want.add(x + ',' + y); if (!BOATS.has(x + ',' + y) && inMap(x, y)) landBoat(x, y, r[2] | 0, null); }
+      const [x0, y0, x1, y1] = box || [0, 0, -1, -1];
+      for (const b of Array.from(BOATS.values())) if (b.x >= x0 && b.x <= x1 && b.y >= y0 && b.y <= y1 && !want.has(b.x + ',' + b.y)) takeBoat(b.x, b.y, null);
+    }
     function disembark(p) {
       const T = p.land; let best = null, bd = 1e9;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
@@ -1552,8 +1790,9 @@
         const d = (x - T[0]) ** 2 + (y - T[1]) ** 2; if (d < bd) { bd = d; best = [x, y]; }
       }
       if (!best) { if (p.land) msg(p, "There's no place to land here.", 'warn'); p.land = null; return; }
+      landBoat(p.x, p.y, p.face, p.id);   /* the canoe stays where you left it */
       p.boat = 0; p.land = null; p.x = best[0]; p.y = best[1]; p.moved = 1;
-      ev({ e: 'boat', p: p.id, on: 0 }); msg(p, 'You step out of the canoe onto the bank.');
+      ev({ e: 'boat', p: p.id, on: 0 }); msg(p, 'You step out of the canoe onto the bank. It will wait for you here.');
       if (best[0] !== T[0] || best[1] !== T[1]) { BOAT = false; p.path = findPath(p.x, p.y, (x, y) => x === T[0] && y === T[1], T[0], T[1]); }
     }
     /* A CANOE DOES NOT SPIN (2026-10-07: "It should have to travel forward and backward in arcs to turn around"): it keeps a
@@ -1583,7 +1822,8 @@
       if (bd === 1 && (S.t & 1)) { p.moved = 0; return; }   /* overburdened: a step every other tick, no running */
       if (bd === 1 && isHawk(p) && S.t % HK.groundEvery) { p.moved = 0; return; }   /* an overburdened hawk walks: half as fast again */
       if (p.runNow && p.path.length > 1 && (bd || !p.energy)) { p.runNow = false; msg(p, bd ? 'You are carrying too much to run.' : 'You are out of run energy: walking.', 'warn'); }
-      let steps = FLY ? Math.min(4, p.path.length) : p.runNow && p.energy > 0 && p.path.length > 1 ? 2 : 1;   /* a hawk flies twice as fast as a run, for free (2026-10-04) */
+      const crew = p.boat === 1 && BOAT && Object.values(S.players).some(q => q.boat === 2 && q.ride === p.id && !q.dead);   /* two paddling */
+      let steps = FLY ? Math.min(4, p.path.length) : p.boat === 1 && BOAT ? Math.min(p.energy > 0 ? (crew ? 8 : 6) : 2, p.path.length) : p.runNow && p.energy > 0 && p.path.length > 1 ? 2 : 1;   /* a canoe goes three times as fast as a run (2026-10-07), for free */   /* a hawk flies twice as fast as a run, for free (2026-10-04) */
       if (steps === 2) { const rf = wx(zoneOf(p.x, p.y), 'run'); if (rf < 1) { p.runAcc = (p.runAcc || 0) + Math.round(rf * 1000); if (p.runAcc >= 1000) p.runAcc -= 1000; else steps = 1; } }   /* snow: deep going */
       let moved = 0;
       for (let s = 0; s < steps && p.path.length; s++) {
@@ -1593,7 +1833,10 @@
         p.face = faceTo(p.x, p.y, nx, ny); p.x = nx; p.y = ny; p.path.shift(); moved++;
       }
       p.moved = moved;
-      if (moved === 2 && !FLY) { addXp(p, 'dexterity', 2 * (DEX.xpPerRunTile || 2)); p.energy = Math.max(0, p.energy - Math.floor(60 * (1000 - Math.min(DEX.drainMaxPermille || 400, (DEX.drainPerLevelPermille || 5) * lv(p, 'dexterity'))) / 1000)); if (!p.energy) { p.run = false; msg(p, 'You are out of run energy.', 'warn'); ev({ e: 'run', p: p.id }); } }
+      /* PADDLING (2026-10-07): three times a run alone, four times with a second paddler, and two share the work - half the
+         run energy each tick; out of energy, the canoe goes at a run */
+      if (p.boat === 1 && moved > 2 && !FLY) { addXp(p, 'dexterity', 2 * (DEX.xpPerRunTile || 2)); p.energy = Math.max(0, p.energy - Math.floor((crew ? 0.5 : 1) * 60 * (1000 - Math.min(DEX.drainMaxPermille || 400, (DEX.drainPerLevelPermille || 5) * lv(p, 'dexterity'))) / 1000)); if (!p.energy) msg(p, 'Your arms are spent: the canoe slows to an easy pace.', 'warn'); }
+      if (moved === 2 && !FLY && !p.boat) { addXp(p, 'dexterity', 2 * (DEX.xpPerRunTile || 2)); p.energy = Math.max(0, p.energy - Math.floor(60 * (1000 - Math.min(DEX.drainMaxPermille || 400, (DEX.drainPerLevelPermille || 5) * lv(p, 'dexterity'))) / 1000)); if (!p.energy) { p.run = false; msg(p, 'You are out of run energy.', 'warn'); ev({ e: 'run', p: p.id }); } }
     }
     function playerAt(x, y, self) { for (const pid of S.order) { const o = S.players[pid]; if (o !== self && !o.dead && o.x === x && o.y === y) return true; } return false; }
     function puppetTick(p) {   /* another player's character in this game: position comes from the network, never stepped here */
@@ -1730,6 +1973,12 @@
     }
     function watchTick() {
       for (const n of M.npcs) {
+        if (n.sapAt) {   /* Nookomis walks up to the sugar camp while the sap runs, and home again after (2026-10-08) */
+          if (n.hx == null) { n.hx = n.x; n.hy = n.y; }
+          const w = NATURE && NATURE.sap && NATURE.sap.season ? n.sapAt : [n.hx, n.hy];
+          if (n.x !== w[0] || n.y !== w[1]) { const x0 = n.x, y0 = n.y; stepNpc(n, w[0], w[1], 0); n.stuck = n.x === x0 && n.y === y0 ? (n.stuck | 0) + 1 : 0; if (n.stuck > 30) { n.x = w[0]; n.y = w[1]; n.stuck = 0; n.path = null; } }   /* no way through: she is there all the same */
+          continue;
+        }
         if (!n.watch) continue;
         if (n.hx == null) { n.hx = n.x; n.hy = n.y; }
         if (n.down) {
@@ -1902,10 +2151,10 @@
       } else if (a && a.k === 'ride') {   /* step from the shore into the bow of a friend's canoe */
         const t = S.players[a.pid];
         if (!t || t.boat !== 1) { p.act = null; }
-        else if (cheb(p.x, p.y, t.x, t.y) <= 2) { p.act = null; p.path = []; p.boat = 2; p.ride = a.pid; p.rideMiss = 0; p.x = t.x; p.y = t.y; ev({ e: 'boat', p: p.id, on: 2 }); msg(p, "You climb into the bow with a paddle, and the bawa'iganaakoog (ricing sticks) at your feet. In the manoomin (wild rice) your partner stands with the gaandakii'iganaak (push pole) and you knock the rice in."); }
+        else if (cheb(p.x, p.y, t.x, t.y) <= 2) { p.act = null; p.path = []; p.boat = 2; p.ride = a.pid; p.knock = invCount(p, 'knockers') > 0 && (t.pole || invCount(t, 'push_pole') > 0); p.rideMiss = 0; p.x = t.x; p.y = t.y; ev({ e: 'boat', p: p.id, on: 2 }); msg(p, p.knock ? "You climb into the bow with a paddle, and the bawa'iganaakoog (ricing sticks) at your feet. In the manoomin (wild rice) your partner stands with the gaandakii'iganaak (push pole) and you knock the rice in." : 'You climb into the bow with a paddle. Two paddling go faster and tire less. Point at the shore beside you to get out.'); }
         else { p.path = findPath(p.x, p.y, (x, y) => cheb(x, y, t.x, t.y) <= 2, t.x, t.y); stepPath(p); if (!p.path.length && cheb(p.x, p.y, t.x, t.y) > 2) { msg(p, "I can't reach that canoe from here.", 'warn'); p.act = null; } }
       } else if (a && a.k === 'board') {   /* walk to the canoe, sit down in it: it floats where it lay */
-        if (inReach(p.x, p.y, a.x, a.y, 1)) { p.act = null; p.path = []; p.boat = 1; p.x = a.x; p.y = a.y; p.land = null; ev({ e: 'boat', p: p.id, on: 1 }); msg(p, 'You sit down in the canoe and take up the paddle. Point at the water to paddle there, or at the shore to land.'); }
+        if (inReach(p.x, p.y, a.x, a.y, 1)) { const lb = BOATS.get(a.x + ',' + a.y); if (!lb && dockFull(a.x, a.y)) { msg(p, 'There is no canoe at the landing: three are already left at the banks nearby. Take one of those.', 'warn'); p.act = null; return; } if (lb) { p.face = lb.face; takeBoat(a.x, a.y, p.id); } p.act = null; p.path = []; p.boat = 1; p.x = a.x; p.y = a.y; p.land = null; ev({ e: 'boat', p: p.id, on: 1 }); msg(p, 'You sit down in the canoe and take up the paddle. Point at the water to paddle there, or at the shore to land.'); }
         else { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, a.x, a.y, 1), a.x, a.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, a.x, a.y, 1)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
       } else if (a && a.k === 'enter') {   /* walk up to a passage and go through: it takes you to its `to` */
         const o = passageAt(a.x, a.y);
@@ -2063,7 +2312,7 @@
       let best = null, bd = 99;
       for (const pid of S.order) {
         const q = S.players[pid];
-        if (q.dead || q.lv > 0 || airborne(q) || S.t - q.spawnT <= 8 || combatLevel(q) > mobCombat(md) || M.zoneAt(q.x, q.y) !== m.zone) continue;   /* monsters keep to the ground floor, and cannot reach a hawk */
+        if (q.dead || q.lv > 0 || (airborne(q) && !shooter(m, md)) || S.t - q.spawnT <= 8 || combatLevel(q) > mobCombat(md) || M.zoneAt(q.x, q.y) !== m.zone) continue;   /* monsters keep to the ground floor, and cannot reach a hawk */
         const d = cheb(q.x, q.y, m.x, m.y); if (d <= sightOf(m, md) && d < bd) { bd = d; best = q; }
       }
       if (best) { m.tgt = best.id; m.back = 0; m.path = null; }
@@ -2084,14 +2333,15 @@
         if (S.t - m.fleeing > 12 || (m.x === m.sx && m.y === m.sy)) { m.fleeing = 0; if (m.tgt) rally(m, m.tgt, 8); }   /* regrouped: back into the fight with friends */
         else { if (!mobPathStep(m, (x, y) => x === m.sx && y === m.sy, m.sx, m.sy, 24) && p) stepAway(m, p, ai.leash); return; }
       }
+      if (p && airborne(p) && !shooter(m, md)) { m.tgt = 0; m.back = 1; m.path = null; p = null; }   /* the hawk flew off: no sword reaches it (2026-10-08) */
       if (!p && !m.back && md.aggro > 0) p = acquire(m, md);
       if (comeStep(m)) { if (m.hp < md.hp && S.t % 10 === 0) m.hp++; return; }   /* someone is trying to hit us and cannot: come out to them, without attacking */
       if (p) {
         const d = cheb(m.x, m.y, p.x, p.y), archer = m.carry && Object.keys(m.carry).some(k => /^arrows_/.test(k) && m.carry[k] > 0);
         if (archer) {
           const rf = wx(m.zone, 'range'), keep = [Math.max(2, Math.round((ai.keep || [4, 6])[0] * rf)), Math.max(2, Math.round((ai.keep || [4, 6])[1] * rf))];
-          if (d <= 2 && stepAway(m, p, ai.leash)) return;   /* backs off when you close in ... */
-          if (d > 2 || !archer) {
+          if (d <= 2 && !airborne(p) && stepAway(m, p, ai.leash)) return;   /* backs off when you close in ... (a hawk overhead it just shoots) */
+          if (d > 2 || airborne(p)) {   /* a hawk overhead is shot at however close */
             if (d <= keep[1] + 1 && lineOfSight(m.x, m.y, p.x, p.y)) { m.face = faceTo(m.x, m.y, p.x, p.y); if (m.atk <= 0) { mobAttack(m, p, true); m.atk = md.speed; } return; }
             if (mobPathStep(m, (x, y) => { const dd = cheb(x, y, p.x, p.y); return dd >= keep[0] && dd <= keep[1] && lineOfSight(x, y, p.x, p.y); }, p.x, p.y, 14)) return;
           }
@@ -2167,8 +2417,9 @@
         m.crossing = retaliating(m, 10);
         if (p && !(m.crossing && p.id === m.hurt) && (p.dead || cheb(m.x, m.y, m.sx, m.sy) > 10 || cheb(p.x, p.y, m.sx, m.sy) > 14)) { m.tgt = 0; m.back = 1; p = null; }
       }
+      if (p && airborne(p) && !shooter(m, md)) { m.tgt = 0; m.back = 1; p = null; }   /* the hawk flew off: no bite or blow reaches it (2026-10-08) */
       if (!p && !m.back && md.aggro > 0) {
-        for (const pid of S.order) { const q = S.players[pid]; if (!q.dead && !airborne(q) && S.t - q.spawnT > 8 && cheb(q.x, q.y, m.x, m.y) <= sightOf(m, md) && (md.hunter || combatLevel(q) <= mobCombat(md)) && M.zoneAt(q.x, q.y) === M.zoneAt(m.sx, m.sy)) { m.tgt = q.id; p = q; break; } }   /* hunters (timber wolves) take on anyone */
+        for (const pid of S.order) { const q = S.players[pid]; if (!q.dead && !(airborne(q) && !shooter(m, md)) && S.t - q.spawnT > 8 && cheb(q.x, q.y, m.x, m.y) <= sightOf(m, md) && (md.hunter || combatLevel(q) <= mobCombat(md)) && M.zoneAt(q.x, q.y) === M.zoneAt(m.sx, m.sy)) { m.tgt = q.id; p = q; break; } }   /* hunters (timber wolves) take on anyone */
       }
       /* shy animals (2026-10-04: chickens scatter, deer flee when you come close): within md.shy tiles of a
          player they run, two steps a tick, away from the nearest one and back toward home after. Hit one and it is
@@ -2249,11 +2500,27 @@
         } else { pl.grown = 1; if (owner) msg(owner, 'The shoot has rooted. It will not come back out of the ground.', 'info'); }
       }
     }
+    /* CROSSING A CUT EDGE OF THE NET (handoff/globe_net.md): the ground past it is drawn as its own continuation; CROSS metres in, the
+       player (and a canoe partner, and a hawk) is moved to where that same ground lies natively in the net - the land around them is
+       the same, only the map coordinates jump and the heading turns with the placement */
+    const CROSS = 24;
+    function netCross(p) {
+      if (!p || p.puppet || p.dead || p.lv > 0 || p.boat === 2) return;   /* a rider goes with the canoe */
+      if (!(S.t % 2) || M.netGap(p.x, p.y) < CROSS || (M.underAt && M.underAt(p.x, p.y))) return;   /* underground lies in the net's empty space on purpose */
+      const a = M.netAcross(p.x, p.y); if (!a) return;
+      let to = [a.x, a.y];
+      const ok = (x, y) => p.boat ? isWet(x, y) : (isHawk(p) || !M.blocked(x, y));
+      if (!ok(to[0], to[1])) { let best = null; for (let r = 1; r <= 4 && !best; r++) for (let dy = -r; dy <= r && !best; dy++) for (let dx = -r; dx <= r; dx++) if (ok(a.x + dx, a.y + dy)) { best = [a.x + dx, a.y + dy]; break; } if (best) to = best; }
+      const from = [p.x, p.y]; p.x = to[0]; p.y = to[1]; p.path = []; p.land = null;
+      for (const q of Object.values(S.players)) if (q.boat === 2 && q.ride === p.id) { q.x = p.x; q.y = p.y; }
+      ev({ e: 'cross', p: p.id, x: p.x, y: p.y, fx: from[0], fy: from[1], turn: a.turn });
+    }
     // ---------------- the tick
     function tick() {
       S.t++; S.ev = [];
       while (queue.length) { const [pid, c] = queue.shift(); const p = S.players[pid]; if (p) apply(p, c); }
       for (const pid of S.order) playerTick(S.players[pid]);
+      if (M.netGap) for (const pid of S.order) netCross(S.players[pid]);   /* the open globe: past a cut edge of the net, carried to where that ground lies */
       if (M.seeded) for (const pid of S.order) wake(S.players[pid]);
       for (const m of S.mobs) mobTick(m);
       patrolTick(); guardTick(); watchTick();
@@ -2285,6 +2552,8 @@
       if (st.st && typeof st.st === 'object') for (const k in p.styles) if (Number.isInteger(st.st[k])) p.styles[k] = st.st[k];
       if (st.bt !== undefined) p.boat = st.bt | 0;   /* in a canoe: 1 poles it, 2 rides in it knocking rice */
       if (st.rd !== undefined) p.ride = st.rd || null;
+      if (st.pl !== undefined) p.pole = !!st.pl;
+      if (st.kn !== undefined) p.knock = !!st.kn;
       if (st.pr !== undefined) p.pray = st.pr && PRAYERS[st.pr] && PRAYERS[st.pr].g === 'head' ? { [st.pr]: 1 } : {};
       if (st.act !== undefined) p.act = st.act && st.act.k === 'attack' && mobByUid(st.act.uid) ? { k: 'attack', uid: st.act.uid } : null;
     }
@@ -2303,12 +2572,12 @@
         else if (!r[4] && m.dead) { m.dead = 0; ev({ e: 'spawn', mob: m.uid }); }
       }
     }
-    function groundAdd(uid, id, n, x, y, from) {
+    function groundAdd(uid, id, n, x, y, from, sunk) {
       if (!IT[id] || isAuth(zoneOf(x, y))) return;
       const did = uid >= BANK_UID ? uid - BANK_UID : null;   /* a persisted drop (its uid says so), even from a host too old to say */
       if (did != null && BANK_GONE.has(did)) return;         /* the Bank already told us somebody took it: an old host's copy stays gone */
       const g = S.ground.find(q => q.uid === uid); if (g) { g.n = n; return; }
-      S.ground.push({ uid, id, n, x, y, owner: null, until: S.t + 1e9, from: from || null, bank: did }); ev({ e: 'drop', g: uid, id, n, x, y });
+      S.ground.push({ uid, id, n, x, y, owner: null, until: S.t + 1e9, from: from || null, bank: did, sunk: sunk || 0 }); ev({ e: 'drop', g: uid, id, n, x, y, sunk: sunk || 0 });
     }
     function groundRemove(uid) { if (uid >= BANK_UID) BANK_GONE.add(uid - BANK_UID); const i = S.ground.findIndex(q => q.uid === uid); if (i >= 0 && !isAuth(zoneOf(S.ground[i].x, S.ground[i].y))) { S.ground.splice(i, 1); ev({ e: 'vanish', g: uid }); } }
     /* PERSISTED DROPS (2026-10-06): what the @ashvale Bank holds on the ground (Gold, stones, magical things, anything
@@ -2320,14 +2589,14 @@
     function bankGround(box, items) {
       const want = new Set();
       for (const r of items || []) {
-        const did = r[0] | 0, id = String(r[1]), n = Math.max(1, r[2] | 0), x = r[3] | 0, y = r[4] | 0;
+        const did = r[0] | 0, id = String(r[1]), n = Math.max(1, r[2] | 0), x = r[3] | 0, y = r[4] | 0, sunk = r[5] ? String(r[5]) : 0;
         if (!IT[id] || !inMap(x, y)) continue;   /* every game puts them down (the area's host may be an older game): same uid everywhere */
         want.add(did); const uid = BANK_UID + did;
         const g = S.ground.find(q => q.uid === uid || q.bank === did);
-        if (g) { g.n = n; g.until = 1e15; continue; }
+        if (g) { g.n = n; g.until = 1e15; if (sunk) g.sunk = sunk; continue; }
         const live = S.ground.find(q => q.bank == null && q.id === id && q.x === x && q.y === y);
-        if (live) { live.bank = did; live.until = 1e15; continue; }
-        S.ground.push({ uid, id, n, x, y, owner: null, until: 1e15, bank: did }); ev({ e: 'drop', g: uid, id, n, x, y, bank: 1 });
+        if (live) { live.bank = did; live.until = 1e15; if (sunk) live.sunk = sunk; continue; }
+        S.ground.push({ uid, id, n, x, y, owner: null, until: 1e15, bank: did, sunk }); ev({ e: 'drop', g: uid, id, n, x, y, bank: 1, sunk });
       }
       const [x0, y0, x1, y1] = box || [0, 0, -1, -1];
       for (let i = 0; i < S.ground.length;) {
@@ -2337,7 +2606,7 @@
       }
       return want.size;
     }
-    function groundFull(zone, list) { S.ground = S.ground.filter(g => zoneOf(g.x, g.y) !== zone || isAuth(zone) || g.bank != null);   /* the Bank's persisted drops stay: the Bank, not the host, says when they go */ for (const r of list) groundAdd(r[0], r[1], r[2], r[3], r[4], r[5]); }
+    function groundFull(zone, list) { S.ground = S.ground.filter(g => zoneOf(g.x, g.y) !== zone || isAuth(zone) || g.bank != null);   /* the Bank's persisted drops stay: the Bank, not the host, says when they go */ for (const r of list) groundAdd(r[0], r[1], r[2], r[3], r[4], r[5], r[6]); }
     /* owner side: what the host resolved about OUR player */
     function applyHit(pid, dmg, cls, fromMob, fx, fxt) { const p = S.players[pid]; if (!p || p.puppet || p.dead) return; if (fromMob && cls && protects(p, cls)) dmg = 0; else if (fromMob && fx) magicFx(p, fx, fxt || 5); p.hp -= Math.min(dmg, p.hp); if (angelSave(p)) return; if (p.retal && !p.act && !p.path.length) { } if (p.hp <= 0) killPlayer(p); }
     function storeItem(pid, id, n) { const p = S.players[pid]; if (!p || !IT[id]) return 0; const had = invCount(p, id); removeItem(p, id, Math.min(n, had)); ev({ e: 'inv', p: pid }); return Math.min(n, had); }   /* into the town chest: it stays in the wallet, only out of the bag */
@@ -2373,7 +2642,7 @@
       return true;
     }
     return {
-      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
+      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, setNature, setNatureTell, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
@@ -2382,7 +2651,7 @@
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
-      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
+      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
       applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, takeOff: (pid, k) => { const p = S.players[pid]; return p ? takeOff(p, k) : null; }, setFelled,
       hitXp: (pid, cls, dmg, dex) => { const p = S.players[pid]; if (p && !p.puppet) hitXp(p, cls, dmg, null, dex); },
       creditKill: (pid, key) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key); }

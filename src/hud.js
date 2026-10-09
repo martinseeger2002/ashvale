@@ -107,7 +107,8 @@
       const req = d.req ? Object.keys(d.req).filter(k => d.req[k] > 1).map(k => A.cap(k) + ' ' + d.req[k]).join(', ') : '';
       if (d.weight) b.push((d.weight * Math.max(1, n || 1) / 1000).toFixed(d.weight * (n || 1) < 1000 ? 2 : 1) + ' kg');
       if (d.carry) b.push('Carry +' + (d.carry / 1000) + ' kg');
-      return d.name + (n > 1 ? ' x ' + n.toLocaleString() : '') + ': ' + (b.length ? b.join(', ') + '. ' : '') + (req ? 'Requires ' + req + '. ' : '') + 'Value ' + d.value + ' GOLD.' + (d.nft ? ' (ASHVALE Armoury: ' + d.nft.copies + ' NFT copies)' : '');
+      if (d.energy) b.push('Run energy +' + Math.round(d.energy / 100) + '%');
+      return d.name + (d.english ? ' (' + d.english + ')' : '') + (n > 1 ? ' x ' + n.toLocaleString() : '') + ': ' + (b.length ? b.join(', ') + '. ' : '') + (req ? 'Requires ' + req + '. ' : '') + 'Value ' + d.value + ' GOLD.' + (d.nft ? ' (ASHVALE Armoury: ' + d.nft.copies + ' NFT copies)' : '');
     }
 
     function updateOrbs() {
@@ -247,12 +248,13 @@
     }
     /* the portal swirl (2026-10-06): shown while the town you are travelling to is still loading (engine arriveCheck) */
     const trav = el('travel', ui); trav.innerHTML = '<div class="sw"></div><div class="sw2"></div><div class="tt"></div><div class="pb"><i></i></div>';
-    /* kind: undefined = the portal swirl; 'down' = climbing into a cave (dark stone, a torch's flicker, grit falling), 'up' = out
+    /* kind: undefined = the portal swirl; 'lodge' / 'lodgeout' = into a wigwam (birch bark walls, ironwood ribs up to the smoke
+       hole, the fire's glow) and back out through its doorway; 'down' = climbing into a cave (dark stone, a torch's flicker, grit falling), 'up' = out
        into the daylight (2026-10-07: "Make the loading screen for entering a cave different than the town portal") */
     function travel(on, name, frac, kind) {
       trav.style.display = on ? 'flex' : 'none'; if (!on) return;
       trav.className = 'travel ui' + (kind ? ' ' + kind : '');
-      trav.querySelector('.tt').textContent = kind === 'down' ? 'Climbing down into the ' + (name || 'cave') + '\u2026' : kind === 'up' ? 'Climbing out into the daylight\u2026' : 'Travelling to ' + (name || 'another town') + '\u2026';
+      trav.querySelector('.tt').textContent = kind === 'down' ? 'Climbing down into the ' + (name || 'cave') + '\u2026' : kind === 'up' ? 'Climbing out into the daylight\u2026' : kind === 'lodge' ? 'Ducking into the wigwam\u2026' : kind === 'lodgeout' ? 'Stepping out through the doorway\u2026' : 'Travelling to ' + (name || 'another town') + '\u2026';
       trav.querySelector('.pb i').style.width = Math.round(Math.max(0.08, Math.min(1, frac || 0)) * 100) + '%';
     }
     function setOpp(o) { if (!o) { opp.style.display = 'none'; return; } opp.style.display = 'block'; opp.innerHTML = '<div class="y t">' + A.esc(o.name) + '</div><div class="bar"><i style="width:' + Math.max(0, Math.min(100, 100 * o.hp / o.max)) + '%"></i></div>'; }

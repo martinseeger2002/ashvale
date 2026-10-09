@@ -102,7 +102,7 @@ cave_path = os.path.join(DD, 'zone.spidercave.json')
 cave = load(cave_path)
 cave['data']['npcs'] = [
     {
-        "id": "edric_skel", "name": "A dead man", "look": "edric_skel", "x": -146, "y": 16105,
+        "id": "edric_skel", "name": "A dead man", "look": "edric_skel", "x": 24054, "y": 24005,
         "verb": "Search",
         "search": {
             "quest": "red_pyre", "step": 3, "item": "vorth_rosary", "flag": "vorth_bag",
@@ -119,12 +119,12 @@ cave['data']['npcs'] = [
         "lines": ["We should probably leave him alone."]
     },
     {
-        "id": "edric_ghost", "name": "Edric's shade", "look": "edric_ghost", "x": -145, "y": 16105,
+        "id": "edric_ghost", "name": "Edric's shade", "look": "edric_ghost", "x": 24055, "y": 24005,
         "hideFlag": "vorth_bag",
         "lines": [
             "I am Edric. I wore the orange once. I was a Vorthan, and I believed the fire was justice.",
             "Then I heard them plan to take the cave. Not to hide. To dump the ones who would not kneel. They used the rosary as a key - it always puts you at the mouth.",
-            "I stole a robe and wrote it down. I ran northeast. They sent me into the dark after the beads, and the spiders finished what the Pyre started.",
+            "I stole a robe and wrote it down. I ran southeast. They sent me into the dark after the beads, and the spiders finished what the Pyre started.",
             "Take the note to Mother Wenna in Saltmere. Let the Bright Three hear it. I was not brave enough to walk there alive."
         ],
         "examine": "A pale figure in a ruined orange hood. You can see the cave wall through him."
@@ -154,7 +154,7 @@ items['items']['vorthan_robe'] = {
 }
 items['items']['vorth_rosary'] = {
     "name": "Vorth's rosary",
-    "description": "A string of burnt-orange beads. Worn in the shield hand: Magic +2, Prayer +4, and two seconds added to each prayer point (same as a Vorthan robe). Once Mother Wenna has sent you for the keeper's beads, using them carries you to the mouth of the Spider Cave northeast of Whisperwood.",
+    "description": "A string of burnt-orange beads. Worn in the shield hand: Magic +2, Prayer +4, and two seconds added to each prayer point (same as a Vorthan robe). Once Mother Wenna has sent you for the keeper's beads, using them carries you to the mouth of the Spider Cave southeast of Whisperwood.",
     "collection": "ASHVALE The Red Pyre",
     "game": "ashvale",
     "category": "jewellery",
@@ -213,7 +213,8 @@ dump(os.path.join(EX, 'monsters.json'), mon)
 
 rules = load(os.path.join(EX, 'rules.json'))
 rules['items']['categories']['resource'] = [
-    "logs", "ore", "coal", "bar", "pelt", "fish", "mushroom", "meat", "bones", "note"
+    "logs", "ore", "coal", "bar", "pelt", "fish", "mushroom", "meat", "bones", "note",
+    "silk", "grain", "bark", "sinew", "bucket", "curio"   # spider silk, wild rice, and the sugar bush (2026-10-08)
 ]
 rules['flags']['vorth_gate'] = {
     "name": "Pike's latch",
@@ -246,7 +247,7 @@ quests['quests']['red_pyre'] = {
             "talk": [
                 "The chapel is open, {name}. That is not the end of the work.",
                 "The Bright Three keep this valley: Althas of the Hearth, Caelen of the Road, Mira of the Well. You walked their blessing-roll. They have an enemy.",
-                "Northwest of the village, up the Whisperwood path a little way, then west of the bandits: a closed gate, and a man who looks like one of them. He is not. Go talk to him. I will not say his name on this floor."
+                "Southwest of the village, up the Whisperwood path a little way, then northwest of the bandits: a closed gate, and a man who looks like one of them. He is not. Go talk to him. I will not say his name on this floor."
             ],
             "say": [
                 "Keep your voice down. If they hear a prayer out of you I am a dead man.",
@@ -254,7 +255,7 @@ quests['quests']['red_pyre'] = {
                 "Inside that fence is the Red Pyre. They are Vorthans - not priests of the Three. Vorth was the fourth they buried still breathing. Orange hoods, a red church. I open the gate. You listen. You do not strike. If you blow this, they will know I let you in."
             ],
             "progress": [
-                "Northwest up the Whisperwood path, then west of the bandits. A closed gate and a man who looks like a lookout. Talk to him, then come back."
+                "Southwest up the Whisperwood path, then northwest of the bandits. A closed gate and a man who looks like a lookout. Talk to him, then come back."
             ],
             "complete": [
                 "Pike. Yes. Caelen still has a man in that camp. You did not name him in the wood, I hope.",
@@ -279,7 +280,7 @@ quests['quests']['red_pyre'] = {
             "complete": [
                 "Vorth the Unburied. I had hoped it was rumour. The Three are hearth, road and well - and they had a brother they would not name.",
                 "Pike cannot hold that gate forever. There is a keeper among them who carries burnt beads, a rosary. You must take it from him. Until I said this, you were not to raise a hand in there. Now you must.",
-                "The beads will put you at a cave in the northeast woods. Whatever they have been hiding, it is there. Bring me what you find."
+                "The beads will put you at a cave in the southeast woods. Whatever they have been hiding, it is there. Bring me what you find."
             ]
         },
         {
@@ -288,7 +289,7 @@ quests['quests']['red_pyre'] = {
             "goal": {"kill": "vorthan", "n": 1, "bring": "edric_note"},
             "reward": "xp:prayer:693",
             "talk": [
-                "Kill the Vorthan who keeps the rosary. Use the beads. They will carry you to the Spider Cave, northeast of Whisperwood.",
+                "Kill the Vorthan who keeps the rosary. Use the beads. They will carry you to the Spider Cave, southeast of Whisperwood.",
                 "Halfway down the first tunnel you will find what they left. Search it. Bring me the writing. The robe is yours if it still holds together."
             ],
             "progress": [

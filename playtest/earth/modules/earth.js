@@ -195,11 +195,12 @@
 
       /* ---- camera state: a target on the sphere, an altitude, a heading from north, a tilt ---- */
       const cam = { u: [0, 0, 1], alt: 90000, hd: 0, tilt: 0, fly: null };
+      const NSA = CFG.north === -1 ? -1 : 1;   /* the world's north is the globe's -z (2026-10-07: the northern hemisphere) */
       const camW = [0, 0, 0], up3 = [0, 0, 0], E3 = [0, 0, 0], N3 = [0, 0, 0], F3 = [0, 0, 0];
       const norm = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; v[0] /= l; v[1] /= l; v[2] /= l; return v; };
       function frameAt(u) {
         up3[0] = u[0]; up3[1] = u[1]; up3[2] = u[2];
-        const d = u[2]; N3[0] = -u[0] * d; N3[1] = -u[1] * d; N3[2] = 1 - u[2] * d;
+        const d = u[2]; N3[0] = -u[0] * d * NSA; N3[1] = -u[1] * d * NSA; N3[2] = (1 - u[2] * d) * NSA;   /* toward the world's north (globecfg.north) */
         if (Math.hypot(N3[0], N3[1], N3[2]) < 1e-6) { N3[0] = 1; N3[1] = 0; N3[2] = 0; }
         norm(N3); E3[0] = N3[1] * u[2] - N3[2] * u[1]; E3[1] = N3[2] * u[0] - N3[0] * u[2]; E3[2] = N3[0] * u[1] - N3[1] * u[0]; norm(E3);
       }
@@ -217,7 +218,7 @@
         const fo = W.fold(f, x, y); return { face: fo[0], x: fo[1], y: fo[2] };
       }
       const llToU = (lat, lon) => { const a = lat * Math.PI / 180, b = lon * Math.PI / 180; return [Math.cos(a) * Math.cos(b), Math.cos(a) * Math.sin(b), Math.sin(a)]; };
-      const uToLL = u => [Math.asin(Math.max(-1, Math.min(1, u[2]))) * 180 / Math.PI, Math.atan2(u[1], u[0]) * 180 / Math.PI];
+      const uToLL = u => [Math.asin(Math.max(-1, Math.min(1, NSA * u[2]))) * 180 / Math.PI, Math.atan2(NSA * u[1], u[0]) * 180 / Math.PI];
       const exAt = alt => 1 + 2 * Math.min(1, Math.max(0, (Math.log10(alt) - 3.3) / 1.5));   /* at most 3x from orbit (the operator: the mountains looked out of scale) */
       const tiltAt = alt => { const t = Math.min(1, Math.max(0, (Math.log10(alt) - 1.6) / 2.2)); return 0.62 + (1.5 - 0.62) * t; };
       const PLACES = {};
@@ -227,10 +228,24 @@
         const halo = new THREE.Mesh(new THREE.SphereGeometry(R * 0.62, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffd36a, transparent: true, opacity: 0.18, depthWrite: false, fog: false }));
         g.add(core, halo); g.frustumCulled = false; core.frustumCulled = halo.frustumCulled = false; scene.add(g); sunBall = g;
         moonBall = new THREE.Mesh(new THREE.SphereGeometry(R * 0.2, 24, 16), new THREE.MeshLambertMaterial({ color: 0xd8d8d0, fog: false })); moonBall.frustumCulled = false; scene.add(moonBall); }
-      function sunNow() {   /* the sun's direction from the planet's centre: over the equator, moving west 360 degrees a day */
+      /* the sky module (src/sky.js, the game's own): the sun and the moon at their true scale, eclipses, and the moon's shadow */
+      const SKYA = (() => { try { const GL = typeof globalThis !== 'undefined' ? globalThis : window, SM = (GL.ASH3D && GL.ASH3D.get && GL.ASH3D.get('sky')) || GL.AshSky; return SM && SM.create ? SM.create({ epoch: SUN_EPOCH, dayS: DAY_S, north: CFG.north }) : null; } catch (e) { return null; } })();
+      /* THE MOON'S SHADOW ON THE PLANET (2026-10-07: "If there is a shadow cast by the moon on the planet, it should show up in the
+         Atlas"): a shell just over the ground, dark round the point under the moon - the penumbra fading out to its edge, the umbra
+         (when it reaches the ground) black */
+      const shadeU = { c: { value: new THREE.Vector3(1, 0, 0) }, pen: { value: 0 }, umb: { value: 0 }, on: { value: 0 } };
+      const shade = new THREE.Mesh(new THREE.SphereGeometry(R * 1.0025, 96, 64), new THREE.ShaderMaterial({ uniforms: shadeU, transparent: true, depthWrite: false, fog: false,
+        vertexShader: 'varying vec3 vP;\nvoid main() { vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+        fragmentShader: 'uniform vec3 c; uniform float pen; uniform float umb; uniform float on; varying vec3 vP;\nvoid main() { if (on < 0.5) discard; float a = acos(clamp(dot(vP, c), -1.0, 1.0)); float d = 1.0 - smoothstep(0.0, pen, a); float u = umb > 0.0 ? 1.0 - smoothstep(umb * 0.7, umb, a) : 0.0; float k = max(0.82 * d * d, 0.97 * u); if (k < 0.004) discard; gl_FragColor = vec4(0.0, 0.0, 0.02, k); }' }));
+      shade.frustumCulled = false; shade.renderOrder = 3; scene.add(shade);
+      function sunNow() {   /* the sun's direction from the planet's centre: moving west 360 degrees a day, north or south of the equator by the season */
         if (sunLon == null) { const a = PLACES.ashvale ? PLACES.ashvale.u : [1, 0, 0]; sunLon = Math.atan2(a[1], a[0]); }
-        const L = sunLon - Math.PI / 2 - 2 * Math.PI * ((Date.now() / 1000 - SUN_EPOCH) / DAY_S);
-        return [Math.cos(L), Math.sin(L), 0];
+        if (SKYA) return SKYA.at(Date.now(), sunLon).sun;
+        const days = (Date.now() / 1000 - SUN_EPOCH) / DAY_S, L = sunLon - Math.PI / 2 - 2 * Math.PI * days;
+        /* the year (the game's seasons module, src/seasons.js): the axis leans 23.44 degrees, so the sun stands north or south of
+           the equator by the day of the 365-day year - the same sun the game lights its world with */
+        const dl = 23.44 * Math.PI / 180 * Math.sin(2 * Math.PI * (days - 79) / 365), cd = Math.cos(dl);
+        return [Math.cos(L) * cd, Math.sin(L) * cd, Math.sin(dl)];
       }
       /* a game tile (the x, y a character stands on) -> the sphere direction and the planar point, the same mapping as the places */
       const gameAt = (vx, vy) => { if (!CFG.origin) return null; const fx = vx + CFG.origin[0] + 0.5, fy = -(vy + CFG.origin[1]) - 0.5; return { u: W.toSphere(CFG.face, fx, fy), face: CFG.face, x: fx, y: fy }; };
@@ -264,12 +279,21 @@
         /* the real sun (2026-10-07: "an orbiting sun that orbits the globe once every 24 hours"; it set over Ashvale at
            SUN_EPOCH - the game uses the same rule, src/engine.js): its light from its direction, the night side dark */
         const S0 = sunNow(); sun.position.set(S0[0] * 1000, S0[1] * 1000, S0[2] * 1000);
-        if (sunBall) { const D = R * 7; sunBall.position.set(S0[0] * D - camW[0], S0[1] * D - camW[1], S0[2] * D - camW[2]); }
-        /* the moon (the game's rule, src/engine.js): its real phase sets how much the night side is lit, and it sits in its
-           real direction, lit by the sun - so it shows its phase */
-        const ph = (((Date.now() / 1000 - 947182440) / 86400) % 29.530588853) / 29.530588853, mc = Math.cos(2 * Math.PI * ph), ms = Math.sin(2 * Math.PI * ph);
+        const SKN = SKYA ? SKYA.at(Date.now(), sunLon) : null;
+        /* the sun at its true size: as wide, seen from here, as ours is from the Earth (drawn nearer than it is, for the depth range) */
+        if (sunBall) { const D = SKN ? 3.2e6 : R * 7; sunBall.position.set(S0[0] * D - camW[0], S0[1] * D - camW[1], S0[2] * D - camW[2]); if (SKN) sunBall.scale.setScalar(D * SKYA.SUN_R / SKYA.SUN_D / (R * 0.32)); }
+        /* the moon (the game's rule, src/engine.js): new to new in 29.53 GAME days, a new moon on day 1 of year 1; its phase sets how
+           much the night side is lit, and it sits in its direction, lit by the sun - so it shows its phase */
+        const ph = ((((Date.now() / 1000 - SUN_EPOCH) / DAY_S) % 29.530588853) + 29.530588853) % 29.530588853 / 29.530588853, mc = Math.cos(2 * Math.PI * ph), ms = Math.sin(2 * Math.PI * ph);
         amb.intensity = 0.04 + 0.18 * (1 - mc) / 2;
-        if (moonBall) { const D = R * 5, m = [S0[0] * mc - S0[1] * ms, S0[0] * ms + S0[1] * mc, 0]; moonBall.position.set(m[0] * D - camW[0], m[1] * D - camW[1], m[2] * D - camW[2]); }
+        if (moonBall && SKN) {   /* the moon where it really is: 60 planet radii out, a quarter of the planet across; dark copper in the planet's shadow */
+          const D = R * SKYA.MOON_D, m = SKN.moon; moonBall.position.set(m[0] * D - camW[0], m[1] * D - camW[1], m[2] * D - camW[2]); moonBall.scale.setScalar(SKYA.MOON_R / 0.2);
+          const u = SKN.lunar.umbra, pn = SKN.lunar.penumbra; moonBall.material.color.setRGB((0.85 - 0.3 * u) * (1 - 0.25 * pn), (0.85 - 0.68 * u) * (1 - 0.25 * pn), (0.82 - 0.72 * u) * (1 - 0.25 * pn));
+          moonBall.material.emissive && moonBall.material.emissive.setRGB(0.22 * u, 0.06 * u, 0.03 * u);   /* lit faintly red by every sunset round the planet */
+          amb.intensity = 0.04 + 0.18 * ((1 - Math.cos(SKN.elong)) / 2) * (1 - 0.85 * u);
+          shade.position.set(-camW[0], -camW[1], -camW[2]); shadeU.on.value = SKN.shadow ? 1 : 0;
+          if (SKN.shadow) { shadeU.c.value.set(SKN.shadow.at[0], SKN.shadow.at[1], SKN.shadow.at[2]); shadeU.pen.value = Math.max(0.02, SKN.shadow.pen - Math.max(0, SKN.shadow.miss - 1)); shadeU.umb.value = SKN.shadow.umbra; }
+        } else if (moonBall) { const D = R * 5, m = [S0[0] * mc - S0[1] * ms, S0[0] * ms + S0[1] * mc, S0[2]]; moonBall.position.set(m[0] * D - camW[0], m[1] * D - camW[1], m[2] * D - camW[2]); }
         sun.target.position.set(0, 0, 0);
       }
 
@@ -562,7 +586,7 @@
       function marksTick() {
         roseG.setAttribute('transform', 'rotate(' + (-cam.hd * 180 / Math.PI).toFixed(2) + ')');
         if (frame - markT < 2) return; markT = frame;
-        place(npEl, screenOf([0, 0, 1], 2)); place(spEl, screenOf([0, 0, -1], 2));
+        place(npEl, screenOf([0, 0, NSA], 2)); place(spEl, screenOf([0, 0, -NSA], 2));
         const l = Math.hypot(cam.u[0], cam.u[1]); place(eqEl, l > 1e-6 ? screenOf([cam.u[0] / l, cam.u[1] / l, 0], 2) : null);
       }
       function youTick() {

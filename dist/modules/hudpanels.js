@@ -88,7 +88,7 @@
           const col = !q ? 'r' : !st ? 'g' : 'y';
           /* a quest you have started opens its story (2026-10-06: "each one of the quests should be clickable") */
           h += '<div class="qrow"' + (q ? ' data-q="' + A.esc(id) + '" style="cursor:pointer"' : '') + '><div class="' + col + '" style="margin-bottom:4px">' + A.esc(Q[id].name) + (q ? ' <span style="opacity:.6">&#9656;</span>' : '') + '</div><div class="info" style="margin:0 0 8px">';
-          const held = (iid) => { let c = 0; for (const s of p.inv || []) if (s && s.id === iid) c += s.n; return c; };
+          const held = (iid) => { if (Array.isArray(iid)) return iid.reduce((a, k) => a + held(k), 0); let c = 0; for (const s of p.inv || []) if (s && s.id === iid) c += s.n; return c; };   /* a list: any of them (sap in a bucket or a pail) */
           const g = st && st.goal, need = g ? (g.n == null ? 1 : g.n) : 1;
           const killsLeft = (gg) => { let n = 0; for (const k in gg.kills || {}) n += Math.max(0, gg.kills[k] - ((q && q.kn && q.kn[k]) | 0)); return n; };
           const ready = !!(st && g && (!((g.kill || g.cook || g.talk || g.plant) && (q.n | 0) < need)) && !(g.kills && killsLeft(g) > 0) && !(g.bring && held(g.bring) < (g.bn == null ? need : g.bn)) && !(g.with && held(g.with) < (g.wn == null ? 1 : g.wn)));
@@ -97,7 +97,7 @@
           else if (ready) h += 'Return to ' + who(st.ends || Q[id].giver) + '.';
           else {
             const have = q.n | 0;
-            const iname = (iid) => { const it = core.item ? core.item(iid) : (core.D.items || {})[iid]; return A.esc((it && it.name ? it.name : iid).toLowerCase()); };
+            const iname = (iid) => { if (Array.isArray(iid)) return iid.map(iname).join(' or '); const it = core.item ? core.item(iid) : (core.D.items || {})[iid]; return A.esc((it && it.name ? it.name : iid).toLowerCase()); };
             if (g.kill && g.bring) {
               const m = core.D.monsters[g.kill], bn = g.bn == null ? need : g.bn;
               h += 'Step ' + q.step + ': slay ' + many(A.esc((m ? m.name : g.kill).toLowerCase()), need) + ' (' + have + '/' + need + ') and bring ' + many(iname(g.bring), bn) + ' (' + held(g.bring) + '/' + bn + ').';

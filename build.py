@@ -23,9 +23,18 @@ JS_MODULES = ['netretry', 'net', 'trade', 'wallet', 'trip', 'world', 'core', 'au
 if os.environ.get('ASH_NO_CASTLE') == '1': JS_MODULES = [m for m in JS_MODULES if m != 'castle']
 if os.path.exists(os.path.join(SRC, 'weather.js')):   # weather visuals (local agent, task 6): its own module/inscription
     JS_MODULES.insert(JS_MODULES.index('engine'), 'weather')      # load order does not matter (factories), kept stable
+if os.path.exists(os.path.join(SRC, 'seasons.js')):   # the year and its seasons (2026-10-07): its own module/inscription
+    JS_MODULES.insert(JS_MODULES.index('engine'), 'seasons')
+if os.path.exists(os.path.join(SRC, 'sky.js')):
+    JS_MODULES.insert(JS_MODULES.index('engine'), 'sky')
+if os.path.exists(os.path.join(SRC, 'skyview.js')):   # the sky drawn as a 3D scene of its own: sun, moon, stars (2026-10-07)
+    JS_MODULES.insert(JS_MODULES.index('engine'), 'skyview')
+if os.path.exists(os.path.join(SRC, 'geo.js')):       # the global grid: face cells, seams, lat/lon (handoff/globe_open_plan.md phase 1)
+    JS_MODULES.insert(JS_MODULES.index('engine'), 'geo')
 if os.path.exists(os.path.join(SRC, 'fog.js')):       # fog measured from the camera-player segment (2026-10-02): its own module
     JS_MODULES.insert(JS_MODULES.index('engine'), 'fog')
 DATA_MODULES = ['items', 'monsters', 'shops', 'quests', 'rules', 'globecfg', 'assets', 'housekit']   # housekit: converted Quaternius house pieces (tools/housekit/q2code.mjs --game)
+DATA_MODULES = DATA_MODULES + (['starmap'] if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'starmap.json')) else [])   # the real night sky (d3-celestial, BSD-3)
 DATA_MODULES = DATA_MODULES + (['pools'] if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'pools.json')) else [])   # pools: tools/pools3d.py data   # globecfg: where ASHVALE sits on the globe (P2)
 # globe P2 step B: seeded land around the old map. The globe grid + worldgen modules (written for the Atlas, used as they
 # are) and worldgen's numbers; without them the game is the old map alone (the engine checks for them).
@@ -33,7 +42,7 @@ if os.path.exists(os.path.join(SRC, 'worldgen.js')):
     JS_MODULES[JS_MODULES.index('world'):JS_MODULES.index('world')] = ['globe', 'wg_geo', 'wg_terrain', 'wg_paths', 'wg_sites', 'wg_tiles', 'worldgen']
     DATA_MODULES.append('wg_tables')
 DATA_PATHS = {'wg_tables': 'atlas/wg_tables'}   # data modules that live in a subfolder of data/
-ZONES = ['village', 'whisperwood', 'saltmere', 'castle', 'wolfden', 'cavemouth', 'spidercave', 'ancientchapel', 'evengrove', 'ziibiing', 'lodges', 'ricelake']   # ziibiing + lodges: the Ojibwe village on the river and its wigwams' insides (tools/make_zone_ziibiing.py)   # castle: the lake castle 4 km out (tools/castle/make_castle.js)
+ZONES = ['village', 'eastend', 'whisperwood', 'saltmere', 'castle', 'wolfden', 'cavemouth', 'spidercave', 'ancientchapel', 'evengrove', 'ziibiing', 'lodges', 'ricelake', 'sugarcamp']   # ziibiing + lodges: the Ojibwe village on the river and its wigwams' insides (tools/make_zone_ziibiing.py)   # castle: the lake castle 4 km out (tools/castle/make_castle.js)
 ZONES = ZONES   # saltmere: the second town, on the sea shore 3.4 km east (tools/make_zone_saltmere.mjs)
 if os.environ.get('ASH_NO_CASTLE') == '1':   # 2026-10-05: "forget about this castle for now" - a release without it
     ZONES = [z for z in ZONES if z != 'castle']

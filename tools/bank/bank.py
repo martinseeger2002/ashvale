@@ -16,7 +16,7 @@ How it runs:
 Run:  python3 tools/bank/bank.py            (systemd user unit ashvale-bank)
       python3 tools/bank/bank.py --status   (queue summary)
 Never prints @ashvale's words, password or keys."""
-import sys, os, json, time, sqlite3, struct, zlib, threading, traceback, urllib.request
+import sys, os, re, json, time, sqlite3, struct, zlib, threading, traceback, urllib.request
 HERE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(HERE, 'tools'))
 os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', '/home/you/.cache/ms-playwright')
@@ -48,7 +48,10 @@ def db():
         create table if not exists jobs(n integer primary key, addr text, item text, units integer, kind text, status text, tries integer default 0,
             txid text, piece text, err text, at real, done_at real, req text);
         create table if not exists given(piece text primary key, addr text, item text, at real);
-        create table if not exists felled(x integer, y integer, by text, at real, primary key(x, y));   -- trees felled for good, shared (2026-10-05)
+        create table if not exists felled(x integer, y integer, by text, at real, primary key(x, y));
+        create table if not exists carried(addr text primary key, x integer, y integer, by text, onb integer, at real);   -- a player carried on in a friend's canoe after dropping out (2026-10-08)
+        create table if not exists marks(k text, x integer, y integer, p integer, by text, at real, primary key(k, x, y));   -- the sugar bush: a maple's sap day, a birch's bark year, shared (2026-10-08)   -- trees felled for good, shared (2026-10-05)
+        create table if not exists boats(x integer, y integer, face integer, by text, at real, primary key(x, y));   -- canoes left at the bank, kept a game year (2026-10-07)
         create table if not exists wheres(addr text primary key, x integer, y integer, at real);
         create table if not exists saves(addr text primary key, id integer, blob text, at real);   -- each player's whole game, packed (2026-10-07)   -- where each player last stood, for the Atlas (2026-10-06)
         create table if not exists drops(n integer primary key, addr text, item text, piece text, x integer, y integer, at real, taken_by text, taken_at real);
@@ -58,9 +61,16 @@ def db():
         except sqlite3.OperationalError: pass
     # persisted drops (2026-10-06): units (Gold and other tokens have no piece), live = shown to every player until
     # someone takes it, paid = the picker's piece has been handed out
-    for col, ty in (('units', 'integer default 1'), ('live', 'integer default 0'), ('paid', 'integer default 0')):
+    for col, ty in (('units', 'integer default 1'), ('live', 'integer default 0'), ('paid', 'integer default 0'), ('sunk', 'text')):   # sunk: the lake it lies at the bottom of (unseen; fished up)
         try: c.execute('alter table drops add column %s %s' % (col, ty))
         except sqlite3.OperationalError: pass
+    # THE UNDERGROUND MOVED (2026-10-08, the globe opened): the Spider Cave and the wigwam rooms left their old spots for the empty
+    # space of the flat net. Anything kept at an old spot moves along (idempotent: moved rows no longer match)
+    for x0, y0, x1, y1, dx, dy in ((-200, 16100, -80, 16184, 24200, 7900), (40, 16300, 253, 16313, 23960, 8100)):
+        for t in ('drops', 'ghosts', 'wheres', 'carried'):
+            n = c.execute('update %s set x = x + ?, y = y + ? where x >= ? and x < ? and y >= ? and y < ?' % t, (dx, dy, x0, x1, y0, y1)).rowcount
+            if n: log('UNDER MOVED', t, n)
+    c.commit()
     return c
 
 # ---------------------------------------------------------------- requests (from the room)
@@ -71,17 +81,18 @@ def handle_drop(c, addr, msg):
     [itemId, piece or '', units] and the game only sends what its rules keep (Gold, stones, magical, worth 100+ GOLD); those are
     LIVE: held for no time limit and shown to every player who asks what lies near them ('ground?')"""
     x, y = int(msg.get('x') or 0), int(msg.get('y') or 0); live = 1 if (msg.get('v') or 0) >= 3 else 0
+    sunk = str(msg.get('sunk'))[:16] if msg.get('sunk') and re.match(r'^L\d{1,14}$', str(msg.get('sunk'))) else None   # fell through the ice (2026-10-07)
     for it in (msg.get('items') or [])[:40]:
         try: k, pc = str(it[0]), str(it[1] or ''); u = max(1, min(1000000, int(it[2]) if len(it) > 2 else 1))
         except (TypeError, IndexError, ValueError): continue
         if k not in ITEMS: continue
         if pc:
             if len(pc) != 64 or c.execute('select 1 from drops where piece=? and taken_by is null', (pc,)).fetchone(): continue
-            c.execute('insert into drops(addr,item,piece,x,y,at,units,live) values(?,?,?,?,?,?,1,?)', (addr, k, pc, x, y, time.time(), live))
+            c.execute('insert into drops(addr,item,piece,x,y,at,units,live,sunk) values(?,?,?,?,?,?,1,?,?)', (addr, k, pc, x, y, time.time(), live, sunk))
         elif live:   # a token (Gold...): an amount on a spot; the same kind dropped on the same spot again adds to it
-            r = c.execute('select n from drops where item=? and piece is null and live=1 and taken_by is null and x=? and y=?', (k, x, y)).fetchone()
+            r = c.execute('select n from drops where item=? and piece is null and live=1 and taken_by is null and x=? and y=? and coalesce(sunk,\'\')=?', (k, x, y, sunk or '')).fetchone()
             if r: c.execute('update drops set units=units+?, at=? where n=?', (u, time.time(), r['n']))
-            else: c.execute('insert into drops(addr,item,piece,x,y,at,units,live) values(?,?,null,?,?,?,?,1)', (addr, k, x, y, time.time(), u))
+            else: c.execute('insert into drops(addr,item,piece,x,y,at,units,live,sunk) values(?,?,null,?,?,?,?,1,?)', (addr, k, x, y, time.time(), u, sunk))
     c.commit(); log('DROP', addr, json.dumps(msg.get('items'))[:200], x, y, 'live' if live else '')
 def handle_took(c, addr, msg):
     """{t:'took', id, n, x, y}: a player picked up a persisted drop. It leaves every other player's ground at once (the next
@@ -117,8 +128,8 @@ def handle_ground(c, addr, msg):
     try: x0, y0, x1, y1 = (int(msg[k]) for k in ('x0', 'y0', 'x1', 'y1'))
     except (KeyError, TypeError, ValueError): return None
     if x1 - x0 > 400 or y1 - y0 > 400: return None
-    rows = [[r['n'], r['item'], r['units'] or 1, r['x'], r['y']] for r in
-            c.execute('select n, item, units, x, y from drops where live=1 and taken_by is null and x between ? and ? and y between ? and ? order by n', (x0, x1, y0, y1))]
+    rows = [[r['n'], r['item'], r['units'] or 1, r['x'], r['y']] + ([r['sunk']] if r['sunk'] else []) for r in
+            c.execute('select n, item, units, x, y, sunk from drops where live=1 and taken_by is null and x between ? and ? and y between ? and ? order by n', (x0, x1, y0, y1))]
     box, q = [x0, y0, x1, y1], str(msg.get('q') or '')[:12]
     log('GROUND?', addr, box, len(rows), 'live drops')
     chunks = [rows[i:i + 10] for i in range(0, len(rows), 10)] or [[]]
@@ -179,6 +190,54 @@ def handle_felled(c, addr, msg):
     if x1 - x0 > 400 or y1 - y0 > 400: return None
     cells = [[r['x'], r['y']] for r in c.execute('select x, y from felled where x between ? and ? and y between ? and ?', (x0, x1, y0, y1))]
     return [{'t': 'felled', 'to': addr, 'cells': cells[i:i + 30]} for i in range(0, len(cells), 30)]
+def handle_carry(c, addr, msg):
+    """'carry': {who, x, y, on} - this player's canoe carries `who` (who dropped out of the game) at (x, y); on 0: put ashore there.
+    Taken only from a player the Bank has lately seen within reach of that spot (their own 'here'), so nobody can move strangers
+    about. 'carried?': this player's last such record -> {t: 'carried', x, y, by, on, at} (the game uses it only if newer than its
+    own save)."""
+    if msg.get('t') == 'carry':
+        try: who, x, y, on = str(msg['who'])[:64], int(msg['x']), int(msg['y']), 1 if msg.get('on') else 0
+        except (KeyError, TypeError, ValueError): return None
+        if who == addr or abs(x) > 10**7 or abs(y) > 10**7: return None
+        w = c.execute('select x, y, at from wheres where addr=?', (addr,)).fetchone()
+        if not w or time.time() - w['at'] > 900 or max(abs(w['x'] - x), abs(w['y'] - y)) > 2000: log('CARRY REFUSED', addr, who, x, y); return None
+        c.execute('insert into carried values(?,?,?,?,?,?) on conflict(addr) do update set x=excluded.x, y=excluded.y, by=excluded.by, onb=excluded.onb, at=excluded.at', (who, x, y, addr, on, time.time())); c.commit()
+        log('CARRY', addr, 'carries' if on else 'puts ashore', who, x, y); return None
+    r = c.execute('select x, y, by, onb, at from carried where addr=?', (addr,)).fetchone()
+    return {'t': 'carried', 'to': addr, 'x': r['x'], 'y': r['y'], 'by': r['by'], 'on': r['onb'], 'at': int(r['at'])} if r else {'t': 'carried', 'to': addr, 'none': 1}
+def handle_marks(c, addr, msg):
+    """'mark': {k: 'sap'|'bark', x, y, p} - a maple tapped on game day p, a birch peeled in year p (kept: the latest). 'marks?': {k,
+    x0, y0, x1, y1} -> [[x, y, p], ...] in chunks of 30. A maple gives sap once a game day and a birch its bark once a year, to
+    whoever comes first."""
+    k = msg.get('k')
+    if k not in ('sap', 'bark'): return None
+    if msg.get('t') == 'mark':
+        try: x, y, per = int(msg['x']), int(msg['y']), int(msg['p'])
+        except (KeyError, TypeError, ValueError): return None
+        c.execute('insert into marks values(?,?,?,?,?,?) on conflict(k, x, y) do update set p=max(p, excluded.p), by=excluded.by, at=excluded.at', (k, x, y, per, addr, time.time())); c.commit(); return None
+    try: x0, y0, x1, y1 = (int(msg[q]) for q in ('x0', 'y0', 'x1', 'y1'))
+    except (KeyError, TypeError, ValueError): return None
+    if x1 - x0 > 400 or y1 - y0 > 400: return None
+    cells = [[r['x'], r['y'], r['p']] for r in c.execute('select x, y, p from marks where k=? and x between ? and ? and y between ? and ?', (k, x0, x1, y0, y1))]
+    return [{'t': 'marks', 'to': addr, 'k': k, 'cells': cells[i:i + 30]} for i in range(0, len(cells), 30)]
+BOAT_LIFE = 365 * 7200   # one game year: 365 game days of two hours
+def handle_boats(c, addr, msg):
+    """'boat': {x, y, face, on: 0 landed | 1 taken} - a canoe left at the bank, or taken from it. 'boats?': the landed canoes in a
+    rectangle (younger than a game year), [[x, y, face], ...] in chunks"""
+    t = msg.get('t')
+    if t == 'boat':
+        try: x, y, f, on = int(msg['x']), int(msg['y']), int(msg.get('face') or 0) & 7, int(msg.get('on') or 0)
+        except (KeyError, TypeError, ValueError): return None
+        if on: c.execute('delete from boats where x=? and y=?', (x, y))
+        else: c.execute('insert or replace into boats values(?,?,?,?,?)', (x, y, f, addr, time.time()))
+        c.commit(); log('BOAT', addr, 'taken' if on else 'landed', x, y); return None
+    try: x0, y0, x1, y1 = (int(msg[k]) for k in ('x0', 'y0', 'x1', 'y1'))
+    except (KeyError, TypeError, ValueError): return None
+    if x1 - x0 > 400 or y1 - y0 > 400: return None
+    c.execute('delete from boats where at<?', (time.time() - BOAT_LIFE,)); c.commit()
+    rows = [[r['x'], r['y'], r['face']] for r in c.execute('select x, y, face from boats where x between ? and ? and y between ? and ?', (x0, x1, y0, y1))]
+    box = [x0, y0, x1, y1]; chunks = [rows[i:i + 30] for i in range(0, len(rows), 30)] or [[]]
+    return [{'t': 'boats', 'to': addr, 'box': box, 'i': i, 'of': len(chunks), 'items': ch} for i, ch in enumerate(chunks)]
 def handle_where(c, addr, msg):
     """the Atlas's "you are here" (2026-10-06: players open the Atlas from the Games tab and should see a dot where they
     are). 'here' {x, y}: the game says where this player stands (sent as it saves, when they have moved or every 2 minutes,
@@ -243,15 +302,30 @@ def handle_save(c, addr, msg):
         except (KeyError, TypeError, ValueError): return None
         if not (0 < n <= SV_MAX and 0 <= i < n and len(d) <= 400 and 0 < sid < 10**14): return None
         cur = SV_PART.get(addr)
-        if not cur or cur['id'] != sid or cur['n'] != n: cur = SV_PART[addr] = {'id': sid, 'n': n, 'parts': {}}
+        if not cur or cur['id'] != sid or cur['n'] != n: cur = SV_PART[addr] = {'id': sid, 'n': n, 'parts': {}, 'base': msg.get('base'), 'mine': msg.get('mine')}
         cur['parts'][i] = d
         if len(cur['parts']) < n: return None
         SV_PART.pop(addr, None)
         blob = ''.join(cur['parts'][k] for k in range(n))
         old = c.execute('select id from saves where addr=?', (addr,)).fetchone()
-        if old and old['id'] >= sid: return None      # an older save arriving late never wins
+        # WHICH SAVE WINS (2026-10-07: changed gear on another device, came back, and the old device's gear was back): not
+        # by the devices' clocks (a phone's can run behind) but by lineage - a save names the save it continues ('base', the id the
+        # game loaded or last had taken); one that does not continue the Bank's current save is from a device that fell behind
+        # (another device has played since): refused, and that game is told so ('svx') and stops. Old games without 'base': by id.
+        base = cur.get('base')
+        if old and base is not None:
+            try: base = int(base)
+            except (TypeError, ValueError): base = -1
+            try: mine = int(cur.get('mine')) if cur.get('mine') is not None else None
+            except (TypeError, ValueError): mine = None
+            if base != old['id'] and old['id'] != sid and mine == old['id']:
+                log('SAVE CONTINUES OWN', addr, 'base', base, 'but its last save', mine, 'is the Bank\'s')   # our svok was lost: same game, no other device between
+            elif base != old['id'] and old['id'] != sid:
+                log('SAVE REFUSED', addr, 'continues', base, 'but the Bank has', old['id'])
+                return {'t': 'svx', 'to': addr, 'id': old['id']}
+        elif old and old['id'] >= sid: return None      # an older save arriving late never wins
         c.execute('insert into saves values(?,?,?,?) on conflict(addr) do update set id=excluded.id, blob=excluded.blob, at=excluded.at', (addr, sid, blob, time.time())); c.commit()
-        return None
+        return {'t': 'svok', 'to': addr, 'id': sid}
     r = c.execute('select id, blob from saves where addr=?', (addr,)).fetchone()
     log('LOAD?', addr, 'none' if not r else '%d B' % len(r['blob']))
     if not r: return {'t': 'ld', 'to': addr, 'n': 0}
@@ -264,6 +338,9 @@ def handle(c, addr, msg):
     if msg.get('t') == 'took': return handle_took(c, addr, msg)
     if msg.get('t') == 'ground?': return handle_ground(c, addr, msg)
     if msg.get('t') in ('fell', 'felled?'): return handle_felled(c, addr, msg)
+    if msg.get('t') in ('mark', 'marks?'): return handle_marks(c, addr, msg)
+    if msg.get('t') in ('carry', 'carried?'): return handle_carry(c, addr, msg)
+    if msg.get('t') in ('boat', 'boats?'): return handle_boats(c, addr, msg)
     if msg.get('t') in ('here', 'where?'): return handle_where(c, addr, msg)
     if msg.get('t') in ('book', 'friends?', 'pals?'): return handle_contacts(c, addr, msg)
     if msg.get('t') in ('sv', 'ld?'): return handle_save(c, addr, msg)
@@ -465,7 +542,7 @@ def room_loop(stop):
                     if fr.evaluate("window.__bankClosed || null"): raise RuntimeError('room closed')
                     for m in fr.evaluate("window.__bankQ.splice(0)"):
                         d, f = m.get('data') or {}, m.get('from') or {}
-                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'pals?', 'sv', 'ld?'): continue
+                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'boat', 'boats?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'pals?', 'sv', 'ld?', 'mark', 'marks?', 'carry', 'carried?'): continue
                         if f.get('guest') or not f.get('address'): continue
                         try: rep = handle(c, f['address'], d)
                         except Exception: log('HANDLE ERROR', traceback.format_exc()[-400:]); rep = {'t': 'dep', 'id': d.get('id'), 'to': f['address'], 'ok': False, 'note': 'The bank hit an error; try again later.'}

@@ -13,11 +13,11 @@
      },
      "talk": [
       "You are on the main path. I came down here, away from the pond. I am Iria.",
-      "Cook me a chicken. A raw one, on a range or a campfire, until it is cooked through and not burnt. The chickens run in Ashvale village, and Hob's range stands by the houses there. There is a campfire in the southwestern tents of this wood if you would rather not walk back.",
+      "Cook me a chicken. A raw one, on a range or a campfire, until it is cooked through and not burnt. The chickens run in Ashvale village, and Hob's range stands by the houses there. There is a campfire in the western tents of this wood if you would rather not walk back.",
       "Bring me word when it is done. I will know if the fire took it."
      ],
      "progress": [
-      "The chicken is not cooked yet, {name}. Kill one of the village chickens for the raw meat, then cook it on Hob's range or on the campfire in the southwestern tents. A burnt one does not count."
+      "The chicken is not cooked yet, {name}. Kill one of the village chickens for the raw meat, then cook it on Hob's range or on the campfire in the western tents. A burnt one does not count."
      ],
      "complete": [
       "Cooked, and the smell is honest. I asked for a chicken. What I wanted was a sandwich."
@@ -51,10 +51,10 @@
      },
      "talk": [
       "A lobster on the side. I do not keep them here.",
-      "Hollis sells lobster at the Saltmere Tap. Saltmere is the harbour southwest of the valley, along the coast. Ask for Hollis."
+      "Hollis sells lobster at the Saltmere Tap. Saltmere is the harbour northwest of the valley, along the coast. Ask for Hollis."
      ],
      "progress": [
-      "One lobster, {name}. Hollis, at the Saltmere Tap. The harbour is southwest."
+      "One lobster, {name}. Hollis, at the Saltmere Tap. The harbour is northwest."
      ],
      "complete": [
       "That will do for supper. You have fed me. The ring is another matter."
@@ -70,11 +70,11 @@
      },
      "reward": "ring_angels",
      "talk": [
-      "The Ring of Angels is not payment for a meal. Kill one timber wolf and bring me its pelt. They den in the trees northeast of the pond, well off this path, and further out in the woods.",
+      "The Ring of Angels is not payment for a meal. Kill one timber wolf and bring me its pelt. They den in the trees southeast of the pond, well off this path, and further out in the woods.",
       "Do both, and the ring is yours. Wear it. If a blow leaves you below a fifth of your life, it carries you home to Ashvale. It rests for an hour before it can do so again."
      ],
      "progress": [
-      "One timber wolf slain, and its pelt in your bag. So far: {n} of {goal} slain. The pelt comes off the beast. Northeast of the pond, off the path."
+      "One timber wolf slain, and its pelt in your bag. So far: {n} of {goal} slain. The pelt comes off the beast. Southeast of the pond, off the path."
      ],
      "complete": [
       "The pelt is honest. Take the Ring of Angels. Wear it, and if a blow leaves you below a fifth of your life it will carry you home. It rests an hour between saves.",
@@ -100,7 +100,7 @@
      },
      "reward": "flag:gift_of_angels",
      "talk": [
-      "The hour is long. Kill three timber wolves and bring me their pelts. The same dens, northeast of the pond, off this path, and out in the woods.",
+      "The hour is long. Kill three timber wolves and bring me their pelts. The same dens, southeast of the pond, off this path, and out in the woods.",
       "Do that and I will give you the Gift of Angels. The ring will rest ten minutes, not an hour."
      ],
      "progress": [
@@ -121,7 +121,7 @@
      "id": 4,
      "zone": "spidercave",
      "talk": [
-      "The crown was the old king's, burned with him when the Keep fell. What was left of it was carried down into the dark: into the Spider Cave, in the woods northeast of Whisperwood, at the end of the trail that leaves its northeast road.",
+      "The crown was the old king's, burned with him when the Keep fell. What was left of it was carried down into the dark: into the Spider Cave, in the woods southeast of Whisperwood, at the end of the trail that leaves its southeast road.",
       "Its pieces have been calling things out of that dark ever since. Three wraiths drift through the tunnels past the flooded grotto. Lay them to rest."
      ],
      "progress": [
@@ -161,7 +161,7 @@
      "talk": [
       "Peace be with you, {name}. Mind the pews - the left one rocks.",
       "I am Father Aldous. This little church is all Ashvale has, but Saltmere had a chapel once, and it has stood empty since the fever years.",
-      "I mean to light its altar again. For that I need the old chapel's blessing-roll, the list of every hand that was ever blessed there. Symmetry keeps the village's old things in the house with the green roof, southeast of the square.",
+      "I mean to light its altar again. For that I need the old chapel's blessing-roll, the list of every hand that was ever blessed there. Symmetry keeps the village's old things in the house with the green roof, east of the square.",
       "Ask her for it, would you? She will know the one I mean: a grey scroll with a salt stain."
      ],
      "say": [
@@ -170,7 +170,7 @@
       "Tell Father Aldous it is on the road, not lost. I would never lose anything. I only move it where it looks right."
      ],
      "progress": [
-      "Symmetry is in the house with the green roof, southeast of the square. Ask her about the blessing-roll."
+      "Symmetry is in the house with the green roof, east of the square. Ask her about the blessing-roll."
      ],
      "complete": [
       "With Odric? Then it has been on the road for a month. Odric does the trip to Saltmere in four days.",
@@ -185,7 +185,7 @@
      },
      "reward": "xp:prayer:250",
      "talk": [
-      "Take the southwest road out of the village, the old trail towards Saltmere. Odric drives a covered wagon with a grey horse; you cannot miss it.",
+      "Take the northwest road out of the village, the old trail towards Saltmere. Odric drives a covered wagon with a grey horse; you cannot miss it.",
       "Find him, {name}. Then come back and tell me what you found - do not go on to Saltmere yet. If he is hurt I will need to know first."
      ],
      "say": [
@@ -194,7 +194,7 @@
       "Don't go on to Saltmere on my account. Go back to Ashvale and tell Father Aldous - he'll send help, and he'll know what to do with this."
      ],
      "progress": [
-      "Southwest out of the village, along the trail to Saltmere. Odric will be somewhere on the road.",
+      "Northwest out of the village, along the trail to Saltmere. Odric will be somewhere on the road.",
       "Come back and tell me what you find."
      ],
      "complete": [
@@ -211,11 +211,11 @@
      "ends": "wenna",
      "reward": "monk_robe",
      "talk": [
-      "Now go on to Saltmere, {name}. The chapel stands at the northeast end of the town, the first house past the trail, with a little steeple on it.",
+      "Now go on to Saltmere, {name}. The chapel stands at the southeast end of the town, the first house past the trail, with a little steeple on it.",
       "Mother Wenna has kept it swept all these years with nobody to pray in it. Tell her the roll is found and Odric is coming. She will take it from there."
      ],
      "progress": [
-      "The Saltmere chapel is at the northeast end of the town, where the trail comes in. Mother Wenna will be inside."
+      "The Saltmere chapel is at the southeast end of the town, where the trail comes in. Mother Wenna will be inside."
      ],
      "complete": [
       "Aldous sent you? And the roll is found - and Odric alive on the road? Then the chapel opens again. I have waited eleven years to say that.",
@@ -243,7 +243,7 @@
      "talk": [
       "The chapel is open, {name}. That is not the end of the work.",
       "The Bright Three keep this valley: Althas of the Hearth, Caelen of the Road, Mira of the Well. You walked their blessing-roll. They have an enemy.",
-      "Northwest of the village, up the Whisperwood path a little way, then west of the bandits: a closed gate, and a man who looks like one of them. He is not. Go talk to him. I will not say his name on this floor."
+      "Southwest of the village, up the Whisperwood path a little way, then northwest of the bandits: a closed gate, and a man who looks like one of them. He is not. Go talk to him. I will not say his name on this floor."
      ],
      "say": [
       "Keep your voice down. If they hear a prayer out of you I am a dead man.",
@@ -251,7 +251,7 @@
       "Inside that fence is the Red Pyre. They are Vorthans - not priests of the Three. Vorth was the fourth they buried still breathing. Orange hoods, a red church. I open the gate. You listen. You do not strike. If you blow this, they will know I let you in."
      ],
      "progress": [
-      "Northwest up the Whisperwood path, then west of the bandits. A closed gate and a man who looks like a lookout. Talk to him, then come back."
+      "Southwest up the Whisperwood path, then northwest of the bandits. A closed gate and a man who looks like a lookout. Talk to him, then come back."
      ],
      "complete": [
       "Pike. Yes. Caelen still has a man in that camp. You did not name him in the wood, I hope.",
@@ -279,7 +279,7 @@
      "complete": [
       "Vorth the Unburied. I had hoped it was rumour. The Three are hearth, road and well - and they had a brother they would not name.",
       "Pike cannot hold that gate forever. There is a keeper among them who carries burnt beads, a rosary. You must take it from him. Until I said this, you were not to raise a hand in there. Now you must.",
-      "The beads will put you at a cave in the northeast woods. Whatever they have been hiding, it is there. Bring me what you find."
+      "The beads will put you at a cave in the southeast woods. Whatever they have been hiding, it is there. Bring me what you find."
      ]
     },
     {
@@ -292,7 +292,7 @@
      },
      "reward": "xp:prayer:693",
      "talk": [
-      "Kill the Vorthan who keeps the rosary. Use the beads. They will carry you to the Spider Cave, northeast of Whisperwood.",
+      "Kill the Vorthan who keeps the rosary. Use the beads. They will carry you to the Spider Cave, southeast of Whisperwood.",
       "Halfway down the first tunnel you will find what they left. Search it. Bring me the writing. The robe is yours if it still holds together."
      ],
      "progress": [
@@ -329,7 +329,7 @@
       "The birch on the left is arguing with the birch on the right. I was listening. Oh. A person.",
       "I am Vael. Balance, wearing a body, for as long as the rope holds. The green does most of the talking.",
       "A hawk is deciding whether the field is one thing or two. I have been on that question since morning.",
-      "You stink of a tipped scale. Chapel stones do that. The carving sent you forty-nine paces north and thirty-seven paces west from that altar, so here you are.",
+      "You stink of a tipped scale. Chapel stones do that. The carving sent you forty-nine paces south and thirty-eight paces west from that altar, so here you are.",
       "Plant three shoots in the grass around me. Not within ten tiles of this rope, not on the path the altar carves from the chapel, and not inside a town. Only grass will take them."
      ],
      "complete": [
@@ -519,7 +519,7 @@
       "Boozhoo (hello), {name}. Sit, sit. My knees have not stood up since the last ricing moon.",
       "Manoominike-giizis (the ricing moon) is here. Out on the zaaga'igan (lake) down the ziibi (river) the manoomin (wild rice) stands ripe, and my old arms cannot knock it.",
       "It takes two in the jiimaan (canoe). One stands in the back with the gaandakii'iganaak (push pole) and moves her through the stalks. The other sits forward with the bawa'iganaakoog (ricing sticks): bend the stalks over with one, knock them with the other, and the rice falls in.",
-      "Find a friend, take the canoe from the landing, and bring me twenty handfuls of manoomin.",
+      "Ziigwan will carve you the gaandakii'iganaak (push pole) and the bawa'iganaakoog (knockers) if you bring her tamarack and cedar. Find a friend, take the canoe from the landing, and bring me twenty handfuls of manoomin.",
       "Do this, and I have a really special gift for you. Something I have kept a long time. You will see when you come back."
      ],
      "progress": [
@@ -535,6 +535,93 @@
    "done": [
     "Boozhoo, {name}. The manoomin (wild rice) is drying on the birch bark. Sit by the fire a while.",
     "Are you keeping the waawaabiganoojiinh (mouse) somewhere safe? A gift like that does not come twice."
+   ]
+  },
+  "sugar_bush": {
+   "name": "Iskigamizigan",
+   "giver": "nookomis",
+   "repeat": "spring",
+   "note": "2026-10-08 (handoff/sugarbush_plan.md): sap, then syrup, then candy, each spring; the Quillwork makak the first time only",
+   "steps": [
+    {
+     "id": 1,
+     "zone": "ziibiing",
+     "goal": {
+      "bring": [
+       "sap_bark",
+       "sap_pail"
+      ],
+      "n": 1
+     },
+     "reward": "xp:woodcutting:600",
+     "talk": [
+      "Boozhoo, {name}. Sit by me. Can you smell it? Under the snow the ground is waking.",
+      "When the nights still freeze and the days begin to thaw, the ziinzibaakwadwaaboo (maple sap) runs. It is the first gift of the year, before the leaves, before anything else is green.",
+      "We go to the iskigamizigan (sugar bush) in the woods up the trail, where the ininaatig (maple) and the wiigwaasaatig (birch) stand together.",
+      "You need something to catch it in. Migizi can fold you a biskitenaagan (birch bark sap bucket) from two sheets of wiigwaas (birch bark) and some ojiitad (sinew) - ask Ma'iingan for that. Or buy an akik (pail) at the store in Ashvale.",
+      "Each ininaatig gives once a day, and only on a day that thaws after a night that froze. Bring me one bucket of sap."
+     ],
+     "progress": [
+      "One bucket of ziinzibaakwadwaaboo (maple sap), {name}. It runs only on a day that thaws after a night that froze, in the days before the maples bud. Ask Animikii what last night did."
+     ],
+     "complete": [
+      "Miigwech (thank you), {name}. Taste it - it is only a little sweet, like water that remembers the tree.",
+      "It boils a long time before it is syrup. That is why we sit up all night by the akik (kettle)."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "ziibiing",
+     "goal": {
+      "bring": [
+       "syrup_bark",
+       "syrup_pail"
+      ],
+      "n": 1
+     },
+     "reward": "xp:cooking:800",
+     "talk": [
+      "Now boil it. Any fire will do - ours here, one you light yourself, even Hob's range up in Ashvale - but watch it. Hang the akik from the iskigamiziganaak (kettle frame) and keep the fire high.",
+      "When it is thick and gold, it is zhiiwaagamizigan (maple syrup). Bring me a bucket of it."
+     ],
+     "progress": [
+      "A bucket of zhiiwaagamizigan (maple syrup), {name}. Boil your sap at a fire until it is thick and gold."
+     ],
+     "complete": [
+      "Look at the colour of it. That is the colour of the sun in iskigamizige-giizis (the sugar-making moon).",
+      "One more boiling."
+     ]
+    },
+    {
+     "id": 3,
+     "zone": "ziibiing",
+     "goal": {
+      "bring": "maple_candy",
+      "n": 1
+     },
+     "reward": "quill_makak",
+     "againReward": "xp:cooking:1500",
+     "talk": [
+      "Boil the syrup once more and stir it as it cools, and it sets into ziinzibaakwadoons (candy). The children wait all winter for it.",
+      "Bring me one piece. Your bucket will come back to you empty, ready for next spring."
+     ],
+     "progress": [
+      "One piece of ziinzibaakwadoons (candy), {name}. Boil your syrup again at a fire."
+     ],
+     "complete": [
+      "Ahh. That is the taste of the iskigamizigewigamig (sap-boiling lodge) when I was a little girl.",
+      "I sewed this makak (birch bark box) for you this winter. Wiigwaas (birch bark), spruce root, and gaaway (porcupine quill) dyed for the flowers. Carry it on your back - it holds more than any pack the stone towns make.",
+      "Come back to the iskigamizigan every spring, {name}. The trees will remember you."
+     ]
+    }
+   ],
+   "again": [
+    "Boozhoo, {name}! The nights are freezing and the days are thawing again. The ininaatig (maple) are ready.",
+    "Bring me a bucket of ziinzibaakwadwaaboo (maple sap), then syrup, then a piece of candy, as you did before."
+   ],
+   "done": [
+    "Boozhoo, {name}. The sugar is put away in its makak for the year. Sit by the fire.",
+    "When the sap runs again next spring, come and find me."
    ]
   }
  }

@@ -123,6 +123,7 @@
         const sv = JSON.parse(st.get('ashvale3d.save.v1') || 'null'), C = DATA.globecfg || {};
         if (sv && (sv.v | 0) >= 2 && Array.isArray(sv.pos) && C.origin) at = [sv.pos[1] - C.origin[0], sv.pos[2] - C.origin[1]];
         else if (sv && Number.isInteger(sv.x) && Number.isInteger(sv.y)) at = [sv.x, sv.y];
+        for (const r of [[-200, 16100, -80, 16184, 24200, 7900], [40, 16300, 253, 16313, 23960, 8100]]) if (at[0] >= r[0] && at[0] < r[2] && at[1] >= r[1] && at[1] < r[3]) { at = [at[0] + r[4], at[1] + r[5]]; break; }   /* the underground moved (core.underMove) */
       } catch (e) { /* a new character */ }
       const bootEl = G.document && G.document.getElementById('boot'); if (bootEl) bootEl.textContent = 'Loading the land around you…';
       /* the zone you stand IN must be here before the core places you (on land without its town you could be "blocked" and put
@@ -168,27 +169,36 @@
     }
     let CLOUD_OK = false;   /* the Bank answered at the start: only then may this game hand it saves (a stale device must never overwrite a newer one) */
     const bankSays = from => from && (from.address === DATA.assets.issuer || from.address === YOURFIRST_ADDR || from.tag === 'yourfirstname');
+    /* the 'bank' room the save was loaded through stays joined and is handed to bankRoom() (2026-10-08): leaving it and joining
+       again could hand back the room just left, which still sends but no longer hears - so the Bank's replies (svok, ground,
+       felled, boats) almost never arrived */
+    let BANK_LOAD_ROOM = null;
     function cloudLoad(st) {
       if (!G.arcade || !net || !net.join) return Promise.resolve();
       let local = null; try { local = JSON.parse(st.get(SAVE_KEY) || 'null'); } catch (e) { local = null; }
       return new Promise(done => {
         let R = null, fin = false; const parts = {};
-        const end = () => { if (fin) return; fin = true; clearTimeout(tm); try { R && R.leave(); } catch (e) { /* gone */ } done(); };
+        const end = () => { if (fin) return; fin = true; clearTimeout(tm); if (R) BANK_LOAD_ROOM = R; done(); };
         const tm = setTimeout(end, local ? 8000 : 20000);   /* no Bank in time: this device's save. With no save here (a new device) it waits longer - a cold sign-in takes the realtime room 10 s and more, and giving up would start a new character */
         net.join('bank', { game: 'ashvale' }).then(res => {
           if (fin || !res || !res.online) return end();
           R = res.room; const me = R.me && R.me.address; if (!me) return end();
           R.on('message', ({ from, data }) => {
-            if (!data || data.t !== 'ld' || data.to !== me || !bankSays(from)) return;
+            if (fin || !data || data.t !== 'ld' || data.to !== me || !bankSays(from)) return;
             if (!data.n) { CLOUD_OK = true; return end(); }   /* the Bank holds no save for this address */
             parts[data.i] = data.d;
             if (Object.keys(parts).length < data.n) return;
             const blob = Array.from({ length: data.n }, (_, i) => parts[i] || '').join('');
             (blob ? unpackSave(blob) : Promise.resolve('')).then(json => {
               const cloud = json ? JSON.parse(json) : null, at = +data.id || 0;
-              if (at > ((local && local.at) || 0)) {   /* newer than this device's: play that one ('' = a New character was made) */
+              /* which to play (2026-10-07: gear changed on another device was gone back on this one): the Bank's, whenever it is not
+                 the very save this device last synced with ('base') - some other device has played since; this device's own, when it
+                 is (it may hold play the Bank has not had yet). A save from before 'base' existed: the newer by its time, as before. */
+              const takeCloud = local && local.base != null ? at !== +local.base : at > ((local && local.at) || 0);
+              if (!takeCloud && local && at) return st.set(SAVE_KEY, JSON.stringify(Object.assign(local, { base: at })));   /* ours goes on from the Bank's current one */
+              if (takeCloud) {   /* play the Bank's ('' = a New character was made) */
                 console.info('ASHVALE: the save from the Bank (' + new Date(at).toISOString() + ') is newer than this device\'s');
-                return st.set(SAVE_KEY, cloud ? JSON.stringify(Object.assign(cloud, { at })) : '');
+                return st.set(SAVE_KEY, cloud ? JSON.stringify(Object.assign(cloud, { at, base: at })) : '');
               }
             }).then(() => { CLOUD_OK = true; }, e => console.warn('ASHVALE: cloud save unreadable', e && e.message)).then(end);
           });
@@ -330,10 +340,33 @@
       const TRAVEL_MS = 900, CAVE_MS = 1400; let travelling = null, TRAVEL_KIND = null;
       /* through a cave passage the screen is the cave's own (down into the dark, up into the daylight), every time - even when
          the area there is already loaded - for at least CAVE_MS */
-      function caveTravel(kind, name) {
-        TRAVEL_KIND = kind; hud.travel && hud.travel(true, name, 0.2, kind);
-        const t0 = performance.now(), tick = () => { if (travelling) return; const f = (performance.now() - t0) / CAVE_MS; if (f >= 1) { TRAVEL_KIND = null; hud.travel && hud.travel(false); return; } hud.travel && hud.travel(true, name, 0.2 + 0.8 * f, kind); requestAnimationFrame(tick); };
+      /* 2026-10-07: "The loading screens need to come up as soon as a player clicks on a portal or the cave or a wigwam":
+         travelScreen goes up the moment you choose to go (and again, unchanged, when the jump itself comes), stays at least
+         CAVE_MS, and while a jump is still due (TRAVEL.due) or the area there is loading (arriveCheck's travelling) it waits.
+         A jump that never comes (refused, out of reach) lets it go after TRAVEL_GIVEUP. */
+      const TRAVEL = { t0: 0, kind: null, name: '', due: 0, on: false, hold: false, warm: true }, TRAVEL_GIVEUP = 8000;
+      function travelScreen(kind, name, due) {
+        const now = performance.now();
+        if (!TRAVEL.on || TRAVEL.kind !== kind) TRAVEL.t0 = now;
+        TRAVEL.warm = false;
+        TRAVEL.kind = kind; TRAVEL.name = name || TRAVEL.name; TRAVEL.due = due ? now + TRAVEL_GIVEUP : 0; TRAVEL_KIND = kind;
+        hud.travel && hud.travel(true, TRAVEL.name, 0.15, kind);
+        if (TRAVEL.on) return; TRAVEL.on = true;
+        const tick = () => {
+          const n = performance.now(), f = (n - TRAVEL.t0) / CAVE_MS;
+          if (travelling) { TRAVEL.on = false; return; }   /* arriveCheck holds the screen from here and lets it go */
+          if (f >= 1 && !TRAVEL.hold && !(TRAVEL.due && n < TRAVEL.due)) { TRAVEL.on = false; TRAVEL_KIND = null; hud.travel && hud.travel(false); return; }
+          hud.travel && hud.travel(true, TRAVEL.name, Math.min(0.95, 0.15 + 0.8 * Math.min(1, f)), TRAVEL.kind); requestAnimationFrame(tick);
+        };
         requestAnimationFrame(tick);
+      }
+      const caveTravel = (kind, name) => travelScreen(kind, name, false);
+      const PASSK = { cavemouth: 'down', caveexit: 'up', wigwamdoor: 'lodge', wigwamout: 'lodgeout' };
+      /* the moment you choose a passage or a portal: up goes the screen (when you are already beside it), and the area on
+         the far side starts loading now rather than when you arrive */
+      function travelSoon(kind, name, tx, ty, near) {
+        if (ZINDEX && tx != null) { const zi = zoneAtIndex(tx, ty); if (zi && !core.hasZone(zi.id)) fetchZone(zi.id).then(z => { if (!core.hasZone(zi.id)) coreCall(() => core.addZone(Object.assign({}, z))); }).catch(() => {}); }
+        if (near) travelScreen(kind, name, true);
       }
       function arriveCheck() {
         if (!ZINDEX) return;
@@ -343,7 +376,7 @@
         hud.travel && hud.travel(true, zi.name || zi.id, 0, TRAVEL_KIND);
         let k = 0;
         const step = () => {
-          if (core.hasZone(want)) { const left = Math.max(0, (TRAVEL_KIND ? CAVE_MS : TRAVEL_MS) - (performance.now() - t0)); setTimeout(() => { travelling = null; TRAVEL_KIND = null; streamRegions(true); cam.snap = true; hud.travel && hud.travel(false); }, left); return; }
+          if (core.hasZone(want)) { const left = Math.max(0, (TRAVEL_KIND ? CAVE_MS : TRAVEL_MS) - (performance.now() - Math.min(t0, TRAVEL.t0 || t0))); setTimeout(() => { travelling = null; TRAVEL_KIND = null; TRAVEL.due = 0; streamRegions(true); cam.snap = true; hud.travel && hud.travel(false); }, left); return; }
           hud.travel && hud.travel(true, zi.name || zi.id, Math.min(0.9, (performance.now() - t0) / 4000), TRAVEL_KIND);
           fetchZone(want).then(z => { if (!core.hasZone(want)) coreCall(() => core.addZone(Object.assign({}, z))); step(); })
             .catch(e => { console.warn('ASHVALE: ' + e.message + ', trying again'); setTimeout(step, Math.min(8000, 800 * ++k)); });
@@ -384,10 +417,10 @@
       const blobGeo = new THREE.CircleGeometry(0.42, 12).rotateX(-PI / 2), blobMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false });
       function gearOf(p) { const g = {}; for (const k of ['head', 'cape', 'pack', 'body', 'legs', 'weapon', 'shield', 'ammo', 'ring']) g[k] = p.eq[k] ? p.eq[k].id : null; return g; }
       /* the hawk ring: an entity wearing it is drawn as a hawk HAWK_ALT m up, wings beating (the operator) */
-      const HAWK_ALT = 14, ringHawk = (id) => !!(id && D.items[id] && (D.items[id].attributes || []).some(a => a.trait_type === 'Form' && a.value === 'hawk'));
+      const HAWK_ALT = 28 /* doubled (2026-10-08) */, ringHawk = (id) => !!(id && D.items[id] && (D.items[id].attributes || []).some(a => a.trait_type === 'Form' && a.value === 'hawk'));
       /* the hawk's height (2026-10-04): a dive down to its prey on every strike, perched in a tree on the side you
          tapped, standing on the ground (legs and shadow back) when it carries too much */
-      const PERCH_H = 3.0, SIT_SCALE = 0.42;   /* perched or standing, the hawk is bird-sized next to a tree (it flies big to be seen from high up) */
+      const PERCH_H = 1.75, PERCH_OUT = 0.55, SIT_SCALE = 0.42;   /* perched IN the tree (2026-10-07: it stood above the crown): on a branch among the leaves, on the side you chose */   /* perched or standing, the hawk is bird-sized next to a tree (it flies big to be seen from high up) */
       /* height above the ground for a floor: a building's storey is 1.8 m, a castle wall walk its own height (lh); an NPC
          posted up there (a watchman on the wall: lv, lh in the zone) stands on it too */
       function liftOf(e, a) {
@@ -403,6 +436,8 @@
       }
       /* THE CANOE (2026-10-07, Ziibiing): whoever sits in one rides the water's skin in a birch bark canoe, paddle in hand */
       const SURF = SCENE.surface ? SCENE.surface(core.M) : null;
+      /* where feet stand: the ground, or on a frozen lake the ice (2026-10-07: walk ON the ice, not along the lake bed) */
+      function footY(x, z) { const h = heightAt(x, z); if (!(core.M.iceAt && core.M.iceAt(Math.floor(x), Math.floor(z)))) return h; const w = SURF ? SURF(Math.floor(x), Math.floor(z)) : null; return w != null && w > h ? w + 0.03 : h; }
       const waterY = (x, z) => { const h = heightAt(x, z); if (!SURF) return h; const s = SURF(Math.floor(x), Math.floor(z)); return s != null && s > h ? s : h; };
       /* two in one canoe (ricing): the knocker sits in the bow, the canoe's length ahead of the poler, facing the way it goes */
       function bowSeat(e, T, knocking) { const f = knocking ? 1.4 : 1.95;   /* knocking rice, the bow person sits in nearer the middle */   /* the bow seat: the stern paddler is 0.95 behind the canoe's middle, the bow one 1.0 ahead of it */ e.root.position.set(T.root.position.x + Math.sin(T.yaw) * f, T.root.position.y - 0.14, T.root.position.z + Math.cos(T.yaw) * f); e.yaw = e.tyaw = T.yaw; e.root.rotation.y = T.yaw; }
@@ -412,7 +447,7 @@
       const RICEQ = { t: 0, on: false };
       function ricingNow() {
         const now = performance.now(); if (now - RICEQ.t < 500) return RICEQ.on; RICEQ.t = now;
-        const rider = me.boat === 1 && [...remotes.values()].some(r => r.boat === 2 && r.ride === myNetId);
+        const rider = me.boat === 1 && me.inv.some(sl => sl && sl.id === 'push_pole') && [...remotes.values()].some(r => r.boat === 2 && r.ride === myNetId && r.knock);   /* ricing: my pole, their knockers */
         RICEQ.on = !!rider && (core.M.objects || []).some(o => o.k === 'rice' && Math.max(Math.abs(o.x - me.x), Math.abs(o.y - me.y)) <= 3);
         return RICEQ.on;
       }
@@ -421,6 +456,8 @@
         if (on) { e.canoe = SCENE.canoeMesh(); e.canoe.position.y = 0.0; e.canoe.position.z = 0.95;   /* you sit in the stern: the canoe reaches ahead of you to the bow */ e.root.add(e.canoe); if (e.blob) e.blob.visible = false; }
         else { e.root.remove(e.canoe); e.canoe = null; if (e.blob) e.blob.visible = !settings.shadows; }
       }
+      /* the head turned up or down to where they look: up to 40 degrees each way, eased */
+      function headLook(e, el, dt) { const hd = e.H && e.H._parts && e.H._parts.head; if (!hd) return; const want = -Math.max(-0.7, Math.min(0.7, el)); e.hlR = (e.hlR || 0) + (want - (e.hlR || 0)) * Math.min(1, dt * 8); hd.rotation.x = e.hlR; }
       function hawkAlt(e) {
         if (!e.hawk) return e.alt || 0;
         if (e === myEnt) {
@@ -429,21 +466,21 @@
             e.hawkGround = grounded; e.hawkPerch = perched;
             if (e.hawk.flying) e.hawk.flying(!(grounded || perched));
             if (e.blob) e.blob.visible = grounded && !settings.shadows;
-            e.hawk.play(grounded ? 'walk' : perched ? 'idle' : 'run', { loop: true });
+            e.hawk.play(grounded ? 'walk' : perched ? 'idle' : 'run', { loop: true, speed: perched ? 1e-6 : 1 });   /* perched: still as a stone (no pecking) */
           }
           e.hawk.object.scale.setScalar(grounded || perched ? SIT_SCALE : 1);
           if (grounded) return 0;
-          if (perched) { e.hawk.object.position.set(0.45 * (P.sx || 0), 0, 0.45 * (P.sy || 0)); return PERCH_H; }
+          if (perched) { e.hawk.object.position.set(PERCH_OUT * (P.sx || 0), 0, PERCH_OUT * (P.sy || 0)); return PERCH_H; }
           e.hawk.object.position.set(0, 0, 0);
         }
-        if (e.dive) { const t = (performance.now() - e.dive) / 900; if (t >= 1) e.dive = 0; else return HAWK_ALT * (1 - 0.92 * Math.sin(Math.PI * t)); }
+        if (e.dive) { const t = (performance.now() - e.dive) / 900; if (t >= 1) e.dive = 0; else return HAWK_ALT * (1 - 0.96 * Math.sin(Math.PI * t)); }   /* the dive still bottoms out ~1 m over the prey */
         return e.alt || HAWK_ALT;
       }
       function hawkify(e, ring) {
         const on = ringHawk(ring); if (!!e.hawk === on) return;
         if (on) { e.hawk = MOD.monster('hawk'); if (e.hawk.flying) e.hawk.flying(); e.root.add(e.hawk.object); e.hawk.play('run', { loop: true }); e.H.object.visible = false; e.alt = HAWK_ALT; if (e.blob) e.blob.visible = false; }   /* no legs, no shadow (the operator) */
         else { e.root.remove(e.hawk.object); e.hawk = null; e.H.object.visible = true; e.alt = 0; if (e.blob) e.blob.visible = !settings.shadows; }
-        if (e === myEnt) { cam.tdist = on ? 34 : 11; cam.tpitch = on ? 0.75 : 0.6; }
+        if (e === myEnt) { cam.tdist = 11; cam.tpitch = on ? 0.5 : 0.6; }   /* the hawk sees through its own eyes (FPV below), looking a little down */
       }
       function makeEnt(key, H, pick, scale) {
         const e = { key, H, root: new THREE.Group(), from: new THREE.Vector3(), to: new THREE.Vector3(), t0: 0, dur: TICK, yaw: 0, tyaw: 0, loco: null, oneShot: false, dead: false, impacts: [], splats: [], hpT: 0, hp: 1, max: 1, running: false, skill: null, fade: 0, scale: scale || CHAR };
@@ -456,12 +493,16 @@
         ents.set(key, e); return e;
       }
       function removeEnt(e) { if (e.bub) e.bub.el.remove(); scene.remove(e.root); const i = proxies.indexOf(e.proxy); if (i >= 0) proxies.splice(i, 1); e.H.dispose && e.H.dispose(); for (const s of e.splats) s.el.remove(); if (e.bar) e.bar.remove(); if (e.tag) e.tag.remove(); if (e.ohd) e.ohd.remove(); ents.delete(e.key); }
-      function place(e, x, y) { const v = new THREE.Vector3(x + 0.5, 0, y + 0.5); v.y = heightAt(v.x, v.z); e.from.copy(v); e.to.copy(v); e.root.position.copy(v); e.tx = x; e.ty = y; }
+      function place(e, x, y) { e.trail = null; const v = new THREE.Vector3(x + 0.5, 0, y + 0.5); v.y = footY(v.x, v.z); e.from.copy(v); e.to.copy(v); e.root.position.copy(v); e.tx = x; e.ty = y; }
       function moveTo(e, x, y, now) {
         if (e.tx === x && e.ty === y) return false;
         const steps = Math.max(Math.abs(x - e.tx), Math.abs(y - e.ty));
         e.from.copy(e.root.position); e.to.set(x + 0.5, 0, y + 0.5); e.t0 = now; e.dur = TICK;
-        e.running = steps > 1; e.tx = x; e.ty = y; return true;
+        e.running = steps > 1;
+        /* face the way you are going over the last few steps, not each tile's own step (no 45-degree snap at every tile) */
+        e.trail = (e.trail || []); e.trail.push([x, y]); if (e.trail.length > 3) e.trail.shift();   /* the last two steps' way: a diagonal and a straight step make one heading between them */
+        const t0 = e.trail[0]; e.headYaw = (t0[0] !== x || t0[1] !== y) && steps <= 2 ? Math.atan2(x - t0[0], y - t0[1]) : null;
+        e.tx = x; e.ty = y; return true;
       }
       const faceYaw = f => Math.atan2(DIRS[f][0], DIRS[f][1]);
       function playOnce(e, name, speed) { e.oneShot = true; e.lastOne = name; e.oneT = performance.now(); e.H.play(name, { loop: false, speed: speed || 1 }); }
@@ -533,6 +574,7 @@
       function syncGround() {
         const seen = new Set(), perTile = {};
         for (const g of core.S.ground) {
+          if (g.sunk) continue;   /* on the bottom of a lake: nobody sees it */
           seen.add(g.uid); const k = g.x + ',' + g.y, n = perTile[k] = (perTile[k] || 0) + 1;
           if (gItems.has(g.uid)) continue;
           const o = new THREE.Group(), m = g.id === 'torch' ? standingTorch() : MOD.item(g.id); if (g.id !== 'torch') m.scale.setScalar(1.0); o.add(m);
@@ -597,25 +639,25 @@
           const p = core.S.players[pid], e = ents.get('p:' + pid); if (!e) continue;
           if (p.dead) continue;
           const mv = moveTo(e, p.x, p.y, stamp);
-          if (mv && !p.boat) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else e.tyaw = faceYaw(p.face);   /* a canoe faces its heading, even backing up */
+          if (mv && !p.boat) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else e.tyaw = faceYaw(p.face);   /* a canoe faces its heading, even backing up */
           const sk = p.skilling, skAnim = sk === 'chop' ? 'chop' : sk === 'mine' ? 'mine' : sk === 'fish' ? 'fish' : sk === 'cook' || sk === 'light' ? 'cook' : null;
           const ric = e === myEnt ? ricingNow() : false; e.ricing = ric;
           const tl = p.boat === 1 ? (ric ? 'push_pole' : 'paddle') : p.boat === 2 ? (p.knocking ? 'ricing_sticks' : 'paddle') : skAnim === 'chop' || skAnim === 'mine' || skAnim === 'fish' ? p.toolId || (sk === 'chop' ? 'hatchet' : sk === 'mine' ? 'pickaxe' : 'net') : null;
           boatLook(e, p.boat === 1); e.boatRole = p.boat | 0; e.rideOf = p.boat === 2 ? p.ride : null; e.knocking = !!p.knocking;
           if (p.path && p.path.length && e.restPose) e.restPose = null;   /* up off the floor once you walk */
-          if (e === myEnt && SCENE.docks) for (const c of SCENE.docks()) c.visible = !p.boat;   /* the landing's canoe is the one you are sitting in */
+          if (e === myEnt) docksShow();   /* the landing's canoe is the one you are sitting in */
           if (skAnim !== e.skill || tl !== e.toolId) { e.skill = skAnim; e.toolId = tl; e.H.setTool && e.H.setTool(tl); }
         }
         for (const n of core.M.npcs) {
           const e = ents.get('n:' + n.id); if (!e) continue;
           e.root.visible = npcShown(n);
-          if (n.patrol || n.guard || n.watch) { if (moveTo(e, n.x, n.y, stamp)) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); }
+          if (n.patrol || n.guard || n.watch || n.sapAt) { if (moveTo(e, n.x, n.y, stamp)) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); }
         }   /* a watchman walking his round, a guard answering the call to arms; hidden NPCs stay unseen until their flag */
         syncMobEnts();
         for (const m of core.S.mobs) {
           const e = ents.get('m:' + m.uid); if (!e || m.dead) continue;   /* (syncMobEnts runs right before) */
           const mv = moveTo(e, m.x, m.y, stamp);
-          if (mv) e.tyaw = Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else if (m.tgt) e.tyaw = faceYaw(m.face);
+          if (mv) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else if (m.tgt) e.tyaw = faceYaw(m.face);
           e.hp = m.hp;
         }
         syncGround();
@@ -687,20 +729,23 @@
             break;
           case 'shop': if (mine) { hud.openShop(e.shop); faceNpc(e.npc); } break;
           case 'portal': if (mine) {   /* the towns you have touched a portal in (2026-10-04) */
-            const L = (e.to || []).map(P => ({ html: 'Travel to <span class="y">' + P.name + '</span>', fn: () => send({ c: 'portal', to: P.id }) }));
+            const L = (e.to || []).map(P => ({ html: 'Travel to <span class="y">' + P.name + '</span>', fn: () => { send({ c: 'portal', to: P.id }); const T = (D.rules.portals || []).find(q => q.id === P.id); travelSoon(null, P.name, T && T.to[0], T && T.to[1], true); } }));
             if (!L.length) hud.chat('Touch the town portal in another town, and you can travel there from here.', 'sys');
             else { const r = host.getBoundingClientRect(); hud.menu(r.width / 2, r.height / 2, L); }
             if ((e.unknown || []).length) hud.chat('Not yet attuned: ' + e.unknown.join(', ') + '.', 'sys');
           } break;
           case 'angels': { const t = ents.get('p:' + e.p); if (t) { angelFlare(t.root.position); if (t.H && t.H.play) t.H.play('cast', { loop: false }); } if (mine) sfx('level'); break; }
           case 'teleport': if (mine) {
-            if (e.to === 'cavemouth' || e.to === 'caveexit') {   /* the cave's own screen goes up FIRST and gets painted; the heavy part (building the cave or the land) follows behind it */
-              const uz = core.M.underAt && core.M.underAt(e.x, e.y), zi2 = uz && ZINDEX && ZINDEX.find(z => z.id === uz);
-              caveTravel(e.to === 'cavemouth' ? 'down' : 'up', zi2 ? zi2.name : (core.M.underAt && ZINDEX && (ZINDEX.find(z => z.under) || {}).name) || 'cave');
-              CAVE.hold = true; requestAnimationFrame(() => setTimeout(() => { CAVE.hold = false; place(myEnt, e.x, e.y); cam.snap = true; streamRegions(); sfx('equip'); arriveCheck(); }, 30));
+            if (e.to !== 'gate') {   /* the screen goes up FIRST and gets painted; the heavy part (building the cave, the wigwam or the land) follows behind it */
+              const uz = core.M.underAt && core.M.underAt(e.x, e.y), zi2 = (uz && ZINDEX && ZINDEX.find(z => z.id === uz)) || zoneAtIndex(e.x, e.y);
+              travelScreen(PASSK[e.to] || null, zi2 ? zi2.name : PASSK[e.to] === 'down' ? 'cave' : '', false);
+              CAVE.hold = true; TRAVEL.hold = true; requestAnimationFrame(() => setTimeout(() => { CAVE.hold = false; place(myEnt, e.x, e.y); cam.snap = true; streamRegions(true); sfx('equip'); arriveCheck(); TRAVEL.warm = true; let k = 0; const settle = () => { if (++k < 3) requestAnimationFrame(settle); else TRAVEL.hold = false; }; requestAnimationFrame(settle); }, 30));   /* and it stays until the new place has been built and drawn a few frames (the first draw compiles its materials) */
             } else { place(myEnt, e.x, e.y); cam.snap = true; streamRegions(); sfx('equip'); arriveCheck(); }
           } break;
           case 'zoneadd': zoneArrived(e, now); break;
+          case 'boatland': boatShow(e.x, e.y, e.face); docksShow(); if (e.by === PID) { boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, face: e.face, on: 0 }); } break;
+          case 'cross': if (e.p === PID) { place(myEnt, e.x, e.y); cam.yaw += e.turn || 0; cam.tyaw += e.turn || 0; cam.snap = true; streamRegions(); TN.key = ''; } break;   /* over a cut edge of the net: the same ground, new map coordinates, the view turned with them */
+          case 'boatgone': boatHide(e.x, e.y); docksShow(); if (e.by === PID) boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, on: 1 }); break;
           case 'chest': if (mine) { const c = ents.get('n:' + e.npc); if (c) c.H.play('open'); hud.openChest(); } break;   /* the town chest */
           case 'shopclose': if (mine) hud.closeShop(); break;
           case 'mobjump': { const t = ents.get('m:' + e.mob); if (t) { place(t, e.x, e.y); if (t.path) t.path = null; } break; }   /* came through a cave opening */
@@ -722,11 +767,12 @@
             if (n && n.pose) myEnt.restPose = n.pose;   /* sit down with him the same way (2026-10-07) */
           } break;
           case 'unhide': { const t = ents.get('n:' + e.npc); if (t) t.root.visible = true; break; }
-          case 'weather': if (e.zone === core.weatherZone(zoneHere())) { if (e.say) hud.chat(e.say, 'sys'); showWeather(); } break;
+          case 'weather': if (e.zone === core.weatherZone(zoneHere()) && !(TL.n > 1 || DEMO)) { const k = seasonal({ kind: e.kind }).kind, say = k === e.kind ? e.say : (((D.rules || {}).weather || {}).say || {})[k] || e.say; if (say && k + ':' + e.intensity !== wxShown) hud.chat(say, 'sys'); showWeather(); } break;
           case 'fire': addFire(e.fire, e.x, e.y); if (e.p === PID || !e.p) sfx('sizzle', e.p === PID ? null : { x: e.x, y: e.y }); break;
           case 'fireout': removeFire(e.fire); break;
           case 'fx': { const t = ents.get('m:' + e.mob); if (!t) break; t.fx = t.fx || {}; t.fx[e.fx] = 1; applyTint(t); const el = hud.fxSplat(e.fx); if (el) t.splats.push({ el, t: performance.now(), k: t.splats.length }); if (e.fx === 'freeze') sfx('freeze', t); break; }
           case 'fxend': { const t = ents.get('m:' + e.mob); if (!t || !t.fx) break; delete t.fx[e.fx]; applyTint(t); break; }
+          case 'mark': if (e.p === PID) markTell(e); break;   /* a maple tapped or a birch peeled: the Bank keeps it for everyone */
           case 'deplete': {
             for (const r of regions) if (r.built) r.built.setDepleted(e.node, true);
             let x = e.x, y = e.y;
@@ -777,6 +823,21 @@
         GLOW.mesh.count = n; GLOW.mesh.instanceMatrix.needsUpdate = true; if (GLOW.mesh.instanceColor) GLOW.mesh.instanceColor.needsUpdate = true;
       }
       const CAVE = { on: false, t: 0, me: null, pool: [], keep: null };
+      /* A FIXED NUMBER OF LIGHTS. three.js builds every material's shader for the number of lights in the scene; one light more
+         or fewer and every material in sight is compiled again (52 programs - that was most of the wait going into the cave or
+         a wigwam, and a stall each time a town's area loaded). So the lights are all there from the start and are only ever
+         dimmed (intensity 0), never added, removed or hidden; the towns' own plaza lights come and go with their areas, and a
+         pad of dark spare lights makes up the difference (lightBudget). */
+      for (let k = 0; k < (isPhone ? 4 : 6); k++) { const L = new THREE.PointLight(0xff9a3c, 0, 10, 1.2); scene.add(L); CAVE.pool.push(L); }
+      const LBUD = { n: 8, pad: [], key: -1 };
+      for (let k = 0; k < LBUD.n; k++) { const L = new THREE.PointLight(0xffa050, 0, 1, 2); L.position.set(0, -500, 0); scene.add(L); LBUD.pad.push(L); }
+      function lightBudget() {
+        let n = 0, sum = 0;
+        for (const r of regions) { const b = r.built; if (!b) continue; if (b._pl == null) { b._pl = []; b.group.traverse(o => { if (o.isPointLight) b._pl.push(o); }); } sum += b._pl.length; }
+        if (sum === LBUD.key) return; LBUD.key = sum;
+        for (const r of regions) { const b = r.built; if (!b) continue; for (const L of b._pl) { L.visible = n < LBUD.n; if (L.visible) n++; } }
+        LBUD.pad.forEach((L, k) => { L.visible = k < LBUD.n - n; });
+      }
       function caveTick(now) {
         const inCave = !!(core.M && core.M.underAt && core.M.underAt(me.x, me.y) != null);
         if (inCave !== CAVE.on) {
@@ -786,18 +847,15 @@
             if (wxMod && wxMod.set) try { wxMod.set('clear', 0, { instant: true }); } catch (e) { /* weather module */ }
             scene.background.setHex(0x030303); scene.fog.color.setHex(0x030303); scene.fog.near = 5; scene.fog.far = 16; hemi.intensity = 0.14; sun.intensity = 0.04;
             /* no light of your own (2026-10-07: "The player should not give off any light. The only light should be coming from the torches") */
-            if (!CAVE.pool.length) for (let k = 0; k < (isPhone ? 4 : 6); k++) { const L = new THREE.PointLight(0xff9a3c, 0, 10, 1.2); scene.add(L); CAVE.pool.push(L); }
-            for (const L of CAVE.pool) L.visible = true;
           } else {
             const K = CAVE.keep || {}; scene.background.setHex(K.bg != null ? K.bg : SKY); scene.fog.color.setHex(K.fc != null ? K.fc : SKY); scene.fog.near = K.fn || 24; scene.fog.far = K.ff || 52;
-            hemi.intensity = K.hemi || 1.7; sun.intensity = K.sun || 2.3; for (const L of CAVE.pool) L.visible = false;
+            hemi.intensity = K.hemi || 1.7; sun.intensity = K.sun || 2.3; for (const L of CAVE.pool) L.intensity = 0;
             wxShown = ''; showWeather(true);
           }
         }
         /* the four torches, ranges and campfires nearest you really light their surroundings - underground always, up top while
            it is dark (a moonless night has no other light: 2026-10-07) */
         const darkUp = !inCave && SUNL.dark > 0.3;
-        if (!CAVE.pool.length && darkUp) for (let k = 0; k < (isPhone ? 4 : 6); k++) { const L = new THREE.PointLight(0xff9a3c, 0, 10, 1.2); scene.add(L); CAVE.pool.push(L); }
         if (GLOW.mesh) { GLOW.mesh.visible = inCave || darkUp; GLOW.mesh.material.opacity = inCave ? 1 : Math.min(1, Math.max(0, (SUNL.dark - 0.3) / 0.4)); }
         if ((!inCave && !darkUp) || !CAVE.pool.length) { if (!inCave) for (const L of CAVE.pool) L.intensity = 0; return; }
         if (now - CAVE.t > 1000) {
@@ -840,25 +898,156 @@
          the sky and the light's colour, and the light (with the shadows) comes from its direction; under the horizon a faint
          bluish moon, opposite it, casts the shadows. */
       const SUN_EPOCH = 1791353761, DAY_S = 7200;
+      /* THE YEAR (2026-10-07): 365 game days from year 1, day 1 at SUN_EPOCH; the axis leans, so the sun climbs and sinks
+         through the year and the hemispheres take turns at summer (the maths: the seasons module, its own inscription) */
+      const SKYM = (() => { try { const SM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('sky'); return SM && SM.create ? SM.create({ epoch: SUN_EPOCH, dayS: DAY_S, north: (DATA.globecfg || {}).north }) : null; } catch (e) { return null; } })();   /* sun, moon, eclipses (src/sky.js) */
+      const NS = (DATA.globecfg || {}).north === -1 ? -1 : 1;   /* the world's north: the globe's -z (2026-10-07: the northern hemisphere) */
+      const SEASONS = (() => { try { const SM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('seasons'); return SM && SM.create ? SM.create({ epoch: SUN_EPOCH, dayS: DAY_S }) : null; } catch (e) { return null; } })();
       const SUNL = { dark: 0, dir: [-0.45, 0.8, 0.3], key: '', b: null, lonA: null, base: new THREE.Color(SKY), col: new THREE.Color(), night: new THREE.Color(), phase: null };
       if (SCENE.lampQuery) SCENE.lampQuery((x, y) => core.lampLit ? core.lampLit(x, y) : true);
       const NEW_SKY = new THREE.Color(0x1a2434), NIGHT_SKY = new THREE.Color(0x2a3a52), DUSK_SKY = new THREE.Color(0xd8865a), SUNC = new THREE.Color(0xfff0d6), DUSKC = new THREE.Color(0xffa060), MOONC = new THREE.Color(0x9fb4ff);
-      function sphereAt(x, y) { const WG = D.wg, C = DATA.globecfg; if (!WG || !WG.toSphere || !C || !C.origin) return null; const fx = x + C.origin[0] + 0.5, fy = -(y + C.origin[1]) - 0.5; return [WG.toSphere(C.face, fx, fy), WG.toSphere(C.face, fx + 1, fy), WG.toSphere(C.face, fx, fy - 1)]; }
+      function sphereAt(x, y) { const S0 = core.M.sphereAt; if (!S0) return null; const u = S0(x + 0.5, y + 0.5); if (!u) return null; return [u, S0(x + 1.5, y + 0.5), S0(x + 0.5, y + 1.5)]; }   /* any face of the open globe (world.js sphereAt goes through the net) */
       function sunAt(tms) {   /* the sun's direction from the planet's centre */
         if (SUNL.lonA == null) { const a = sphereAt(22, 52); SUNL.lonA = a ? Math.atan2(a[0][1], a[0][0]) : 0; }   /* Ashvale's longitude (by the well) */
         const L = SUNL.lonA - Math.PI / 2 - 2 * Math.PI * ((tms / 1000 - SUN_EPOCH) / DAY_S);
-        return [Math.cos(L), Math.sin(L), 0];
+        const dl = SEASONS ? SEASONS.declination(tms) : 0, cd = Math.cos(dl);   /* north or south of the equator by the time of year */
+        return [Math.cos(L) * cd, Math.sin(L) * cd, Math.sin(dl)];
       }
-      const MOON_P = 29.530588853, MOON_NEW = 947182440;   /* the synodic month; a new moon: 2000-01-06 18:14 UTC */
+      /* THE MOON KEEPS GAME TIME (2026-10-07: "the moon cycle ... should operate on game time"): new to new in 29.53 GAME days -
+         the Earth's month, scaled like the day - about 12.4 moons a game year; a new moon on day 1 of year 1 (SUN_EPOCH) */
+      const MOON_P = 29.530588853;
       function moonAt(tms, s) {   /* {v: its direction, lit: 0 at new moon .. 1 at full} */
-        const ph = (((tms / 1000 - MOON_NEW) / 86400) % MOON_P) / MOON_P, a = 2 * Math.PI * ph, c = Math.cos(a), si = Math.sin(a);
-        return { v: [s[0] * c - s[1] * si, s[0] * si + s[1] * c, 0], lit: (1 - c) / 2, phase: ph };   /* s turned east by the phase */
+        let ph = (((tms / 1000 - SUN_EPOCH) / DAY_S) % MOON_P) / MOON_P; if (ph < 0) ph += 1; const a = 2 * Math.PI * ph, c = Math.cos(a), si = Math.sin(a);
+        return { v: [s[0] * c - s[1] * si, s[0] * si + s[1] * c, s[2]], lit: (1 - c) / 2, phase: ph };   /* s turned east by the phase */
       }
       const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], nrm3 = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
       /* THE STARS: a fixed sky of 1600 points round the camera, shown at night - brightest on a clear moonless night, faint under a
          full moon, gone by day, underground and under cloud */
       const STARS = { pts: null };
-      function starsAt(night, moonK) {
+      const SKYV = { v: null, basis: new THREE.Matrix4(), rot: new THREE.Matrix4(), m: new THREE.Matrix4(), flipM: new THREE.Matrix4() };
+      /* THE SUN AND THE MOON in the sky (2026-10-07: "Just like the stars are visible in the clear sky at night, so should the
+         sun be and the moon, in their position from the Atlas"): two discs far out round the camera in the very directions that
+         light the world (the Atlas's sun, the real moon's phase); the moon is drawn lit on its sun side, faint by day, and both
+         hide under thick weather and underground */
+      const BODIES = { sun: null, moon: null, mph: -1, cv: null };
+      function bodyTex(draw) { const cv = document.createElement('canvas'); cv.width = cv.height = 96; draw(cv.getContext('2d'), cv); const t = new THREE.CanvasTexture(cv); if (THREE.SRGBColorSpace) t.colorSpace = THREE.SRGBColorSpace; return { t, cv }; }
+      /* the moon lit by the sun, truly (2026-10-07: the lit side faced away from the sun): drawn with the sunlight coming from the
+         disc's +x side at the real angle between them in the sky (e: 0 = new, the sun behind it; pi = full), and the disc is turned
+         every frame so that +x points at the sun on the screen */
+      /* THE MOON'S FACE (2026-10-07: "the moon should have some sort of moon like texture"): the near side as we know it - the dark
+         maria where they are on our moon (Procellarum, Imbrium, Serenitatis, Tranquillitatis, Crisium ...) and the bright young
+         craters with Tycho's rays - drawn from their selenographic places, north up; no picture to fetch */
+      const MARIA = [[-57, 18, 24], [-16, 33, 15], [18, 28, 9], [31, 8, 11], [59, 17, 6], [51, -8, 9], [35, -15, 5.5], [-17, -21, 9], [-39, -24, 5], [-30, 57, 6], [0, 56, 6], [30, 57, 6], [4, 13, 4], [-5, -4, 3.5], [-60, -2, 7], [-43, 4, 6]];
+      const CRATERS = [[-11, -43, 1.6, 1], [-20, 9.6, 1.7, 0.75], [-38, 8, 1, 0.6], [-47.5, 23.7, 0.8, 0.9], [-9, -39, 0, 0], [26, -11, 1, 0.4]];
+      function moonAlbedo(sx, sy) {   /* sx, sy: on the disc, north up, -1..1 */
+        const lat = Math.asin(Math.max(-1, Math.min(1, sy))), cl = Math.cos(lat), lon = cl > 1e-4 ? Math.asin(Math.max(-1, Math.min(1, sx / cl))) : 0, R2D = 180 / Math.PI;
+        const la = lat * R2D, lo = lon * R2D;
+        let a = 0.8 + 0.06 * Math.sin(lo * 0.31 + la * 0.17) * Math.sin(la * 0.23 - lo * 0.11) + 0.04 * Math.sin(lo * 1.3) * Math.cos(la * 1.1);
+        for (const m of MARIA) { const d = Math.hypot((lo - m[0]) * Math.cos(la / R2D), la - m[1]); if (d < m[2] * 1.25) a -= 0.3 * Math.min(1, (m[2] * 1.25 - d) / (m[2] * 0.45)); }
+        a = Math.max(0.42, a);
+        for (const c of CRATERS) { if (!c[2]) continue; const d = Math.hypot((lo - c[0]) * Math.cos(la / R2D), la - c[1]); if (d < c[2]) a += 0.28 * c[3] * (1 - d / c[2]); }
+        { const d = Math.hypot((lo + 11) * Math.cos(la / R2D), la + 43), ang = Math.atan2(la + 43, lo + 11); if (d > 1.6 && d < 38) a += 0.07 * Math.max(0, Math.cos(ang * 9)) * (1 - d / 38); }   /* Tycho's rays */
+        return Math.min(1.05, a);
+      }
+      /* lit from the side toward the sun (the disc's +x, turned to the sun on the screen by the sprite's rotation rot), the face kept
+         north-up on the sky; in front of the sun its unlit side is a black disc exactly where it covers the sun's disc, and only
+         there - the moon leaves the sun and is gone again (2026-10-07) */
+      function drawMoon(e, rot, sunD, sunR) {
+        const c = BODIES.cv.getContext('2d'), N = 96, R = 40, img = c.createImageData(N, N), Lx = Math.sin(e), Lz = -Math.cos(e), cr = Math.cos(rot), sr = Math.sin(rot);
+        for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+          const nx = (x - N / 2 + 0.5) / R, ny = (y - N / 2 + 0.5) / R, r2 = nx * nx + ny * ny, o = (y * N + x) * 4; if (r2 > 1) continue;
+          const nz = Math.sqrt(1 - r2), l = nx * Lx + nz * Lz, edge = Math.min(1, (1 - Math.sqrt(r2)) * R / 1.5);
+          const qx = nx * cr + ny * sr, qy = -(-nx * sr + ny * cr);   /* this pixel on the sky, north up */
+          const alb = moonAlbedo(qx, qy), lit = Math.max(0, Math.min(1, l * 6 + 0.5));
+          const sh = lit + (1 - lit) * 0.05;
+          const inSun = sunD != null ? Math.max(0, Math.min(1, (sunR - Math.hypot(nx - sunD, ny)) * R / 1.5)) : 0;   /* over the sun's disc: black */
+          img.data[o] = 238 * alb * sh; img.data[o + 1] = 232 * alb * sh; img.data[o + 2] = 214 * alb * (sh + (1 - lit) * 0.04); img.data[o + 3] = 255 * edge * Math.max(inSun, 0.04 + 0.96 * lit);
+        }
+        c.putImageData(img, 0, 0); BODIES.moon.material.map.needsUpdate = true;
+      }
+      function skyBodies(sv, mv, day, M) {
+        if (!BODIES.sun) {
+          const sun = bodyTex(c => { const g = c.createRadialGradient(48, 48, 0, 48, 48, 48); g.addColorStop(0, 'rgba(255,255,244,1)'); g.addColorStop(0.28, 'rgba(255,246,200,1)'); g.addColorStop(0.36, 'rgba(255,214,120,0.55)'); g.addColorStop(1, 'rgba(255,190,90,0)'); c.fillStyle = g; c.fillRect(0, 0, 96, 96); });
+          const moon = bodyTex(() => {}); BODIES.cv = moon.cv;
+          const mk = t => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, fog: false })); sp.renderOrder = -1; sp.frustumCulled = false; scene.add(sp); return sp; };
+          BODIES.sun = mk(sun.t); BODIES.moon = mk(moon.t);
+        }
+        const w = core.weatherOf(zoneHere()), clear = !w || w.kind === 'clear' ? 1 : Math.max(0, 1 - w.intensity / 70), D = Math.max(60, camera.far * 0.85), P = camera.position;
+        const put = (sp, v, size, alpha) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; sp.position.set(P.x + v[0] / l * D, P.y + v[1] / l * D, P.z + v[2] / l * D); sp.scale.setScalar(D * size); sp.material.opacity = alpha; sp.visible = alpha > 0.01 && !CAVE.on; };
+        const sUp = sv[1] / (Math.hypot(sv[0], sv[1], sv[2]) || 1), mUp = mv[1] / (Math.hypot(mv[0], mv[1], mv[2]) || 1);
+        /* true sizes (2026-10-07: "the same scale as our planet is to the Earth"): each disc half a degree across, as ours are; the sun's
+           glare round it is wider (the disc itself is 0.28 of its sprite) */
+        put(BODIES.sun, sv, 0.00930 / 0.28, Math.max(0, Math.min(1, (sUp + 0.04) / 0.06)) * clear);
+        const sl = Math.hypot(sv[0], sv[1], sv[2]) || 1, ml = Math.hypot(mv[0], mv[1], mv[2]) || 1, sn = [sv[0] / sl, sv[1] / sl, sv[2] / sl], mn = [mv[0] / ml, mv[1] / ml, mv[2] / ml];
+        const cosE = Math.max(-1, Math.min(1, sn[0] * mn[0] + sn[1] * mn[1] + sn[2] * mn[2])), E = Math.acos(cosE);
+        /* which way is the sun from the moon, on the screen: the sky's path from the moon toward the sun, in the camera's frame; and
+           which way is north (up the sky) at the moon, to keep its face north up */
+        const tg = [sn[0] - mn[0] * cosE, sn[1] - mn[1] * cosE, sn[2] - mn[2] * cosE];
+        let rot = BODIES.moon.material.rotation || 0;
+        if (Math.hypot(tg[0], tg[1], tg[2]) > 1e-6) { BODIES.v3 = BODIES.v3 || new THREE.Vector3(); BODIES.v3.set(tg[0], tg[1], tg[2]).transformDirection(camera.matrixWorldInverse); rot = Math.atan2(BODIES.v3.y, BODIES.v3.x); }
+        BODIES.moon.material.rotation = rot;
+        BODIES.nv = BODIES.nv || new THREE.Vector3(); BODIES.nv.set(-mn[0] * mn[1], 1 - mn[1] * mn[1], -mn[2] * mn[1]).transformDirection(camera.matrixWorldInverse);   /* up the sky from the moon */
+        const face = rot - (Math.atan2(BODIES.nv.y, BODIES.nv.x) - Math.PI / 2);   /* the disc's +x against the sky's east-west */
+        const mR = 0.00905 / 2, near = E < 0.012, sunD = near ? E / mR : null, sunR = near ? (0.0093 / 2) / mR : 0;   /* in moon radii */
+        if (near || Math.abs(E - BODIES.mph) > 0.01 || Math.abs(face - (BODIES.face || 0)) > 0.04 || BODIES.near !== near) { BODIES.mph = E; BODIES.face = face; BODIES.near = near; drawMoon(E, face, sunD, sunR); }
+        put(BODIES.moon, mv, 0.00905 / 0.833, Math.max(0, Math.min(1, (mUp + 0.03) / 0.06)) * clear * (0.35 + 0.65 * (1 - day)));
+        /* a lunar eclipse: the moon in the planet's shadow goes dark copper */
+        BODIES.moon.material.color.setRGB(1 - 0.45 * SUNL.lunar, 1 - 0.8 * SUNL.lunar, 1 - 0.88 * SUNL.lunar);
+        BODIES.sun.renderOrder = -2; BODIES.moon.renderOrder = -1;   /* the moon passes in front of the sun */
+      }
+      /* THE REAL SKY (2026-10-07: "actual constellations in the sky ... And the Milky Way"): the stars to magnitude 5.5 in their
+         true places, brightness and colour, and the Milky Way's glow, from d3-celestial (BSD-3, data/starmap.json), turned with the
+         planet: the sky module's sid sets it, so the constellations rise and set with the game's day and the sun walks the zodiac
+         through the year */
+      const SM = DATA.starmap && DATA.starmap.stars ? DATA.starmap : null;
+      function bvRGB(bv) {   /* a star's colour index to a tint: blue-white to orange */
+        const t = Math.max(-0.4, Math.min(2, bv));
+        return t < 0.4 ? [0.72 + 0.7 * (t + 0.4) * 0.35, 0.82 + 0.15 * (t + 0.4) / 0.8, 1] : [1, 1 - 0.32 * (t - 0.4) / 1.6, 1 - 0.65 * (t - 0.4) / 1.6];
+      }
+      function realSky() {
+        const grp = new THREE.Group(); grp.matrixAutoUpdate = false; grp.renderOrder = -3;
+        const dirOf = (ra, dec) => { const a = ra * Math.PI / 180, d = dec * Math.PI / 180; return [Math.cos(d) * Math.cos(a), Math.cos(d) * Math.sin(a), Math.sin(d)]; };
+        for (const [lo, hi, size] of [[-3, 2.0, isPhone ? 3.2 : 3.6], [2.0, 3.6, isPhone ? 2.2 : 2.5], [3.6, 9, isPhone ? 1.4 : 1.6]]) {
+          const L = SM.stars.filter(r => r[2] / 10 >= lo && r[2] / 10 < hi), pos = new Float32Array(L.length * 3), col = new Float32Array(L.length * 3);
+          L.forEach((r, i) => { const v = dirOf(r[0] / 10, r[1] / 10), m = r[2] / 10, b = Math.max(0.28, Math.min(1, 1.25 - 0.17 * m)), c = bvRGB(r[3] / 10); pos.set(v, i * 3); col.set([c[0] * b, c[1] * b, c[2] * b], i * 3); });
+          const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+          const pts = new THREE.Points(g, new THREE.PointsMaterial({ size, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, fog: false }));
+          pts.frustumCulled = false; pts.renderOrder = -3; grp.add(pts);
+        }
+        /* the Milky Way: its outline (five levels of brightness) painted soft onto a sky-sized sphere in the same frame */
+        let mwMesh = null;
+        if (typeof document !== 'undefined' && SM.mw && SM.mw.length) {
+          const W = 2048, H = 1024, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const c = cv.getContext('2d');
+          if ('filter' in c) c.filter = 'blur(7px)';
+          for (const [lvl, flat] of SM.mw) {
+            const pts = []; for (let i = 0; i < flat.length; i += 2) pts.push([flat[i] / 10, flat[i + 1] / 10]);
+            for (let i = 1; i < pts.length; i++) { while (pts[i][0] - pts[i - 1][0] > 180) pts[i][0] -= 360; while (pts[i][0] - pts[i - 1][0] < -180) pts[i][0] += 360; }   /* unwrapped across 0h */
+            c.fillStyle = 'rgba(205,215,255,' + (0.045 + 0.012 * lvl) + ')';
+            for (const sh of [-360, 0, 360]) { c.beginPath(); pts.forEach((p, i) => { const x = (p[0] + sh) / 360 * W, y = (1 - (p[1] + 90) / 180) * H; if (i) c.lineTo(x, y); else c.moveTo(x, y); }); c.closePath(); c.fill(); }
+          }
+          const tex = new THREE.CanvasTexture(cv); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+          const NA = 96, ND = 48, pos = [], uv = [], ind = [];
+          for (let j = 0; j <= ND; j++) for (let i = 0; i <= NA; i++) { const ra = i / NA * 360, dec = -90 + j / ND * 180; pos.push(...dirOf(ra, dec)); uv.push(i / NA, j / ND); }
+          for (let j = 0; j < ND; j++) for (let i = 0; i < NA; i++) { const a = j * (NA + 1) + i, b = a + 1, d = a + NA + 1, e = d + 1; ind.push(a, d, b, b, d, e); }
+          const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(ind);
+          mwMesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, depthWrite: false, fog: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+          mwMesh.frustumCulled = false; mwMesh.renderOrder = -4; grp.add(mwMesh);
+        }
+        scene.add(grp); return { grp, mw: mwMesh, rot: new THREE.Matrix4(), basis: new THREE.Matrix4(), sc: new THREE.Matrix4() };
+      }
+      function starsAt(night, moonK, SK, B) {
+        if (SM && SK && B) {
+          if (!STARS.real) STARS.real = realSky();
+          const R = STARS.real, w = core.weatherOf(zoneHere()), clear = (TL.n > 1 || DEMO) ? 1 : !w || w.kind === 'clear' ? 1 : Math.max(0, 1 - w.intensity / 60);
+          const o = Math.max(0, Math.min(1, (night - 0.5) / 0.4)) * (1 - 0.75 * moonK) * clear;
+          R.grp.visible = o > 0.01 && !CAVE.on; if (!R.grp.visible) return;
+          for (const ch of R.grp.children) ch.material.opacity = ch === R.mw ? o * 0.55 : o;
+          R.basis.set(B.e[0], B.e[1], B.e[2], 0, B.u[0], B.u[1], B.u[2], 0, B.s[0], B.s[1], B.s[2], 0, 0, 0, 0, 1);   /* planet frame -> this place's (east, up, south) */
+          R.rot.makeRotationZ(SK.sid); const D = Math.max(60, camera.far * 0.9);
+          R.grp.matrix.makeTranslation(camera.position.x, camera.position.y, camera.position.z).multiply(R.sc.makeScale(D, D, D)).multiply(R.basis).multiply(R.rot);
+          R.grp.matrixWorldNeedsUpdate = true;
+          return;
+        }
         if (!STARS.pts) {
           const n = 1600, pos = new Float32Array(n * 3), col = new Float32Array(n * 3); let h = 2166136261;
           const rnd = () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return ((h >>> 0) % 100000) / 100000; };
@@ -876,21 +1065,177 @@
         STARS.pts.material.opacity = o; STARS.pts.visible = o > 0.01 && !CAVE.on;
         STARS.pts.position.copy(camera.position); STARS.pts.scale.setScalar(Math.max(60, camera.far * 0.9));
       }
+      /* the season where you stand, every few seconds: the woods, the ground and the lakes follow it; the lakes freeze by their
+         own latitude (core.M.setIce), refreshed each minute */
+      const SEASON = { t: 0, key: '', ice: 0, name: '' };
+      /* through the ice (2026-10-07): standing on a frozen lake when it thaws is a fall into it - a death, and what you carry sinks */
+      const ICEWALK = { on: false };
+      setInterval(() => {
+        if (!me || me.dead || me.boat || !core.M.iceAt) return;
+        const t = core.M.tileAt(me.x, me.y), wet = t === '~' || t === 'v';
+        if (wet && core.M.iceAt(me.x, me.y)) { ICEWALK.on = true; return; }
+        if (ICEWALK.on && wet && core.M.blocked(me.x, me.y)) { ICEWALK.on = false; coreCall(() => core.fallThrough && core.fallThrough(PID)); return; }
+        if (!wet) ICEWALK.on = false;
+      }, 400);
+      /* the sky's clock: real time, unless a viewer asks for a time-lapse (?timelapse=N runs the sun, moon and seasons N
+         times faster from now, ?skyday=D starts D game days on). Only this viewer's sky moves; nothing is sent */
+      const TL = { n: Math.max(1, +q.get('timelapse') || 1), t0: Date.now(), off: (+q.get('skyday') || 0) * DAY_S * 1000 };
+      const skyNow = () => TL.t0 + TL.off + (Date.now() - TL.t0) * TL.n;
+      /* ?demo=eclipse (a showing for 2026-10-07; nothing else uses it): the sky jumps to a solar eclipse seen from Ashvale,
+         the camera tilts from behind you into your eyes and up to the sun while the moon crosses it, then to a total lunar eclipse
+         the same way, and round again. Only this viewer's sky and camera; nothing is sent. */
+      const DEMO = q.get('demo') === 'eclipse' ? { i: -1, t: 0, list: [   /* the days: what Ashvale (60 N since the north was turned) can see */
+        { day: 531.470, n: 6, dur: 104000, at: 'sun', zoom: 4.8, say: 'A solar eclipse over Ashvale (game day 531): the moon slides in across the sun from the side and away again.' },
+        { day: 369.050, n: 17, dur: 104000, at: 'moon', zoom: 4.8, say: 'A total lunar eclipse (game day 369): the moon passes through the planet\'s shadow and turns copper.' },
+        { day: 530.105, n: 4, dur: 42000, at: 'sun', zoom: 9.5, say: 'Sunset (game day 530).' },
+        { day: 372.052, n: 4, dur: 42000, at: 'moon', zoom: 9.5, say: 'Moonrise (game day 372), just past full.' }] } : null;
+      /* ?demo=hawk (a showing for 2026-10-08; never on the arcade, where it would hand out a ring): a hawk ring on, and a flight
+         along the new road from Eastend to Saltmere and back, seen through the hawk's eyes looking ahead and a little down */
+      const HDEMO = q.get('demo') === 'hawk' && !G.arcade ? { i: 0, ring: false, way: [] } : null;
+      if (HDEMO) { for (let k = 0; k <= 10; k++) HDEMO.way.push([Math.round(74 + (378 - 74) * k / 10), Math.round(50 + (24 - 50) * k / 10)]); HDEMO.way = HDEMO.way.concat(HDEMO.way.slice(0, -1).reverse()); }
+      /* ?demo=sugar (a showing for 2026-10-08; not on the arcade): the sugar bush, start to finish - peel wiigwaas off two
+         birches, trade a deer hide to Ma'iingan for ojiitad, Migizi folds a biskitenaagan (the clock steps a day), tap two maples on
+         sap days, Nookomis's quest at the sugar camp: sap, boil to syrup, boil to candy, the Quillwork makak */
+      const SDEMO = q.get('demo') === 'sugar' && !G.arcade ? { on: 0 } : null;
+      async function sugarDemo() {
+        const wait = ms => new Promise(ok => setTimeout(ok, ms)), say = t => hud.chat(t, 'sys'), cheb = (x, y) => Math.max(Math.abs(me.x - x), Math.abs(me.y - y));
+        const follow = (d, p) => { cam.tdist = d || 8; cam.tpitch = p || 0.5; };
+        const until = async (f, ms) => { const t0 = performance.now(); while (!f() && performance.now() - t0 < ms) await wait(200); return f(); };
+        const walk = async (x, y, r) => { send({ c: 'walk', x, y, run: true }); await until(() => cheb(x, y) <= (r || 1) || !me.path.length && cheb(x, y) <= 2, 45000); await wait(400); };
+        const nb = (x, y) => { for (const [dx, dy] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) if (!core.M.blocked(x + dx, y + dy)) return [x + dx, y + dy]; return [x, y]; };
+        const work = async (x, y, extra) => { const s0 = nb(x, y); await walk(s0[0], s0[1], 0); send(Object.assign({ c: 'gather', x, y }, extra || {})); await wait(800); await until(() => !me.act, 9000); await wait(900); };
+        const talk = async (id) => { const n = core.M.npcs.find(o => o.id === id); const s0 = nb(n.x, n.y); await walk(s0[0], s0[1], 0); send({ c: 'npc', id }); await wait(6500); hud.closeAll && hud.closeAll(); await wait(400); };
+        const sapDays = () => { const now = skyNow(); for (let d = 0; d < 400; d++) { const t = now + d * DAY_S * 1000; if ([0, 1, 2, 3].every(k => SEASONS.sap(SEASON.lat, t + k * DAY_S * 1000).day)) return t; } return now; };
+        const goto = (t) => { TL.t0 = Date.now(); TL.off = t - TL.t0; SEASON.key = ''; SEASON.t = 0; };
+        const nextDay = () => goto(skyNow() + DAY_S * 1000);
+        const trees = (k) => { const out = []; for (let y = 530; y < 560; y++) for (let x = 78; x < 106; x++) if (core.M.tileAt(x, y) === k && core.nodeAt(core.M.key(x, y)) && nb(x, y)[0] !== x + 0.5) { const o = nb(x, y); if (o[0] !== x || o[1] !== y) out.push([x, y]); } out.sort((a, b) => Math.hypot(a[0] - 92, a[1] - 545) - Math.hypot(b[0] - 92, b[1] - 545)); return out; };
+        hud.showHelp && hud.showHelp(false); if (core.setWeather) coreCall(() => core.setWeather(zoneHere(), 'clear', 0, 100000));
+        goto(sapDays()); await wait(3000); follow(9, 0.55);
+        coreCall(() => { core.grantItem(PID, 'deer_hide', 1); core.grantItem(PID, 'pail', 1); });
+        say('The sugar bush, start to finish. A thaw after a frost: the sap is running.'); await wait(3500);
+        const E = trees('E'), Mp = trees('M');
+        say('A long press on a wiigwaasaatig (birch): Peel bark. Each birch gives once a year.');
+        await work(E[0][0], E[0][1], { peel: 1 }); await work(E[1][0], E[1][1], { peel: 1 });
+        say("Down to Ziibiing. Ma'iingan trades ojiitad (sinew) for a waawaashkeshiwayaan (deer hide).");
+        await talk('maiingan');
+        say('Migizi folds a biskitenaagan (birch bark sap bucket) from two wiigwaas and an ojiitad. It dries a day in its folds.');
+        await talk('migizi');
+        say('...the next day.'); nextDay(); await wait(2500);
+        await talk('migizi');
+        say('Up to the iskigamizigan (sugar camp). Nookomis is here while the sap runs.'); await walk(95, 548, 1);
+        await talk('nookomis');
+        say('A long press on an ininaatig (maple): Collect sap. One bucket per tree a day, one sap per bucket.');
+        await work(Mp[0][0], Mp[0][1], { tap: 1 }); await work(Mp[1][0], Mp[1][1], { tap: 1 });
+        say('One bucket of ziinzibaakwadwaaboo (maple sap) to Nookomis. She gives the bucket back.'); await talk('nookomis');
+        const F = { x: 92, y: 543 };
+        say('Boil the other at the fire: zhiiwaagamizigan (maple syrup), in the same bucket.'); await work(F.x, F.y);
+        await talk('nookomis');
+        say('Another day, another bucket of sap.'); nextDay(); await wait(2500); await work(Mp[2][0], Mp[2][1], { tap: 1 });
+        say('Boil it twice: syrup, then ziinzibaakwadoons (candy). The bucket comes back empty.'); await work(F.x, F.y); await work(F.x, F.y);
+        await talk('nookomis');
+        const sl = me.inv.findIndex(x => x && x.id === 'quill_makak'); if (sl >= 0) { send({ c: 'equip', slot: sl }); await wait(1500); }
+        follow(4, 0.3); say('The Quillwork makak, worn on the back. It carries more than any pack. Miigwech!');
+      }
+      function hawkDemoTick() {
+        if (!HDEMO) return;
+        if (!HDEMO.ring) {
+          HDEMO.ring = true; coreCall(() => core.grantItem && core.grantItem(PID, 'ring_hawk', 1));
+          setTimeout(() => { const slot = me.inv.findIndex(sl => sl && sl.id === 'ring_hawk'); if (slot >= 0) send({ c: 'equip', slot }); if (core.setWeather) coreCall(() => core.setWeather(zoneHere(), 'clear', 0, 100000)); hud.chat('A hawk flight over the new road, West End to Saltmere and back.', 'sys'); }, 1500);
+          return;
+        }
+        if (!myEnt.hawk) return;
+        const W = HDEMO.way[HDEMO.i % HDEMO.way.length];
+        if (Math.max(Math.abs(me.x - W[0]), Math.abs(me.y - W[1])) <= 2 || !me.path.length) {
+          if (Math.max(Math.abs(me.x - W[0]), Math.abs(me.y - W[1])) <= 2) HDEMO.i++;
+          const N = HDEMO.way[HDEMO.i % HDEMO.way.length]; if (!me.path.length || HDEMO.sent !== HDEMO.i) { HDEMO.sent = HDEMO.i; send({ c: 'walk', x: N[0], y: N[1] }); }
+        }
+        const N = HDEMO.way[HDEMO.i % HDEMO.way.length], dx = N[0] + 0.5 - myEnt.root.position.x, dz = N[1] + 0.5 - myEnt.root.position.z;
+        if (Math.hypot(dx, dz) > 0.5) { const want = Math.atan2(-dx, -dz); cam.tyaw = want + Math.round((cam.yaw - want) / (2 * PI)) * 2 * PI; }
+        cam.tpitch = 0.45; cam.tdist = 11;
+      }
+      function demoTick(now) {
+        if (!DEMO || !SUNL.sv) return;
+        const cur = DEMO.list[DEMO.i];
+        if (DEMO.i < 0 || now - DEMO.t > (cur ? cur.dur || 36000 : 0)) {
+          DEMO.i = (DEMO.i + 1) % DEMO.list.length; DEMO.t = now; const L = DEMO.list[DEMO.i];
+          TL.t0 = Date.now(); TL.off = (SUN_EPOCH + L.day * DAY_S) * 1000 - TL.t0; TL.n = L.n; SEASON.key = ''; SEASON.t = 0; hud.chat(L.say, 'sys');
+          if (core.setWeather) coreCall(() => core.setWeather(zoneHere(), 'clear', 0, 100000));
+          return;
+        }
+        const v = cur.at === 'sun' ? SUNL.sv : SUNL.mv, l = Math.hypot(v[0], v[1], v[2]) || 1, el = Math.asin(Math.max(-1, Math.min(1, v[1] / l))), yaw = Math.atan2(-v[0], -v[2]);
+        const k = Math.min(1, (now - DEMO.t) / 9000), want = 0.1 - Math.max(0.05, el) / 1.07;   /* behind you, then up into your eyes, then up to it */
+        const z = Math.min(1, Math.max(0, (now - DEMO.t - 9000) / 4000));
+        cam.tyaw = cam.yaw = yaw; cam.tdist = cam.dist = 11 - (11 - (cur.zoom || 4.8)) * z * z * (3 - 2 * z); cam.tpitch = cam.pitch = 0.6 + (want - 0.6) * (k * k * (3 - 2 * k));   /* then the binoculars: zoom in on it */
+      }
+      /* a fast time-lapse (N of 2000 and up) holds the sun at noon where you stand, so the seasons run without day and night strobing */
+      TL.noon = null;
+      function sunTime(B) {
+        const t = skyNow(); if (TL.n < 2000 || !B) return t;
+        const DMS = DAY_S * 1000;
+        if (TL.noon == null) { let best = -2; for (let k = 0; k < 96; k++) { const tt = t + k * DMS / 96, v = dot3(sunAt(tt), B.u); if (v > best) { best = v; TL.noon = tt; } } }
+        return TL.noon + Math.floor((t - TL.noon) / DMS) * DMS;
+      }
+      function seasonTick(B) {
+        if (!SEASONS) return;
+        const real = Date.now(); if (real - SEASON.t < (TL.n > 1 ? 250 : 3000)) return; SEASON.t = real; const now = skyNow();
+        const lat = NS * Math.asin(Math.max(-1, Math.min(1, B.u[2]))) * 180 / Math.PI, S = SEASONS.at(lat, now);
+        const key = [S.name, S.day, Math.round(S.leaf.bud * 20), Math.round(S.leaf.grow * 20), Math.round(S.leaf.colourT * 20), Math.round(S.leaf.springT * 10), Math.round(S.snow * 20), S.frozen].join(':');   /* every game day: in the leaf fall each tree has its own day */
+        if (key !== SEASON.key) { SEASON.key = key; const ta = performance.now(); if (SCENE.seasonApply) SCENE.seasonApply(S, SEASONS); SEASON.applyMs = performance.now() - ta; SEASON.applies = (SEASON.applies || 0) + 1; SEASON.snowy = S.name === 'winter' && S.snow > 0.3;   /* it snows only in winter (2026-10-07: "It shouldn't be snowing in the spring time") */ wxShown = ''; if (core.setSeason) core.setSeason({ snowy: SEASON.snowy, rice: !!S.rice, riceLate: S.p > 0.551 && S.p < 0.95 }); showWeather(); }
+        if (S.name !== SEASON.name) { if (SEASON.name) { const C = SEASONS.calendar(now); hud.chat(S.name.charAt(0).toUpperCase() + S.name.slice(1) + ' has come: year ' + C.year + ', day ' + C.day + '.', 'sys'); } SEASON.name = S.name; }
+        /* a time-lapse runs the weather fast too: every few seconds each region this viewer hosts rolls again (for its season) */
+        /* local time from the sun itself (2026-10-08): noon is when the sun stands highest here. SEASON.lon is the shift, in degrees,
+           that the seasons module's clock wants (it reads the hour as the game day's fraction + lon / 360) */
+        const gday = Math.floor((now / 1000 - SUN_EPOCH) / DAY_S);
+        if (SKYM && SUNL.lonA != null && SEASON.noonDay !== gday) {
+          const t0 = (SUN_EPOCH + gday * DAY_S) * 1000; let best = -2, bk = 48;
+          for (let k = 0; k < 96; k++) { const v = SKYM.at(t0 + k * DAY_S * 1000 / 96, SUNL.lonA).sun, up = v[0] * B.u[0] + v[1] * B.u[1] + v[2] * B.u[2]; if (up > best) { best = up; bk = k; } }
+          SEASON.noonDay = gday; SEASON.noon = bk / 96;
+        }
+        SEASON.lat = lat; SEASON.lon = SEASON.noon != null ? (0.5 - SEASON.noon) * 360 : Math.atan2(B.u[1], B.u[0]) * 180 / Math.PI;
+        if (core.setNature && SEASONS.sap) { const C = SEASONS.calendar(now); core.setNature({ day: Math.floor((now / 1000 - SUN_EPOCH) / DAY_S), year: C.year, sap: SEASONS.sap(lat, now) }); }   /* the sugar bush rules: which day and year it is, and whether the sap runs */
+        if (TL.n > 1 && SEASONS.temperature) {   /* a time-lapse shows the date, the temperature and the sap run (2026-10-08) */
+          let el = document.getElementById('tl-clock');
+          if (!el) { el = document.createElement('div'); el.id = 'tl-clock'; el.style.cssText = 'position:fixed;left:12px;top:12px;z-index:50;padding:6px 10px;border-radius:6px;background:rgba(10,14,20,.72);color:#f2ead8;font:600 15px/1.35 system-ui,sans-serif;pointer-events:none;white-space:pre'; document.body.appendChild(el); }
+          const C = SEASONS.calendar(now), T = SEASONS.temperature(lat, now, SEASON.lon), sp = SEASONS.sap(lat, now), hr = ((C.dayFrac + SEASON.lon / 360) % 1 + 1) % 1;
+          el.textContent = 'Year ' + C.year + ', day ' + C.day + '  ' + String(Math.floor(hr * 24)).padStart(2, '0') + ':' + String(Math.floor(hr * 1440) % 60).padStart(2, '0') + '  ' + S.name + '\n' + T.toFixed(1) + ' \u00b0C   night ' + sp.low.toFixed(0) + ' / day ' + sp.high.toFixed(0) + '\n' +
+            (sp.season ? (sp.day ? 'The sap is running' : 'Sap season - no run today') + ' (' + sp.left + ' days to the buds)' : (S.snow > 0.3 ? 'snow on the ground' : 'leaves: ' + ({ budding: 'buds opening', bare: 'bare', falling: 'falling', turning: 'turning' }[S.leaf.stage] || S.leaf.stage)));
+        }
+        if (core.M.setIce && real - SEASON.ice > (TL.n > 1 ? 2000 : 60000)) { SEASON.ice = real; core.M.setIce(la => SEASONS.at(la, skyNow()).frozen); }
+      }
       function dayTick() {
         const key = (me.x >> 3) + ':' + (me.y >> 3);
         if (key !== SUNL.key) { const a = sphereAt(me.x, me.y); SUNL.key = key; SUNL.b = a ? { u: nrm3(a[0]), e: nrm3(sub3(a[1], a[0])), s: nrm3(sub3(a[2], a[0])) } : null; }   /* up, game east (+x), game south (+y) */
         const B = SUNL.b; if (!B) return;
-        const now = Date.now(), s = sunAt(now), up = dot3(s, B.u), ex = dot3(s, B.e), so = dot3(s, B.s);
-        const day = Math.min(1, Math.max(0, (up + 0.08) / 0.2)), dusk = Math.max(0, 1 - Math.abs(up) / 0.18);   /* 1 by day, 0 by night; dusk near the horizon */
+        seasonTick(B);
+        demoTick(performance.now()); hawkDemoTick(); if (SDEMO && !SDEMO.on && SEASON.lat != null) { SDEMO.on = 1; sugarDemo().catch(e => hud.chat('Demo stopped: ' + e.message, 'sys')); }
+        const now = sunTime(B);
+        /* the sun and the moon from the sky module (true sizes and distances, eclipses); without it the old rule */
+        const SK = SKYM ? (SUNL.lonA == null && sunAt(now), SKYM.at(now, SUNL.lonA)) : null;
+        const s = SK ? SK.sun : sunAt(now), up = dot3(s, B.u), ex = dot3(s, B.e), so = dot3(s, B.s);
+        /* a solar eclipse where you stand: the moon covers that much of the sun, and the day goes that much dark (2026-10-07) */
+        const ecl = SK ? SKYM.solarCover(SK, B.u) : 0; SUNL.eclipse = ecl; SUNL.lunar = SK && SK.lunar ? SK.lunar.umbra : 0;
+        const day = Math.min(1, Math.max(0, (up + 0.08) / 0.2)) * (1 - 0.96 * ecl * ecl), dusk = Math.max(0, 1 - Math.abs(up) / 0.18);   /* 1 by day, 0 by night; dusk near the horizon */
         /* the moon follows the real cycle and adds light when it is up. A moonless night is starlight (2026-10-07: "add stars
            to moonless [nights] so that it is at least navigable, but just barely"): a sky full of stars, and only just enough
            light to make out the ground */
-        const M = moonAt(now, s), mup = dot3(M.v, B.u), moonK = M.lit * Math.min(1, Math.max(0, (mup + 0.03) / 0.15));
+        const M = SK ? { v: SKYM.moonFrom(SK, B.u), lit: (1 - Math.cos(SK.elong)) / 2, phase: SK.phase } : moonAt(now, s), mup = dot3(M.v, B.u), moonK = M.lit * Math.min(1, Math.max(0, (mup + 0.03) / 0.15)) * (1 - 0.85 * SUNL.lunar);   /* in the planet's shadow the moon gives little light */
         const lit = up > -0.02, d = lit ? [ex, Math.max(up, 0.06), so] : [dot3(M.v, B.e), Math.max(mup, 0.2), dot3(M.v, B.s)];
         const l = Math.hypot(d[0], d[1], d[2]); SUNL.dir = [d[0] / l, d[1] / l, d[2] / l];
         sun.intensity = lit ? 0.5 + 1.8 * day : 0.04 + 0.22 * moonK; sun.color.copy(lit ? SUNC : MOONC); if (lit && dusk > 0) sun.color.lerp(DUSKC, dusk * 0.8);
         hemi.intensity = 1.7 * day + (0.08 + 0.13 * moonK) * (1 - day); SUNL.dark = 1 - day;
-        starsAt(1 - day, moonK);
+        SUNL.sv = [ex, up, so]; SUNL.mv = [dot3(M.v, B.e), mup, dot3(M.v, B.s)];
+        const nightK = Math.max(1 - day, ecl > 0.9 ? (ecl - 0.9) * 10 : 0);
+        if (!SKYV.v && SKYV.v !== false) { try { const SVM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('skyview'); SKYV.v = SVM && SVM.createSkyView && SK ? SVM.createSkyView(THREE, { starmap: SM, phone: isPhone }) : false; } catch (er) { console.warn('skyview', er && er.message); SKYV.v = false; } }
+        if (SKYV.v && SK) {   /* the sky as its own little 3D scene (src/skyview.js): the sun, the moon lit by it, the stars */
+          const w = core.weatherOf(zoneHere()), clear = (TL.n > 1 || DEMO) ? 1 : !w || w.kind === 'clear' ? 1 : Math.max(0, 1 - w.intensity / 60);
+          SKYV.basis.set(B.e[0], B.e[1], B.e[2], 0, B.u[0], B.u[1], B.u[2], 0, B.s[0], B.s[1], B.s[2], 0, 0, 0, 0, 1); SKYV.rot.makeRotationZ(SK.sid); SKYV.m.copy(SKYV.basis).multiply(SKYV.flipM.makeScale(1, NS, NS)).multiply(SKYV.rot);
+          const PLN = SKYM.planets ? SKYM.planets(now, SUNL.lonA).map(P => ({ name: P.name, mag: P.mag, color: P.color, dir: [dot3(P.dir, B.e), dot3(P.dir, B.u), dot3(P.dir, B.s)] })) : null; SKYV.pl = PLN;
+          SKYV.v.update({ planets: PLN, bg: scene.background && scene.background.isColor ? scene.background : null, sun: SUNL.sv, moon: SUNL.mv, north: [NS * B.e[2], NS * B.u[2], NS * B.s[2]], starsM: SKYV.m, night: nightK, moonK, cover: ecl, lunar: SUNL.lunar, clear, under: CAVE.on });
+          if (BODIES.sun) { BODIES.sun.visible = BODIES.moon.visible = false; } if (STARS.real) STARS.real.grp.visible = false; if (STARS.pts) STARS.pts.visible = false;
+        } else {
+          starsAt(nightK, moonK, SK, B);
+          skyBodies(SUNL.sv, SUNL.mv, day, M);
+        }
         if (SCENE.lampGlow) SCENE.lampGlow((SUNL.dark - 0.3) / 0.4);   /* glass warms with the dark; each lamp still waits for its guard */
         if (core.watchPhase) { const night = SUNL.dark >= 0.5; if (SUNL.phase == null) { SUNL.phase = night; core.watchPhase(night, true); } else if (SUNL.phase !== night) { SUNL.phase = night; core.watchPhase(night, false); } }
         /* the sky: the weather's colour (the weather module repaints it every frame), toward dusk orange and the night's blue
@@ -902,7 +1247,8 @@
       }
       /* ---------- HAND TORCHES (2026-10-07: "a torch ... hold it at night and illuminate his surroundings"): whoever holds
          one (the off hand) carries a warm flickering light of its Light radius - you, and up to three players near you */
-      const TORCH = { me: null, pool: [] };
+      const TORCH = { me: new THREE.PointLight(0xffa040, 0, 8, 1.3), pool: [] };   /* made now, not on first use: see A FIXED NUMBER OF LIGHTS */
+      scene.add(TORCH.me); for (let k = 0; k < 3; k++) { const L = new THREE.PointLight(0xffa040, 0, 8, 1.3); scene.add(L); TORCH.pool.push(L); }
       /* any item worn or held with a Light value lights round you - a torch, a glowing helmet, the Spider Queen's Crown (the operator
          2026-10-07: "Or other illuminating items ... the spider queen's crown should be illuminating"); the brightest counts */
       const LIGHTC = { torch: 0xffa040 }, lightOf = ids => { let best = 0, col = 0xffa040; for (const id of ids) { const d = id && core.item(id); if (d && d.light > best) { best = d.light; col = d.id === 'hat_spidercrown' ? 0xc89aff : LIGHTC[d.id] || 0xffc070; } } return [best, col]; };
@@ -918,10 +1264,19 @@
       /* ---------- weather visuals: the weather module (src/weather.js, its own inscription) when it is loaded, else scene fog */
       let wxShown = '', wxMod = null;
       try { const W = G.ASH3D && G.ASH3D.get && G.ASH3D.get('weather'); if (W && W.createWeather) wxMod = W.createWeather(THREE, { scene, camera, quality: isPhone ? 'low' : 'high' }); } catch (er) { console.warn('weather module', er && er.message); }
+      /* what falls where you stand keeps your season, whatever the region's roll was (a region can span latitudes): in a
+         snowy winter rain and fog come down as snow; anywhere else snow comes down as rain */
+      function seasonal(w) {
+        if (TL.n > 1 || DEMO) return { kind: 'clear', intensity: 0 };   /* no weather in a time-lapse or a showing (2026-10-07) */
+        if (SEASON.snowy == null || !w) return w;
+        if (SEASON.snowy && (w.kind === 'rain' || w.kind === 'fog')) return Object.assign({}, w, { kind: 'snow' });
+        if (!SEASON.snowy && w.kind === 'snow') return Object.assign({}, w, { kind: 'rain' });
+        return w;
+      }
       const WXLOOK = { clear: [SKY, 24, 52], fog: [0xb8bec4, 3, 16], rain: [0x7d8fa0, 14, 38], snow: [0xdfe6ec, 10, 30] };
       function showWeather(instant) {
         if (CAVE.on) return;   /* underground there is no weather (caveTick puts it back on the way out) */
-        const w = core.weatherOf(zoneHere()) || { kind: 'clear', intensity: 0 }, key = w.kind + ':' + w.intensity; if (key === wxShown) return; wxShown = key;
+        const w = seasonal(core.weatherOf(zoneHere()) || { kind: 'clear', intensity: 0 }), key = w.kind + ':' + w.intensity; if (key === wxShown) return; wxShown = key;
         if (wxMod) { wxMod.set(w.kind, w.intensity / 100, { instant: !!instant }); return; }
         const L = WXLOOK[w.kind] || WXLOOK.clear, C = WXLOOK.clear, k = w.kind === 'clear' ? 0 : w.intensity / 100;
         const col = new THREE.Color(C[0]).lerp(new THREE.Color(L[0]), k);
@@ -1002,7 +1357,8 @@
         if (t.H.setTint) t.H.setTint(tc ? tc[0] : null, tc ? tc[1] : 0);
         if (t.H.setFrozen) t.H.setFrozen(!!(t.fx && (t.fx.freeze || t.fx.stun)));
       }
-      function faceNpc(id) { const n = ents.get('n:' + id); if (n) { n.tyaw = Math.atan2(myEnt.to.x - n.to.x, myEnt.to.z - n.to.z); n.facing = 1; } }
+      function faceNpc(id) { const nd = NPCN[id]; if (nd && nd.still) return;   /* a wreck or a body does not turn to look at you (2026-10-07) */
+        const n = ents.get('n:' + id); if (n) { n.tyaw = Math.atan2(myEnt.to.x - n.to.x, myEnt.to.z - n.to.z); n.facing = 1; } }
       function npcsTurnBack() { for (const n of core.M.npcs) { const e = ents.get('n:' + n.id); if (e && e.facing && e.homeYaw != null && !n.patrol && !n.guard && Math.max(Math.abs(n.x - me.x), Math.abs(n.y - me.y)) > 6) { e.facing = 0; e.tyaw = e.homeYaw; } } }   /* back to their own spot once you walk off */
       let insideRoof = false;
       /* the floor bar (the operator: "hard to find how to get back down"): while you are in a building with storeys, which floor
@@ -1105,12 +1461,15 @@
       }
 
       /* ---------- camera (RuneScape-style orbit) */
+      const FPV = { v: new THREE.Vector3(), t: new THREE.Vector3(), fw: new THREE.Vector3(), hid: false };
       const cam = { yaw: PI * 0.12, pitch: 0.92, dist: isPhone ? 9 : 11, tyaw: PI * 0.12, tpitch: 0.92, tdist: isPhone ? 9 : 11, snap: true, keys: {} };
+      { const cy = +q.get('camyaw'), cp = +q.get('campitch'); if (q.has('camyaw') && isFinite(cy)) cam.yaw = cam.tyaw = cy; if (q.has('campitch') && isFinite(cp)) cam.pitch = cam.tpitch = cp; }   /* a playtest or time-lapse can set the view */
       const camT = new THREE.Vector3();
       function updateCamera(dt) {
         const k = cam.keys;
         if (k.ArrowLeft) cam.tyaw -= 2.2 * dt; if (k.ArrowRight) cam.tyaw += 2.2 * dt; if (k.ArrowUp) cam.tpitch += 1.2 * dt; if (k.ArrowDown) cam.tpitch -= 1.2 * dt;
-        cam.tpitch = Math.max(myEnt.hawk ? 0.72 : 0.3, Math.min(1.42, cam.tpitch)); cam.tdist = Math.max(4.5, Math.min(myEnt.hawk ? 48 : 24, cam.tdist));   /* zoom vision while a hawk: twice as far out, looking down so the view stays on loaded land */
+        const hawkEye = !!myEnt.hawk && !((me.burden || 0) > 0);   /* flying or perched: the hawk's own eyes (2026-10-07); grounded under a load: behind it as usual */
+        cam.tpitch = Math.max(hawkEye || !myEnt.hawk ? -1.3 : 0.3, Math.min(1.42, cam.tpitch)); cam.tdist = Math.max(4.5, Math.min(hawkEye ? 11 : 24, cam.tdist));   /* below 0.3 a walker's camera goes into the eyes and looks up; zoom by distance */
         const s = cam.snap ? 1 : Math.min(1, dt * 10);
         cam.yaw += (cam.tyaw - cam.yaw) * s; cam.pitch += (cam.tpitch - cam.pitch) * s; cam.dist += (cam.tdist - cam.dist) * s;
         const p = myEnt.root.position; const tg = new THREE.Vector3(p.x, p.y + 1.0, p.z);
@@ -1120,9 +1479,41 @@
         }
         if (cam.snap) camT.copy(tg); else camT.lerp(tg, Math.min(1, dt * 12));
         cam.snap = false;
-        camera.position.set(camT.x + Math.sin(cam.yaw) * Math.cos(cam.pitch) * cam.dist, camT.y + Math.sin(cam.pitch) * cam.dist, camT.z + Math.cos(cam.yaw) * Math.cos(cam.pitch) * cam.dist);
+        const cp = Math.max(0.3, cam.pitch);
+        camera.position.set(camT.x + Math.sin(cam.yaw) * Math.cos(cp) * cam.dist, camT.y + Math.sin(cp) * cam.dist, camT.z + Math.cos(cam.yaw) * Math.cos(cp) * cam.dist);
         const gy = heightAt(camera.position.x, camera.position.z) + 0.6; if (camera.position.y < gy) camera.position.y = gy;
-        camera.lookAt(camT);
+        /* LOOK UP AT THE SKY (2026-10-07: "look up past the point where it is currently limited to slide the camera into first person
+           view"): tilting on past the lowest view slides the camera forward into your character's eyes, and from there you look up -
+           to the sun, the moon, the stars, straight overhead. Tilt back down and it slides out again. */
+        const hawkFP = !!myEnt.hawk && !((me.burden || 0) > 0) && cam.mode !== 'creator';
+        const fp = cam.mode === 'creator' || (myEnt.hawk && !hawkFP) ? 0 : hawkFP ? 1 : Math.min(1, Math.max(0, (0.3 - cam.pitch) / 0.2)), fpEl = hawkFP ? Math.max(-1.45, Math.min(1.5, (0.1 - cam.pitch) * 1.07)) : Math.min(1.5, Math.max(0, 0.1 - cam.pitch) * 1.07);   /* the hawk looks down at the ground as well as up */
+        /* looking up, the zoom is a pair of binoculars: the view narrows down to a few degrees, and the sun and the moon (half a degree
+           each, as ours) fill it */
+        if (FPV.fov0 == null) FPV.fov0 = camera.fov;
+        const fovW = fp > 0 ? FPV.fov0 + (FPV.fov0 * Math.max(0.25, Math.min(1, (cam.dist - 4.5) / 6.5)) - FPV.fov0) * fp : FPV.fov0;
+        if (Math.abs(camera.fov - fovW) > 0.01) { camera.fov = fovW; camera.updateProjectionMatrix(); }
+        /* FOLLOW WHAT YOU ZOOMED IN ON (2026-10-07): looking up and zoomed in, the sun, the moon or a planet near the middle of the view
+           is followed across the sky - the view turns with it - until you drag the view away */
+        if (fp > 0.95 && cam.dist < 8 && !ptrs.size && !(cam.keys.ArrowLeft || cam.keys.ArrowRight || cam.keys.ArrowUp || cam.keys.ArrowDown)) {
+          const fw = FPV.fw.set(0, 0, -1).applyQuaternion(camera.quaternion), lim = Math.max(0.05, camera.fov * Math.PI / 180 * 0.35);
+          let best = null, bd = lim;
+          for (const v of [SUNL.sv, SUNL.mv].concat((SKYV.pl || []).map(P => P.dir))) {
+            if (!v) continue; const l = Math.hypot(v[0], v[1], v[2]) || 1, a = Math.acos(Math.max(-1, Math.min(1, (v[0] * fw.x + v[1] * fw.y + v[2] * fw.z) / l)));
+            if (a < bd && v[1] / l > -0.02) { bd = a; best = [v[0] / l, v[1] / l, v[2] / l]; }
+          }
+          if (best) { const el = Math.asin(best[1]); cam.tyaw = Math.atan2(-best[0], -best[2]) + Math.round((cam.tyaw - Math.atan2(-best[0], -best[2])) / (2 * PI)) * 2 * PI; cam.tpitch = 0.1 - Math.max(0, el) / 1.07; }
+        }
+        if (fp > 0) {
+          const ex = p.x, ey = p.y + (hawkFP ? 0.3 : 1.62), ez = p.z, fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw);
+          camera.position.lerp(FPV.v.set(ex - fx * 0.05, ey, ez - fz * 0.05), fp);
+          FPV.t.set(ex + fx * Math.cos(fpEl) * 10, ey + Math.sin(fpEl) * 10, ez + fz * Math.cos(fpEl) * 10);
+          camera.lookAt(FPV.t.lerp(camT, 1 - fp));
+        } else camera.lookAt(camT);
+        /* LOOKING AROUND IN FIRST PERSON (2026-10-07): your character turns the way you look, and its head tilts up (or down) to where
+           you are looking - others see it (the state's f and hl) */
+        if (fp > 0.5 && !myEnt.hawk) { myEnt.tyaw = cam.yaw + PI; myEnt.hl = fpEl; } else myEnt.hl = 0;
+        if (fp > 0.85 && myEnt.root.visible) { myEnt.root.visible = false; FPV.hid = true; }   /* your own head would fill the view */
+        else if (fp <= 0.85 && FPV.hid) { myEnt.root.visible = true; FPV.hid = false; }
         sun.position.set(camT.x + SUNL.dir[0] * 20, camT.y + SUNL.dir[1] * 20, camT.z + SUNL.dir[2] * 20); sun.target.position.copy(camT);   /* from the real sun (or the moon) */
       }
 
@@ -1186,6 +1577,9 @@
           const n = core.nodeAt(t.i); if (!n) return [];
           const nd = core.nodeDef(n), verb = n.kind === 'altar' ? 'Pray-at' : n.kind === 'range' || n.kind === 'fire' ? 'Cook-at' : nd.skill === 'woodcutting' ? 'Chop down' : nd.skill === 'mining' ? 'Mine' : 'Net', nm = '<span class="c">' + nd.name + '</span>';
           const o = [{ html: verb + ' ' + nm, act: { c: 'gather', x: n.x, y: n.y }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(nd.name + (nd.req ? ': needs ' + nd.skill + ' level ' + nd.req + '.' : '.'), 'sys') }];
+          /* the sugar bush (2026-10-08): peel a birch's bark, tap a maple for sap - first in the list, before chopping */
+          if (nd.peel) o.unshift({ html: (nd.peel.verb || 'Peel') + ' ' + nm, act: { c: 'gather', x: n.x, y: n.y, peel: 1 }, red: 1 });
+          if (nd.tap) o.unshift({ html: (nd.tap.verb || 'Tap') + ' ' + nm, act: { c: 'gather', x: n.x, y: n.y, tap: 1 }, red: 1 });
           if (n.chapel === 'ancient') {
             const q = me.quests && me.quests.even_grove, Q = D.quests && D.quests.quests.even_grove;
             if (q && Q && q.step > Q.steps.length) o.push({ html: 'Offer <span class="c">logs and bones</span>', act: { c: 'offer', x: n.x, y: n.y } });
@@ -1199,11 +1593,12 @@
           return [{ html: 'Get into the ' + nm, act: { c: 'board', x: t.x, y: t.y }, red: 1 },
                   { html: 'Examine ' + nm, fn: () => hud.chat('A canoe of birch bark over cedar ribs, sewn with spruce root and sealed with pitch. It floats light as a leaf.', 'sys') }]; }
         if (t.kind === 'passage') { const o = core.passageAt(t.x, t.y); if (!o) return []; const nm = '<span class="c">' + esc(o.name || (o.k === 'cavemouth' ? 'Cave' : o.k === 'gate' ? 'Gate' : 'Way out')) + '</span>';
-          return [{ html: esc(o.label || 'Go through'), act: { c: 'enter', x: o.x, y: o.y }, red: 1 },
+          return [{ html: esc(o.label || 'Go through'), act: { c: 'enter', x: o.x, y: o.y }, red: 1, then: () => { if (o.k !== 'gate' && o.to) travelSoon(PASSK[o.k] || null, (zoneAtIndex(o.to[0], o.to[1]) || {}).name || '', o.to[0], o.to[1], Math.max(Math.abs(me.x - o.x), Math.abs(me.y - o.y)) <= 1); } },
                   { html: 'Examine ' + nm, fn: () => hud.chat(o.k === 'cavemouth' ? 'A dark opening in the rock. Webs hang just inside, and the air smells of damp and old fur.' : o.k === 'gate' ? 'A barred wooden gate in a palisade. The lookout has the latch.' : 'A ladder up to a shaft of daylight.', 'sys') }]; }
         if (t.kind === 'remote') {
           const r = remotes.get(t.id); if (!r) return [];
-          if (r.boat === 1 && !me.boat && !Object.values(core.S.players).some(q => q.boat === 2 && q.ride === t.id)) return [{ html: 'Climb in to knock rice <span class="c">(bawa\'iganaakoog)</span>', act: { c: 'ride', pid: t.id }, red: 1 }];   /* ricing: two in the canoe */
+          if (r.boat === 1 && !me.boat && !Object.values(core.S.players).some(q => q.boat === 2 && q.ride === t.id))   /* two in the canoe: with their push pole and my knockers, ricing; else paddling together (2026-10-08) */
+            return [r.pole && me.inv.some(sl => sl && sl.id === 'knockers') ? { html: 'Climb in to knock rice <span class="c">(bawa\'iganaakoog)</span>', act: { c: 'ride', pid: t.id }, red: 1 } : { html: 'Get into the <span class="c">canoe</span>', act: { c: 'ride', pid: t.id }, red: 1 }];
           /* the combat level next to the name, coloured like a monster's (2026-10-06) */
           const pp = core.S.players[t.id], cb = pp ? core.combatLevel(pp) : 0;
           const nm = '<span class="w">' + esc(label(r.name, r.from)) + '</span>' + (cb ? ' <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>' : ''), o = [];
@@ -1212,7 +1607,9 @@
              on a player walks there (tapAt skips players) */
           if (trade && trade.available() && room && !room.me.guest && !r.from.guest) o.push({ html: 'Trade with ' + nm, fn: () => trade.open(r.from) });
           o.push({ html: 'Follow ' + nm, fn: () => startFollow(t.id) });
-          o.push({ html: 'View stats ' + nm, fn: () => hud.playerStats(label(r.name, r.from), r.skills || (pp ? Object.fromEntries(Object.keys(pp.xp).map(k => [k, core.lv(pp, k)])) : {}), cb) });
+          /* their own levels as their game sent them; not here yet (2026-10-07: a first look showed every skill at 1, a blank copy):
+             ask their game for them and open the panel when they come */
+          o.push({ html: 'View stats ' + nm, fn: () => { if (r.skills) { hud.playerStats(label(r.name, r.from), r.skills, cb); return; } hud.chat('Asking ' + label(r.name, r.from) + ' for their stats\u2026', 'sys'); r.wantStats = { at: Date.now(), name: label(r.name, r.from), cb }; netSend({ GQ: 1 }); } });
           o.push({ html: 'Examine ' + nm, fn: () => hud.chat(label(r.name, r.from) + ': another adventurer on the arcade.', 'sys') });
           return o;
         }
@@ -1277,7 +1674,7 @@
         if (!a) return opts;
         return [a].concat(opts.filter(o => !o.act || (o.act.c !== 'plant' && o.act.c !== 'unplant' && o.act.c !== a.act.c)));
       }
-      function doAct(o, sx, sy) { if (o.act) { send(o.act); if (sx != null) { const r = host.getBoundingClientRect(); hud.marker(sx - r.left, sy - r.top, o.red); } if (o.act.c === 'walk') flag = [o.act.x, o.act.y]; else flag = null; } else if (o.fn) o.fn(); }
+      function doAct(o, sx, sy) { if (o.act) { send(o.act); if (o.then) o.then(); if (sx != null) { const r = host.getBoundingClientRect(); hud.marker(sx - r.left, sy - r.top, o.red); } if (o.act.c === 'walk') flag = [o.act.x, o.act.y]; else flag = null; } else if (o.fn) o.fn(); }
       let flag = null;
       /* The operator: "a single click should make the character walk, a double click should make the character run". The first
          tap starts walking at once; a second tap within 300 ms near the same spot upgrades the same move to a run.
@@ -1319,6 +1716,10 @@
       /* ---------- input: touch (tap / drag / pinch / long-press), mouse, wheel, keys */
       const ptrs = new Map(); let pinch = null, suppressTap = false, lpTimer = null, lpFired = false;
       canvas.addEventListener('contextmenu', e => { e.preventDefault(); menuAt(e.clientX, e.clientY); });
+      /* a long press ANYWHERE in the game is ours (2026-10-08: on Android it opened the browser's own page menu - Back, Reload,
+         Share - when it landed on a HUD layer over the view): the browser menu only in a text box */
+      document.addEventListener('contextmenu', e => { const t = e.target; if (!(t && /^(INPUT|TEXTAREA)$/.test(t.tagName))) e.preventDefault(); }, true);
+      { const st = document.createElement('style'); st.textContent = 'html,body,#ash{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}input,textarea{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}'; document.head.appendChild(st); }   /* no callout or text selection on a long press (the launcher's page is fixed, so this comes with the engine) */
       canvas.addEventListener('pointerdown', e => {
         try { canvas.setPointerCapture(e.pointerId); } catch (er) { /* ok */ }
         ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: 0, b: e.button, type: e.pointerType });
@@ -1399,7 +1800,39 @@
          out wearing the default "Adventurer" for good, because nothing re-tells the name. The last name heard for an
          id is kept here so a rebuild starts from what was already learned about that player. */
       const knewName = new Map();
-      function dropRemote(id) { const r = remotes.get(id); if (r) { if (r.name && r.name !== 'Adventurer') knewName.set(id, r.name); removeEnt(r.e); remotes.delete(id); } if (core.S.players[id] && core.S.players[id].puppet) core.removePlayer(id); }
+      /* A PARTNER WHO DROPS OUT OF A SHARED CANOE (2026-10-08: "their avatar should continue to travel with the canoe ... if
+         somebody goes off-line on accident while traveling with another player, they don't get lost"): they stay seated in the bow
+         and travel on; if it was the one steering, the other takes the stern. This game tells the @ashvale Bank where it carries
+         them (and where it puts them ashore), so when they come back they are in the canoe - or on the bank where it landed. */
+      const CARRIED = { by: null, x: 0, y: 0 };   /* set when the Bank says another player's canoe carried you while you were away */
+      function carriedAsk() { bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'carried?', v: 1 }); }); }
+      setTimeout(carriedAsk, 9000);
+      const ghostable = (r, id) => (r.boat === 2 && r.ride === myNetId && me.boat === 1) || (me.boat === 2 && me.ride === id && r.boat === 1);
+      function carryTell(r, on) { const who = r.from && r.from.address; if (!who) return; bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'carry', v: 1, who, x: me.x, y: me.y, on: on ? 1 : 0 }); }); }
+      function carriedHeard(d) {   /* newer than this game's save: you went on in a friend's canoe after you dropped out */
+        const at = (+d.at || 0) * 1000, mine = (save && save.at) || 0; if (d.none || !(at > mine) || Date.now() - at > 7 * 24 * 3600 * 1000) return;
+        const x = d.x | 0, y = d.y | 0;
+        if (d.on && d.by) { CARRIED.by = d.by; CARRIED.x = x; CARRIED.y = y; setTimeout(() => { if (CARRIED.by) { CARRIED.by = null; landNear(x, y); } }, 60000); hud.chat('You dropped out while out in a canoe. Looking for it...', 'sys'); }   /* in the canoe: rejoin it if it is near, else ashore */
+        else landNear(x, y);
+      }
+      function landNear(x, y) {   /* the nearest ground you can stand on (the bank where the canoe put you ashore) */
+        for (let r = 0; r < 30; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue; const tx = x + dx, ty = y + dy;
+          if (core.M.inWorld && !core.M.inWorld(tx, ty)) continue; if (!core.M.blocked(tx, ty) && !/[~vJB]/.test(core.M.tileAt(tx, ty))) { me.x = tx; me.y = ty; me.path = []; place(myEnt, tx, ty); cam.snap = true; streamRegions(); hud.chat('You are on the bank where the canoe put you ashore.', 'sys'); return; } }
+      }
+      function makeGhost(id, r) {
+        r.offline = { told: performance.now() }; const nm = r.name || 'Your partner';
+        if (me.boat === 2) { coreCall(() => { me.boat = 1; me.ride = null; me.knock = false; me.path = []; }); hud.chat(nm + ' has dropped out of the game. You take the stern and steer; they ride on with you.', 'sys'); }
+        else hud.chat(nm + ' has dropped out of the game. They stay in the bow and travel on with you.', 'sys');
+        r.boat = 2; r.ride = myNetId; r.knock = false; r.anim = 'sit'; r.e.H.play('sit', { loop: true });
+        if (core.S.players[id] && core.S.players[id].puppet) core.removePlayer(id);
+        carryTell(r, 1);
+      }
+      function ghostTick(id, r, now) {
+        if (me.boat !== 1) { carryTell(r, 0); hud.chat((r.name || 'Your partner') + ' is left on the bank here until they come back.', 'sys'); dropRemote(id, true); return; }   /* ashore: they wait on the bank */
+        if (now - r.offline.told > 15000) { r.offline.told = now; carryTell(r, 1); }
+      }
+      function dropRemote(id, hard) { const r = remotes.get(id);
+        if (!hard && r && !r.offline && ghostable(r, id)) { makeGhost(id, r); return; } if (r) { if (r.name && r.name !== 'Adventurer') knewName.set(id, r.name); removeEnt(r.e); remotes.delete(id); } if (core.S.players[id] && core.S.players[id].puppet) core.removePlayer(id); }
       function dropRemotes() { for (const id of Array.from(remotes.keys())) dropRemote(id); }
       /* fighting a monster of another area (the operator: attackers can be attacked back across borders): we tell the room which
          area we are fighting in, so that area gets a host even when nobody stands in it; 6 s after the last blow it ends */
@@ -1442,7 +1875,9 @@
             hud.chat('From ' + (ev.from.tag ? '@' + ev.from.tag : ev.from.address.slice(0, 8) + '...') + ': ' + m.text.slice(0, 120), 'dm'); sfx('click'); return;
           }
           if (stopped || m.t !== 'dev' || m.s === ONE.sid || !ev.from || ev.from.address !== who.address) return;
-          if (m.claim || m.at > ONE.at || (m.at === ONE.at && String(m.s) > ONE.sid)) evicted();
+          /* the newest session wins on its start time alone (2026-10-08): a 'claim' only says "I just opened" - a stale one (a
+             replay, a game that opened before us) must not stop a newer game, which is what kept stopping @cinderwalker */
+          if (m.at > ONE.at || (m.at === ONE.at && String(m.s) > ONE.sid)) { G.__evictedBy = { s: m.s, at: m.at, claim: !!m.claim, ours: ONE.at, from: ev.from && (ev.from.id || ev.from.address) }; try { console.warn('ASHVALE: stopped by a newer session', JSON.stringify(G.__evictedBy)); } catch (e) { /* no console */ } evicted(); }
           else if (Date.now() - ONE.said > 3000) say(false);   /* the other is older: make sure it hears us */
         }, { self: true });
         R.on('join', () => say(false));
@@ -1497,8 +1932,21 @@
         const s = new Set(); for (const o of [[d, 0], [-d, 0], [0, d], [0, -d], [d, d], [d, -d], [-d, d], [-d, -d]]) s.add(core.regionOf(x + o[0], y + o[1]));
         s.delete(core.regionOf(x, y)); s.delete(roomZone); return Array.from(s);
       }
+      /* THE SEAMS OF THE OPEN GLOBE (2026-10-08: "can you fix those 11 seams?"): across a cut edge of the flat net the same ground
+         lies far away in map coordinates, in another region's room. Near one, we also join the room of the ground across it (as a
+         viewer, like a region border) and draw its players at their true places beside us (core.M.netNear) */
+      const SEAM_NEAR = 160;
+      function seamRegions(x, y) {
+        if (!core.M.netAcross || !core.M.netGap) return [];
+        const out = new Set();
+        for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [0.7, -0.7], [-0.7, 0.7], [-0.7, -0.7]]) {
+          const px = Math.round(x + dx * SEAM_NEAR), py = Math.round(y + dy * SEAM_NEAR); if (core.M.netGap(px, py) <= 0) continue;
+          const a = core.M.netAcross(px, py); if (a) out.add(core.regionOf(a.x, a.y));
+        }
+        out.delete(core.regionOf(x, y)); out.delete(roomZone); return Array.from(out);
+      }
       let nbT = 0, nbPosT = 0, nbPosKey = '', nbGearT = 0, nbGearRefT = 0;
-      const nb = net.neighbours && q.has('nb') ? net.neighbours({   /* off until it is proven next to the adjacent-zones test: ?nb turns it on */ game: 'ashvale', loopback: q.has('loopback'), max: 3, on: {
+      const nb = net.neighbours ? net.neighbours({   /* region borders only with ?nb (not yet proven next to the adjacent-zones test); always the far side of a seam of the open globe */ game: 'ashvale', loopback: q.has('loopback'), max: 3, on: {
         message: (rid, ev) => onNet(ev, rid),
         join: (rid, ev) => { clearTimeout(nbGearT); nbGearT = setTimeout(nbGear, ev.self ? 0 : 600); },   /* we arrived, or somebody did: they need our look */
         leave: (rid, ev) => { const r = remotes.get(ev.from.id); if (r && r.via === rid) dropRemote(ev.from.id); },
@@ -1507,7 +1955,8 @@
       function netNeighbours(now) {
         if (!nb || joining || now - nbT < 1000) return; nbT = now;
         if (!room) { nb.update([], []); return; }
-        nb.update(regionsAround(me.x, me.y, NB_NEAR), regionsAround(me.x, me.y, NB_KEEP));
+        const seams = seamRegions(me.x, me.y);
+        nb.update((q.has('nb') ? regionsAround(me.x, me.y, NB_NEAR) : []).concat(seams), (q.has('nb') ? regionsAround(me.x, me.y, NB_KEEP) : []).concat(seams));
         const rooms = nb.rooms(); if (!rooms.length) return;
         const p = myEnt.root.position, an = myEnt.oneShot ? myEnt.lastOne || 'idle' : myEnt.loco || 'idle', key = p.x.toFixed(1) + ',' + p.z.toFixed(1) + ',' + an;
         if (now - nbPosT >= (key === nbPosKey ? 4000 : 1500)) {   /* moving: every 1.5 s; standing: a 4 s heartbeat (remotes drop after 12 s of silence) */
@@ -1732,7 +2181,7 @@
         if (!core.persists || e.x == null || !core.persists(e.id, e.n || 1)) return;
         const tell = o => bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send(o); });
         if (e.e === 'take' && e.p === PID) tell({ t: 'took', v: 1, id: e.id, n: e.n || 1, x: e.x, y: e.y });
-        else if ((e.e === 'drop' || e.e === 'xdrop') && (e.owner === PID || e.from === PID) && core.item(e.id) && core.item(e.id).stack) tell({ t: 'drop', v: 3, items: [[e.id, '', e.n || 1]], x: e.x, y: e.y });
+        else if ((e.e === 'drop' || e.e === 'xdrop') && (e.owner === PID || e.from === PID) && core.item(e.id) && core.item(e.id).stack) tell({ t: 'drop', v: 3, items: [[e.id, '', e.n || 1]], x: e.x, y: e.y, sunk: e.sunk || undefined });
       }
       function chestEvent(e) {
         persistTell(e);
@@ -1755,7 +2204,7 @@
           for (const pc of have) { if (items.length >= Math.min(e.n || 1, backed)) break; if (!held.has(pc)) { items.push([e.id, pc]); L.dropped.push({ k: e.id, pc, x: e.x, y: e.y, t: now }); } }
           if (!items.length) return;
           L.dropped = L.dropped.filter(d => now - d.t < 7200000).slice(-100); ledgerSave();
-          bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'drop', v: keep ? 3 : 2, items: keep ? items.map(it => [it[0], it[1], 1]) : items, x: e.x, y: e.y }); });
+          bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'drop', v: keep || e.sunk ? 3 : 2, items: keep || e.sunk ? items.map(it => [it[0], it[1], 1]) : items, x: e.x, y: e.y, sunk: e.sunk || undefined }); });
         } else if (e.e === 'take' && e.p === PID && e.x != null) {
           L.picks.push({ k: e.id, n: e.n || 1, x: e.x, y: e.y, t: now, own: e.own ? 1 : 0 }); L.picks = L.picks.filter(q => now - q.t < 7200000).slice(-100);
           /* YOUR OWN DROP, BACK IN YOUR BAG (2026-10-07, @tbuuol died, picked his things up and ended with two of everything):
@@ -1841,6 +2290,98 @@
       }
       /* felled trees, shared by every player for ever (2026-10-05): you tell the @ashvale Bank when you fell one, and
          ask it which trees round you are already down whenever you arrive somewhere new (and every few minutes) */
+      /* LANDED CANOES (2026-10-07): the core keeps them, the @ashvale Bank keeps them a game year for everyone, and here
+         each is a canoe afloat at the bank you can tap to get in */
+      const BOATM = new Map(), DIR8 = [[0, -1], [1, 0], [0, 1], [-1, 0], [1, -1], [1, 1], [-1, 1], [-1, -1]];
+      function boatShow(x, y, face) {
+        const k = x + ',' + y; if (BOATM.has(k) || !SCENE.canoeMesh) return;
+        const c = SCENE.canoeMesh(), d = DIR8[face | 0] || DIR8[2]; c.position.set(x + 0.5, waterY(x + 0.5, y + 0.5) - 0.02, y + 0.5); c.rotation.y = Math.atan2(d[0], d[1]); scene.add(c);
+        const pk = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.9, 4.4), proxyMat); pk.position.copy(c.position); pk.rotation.y = c.rotation.y; pk.userData.pick = { kind: 'canoe', x, y }; scene.add(pk); proxies.push(pk);
+        BOATM.set(k, { c, pk });
+      }
+      /* the landing's canoe: not there while you sit in it, nor while three or more are left at the banks nearby (core.dockFull) */
+      /* THE NEXT ECLIPSES, as the people round Ziibiing's fire tell them (2026-10-07): the next eclipse of the sun and of the moon
+         that can be seen from where you stand (the sun or the moon up then), worked out from the sky module once a game day */
+      const SKYT = { day: -1, text: null };
+      function skyTell() {
+        if (!SKYM || !SUNL.b) return null;
+        const now = sunTime(SUNL.b), day = Math.floor((now / 1000 - SUN_EPOCH) / DAY_S); if (day === SKYT.day && SKYT.text) return SKYT.text;
+        const up = SUNL.b.u, d3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; let sol = null, lun = null;
+        for (const e of SKYM.next(now, SUNL.lonA, 365 * 8)) {
+          if (e.kind === 'solar' && !sol) { for (let t = e.t - DAY_S * 600; t <= e.t + DAY_S * 600 && !sol; t += 20000) { const st = SKYM.at(t, SUNL.lonA); if (d3(st.sun, up) > 0.03 && SKYM.solarCover(st, up) > 0.05) sol = t; } }
+          if (e.kind === 'lunar' && !lun && (e.umbra || 0) > 0) { const st = SKYM.at(e.t, SUNL.lonA); if (d3(st.moon, up) > 0.03) lun = e.t; }
+          if (sol && lun) break;
+        }
+        const when = t => { const d = (t / 1000 - SUN_EPOCH) / DAY_S, y = Math.floor(d / 365) + 1, dd = Math.floor(d % 365) + 1, gd = Math.max(0, Math.round((t - now) / 1000 / DAY_S)), rh = (t - now) / TL.n / 3600000;
+          return 'on day ' + dd + ' of year ' + y + ', ' + (gd ? gd + ' days from now' : 'this very day') + ' (' + (rh < 48 ? Math.max(1, Math.round(rh)) + ' hours' : Math.round(rh / 24) + ' days') + ' as you count them)'; };
+        SKYT.day = day;
+        SKYT.text = 'And watch the sky. ' + (sol ? 'Giizis, the sun, will be eaten by the moon ' + when(sol) + '. ' : 'The sun will not be eaten here for many winters. ') + (lun ? 'Dibiki-giizis, the night sun, the moon, will turn red ' + when(lun) + '.' : 'The moon will not turn red here for many winters.');
+        return SKYT.text;
+      }
+      if (core.setSkyTell) core.setSkyTell(() => skyTell());
+      /* THE PEOPLE WHO WATCH THE WORLD (2026-10-08: "hyper aware of the seasons, the stars, the planets, the sun, the moon,
+         and nature"; each one watches one thing and ends with it). Worked out from the same seasons, temperature and sky every game
+         uses where you stand. Ojibwe nouns from the Ojibwe People's Dictionary. */
+      /* THIRTEEN MOONS (2026-10-08: "there should be 13 months because there are 13 moons"; the 13th, miini-giizis, his
+         choice): each moon is named as it comes in the real sky - by where its full moon falls in the year, so a year with only twelve
+         new moons skips one name, as on Earth */
+      const MOONS = [['gichi-manidoo-giizis', 'the great spirit moon'], ['namebini-giizis', 'the sucker moon'], ['onaabani-giizis', 'the moon of the crust on the snow'],
+        ['iskigamizige-giizis', 'the sugar-making moon'], ['zaagibagaa-giizis', 'the budding moon'], ["ode'imini-giizis", 'the strawberry moon'],
+        ['aabita-niibino-giizis', 'the midsummer moon'], ['miini-giizis', 'the berry moon'], ['manoominike-giizis', 'the ricing moon'], ['waatebagaa-giizis', 'the moon the leaves turn'],
+        ['binaakwe-giizis', 'the falling-leaves moon'], ['gashkadino-giizis', 'the freezing moon'], ['manidoo-giizisoons', 'the little spirit moon']];
+      function natureTell(kind) {
+        if (!SEASONS || SEASON.lat == null) return null;
+        const now = skyNow(), lat = SEASON.lat, S = SEASONS.at(lat, now), sp = SEASONS.sap(lat, now), T = SEASONS.temperature(lat, now, SEASON.lon);
+        const deg = v => Math.round(v) + ' degrees';
+        if (kind === 'weather') {   /* Animikii: last night, today, the sap, the ice */
+          const R = SEASONS.dayRange(lat, now), night = R.low < -8 ? 'froze hard' : R.low < 0 ? 'froze' : 'stayed above freezing';
+          let t = 'Last night it ' + night + ', ' + deg(R.low) + '. Today it will reach ' + deg(R.high) + ', and it is ' + deg(T) + ' now.';
+          if (sp.season) t += (sp.day ? ' A night that froze and a day that thaws: the ziinzibaakwadwaaboo (maple sap) is running. Go to the trees.' : R.high <= 0 ? ' Too cold to thaw today. The sap stays in the tree.' : ' The night did not freeze. The sap will not run today.') + ' The maples bud in ' + sp.left + ' days.';
+          else if (S.frozen) t += ' The mikwam (ice) is thick on the lakes. Walk on it while you can.';
+          else if (S.snow > 0.2) t += ' The goon (snow) is going soft. The sap will run soon.';
+          else if (S.name === 'summer') t += ' In this heat the animikiig, the thunderers, will come out of the west.';
+          return t;
+        }
+        if (kind === 'plants') {   /* Ziigwan: the trees, the rice, the birds */
+          const st = S.leaf.stage, rice = S.riceAt ? S.riceAt(0.5) : null;
+          const tree = S.snow > 0.3 || st === 'bare' ? 'The ininaatig (maple) and the wiigwaasaatig (birch) are sleeping, bare.' : st === 'budding' ? (S.leaf.bud < 0.05 ? 'The buds on the ininaatig (maple) are still tight.' : 'The buds are opening at the tips of the branches.') :
+            st === 'turning' ? 'The ininaatig (maple) is turning red and the wiigwaasaatig (birch) gold.' : st === 'falling' ? 'The leaves are coming down this week.' : 'The trees are in full leaf.';
+          const ricing = S.rice ? ' The manoomin (wild rice) is ripe. Go ricing.' : rice && rice.tall > 0.1 && !rice.ripe ? ' The manoomin (wild rice) is growing tall on the lake.' : '';
+          const bird = S.snow > 0.3 ? ' Only the gijigijigaaneshiinh (chickadee) and the aandeg (crow) stay with us now.' : S.name === 'spring' ? ' The nika (Canada goose) is flying north, and the opichi (robin) is back.' :
+            S.name === 'summer' ? ' The maang (loon) is calling on the lake at night.' : S.name === 'autumn' ? ' The nika (Canada goose) is going south again.' : '';
+          return tree + ricing + bird;
+        }
+        if (kind === 'moon') {   /* Waabigwan: the moon, its phase and its name */
+          const SK = SKYM && SUNL.lonA != null ? SKYM.at(now, SUNL.lonA) : null; if (!SK) return null;
+          const ph = SK.phase, toFull = Math.round(((0.5 - ph + 1) % 1) * 29.53), toNew = Math.round(((1 - ph) % 1) * 29.53);
+          const look = ph < 0.03 || ph > 0.97 ? 'There is no moon tonight. It is new, and the stars have the sky.' : Math.abs(ph - 0.5) < 0.03 ? 'Dibiki-giizis (the moon) is full tonight.' :
+            ph < 0.5 ? 'Dibiki-giizis (the moon) is growing, ' + (Math.abs(ph - 0.25) < 0.03 ? 'half full' : ph < 0.1 ? 'a thin sliver' : ph < 0.25 ? 'a crescent' : 'more than half') + '. It will be full in ' + toFull + ' days.' :
+            'Dibiki-giizis (the moon) is getting smaller, ' + (Math.abs(ph - 0.75) < 0.03 ? 'half again' : ph > 0.9 ? 'a thin sliver' : ph > 0.75 ? 'a crescent' : 'more than half') + '. It will be new in ' + toNew + ' days.';
+          const tFull = now + (0.5 - ph) * 29.530588853 * DAY_S * 1000, doy = ((SEASONS.at(lat, tFull).p * 365 + 79) % 365 + 365) % 365, M13 = MOONS[Math.min(12, Math.floor(doy * 13 / 365))];
+          return look + ' This is ' + M13[0] + ', ' + M13[1] + '.';
+        }
+        if (kind === 'sky') {   /* Makwa: the sun's day, and the planets and stars tonight */
+          if (!SKYM || !SUNL.b) return null;
+          const B = SUNL.b, d3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], t0 = now - (((now / 1000 - SUN_EPOCH) / DAY_S) % 1) * DAY_S * 1000;
+          let rise = null, set = null, prev = null;
+          for (let k = 0; k <= 96; k++) { const t = t0 + k * DAY_S * 1000 / 96, up = d3(SKYM.at(t, SUNL.lonA).sun, B.u); if (prev != null) { if (prev < 0 && up >= 0 && rise == null) rise = k; if (prev >= 0 && up < 0 && set == null) set = k; } prev = up; }
+          const hh = k => { const h = ((k / 96 + (SEASON.lon || 0) / 360) % 1 + 1) % 1 * 24; return Math.floor(h) + ':' + String(Math.floor((h % 1) * 60)).padStart(2, '0'); };   /* local time: noon is the sun's highest */
+          let t = rise == null && set == null ? (prev >= 0 ? 'Giizis (the sun) does not set at all now.' : 'Giizis (the sun) does not rise at all now. This is the long dark.') : 'Giizis (the sun) rises at ' + (rise != null ? hh(rise) : '-') + ' and sets at ' + (set != null ? hh(set) : '-') + ' today.';
+          const mid = t0 + DAY_S * 1000 * (((set != null ? set : 72) / 96 + 0.5 * (1 - (set != null ? set : 72) / 96))), PL = SKYM.planets ? SKYM.planets(mid, SUNL.lonA) : [];
+          const vis = PL.filter(P => d3(P.dir, B.u) > 0.1 && P.mag < 3).sort((a, b) => a.mag - b.mag).map(P => P.name);
+          t += vis.length ? ' Tonight ' + vis.slice(0, 3).join(' and ') + (vis.length > 1 ? ' are' : ' is') + ' up among the anangoog (stars).' : ' Tonight no wandering star is up, only the anangoog (stars).';
+          return t;
+        }
+        return null;
+      }
+      if (core.setNatureTell) core.setNatureTell((kind) => natureTell(kind));
+      function docksShow() { if (!SCENE.docks) return; const mb = core.S.players[PID] && core.S.players[PID].boat; for (const c of SCENE.docks()) c.visible = !mb && !(core.dockFull && c.userData.dock && core.dockFull(c.userData.dock[0], c.userData.dock[1])); }
+      function boatHide(x, y) { const k = x + ',' + y, b = BOATM.get(k); if (!b) return; scene.remove(b.c); scene.remove(b.pk); const i = proxies.indexOf(b.pk); if (i >= 0) proxies.splice(i, 1); BOATM.delete(k); }
+      function boatTell(o) { bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send(o); }); setTimeout(() => boatsAsk(true), 3000); }
+      let boatsT = 0; const boatsGot = {};
+      function boatsAsk(force) { if (!force && performance.now() - boatsT < 10000) return; boatsT = performance.now(); bankRoom().then(R => { if (R && R.me) R.send({ t: 'boats?', v: 1, x0: me.x - 80, y0: me.y - 80, x1: me.x + 80, y1: me.y + 80 }); }); }
+      function boatsHeard(d) { const k = (d.box || []).join(','), G = boatsGot[k] = boatsGot[k] || { items: [], n: 0 }; G.items.push(...(d.items || [])); G.n++; if (G.n >= (d.of | 0)) { delete boatsGot[k]; coreCall(() => core.setBoats && core.setBoats(d.box, G.items)); } }
+      setInterval(() => boatsAsk(false), 10000); setTimeout(() => boatsAsk(true), 7000);
       function fellTell(x, y) { bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'fell', v: 1, x, y }); }); }
       let fellAt = null, fellT = 0;
       function felledAsk(force) {
@@ -1849,6 +2390,15 @@
         bankRoom().then(R => { if (R && R.me) R.send({ t: 'felled?', v: 1, x0: me.x - 80, y0: me.y - 80, x1: me.x + 80, y1: me.y + 80 }); });
       }
       setInterval(() => felledAsk(false), 15000); setTimeout(() => felledAsk(true), 8000);
+      /* the sugar bush marks (2026-10-08): a maple gives sap once a game day and a birch its bark once a year, to whoever comes first */
+      function markTell(e) { bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'mark', v: 1, k: e.k, x: e.x, y: e.y, p: e.v }); }); }
+      let markAt = null, markT = 0;
+      function marksAsk(force) {
+        const k = Math.floor(me.x / 48) + ',' + Math.floor(me.y / 48); if (!force && k === markAt && performance.now() - markT < 120000) return;
+        markAt = k; markT = performance.now();
+        bankRoom().then(R => { if (R && R.me) for (const kind of ['sap', 'bark']) R.send({ t: 'marks?', v: 1, k: kind, x0: me.x - 80, y0: me.y - 80, x1: me.x + 80, y1: me.y + 80 }); });
+      }
+      setInterval(() => marksAsk(false), 15000); setTimeout(() => marksAsk(true), 9000);
       /* persisted drops near you, from the @ashvale Bank: asked when you arrive somewhere new and every minute (the operator
          2026-10-06: dropped Gold and valuables "should persist ... in the exact same location until a player picks them up") */
       let gAt = null, gT = 0, gSeq = 0; const gGot = {};
@@ -1865,7 +2415,8 @@
       setInterval(() => groundAsk(false), 10000); setTimeout(() => groundAsk(true), 9000);
       function bankRoom() {
         if (bank.room) return Promise.resolve(bank.room); if (bank.joining) return bank.joining;
-        bank.joining = net.join('bank', { game: 'ashvale' }).then(res => {
+        const kept = BANK_LOAD_ROOM; BANK_LOAD_ROOM = null;
+        bank.joining = (kept ? Promise.resolve({ online: true, room: kept }) : net.join('bank', { game: 'ashvale' })).then(res => {
           bank.joining = null;
           if (!res || !res.online) { bank.note = 'The @ashvale Bank cannot be reached from here' + (res && res.why ? ' (' + res.why + ')' : '') + '.'; return null; }
           const R = res.room; bank.room = R;
@@ -1881,7 +2432,12 @@
           R.on('closed', () => { if (bank.room === R) bank.room = null; });
           R.on('message', ({ from, data }) => {
             const bankFrom = from && (from.address === DATA.assets.issuer || from.address === YOURFIRST_ADDR || from.tag === 'yourfirstname');
-            if (data && data.t === 'felled' && bankFrom && R.me && data.to === R.me.address) { core.setFelled(data.cells || []); return; }   /* trees others felled */
+            if (data && data.t === 'boats' && bankFrom && R.me && data.to === R.me.address) { boatsHeard(data); return; }
+            if (data && data.t === 'svok' && bankFrom && R.me && data.to === R.me.address) { CLOUD.base = +data.id; return; }   /* the Bank took our save: the next continues it */
+            if (data && data.t === 'svx' && bankFrom && R.me && data.to === R.me.address) { console.info('ASHVALE: another device has played since this game loaded: stopping'); evicted(); return; }   /* canoes left at the bank near me */
+            if (data && data.t === 'felled' && bankFrom && R.me && data.to === R.me.address) { core.setFelled(data.cells || []); return; }
+            if (data && data.t === 'carried' && bankFrom && R.me && data.to === R.me.address) { carriedHeard(data); return; }   /* carried in someone's canoe while away */
+            if (data && data.t === 'marks' && bankFrom && R.me && data.to === R.me.address) { if (core.setMarks) core.setMarks(data.k, data.cells || []); return; }   /* maples tapped today, birches peeled this year */   /* trees others felled */
             if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }   /* persisted drops near me */
             if (data && data.t === 'pals' && bankFrom && R.me && data.to === R.me.address) { palsHeard(data); return; }
             if (!data || data.t !== 'dep' || !bankFrom || !R.me || data.to !== R.me.address) return;   /* only @ashvale or @yourfirstname answers, only to me */
@@ -1951,6 +2507,7 @@
         netStats.queued = outQ.length;
       }
       const totalLevel = p => (D.rules.skills || []).reduce((a, k) => a + core.lv(p, k), 0);   /* the Skills tab's Total level */
+      const NETGQ = { t: 0 };
       function netGear() { netSend({ g: gearOf(me), n: me.name, T: totalLevel(me), SK: Object.fromEntries(Object.keys(me.xp).map(k => [k, core.lv(me, k)])), L: ['attack', 'strength', 'defence', 'hitpoints', 'ranged', 'magic', 'dexterity'].map(k => core.lv(me, k)), st: me.styles }); netOutfit(); }
       function netOutfit() { if (myEnt.H.outfit) netSend({ o: myEnt.H.outfit }); }
       /* chat: what you type goes to everyone in the same zone room; rate-limited here (the mesh limits ~5 msgs/s) */
@@ -1999,7 +2556,8 @@
       function stateMsg(now) {
         const p = myEnt.root.position;
         const m = { s: Math.round(now), p: [Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100], f: Math.round(myEnt.yaw * 100) / 100, a: myEnt.oneShot ? myEnt.lastOne || 'idle' : myEnt.loco || 'idle', j: myJoin, hp: me.hp, d: me.dead ? 1 : 0, k: myEnt.toolId || 0 };
-        if (me.boat) { m.bt = me.boat; if (me.boat === 2) m.rd = me.ride; }   /* in a canoe: 1 poling it, 2 riding in someone's bow (rd: whose) */
+        if (myEnt.hl) m.hl = Math.round(myEnt.hl * 100) / 100;   /* where your head is looking, up or down (first person) */
+        if (me.boat) { m.bt = me.boat; if (me.boat === 2) m.rd = me.ride; if (me.boat === 1 && me.inv.some(sl => sl && sl.id === 'push_pole')) m.pl = 1; if (me.boat === 2 && me.knock) m.kn = 1; }   /* pl: a push pole aboard; kn: knocking rice in the bow */   /* in a canoe: 1 poling it, 2 riding in someone's bow (rd: whose) */
         const oh = core.overhead(me) || 0; if (oh || lastPr) { m.pr = oh; lastPr = oh; }   /* the overhead prayer, so hosts' monsters respect it and others see it */
         const cz = combatZone(); if (cz) m.c = cz;   /* the area I am fighting in, when it is not the one I stand in */
         if (now - gearRefT > 10000) { gearRefT = now; netSend({ g: gearOf(me), n: me.name }); if (myEnt.H.outfit) netSend({ o: myEnt.H.outfit }); }   /* a missed gear message left others drawn wrong, and a missed name left them called Adventurer: refresh both every 10 s, as their own small messages */
@@ -2012,7 +2570,7 @@
         if (id === myNetId) return;   /* ourselves, heard through another room */
         if (d.tr) { if (d.to === myNetId && trade && !via) trade.onMessage(from, d.tr); return; }   /* a trade window message, for us only */
         if (!r && !d.p && !d.g && !d.n && !d.M && !d.E && !d.F) { /* first contact carries state soon */ }
-        if (r) r.heard = performance.now();
+        if (r) { r.heard = performance.now(); if (r.offline) { r.offline = null; hud.chat((r.name || 'Your partner') + ' is back.', 'sys'); } }
         if (!r) { const e = makeEnt('r:' + id, MOD.humanoid({}), { kind: 'remote', id }); const nm = knewName.get(id) || 'Adventurer'; e.tag = hud.tag(label(nm, from)); r = { e, buf: [], anim: 'idle', name: nm, from, lastS: -1, heard: performance.now(), fullT: 0 }; remotes.set(id, r); e.root.visible = false; }
         /* a VIEWER (neighbour region): drawn, never a puppet or a host. A full member of our room wins for 3 s after its last word */
         const view = !!via || d.nb === 1;
@@ -2023,7 +2581,7 @@
         if (d.g && typeof d.g === 'object' && sameSet(d.g, r.e.H.gear) === false) r.e.H.setGear(d.g);
         if (d.g && typeof d.g === 'object') hawkify(r.e, d.g.ring);   /* another player's hawk ring */
         if (d.o && typeof d.o === 'object' && r.e.H.setOutfit && sameSet(d.o, r.e.H.outfit || {}) === false) r.e.H.setOutfit(d.o);
-        if (Array.isArray(d.p) && typeof d.a === 'string') { r.boat = d.bt | 0; r.ride = d.rd || null; }
+        if (Array.isArray(d.p) && typeof d.a === 'string') { r.boat = d.bt | 0; r.ride = d.rd || null; r.pole = !!d.pl; r.knock = !!d.kn; r.hl = isFinite(+d.hl) ? Math.max(-1.5, Math.min(1.5, +d.hl)) : 0; }
         if ('k' in d) { const tl = typeof d.k === 'string' && /^[a-z0-9_]{1,24}$/.test(d.k) ? d.k : null; if (tl !== r.tool) { r.tool = tl; r.e.H.setTool && r.e.H.setTool(tl); } }
         if (d.T != null) r.total = Math.max(0, Math.min(9999, d.T | 0));
         if (d.n || d.T != null) { if (d.n) r.name = cleanName(d.n); if (r.e.tag) setTag(r.e.tag, r.name, from, r.total); }
@@ -2036,8 +2594,9 @@
         if (!r.viewOnly) shared(id, r, d);
         if (Array.isArray(d.p) && d.p.length === 2 && isFinite(d.p[0]) && isFinite(d.p[1])) {
           if (typeof d.s === 'number') { if (d.s <= r.lastS && d.s > r.lastS - 60000) return; r.lastS = d.s; }   /* unordered delivery: drop older states */
-          if (core.S.players[id]) core.setPuppet(id, Object.assign({ x: Math.floor(+d.p[0]), y: Math.floor(+d.p[1]) }, typeof d.a === 'string' ? { bt: d.bt | 0, rd: d.rd || null } : {}));   /* only a full state says whether they are in a canoe */
+          if (core.S.players[id]) core.setPuppet(id, Object.assign({ x: Math.floor(+d.p[0]), y: Math.floor(+d.p[1]) }, typeof d.a === 'string' ? { bt: d.bt | 0, rd: d.rd || null, pl: d.pl ? 1 : 0, kn: d.kn ? 1 : 0 } : {}));   /* only a full state says whether they are in a canoe */
           r.area = core.areaOf(Math.floor(+d.p[0]), Math.floor(+d.p[1])); r.carea = typeof d.c === 'string' ? d.c.slice(0, 40) : null;
+          if (r.buf.length) { const lb = r.buf[r.buf.length - 1]; if (Math.abs(lb.x - +d.p[0]) + Math.abs(lb.z - +d.p[1]) > 60) r.buf.length = 0; }   /* they crossed a cut edge of the net (or a portal): no sliding across the map */
           r.e.root.visible = true; r.buf.push({ t: performance.now(), x: +d.p[0], z: +d.p[1], f: +d.f || 0, a: typeof d.a === 'string' ? d.a.slice(0, 12) : 'idle' }); if (r.buf.length > 20) r.buf.shift();
         }
       }
@@ -2118,7 +2677,7 @@
           case 'hit': if (fight()) hostQ.push(['h', toNet(e.src), toNet(e.dst), e.dmg, e.hp, (e.cls || 'm')[0] === 'm' ? 'm' : e.cls === 'ranged' ? 'r' : 'g', (e.blocked ? 1 : 0) | (e.dodged ? 2 : 0) | (e.dex ? 4 : 0) | (e.prot ? 8 : 0), e.prot ? e.raw | 0 : 0, e.fx || 0, e.fxt | 0]); break;
           case 'die': if (e.mob != null && mobIn(e.mob)) hostQ.push(['k', e.mob, e.killer ? toNet(e.killer) : 0]); break;
           case 'spawn': { const m = core.mobByUid(e.mob); if (m && iHost(m.zone)) hostQ.push(['s', m.uid, m.x, m.y, m.hp]); break; }
-          case 'drop': if (iHostAt(e.x, e.y)) hostQ.push(['d', e.g, e.id, e.n, e.x, e.y, e.from ? toNet(e.from) : 0]); break;
+          case 'drop': if (iHostAt(e.x, e.y)) hostQ.push(['d', e.g, e.id, e.n, e.x, e.y, e.from ? toNet(e.from) : 0, e.sunk || 0]); break;
           case 'take': if (iHostAt(e.x, e.y)) hostQ.push(['t', e.g, toNet(e.p), e.id, e.n, e.x, e.y]); break;
           case 'vanish': if (iHostAt(e.x, e.y)) hostQ.push(['v', e.g, e.x, e.y]); break;
           case 'ground': if (iHostAt(e.x, e.y)) hostQ.push(['n', e.g, e.n, e.x, e.y]); break;
@@ -2170,7 +2729,7 @@
         fullT = performance.now(); const seq = Math.round(fullT);
         packSend({ F: seq }, 'M', mobRows(true));
         for (const a of hosted) {
-          const G = core.S.ground.filter(g => areaAt(g.x, g.y) === a).map(g => [g.uid, g.id, g.n, g.x, g.y, g.from ? toNet(g.from) : 0]);
+          const G = core.S.ground.filter(g => areaAt(g.x, g.y) === a).map(g => [g.uid, g.id, g.n, g.x, g.y, g.from ? toNet(g.from) : 0, g.sunk || 0]);
           packSend({ F: seq, Gr: a }, 'G', G);
           const wz = core.weatherOf(a); if (wz) netSend({ F: seq, W: [a, wz.kind, wz.intensity, Math.max(1, wz.until - core.S.t)] });
         }
@@ -2190,7 +2749,8 @@
         if (d.d != null) pst.dead = !!d.d;
         if (d.g && typeof d.g === 'object') pst.g = d.g;
         if (Array.isArray(d.L)) { pst.L = d.L; r.maxHp = d.L[3] | 0; }
-        if (d.SK && typeof d.SK === 'object') { const sk = {}; for (const k in d.SK) if (/^[a-z]{1,20}$/.test(k)) { const L = d.SK[k] | 0; if (L >= 1 && L <= 99) sk[k] = L; } r.skills = sk; }
+        if (d.SK && typeof d.SK === 'object') { const sk = {}; for (const k in d.SK) if (/^[a-z]{1,20}$/.test(k)) { const L = d.SK[k] | 0; if (L >= 1 && L <= 99) sk[k] = L; } r.skills = sk; if (r.wantStats && Date.now() - r.wantStats.at < 15000) hud.playerStats(r.wantStats.name, sk, r.wantStats.cb); r.wantStats = null; }
+        if (d.GQ && Date.now() - (NETGQ.t || 0) > 3000) { NETGQ.t = Date.now(); netGear(); }   /* someone asked for our stats: send them again (at most every 3 s) */
         if (d.st && typeof d.st === 'object') pst.st = d.st;
         if (d.pr !== undefined) pst.pr = typeof d.pr === 'string' ? d.pr : 0;
         if (d.A !== undefined) pst.act = d.A ? { k: 'attack', uid: +d.A } : null;
@@ -2202,7 +2762,7 @@
         if (Array.isArray(d.M)) { const rows = d.M.filter(w => Array.isArray(w) && fromHostOf(id, mobArea(w[0]))); if (rows.length) coreCall(() => core.applyMobs(rows)); }
         if (Array.isArray(d.W) && fromHostOf(id, d.W[0])) coreCall(() => core.setWeather(d.W[0], String(d.W[1]), d.W[2] | 0, d.W[3] | 0));
         if (Array.isArray(d.Fi)) coreCall(() => { for (const f of d.Fi) if (fromHostOf(id, areaAt(f[1], f[2]))) core.fireAdd(f[0], f[1], f[2], f[3], f[4]); });
-        if (Array.isArray(d.G)) coreCall(() => { if (d.Gr) { if (fromHostOf(id, d.Gr)) core.groundFull(d.Gr, d.G); } else for (const g of d.G) if (fromHostOf(id, areaAt(g[3], g[4]))) core.groundAdd(g[0], g[1], g[2], g[3], g[4], g[5] ? fromNet(g[5]) : null); });
+        if (Array.isArray(d.G)) coreCall(() => { if (d.Gr) { if (fromHostOf(id, d.Gr)) core.groundFull(d.Gr, d.G); } else for (const g of d.G) if (fromHostOf(id, areaAt(g[3], g[4]))) core.groundAdd(g[0], g[1], g[2], g[3], g[4], g[5] ? fromNet(g[5]) : null, g[6] || 0); });
         if (Array.isArray(d.E)) coreCall(() => { for (const a of d.E) if (Array.isArray(a) && eventFromHost(id, a)) applyEvent(a); });
       }
       function eventFromHost(id, a) {   /* is the sender the host of the area this event is about? */
@@ -2231,7 +2791,7 @@
           }
           case 'k': { const m = core.mobByUid(a[1]); if (!m) break; core.applyMobs([[m.uid, m.x, m.y, 0, 1]]); if (fromNet(a[2]) === PID) core.creditKill(PID, m.key); for (const pid of core.S.order) { const o = core.S.players[pid]; if (o.act && o.act.k === 'attack' && o.act.uid === m.uid) o.act = null; } handle({ e: 'die', mob: m.uid }, now); break; }
           case 's': core.applyMobs([[a[1], a[2], a[3], a[4], 0]]); break;
-          case 'd': core.groundAdd(a[1], a[2], a[3], a[4], a[5], a[6] ? fromNet(a[6]) : null); break;
+          case 'd': core.groundAdd(a[1], a[2], a[3], a[4], a[5], a[6] ? fromNet(a[6]) : null, a[7] || 0); break;
           case 't': core.groundRemove(a[1]); if (fromNet(a[2]) === PID) { core.grantItem(PID, a[3], a[4]); persistTell({ e: 'take', p: PID, id: a[3], n: a[4], x: a[5], y: a[6] }); } break;   /* the host gave it to us: tell the Bank too */
           case 'v': core.groundRemove(a[1]); break;
           case 'n': { const g = core.S.ground.find(q => q.uid === a[1]); if (g) g.n = a[2]; break; }
@@ -2247,7 +2807,10 @@
         if (room && now - electT > 500) { electT = now; elect(); }
         const rt = now - 150 - 250;   /* render one send-interval + 150 ms behind */
         for (const [id, r] of remotes) {
-          if (now - r.heard > 12000) { dropRemote(id); elect(); continue; }   /* silent for 12 s: gone (the node drops them after ~10 s) */
+          if (r.offline) ghostTick(id, r, now);   /* a partner gone offline, riding on in the bow */
+          else if (now - r.heard > 12000) { dropRemote(id); elect(); if (!remotes.has(id) || !remotes.get(id).offline) continue; }   /* silent for 12 s: gone (the node drops them after ~10 s) */
+          if (!remotes.has(id)) continue;
+          if (CARRIED.by && r.from && r.from.address === CARRIED.by && r.boat === 1 && !me.boat && !r.offline && Math.max(Math.abs(Math.floor(r.buf.length ? r.buf[r.buf.length - 1].x : 0) - CARRIED.x), Math.abs(Math.floor(r.buf.length ? r.buf[r.buf.length - 1].z : 0) - CARRIED.y)) <= 40) { const b = r.buf[r.buf.length - 1]; CARRIED.by = null; me.x = Math.floor(b.x); me.y = Math.floor(b.z); place(myEnt, me.x, me.y); send({ c: 'ride', pid: id }); hud.chat('You are back in the canoe with ' + (r.name || 'your partner') + '.', 'sys'); }   /* back in the canoe that carried you */
           const b = r.buf; if (!b.length) continue;
           let i = b.length - 1; while (i > 0 && b[i - 1].t > rt) i--;
           const A = b[Math.max(0, i - 1)], Bs = b[i];
@@ -2259,13 +2822,15 @@
              (the operator's shared-world position check, 2026-10-02.) */
           const span = Math.max(1, Math.min(Bs.t - A.t, TICK));
           const k = Math.max(0, Math.min(1, (rt - A.t) / span));
-          const x = A.x + (Bs.x - A.x) * k, z = A.z + (Bs.z - A.z) * k;
+          let x = A.x + (Bs.x - A.x) * k, z = A.z + (Bs.z - A.z) * k, turnS = 0;
+          if (core.M.netNear && Math.abs(x - me.x) + Math.abs(z - me.y) > 400) { const q = core.M.netNear(x, z, me.x + 0.5, me.y + 0.5); if (q && Math.abs(q[0] - me.x) + Math.abs(q[1] - me.y) < 400) { x = q[0]; z = q[1]; turnS = q[2]; } }   /* across a seam: at their true place beside us */
           boatLook(r.e, r.boat === 1);
-          r.e.root.position.set(x, (r.e.canoe ? waterY(x, z) + (r.anim === 'pole' || r.anim === 'idle' ? 0.14 : 0) : heightAt(x, z)) + (r.e.alt || 0), z); r.e.tyaw = Bs.f;
+          r.e.root.position.set(x, (r.e.canoe ? waterY(x, z) + (r.anim === 'pole' || r.anim === 'idle' ? 0.14 : 0) : heightAt(x, z)) + (r.e.alt || 0), z); r.e.tyaw = Bs.f + turnS;
           const an = Bs.a; if (an !== r.anim) { r.anim = an; r.e.H.play(an, { loop: /idle|walk|run|chop|mine|fish|cook|sit|paddle|pole|knock|crosslegged/.test(an) }); }
           r.e.yaw += (((r.e.tyaw - r.e.yaw + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI) * Math.min(1, dt * 10); r.e.root.rotation.y = r.e.yaw;
           if (r.boat === 2) { const T = r.ride === myNetId ? myEnt : (remotes.get(r.ride) || {}).e; if (T) { bowSeat(r.e, T, r.anim === 'knock'); } }
           r.e.H.update(dt); if (r.e.hawk) r.e.hawk.update(dt);
+          headLook(r.e, r.hl || 0, dt);
         }
       }
 
@@ -2295,7 +2860,7 @@
           if (e.fadeIn) { const k = (now - e.fadeIn) / 500; if (k >= 1) { e.H.setOpacity(1); e.fadeIn = 0; } else e.H.setOpacity(Math.max(0.02, k)); }   /* a person whose zone just arrived */
           if (e.key.charAt(0) === 'r') continue;
           const a = Math.min(1, (now - e.t0) / e.dur);
-          if (!e.dead || a < 1) { e.root.position.lerpVectors(e.from, e.to, a); e.root.position.y = (e.canoe ? waterY(e.root.position.x, e.root.position.z) + (e.ricing ? 0.14 : 0) : heightAt(e.root.position.x, e.root.position.z) + liftOf(e, a)) + hawkAlt(e); }   /* the poler stands on the canoe's floor */   /* on an upper floor; a hawk over the trees */
+          if (!e.dead || a < 1) { e.root.position.lerpVectors(e.from, e.to, a); e.root.position.y = (e.canoe ? waterY(e.root.position.x, e.root.position.z) + (e.ricing ? 0.14 : 0) : footY(e.root.position.x, e.root.position.z) + liftOf(e, a)) + hawkAlt(e); }   /* the poler stands on the canoe's floor */   /* on an upper floor; a hawk over the trees */
           let d = e.tyaw - e.yaw; d = ((d + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI; e.yaw += d * Math.min(1, dt * 12); e.root.rotation.y = e.yaw;
           const moving = a < 1 && e.from.distanceToSquared(e.to) > 1e-4;
           if (!e.dead && !e.oneShot && !e.prone && !e.held) { const want = e.boatRole === 2 ? (e.knocking ? 'knock' : moving ? 'paddle' : 'sit') : e.canoe ? (e.ricing ? (moving ? 'pole' : 'idle') : moving ? 'paddle' : 'sit') : moving ? (e.running ? 'run' : 'walk') : (e.restPose || e.skill || 'idle'); if (want !== e.loco) { e.loco = want; e.H.play(want, { loop: true }); } }
@@ -2305,6 +2870,7 @@
           if (e.dead && e.key.charAt(0) === 'm') { const k = (now - e.deadT) / 1000; if (k > 1.3 && k < 2.2 && e.H.setOpacity) e.H.setOpacity(Math.max(0, 1 - (k - 1.3) / 0.8)); if (k >= 2.2) e.root.visible = false; }
           if (e.spawnT) { const k = Math.min(1, (now - e.spawnT) / 400); e.H.object.scale.setScalar(e.scale * (0.3 + 0.7 * k)); if (k >= 1) e.spawnT = 0; }
           if (e.root.visible) { e.H.update(dt); if (e.hawk) e.hawk.update(dt); }
+          if (e === myEnt) headLook(e, myEnt.hl || 0, dt);
         }
         for (const g of fires.values()) { const u = g.userData, sc = 0.8 + 0.25 * Math.sin(now / 70 + u.ph) + 0.1 * Math.sin(now / 23 + u.ph); u.f1.scale.set(1, sc, 1); u.f2.scale.set(1, 1.1 * sc, 1); }
         if (wxMod && wxMod.update && !CAVE.on) wxMod.update(elapsed);
@@ -2312,7 +2878,7 @@
         updateRemotes(now, dt);
         for (let i = projs.length - 1; i >= 0; i--) {
           const p = projs[i]; p.t += dt; const k = Math.min(1, p.t / p.dur);
-          const to = p.tgt.root.position.clone(); to.y += (p.tgt.H.height || 1.2) * p.tgt.scale * 0.55;
+          const to = p.tgt.root.position.clone(); to.y += p.tgt.hawk ? 0.25 : (p.tgt.H.height || 1.2) * p.tgt.scale * 0.55;   /* up at the hawk itself in the sky */
           const pos = p.from.clone().lerp(to, k); if (p.kind === 'ranged') pos.y += Math.sin(k * PI) * 0.25 * p.from.distanceTo(to) / 6;
           p.obj.lookAt(pos.x + (to.x - p.from.x), pos.y + (to.y - p.from.y) * 0.1, pos.z + (to.z - p.from.z)); p.obj.position.copy(pos);
           if (p.kind !== 'ranged') p.obj.rotation.z += dt * 8;
@@ -2363,6 +2929,7 @@
         hud.setPos(me.x, me.y);
         netPos(now); netNeighbours(now); flushNet();
         if (fogMod && myEnt) fogMod.focus(myEnt.root.position);
+        if (wxMod && wxMod.focus && myEnt) wxMod.focus(myEnt.root.position);
         if (SCENE.see && myEnt) {   /* see-through: a circle round the avatar's chest on screen, for anything 2 m or more in front of it */
           const S = SCENE.see, hp = _seeV.copy(myEnt.root.position); hp.y += 1.0;
           const d = camera.position.distanceTo(hp); hp.project(camera);
@@ -2375,7 +2942,15 @@
         const fn0 = scene.fog.near, ff0 = scene.fog.far, fk = CAVE.on ? 1 : viewR() / VIEW, back = cam.dist;
         scene.fog.near = fn0 * fk + back; scene.fog.far = ff0 * fk + back;
         { const cf = Math.max(90, scene.fog.far + 8); if (Math.abs(camera.far - cf) > 2) { camera.far = cf; camera.updateProjectionMatrix(); } }
-        renderer.render(scene, camera);
+        lightBudget();
+        if (!((TRAVEL.on || travelling) && !TRAVEL.warm)) {
+          const bg = scene.background;
+          if (SKYV.v && !CAVE.on && SKYV.v.render(renderer, camera, bg)) {   /* the sky first, then the world over it without clearing */
+            renderer.autoClear = false; renderer.clearDepth(); scene.background = null;
+            renderer.render(scene, camera);
+            scene.background = bg; renderer.autoClear = true;
+          } else renderer.render(scene, camera);
+        }   /* behind a loading screen nothing is drawn: the frame time goes to building the place you are going to */
         scene.fog.near = fn0; scene.fog.far = ff0;
       }
       const arrivedProjs = [];
@@ -2386,7 +2961,7 @@
         const p = myEnt.root.position, dots = [];
         for (const m of core.S.mobs) if (!m.dead) { const e = ents.get('m:' + m.uid); if (e) dots.push({ x: e.root.position.x, y: e.root.position.z, c: '#ffff00' }); }
         for (const n of core.M.npcs) dots.push({ x: n.x + 0.5, y: n.y + 0.5, c: '#ffff00' });
-        for (const g of core.S.ground) dots.push({ x: g.x + 0.5, y: g.y + 0.5, c: '#ff2020' });
+        for (const g of core.S.ground) if (!g.sunk) dots.push({ x: g.x + 0.5, y: g.y + 0.5, c: '#ff2020' });
         for (const r of remotes.values()) dots.push({ x: r.e.root.position.x, y: r.e.root.position.z, c: '#ffffff' });
         if (flag && me.x === flag[0] && me.y === flag[1]) flag = null;
         minimapFor();
@@ -2399,10 +2974,10 @@
          pole's direction on the ground where you stand, as a game vector [x east, y south]. Recomputed every 16 tiles. */
       const TN = { key: '', v: [0, -1] };
       function trueNorth(x, y) {
-        const WG = D.wg, C = DATA.globecfg; if (!WG || !WG.toSphere || !C || !C.origin) return TN.v;
+        const S0 = core.M.sphereAt; if (!S0 || !S0(x + 0.5, y + 0.5)) return TN.v;
         const key = (x >> 4) + ':' + (y >> 4); if (key === TN.key) return TN.v; TN.key = key;
-        const fx = x + C.origin[0] + 0.5, fy = -(y + C.origin[1]) - 0.5, u = WG.toSphere(C.face, fx, fy), un = WG.toSphere(C.face, fx, fy + 1), ue = WG.toSphere(C.face, fx + 1, fy);
-        const d = [un[0] - u[0], un[1] - u[1], un[2] - u[2]], e = [ue[0] - u[0], ue[1] - u[1], ue[2] - u[2]], N = [-u[0] * u[2], -u[1] * u[2], 1 - u[2] * u[2]];
+        const u = S0(x + 0.5, y + 0.5), un = S0(x + 0.5, y - 0.5), ue = S0(x + 1.5, y + 0.5);   /* through the net: right on every face */
+        const d = [un[0] - u[0], un[1] - u[1], un[2] - u[2]], e = [ue[0] - u[0], ue[1] - u[1], ue[2] - u[2]], N = [-NS * u[0] * u[2], -NS * u[1] * u[2], NS * (1 - u[2] * u[2])];   /* toward the world's north */
         const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], dd = dot(d, d), de = dot(d, e), ee = dot(e, e), nd = dot(N, d), ne = dot(N, e), det = dd * ee - de * de;
         if (!(Math.abs(det) > 0)) return TN.v;
         const a = (nd * ee - ne * de) / det, b = (dd * ne - de * nd) / det, gx = b, gy = -a, l = Math.hypot(gx, gy) || 1;   /* N = a*(game north) + b*(game east) */
@@ -2467,21 +3042,23 @@
       }
       setTimeout(() => { reportBook().catch(() => {}); setInterval(() => reportBook().catch(() => {}), 600000); }, 15000);
       /* the save to the Bank (cloudLoad above): only when it changed, at most every 20 s, at once when you leave */
-      const CLOUD = { last: null, at: (save && save.at) || 0, sent: '', t: 0 };
+      const CLOUD = { last: null, at: (save && save.at) || 0, sent: '', t: 0, mine: null, base: save && save.base != null ? +save.base : null };   /* base: the Bank's save this game continues */
       function cloudPush(json, now) {
         if (!G.arcade || !CLOUD_OK || !json || json === CLOUD.sent || (!now && performance.now() - CLOUD.t < 20000)) return;
         CLOUD.t = performance.now(); const at = CLOUD.at;
         packSave(json).then(b => bankRoom().then(R => {
           if (!R) return; const n = Math.max(1, Math.ceil(b.length / CHUNK));
           if (n > 40) { console.warn('ASHVALE: the save is too big for the Bank (' + b.length + ' B)'); return; }
-          CLOUD.sent = json; for (let i = 0; i < n; i++) R.send({ t: 'sv', id: at, i, n, d: b.slice(i * CHUNK, (i + 1) * CHUNK) });
+          /* mine: the last save THIS game sent - if the Bank's 'svok' for it never reached us, the Bank still knows no other device
+             came between (2026-10-08: a lost svok left base one save behind and the next save was refused as another device's) */
+          const mine = CLOUD.mine; CLOUD.sent = json; CLOUD.mine = at; for (let i = 0; i < n; i++) R.send(Object.assign({ t: 'sv', id: at, i, n, d: b.slice(i * CHUNK, (i + 1) * CHUNK) }, CLOUD.base != null ? { base: CLOUD.base } : {}, mine != null ? { mine } : {}));
         })).catch(e => console.warn('ASHVALE: cloud save', e && e.message));
       }
       function persist(leaving) {
         if (stopped) return;
         try { tellHere(leaving === true); } catch (e) { /* the Bank is out of reach: the next save */ }
         const P = core.exportPlayer(PID); if (P && ledger) P.chestLedger = ledgerSnap();   /* the chest ledger saves with the bag it describes */
-        const json = JSON.stringify(P); if (json !== CLOUD.last) { CLOUD.at = Date.now(); CLOUD.last = json; } if (P) P.at = CLOUD.at;
+        const json = JSON.stringify(P); if (json !== CLOUD.last) { CLOUD.at = Date.now(); CLOUD.last = json; } if (P) { P.at = CLOUD.at; if (CLOUD.base != null) P.base = CLOUD.base; }
         cloudPush(json, leaving === true);
         Promise.resolve(store.set(SAVE, JSON.stringify(P))).then(ok => {   /* false: the arcade did not take it */
           if (ok === false) { if (++saveFails === 2) hud.netLost && hud.netLost(true, 'save'); }
@@ -2507,7 +3084,7 @@
           toggle: k => { settings[k] = !settings[k]; store.set(SET, JSON.stringify(settings)); if (k === 'shadows') { sun.castShadow = settings.shadows; for (const e of ents.values()) e.blob.visible = !settings.shadows && !e.hawk; renderer.shadowMap.needsUpdate = true; scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); } },
           resetCamera: () => { cam.tyaw = PI * 0.12; cam.tpitch = 0.92; cam.tdist = isPhone ? 9 : 11; },
           faceNorth: () => { const v = trueNorth(me.x, me.y), want = -PI / 2 - Math.atan2(v[1], v[0]); cam.tyaw = want + Math.round((cam.tyaw - want) / (2 * PI)) * 2 * PI; },   /* true north up, the short way round */
-          newGame: () => { stopped = true; const at = Date.now(); (CLOUD_OK ? bankRoom() : Promise.resolve(null)).then(R => R && R.send({ t: 'sv', id: at, i: 0, n: 1, d: '' })).catch(() => {}).then(() => store.set(SAVE, '')).then(() => location.reload(), () => location.reload()); },   /* the Bank's copy goes too: an empty save, newer than any */
+          newGame: () => { stopped = true; const at = Date.now(); (CLOUD_OK ? bankRoom() : Promise.resolve(null)).then(R => R && R.send(Object.assign({ t: 'sv', id: at, i: 0, n: 1, d: '' }, CLOUD.base != null ? { base: CLOUD.base } : {}))).catch(() => {}).then(() => store.set(SAVE, '')).then(() => location.reload(), () => location.reload()); },   /* the Bank's copy goes too: an empty save, newer than any */
           helpSeen: () => store.set('ashvale3d.help', '1'),
           savesHere: () => store.backend,
           modulesText: () => 'Players: ' + netStatus + '. Saves: ' + ({ arcade: 'on the arcade', browser: 'in this browser', memory: 'not saved (this session only)' }[store.backend] || store.backend) + '. Modules: ' + (opts.report || []).map(r => r[0] + ' v' + r[1]).join(', '),
@@ -2552,8 +3129,14 @@
         netHealth: () => ({ online: !!room, lost: NW.lost, heardAgo: NW.heard ? Math.round(performance.now() - NW.heard) : null, fails: NW.fails, saveFails }), _netBreak: () => { if (room) { const R = room; R.send = () => Promise.resolve(false); } },
         zones: () => ({ loaded: (core.D.zones || []).map(z => z.id), index: ZINDEX ? ZINDEX.map(z => z.id) : null, waiting: Object.keys(LZ_WAIT), travelling }),
         tap: tapAt, menuAt, targetsAt, pad: () => PAD && PAD.state(), fps: () => frames, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries }), setCam(y, p, d) { if (y != null) cam.tyaw = cam.yaw = y; if (p != null) cam.tpitch = cam.pitch = p; if (d != null) cam.tdist = cam.dist = d; },
+        remotesInfo: () => Array.from(remotes).map(([id, r]) => ({ id, boat: r.boat, ride: r.ride, offline: !!r.offline, name: r.name, via: r.via || null, at: [Math.round(r.e.root.position.x), Math.round(r.e.root.position.z)] })),   /* tests: who rides with whom, and who is a dropped-out partner */
         net: () => ({ host: hostOf(zoneHere()), amHost: !!room && hostOf(zoneHere()) === myNetId, hosts: Object.fromEntries(hosts), hosted: Array.from(hosted), area: zoneHere(), region: roomZone, myId: myNetId, ids: Array.from(remotes.keys()), room: room && room.id, me: room && room.me, neighbours: nb ? nb.rooms().map(R => R.id) : [], viewers: Array.from(remotes).filter(e => e[1].viewOnly).map(e => e[0]), status: netStatus, stats: Object.assign({ perSec: +(netStats.sent / Math.max(1, (performance.now() - netStats.t0) / 1000)).toFixed(2) }, netStats, { times: undefined }), gear: Array.from(remotes.values()).map(r => [r.name, r.e.H.gear || null]), remotes: Array.from(remotes.keys()), names: Array.from(remotes.values()).map(r => r.e.tag && r.e.tag.textContent) }),
         weather: (kind, intensity, ticks) => coreCall(() => core.setWeather(zoneHere(), kind, intensity == null ? 80 : intensity, ticks || 500)),
+        skyDirs: () => ({ north: trueNorth(me.x, me.y), season: SEASON.name, sun: SUNL.sv, moon: SUNL.mv, info: { eclipse: +(SUNL.eclipse || 0).toFixed(3), lunar: +(SUNL.lunar || 0).toFixed(3) } }),   /* a test aims the camera at the sun or the moon */
+        wx: () => Object.assign({ season: SEASON.name, snowy: SEASON.snowy }, wxMod && wxMod.state ? wxMod.state() : {}),
+        progInfo: () => { const P = renderer.info.programs || [], I = renderer.info; return { n: P.length, calls: I.render.calls, tris: I.render.triangles, geos: I.memory.geometries, tex: I.memory.textures, applyMs: SEASON.applyMs, applies: SEASON.applies }; },
+        tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },   /* a test taps a thing as a player would (first option) */
+        travelShown: () => { const el = host.querySelector('.travel'); return el && el.style.display !== 'none' ? el.className + ' | ' + el.querySelector('.tt').textContent : null; },
         say, store, models: MOD, allowedAsset, wallet: walletApi(DATA.items.items), walletState: () => walletState, walletRefresh,
         chestEventForTest: chestEvent,
         showPals(rows, note) { PALS.rows = (rows || []).map(r => ({ tag: String(r.tag || '').replace(/^@/, ''), online: !!r.online })); PALS.note = note || ''; if (hud.tab === 'friends') hud.refresh('friends'); },

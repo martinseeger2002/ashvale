@@ -16,7 +16,7 @@
 (function (root) {
   'use strict';
   const META = { api: 1, v: 3, needs: { wg_geo: 1 } };
-  const TREES = 'TPOWMYU';
+  const TREES = 'TPOWMYUELQ';
   function attach(ctx) {
     const g = ctx.geo, T = ctx.T, PT = T.paths, PC = T.pieces, BK = 32;
     const bkey = (f, bx, by) => (f * 8192 + (bx + 4096)) * 8192 + (by + 4096);
@@ -53,6 +53,20 @@
     function waterCarve(f, x, y, h) {
       const r = segDist(f, x, y, 1); if (!r || r[0] > 1.5) return h;
       const k = g.sstep(-0.6, 1.5, r[0]); return Math.min(h, r[1] * (1 - k) + h * k);
+    }
+    /* GROVES (2026-10-08: "a large deciduous forest with maple and birch" by Ziibiing): an ellipse of woods tied to a
+       piece (globecfg.groves: {piece, x, y, rx, ry, sp, dens, edge}, game tiles), its edge wandering with noise. Returns the
+       grove's species and density and k, how fully this spot is in it (0 outside .. 1 well inside), or null */
+    const GROVE = { k: 0, sp: '', dens: 0 };
+    function groveAt(f, x, y) {
+      const gx = x, gy = -y;
+      for (const pc of ctx.PIECES) if (pc.face === f && pc.groves && pc.groves.length) for (const q of pc.groves) {
+        const dx = (gx - q.x) / q.rx, dy = (gy - q.y) / q.ry, d = Math.sqrt(dx * dx + dy * dy) * (0.85 + 0.3 * g.vnoise(gx / 37, gy / 37, f, ctx.S.pa ^ 0x6b43));
+        if (d >= 1) continue;
+        const e = Math.max(0.05, (q.edge || 30) / Math.min(q.rx, q.ry)), t = Math.min(1, (1 - d) / e);
+        GROVE.k = t * t * (3 - 2 * t); GROVE.sp = q.sp || 'M'; GROVE.dens = q.dens == null ? 0.6 : q.dens; return GROVE;
+      }
+      return null;
     }
     /* flora near a piece: the profile of the nearest edge tile, and how far the seeded land has taken over */
     function pieceFlora(f, x, y, out) {
@@ -98,8 +112,8 @@
       const inPiece = (face, gx, gy) => PIECES.some(q => q.face === face && gx >= q.x && gy >= q.y && gx < q.x + q.w && gy < q.y + q.h);
       function lightTrail(face, pts, w0) {   /* lit posts along a trail between towns (the road to Saltmere) */
         if (!pts || pts.length < 2) return;
-        const SPACE = 8, off = Math.max(1.15, (w0 || 1) + 0.85), seen = new Set();
-        let acc = SPACE * 0.45, n = 0;
+        const SPACE = 16 /* every other lamp gone (2026-10-08) */, off = Math.max(1.15, (w0 || 1) + 0.85), seen = new Set();
+        let acc = SPACE * 0.45;
         for (let i = 1; i < pts.length; i++) {
           const ax = pts[i - 1][0], ay = pts[i - 1][1], bx = pts[i][0], by = pts[i][1];
           const L = Math.hypot(bx - ax, by - ay); if (L < 0.05) continue;
@@ -107,7 +121,7 @@
           let d = 0;
           while (acc + (L - d) >= SPACE) {
             const step = SPACE - acc; d += step; acc = 0;
-            const px = ax + ux * d, py = ay + uy * d, side = (n++ & 1) ? 1 : -1;
+            const px = ax + ux * d, py = ay + uy * d, side = 1;   /* all down one side of the road (2026-10-08), not alternating */
             ctx.foldInto(face, px, py, SB);
             const s0 = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false);
             if (s0.h < ctx.WATER + 0.2 || s0.peakS > 0.08) continue;
@@ -119,7 +133,7 @@
         }
       }
       for (const sp of (list || [])) {
-        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, links: sp.links || [], linkStyles: sp.linkStyles || {} };
+        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, groves: sp.groves || [], links: sp.links || [], linkStyles: sp.linkStyles || {} };
         pc.px0 = pc.x; pc.px1 = pc.x + pc.w; pc.py0 = -(pc.y + pc.h); pc.py1 = -pc.y;
         PIECES.push(pc); ctx.PIECE_BY_ID.set(pc.id, pc);
       }
@@ -282,13 +296,24 @@
             if (!di && !dj) continue; const ni = i + di, nj = j + dj; if (ni < 0 || nj < 0 || ni >= GW || nj >= GH) continue;
             const nk = nj * GW + ni; if (nk !== tk && !ok(ni, nj)) continue;
             const step = (di && dj ? 1.414 : 1) * CS, dh = Math.abs((hgt[nk] === hgt[nk] && hgt[nk] > -1e8 ? hgt[nk] : h0) - h0);
-            const ng = gsc[k] + step * (1 + 0.6 * dh / CS) * (0.92 + 0.16 * g.u01(g.hash3(ni, nj, hv)));
+            const ng = gsc[k] + step * (1 + (trail ? 0.6 : 0.3) * dh / CS) * (trail ? 0.92 + 0.16 * g.u01(g.hash3(ni, nj, hv)) : 0.98 + 0.04 * g.u01(g.hash3(ni, nj, hv)));   /* a road between towns runs as straight as the ground allows (2026-10-08); a trail wanders */
             if (ng < gsc[nk]) { gsc[nk] = ng; from[nk] = k; hpush(ng + Math.hypot(ni - ti, nj - tj) * CS, nk); }
           }
         }
         if (found) {
           const pts = []; for (let k = tk; k >= 0; k = from[k]) { const i = k % GW, j = (k - i) / GW; pts.push([gx0 + i * CS, gy0 + j * CS]); if (k === sk) break; }
           pts.reverse(); pts[0] = [x, y]; pts[pts.length - 1] = [tx, ty];
+          /* STRAIGHTEN (2026-10-08: "as straight as possible from Ashvale to Saltmere"): a road skips every corner it can - from
+             each point, on to the farthest point it reaches in a straight line over open ground - so it runs in long straight
+             reaches and bends only where water, rock or a town is in the way. A trail keeps its wander. */
+          if (!trail && pts.length > 2) {
+            const clear = (a2, b2) => { const n = Math.ceil(Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) / (CS / 2)); for (let q = 1; q < n; q++) { const px = a2[0] + (b2[0] - a2[0]) * q / n, py = a2[1] + (b2[1] - a2[1]) * q / n, ci = Math.round((px - gx0) / CS), cj = Math.round((py - gy0) / CS); if (ci < 0 || cj < 0 || ci >= GW || cj >= GH || !ok(ci, cj)) return false; } return true; };
+            const st = [pts[0]]; let i0 = 0;
+            while (i0 < pts.length - 1) { let j = pts.length - 1; while (j > i0 + 1 && !clear(pts[i0], pts[j])) j--; st.push(pts[j]); i0 = j; }
+            const fine = [st[0]];   /* back to points every step or so, so the road is laid (and lit) as before */
+            for (let q = 1; q < st.length; q++) { const a2 = st[q - 1], b2 = st[q], n = Math.max(1, Math.ceil(Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) / CS)); for (let r = 1; r <= n; r++) fine.push([a2[0] + (b2[0] - a2[0]) * r / n, a2[1] + (b2[1] - a2[1]) * r / n]); }
+            pts.length = 0; pts.push(...fine);
+          }
           let px0 = pts[0][0], py0 = pts[0][1];
           for (let k = 2; k < pts.length; k += 2) { const q = pts[Math.min(k, pts.length - 1)]; segs.push(A.face, px0, py0, q[0], q[1], w0, RK, A.hb - 0.75); px0 = q[0]; py0 = q[1]; }
           segs.push(A.face, px0, py0, tx, ty, w0, RK, A.hb - 0.75);
@@ -319,7 +344,7 @@
       if (ctx.clearCaches) ctx.clearCaches();
       return PIECES.map(p => ({ id: p.id, face: p.face, x: p.x, y: p.y, w: p.w, h: p.h, hb: p.hb }));
     }
-    Object.assign(ctx, { pieceDist, pieceTile, pathDist, roadDist, bridgeDist, waterCarve, pieceFlora, setSetPieces, pathCount: () => SEG.length / NS, roadObjects: () => ctx.ROAD_OBJ || [] });
+    Object.assign(ctx, { pieceDist, pieceTile, pathDist, roadDist, bridgeDist, waterCarve, pieceFlora, groveAt, setSetPieces, pathCount: () => SEG.length / NS, roadObjects: () => ctx.ROAD_OBJ || [] });
     return ctx;
   }
   const api = { api: 1, attach };

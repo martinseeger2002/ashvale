@@ -26,8 +26,16 @@ ok(wolfHits > 0, 'the wolf can hit the hawk while it is down striking (' + wolfH
 // in the air nothing lands
 const c2 = C.create(D, { seed: 'hawk2' }), q = c2.addPlayer('p1', { inv: [{ id: 'ring_hawk', n: 1 }] }); c2.cmd('p1', { c: 'equip', slot: 0 }); c2.tick();
 const w2 = c2.S.mobs.find(z => z.key === 'wolf'); q.x = w2.x + 1; q.y = w2.y; w2.tgt = 'p1'; let hit2 = 0;
-for (let i = 0; i < 60; i++) for (const e of c2.tick()) if (e.e === 'hit' && e.dst === 'p1') hit2++;
+for (const o of c2.S.mobs) if (o !== w2 && Math.max(Math.abs(o.x - w2.x), Math.abs(o.y - w2.y)) < 14) o.dead = 1e9;   /* only the wolf: bandits' arrows reach a hawk now */
+for (let i = 0; i < 60; i++) for (const e of c2.tick()) if (e.e === 'hit' && e.dst === 'p1' && e.src === w2.uid) hit2++;   /* the wolf's own; a bandit's arrow may reach it now */
 ok(hit2 === 0 && q.hawkHp === 4, 'a hawk in the air takes no hits from a land animal');
+ok(!w2.tgt, 'and the wolf gives up on it: the hawk flew off, no bite reaches the sky (2026-10-08)');
+// an archer shoots it out of the sky (2026-10-08: "the projectiles should have to be shot at the hawk in the sky")
+const c5 = C.create(D, { seed: 'hawk5' }), a5 = c5.addPlayer('p1', { inv: [{ id: 'ring_hawk', n: 1 }] }); c5.cmd('p1', { c: 'equip', slot: 0 }); c5.tick();
+const b5 = c5.S.mobs.find(z => z.key === 'bandit' && z.carry && Object.keys(z.carry).some(k => /^arrows_/.test(k) && z.carry[k] > 0));
+let shot = 0, melee5 = 0;
+if (b5) { a5.x = b5.x + 4; a5.y = b5.y; b5.tgt = 'p1'; for (let i = 0; i < 120 && c5.isHawk(a5); i++) { a5.hawkHp = 4; for (const e of c5.tick()) if (e.e === 'hit' && e.dst === 'p1') { if (e.cls === 'ranged') shot++; else melee5++; } } }
+ok(b5 && shot > 0 && melee5 === 0, 'a bandit with arrows shoots the hawk in the air (' + shot + ' arrows landed' + (c5.isHawk(a5) ? '' : ', and down it came') + '), and never with a blade');
 // hawk HP gone: down it comes, as yourself
 const c4 = C.create(D, { seed: 'hawk4' }), h = c4.addPlayer('p1', { inv: [{ id: 'ring_hawk', n: 1 }] }); c4.cmd('p1', { c: 'equip', slot: 0 }); c4.tick();
 const w4 = c4.S.mobs.find(z => z.key === 'wolf'); h.x = w4.x + 1; h.y = w4.y; h.hawkHp = 1; const hp0 = h.hp; let fell = false;

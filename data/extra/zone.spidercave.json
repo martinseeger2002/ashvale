@@ -4,8 +4,8 @@
    "id": "edric_skel",
    "name": "A dead man",
    "look": "edric_skel",
-   "x": -146,
-   "y": 16105,
+   "x": 24054,
+   "y": 24005,
    "verb": "Search",
    "lie": true,
    "search": {
@@ -31,21 +31,22 @@
    "examine": "A skeleton sprawled on the cave floor, a rotting bag still hooked in the ribs.",
    "lines": [
     "We should probably leave him alone."
-   ]
+   ],
+   "still": true
   },
   {
    "id": "edric_ghost",
    "name": "Edric's shade",
    "look": "edric_ghost",
-   "x": -145,
-   "y": 16105,
+   "x": 24055,
+   "y": 24005,
    "hideFlag": "vorth_bag",
    "vanish": true,
    "goneFlag": "vorth_spoke",
    "lines": [
     "I am Edric. I wore the orange once. I was a Vorthan, and I believed the fire was justice.",
     "Then I heard them plan to take the cave. Not to hide. To dump the ones who would not kneel. They used the rosary as a key - it always puts you at the mouth.",
-    "I stole a robe and wrote it down. I ran northeast. They sent me into the dark after the beads, and the spiders finished what the Pyre started.",
+    "I stole a robe and wrote it down. I ran southeast. They sent me into the dark after the beads, and the spiders finished what the Pyre started.",
     "Take the note to Mother Wenna in Saltmere. Let the Bright Three hear it. I was not brave enough to walk there alive."
    ],
    "examine": "A pale figure in a ruined orange hood. You can see the cave wall through him."
