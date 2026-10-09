@@ -479,8 +479,10 @@ class Deliverer:
                 else: raise
             return (r or {}).get('txid'), None
         if job['want']:   # a pickup: that exact piece, once it is back with @ashvale
-            self.stock, self.stock_t = held_pieces(), time.time()
-            if job['want'] not in self.stock.get(k, []): raise RuntimeError('waiting for the dropped piece to come back to @ashvale')
+            # that exact inscription's owner, whatever its collection (2026-10-08: a dropped Lake Castle stone, of the Portal
+            # Stones, waited for ever because the Armoury listing never holds it)
+            P = json.load(urllib.request.urlopen(APP + '/r/inscription/' + job['want'], timeout=60)) or {}
+            if P.get('owner') != ASHVALE or P.get('held') is False: raise RuntimeError('waiting for the dropped piece to come back to @ashvale')
             piece = job['want']
         elif job['coll']: piece = None   # a quest reward is always a fresh copy in the quest's collection
         else: piece = self.stock_for(c, k)

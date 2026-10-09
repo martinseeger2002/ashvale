@@ -177,6 +177,18 @@
    "api": 1,
    "kind": "js"
   },
+  "engsky": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "engbank": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
   "sky": {
    "id": null,
    "v": "1",
