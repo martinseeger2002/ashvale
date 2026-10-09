@@ -9272,6 +9272,7 @@ function createModels(THREE, opts) {
     const body = PARTS[o.body || 'body.human'];
     const build_ = o.build || 'normal', big = build_ === 'big', small = build_ === 'small';
     const V0 = Object.assign({ W: big ? 1.16 : 1, small: small ? 1 : 0, big: big ? 1 : 0 }, o.vars || {});   /* char vars, e.g. {goblin:1, skull:1} */
+    const RS = { v: 1 };   /* the body's own root scale, so a body change can keep the size the engine set on top of it */
     const HIDE = new Set(o.hide || []), TINT = o.gearTint || {};   /* char: body segments to leave out (a legless wraith), gear recolours by slot */
     const outfit = JSON.parse(JSON.stringify(DEFAULT_OUTFIT));
     /* old-style options (colours) still work */
@@ -9308,7 +9309,7 @@ function createModels(THREE, opts) {
       for (const m of made) { if (m.parent) m.parent.remove(m); m.traverse(x => { if (x.isMesh) x.geometry.dispose(); }); }
       made = []; tip = null; H.carry = {};
       const fem = outfit.body === 'female' ? 1 : 0;
-      if (fem !== V0.fem) { V0.fem = fem; placeJoints(); root.scale.setScalar(ev(body.rootScale || 1, V0)); joints.lift.p0 = J.hips.position.y; }
+      if (fem !== V0.fem) { const k = root.scale.x / (RS.v || 1); V0.fem = fem; placeJoints(); RS.v = ev(body.rootScale || 1, V0); root.scale.setScalar(RS.v * k); joints.lift.p0 = J.hips.position.y; }   /* keep the size the engine gave the figure (2026-10-09: Random in the creator flipped the body and the character doubled in size) */
       const O = Object.assign({}, outfit);
       const hatI = info(gear.head), capeI = info(gear.cape), bodyI = info(gear.body);
       if (hatI.slot === 'hat') O.hat = { style: hatI.part.style, color: hatI.color };
@@ -9379,7 +9380,7 @@ function createModels(THREE, opts) {
     H.attackAnim = function (id) { const I = info(id || gear.weapon); return (I.part && I.part.attack) || 'crush'; };
     H.muzzle = function (out) { out = out || new THREE.Vector3(); (tip || J.handR).getWorldPosition(out); return out; };
     Object.defineProperty(H, 'height', { get: () => (body.height || 1.86) * root.scale.y });
-    root.scale.setScalar(ev(body.rootScale || 1, V0));
+    RS.v = ev(body.rootScale || 1, V0); root.scale.setScalar(RS.v);
     H._parts = { head: J.head, torso: J.torso };
     rebuild();
     H.play('idle'); H.update(0);
