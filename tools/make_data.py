@@ -311,6 +311,15 @@ items.update({
                         "english": "obsidian-tipped arrows", "made": "Ziibiing", "model": "gear.bikwak"},
     "flint": {"name": "Biiwaanag", "kind": "tool", "value": 5, "_kg": 0.15, "english": "flint", "made": "Ziibiing", "model": "item.flint"},
     "obsidian": {"name": "Obsidian", "kind": "resource", "value": 10, "_kg": 0.4, "made": "Ziibiing", "model": "item.obsidian"},
+    # Ma'iingan's nagwaagan (snare, OPD; waabooz: a rabbit, a snowshoe hare) (2026-10-09: "set it, come back"): Set it on open
+    # ground where hares run; in a game hour or two it holds one (the hare's own drops: meat and pelt). See core setTrap
+    # asemaa (tobacco, OPD) (2026-10-09): offered before a harvest and to ask an elder; stacks like Gold. Its rules: rules.items.offers.tobacco
+    "asemaa": {"name": "Asemaa", "kind": "resource", "stack": True, "value": 2, "_kg": 0.01, "english": "tobacco", "made": "Ziibiing", "model": "item.asemaa"},
+    # red willow bark and apaakozigan (kinnikinnick: tobacco and bark smoking mixture, OPD) (2026-10-09): two bark and one
+    # asemaa at a fire make three; it is offered exactly like asemaa (same subcategory, so rules.items.offers.tobacco)
+    "willow_bark": {"name": "Miskwaabiimizh bark", "kind": "resource", "stack": True, "value": 2, "_kg": 0.05, "english": "red willow bark", "made": "Ziibiing", "model": "item.willowbark"},
+    "apaakozigan": {"name": "Apaakozigan", "kind": "resource", "stack": True, "value": 2, "_kg": 0.01, "english": "kinnikinnick", "made": "Ziibiing", "model": "item.asemaa"},
+    "snare": {"name": "Nagwaagan", "kind": "tool", "value": 6, "_kg": 0.1, "english": "snare", "made": "Ziibiing", "model": "item.snare"},   # its rules: rules.items.traps.snare
 })
 # English names, shown in brackets when an item with an Ojibwe name is examined (2026-10-08)
 for _k, _e in {"wiigwaas": "birch bark", "sinew": "sinew", "bucket_bark": "birch bark sap bucket", "sap_bark": "birch bark sap bucket of maple sap", "syrup_bark": "birch bark sap bucket of maple syrup", "pail": "pail", "sap_pail": "pail of maple sap", "syrup_pail": "pail of maple syrup", "maple_candy": "maple sugar candy", "quill_makak": "birch bark box with porcupine quillwork", "push_pole": "push pole", "knockers": "ricing sticks"}.items(): items[_k]['english'] = _e
@@ -351,7 +360,7 @@ CAT = {  # internal kind -> (category, subcategory)
     "chainbody": ("armour", "chainbody"), "legs": ("armour", "platelegs"), "shield": ("armour", "kiteshield"), "torch": ("armour", "torch"),
     "arrows": ("ammo", "arrow"), "coins": ("currency", "gold"), "hat": ("cosmetic", "hat"), "cape": ("cosmetic", "cape"), "robe": ("cosmetic", "robe"),
     "pack": ("pack", "pack"), "ring": ("jewellery", "ring"), "tomahawk": ("weapon", "tomahawk")}
-SUB_OF_ID = {"flint": "flint", "obsidian": "stone", "push_pole": "pole", "knockers": "knocker", "wiigwaas": "bark", "sinew": "sinew", "bucket_bark": "bucket", "sap_bark": "bucket", "syrup_bark": "bucket", "pail": "bucket", "sap_pail": "bucket", "syrup_pail": "bucket", "maple_candy": "candy", "spider_silk": "silk", "dragon_bones": "bones", "ashvale_stone": "stone", "saltmere_stone": "stone", "castle_stone": "stone", "tinderbox": "tinderbox", "hatchet": "hatchet", "pickaxe": "pickaxe", "net": "net", "fishing_rod": "rod", "lobster_pot": "pot", "bread": "bread", "coal": "coal"}
+SUB_OF_ID = {"asemaa": "tobacco", "apaakozigan": "tobacco", "willow_bark": "bark", "snare": "snare", "flint": "flint", "obsidian": "stone", "push_pole": "pole", "knockers": "knocker", "wiigwaas": "bark", "sinew": "sinew", "bucket_bark": "bucket", "sap_bark": "bucket", "syrup_bark": "bucket", "pail": "bucket", "sap_pail": "bucket", "syrup_pail": "bucket", "maple_candy": "candy", "spider_silk": "silk", "dragon_bones": "bones", "ashvale_stone": "stone", "saltmere_stone": "stone", "castle_stone": "stone", "tinderbox": "tinderbox", "hatchet": "hatchet", "pickaxe": "pickaxe", "net": "net", "fishing_rod": "rod", "lobster_pot": "pot", "bread": "bread", "coal": "coal"}
 MODEL = {"weapon": lambda sub, k: "gear." + sub, "armour": lambda sub, k: "gear." + {"kiteshield": "shield"}.get(sub, sub),
          "ammo": lambda sub, k: "gear.arrows", "pack": lambda sub, k: "gear.pack", "currency": lambda sub, k: "item.coins",
          "cosmetic": lambda sub, k: "cloth." + (k if sub == "hat" else "robe" if sub == "robe" else "cape"),
@@ -1291,7 +1300,7 @@ R = random.Random(20260930)
 
 # the tile legend, in one place: which letters stop you walking, and which stop you seeing. scene.js
 # draws the same letters (trees, rocks with ore), rules.json ships this same set.
-T_BLOCK = "TPORNIr~FHXWMYCGAUSV"   # U: a desert cactus (blocks the way, not the view)
+T_BLOCK = "TPORNIr~FHXWMYCGAUSVJ"   # U: a desert cactus (blocks the way, not the view)
 T_LOS = "TPORNIrHXWMYCGASV"
 T_TREE = "TPOMWY"
 T_ROCK = "RNICGA"
@@ -1616,12 +1625,18 @@ HOMES = {
   "name": "Ashvale"
  },
  "ziibiing": {
+  "hud": "ziibiing",
   "name": "Ziibiing",
+  "offerHint": "Before you take from the land, set down a little asemaa (tobacco) and give thanks: Biindaakoojige (offer tobacco) from your bag. The land gives more to those who ask.",
   "spawn": [
    24048,
    24406
   ],
   "inv": [[
+    "asemaa",
+    5
+   ],
+   [
     "venison_cooked",
     1
    ],
@@ -1785,6 +1800,13 @@ module('rules', 3, {
               "say": "You pry a nodule of biiwaanag (flint) out of the chalky bank."},
         "V": {"skill": "mining", "name": "Obsidian", "item": "obsidian", "req": 1, "xp": 100, "speed": 4, "deplete": 1, "regrow": 15, "bare": True,
               "say": "You work a piece of black obsidian loose from the bank. Its broken edge is sharper than any knife."},
+        # miskwaabiimizh (red willow, red osier dogwood; OPD) clumps on the riverbank (2026-10-09): bark only, once a game day
+        # each, with a blade - for apaakozigan (kinnikinnick)
+        "J": {"skill": "woodcutting", "name": "Miskwaabiimizh (red willow)", "item": "willow_bark", "req": 1, "xp": 0, "speed": 4, "deplete": 0, "regrow": -1, "peelOnly": True,
+              "peel": {"item": "willow_bark", "xp": 60, "ticks": 4, "per": "day", "mark": "willow", "verb": "Peel bark from", "tool": "woodcutting",
+                       "noTool": "You need a tomahawk or an axe to cut the bark from the miskwaabiimizh (red willow).",
+                       "say": "You shave the red outer bark from a stem of miskwaabiimizh (red willow). It will grow back by tomorrow.",
+                       "again": "This miskwaabiimizh (red willow) has given its bark today. Try another clump, or come back tomorrow."}},
         "fish": {"skill": "fishing", "name": "Fishing spot", "req": 1, "xp": 100, "speed": 5, "deplete": 0},
         "range": {"skill": "cooking", "name": "Cooking range", "speed": 4},
         "fire": {"skill": "cooking", "name": "Campfire", "speed": 4, "burnBonus": 10}},
@@ -1799,13 +1821,22 @@ module('rules', 3, {
               "skills": ["attack", "strength", "defence", "ranged", "magic", "hitpoints", "dexterity", "speechcraft"]},
     "items": {
         "categories": {"weapon": ["sword", "dagger", "longsword", "mace", "bow", "staff", "tomahawk"], "armour": ["helmet", "platebody", "chainbody", "platelegs", "kiteshield", "torch"],
-                       "tool": ["hatchet", "pickaxe", "net", "rod", "pot", "tinderbox", "stone", "pole", "knocker", "flint"], "pack": ["pack"], "cosmetic": ["hat", "cape", "robe"],
+                       "tool": ["hatchet", "pickaxe", "net", "rod", "pot", "tinderbox", "stone", "pole", "knocker", "snare", "flint"], "pack": ["pack"], "cosmetic": ["hat", "cape", "robe"],
                        "resource": ["logs", "ore", "coal", "bar", "pelt", "fish", "mushroom", "meat", "silk", "grain", "bark", "sinew", "bucket", "stone"], "food": ["bread", "fish", "mushroom", "meat", "candy"], "potion": ["healing"],
                        "ammo": ["arrow"], "currency": ["gold"], "jewellery": ["ring"]},
         "slots": {"weapon": "weapon", "armour/helmet": "head", "armour/platebody": "body", "armour/chainbody": "body", "armour/platelegs": "legs",
                   "armour/kiteshield": "shield", "armour/torch": "shield", "ammo": "ammo", "pack": "pack", "cosmetic/hat": "head", "cosmetic/cape": "cape", "cosmetic/robe": "body", "jewellery/ring": "ring"},
         "weapons": {"sword": {"class": "melee", "anim": "slash"}, "dagger": {"class": "melee", "anim": "stab"}, "longsword": {"class": "melee", "anim": "slash"},
                     "mace": {"class": "melee", "anim": "crush"}, "tomahawk": {"class": "melee", "anim": "slash"}, "bow": {"class": "ranged", "anim": "bow", "twoHanded": True}, "staff": {"class": "magic", "anim": "cast"}},
+        "fireMix": [{"take": {"willow_bark": 2, "asemaa": 1}, "give": {"apaakozigan": 3}, "xp": {"cooking": 150},   # at any fire (core; 2026-10-09)
+                     "say": "You toast the miskwaabiimizh (red willow) bark over the fire and rub it fine with the asemaa (tobacco): three pinches of apaakozigan (kinnikinnick)."}],
+        "offers": {"tobacco": {"verb": "Biindaakoojige (offer tobacco)", "xpAs": "bones", "radius": 12, "bonus": 25,   # an offering: Prayer XP as for bones, the ground blessed for the day (core offerTobacco; 2026-10-09)
+                              "say": "You set down a pinch of asemaa (tobacco) and give thanks before you take anything from here. The ground here is blessed for you today."}},
+        "traps": {"snare": {"prey": ["hare", "snow_hare"], "near": 12, "hours": [1, 2], "max": 3, "xp": {"dexterity": 40},   # a tool of this subcategory is a trap (core setTrap; 2026-10-09)
+                            "say": "You bend a sapling, tie the noose of the nagwaagan (snare) across a waabooz (rabbit) run and leave it.",
+                            "none": "There are no waabooz (rabbit) runs here. Set the nagwaagan (snare) where the rabbits are.",
+                            "empty": "The nagwaagan (snare) is still empty. Leave it a while and come back.",
+                            "caught": "There is a {prey} in your nagwaagan (snare)."}},
         "tools": {"hatchet": "woodcutting", "pickaxe": "mining", "net": "fishing", "rod": "fishing", "pot": "fishing", "tinderbox": "firemaking", "flint": "firemaking"},
         "edible": ["food", "potion"], "drink": ["potion"],
         "traits": {"Edition": "edition", "Cures": "cures", "Light": "light", "Form": "form", "Teleport": "teleport", "Cooldown ticks": "cooldown", "Call to arms": "arms", "Attack": "attack", "Strength": "strength", "Defence": "defence", "Ranged": "ranged", "Magic": "magic", "Ranged strength": "rstr",
@@ -1847,6 +1878,7 @@ module('rules', 3, {
                   "xpPerRunTile": 2, "xpPerDamage": 10},
     "speechcraft": {"pctPerLevelPermille": 4, "maxPermille": 300, "xpPerGold": 1, "xpQuestTalk": 250},
     "homes": HOMES,
+    "questHomes": ["ashvale"],   # a quest with no `homes` of its own is the town's (2026-10-09)
     "yard": {"note": "2026-10-04: chickens wherever there are buildings - n birds per `per` buildings, by a building, at most max per town", "kinds": ["house", "shop", "smithy", "inn", "tavern", "hall"], "per": 2, "n": 2, "max": 14, "birds": ["chicken", "hen"]},   # town birds (2026-10-04): n per `per` buildings, by a building (src/world.js)
 })
 

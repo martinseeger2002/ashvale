@@ -154,7 +154,22 @@
       const bud = S.melt + BUD.M, season = S.leafy >= 0.5 && S.p >= bud - w && S.p < bud;   /* until the maples bud */
       return { season, day: season && R.low < 0 && R.high > 0, low: R.low, high: R.high, left: season ? Math.ceil((bud - S.p) * YEAR) : 0 };
     }
-    return { api: 1, YEAR, TILT, FALL0, SAP_DAYS, temperature, dayRange, sap, LITTER: [AUTUMN.T, AUTUMN.O, AUTUMN.M], calendar, declination, at, leafColour, deciduous: k => !!DECIDUOUS[k] };
+    /* SEASONAL QUESTS (2026-10-09: "if wild rice is not ripe, grandpa should not tell you to go harvest wild rice, but instead
+       tell you how long until that quest is available ... same thing with any seasonal quest"): whether a kind of season is on
+       here now - 'rice' (the manoomin is ripe), 'sap' (the sap run), or a season of the year ('spring', 'summer', 'autumn', 'winter') */
+    function open(kind, latDeg, tms) {
+      if (kind === 'sap') return !!sap(latDeg, tms).season;
+      const S = at(latDeg, tms);
+      if (kind === 'rice') return !!S.rice;
+      return S.name === kind;
+    }
+    /* {open, days}: on now, else how many whole game days until it is (null if not within a year) */
+    function until(kind, latDeg, tms) {
+      if (open(kind, latDeg, tms)) return { open: true, days: 0 };
+      for (let d = 1; d <= YEAR + 1; d++) if (open(kind, latDeg, tms + d * dayS * 1000)) return { open: false, days: d };
+      return { open: false, days: null };
+    }
+    return { api: 1, YEAR, TILT, FALL0, SAP_DAYS, temperature, dayRange, sap, open, until, LITTER: [AUTUMN.T, AUTUMN.O, AUTUMN.M], calendar, declination, at, leafColour, deciduous: k => !!DECIDUOUS[k] };
   }
   const api = { api: 1, create };
   if (root.ASH3D && root.ASH3D.define) root.ASH3D.define('seasons', { api: 1, v: 1, needs: {} }, () => api);

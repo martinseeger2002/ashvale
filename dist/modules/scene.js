@@ -681,6 +681,19 @@
         if (ORE[c]) { rk.userData.pick = rk2.userData.pick = { kind: 'node', i: K(x, y) }; pickables.push(rk, rk2); }
         rockAt.set(K(x, y), { g, ore }); group.add(g);
       }
+      /* ---------- miskwaabiimizh (red willow, red osier dogwood) clumps by the river (J, 2026-10-09): bare red stems in a
+         vase shape; peeled for apaakozigan (kinnikinnick) */
+      for (let y = Y0; y < Y1; y++) for (let x = X0; x < X1; x++) {
+        if (at(x, y) !== 'J' || !mine(x, y)) continue;
+        const g = new THREE.Group(), h0 = hash2(x, y), parts = [];
+        for (let k = 0; k < 7; k++) {
+          const a = (k / 7) * 6.283 + h0 * 3, lean = 0.12 + 0.1 * ((k * 37 + Math.floor(h0 * 97)) % 5) / 5, ht = 0.9 + 0.5 * (((k * 53) % 7) / 7);
+          const st = mesh(new THREE.CylinderGeometry(0.018, 0.03, ht, 5), 0xa8322a); st.position.set(Math.cos(a) * 0.12 + Math.cos(a) * lean * ht / 2, ht / 2, Math.sin(a) * 0.12 + Math.sin(a) * lean * ht / 2);
+          st.rotation.z = -Math.cos(a) * lean * -1; st.rotation.x = Math.sin(a) * lean * -1;   /* each stem leans out from the root: a vase of red stems */ g.add(st); parts.push(st);
+        }
+        g.position.set(x + 0.5, heightAt(x + 0.5, y + 0.5), y + 0.5); group.add(g);
+        for (const m of parts) { m.userData.pick = { kind: 'node', i: K(x, y) }; pickables.push(m); }
+      }
       /* ---------- buildings, fences and props */
       const B = Batcher(group), BF = Batcher(group), anim = [], RICEP = [];   /* RICEP: the wild rice plants, grown by the seasons */   /* BF: the small flora, which the seasons take away and give back */
       const roofs = [];
@@ -1166,11 +1179,7 @@
             B.add('box', 0xa07a48, x, y + 0.25, z + 0.3, 0.8, 0.5, 0.35);
             break; }
           case 'barrel': y = floorY(o, y); B.add('cyl', 0x8a5a30, x, y + 0.4, z, 0.6, 0.8, 0.6); B.add('cyl', 0x3a3a3a, x, y + 0.2, z, 0.62, 0.06, 0.62); B.add('cyl', 0x3a3a3a, x, y + 0.6, z, 0.62, 0.06, 0.62); break;
-          case 'crate': {
-            B.add('box', 0xa07a48, x, y + 0.32, z, 0.65, 0.65, 0.65, hash2(o.x, o.y)); B.add('box', 0x7a5a30, x, y + 0.66, z, 0.68, 0.04, 0.68, hash2(o.x, o.y));
-            if (o.loot) { const pk = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshBasicMaterial({ visible: false })); pk.position.set(x, y + 0.4, z); pk.userData.pick = { kind: 'crate', x: o.x, y: o.y }; group.add(pk); pickables.push(pk); }
-            break;
-          }
+          case 'crate': B.add('box', 0xa07a48, x, y + 0.32, z, 0.65, 0.65, 0.65, hash2(o.x, o.y)); B.add('box', 0x7a5a30, x, y + 0.66, z, 0.68, 0.04, 0.68, hash2(o.x, o.y)); break;
           case 'tent': { const t = mesh(new THREE.ConeGeometry(1.25, 1.6, 4), hash2(o.x, o.y) < 0.5 ? 0x8a7a50 : 0x6a7a40, x, y + 0.8, z); t.rotation.y = Math.PI / 4; group.add(t); B.add('box', 0x2a2015, x, y + 0.4, z + 0.86, 0.4, 0.8, 0.05); break; }
           case 'gate': {
             /* a closed gate in the palisade: posted leaves, iron bands, a latch. span "ns" = the fence runs

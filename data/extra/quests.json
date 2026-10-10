@@ -514,7 +514,10 @@
       "n": 20
      },
      "ends": "mishoomis",
-     "reward": "dried_mouse",
+     "reward": [
+      "dried_mouse",
+      "asemaa:3"
+     ],
      "talk": [
       "Boozhoo (hello), {name}. Sit, sit. My knees have not stood up since the last ricing moon.",
       "Manoominike-giizis (the ricing moon) is here. Out on the zaaga'igan (lake) down the ziibi (river) the manoomin (wild rice) stands ripe, and my old arms cannot knock it.",
@@ -535,6 +538,24 @@
    "done": [
     "Boozhoo, {name}. The manoomin (wild rice) is drying on the birch bark. Sit by the fire a while.",
     "Are you keeping the waawaabiganoojiinh (mouse) somewhere safe? A gift like that does not come twice."
+   ],
+   "season": "rice",
+   "notYet": [
+    "Boozhoo, {name}. Sit with me a while.",
+    "The manoomin (wild rice) is not ripe yet. When manoominike-giizis (the ricing moon) comes, the heads turn heavy and we go out in the jiimaan (canoe).",
+    "Come back {when}, and I will send you out on the lake."
+   ],
+   "ask": {
+    "asemaa": 1
+   },
+   "askLackTalk": [
+    "When you come to an elder for teaching, {name}, bring a little asemaa (tobacco). That is how it is done. Come back with some, and we will talk about the manoomin (wild rice)."
+   ],
+   "askLack": "Bring asemaa (tobacco) to ask an elder for teaching.",
+   "askSay": "(When you say yes, you offer Mishoomis one asemaa (tobacco).)",
+   "homes": [
+    "ziibiing",
+    "ashvale"
    ]
   },
   "sugar_bush": {
@@ -570,7 +591,12 @@
      "complete": [
       "Miigwech (thank you), {name}. Taste it - it is only a little sweet, like water that remembers the tree.",
       "It boils a long time before it is syrup. That is why we sit up all night by the akik (kettle)."
-     ]
+     ],
+     "at": [
+      92,
+      543
+     ],
+     "mark": "Iskigamizigan (sugar camp)"
     },
     {
      "id": 2,
@@ -605,8 +631,14 @@
       "bring": "maple_candy",
       "n": 1
      },
-     "reward": "quill_makak",
-     "againReward": "xp:cooking:1500",
+     "reward": [
+      "quill_makak",
+      "asemaa:3"
+     ],
+     "againReward": [
+      "xp:cooking:1500",
+      "asemaa:3"
+     ],
      "talk": [
       "Boil the syrup once more and stir it as it cools, and it sets into ziinzibaakwadoons (candy). The children wait all winter for it.",
       "Bring me one piece. Your bucket will come back to you empty, ready for next spring."
@@ -631,6 +663,24 @@
    "done": [
     "Boozhoo, {name}. The sugar is put away in its makak for the year. Sit by the fire.",
     "When the sap runs again next spring, come and find me."
+   ],
+   "season": "sap",
+   "notYet": [
+    "Boozhoo, {name}. Sit by me.",
+    "The ziinzibaakwadwaaboo (maple sap) is not running yet. It runs when the nights still freeze and the days begin to thaw, before the ininaatig (maple) buds.",
+    "Come back {when}, and we will go up to the iskigamizigan (sugar camp) together."
+   ],
+   "ask": {
+    "asemaa": 1
+   },
+   "askLackTalk": [
+    "Come and sit by me, {name}. When you ask an elder to teach you, you bring a little asemaa (tobacco) - it is how we ask. Come back with some, and I will take you to the sugar bush."
+   ],
+   "askLack": "Bring asemaa (tobacco) to ask an elder for teaching.",
+   "askSay": "(When you say yes, you offer Nookomis one asemaa (tobacco).)",
+   "homes": [
+    "ziibiing",
+    "ashvale"
    ]
   },
   "biiwaanag": {
@@ -651,7 +701,10 @@
      "kit": {
       "logs": 1
      },
-     "reward": "xp:firemaking:300",
+     "reward": [
+      "xp:firemaking:300",
+      "asemaa:3"
+     ],
      "talk": [
       "Boozhoo, {name}. Sit. The fire in this wigwam was lit by my grandfather's hand, and it has never been let go out.",
       "One of the people of Ziibiing (at the river) must be able to make a fire of their own. For that you need biiwaanag (flint).",
@@ -664,12 +717,25 @@
      "complete": [
       "I can smell the smoke on you. Good.",
       "Keep the biiwaanag (flint). It does not wear out the way we do."
-     ]
+     ],
+     "at": [
+      138,
+      641
+     ],
+     "mark": "Biiwaanag (flint)"
     }
    ],
    "done": [
     "Boozhoo, {name}. Is your fire still going? Ishkode (fire) is a relative. Feed it and it looks after you."
-   ]
+   ],
+   "ask": {
+    "asemaa": 1
+   },
+   "askLackTalk": [
+    "When you come to an elder for teaching, {name}, bring a little asemaa (tobacco). That is how it is done. Come back with some, and I will show you where the biiwaanag (flint) lies."
+   ],
+   "askLack": "Bring asemaa (tobacco) to ask an elder for teaching.",
+   "askSay": "(When you say yes, you offer Mishoomis one asemaa (tobacco).)"
   },
   "mitigwaab": {
    "name": "Mitigwaab",
@@ -677,7 +743,7 @@
    "homes": [
     "ziibiing"
    ],
-   "note": "2026-10-09: a maple log and a birch log; two game hours later a maple bow (bound) and fifteen birch arrows; the tomahawk at the start",
+   "note": "2026-10-09: a maple log and ojiitad (sinew) for the bowstring, and a birch log for the arrows; two game hours later a maple bow (bound) and fifteen birch arrows; the tomahawk at the start",
    "steps": [
     {
      "id": 1,
@@ -685,23 +751,31 @@
      "goal": {
       "bring": "maple_logs",
       "n": 1,
-      "with": "birch_logs"
+      "with": {
+       "sinew": 1,
+       "birch_logs": 1
+      }
      },
      "kit": {
       "tomahawk": 1
      },
      "talk": [
-      "Boozhoo, {name}. No mitigwaab (bow) yet? Then you can feed nobody but yourself.",
+      "Boozhoo, {name}. Ma'iingan tells me you snared a waabooz (rabbit) and earned your first ojiitad (sinew). Good. Now a mitigwaab (bow).",
       "Take this tomahawk. It cuts wood, and it cuts the wiigwaas (birch bark) off a tree when you need some.",
-      "Bring me one log of ininaatig (maple) for the bow and one log of wiigwaasaatig (birch) for the bikwak (arrows). The sugar bush up the trail is full of both.",
+      "Bring me one log of ininaatig (maple) for the bow, your ojiitad (sinew) for the bowstring, and one log of wiigwaasaatig (birch) for the bikwak (arrows). The sugar bush up the trail is full of maple and birch.",
       "Ininaatig (maple) is hard wood. Your arm is young, so it will take many swings. Keep at it."
      ],
      "progress": [
-      "One ininaatig (maple) log and one wiigwaasaatig (birch) log, {name}. The sugar bush up the trail has both. The tomahawk will do it, slowly."
+      "One ininaatig (maple) log, one ojiitad (sinew) and one wiigwaasaatig (birch) log, {name}. The sugar bush up the trail has the wood. The tomahawk will do it, slowly."
      ],
      "complete": [
-      "Good wood. Feel the weight of that maple - it will bend for you and come back."
-     ]
+      "Good wood, and good ojiitad (sinew). Feel the weight of that maple - it will bend for you and come back."
+     ],
+     "at": [
+      92,
+      543
+     ],
+     "mark": "Ininaatig (maple) and wiigwaas (birch)"
     },
     {
      "id": 2,
@@ -711,7 +785,8 @@
      },
      "reward": [
       "mitigwaab",
-      "birch_arrows:15"
+      "birch_arrows:15",
+      "asemaa:3"
      ],
      "talk": [
       "Now leave me with it. A bow is shaved, not chopped, and the arrows want straightening over the fire.",
@@ -729,7 +804,8 @@
    ],
    "done": [
     "Boozhoo, {name}. Bring me a wiigwaasaatig (birch) log whenever you need more bikwak (arrows)."
-   ]
+   ],
+   "after": "waabooz"
   },
   "deer_hunt": {
    "name": "Waawaashkeshi",
@@ -749,7 +825,8 @@
      },
      "reward": [
       "sinew:2",
-      "xp:ranged:300"
+      "xp:ranged:300",
+      "asemaa:3"
      ],
      "talk": [
       "Boozhoo, {name}! Mitigwaabiike made you a mitigwaab (bow)? Then come hunting.",
@@ -797,7 +874,12 @@
      ],
      "complete": [
       "Black as a winter night. Good."
-     ]
+     ],
+     "at": [
+      24,
+      622
+     ],
+     "mark": "Obsidian"
     },
     {
      "id": 2,
@@ -805,7 +887,10 @@
      "goal": {
       "wait": 2
      },
-     "reward": "obsidian_arrows:15",
+     "reward": [
+      "obsidian_arrows:15",
+      "asemaa:3"
+     ],
      "talk": [
       "Knapping takes patience. Each point is struck a hundred times before it is sharp enough.",
       "Come back in two hours and they will be ready."
@@ -821,6 +906,56 @@
    ],
    "done": [
     "Boozhoo, {name}. Obsidian and birch, and I will make you more obsidian bikwak (arrows)."
+   ]
+  },
+  "waabooz": {
+   "name": "Waabooz",
+   "giver": "maiingan",
+   "homes": [
+    "ziibiing"
+   ],
+   "note": "2026-10-09: Ma'iingan lends a nagwaagan (snare); set it where the waabooz (rabbits) run, come back, and bring three pelts for your first ojiitad (sinew) - before the bow",
+   "steps": [
+    {
+     "id": 1,
+     "zone": "ziibiing",
+     "goal": {
+      "bring": [
+       "hare_pelt",
+       "snow_hare_pelt"
+      ],
+      "n": 3
+     },
+     "kit": {
+      "snare": 1
+     },
+     "reward": [
+      "sinew:1",
+      "xp:dexterity:200",
+      "asemaa:3"
+     ],
+     "talk": [
+      "Boozhoo, {name}. You want a mitigwaab (bow)? Mitigwaabiike will want ojiitad (sinew) for the string, and you have none.",
+      "Before a hunter has a bow, he has a nagwaagan (snare). Here, take this one of mine.",
+      "Go where the waabooz (rabbits) run, in the brush round the village. Set it on the ground there and leave it. Come back in an hour or two and see what it holds.",
+      "Bring me three waabooz (rabbit) pelts, and I will give you your first ojiitad (sinew)."
+     ],
+     "progress": [
+      "Three waabooz (rabbit) pelts, {name}. Set the nagwaagan (snare) where they run, leave it, and come back to it later."
+     ],
+     "complete": [
+      "Three pelts. Miigwech (thank you) - they will line a pair of makizinan (moccasins) for the winter.",
+      "Here is your ojiitad (sinew). Take it to Mitigwaabiike for a bowstring. Keep the nagwaagan (snare) - a hunter always has one set somewhere."
+     ],
+     "at": [
+      72,
+      598
+     ],
+     "mark": "Waabooz (hares)"
+    }
+   ],
+   "done": [
+    "Boozhoo, {name}. Three waabooz (rabbit) pelts or one waawaashkeshiwayaan (deer hide), and I will give you ojiitad (sinew)."
    ]
   }
  }

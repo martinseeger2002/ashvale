@@ -116,6 +116,17 @@
     /* HOMES (2026-10-08, handoff/ziibiing_start_plan.md): a character is born somewhere - Ashvale (every save before this)
        or Ziibiing (its own game card). The home sets where a new character opens its eyes, what it carries, and where it wakes */
     const HOMES = RU.homes || {}; let NEWHOME = 'ashvale';
+    /* whose quest it is (2026-10-09: "we shouldn't see quests from a character made in Ashvale in our fresh character on
+       Ziibiing"): a quest's `homes`, or else rules.questHomes (the town's quests carry no list of their own) */
+    /* where your open quest steps want you (a step's `at` [x, y] and `mark` label, data): the engine marks them on the minimap and
+       with a beacon in the world (2026-10-09: "I can't find the flint from the first quest... it needs a better marker") */
+    function questMarks(p) {
+      const out = [];
+      for (const id in (p && p.quests) || {}) { const q = p.quests[id], Q = D.quests.quests[id], st = Q && Q.steps[q.step - 1];
+        if (st && Array.isArray(st.at) && !q.hid) out.push({ x: st.at[0], y: st.at[1], label: st.mark || Q.name, q: id }); }
+      return out;
+    }
+    const questForHome = (Q, p) => (Q.homes || RU.questHomes || ['ashvale']).indexOf((p && p.home) || 'ashvale') >= 0;
     const homeOf = p => HOMES[(p && p.home) || 'ashvale'] || null;
     const spawnOf = p => { const H = homeOf(p); return (H && H.spawn) || RESPAWN0(); };
     function wakeSpot(p) { const P = p.town && !(homeOf(p) && homeOf(p).wake === 'home') ? portalOf(p.town) : null; return P ? { at: P.to, name: P.name } : { at: spawnOf(p), name: null }; }   /* a home with wake: 'home' always wakes you there (Ziibiing: your mother's wigwam) */
@@ -423,6 +434,9 @@
         if (q && q.step > Q.steps.length && !(p.flags && p.flags[k])) { p.flags = p.flags || {}; p.flags[k] = 1; }
       }
       if (s.attuned) p.attuned = JSON.parse(JSON.stringify(s.attuned));
+      if (s.orders && typeof s.orders === 'object') p.orders = JSON.parse(JSON.stringify(s.orders));   /* what the people are making for you (a canoe takes two days) */
+      if (Array.isArray(s.bless)) p.bless = s.bless.filter(b => b && Number.isInteger(b.x) && Number.isInteger(b.y)).slice(-12).map(b => ({ x: b.x, y: b.y, day: b.day | 0, r: Math.min(30, b.r | 0) }));
+      if (Array.isArray(s.traps)) p.traps = s.traps.filter(t => t && IT[t.id] && trapOf(IT[t.id]) && Number.isInteger(t.x) && Number.isInteger(t.y)).slice(0, 8).map(t => ({ id: t.id, x: t.x, y: t.y, prey: String(t.prey || ''), ready: +t.ready || 0 }));
       if (typeof s.town === 'string') p.town = s.town;
       if (s.hawkHp != null) p.hawkHp = s.hawkHp | 0;
       if (s.cd) { p.cd = {}; for (const k in s.cd) p.cd[k] = S.t + (s.cd[k] | 0); }   /* cooldowns are saved as ticks left */
@@ -489,7 +503,7 @@
     function exportPlayer(id) {
       const p = S.players[id]; if (!p) return null;
       const at = p.dead ? wakeSpot(p).at : [p.x, p.y];
-      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
+      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, orders: p.orders || {}, traps: p.traps || [], bless: p.bless || [], town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
     }
 
     // ---------------- pathfinding: BFS over the tile grid, 8 directions, no corner cutting (RuneScape-style)
@@ -723,7 +737,6 @@
         }
         case 'take': { const g = S.ground.find(q => q.uid === c.uid); if (g) { p.act = { k: 'take', uid: g.uid }; p.skilling = null; closeShop(p); } break; }
         case 'enter': { const o = passageAt(c.x, c.y); if (o && !p.dead) { p.act = { k: 'enter', x: o.x, y: o.y }; p.skilling = null; closeShop(p); } break; }   /* a cave mouth, a way out */
-        case 'crate': { const o = crateAt(c.x | 0, c.y | 0); if (o && !p.dead) { p.act = { k: 'crate', x: o.x, y: o.y }; p.skilling = null; closeShop(p); } break; }
         case 'npc': { const n = M.npcs.find(q => q.id === c.id); if (n) { p._trade = !!c.trade; p.act = { k: 'npc', id: n.id }; p.skilling = null; closeShop(p); } break; }
         case 'acceptq': {   /* yes on a starting dialogue, or yes when Vael asks before calling the three again */
           const qid = String(c.q || ''), Q = D.quests.quests[qid];
@@ -736,6 +749,8 @@
             break;
           }
           if (p.quests[qid]) break;
+          if (Q.ask && !askHas(p, Q.ask)) { msg(p, Q.askLack || 'Bring what you need to ask with, then ask again.', 'warn'); break; }   /* an elder is asked with asemaa (tobacco) */
+          if (Q.ask) askTake(p, Q.ask);
           const q = p.quests[qid] = { step: 1, n: 0 };
           ev({ e: 'quest', p: p.id, q: qid, step: 1 }); addXp(p, 'speechcraft', SPEECH.xpQuestTalk || 250);
           openStep(p, q, Q.steps[0]);
@@ -779,6 +794,9 @@
           msg(p, 'Nothing interesting happens.'); clearUsing(p); break;
         }
         case 'use': useItem(p, c.slot | 0); break;
+        case 'craft': { const n = M.npcs.find(q => q.id === c.npc), L = n && (Array.isArray(n.craft) ? n.craft : n.craft ? [n.craft] : []), k = L && L[c.i | 0];
+          if (k && !p.dead && cheb(p.x, p.y, n.x, n.y) <= 3 && (!k.after || questFinished(p, k.after))) orderCraft(p, n, k); break; }
+        case 'trap': { const t = (p.traps || []).find(q => q.x === (c.x | 0) && q.y === (c.y | 0)); if (t && !p.dead) { p.act = { k: 'trap', x: t.x, y: t.y, up: c.up ? 1 : 0 }; p.skilling = null; closeShop(p); } break; }
         case 'arms': { const has = p.inv.concat(Object.values(p.eq || {})).some(s => s && IT[s.id] && IT[s.id].arms); if (!has) { msg(p, 'You need the Lake Castle stone to call the guard.', 'warn'); break; } callToArms(p, !!c.on); break; }
         case 'equip': equip(p, c.slot | 0); break;
         case 'unequip': unequip(p, c.eq); break;
@@ -821,6 +839,8 @@
     function useItem(p, slot) {
       const s = p.inv[slot]; if (!s) return; const d = IT[s.id];
       if (d.buryXp) { bury(p, slot); return; }
+      if (trapOf(d)) { setTrap(p, slot); return; }
+      if (offerOf(d)) { offerTobacco(p, slot); return; }
       /* rings wear on click (their teleport is a trigger, e.g. the Ring of Angels). Charms and stones with a Teleport
          trait Use to travel; Wear still equips a charm that also has an eq slot (Vorth's rosary in the shield hand). */
       if (d.eq && (d.eq === 'ring' || d.teleport == null)) { equip(p, slot); return; }
@@ -1212,7 +1232,7 @@
     }
     function prereqDone(Q, p) {
       if (!Q) return true;
-      if (Q.homes && Q.homes.indexOf((p && p.home) || 'ashvale') < 0) return false;   /* a quest for those born in one home only (2026-10-09: the Ziibiing beginning quests) */
+      if (!questForHome(Q, p)) return false;   /* a quest for those born in one home only (2026-10-09: the Ziibiing beginning quests) */
       if (Q.after && !questFinished(p, Q.after)) return false;
       for (const id of Q.needs ? [].concat(Q.needs) : []) if (!questFinished(p, id)) return false;
       return true;
@@ -1220,12 +1240,13 @@
     function nextOffered(n, p) {
       const ids = n.quests && n.quests.length ? n.quests.slice() : (n.quest ? [n.quest] : []);
       for (const id of ids) { const Q = D.quests.quests[id], q = p.quests[id]; if (Q && q && q.step <= Q.steps.length) return id; }   /* one under way comes before a new offer (Mishoomis: the wild rice you began, then the flint) */
+      let shut = null;   /* a quest out of its season waits behind one that can be started now (it is still named, to say when) */
       for (const id of ids) {
         const Q = D.quests.quests[id]; if (!Q || !prereqDone(Q, p)) continue;
         const q = p.quests[id];
-        if (!q || q.step <= Q.steps.length) return id;
+        if (!q || q.step <= Q.steps.length) { if (!q && !inSeason(Q)) { shut = shut || id; continue; } return id; }
       }
-      return null;
+      return shut;
     }
     function npcIdleLines(n, p) {
       if (n.reqAfter && !questFinished(p, n.reqAfter)) return n.lines;
@@ -1233,22 +1254,13 @@
       if (n.linesReady) return n.linesReady;
       return n.lines;
     }
-    function crateAt(x, y) { return (M.objects || []).find(o => o.k === 'crate' && o.loot && o.x === x && o.y === y) || null; }
-    function openCrate(p, o) {
-      const flag = o.once || ('crate_' + o.x + '_' + o.y);
-      if (hasFlag(p, flag)) { msg(p, 'The crate is empty. You already took what was hidden in it.', 'info'); return; }
-      if (!IT[o.loot]) return;
-      if (addItem(p, o.loot, o.n || 1)) { msg(p, 'Your bag is full. Make room before you take what is in the crate.', 'warn'); return; }
-      p.flags = p.flags || {}; p.flags[flag] = S.t || 1;
-      ev({ e: 'inv', p: p.id }); ev({ e: 'flag', p: p.id, flag: flag });
-      msg(p, 'Under the straw you find ' + IT[o.loot].name + '.', 'info');
-    }
     function searchOpen(p, n) {
       const s = n && n.search; if (!s) return false;
       const q = p.quests && p.quests[s.quest]; if (!q) return false;
       if (q.step > s.step) return true;
       if (q.step === s.step && (q.n | 0) >= 1) return true;
-      return false;   /* a quest item from someone else does not open the search */
+      if (s.item && IT[s.item] && invCount(p, s.item) > 0) return true;
+      return false;
     }
     function coverBlocks(p, m) {
       const md = MON[m.key]; if (!md || !md.cover) return false;
@@ -1274,6 +1286,13 @@
     /* game hours (fractional): from the engine's sky clock when it has one (NATURE.hours), else from the tick count (a game day is
        12000 ticks, so an hour is 500). Mitigwaabiike's bow takes two of them (2026-10-09) */
     function natureHours() { return NATURE && NATURE.hours != null ? NATURE.hours : S.t / 500; }
+    /* SEASONAL QUESTS (2026-10-09): a quest with a `season` ('rice', 'sap', 'spring', ...) is offered only in it. The engine
+       works out each kind once a game day where you stand (NATURE.seasons[kind] = {open, days until it opens}); with no word from
+       a sky (a test, a headless host) every season is open, as before */
+    function seasonOf(Q) { return Q && Q.season && NATURE && NATURE.seasons && NATURE.seasons[Q.season] || null; }
+    function inSeason(Q) { const s = seasonOf(Q); return !s || !!s.open; }
+    function whenText(days) { return days == null ? 'next year' : days <= 1 ? 'tomorrow' : days <= 6 ? 'in ' + days + ' days' : 'in about ' + days + ' days'; }
+    function realText(days) { const h = (days || 0) * 2; return h < 48 ? 'about ' + h + ' hours' : 'about ' + Math.round(h / 24) + ' days'; }   /* a game day is two real hours */
     function natureYear() { return NATURE && NATURE.year != null ? NATURE.year : 1 + Math.floor(S.t / (12000 * 365)); }
     const period = (per) => per === 'year' ? natureYear() : natureDay();
     function yieldTick(p, n, i, Y, how) {
@@ -1290,12 +1309,13 @@
       if (M0.get(i) === period(Y.per)) return stop(Y.again);
       if (how === 'peel' && !canAdd(p, Y.item, 1)) return stop('Your bag is full.');
       p.skilling = 'chop';
-      if (!p.gT) { p.gT = S.t + (Y.ticks || 4); return; }
+      if (!p.gT) { harvestHint(p, n.x, n.y); p.gT = S.t + (Y.ticks || 4); return; }
       if (S.t < p.gT) return;
       p.gT = 0; p.act = null; p.skilling = null;
       let got = Y.item, was = null;
       if (how === 'tap') { was = p.inv[b].id; got = IT[was].fills; removeItem(p, was, 1); }
       addItem(p, got, 1); addXp(p, 'woodcutting', (Y.xp || 0) | 0);
+      if (how === 'peel' && blessExtra(p, n.x, n.y) && canAdd(p, got, 1)) { addItem(p, got, 1); msg(p, 'The birch gives a second sheet, as if it wanted to.'); }   /* blessed ground: more bark */
       M0.set(i, period(Y.per)); ev({ e: 'mark', p: p.id, k: Y.mark, x: n.x, y: n.y, v: period(Y.per) });
       if (Y.say) msg(p, String(Y.say).replace('{bucket}', was ? IT[was].name.toLowerCase() : ''));
       ev({ e: 'gather', p: p.id, node: i, ok: true, item: got }); ev({ e: 'inv', p: p.id });
@@ -1303,26 +1323,112 @@
     /* TRADES AND CRAFTS by the people (data on the NPC): trade {take: {id: n}, give: {id: n}, say, lack} at once; craft {take,
        give, days, say, wait, ready, lack} - made for you and ready to collect after `days` game days (Migizi's biskitenaagan), or
        after `hours` game hours; `n` of them at once (fifteen bikwak); `after`: only once that quest is finished */
+    /* SNARES (2026-10-09: Ma'iingan lends a snare; "set it, come back"): an item with `trap` {prey: [monster keys], near:
+       tiles, hours: [min, max], xp: {skill: n}, max: how many one may set} is set where you stand, on open ground with its prey
+       about. Some game hours later (deterministic, from the seeded roll) it holds one: the whole animal, one of each thing it can
+       drop (a hare: meat and pelt). Going back hands you the catch and the snare, ready to set again. Your snares are yours alone and are saved with you. */
+    /* ASEMAA (tobacco) (2026-10-09; OPD: asemaa (na) tobacco, biindaakoojige (vai) makes an offering of tobacco): an item whose
+       subcategory is in rules.items.offers is offered from the bag: one is spent, Prayer XP as for burying the item named in `xpAs`
+       (bones), and the ground within `radius` is blessed for you for the rest of the game day - `bonus` % better harvests there.
+       A home with `offerHint` (Ziibiing) reminds its people, once per place and day, the first time they start a harvest on
+       unblessed ground; it never stops the harvest. */
+    function offerOf(d) { return d && ((RU.items || {}).offers || {})[d.subcategory] || null; }
+    function offerRule() { const O = (RU.items || {}).offers || {}; return O[Object.keys(O)[0]] || null; }
+    function blessed(p, x, y) { const day = natureDay(); return (p.bless || []).some(b => b.day === day && cheb(b.x, b.y, x, y) <= b.r); }
+    function blessRoll(p, x, y, pct) { const O = offerRule(); return O && blessed(p, x, y) ? Math.min(98, Math.round(pct * (100 + (O.bonus || 25)) / 100)) : pct; }   /* a success chance, better on blessed ground */
+    function blessExtra(p, x, y) { const O = offerRule(); return !!(O && blessed(p, x, y) && R.int(100) < (O.bonus || 25)); }   /* an extra catch on blessed ground */
+    function offerTobacco(p, slot) {
+      const s = p.inv[slot], d = s && IT[s.id], O = offerOf(d); if (!O) return;
+      if (p.dead || p.boat) { msg(p, 'Not here.', 'warn'); return; }
+      if (s.n > 1) s.n--; else p.inv[slot] = null;
+      const day = natureDay(), r = O.radius || 12; p.bless = (p.bless || []).filter(b => b.day === day); p.bless.push({ x: p.x, y: p.y, day, r });
+      const xp = O.xpAs && IT[O.xpAs] ? IT[O.xpAs].buryXp | 0 : (O.xp | 0); if (xp) addXp(p, 'prayer', xp);
+      ev({ e: 'inv', p: p.id }); ev({ e: 'offer', p: p.id, x: p.x, y: p.y }); msg(p, O.say || 'You make an offering.', 'info');
+    }
+    /* what an elder is asked with: an offering item (asemaa) or anything offered the same way (apaakozigan, kinnikinnick, the operator
+       2026-10-09); the mixture is given first, the plain tobacco kept */
+    function askIds(k) { const O = offerOf(IT[k]); return O ? Object.keys(IT).filter(id => offerOf(IT[id]) === O).sort((a, b) => (a === k) - (b === k)) : [k]; }
+    function askHas(p, ask) { return Object.keys(ask).every(k => askIds(k).reduce((a, id) => a + invCount(p, id), 0) >= ask[k]); }
+    function askTake(p, ask) {
+      const gave = [];
+      for (const k in ask) { let left = ask[k]; for (const id of askIds(k)) { const t = Math.min(left, invCount(p, id)); if (t > 0) { removeItem(p, id, t); left -= t; gave.push(t + ' x ' + IT[id].name + (IT[id].english ? ' (' + IT[id].english + ')' : '')); } } }
+      ev({ e: 'inv', p: p.id }); msg(p, 'You offer ' + gave.join(' and ') + ' as you ask.', 'quest');
+    }
+    function harvestHint(p, x, y) {
+      const H = (homeOf(p) || {}).offerHint, O = offerRule(); if (!H || !O || blessed(p, x, y)) return;
+      const day = natureDay(); if (!p.hints || p.hints.day !== day) p.hints = { day, at: [] };
+      if (p.hints.at.some(([hx, hy]) => cheb(hx, hy, x, y) <= (O.radius || 12))) return;
+      p.hints.at.push([x, y]); msg(p, H, 'quest');
+    }
+    function trapOf(d) { return d && (d.trap || ((RU.items || {}).traps || {})[d.subcategory]) || null; }   /* rules.items.traps by subcategory */
+    function trapsMsg(p) { ev({ e: 'traps', p: p.id, traps: (p.traps || []).map(t => ({ x: t.x, y: t.y, id: t.id, ready: natureHours() >= t.ready ? 1 : 0 })) }); }
+    function setTrap(p, slot) {
+      const s = p.inv[slot], d = s && IT[s.id], T = trapOf(d); if (!T) return;
+      if (p.boat || p.lv !== 0 || p.dead || (M.insideAt && M.insideAt(p.x, p.y)) || isWet(p.x, p.y)) { msg(p, 'You can only set a ' + d.name.toLowerCase() + ' on open ground outdoors.', 'warn'); return; }
+      p.traps = p.traps || [];
+      if (p.traps.some(t => t.x === p.x && t.y === p.y)) { msg(p, 'You already have a snare set here.', 'warn'); return; }
+      if (p.traps.length >= (T.max || 3)) { msg(p, 'You have as many snares out as you can watch. Go and look in one first.', 'warn'); return; }
+      const prey = T.prey || [], near = T.near || 10;
+      const by = S.mobs.find(m => !m.dead && !m.gone && prey.indexOf(m.key) >= 0 && cheb(m.x, m.y, p.x, p.y) <= near);
+      if (!by) { msg(p, T.none || 'There are no tracks here. Set it where the animals run.', 'warn'); return; }
+      const h = T.hours || [1, 2], ready = natureHours() + h[0] + (h[1] - h[0]) * R.int(101) / 100;
+      if (s.n > 1) s.n--; else p.inv[slot] = null;
+      harvestHint(p, p.x, p.y);
+      p.traps.push({ id: s.id, x: p.x, y: p.y, prey: by.key, ready: Math.round(ready * 1000) / 1000 });
+      ev({ e: 'inv', p: p.id }); trapsMsg(p); msg(p, T.say || 'You set the snare.');
+    }
+    function checkTrap(p, x, y, up) {
+      const i = (p.traps || []).findIndex(t => t.x === x && t.y === y); if (i < 0) return;
+      const t = p.traps[i], T = trapOf(IT[t.id]) || {}, caught = !up && natureHours() >= t.ready;
+      if (!caught && !up) { msg(p, T.empty || 'Nothing yet. Leave it a while and come back.'); return; }
+      const got = caught ? ((MON[t.prey] && MON[t.prey].drops) || []).filter(dr => IT[dr.item]).map(dr => [dr.item, 1])   /* the whole animal: each thing it can drop, once */ : [];
+      const all = got.concat(caught && blessExtra(p, t.x, t.y) ? got : []).concat([[t.id, 1]]);   /* blessed ground: two in the snare */
+      if (all.some(([id, k]) => !canAdd(p, id, k)) && invFree(p) < all.length) { msg(p, "You don't have enough inventory space to hold that.", 'warn'); return; }
+      p.traps.splice(i, 1);
+      for (const [id, k] of all) { const left = addItem(p, id, k); if (left) dropGround(id, left, p.x, p.y, p.id, 600); }
+      if (caught) { for (const sk in T.xp || {}) addXp(p, sk, T.xp[sk]); msg(p, String(T.caught || 'There is a {prey} in your snare.').replace('{prey}', (MON[t.prey] ? MON[t.prey].name : 'catch').toLowerCase()), 'info'); }
+      else msg(p, 'You take up your snare.');
+      ev({ e: 'inv', p: p.id }); trapsMsg(p);
+    }
+    /* hand over what a craft takes and put the order in (its key as tradeTalk keeps it); `craft` command: the choice made */
+    function orderCraft(p, n, c) {
+      const C = n.craft, key = (Array.isArray(C) && C.length > 1) ? n.id + ':' + (c.give || 'boat') : n.id;
+      p.orders = p.orders || {}; if (p.orders[key] || !Object.keys(c.take || {}).every(k => invCount(p, k) >= c.take[k])) return false;
+      for (const k in c.take) removeItem(p, k, c.take[k]); ev({ e: 'inv', p: p.id });
+      p.orders[key] = c.hours != null ? { readyH: natureHours() + c.hours } : { ready: natureDay() + (c.days || 1) };
+      msg(p, 'You hand ' + n.name + ' ' + Object.keys(c.take).map(k => c.take[k] + ' x ' + IT[k].name).join(' and ') + '.', 'info');
+      ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: (c.say || []).map(l => String(l).replace(/\{name\}/g, p.name || 'traveller')) });
+      return true;
+    }
     function tradeTalk(p, n) {
       const T = n.trade, C = n.craft, f = (L) => (L || []).map(l => String(l).replace(/\{name\}/g, p.name || 'traveller'));
       const has = (take) => Object.keys(take || {}).every(k => invCount(p, k) >= take[k]);
       const say = (L) => { ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: f(L) }); return true; };
       if (C) {   /* one craft, or a list (Ziigwan carves the push pole and the knockers); an order is kept per thing made */
-        p.orders = p.orders || {}; const L0 = (Array.isArray(C) ? C : [C]).filter(c => !c.after || questFinished(p, c.after)), key = (c) => (Array.isArray(C) && C.length > 1) ? n.id + ':' + c.give : n.id;
+        p.orders = p.orders || {}; const L0 = (Array.isArray(C) ? C : [C]).filter(c => !c.after || questFinished(p, c.after)), key = (c) => (Array.isArray(C) && C.length > 1) ? n.id + ':' + (c.give || 'boat') : n.id;
+        if (Array.isArray(C) && C.length > 1 && p.orders[n.id]) { p.orders[n.id + ':' + (C[0].give || 'boat')] = p.orders[n.id]; delete p.orders[n.id]; }   /* an order made when they made one thing (Migizi's bucket, before his canoes) */
         const isReady = (o) => o.readyH != null ? natureHours() >= o.readyH : natureDay() >= o.ready;
         for (const c of L0) { const o = p.orders[key(c)]; if (!o || !isReady(o)) continue;
+          if (c.boat) {   /* a canoe: set in the water at the landing when it is ready (Migizi, 2026-10-09); anyone may paddle it, and it
+                             lasts like any canoe left at a bank (a game year after you step out) */
+            const spot = c.boat.find(b => !BOATS.has(b[0] + ',' + b[1]));
+            if (!spot) { msg(p, 'Every place at the landing has a canoe in it already. Take one of those, or come back when one is free.', 'warn'); return true; }
+            delete p.orders[key(c)]; landBoat(spot[0], spot[1], spot[2] | 0, p.id);   /* told to the Bank like a canoe you step out of */ msg(p, n.name + ' sets your ' + (c.name || 'canoe') + ' in the water at the landing.', 'info');
+            return say(c.ready); }
           if (!canAdd(p, c.give, c.n || 1)) { msg(p, 'Your bag is full: make room for what ' + n.name + ' made you.', 'warn'); return true; }
           delete p.orders[key(c)]; addItem(p, c.give, c.n || 1); ev({ e: 'inv', p: p.id }); msg(p, n.name + ' gives you ' + (c.n > 1 ? c.n + ' x ' : '') + IT[c.give].name + '.', 'info');
           return say(c.ready); }
-        for (const c of L0) { if (p.orders[key(c)] || !has(c.take)) continue;
-          for (const k in c.take) removeItem(p, k, c.take[k]); ev({ e: 'inv', p: p.id });
-          p.orders[key(c)] = c.hours != null ? { readyH: natureHours() + c.hours } : { ready: natureDay() + (c.days || 1) };
-          msg(p, 'You hand ' + n.name + ' ' + Object.keys(c.take).map(k => c.take[k] + ' x ' + IT[k].name).join(' and ') + '.', 'info');
-          return say(c.say); }
+        const can0 = L0.filter(c => !p.orders[key(c)] && has(c.take));
+        const can = can0.filter(c => c === can0[0] || Object.keys(c.take).some(k => can0[0].take[k] != null));   /* only things made from the same goods compete */
+        if (can.length > 1) {   /* you could pay for more than one from the same goods: they ask which (Migizi: a bucket or a canoe, both bark and sinew) */
+          ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: f([n.choose || 'What shall I make for you, {name}?']), make: can.map(c => ({ i: (Array.isArray(C) ? C : [C]).indexOf(c), label: c.label || (c.boat ? 'A ' + (c.name || 'canoe') : IT[c.give].name) })) });
+          return true; }
+        if (can.length) return orderCraft(p, n, can[0]);
         const w = L0.find(c => p.orders[key(c)]); if (w) return say(w.wait);
         const part = L0.find(c => c.hint && Object.keys(c.take).some(k => invCount(p, k) > 0)); if (part) return say(part.lack);
       }
-      if (T && has(T.take)) {
+      const T1 = (Array.isArray(T) ? T : T ? [T] : []).find(t => has(t.take));   /* one trade, or a list (Ma'iingan: ojiitad for a deer hide or for three hare pelts) */
+      if (T1) { const T = T1;
         for (const k in T.give) if (!canAdd(p, k, T.give[k])) { msg(p, 'Your bag is full.', 'warn'); return true; }
         for (const k in T.take) removeItem(p, k, T.take[k]); for (const k in T.give) addItem(p, k, T.give[k]); ev({ e: 'inv', p: p.id });
         msg(p, 'You trade ' + Object.keys(T.take).map(k => IT[k].name).join(', ') + ' for ' + Object.keys(T.give).map(k => IT[k].name).join(', ') + '.', 'info');
@@ -1400,7 +1506,6 @@
       if ((n.trade || n.craft) && !ends && !nextOffered(n, p) && tradeTalk(p, n)) return;   /* a quest of theirs comes first (Ma'iingan's deer hunt before his sinew trade) */
       const idle = npcIdleLines(n, p), offered = nextOffered(n, p);
       const hadQuest = (n.quests || []).concat(n.quest ? [n.quest] : []).some(id => p.quests[id]);
-      if (n.watch && !ends && !offered && !hadQuest) { ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: watchSay(p) }); return; }
       if (idle && idle.length && !ends && !offered && !hadQuest) { let tell = null; if (n.sky && SKYTELL) try { tell = SKYTELL(p); } catch (e) { tell = null; } let nat = null; if (n.nature && NATTELL) try { nat = NATTELL(n.nature, p); } catch (e) { nat = null; } ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: idle.concat(nat ? [nat] : [], tell ? [tell] : []) }); return; }   /* the sky-watchers end with the next eclipses */   /* dialogue straight off the zone data, checked after shop and quest */
       /* an NPC may offer the next quest only after the one before it is finished (Iria's supper, then the Gift of Angels) */
       let qid = ends || offered || n.quest;
@@ -1409,7 +1514,9 @@
       }
       if (qid && D.quests.quests[qid]) {
         const Q = D.quests.quests[qid]; let q = p.quests[qid]; let lines;
-        if (q && Q.repeat === 'spring' && q.step > Q.steps.length && NATURE && NATURE.sap && NATURE.sap.season && natureYear() > (q.yr | 0)) {   /* Nookomis asks again every spring (2026-10-08) */
+        if (q && Q.repeat && q.step > Q.steps.length && NATURE && (seasonOf(Q) ? inSeason(Q) : Q.repeat === 'spring' && NATURE.sap && NATURE.sap.season) && natureYear() > (q.yr | 0)) {
+          if (Q.ask && !askHas(p, Q.ask)) { ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: linesFor(p, Q.askLackTalk || [Q.askLack]).map(l => String(l).replace(/\{name\}/g, p.name || 'traveller')) }); return; }
+          if (Q.ask) askTake(p, Q.ask);   /* Nookomis asks again every spring (2026-10-08) */
           q = p.quests[qid] = { step: 1, n: 0, again: 1, yr: q.yr }; lines = linesFor(p, Q.again || Q.steps[0].talk).map(l => String(l).replace(/\{name\}/g, p.name || 'traveller')); ev({ e: 'quest', p: p.id, q: qid, step: 1 }); openStep(p, q, Q.steps[0]);
           ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines }); return;
         }
@@ -1421,8 +1528,9 @@
         const need = (st) => st.goal.n == null ? 1 : st.goal.n;
         const bringN = (st) => st.goal.bn == null ? need(st) : st.goal.bn;
         const withN = (st) => st.goal.wn == null ? 1 : st.goal.wn;
+        const withs = (st) => !st.goal.with ? [] : typeof st.goal.with === 'string' ? [[st.goal.with, withN(st)]] : Object.entries(st.goal.with);   /* "with": one item (wn of it) or {id: n} */
         const bids = (g) => (Array.isArray(g.bring) ? g.bring : [g.bring]).filter(id => IT[id]);   /* bring: one item, or a list where any will do */
-        const bringHave = (g) => bids(g).reduce((a, id) => a + Math.max(0, invCount(p, id) - ((q.pre && q.pre[id]) | 0)), 0);
+        const bringHave = (g) => bids(g).reduce((a, id) => a + invCount(p, id), 0);
         const counted = (st) => {
           if (st.goal.kills) { let n = 0; for (const k in st.goal.kills) n += Math.min(st.goal.kills[k], (q.kn && q.kn[k]) | 0); return n; }
           return (st.goal.kill || st.goal.cook || st.goal.talk || st.goal.plant || st.goal.light) ? (q.n | 0) : (st.goal.bring && bids(st.goal).length ? bringHave(st.goal) : (q.n | 0));
@@ -1434,13 +1542,24 @@
           if (g.wait != null && !(natureHours() >= (q.t0 == null ? Infinity : q.t0) + g.wait)) return false;
           if (g.kills && !killsMet(st)) return false;
           if (g.bring && (!bids(g).length || bringHave(g) < bringN(st))) return false;
-          if (g.with && (!IT[g.with] || invCount(p, g.with) < withN(st))) return false;
+          if (withs(st).some(([id, k]) => !IT[id] || invCount(p, id) < k)) return false;
           return !!(g.kill || g.cook || g.talk || g.bring || g.plant || g.kills || g.light || g.wait != null);
         };
         const fill = (L, st) => linesFor(p, L).map(l => String(l).replace(/\{(n|goal|left|name)\}/g, (m, k) => k === 'name' ? (p.name || 'traveller') : !st ? '' : k === 'n' ? counted(st) : k === 'goal' ? need(st) : Math.max(0, need(st) - counted(st))));
         const open = (st) => st && ZINDEX.some(z => z.id === st.zone);   /* a step opens when its zone EXISTS (it may not be loaded yet) */
+        if (!q && !inSeason(Q)) {   /* out of its season: when it opens, not the errand */
+          const sn = seasonOf(Q), when = whenText(sn.days);
+          lines = linesFor(p, Q.notYet || ['Not yet, {name}. Come back {when}.']).map(l => String(l).replace(/\{name\}/g, p.name || 'traveller').replace(/\{when\}/g, when).replace(/\{days\}/g, sn.days == null ? '' : sn.days));
+          ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines });
+          msg(p, Q.name + ' opens ' + when + (sn.days ? ' (' + realText(sn.days) + ' of real time).' : '.'), 'quest');
+          return;
+        }
+        const askHave = !Q.ask || askHas(p, Q.ask);
+        if (!q && !askHave) {   /* an elder is asked with asemaa (tobacco): with none, they say so kindly (2026-10-09) */
+          ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: fill(Q.askLackTalk || [Q.askLack || 'Come back when you have something to ask with.'], null) }); return;
+        }
         if (!q) {   /* a quest begins only when the player says yes; the first talk is the offer */
-          lines = fill(Q.steps[0].talk, Q.steps[0]);
+          lines = fill(Q.steps[0].talk, Q.steps[0]).concat(Q.ask ? fill([Q.askSay || 'You will offer what you ask with when you say yes.'], null) : []);
           ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines, offer: qid, warn: Q.steps[0] && Q.steps[0].summon ? 1 : 0 });
           return;
         }
@@ -1452,7 +1571,7 @@
             if (st.goal.bring) {   /* the goods change hands here, and only here: a step cannot be handed in twice */
               let left = bringN(st); for (const id of bids(st.goal)) { const k = Math.min(left, invCount(p, id)); if (k > 0) { removeItem(p, id, k); left -= k; msg(p, 'You hand over ' + k + ' x ' + IT[id].name + '.', 'quest'); if (IT[id].vessel && IT[IT[id].vessel]) { if (addItem(p, IT[id].vessel, k)) dropGround(IT[id].vessel, k, p.x, p.y, p.id, 600); msg(p, 'You get your ' + IT[IT[id].vessel].name.toLowerCase() + ' back, empty.', 'quest'); } } }   /* she keeps the sap, not your bucket */
             }
-            if (st.goal.with) { removeItem(p, st.goal.with, withN(st)); msg(p, 'You hand over ' + withN(st) + ' x ' + IT[st.goal.with].name + '.', 'quest'); }
+            for (const [id, k] of withs(st)) { removeItem(p, id, k); msg(p, 'You hand over ' + k + ' x ' + IT[id].name + '.', 'quest'); }
             if (st.goal.bring || st.goal.with) ev({ e: 'inv', p: p.id });
             let done = st.complete && st.complete.length ? fill(st.complete, st) : (st.fold ? [] : ['Well done, traveller. Take this, you have earned it.']);
             if (st.fold && st.say && st.say.length) done = fill(st.say, st).concat(done);
@@ -1553,22 +1672,7 @@
       const own = S.players[m.owner];
       if (own && !own.summonBye) { own.summonBye = 1; msg(own, 'They vanish. A death, or fifty tiles from the rope, undoes the call. Ask again if you want them back.', 'warn'); }
     }
-    function broughtBySearch(p, id) {
-      for (const n of M.npcs) {
-        const s = n && n.search;
-        if (!s || !s.flag || !hasFlag(p, s.flag)) continue;
-        const items = Array.isArray(s.items) ? s.items : [];
-        if (items.some(it => (it && (it.id || it)) === id)) return true;
-      }
-      return false;
-    }
-    function stampBring(p, q, st) {
-      q.pre = {};
-      if (!st || !st.goal || st.goal.bring == null) return;
-      const ids = (Array.isArray(st.goal.bring) ? st.goal.bring : [st.goal.bring]).filter(id => IT[id]);
-      for (const id of ids) q.pre[id] = broughtBySearch(p, id) ? 0 : invCount(p, id);
-    }
-    function openStep(p, q, st) { if (!st || !q) return; if (st.goal && st.goal.wait != null && q.tw !== q.step) { q.t0 = natureHours(); q.tw = q.step; } topUp(p, q, st); fellStumps(q, st); learnFlag(p, st); stampBring(p, q, st); }   /* a wait starts the clock when its step opens */
+    function openStep(p, q, st) { if (!st || !q) return; if (st.goal && st.goal.wait != null && q.tw !== q.step) { q.t0 = natureHours(); q.tw = q.step; } topUp(p, q, st); fellStumps(q, st); learnFlag(p, st); }   /* a wait starts the clock when its step opens */
     function learnFlag(p, st) {
       const k = st && st.flag;
       if (!k || !FLAGS[k] || hasFlag(p, k)) return;
@@ -1576,7 +1680,7 @@
       ev({ e: 'flag', p: p.id, flag: k });
       msg(p, 'You learn ' + FLAGS[k].name + '.' + (FLAGS[k].desc ? ' ' + FLAGS[k].desc : ''), 'quest');
     }
-    function ensureStep(p, q, st) { if (!st || !q) return; topUp(p, q, st); fellStumps(q, st); learnFlag(p, st); }
+    function ensureStep(p, q, st) { openStep(p, q, st); }
     function isStump(x, y) { const i = idx(x, y); return isWood(x, y) && !!S.dep[i]; }
     const TOWN = {}; for (const z of ZINDEX) if (z.level === 'safe') TOWN[z.id] = 1;
     const GATES = [];
@@ -1664,7 +1768,6 @@
       if (count) { rec.qid = job.qid; rec.step = job.q.step; rec.counted = 1; }
       S.plants[i] = rec;
       ev({ e: 'plant', x, y, p: p.id });
-      if (!isAuth(zoneOf(x, y))) ev({ e: 'xplant', x, y, p: p.id });
       if (cleared) msg(p, 'You plant the sapling in the new grass. You can pick it up for one hour. After that, it grows into a tree and stays.');
       else msg(p, 'You plant the sapling in the grass. You can pick it up for one hour. After that, it grows into a tree and stays.');
       if (job && rec.counted) {
@@ -1684,53 +1787,7 @@
         if (pl.stump && q.sown) q.sown = q.sown.filter(s => s[0] !== x || s[1] !== y);
       }
       ev({ e: 'unplant', x, y, p: p.id }); ev({ e: 'inv', p: p.id });
-      if (!isAuth(zoneOf(x, y))) ev({ e: 'xunplant', x, y, p: p.id });
       msg(p, 'You pick the sapling back up.');
-    }
-    function hostPlant(x, y, pid) {
-      if (!inMap(x, y) || !isAuth(zoneOf(x, y))) return;
-      const i = idx(x, y);
-      if (S.plants[i] || plantWhy(x, y)) return;
-      if (isWood(x, y) && !S.dep[i]) return;
-      S.plants[i] = { x, y, at: S.t, tile: M.tileAt(x, y), stump: 0, owner: pid || 0, grown: 0 };
-      ev({ e: 'plant', x, y, p: pid || 0 });
-    }
-    function hostUnplant(x, y) {
-      if (!inMap(x, y) || !isAuth(zoneOf(x, y))) return;
-      const i = idx(x, y), pl = S.plants[i];
-      if (!pl || pl.grown || S.t - pl.at >= PLANT_HOUR) return;
-      delete S.plants[i];
-      ev({ e: 'unplant', x, y });
-    }
-    function plantSnap(area) {
-      const rows = [];
-      for (const k in S.plants) {
-        const pl = S.plants[k];
-        if (!pl || (area && zoneOf(pl.x, pl.y) !== area)) continue;
-        rows.push([pl.x, pl.y, Math.max(0, S.t - pl.at), pl.grown ? 1 : 0]);
-      }
-      return rows;
-    }
-    function acceptPlant(x, y, age, grown) {
-      if (!inMap(x, y) || isAuth(zoneOf(x, y))) return;
-      const i = idx(x, y);
-      if (grown) {
-        if (S.plants[i] && S.plants[i].grown) return;
-        if (M.growTree) M.growTree(x, y);
-        S.plants[i] = { x, y, at: S.t - (age | 0), tile: '.', stump: 0, owner: 0, grown: 1 };
-        ev({ e: 'grow', x, y, node: i });
-        return;
-      }
-      if (S.plants[i]) return;
-      S.plants[i] = { x, y, at: S.t - (age | 0), tile: M.tileAt(x, y), stump: 0, owner: 0, grown: 0 };
-      ev({ e: 'plant', x, y });
-    }
-    function acceptUnplant(x, y) {
-      if (!inMap(x, y) || isAuth(zoneOf(x, y))) return;
-      const i = idx(x, y);
-      if (!S.plants[i] || S.plants[i].grown) return;
-      delete S.plants[i];
-      ev({ e: 'unplant', x, y });
     }
 
     // ---------------- gathering
@@ -1771,6 +1828,19 @@
         ev({ e: 'pray', p: p.id, altar: 1, x: n.x, y: n.y }); return;
       }
       if (n.kind === 'range' || n.kind === 'fire') {
+        /* FIRE MIXES (rules.items.fireMix, 2026-10-09): what is made at a fire from several things at once, before any
+           cooking - apaakozigan (kinnikinnick): two red willow bark and one asemaa (tobacco) make three */
+        const mix = ((RU.items || {}).fireMix || []).find(m => Object.keys(m.take).every(k => invCount(p, k) >= m.take[k]) && Object.keys(m.give).every(k => canAdd(p, k, m.give[k])));
+        if (mix) {
+          p.skilling = 'cook'; p.face = faceTo(p.x, p.y, n.x, n.y);
+          if (!p.gT) { p.gT = S.t + nd.speed; return; }
+          if (S.t < p.gT) return;
+          p.gT = 0; p.act = null; p.skilling = null;
+          for (const k in mix.take) removeItem(p, k, mix.take[k]); for (const k in mix.give) addItem(p, k, mix.give[k]);
+          for (const k in mix.xp || {}) addXp(p, k, mix.xp[k]);
+          msg(p, mix.say || 'You make ' + Object.keys(mix.give).map(k => mix.give[k] + ' x ' + IT[k].name).join(' and ') + '.');
+          ev({ e: 'inv', p: p.id }); ev({ e: 'gather', p: p.id, node: i, ok: true }); return;
+        }
         const raw = p.inv.findIndex(s => s && IT[s.id].cooks);
         if (raw < 0) { msg(p, 'You have nothing to cook. Raw fish come from the fishing spots by the lake.'); p.act = null; p.skilling = null; return; }
         p.skilling = 'cook'; p.face = faceTo(p.x, p.y, n.x, n.y);
@@ -1790,7 +1860,7 @@
       /* a birch: peel its bark when asked, or always without an axe; a maple: tap it when asked, or without an axe but with an
          empty bucket (2026-10-08). A yield may want a tool in the pack (`tool`: the bark wants a blade - a tomahawk or any
          axe, 2026-10-09) */
-      if (nd.peel && (p.act && p.act.peel || !hasWoodTool(p))) {
+      if (nd.peel && (nd.peelOnly || p.act && p.act.peel || !hasWoodTool(p))) {   /* peelOnly: a shrub that only gives bark (miskwaabiimizh, red willow) */
         if (nd.peel.tool && !p.inv.concat(Object.values(p.eq || {})).some(s => s && IT[s.id] && IT[s.id].tool === nd.peel.tool)) { msg(p, nd.peel.noTool || 'You need a tool for that.', 'warn'); p.act = null; p.skilling = null; return; }
         return yieldTick(p, n, i, nd.peel, 'peel');
       }
@@ -1803,11 +1873,12 @@
       if (!canAdd(p, n.item, 1)) { msg(p, 'Your inventory is too full to hold any more.', 'warn'); p.act = null; p.skilling = null; return; }
       p.skilling = skill === 'woodcutting' ? 'chop' : skill === 'mining' ? 'mine' : 'fish';
       p.face = faceTo(p.x, p.y, n.x, n.y);
+      if (!p.gT) harvestHint(p, n.x, n.y);
       if (!p.gT) { p.gT = S.t + nd.speed; msg(p, skill === 'woodcutting' ? 'You swing your ' + (toolSlot ? IT[toolSlot.id].name.toLowerCase() : 'hatchet') + ' at the tree.' : skill === 'mining' ? (nd.bare ? 'You work at the bank with your hands.' : 'You swing your pickaxe at the rock.') : want === 'lobster_pot' ? 'You bait the pot and drop it in.' : want ? 'You cast your line out and wait.' : 'You cast out your net...'); return; }
       if (S.t < p.gT) return;
       p.gT = S.t + nd.speed;
       const pct = Math.max(8, Math.min(92, 30 + 2 * (L - Math.max(req, nd.hard || 0))));   /* hard: a tree anyone may cut that bites like a harder one (a maple) */
-      if (R.int(100) >= pct) { ev({ e: 'gather', p: p.id, node: i, ok: false }); return; }
+      if (R.int(100) >= blessRoll(p, n.x, n.y, pct)) { ev({ e: 'gather', p: p.id, node: i, ok: false }); return; }
       /* a lake gives back what sank in it (2026-10-07): the more lies on its bottom, the likelier a cast brings one up
          instead of a fish - 3 % for one thing, 2 % more for each other, at most 40 % */
       if (skill === 'fishing') {
@@ -1921,6 +1992,8 @@
       p.knocking = !!got;
       if (!got) return;
       RICED[got.x + ',' + got.y] = S.t + RICE_CD;
+      harvestHint(p, p.x, p.y);
+      if (blessExtra(p, p.x, p.y)) addItem(p, 'wild_rice', 1);   /* blessed water: an extra handful */
       if (addItem(p, 'wild_rice', 1)) { msg(p, 'Your pack is full: no room for more manoomin (wild rice).', 'warn'); return; }
       ev({ e: 'knock', p: p.id }); p.dirtyInv = 1;
     }
@@ -2040,27 +2113,7 @@
     }
     /* town guards (2026-10-07): combat 33, they do not start a fight. Hit one and every guard of that
        watch draws steel. At dusk they walk the town lamps and torches alight; at dawn they put the lamps out.
-       One guard walks the cobbles from Ashvale to Saltmere and tends the lamps along that road.
-       Talk is the ordinary greeting. The same handful of remarks comes round again, guard after guard. */
-    const WATCH_SAY = [
-      ['We keep the peace. When the day goes we light the lamps and the torches. When it comes back we put the lamps out.', 'Walk easy after dark. The lamps are ours to tend.'],
-      ['Strike one of us and the whole watch answers. That is the only warning I give.', 'The square is for walking, not for swords.'],
-      ['Tam has bread if you are empty. Garrick has steel if you are not.', 'I do not sell either. I stand here.'],
-      ['The wolves in Whisperwood come down tidy, one lamb at a time. Maren does not like tidy wolves.', 'If you go, go with a hatchet and a reason.'],
-      ['Rain gets in at the collar. It always has.', 'A dry watch is a story the older men tell.'],
-      ['The well is Maren\'s. The lamps are ours. Try not to confuse the two after dark.', 'People do.'],
-      ['There is a dog that belongs to nobody and sleeps by the armoury.', 'He is not on the watch. He just looks it.'],
-      ['The cobbles run out to Saltmere. One of us walks them and lights those lamps.', 'The rest of us keep the towns.'],
-      ['The portal stones hum if you lay a hand on them. I have never liked it.', 'A road you can see is enough road for me.'],
-      ['Night watch is long and mostly nothing. Then it is not.', 'That is the whole of the job.'],
-      ['My boots are older than your sword, whatever sword that is.', 'They still get me to the next lamp.'],
-      ['A castle stands a long way off, past any road I walk.', 'People who have never been there call it Lake Castle. I could not tell you the lake, or who keeps it. That story is not ours yet.']
-    ];
-    function watchSay(p) {
-      const i = (p.watchAt | 0) % WATCH_SAY.length;
-      p.watchAt = i + 1;
-      return WATCH_SAY[i].map(l => String(l).replace(/\{name\}/g, p.name || 'traveller'));
-    }
+       One guard walks the cobbles from Ashvale to Saltmere and tends the lamps along that road. */
     const GSTAT = { hp: 40, att: 16, def: 16, attb: 12, defb: 12, max: 7, cb: 33 };
     function isTended(o) {
       if (!o) return false;
@@ -2354,14 +2407,12 @@
         if (!t || t.boat !== 1) { p.act = null; }
         else if (cheb(p.x, p.y, t.x, t.y) <= 2) { p.act = null; p.path = []; p.boat = 2; p.ride = a.pid; p.knock = invCount(p, 'knockers') > 0 && (t.pole || invCount(t, 'push_pole') > 0); p.rideMiss = 0; p.x = t.x; p.y = t.y; ev({ e: 'boat', p: p.id, on: 2 }); msg(p, p.knock ? "You climb into the bow with a paddle, and the bawa'iganaakoog (ricing sticks) at your feet. In the manoomin (wild rice) your partner stands with the gaandakii'iganaak (push pole) and you knock the rice in." : 'You climb into the bow with a paddle. Two paddling go faster and tire less. Point at the shore beside you to get out.'); }
         else { p.path = findPath(p.x, p.y, (x, y) => cheb(x, y, t.x, t.y) <= 2, t.x, t.y); stepPath(p); if (!p.path.length && cheb(p.x, p.y, t.x, t.y) > 2) { msg(p, "I can't reach that canoe from here.", 'warn'); p.act = null; } }
+      } else if (a && a.k === 'trap') {   /* walk to your snare, then look in it (or take it up) */
+        if (inReach(p.x, p.y, a.x, a.y, 1)) { p.act = null; p.path = []; checkTrap(p, a.x, a.y, a.up); }
+        else { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, a.x, a.y, 1), a.x, a.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, a.x, a.y, 1)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
       } else if (a && a.k === 'board') {   /* walk to the canoe, sit down in it: it floats where it lay */
         if (inReach(p.x, p.y, a.x, a.y, 1)) { const lb = BOATS.get(a.x + ',' + a.y); if (!lb && dockFull(a.x, a.y)) { msg(p, 'There is no canoe at the landing: three are already left at the banks nearby. Take one of those.', 'warn'); p.act = null; return; } if (lb) { p.face = lb.face; takeBoat(a.x, a.y, p.id); } p.act = null; p.path = []; p.boat = 1; p.x = a.x; p.y = a.y; p.land = null; ev({ e: 'boat', p: p.id, on: 1 }); msg(p, 'You sit down in the canoe and take up the paddle. Point at the water to paddle there, or at the shore to land.'); }
         else { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, a.x, a.y, 1), a.x, a.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, a.x, a.y, 1)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
-      } else if (a && a.k === 'crate') {
-        const o = crateAt(a.x, a.y);
-        if (!o) p.act = null;
-        else if (inReach(p.x, p.y, o.x, o.y, 1)) { p.face = faceTo(p.x, p.y, o.x, o.y); p.act = null; p.path = []; openCrate(p, o); }
-        else { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, o.x, o.y, 1), o.x, o.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, o.x, o.y, 1)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
       } else if (a && a.k === 'enter') {   /* walk up to a passage and go through: it takes you to its `to` */
         const o = passageAt(a.x, a.y);
         if (!o) p.act = null;
@@ -2708,7 +2759,6 @@
       for (const k in S.plants) {
         const pl = S.plants[k];
         if (!pl || pl.grown) continue;
-        if (!isAuth(zoneOf(pl.x, pl.y))) continue;
         if (S.t - pl.at < PLANT_HOUR) continue;
         const owner = S.players[pl.owner];
         if (pl.stump) {
@@ -2834,18 +2884,7 @@
     function groundFull(zone, list) { S.ground = S.ground.filter(g => zoneOf(g.x, g.y) !== zone || isAuth(zone) || g.bank != null);   /* the Bank's persisted drops stay: the Bank, not the host, says when they go */ for (const r of list) groundAdd(r[0], r[1], r[2], r[3], r[4], r[5], r[6]); }
     /* owner side: what the host resolved about OUR player */
     function applyHit(pid, dmg, cls, fromMob, fx, fxt) { const p = S.players[pid]; if (!p || p.puppet || p.dead) return; if (fromMob && cls && protects(p, cls)) dmg = 0; else if (fromMob && fx) magicFx(p, fx, fxt || 5); p.hp -= Math.min(dmg, p.hp); if (angelSave(p)) return; if (p.retal && !p.act && !p.path.length) { } if (p.hp <= 0) killPlayer(p); }
-    function storeItem(pid, id, n) {
-      const p = S.players[pid]; if (!p || !IT[id] || n <= 0) return 0;
-      const had = invCount(p, id); const fromBag = Math.min(n, had); if (fromBag) removeItem(p, id, fromBag);
-      let left = n - fromBag;
-      if (left > 0) for (const k of EQ_SLOTS) {   /* a live arcade offer of a worn piece: it has to come off or the Bank mints another */
-        if (left <= 0) break;
-        const e = p.eq[k]; if (!e || e.id !== id) continue;
-        delete p.eq[k]; left -= 1; ev({ e: 'equip', p: pid });
-      }
-      if (fromBag || left < n) { ev({ e: 'inv', p: pid }); burdenCheck(p); }
-      return n - left;
-    }
+    function storeItem(pid, id, n) { const p = S.players[pid]; if (!p || !IT[id]) return 0; const had = invCount(p, id); removeItem(p, id, Math.min(n, had)); ev({ e: 'inv', p: pid }); return Math.min(n, had); }   /* into the town chest: it stays in the wallet, only out of the bag */
     function grantItem(pid, id, n) { const p = S.players[pid]; if (!p || !IT[id]) return; const left = addItem(p, id, n); if (left) dropGround(id, left, p.x, p.y, null, 300); ev({ e: 'take', p: pid, id, n: n - left }); }
     function addPlayer(id, save) {
       const p = newPlayer(id, save);
@@ -2878,17 +2917,17 @@
       return true;
     }
     return {
-      setNewHome: h => { if (HOMES[h]) NEWHOME = h; }, homeOf: p => (p && p.home) || 'ashvale', npcFor, lineFor,
-      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, setNature, natureHours, setNatureTell, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
+      setNewHome: h => { if (HOMES[h]) NEWHOME = h; }, homeOf: p => (p && p.home) || 'ashvale', npcFor, lineFor, questForHome, questMarks,
+      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, trapOf, offerOf, isBlessed: (pid, x, y) => !!(S.players[pid] && blessed(S.players[pid], x, y)), setNature, natureHours, setNatureTell, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
       prayTicks(p, pts, drain) { let d = drain; if (d == null) { d = 0; for (const id in p.pray || {}) d += (PRAYERS[id] && PRAYERS[id].drain) || 0; } if (!d) return null; const n = pts == null ? (p.pp | 0) : pts, rs = resist(p, d); return n <= 0 ? 0 : Math.ceil(((n - 1) * rs + rs + 1 - (pts == null ? (p.pd | 0) : 0)) / d); },
-      isHawk, passageAt, crateAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, searchOpen, coverBlocks, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf,
+      isHawk, passageAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, searchOpen, coverBlocks, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf,
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
-      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, plantSnap, acceptPlant, acceptUnplant, hostPlant, hostUnplant, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
+      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
       applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, takeOff: (pid, k) => { const p = S.players[pid]; return p ? takeOff(p, k) : null; }, setFelled,
       hitXp: (pid, cls, dmg, dex) => { const p = S.players[pid]; if (p && !p.puppet) hitXp(p, cls, dmg, null, dex); },
       creditKill: (pid, key) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key); }

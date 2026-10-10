@@ -290,12 +290,22 @@
           if (TL.noon == null) { let best = -2; for (let k = 0; k < 96; k++) { const tt = t + k * DMS / 96, v = dot3(sunAt(tt), B.u); if (v > best) { best = v; TL.noon = tt; } } }
           return TL.noon + Math.floor((t - TL.noon) / DMS) * DMS;
         }
+        /* the seasons the quests wait for (a quest's `season`: 'rice', 'sap', 'spring' ...), worked out once a game day where you stand:
+           {kind: {open, days}} - days until it opens. The core's givers say "not yet" with it (2026-10-09) */
+        const QSEASON = { key: '', v: null, kinds: null };
+        function questSeasons(lat, now, gday) {
+          if (!SEASONS.until) return null;
+          if (!QSEASON.kinds) { const Q = (DATA.quests && DATA.quests.quests) || {}; QSEASON.kinds = [...new Set(Object.values(Q).map(x => x && x.season).filter(Boolean))]; }
+          const key = gday + ':' + Math.round(lat * 4);
+          if (key !== QSEASON.key) { QSEASON.key = key; QSEASON.v = {}; for (const k of QSEASON.kinds) QSEASON.v[k] = SEASONS.until(k, lat, now); }
+          return QSEASON.v;
+        }
         function seasonTick(B) {
           if (!SEASONS) return;
           const real = Date.now(); if (real - SEASON.t < (TL.n > 1 ? 250 : 3000)) return; SEASON.t = real; const now = skyNow();
           const lat = NS * Math.asin(Math.max(-1, Math.min(1, B.u[2]))) * 180 / Math.PI, S = SEASONS.at(lat, now);
           const key = [S.name, S.day, Math.round(S.leaf.bud * 20), Math.round(S.leaf.grow * 20), Math.round(S.leaf.colourT * 20), Math.round(S.leaf.springT * 10), Math.round(S.snow * 20), S.frozen].join(':');   /* every game day: in the leaf fall each tree has its own day */
-          if (key !== SEASON.key) { SEASON.key = key; const ta = performance.now(); if (SCENE.seasonApply) SCENE.seasonApply(S, SEASONS); SEASON.applyMs = performance.now() - ta; SEASON.applies = (SEASON.applies || 0) + 1; SEASON.snowy = S.name === 'winter' && S.snow > 0.3;   /* it snows only in winter (2026-10-07: "It shouldn't be snowing in the spring time") */ K.wxShown = ''; if (core.setSeason) core.setSeason({ snowy: SEASON.snowy, rice: !!S.rice, riceLate: S.p > 0.551 && S.p < 0.95 }); if (K.pineSnow) K.pineSnow(); showWeather(); }
+          if (key !== SEASON.key) { SEASON.key = key; const ta = performance.now(); if (SCENE.seasonApply) SCENE.seasonApply(S, SEASONS); SEASON.applyMs = performance.now() - ta; SEASON.applies = (SEASON.applies || 0) + 1; SEASON.snowy = S.name === 'winter' && S.snow > 0.3;   /* it snows only in winter (2026-10-07: "It shouldn't be snowing in the spring time") */ K.wxShown = ''; if (core.setSeason) core.setSeason({ snowy: SEASON.snowy, rice: !!S.rice, riceLate: S.p > 0.551 && S.p < 0.95 }); if (K.pineSnow) K.pineSnow(); if (K.pineSnow) K.pineSnow(); showWeather(); }
           if (S.name !== SEASON.name) { if (SEASON.name) { const C = SEASONS.calendar(now); hud.chat(S.name.charAt(0).toUpperCase() + S.name.slice(1) + ' has come: year ' + C.year + ', day ' + C.day + '.', 'sys'); } SEASON.name = S.name; }
           /* a time-lapse runs the weather fast too: every few seconds each region this viewer hosts rolls again (for its season) */
           /* local time from the sun itself (2026-10-08): noon is when the sun stands highest here. SEASON.lon is the shift, in degrees,
@@ -307,7 +317,7 @@
             SEASON.noonDay = gday; SEASON.noon = bk / 96;
           }
           SEASON.lat = lat; SEASON.lon = SEASON.noon != null ? (0.5 - SEASON.noon) * 360 : Math.atan2(B.u[1], B.u[0]) * 180 / Math.PI;
-          if (core.setNature && SEASONS.sap) { const C = SEASONS.calendar(now); core.setNature({ day: Math.floor((now / 1000 - SUN_EPOCH) / DAY_S), hours: 24 * (now / 1000 - SUN_EPOCH) / DAY_S, year: C.year, sap: SEASONS.sap(lat, now) }); }   /* the sugar bush rules: which day and year it is, and whether the sap runs */
+          if (core.setNature && SEASONS.sap) { const C = SEASONS.calendar(now); core.setNature({ day: Math.floor((now / 1000 - SUN_EPOCH) / DAY_S), hours: 24 * (now / 1000 - SUN_EPOCH) / DAY_S, year: C.year, sap: SEASONS.sap(lat, now), seasons: questSeasons(lat, now, gday) }); }   /* the sugar bush rules: which day and year it is, and whether the sap runs */
           if (TL.n > 1 && SEASONS.temperature) {   /* a time-lapse shows the date, the temperature and the sap run (2026-10-08) */
             let el = document.getElementById('tl-clock');
             if (!el) { el = document.createElement('div'); el.id = 'tl-clock'; el.style.cssText = 'position:fixed;left:12px;top:12px;z-index:50;padding:6px 10px;border-radius:6px;background:rgba(10,14,20,.72);color:#f2ead8;font:600 15px/1.35 system-ui,sans-serif;pointer-events:none;white-space:pre'; document.body.appendChild(el); }
@@ -317,10 +327,17 @@
           }
           if (core.M.setIce && real - SEASON.ice > (TL.n > 1 ? 2000 : 60000)) { SEASON.ice = real; core.M.setIce(la => SEASONS.at(la, skyNow()).frozen); }
         }
+        /* inside a wigwam or a cave the world goes on: the season and the clock where it stands on the surface (its zone's
+           `surface` spot, or the land right over it), so the people indoors (Mishoomis) know the time of year too (2026-10-09) */
+        function underSeason() {
+          const Z = DATA.zoneindex && DATA.zoneindex.zones, uz = core.M.underAt && core.M.underAt(me.x, me.y), ue = uz && Z && Z.find(z => z.id === uz);
+          const at = ue && (ue.surfaceOffset ? [me.x + ue.surfaceOffset[0], me.y + ue.surfaceOffset[1]] : ue.surface);
+          const a = at && sphereAt(at[0], at[1]); if (a) seasonTick({ u: nrm3(a[0]) });
+        }
         function dayTick() {
           const key = (me.x >> 3) + ':' + (me.y >> 3);
           if (key !== SUNL.key) { const a = sphereAt(me.x, me.y); SUNL.key = key; SUNL.b = a ? { u: nrm3(a[0]), e: nrm3(sub3(a[1], a[0])), s: nrm3(sub3(a[2], a[0])) } : null; }   /* up, game east (+x), game south (+y) */
-          const B = SUNL.b; if (!B) return;
+          const B = SUNL.b; if (!B) { underSeason(); return; }
           seasonTick(B);
           demoTick(performance.now()); hawkDemoTick(); if (SDEMO && !SDEMO.on && SEASON.lat != null) { SDEMO.on = 1; sugarDemo().catch(e => hud.chat('Demo stopped: ' + e.message, 'sys')); }
           const now = sunTime(B);
@@ -360,7 +377,7 @@
           SUNL.col.copy(base).lerp(DUSK_SKY, dusk * 0.45 * day + dusk * 0.25).lerp(SUNL.night, 1 - day);
           scene.background.copy(SUNL.col); scene.fog.color.copy(SUNL.col);
         }
-    return { DAY_S, DEMO, NS, SEASON, SEASONS, SKYM, SKYV, STARS, SUNL, SUN_EPOCH, TL, dayTick, dot3, moonAt, skyNow, sunAt, sunTime };
+    return { DAY_S, DEMO, NS, SEASON, SEASONS, SKYM, SKYV, STARS, SUNL, SUN_EPOCH, TL, dayTick, underSeason, dot3, moonAt, skyNow, sunAt, sunTime };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engsky', { api: 1, v: 1, needs: {} }, () => ({ api: 1, install }));
   if (typeof module !== 'undefined' && module.exports) module.exports = { install };

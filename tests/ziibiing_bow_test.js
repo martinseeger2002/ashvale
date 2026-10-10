@@ -18,6 +18,7 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'ok  ' : 
 function born(home, seed) {
   const core = AshCore.create(D, { seed: seed || 'zbow' }); core.setNewHome(home); const p = core.addPlayer('p1', null);
   for (let i = 0; i < p.inv.length; i++) p.inv[i] = null;
+  core.grantItem('p1', 'asemaa', 5);   /* asemaa (tobacco) to ask the elders with (a Ziibiing-born starts with 5) */
   const msgs = [], offers = [];
   const run = (n) => { for (let i = 0; i < n; i++) for (const e of core.tick()) { if (e.p !== 'p1') continue; if (e.e === 'msg') msgs.push(e.text); if (e.e === 'dialog') { msgs.push(e.lines.join(' ')); if (e.offer) offers.push(e.offer); } } };
   const has = (id) => p.inv.reduce((a, s) => a + (s && s.id === id ? s.n : 0), 0) + Object.values(p.eq).reduce((a, s) => a + (s && s.id === id ? s.n : 0), 0);
@@ -67,6 +68,38 @@ ok(p.quests.biiwaanag.n === 1, 'the flint lights a log (' + Z.msgs.find(m => /st
 ok(has('flint') >= 1, 'and the flint is not used up');
 t = talk('mishoomis');
 ok(p.quests.biiwaanag.step === 2, 'Mishoomis: the quest is done (' + t.slice(0, 50) + ')');
+/* the snare first (2026-10-09: the bow wants sinew, and the first sinew comes from a nagwaagan (snare)) */
+t = talk('mitigwaabiike');
+ok(!Z.offers.length, 'no bow quest before the snare (' + t.slice(0, 50) + ')');
+t = talk('maiingan');
+ok(Z.offers[0] === 'waabooz' && /nagwaagan/.test(t), "Ma'iingan offers the snare quest first (" + Z.offers.join() + ')');
+accept('waabooz');
+ok(has('snare') === 1, 'and lends a nagwaagan (snare)');
+{
+  core.setNature({ day: 400, year: 2, hours: 9600 });
+  const sl = () => p.inv.findIndex(s => s && s.id === 'snare');
+  p.x = 310; p.y = 310; Z.msgs.length = 0; core.cmd('p1', { c: 'use', slot: sl() }); Z.run(1);
+  ok(has('snare') === 1 && /no waabooz/i.test(Z.msgs.join()), 'no rabbits about: it will not set (' + Z.msgs.join().slice(0, 50) + ')');
+  for (let k = 0; k < 3; k++) {
+    const hz = core.S.mobs.find(m => m.key === 'hare' && !m.dead);
+    let spot = null; for (let r = 1; r < 5 && !spot; r++) for (let dy = -r; dy <= r && !spot; dy++) for (let dx = -r; dx <= r && !spot; dx++) { const x = hz.x + dx, y = hz.y + dy; if (!core.M.blocked(x, y) && !core.M.insideAt(x, y) && !(p.traps || []).some(t => t.x === x && t.y === y)) spot = [x, y]; }
+    p.x = spot[0]; p.y = spot[1]; p.path = []; p.act = null; Z.msgs.length = 0; core.cmd('p1', { c: 'use', slot: sl() }); Z.run(1);
+    ok(!has('snare') && p.traps && p.traps.length === 1 && /noose/.test(Z.msgs.join()), 'the snare is set where the rabbits run (' + Z.msgs.join().slice(0, 40) + ')');
+    const tr = p.traps[0];
+    ok(tr.ready >= 9600 + 1 && tr.ready <= 9600 + 2.001, 'it will hold one in one to two game hours (' + (tr.ready - 9600).toFixed(2) + ')');
+    Z.msgs.length = 0; core.cmd('p1', { c: 'trap', x: tr.x, y: tr.y }); Z.run(3);
+    ok(p.traps.length === 1 && /still empty/.test(Z.msgs.join()), 'looked at too soon: still empty');
+    const x0 = p.xp.dexterity | 0; core.setNature({ day: 400, year: 2, hours: 9602.01 });
+    Z.msgs.length = 0; core.cmd('p1', { c: 'trap', x: tr.x, y: tr.y }); Z.run(3);
+    ok(!p.traps.length && has('snare') === 1 && has('hare_pelt') === k + 1 && has('hare_raw') >= 1 && (p.xp.dexterity | 0) > x0, 'two hours later: a waabooz (rabbit), its pelt and meat, and the snare back (' + Z.msgs.join().slice(0, 40) + ' pelts ' + has('hare_pelt') + ' raw ' + has('hare_raw') + ' snare ' + has('snare') + ' dex ' + (p.xp.dexterity | 0) + ' traps ' + p.traps.length + ')');
+    core.setNature({ day: 400, year: 2, hours: 9600 });
+  }
+  const sv = core.exportPlayer('p1');
+  ok(Array.isArray(sv.traps) && sv.orders && typeof sv.orders === 'object', 'snares and orders are saved with the character');
+}
+const sin0 = has('sinew');
+t = talk('maiingan');
+ok(has('sinew') === sin0 + 1 && !has('hare_pelt') && p.quests.waabooz.step === 2, 'three pelts: your first ojiitad (sinew) (' + t.slice(0, 50) + ')');
 /* the bow */
 t = talk('mitigwaabiike');
 ok(Z.offers[0] === 'mitigwaab' && /tomahawk/.test(t), 'Mitigwaabiike offers the bow quest');
@@ -93,8 +126,11 @@ ok(has('maple_logs') >= 1, 'a maple can be chopped at Woodcutting 1, slowly (' +
 tries = 0; while (!has('birch_logs') && tries++ < 20) work(trees.E[(tries + 3) % trees.E.length][0], trees.E[(tries + 3) % trees.E.length][1], null, 60);
 ok(has('birch_logs') >= 1, 'a birch gives birch logs');
 core.setNature({ day: 500, year: 2, hours: 12000 });
-const m0 = has('maple_logs'), b0 = has('birch_logs');
+{ const sv = p.inv.findIndex(s => s && s.id === 'sinew'); const keep = p.inv[sv]; p.inv[sv] = null;
+  t = talk('mitigwaabiike'); ok(p.quests.mitigwaab.step === 1 && has('maple_logs') >= 1, 'no ojiitad (sinew), no bowstring: he waits (' + t.slice(0, 50) + ')'); p.inv[sv] = keep; }
+const m0 = has('maple_logs'), b0 = has('birch_logs'), s0 = has('sinew');
 t = talk('mitigwaabiike');
+ok(has('sinew') === s0 - 1, 'the ojiitad (sinew) goes into the bowstring');
 ok(has('maple_logs') === m0 - 1 && has('birch_logs') === b0 - 1 && p.quests.mitigwaab.step === 2 && /two hours/.test(t), 'he takes the maple and the birch: come back in two hours [' + has('maple_logs') + has('birch_logs') + p.quests.mitigwaab.step + '] ' + t.slice(-120));
 core.setNature({ day: 500, year: 2, hours: 12001.5 });
 t = talk('mitigwaabiike');

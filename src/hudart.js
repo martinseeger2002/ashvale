@@ -254,6 +254,49 @@
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const fmtN = n => n >= 1e7 ? [Math.floor(n / 1e6) + 'M', 'm'] : n >= 1e5 ? [Math.floor(n / 1e3) + 'K', 'k'] : [String(n), ''];
   const prayIcon = (q) => PRAY_ICON[q.icon] || PRAY_ICON[q.id.replace(/^protect_/, '')] || (PRAY_FOR[q.g] && SKI[PRAY_FOR[q.g]]) || PRAY_ICON[q.g] || PRAY_ICON[q.id] || ICON.prayer;
-  const art = { CSS, SPLAT_RED, SPLAT_BLUE, SV, ICON, SKI, PRAY_ICON, prayIcon, SKILL_ORDER, SKILL_INFO, START_SKILLS, EQ_LAYOUT, EQ_ACTIVE, cap, esc, fmtN };
+  /* HOME THEMES (2026-10-09: "change the hud for ziibiing ... make the icons Native American themed instead of medieval
+     themed"). A home's rules say which theme its players see (rules.homes.<h>.hud); the theme swaps the tab and skill icons and
+     restyles the panels. Ziibiing: smoked deer hide with a beadwork edge, ribbon red, and the village's own things - the
+     tomahawk, the bow, a makak (birch bark box), a ribbon shirt, asemaa (tobacco), a snowshoe, the moon. Nothing sacred
+     (no dreamcatchers, no medicine wheel) is used as decoration. */
+  const BEADS = 'repeating-linear-gradient(90deg,#b8322a 0 4px,#f3ede0 4px 8px,#2f6aa8 8px 12px,#f3ede0 12px 16px,#e2a93a 16px 20px,#f3ede0 20px 24px)';
+  const THEMES = {
+    ziibiing: {
+      ICON: {
+        combat: SV('M3 19.5l1.5 1.5 11-11-1.5-1.5zM12.5 6.5c1.5-3 5-4.5 8-3.5-.5 3-2 5.5-4.5 6.5z', '#d9c9a0'),                       // a tomahawk
+        skills: SV('M12 3a3 3 0 010 6 3 3 0 010-6zM6 9a3 3 0 010 6 3 3 0 010-6zM18 9a3 3 0 010 6 3 3 0 010-6zM12 15a3 3 0 010 6 3 3 0 010-6zM12 10.5a1.5 1.5 0 010 3 1.5 1.5 0 010-3z', '#e2a93a'),   // a beaded flower
+        quest: SV('M4 4c2 1 4-1 6 0s4-1 6 0 3-1 4 0v16c-1-1-2 1-4 0s-4 1-6 0-4 1-6 0zM8 9l2 3 2-3 2 3M8 15h8', '#efe8d8'),               // birch bark with marks
+        friends: SV('M8 11a3 3 0 100-6 3 3 0 000 6zM2 19c0-3 2.5-5 6-5s6 2 6 5M16 11a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM14 14c2.8 0 6 1.6 6 4.5M6 8v6M10 8v6', '#7dcea0'),
+        wallet: SV('M5 2l7 8 7-8M6 10h12l-1 11H7zM9 14h6M10 17h4', '#2f6aa8'),                                                     // a bandolier bag
+        inv: SV('M4 6h16v3H4zM5 9h14l-1.5 12h-11zM12 12a2 2 0 010 4 2 2 0 010-4z', '#d8c8a0'),                                       // a makak, quill flower
+        equip: SV('M8 3L3 6l2 5 3-1v11h8V10l3 1 2-5-5-3c-1 2-2 2-4 2S9 5 8 3zM8 14h8M8 17h8', '#b8322a'),                           // a ribbon shirt
+        prayer: SV('M12 2c5 3 7.5 8 4.5 14L12 22l-4.5-6C4.5 10 7 5 12 2zM12 6v14M12 11l-3-2M12 14l3-2', '#8fcf6a'),               // asemaa (tobacco) leaf
+        magic: SV('M15 3a9 9 0 100 18 7 7 0 010-18zM19 5l.6 1.6 1.6.6-1.6.6L19 9.4l-.6-1.6-1.6-.6 1.6-.6z', '#9fb8ff'),           // the moon and a star
+        settings: SV('M12 2c4 0 6 4 6 10s-2 10-6 10-6-4-6-10S8 2 12 2zM8 8h8M7.5 12h9M8 16h8M10 4v16M14 4v16', '#c8a878')           // a snowshoe
+      },
+      SKI: {
+        attack: SV('M3 20l1.5 1.5 10-10-1.5-1.5zM15.5 3a4 4 0 110 8 4 4 0 010-8z', '#c8b090'),                                          // a ball-headed war club
+        strength: SV('M11 2h2v11c2 1 3 4 2 7l-3 2-3-2c-1-3 0-6 2-7z', '#d8a070'),                                                      // a canoe paddle
+        defence: SV('M12 3a9 9 0 110 18 9 9 0 010-18zM12 7v10M7 12h10', '#a07850'),                                                   // a hide shield
+        ranged: SV('M6 3c8 2 13 8 15 15M6 3L21 18M3 21l15-15M15 4h4v4', '#8ac060'),                                                    // a bow and arrow
+        magic: SV('M15 3a9 9 0 100 18 7 7 0 010-18z', '#9fb8ff'),
+        woodcutting: SV('M3 19.5l1.5 1.5 11-11-1.5-1.5zM12.5 6.5c1.5-3 5-4.5 8-3.5-.5 3-2 5.5-4.5 6.5z', '#a07a48'),
+        mining: SV('M5 15l4-9 7-2 4 6-2 8-8 2zM9 9l4 3M13 12l3-4', '#4a4a52'),                                                      // obsidian
+        dexterity: SV('M12 2c4 0 6 4 6 10s-2 10-6 10-6-4-6-10S8 2 12 2zM8 8h8M7.5 12h9M8 16h8', '#9ad0b0'),                          // a snowshoe
+        cooking: SV('M5 10h14c0 6-3 10-7 10s-7-4-7-10zM5 10c2-5 12-5 14 0M12 2v4', '#d0a040'),                                      // akik (a kettle)
+        prayer: SV('M12 2c5 3 7.5 8 4.5 14L12 22l-4.5-6C4.5 10 7 5 12 2zM12 6v14', '#8fcf6a')
+      },
+      css: `
+.ash.th-ziibiing .stone{background:linear-gradient(#6e4c2f,#4c321d);border:2px solid #24160b;box-shadow:inset 0 0 0 1px #a07a50,0 2px 6px #0008}
+.ash.th-ziibiing .panel.stone,.ash.th-ziibiing .chat.stone{border-top:4px solid transparent;border-image:${BEADS} 4 0 0 0 / 4px 0 0 0}
+.ash.th-ziibiing .tab.on{background:linear-gradient(#a8302a,#7a1f1a);box-shadow:inset 0 0 0 1px #f3ede0}
+.ash.th-ziibiing .slot,.ash.th-ziibiing .pry{background:#3a2615;box-shadow:inset 0 0 0 1px #7a5634}
+.ash.th-ziibiing .mm,.ash.th-ziibiing .compass{border-color:#24160b;box-shadow:0 0 0 2px #a07a50,0 3px 8px #000a}
+`
+    }
+  };
+  let CSS_NOW = CSS;
+  function useTheme(name) { const T = THEMES[name]; if (!T) return null; Object.assign(ICON, T.ICON || {}); Object.assign(SKI, T.SKI || {}); CSS_NOW = CSS + (T.css || ''); art.CSS = CSS_NOW; return 'th-' + name; }
+  const art = { CSS, SPLAT_RED, SPLAT_BLUE, SV, ICON, SKI, PRAY_ICON, prayIcon, SKILL_ORDER, SKILL_INFO, START_SKILLS, EQ_LAYOUT, EQ_ACTIVE, cap, esc, fmtN, useTheme, THEMES };
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('hudart', { api: 1, v: 1 }, () => art);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

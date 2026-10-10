@@ -88,7 +88,9 @@ obj('fishrack', LAND[0] + 2, LAND[1] - 4, w=2, h=1)
 obj('woodpile', FIRE[0] - 3, FIRE[1] - 3)
 obj('basket', FIRE[0] + 3, FIRE[1] + 3); obj('basket', FIRE[0] + 4, FIRE[1] + 3)
 obj('ricebasket', FIRE[0] - 4, FIRE[1] + 3)
-obj('canoe', LAND[0], LAND[1], label='Get into the canoe', name='Birch bark canoe')     # the canoe to paddle the river in
+# no free canoe at the landing any more (2026-10-09): Migizi builds you a jiimaan (canoe) and sets it in the water here.
+# Its places: the landing tile and the shallows beside it (a canoe left there lasts a game year, like any canoe at a bank)
+BOATSPOTS = [[LAND[0], LAND[1], 0]] + [[x, LAND[1], 0] for x in (LAND[0] - 1, LAND[0] + 1, LAND[0] - 2, LAND[0] + 2) if at(x, LAND[1]) in WET and land(x, LAND[1] - 1)][:2]
 obj('canoe_up', LAND[0] - 5, LAND[1] - 2, name='Birch bark canoe')                          # one turned over on the bank, drying
 # cattails at the village's water's edge; the landing kept clear
 import random
@@ -118,8 +120,9 @@ npc('nookomis', 'Nookomis', FIRE[0] + 2, FIRE[1] + 1,
      "The young ones say I take too long over a single leaf. A leaf should take long."],
     'Nookomis, the grandmother of the village, in a velvet vest beaded with woodland flowers.')
 npc('migizi', 'Migizi', LAND[0] - 2, LAND[1] - 1,
-    ["Boozhoo. That canoe is birch bark over cedar ribs, sewn with spruce root and sealed with pitch.",
-     "Take her out if you like. Sit in her, then point where you want to go on the water. Point at the shore and she will bring you to it.",
+    ["Boozhoo. That jiimaan (canoe) on the bank is wiigwaas (birch bark) over cedar ribs, sewn and sealed with pitch. It is drying.",
+     "Bring me four sheets of wiigwaas (birch bark) and two lengths of ojiitad (sinew), and I will build you a jiimaan (canoe) of your own. It takes me two days.",
+     "When she is ready I set her in the water at the landing. Sit in her, then point where you want to go on the water. Point at the shore and she will bring you to it.",
      "Keep low and keep to the middle. The river is kind if you are patient with it.",
      "Bring me two sheets of wiigwaas (birch bark) and some ojiitad (sinew), and I will fold you a biskitenaagan (birch bark sap bucket) for the sugar bush."],
     'Migizi, the canoe maker, in a ribbon shirt, a beaded bandolier bag across his chest.')
@@ -150,18 +153,30 @@ npc('maiingan', "Ma'iingan", FIRE[0] - 3, FIRE[1] + 1,
 # people each watch one part of the world and end with it: Animikii the weather, Ziigwan the plants and birds, Waabigwan the moon,
 # Makwa the sun, the stars and the planets (the lines come from the engine, which has the sky and the seasons)
 def at(i): return next(n for n in npcs if n['id'] == i)
-at('migizi')['craft'] = {'take': {'wiigwaas': 2, 'sinew': 1}, 'give': 'bucket_bark', 'days': 1, 'hint': True,
+at('migizi')['craft'] = [{'take': {'wiigwaas': 2, 'sinew': 1}, 'give': 'bucket_bark', 'days': 1, 'hint': True,
     'say': ["Two sheets of wiigwaas (birch bark) and ojiitad (sinew). Good.",
             "I will fold you a biskitenaagan (sap bucket): the bark bent at the corners so it holds without a seam, the rim sewn with the ojiitad. It has to dry in its folds. Come back tomorrow, {name}."],
     'wait': ["The biskitenaagan (sap bucket) is still drying in its folds. Come back tomorrow, {name}."],
     'ready': ["Here is your biskitenaagan (sap bucket), {name}. Fold it the way it wants to go and it will hold sap all day.",
               "Set it under the cut on an ininaatig (maple) when the nights freeze and the days thaw."],
     'lack': ["For a biskitenaagan (sap bucket) I need two sheets of wiigwaas (birch bark) and one ojiitad (sinew) to sew the rim.",
-             "Peel the wiigwaas off a wiigwaasaatig (birch tree) - each one gives once a year. Ma'iingan has ojiitad if you bring him a deer hide."]}
-at('maiingan')['lines'].append("If you bring me a waawaashkeshiwayaan (deer hide), I will give you ojiitad (sinew) for sewing. Migizi uses it for the sap buckets.")
-at('maiingan')['trade'] = {'take': {'deer_hide': 1}, 'give': {'sinew': 2},
+             "Peel the wiigwaas off a wiigwaasaatig (birch tree) - each one gives once a year. Ma'iingan has ojiitad if you bring him a deer hide."]},
+    # a jiimaan (canoe) of your own (2026-10-09: four wiigwaas and two ojiitad, two game days; set at the landing; anyone may use it)
+    {'take': {'wiigwaas': 4, 'sinew': 2}, 'boat': BOATSPOTS, 'name': 'jiimaan (canoe)', 'days': 2, 'hint': True,
+     'say': ["Four sheets of wiigwaas (birch bark) and two lengths of ojiitad (sinew). Good.",
+             "I will build you a jiimaan (canoe): cedar ribs bent in the water, the wiigwaas sewn over them with the ojiitad and sealed with pitch. Come back in two days, {name}."],
+     'wait': ["The jiimaan (canoe) is still on the frame. The pitch has to set. Come back in a day or two, {name}."],
+     'ready': ["Your jiimaan (canoe) is in the water at the landing, {name}. Sit in her and point where you want to go.",
+               "If you leave her at a bank, she will wait there for you a whole year. Anyone who needs her may use her - that is how it is on the river."],
+     'lack': ["For a jiimaan (canoe) I need four sheets of wiigwaas (birch bark) and two lengths of ojiitad (sinew) to sew them.",
+              "Cut the wiigwaas off a wiigwaasaatig (birch tree) with a blade. Ma'iingan has ojiitad for waabooz (rabbit) pelts or a waawaashkeshiwayaan (deer hide)."]}]
+at('maiingan')['lines'].append("If you bring me a waawaashkeshiwayaan (deer hide), or three waabooz (rabbit) pelts, I will give you ojiitad (sinew) for sewing. Migizi uses it for the sap buckets and the canoes.")
+at('maiingan')['trade'] = [{'take': {'deer_hide': 1}, 'give': {'sinew': 2},
     'say': ["A waawaashkeshiwayaan (deer hide)! Miigwech (thank you).",
-            "Here, two lengths of ojiitad (sinew) from along the deer's back, dried and split. It sews bark better than anything."]}
+            "Here, two lengths of ojiitad (sinew) from along the deer's back, dried and split. It sews bark better than anything."]},
+    # three waabooz (rabbit) pelts for one ojiitad (2026-10-09): the snared pelts, summer brown or winter white
+    {'take': {'hare_pelt': 3}, 'give': {'sinew': 1}, 'say': ["Three waabooz (rabbit) pelts. Miigwech (thank you).", "Here is a length of ojiitad (sinew) for them."]},
+    {'take': {'snow_hare_pelt': 3}, 'give': {'sinew': 1}, 'say': ["Three white waabooz (rabbit) pelts, the winter coat. Miigwech (thank you).", "Here is a length of ojiitad (sinew) for them."]}]
 at('nookomis')['quest'] = 'sugar_bush'
 at('nookomis')['sapAt'] = [93, 545]   # by the sugar camp's fire while the sap runs (core moves her there and back)
 at('nookomis').pop('lines', None)   # a quest giver chats of nothing (her quest's own words say it all)
@@ -206,7 +221,7 @@ at('mitigwaabiike')['craft'] = [   # after the quests: more bikwak whenever you 
      'wait': ["I am still knapping the points. Come back a little later, {name}."],
      'ready': ["Fifteen obsidian bikwak (arrows), {name}. One is enough for a waawaashkeshi (deer)."],
      'lack': ["Obsidian bikwak (arrows) take a wiigwaasaatig (birch) log and a piece of obsidian from the bank upriver by the cairn."]}]
-at('maiingan')['quest'] = 'deer_hunt'   # a Ziibiing-born with a bow is sent hunting first (his sinew trade stays for everyone)
+at('maiingan')['quests'] = ['waabooz', 'deer_hunt']   # the snare first, then (with a bow) the hunt   # a Ziibiing-born with a bow is sent hunting first (his sinew trade stays for everyone)
 npcs.append({'id': 'makak', 'name': 'Ziibiing makak', 'look': 'makak', 'x': FIRE[0] + 3, 'y': FIRE[1] - 1, 'chest': True,
              'examine': 'A birch bark makak, sewn with spruce root, quill flowers on its side. Like the chest in Ashvale, it holds everything you own in your arcade wallet.'})
 # WHERE YOU COME FROM (2026-10-09: "the dialogue for the NPCs should be different and aware of the origins of the character"):
@@ -228,8 +243,18 @@ lnpcs.append({'id': 'ningashi', 'name': 'Ningashi', 'look': 'ningashi', 'x': c0[
 lz = {'name': 'Wigwam', 'level': '1-10', 'origin': list(LODGE_O), 'size': [GAP * (len(WIGWAMS) - 1) + ROOM, ROOM], 'ground': 'grass', 'under': True, 'style': 'wigwam',
       'surface': list(WIGWAMS[0]), 'tiles': [''.join(r) for r in lodges], 'objects': lobj, 'npcs': lnpcs, 'spawns': [], 'fishing': []}
 json.dump({'ashvale3d': 'module', 'name': 'zone.lodges', 'api': 1, 'v': 1, 'data': lz}, open(os.path.join(HERE, 'data', 'zone.lodges.json'), 'w'), separators=(',', ':'))
+# waabooz (rabbits) in the brush round the village, for Ma'iingan's nagwaagan (snare) (2026-10-09): the nearest wild herd
+# is a long way off, and a beginner snares before he owns a bow or a canoe. Open grass 9-16 tiles from the fire, clear of the
+# wigwams, the yard and the paths
+taken = {(o['x'] + dx, o['y'] + dy) for o in objects for dx in range(-2, 3) for dy in range(-2, 3)}
+HARES = []
+for (x, y) in sorted(((x, y) for y in range(OY + 2, OY + H - 2) for x in range(OX + 2, OX + W - 2)), key=lambda q: (RND.random(), q)):
+    if len(HARES) >= 4: break
+    if g[y - OY][x - OX] != '.' or (x, y) in taken or not (9 <= ((x - FIRE[0]) ** 2 + (y - FIRE[1]) ** 2) ** 0.5 <= 16): continue
+    if any(abs(x - hx) + abs(y - hy) < 6 for hx, hy in HARES): continue
+    HARES.append((x, y))
 zone = {'name': 'Ziibiing', 'level': '1-10', 'origin': [OX, OY], 'size': [W, H], 'ground': 'grass',
-        'tiles': [''.join(r) for r in g], 'objects': objects, 'npcs': npcs, 'spawns': [], 'fishing': []}
+        'tiles': [''.join(r) for r in g], 'objects': objects, 'npcs': npcs, 'spawns': [{'m': 'hare', 'x': x, 'y': y} for x, y in HARES], 'fishing': []}
 json.dump({'ashvale3d': 'module', 'name': 'zone.ziibiing', 'api': 1, 'v': 1, 'data': zone},
           open(os.path.join(HERE, 'data', 'zone.ziibiing.json'), 'w'), separators=(',', ':'))
 print('wrote data/zone.ziibiing.json: %d x %d at %d,%d; landing %s; fire %s' % (W, H, OX, OY, LAND, FIRE))
@@ -303,6 +328,10 @@ def bank_site(zid, name, X, Y, Wd, Ht, clear, deposits, letter, landmark):
 # biiwaanag (flint): DOWN the river, on the south bank across and below the village, by a painted rock face
 bank_site('flintbank', 'Biiwaanag bank', 132, 636, 22, 10, [(133, 641, 147, 644)], [(136, 641), (138, 642), (140, 641)], 'S',
           ('paintedrock', 143, 642, [(142, 642), (143, 642), (144, 642), (142, 643), (143, 643), (144, 643)], {'face': 'n', 'name': 'Painted rock'}))
+# miskwaabiimizh (red willow): DOWN the river, on the north bank across from the flint, by a drying rack hung with red bark
+# (2026-10-09, kinnikinnick); peeled with a blade, once a game day each
+bank_site('willowbank', 'Miskwaabiimizh bank', 124, 610, 18, 9, [(126, 613, 140, 616)], [(128, 616), (130, 615), (132, 616), (134, 615), (136, 616)], 'J',
+          ('fishrack', 138, 614, [], {'w': 2, 'h': 1, 'name': 'Drying rack'}))
 # obsidian: UP the river, on the north bank west of the village, by a stone cairn
 bank_site('obsidianbank', 'Obsidian bank', 14, 612, 22, 12, [(16, 616, 34, 622)], [(22, 622), (24, 621), (26, 622)], 'V',
           ('cairn', 29, 621, [(29, 621)], {'name': 'Cairn'}))

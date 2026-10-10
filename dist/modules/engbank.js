@@ -89,8 +89,7 @@
           const lch = g(L.lchest, k), ch = wk - bag - spent - gone + pch + lch - onGround - Math.max(0, +HOLDS.o[k] || 0); if (ch > 0) chest[k] = ch;   /* less what the wallet's other character carries */   /* + what you stored before it arrived, or before it was even deposited */
           if (lch > 0) loose[k] = (loose[k] || 0) + lch;   /* stored-but-new still goes to the Bank */
           const ownBack = (L.picks || []).reduce((a, q) => a + (q.own && q.k === k && Date.now() - q.t < 7200000 ? q.n : 0), 0);   /* picked up from your own drop in the last two hours: never new */
-          const offered = offerHold(k);   /* a live arcade offer: the piece is still in the bag, it is not new loot */
-          const lo = Math.min(c - bag - pend, c - ownBack - pend) - offered; if (lo > 0) loose[k] = (loose[k] || 0) + lo;
+          const lo = Math.min(c - bag - pend, c - ownBack - pend); if (lo > 0) loose[k] = (loose[k] || 0) + lo;
           arriving += pend + pspent + pch;
         }
         if (JSON.stringify([L.bag, L.spent, L.pend, L.pspent, L.gone, L.autoTake, L.pchest, L.lchest]) !== before) ledgerSave();
@@ -207,21 +206,6 @@
       }, 15000);
       setInterval(() => { if (WAL && walletState.address && !document.hidden) walletRefresh(); }, 60000);   /* the chest follows trades and deliveries */
       /* the trade window offers only what you CARRY that your wallet holds (2026-10-04) */
-      function tellOffer(o) {
-        bankRoom().then(R => {
-          if (!R || !R.me || R.me.guest) return;
-          if (o && o.inscription && o.key) R.send({ t: 'offer', v: 1, piece: o.inscription, item: o.key });
-          else R.send({ t: 'unoffer', v: 1 });
-        });
-      }
-      function offerHold(k) {
-        const T = K.trade;
-        if (!T || !T.offered) return 0;
-        const o = T.offered();
-        if (!o) return 0;
-        if (o.key === k) return o.inscription ? 1 : Math.max(1, +o.amount || 0);
-        return 0;
-      }
       async function tradeOfferable() {
         if (!walletState.data) await walletRefresh();
         const W = walletState.data, kinds = []; if (!W || !walletState.address) return { kinds, gold: 0 };
@@ -508,7 +492,7 @@
           R.send({ t: 'dep', v: 3, id, items, carried, chest, spent, reward, pend: pendOf(Object.keys(items)), from: fromAll(Object.keys(items)) });
         });
       }
-    return { CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer };
+    return { CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engbank', { api: 1, v: 1, needs: {} }, () => ({ api: 1, install }));
   if (typeof module !== 'undefined' && module.exports) module.exports = { install };

@@ -66,7 +66,6 @@
     const send = opts.send || (() => false);
     const onSettled = opts.onSettled || (() => {});
     const onUndone = opts.onUndone || (() => {});
-    const onOffer = opts.onOffer || (() => {});
     /* DEALS: every swap this game took part in, by the arcade's swap id, so the items move even when the trade window is
        closed before the chain answers. 2026-10-08: "as soon as the trade transaction hits the mempool the game should
        reflect it" - a deal is applied once, at 'broadcast' (or 'settled' if that comes first), and undone if it then fails. */
@@ -128,7 +127,6 @@
     function setMine(o) {
       if (!T || T.swap) return;
       T.mine.offer = o; T.mine.ok = false; T.theirs.ok = false; T.note = '';   /* any change clears both accepts */
-      onOffer(o);
       send(T.with.id, { k: 'offer', sid: T.sid, offer: o ? (o.inscription ? { inscription: o.inscription, key: o.key, name: o.name } : { token: +o.token, amount: o.amount, key: o.key || null }) : null });
       draw();
     }
@@ -143,7 +141,7 @@
         const T0 = T, r = await S().trade({ with: T.with.id, give, get }); T0.swapId = r && r.id; remember(T0.swapId, T0); }
       catch (e) { T.swap = null; T.mine.ok = false; T.note = 'Not settled: ' + (e && e.message || e); send(T.with.id, { k: 'unaccept', sid: T.sid }); draw(); }
     }
-    function cancel(tell) { if (T && tell) send(T.with.id, { k: 'cancel', sid: T.sid }); onOffer(null); T = null; box.hidden = true; box.innerHTML = ''; }
+    function cancel(tell) { if (T && tell) send(T.with.id, { k: 'cancel', sid: T.sid }); T = null; box.hidden = true; box.innerHTML = ''; }
     async function begin(player, sid, starter) {
       T = { with: player, sid, starter, mine: { offer: null, ok: false }, theirs: { offer: null, ok: false }, wallet: null, note: '' };
       draw();
@@ -209,7 +207,7 @@
         if (!DEALS.has(t.id) && T && T.swap && t.with && t.with.id === T.with.id) remember(t.id, T);
         const d = DEALS.get(t.id);
         if (t.status === 'broadcast' || t.status === 'settled') {
-          if (d && !d.done) { d.done = true; onSettled(d.gave, d.got); onOffer(null); toast('Trade with ' + nameOf(d.withId) + ' complete' + (d.got ? ': you got ' + label(d.got) + '.' : '.') + (t.status === 'broadcast' ? ' (on its way: the chain confirms it in a block)' : ''), 'trade'); if (T && T.swap) cancel(false); }
+          if (d && !d.done) { d.done = true; onSettled(d.gave, d.got); toast('Trade with ' + nameOf(d.withId) + ' complete' + (d.got ? ': you got ' + label(d.got) + '.' : '.') + (t.status === 'broadcast' ? ' (on its way: the chain confirms it in a block)' : ''), 'trade'); if (T && T.swap) cancel(false); }
           else if (!d && t.status === 'settled') toast('Trade with ' + nameOf(t.with && t.with.id) + ' complete.', 'trade');
           return;
         }
@@ -218,8 +216,7 @@
       });
     }
     hook();
-    function offered() { return T && T.mine && T.mine.offer ? T.mine.offer : null; }
-    return { available, open, close: () => cancel(true), onMessage, hook, offered, GOLD };
+    return { available, open, close: () => cancel(true), onMessage, hook, GOLD };
   }
   const api = { api: 1, create, ISSUER };
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('trade', { api: 1, v: 2 }, () => api);
