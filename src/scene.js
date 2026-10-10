@@ -1166,7 +1166,11 @@
             B.add('box', 0xa07a48, x, y + 0.25, z + 0.3, 0.8, 0.5, 0.35);
             break; }
           case 'barrel': y = floorY(o, y); B.add('cyl', 0x8a5a30, x, y + 0.4, z, 0.6, 0.8, 0.6); B.add('cyl', 0x3a3a3a, x, y + 0.2, z, 0.62, 0.06, 0.62); B.add('cyl', 0x3a3a3a, x, y + 0.6, z, 0.62, 0.06, 0.62); break;
-          case 'crate': B.add('box', 0xa07a48, x, y + 0.32, z, 0.65, 0.65, 0.65, hash2(o.x, o.y)); B.add('box', 0x7a5a30, x, y + 0.66, z, 0.68, 0.04, 0.68, hash2(o.x, o.y)); break;
+          case 'crate': {
+            B.add('box', 0xa07a48, x, y + 0.32, z, 0.65, 0.65, 0.65, hash2(o.x, o.y)); B.add('box', 0x7a5a30, x, y + 0.66, z, 0.68, 0.04, 0.68, hash2(o.x, o.y));
+            if (o.loot) { const pk = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshBasicMaterial({ visible: false })); pk.position.set(x, y + 0.4, z); pk.userData.pick = { kind: 'crate', x: o.x, y: o.y }; group.add(pk); pickables.push(pk); }
+            break;
+          }
           case 'tent': { const t = mesh(new THREE.ConeGeometry(1.25, 1.6, 4), hash2(o.x, o.y) < 0.5 ? 0x8a7a50 : 0x6a7a40, x, y + 0.8, z); t.rotation.y = Math.PI / 4; group.add(t); B.add('box', 0x2a2015, x, y + 0.4, z + 0.86, 0.4, 0.8, 0.05); break; }
           case 'gate': {
             /* a closed gate in the palisade: posted leaves, iron bands, a latch. span "ns" = the fence runs

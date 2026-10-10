@@ -55,6 +55,14 @@ d = talk('wenna');
 ok(d && d.offer === 'red_pyre' && !p.quests.red_pyre && /Bright Three|Althas|gate/.test(d.lines.join(' ')), 'Wenna offers The Red Pyre and names the Bright Three');
 core.cmd('p1', { c: 'acceptq', q: 'red_pyre' }); core.tick();
 ok(p.quests.red_pyre && p.quests.red_pyre.step === 1, 'saying yes begins The Red Pyre');
+{
+  const slot = p.inv.findIndex(s => !s);
+  p.inv[slot] = { id: 'vorth_rosary', n: 1 };
+  p.inv[p.inv.findIndex(s => !s)] = { id: 'edric_note', n: 1 };
+  ok(!core.searchOpen(p, npc('edric_skel')), 'a rosary from someone else does not open the bones');
+  d = talk('edric_skel');
+  ok(d && /leave him alone/.test(d.lines[0]) && p.quests.red_pyre.step === 1 && !p.flags.vorth_bag, 'the gifted rosary does not move the quest or open the bag');
+}
 
 d = talk('pike');
 ok(p.quests.red_pyre.n === 1 && /Brother Pike|Caelen|Vorthan/.test(d.lines.join(' ')), 'Pike names himself and will not have you strike');
@@ -78,6 +86,8 @@ d = talk('vorthan_reader');
 ok(p.quests.red_pyre.n === 1 && /Vorth was the fourth/.test(d.lines.join(' ')), 'the Reader speaks of Vorth');
 d = talk('wenna');
 ok(p.quests.red_pyre.step === 3 && /rosary|beads/.test(d.lines.join(' ')), 'Wenna authorises the killing blow');
+ok(p.quests.red_pyre.pre && p.quests.red_pyre.pre.edric_note === 1, 'the note he was given does not count as the one in the cave');
+ok(!core.searchOpen(p, npc('edric_skel')), 'the bones stay shut until the keeper is dead');
 ok(!core.coverBlocks(p, v), 'cover lifts once she has sent you to kill');
 
 p.x = 27; p.y = 3; p.act = null; p.path = [];
@@ -85,6 +95,8 @@ v.hp = D.monsters.vorthan.hp; v.dead = 0; v.x = 31; v.y = 4;
 core.cmd('p1', { c: 'attack', uid: v.uid });
 for (let i = 0; i < 80 && !v.dead; i++) core.tick();
 ok(v.dead && p.quests.red_pyre.n === 1, 'from outside the open gate you can walk in and slay the keeper');
+d = talk('wenna');
+ok(p.quests.red_pyre.step === 3, 'Wenna will not take the note he already had');
 ok(p.x >= 28, 'the fight path takes you through the gate');
 for (let i = 0; i < 6; i++) core.tick();
 ok(core.S.ground.some(g => g.id === 'vorth_rosary'), 'he drops Vorth\'s rosary');
@@ -117,6 +129,15 @@ p.x = 24044; p.y = 24045;
 core.cmd('p1', { c: 'escape', id: 'edric_skel' });
 for (let i = 0; i < 4; i++) core.tick();
 ok(p.x === -124 && p.y === 10, 'escaping the cave returns you to the mouth');
+
+p.x = 24006; p.y = 24006; p.path = []; p.act = null;
+const had = core.invCount(p, 'antidote');
+core.cmd('p1', { c: 'crate', x: 24005, y: 24006 });
+for (let i = 0; i < 8; i++) core.tick();
+ok(core.invCount(p, 'antidote') === had + 1 && p.flags.cave_antidote, 'the crate at the shaft hides one antidote');
+core.cmd('p1', { c: 'crate', x: 24005, y: 24006 });
+for (let i = 0; i < 4; i++) core.tick();
+ok(core.invCount(p, 'antidote') === had + 1, 'the crate can be searched only once');
 
 console.log(fails ? fails + ' FAILED' : 'all ok');
 process.exit(fails ? 1 : 0);

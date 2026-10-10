@@ -56,7 +56,8 @@ def db():
         create table if not exists holds(addr text, h text, b text, at real, primary key(addr, h));   -- what each character of a wallet carries (a second home, Ziibiing 2026-10-09)
         create table if not exists saves(addr text primary key, id integer, blob text, at real);   -- each player's whole game, packed (2026-10-07)   -- where each player last stood, for the Atlas (2026-10-06)
         create table if not exists drops(n integer primary key, addr text, item text, piece text, x integer, y integer, at real, taken_by text, taken_at real);
-        create table if not exists ghosts(n integer primary key, addr text, item text, units integer, x integer, y integer, at real, left integer);   -- picked-up copies of drops somebody else already took (2026-10-06)""")
+        create table if not exists ghosts(n integer primary key, addr text, item text, units integer, x integer, y integer, at real, left integer);   -- picked-up copies of drops somebody else already took (2026-10-06)
+        create table if not exists offers(addr text, piece text, item text, at real, primary key(addr, piece));   -- a live arcade offer: that piece is not new loot""")
     for col in ('want', 'coll'):   # want: the exact piece (a pickup of a drop); coll: a quest reward's own collection
         try: c.execute('alter table jobs add column %s text' % col)
         except sqlite3.OperationalError: pass
@@ -362,8 +363,21 @@ def handle_holds(c, addr, msg):
     rep = {'t': 'holds', 'to': addr, 'o': o, 'multi': multi}
     if h != 'ashvale': rep['h'] = h
     return rep
+def handle_offer(c, addr, msg):
+    """a live arcade offer: that exact piece is already inscribed. It is not new loot, and the Bank must not mint another."""
+    piece = str(msg.get('piece') or '')[:80]
+    k = str(msg.get('item') or '')[:40]
+    if msg.get('t') == 'unoffer':
+        if piece: c.execute('delete from offers where addr=? and piece=?', (addr, piece))
+        elif k: c.execute('delete from offers where addr=? and item=?', (addr, k))
+        else: c.execute('delete from offers where addr=?', (addr,))
+        c.commit(); return None
+    if not piece or k not in ITEMS: return None
+    c.execute('insert or replace into offers values(?,?,?,?)', (addr, piece, k, time.time())); c.commit()
+    return None
 def handle(c, addr, msg):
     """-> reply dict (or a list of them). Queues jobs; never touches the chain itself."""
+    if msg.get('t') in ('offer', 'unoffer'): return handle_offer(c, addr, msg)
     if msg.get('t') == 'drop': handle_drop(c, addr, msg); return None
     if msg.get('t') == 'took': return handle_took(c, addr, msg)
     if msg.get('t') == 'ground?': return handle_ground(c, addr, msg)
@@ -406,7 +420,10 @@ def handle(c, addr, msg):
         try: claim = (int(carried.get(k)) if k in carried else n) + int((msg.get('chest') or {}).get(k) or 0) + int((msg.get('spent') or {}).get(k) or 0)
         except (TypeError, ValueError): claim = n
         want = n; base = claim - held.get(k, 0)
-        n = min(n, max(0, base - owed.get(k, 0) - fresh.get(k, 0)))   # only what no NFT or token of yours stands for yet
+        offered = 0
+        if (assets().get(k) or {}).get('kind') == 'nft':
+            offered = c.execute('select count(*) from offers where addr=? and item=? and at>?', (addr, k, time.time() - 1800)).fetchone()[0]
+        n = min(n, max(0, base - owed.get(k, 0) - fresh.get(k, 0) - offered))   # only what no NFT or token of yours stands for yet; a live offer is that same piece
         for gr in c.execute('select n, left from ghosts where addr=? and item=? and left>0 order by n', (addr, k)).fetchall():   # ghost pickups are never paid
             if n <= 0: break
             cut = min(n, gr['left']); n -= cut; c.execute('update ghosts set left=left-? where n=?', (cut, gr['n'])); log('GHOST CUT', addr, k, cut)
@@ -527,6 +544,8 @@ class Deliverer:
             piece = job['want']
         elif job['coll']: piece = None   # a quest reward is always a fresh copy in the quest's collection
         else: piece = self.stock_for(c, k)
+        live = c.execute('select piece from offers where addr=? and item=? and at>?', (addr, k, time.time() - 1800)).fetchone()
+        if live and not job['want']: raise RuntimeError('that piece is in a live trade; it is not a new mint')
         if not piece and magical(k): raise RuntimeError('a magical item is never minted: waiting for a dropped one to come back to @ashvale')
         if not piece and unique(k): raise RuntimeError('a one-of-one is never minted: only the inscribed piece exists')   # (the operator's Hawk ring, 2026-10-04)
         piece = piece or self.mint(c, k, job['coll'])
@@ -575,7 +594,7 @@ def room_loop(stop):
                     if fr.evaluate("window.__bankClosed || null"): raise RuntimeError('room closed')
                     for m in fr.evaluate("window.__bankQ.splice(0)"):
                         d, f = m.get('data') or {}, m.get('from') or {}
-                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'boat', 'boats?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'pals?', 'sv', 'ld?', 'mark', 'marks?', 'carry', 'carried?', 'hold', 'holds?'): continue
+                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'boat', 'boats?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'pals?', 'sv', 'ld?', 'mark', 'marks?', 'carry', 'carried?', 'hold', 'holds?', 'offer', 'unoffer'): continue
                         if f.get('guest') or not f.get('address'): continue
                         try: rep = handle(c, f['address'], d)
                         except Exception: log('HANDLE ERROR', traceback.format_exc()[-400:]); rep = {'t': 'dep', 'id': d.get('id'), 'to': f['address'], 'ok': False, 'note': 'The bank hit an error; try again later.'}

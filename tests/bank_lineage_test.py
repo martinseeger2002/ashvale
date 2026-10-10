@@ -37,3 +37,17 @@ ok(r['x'] == 50 and r['y'] == 60 and r['by'] == 'S' and r['on'] == 1, 'the canoe
 B.handle_carry(c, 'S', {'t': 'carry', 'who': 'R', 'x': 70, 'y': 61, 'on': 0})
 ok(B.handle_carry(c, 'R', {'t': 'carried?'})['on'] == 0, 'and where it put them ashore')
 print('ALL OK' if not fails else 'FAILED: %d' % fails)
+# a live arcade offer of an NFT is not a new mint
+c.execute('create table offers(addr text, piece text, item text, at real, primary key(addr, piece))')
+c.execute("create table jobs(n integer primary key, addr text, item text, units integer, kind text, status text, tries integer default 0, txid text, piece text, err text, at real, done_at real, req text, want text, coll text)")
+B.handle_offer(c, 'A', {'t': 'offer', 'piece': 'helm7', 'item': 'helmet_t4'})
+ok(c.execute("select item from offers where addr='A'").fetchone()['item'] == 'helmet_t4', 'the Bank notes the live offer of mithril helmet #7')
+B.holdings = lambda addr: {}
+B.assets = lambda: {'helmet_t4': {'kind': 'nft'}}
+held = {'helmet_t4': 0}
+offered = c.execute("select count(*) from offers where addr=? and item=? and at>?", ('A', 'helmet_t4', 0)).fetchone()[0]
+n = min(1, max(0, (1 - held.get('helmet_t4', 0)) - offered))
+ok(n == 0, 'a deposit while that piece is on offer pays nothing, so nothing is minted')
+B.handle_offer(c, 'A', {'t': 'unoffer'})
+ok(c.execute("select count(*) from offers where addr='A'").fetchone()[0] == 0, 'the offer clears when the trade ends')
+print('ALL OK' if not fails else 'FAILED: %d' % fails)
