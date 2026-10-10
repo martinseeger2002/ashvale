@@ -423,7 +423,7 @@
       const ents = new Map(), proxies = [];
       const proxyMat = new THREE.MeshBasicMaterial({ visible: false });
       const blobGeo = new THREE.CircleGeometry(0.42, 12).rotateX(-PI / 2), blobMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false });
-      function gearOf(p) { const g = {}; for (const k of ['head', 'cape', 'pack', 'body', 'legs', 'weapon', 'shield', 'ammo', 'ring']) g[k] = p.eq[k] ? p.eq[k].id : null; return g; }
+      function gearOf(p) { const g = {}; for (const k of ['head', 'cape', 'pack', 'body', 'legs', 'weapon', 'shield', 'ammo', 'feet', 'ring']) g[k] = p.eq[k] ? p.eq[k].id : null; return g; }
       /* the hawk ring: an entity wearing it is drawn as a hawk HAWK_ALT m up, wings beating (the operator) */
       const HAWK_ALT = 28 /* doubled (2026-10-08) */, ringHawk = (id) => !!(id && D.items[id] && (D.items[id].attributes || []).some(a => a.trait_type === 'Form' && a.value === 'hawk'));
       /* the hawk's height (2026-10-04): a dive down to its prey on every strike, perched in a tree on the side you
@@ -1373,7 +1373,7 @@
           o.push({ html: 'Follow ' + nm, fn: () => startFollow(t.id) });
           /* their own levels as their game sent them; not here yet (2026-10-07: a first look showed every skill at 1, a blank copy):
              ask their game for them and open the panel when they come */
-          o.push({ html: 'View stats ' + nm, fn: () => { if (r.skills) { hud.playerStats(label(r.name, r.from), r.skills, cb); return; } hud.chat('Asking ' + label(r.name, r.from) + ' for their stats\u2026', 'sys'); r.wantStats = { at: Date.now(), name: label(r.name, r.from), cb }; netSend({ GQ: 1 }); } });
+          o.push({ html: 'View stats ' + nm, fn: () => { if (r.skills) { hud.playerStats(label(r.name, r.from), r.skills, cb, r.story); return; } hud.chat('Asking ' + label(r.name, r.from) + ' for their stats\u2026', 'sys'); r.wantStats = { at: Date.now(), name: label(r.name, r.from), cb }; netSend({ GQ: 1 }); } });
           o.push({ html: 'Examine ' + nm, fn: () => hud.chat(label(r.name, r.from) + ': another adventurer on the arcade.', 'sys') });
           return o;
         }
@@ -1838,7 +1838,7 @@
       }
       const totalLevel = p => (D.rules.skills || []).reduce((a, k) => a + core.lv(p, k), 0);   /* the Skills tab's Total level */
       const NETGQ = { t: 0 };
-      function netGear() { netSend({ g: gearOf(me), n: me.name, T: totalLevel(me), SK: Object.fromEntries(Object.keys(me.xp).map(k => [k, core.lv(me, k)])), L: ['attack', 'strength', 'defence', 'hitpoints', 'ranged', 'magic', 'dexterity'].map(k => core.lv(me, k)), st: me.styles }); netOutfit(); }
+      function netGear() { netSend({ g: gearOf(me), n: me.name, T: totalLevel(me), SK: Object.fromEntries(Object.keys(me.xp).map(k => [k, core.lv(me, k)])), ST: core.storyPoints(me), L: ['attack', 'strength', 'defence', 'hitpoints', 'ranged', 'magic', 'dexterity'].map(k => core.lv(me, k)), st: me.styles }); netOutfit(); }
       function netOutfit() { if (myEnt.H.outfit) netSend({ o: myEnt.H.outfit }); }
       /* chat: what you type goes to everyone in the same zone room; rate-limited here (the mesh limits ~5 msgs/s) */
       const sayTimes = [];
@@ -2091,7 +2091,8 @@
         if (d.d != null) pst.dead = !!d.d;
         if (d.g && typeof d.g === 'object') pst.g = d.g;
         if (Array.isArray(d.L)) { pst.L = d.L; r.maxHp = d.L[3] | 0; }
-        if (d.SK && typeof d.SK === 'object') { const sk = {}; for (const k in d.SK) if (/^[a-z]{1,20}$/.test(k)) { const L = d.SK[k] | 0; if (L >= 1 && L <= 99) sk[k] = L; } r.skills = sk; if (r.wantStats && Date.now() - r.wantStats.at < 15000) hud.playerStats(r.wantStats.name, sk, r.wantStats.cb); r.wantStats = null; }
+        if (Number.isInteger(d.ST) && d.ST >= 0 && d.ST <= 999) r.story = d.ST;
+        if (d.SK && typeof d.SK === 'object') { const sk = {}; for (const k in d.SK) if (/^[a-z]{1,20}$/.test(k)) { const L = d.SK[k] | 0; if (L >= 1 && L <= 99) sk[k] = L; } r.skills = sk; if (r.wantStats && Date.now() - r.wantStats.at < 15000) hud.playerStats(r.wantStats.name, sk, r.wantStats.cb, r.story); r.wantStats = null; }
         if (d.GQ && Date.now() - (NETGQ.t || 0) > 3000) { NETGQ.t = Date.now(); netGear(); }   /* someone asked for our stats: send them again (at most every 3 s) */
         if (d.st && typeof d.st === 'object') pst.st = d.st;
         if (d.pr !== undefined) pst.pr = typeof d.pr === 'string' ? d.pr : 0;
@@ -2147,7 +2148,7 @@
           case 'k': { const m = core.mobByUid(a[1]); if (!m) break; core.applyMobs([[m.uid, m.x, m.y, 0, 1]]); if (fromNet(a[2]) === PID) core.creditKill(PID, m.key); for (const pid of core.S.order) { const o = core.S.players[pid]; if (o.act && o.act.k === 'attack' && o.act.uid === m.uid) o.act = null; } handle({ e: 'die', mob: m.uid }, now); break; }
           case 's': core.applyMobs([[a[1], a[2], a[3], a[4], 0]]); break;
           case 'd': core.groundAdd(a[1], a[2], a[3], a[4], a[5], a[6] ? fromNet(a[6]) : null, a[7] || 0); break;
-          case 't': core.groundRemove(a[1]); if (fromNet(a[2]) === PID) { core.grantItem(PID, a[3], a[4]); persistTell({ e: 'take', p: PID, id: a[3], n: a[4], x: a[5], y: a[6] }); } break;   /* the host gave it to us: tell the Bank too */
+          case 't': core.groundRemove(a[1]); if (fromNet(a[2]) === PID) { core.grantItem(PID, a[3], a[4], a[1]); persistTell({ e: 'take', p: PID, id: a[3], n: a[4], x: a[5], y: a[6] }); } break;   /* the host gave it to us: tell the Bank too */
           case 'v': core.groundRemove(a[1]); break;
           case 'n': { const g = core.S.ground.find(q => q.uid === a[1]); if (g) g.n = a[2]; break; }
           case 'e': handle({ e: 'mobeat', mob: a[1] }, now); break;

@@ -20,7 +20,8 @@
     "platelegs",
     "kiteshield",
     "robe",
-    "torch"
+    "torch",
+    "boots"
    ],
    "cosmetic": [
     "hat",
@@ -51,6 +52,7 @@
   },
   "slots": {
    "armour/robe": "body",
+   "armour/boots": "feet",
    "cosmetic/robe": "body",
    "jewellery/charm": "shield"
   },

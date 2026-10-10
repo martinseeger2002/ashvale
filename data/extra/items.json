@@ -324,6 +324,35 @@
    "value": 6,
    "attributes": []
   },
+  "fighter_boots": {
+   "name": "Fighter boots",
+   "description": "Heavy leather and iron boots from the Ashen Crown. Strength +10, Defence +4. They put real weight behind a melee blow.",
+   "collection": "ASHVALE The Ashen Crown",
+   "game": "ashvale",
+   "category": "armour",
+   "subcategory": "boots",
+   "tier": 3,
+   "weight": 1800,
+   "req": {
+    "strength": 10
+   },
+   "model": "gear.boots",
+   "value": 400,
+   "attributes": [
+    {
+     "trait_type": "Strength",
+     "value": 10
+    },
+    {
+     "trait_type": "Defence",
+     "value": 4
+    }
+   ],
+   "nft": {
+    "copies": 25,
+    "key": "fighter_boots"
+   }
+  },
   "dried_mouse": {
    "name": "Dried mouse",
    "description": "Waawaabiganoojiinh, a dried mouse. Mishoomis's really special gift for twenty handfuls of manoomin. Nobody knows what it is for. From the valley of Ashvale.",

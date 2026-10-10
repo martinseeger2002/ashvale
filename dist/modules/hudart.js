@@ -249,7 +249,7 @@
     firemaking: 'Light campfires: a tinderbox on logs. Better logs need more levels and burn longer.' };
   const START_SKILLS = [['attack', 'Hit more often in melee'], ['strength', 'Hit harder, carry 1 kg more per level'], ['defence', 'Get hit less often'], ['ranged', 'Bows and arrows'], ['magic', 'Staffs and spells'], ['hitpoints', 'More health'], ['dexterity', 'Run longer, dodge, faster daggers and bows'], ['speechcraft', 'Better prices in shops']];
   const EQ_LAYOUT = [null, 'head', null, 'cape', 'neck', 'ammo', 'weapon', 'body', 'shield', 'pack', 'legs', null, 'hands', 'feet', 'ring'];
-  const EQ_ACTIVE = { head: 1, cape: 1, pack: 1, ammo: 1, weapon: 1, body: 1, shield: 1, legs: 1, ring: 1 };
+  const EQ_ACTIVE = { head: 1, cape: 1, pack: 1, ammo: 1, weapon: 1, body: 1, shield: 1, legs: 1, feet: 1, ring: 1 };
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const fmtN = n => n >= 1e7 ? [Math.floor(n / 1e6) + 'M', 'm'] : n >= 1e5 ? [Math.floor(n / 1e3) + 'K', 'k'] : [String(n), ''];

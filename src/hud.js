@@ -181,10 +181,10 @@
       help.querySelector('[data-a=yes]').onclick = () => { help.style.display = 'none'; onYes && onYes(); };
       help.querySelector('[data-a=no]').onclick = () => { help.style.display = 'none'; };
     }
-    function playerStats(name, sk, cb) {
+    function playerStats(name, sk, cb, story) {
       let tot = 0, h = '<h3>' + A.esc(name) + '</h3><div class="skills">';
       for (const s of A.SKILL_ORDER) { const L = sk[s] | 0 || 1; tot += L; h += '<div class="sk">' + A.SKI[s] + A.cap(s) + '<span>' + L + '</span></div>'; }
-      help.innerHTML = h + '</div><div class="info" style="margin-top:6px">Total level: ' + tot + ' · Combat: ' + cb + '</div><button class="btn">Close</button>';
+      help.innerHTML = h + '</div><div class="info" style="margin-top:6px">Total level: ' + tot + ' · Combat: ' + cb + (story != null ? ' · Story points: ' + story : '') + '</div><button class="btn">Close</button>';
       help.style.display = 'block'; help.querySelector('.btn').onclick = () => { help.style.display = 'none'; };
     }
 

@@ -84,7 +84,8 @@
    ],
    "done": [
     "The ring is yours. Speak to me again if you would have it watch over you more often."
-   ]
+   ],
+   "story": 2
   },
   "angel_gift": {
    "name": "The Gift of Angels",
@@ -113,7 +114,8 @@
    ],
    "done": [
     "The gift is yours. The ring rests ten minutes, then it can carry you home again."
-   ]
+   ],
+   "story": 1
   },
   "ashen_crown": {
    "steps": [
@@ -135,17 +137,31 @@
      "id": 5,
      "zone": "spidercave",
      "talk": [
-      "Past the wraiths, at the narrow way into the deepest chamber, the Ash Knight still stands guard, as he once guarded a king long dead. He was the best of them, once."
+      "Past the wraiths, at the narrow way into the deepest chamber, the Ash Knight still stands guard, as he once guarded a king long dead.",
+      "He was the best of them, once. Give him rest, {name}."
      ]
     },
     {
      "id": 6,
      "zone": "spidercave",
      "talk": [
-      "Beyond the Spider Queen's lair, at the very end of the cave, waits the one who wears the rest of the crown: the Lich of Ashvale. End it, and the valley remembers what it was."
+      "Beyond the Spider Queen's lair, at the very end of the cave, waits the one who wears the rest of the crown: the Lich of Ashvale.",
+      "End it, and the valley remembers what it was. Come back alive, and I will put iron on your feet."
+     ],
+     "progress": [
+      "The Lich still holds the crown. Every night it does, the valley forgets a little more of itself."
+     ],
+     "complete": [
+      "It's over. The lich is ash, and the valley can remember itself again.",
+      "Take these fighter boots. They put real weight behind a blow. Wear them, and your Strength will tell."
+     ],
+     "reward": [
+      "xp:strength:8000",
+      "fighter_boots"
      ]
     }
-   ]
+   ],
+   "story": 5
   },
   "wayside_prayer": {
    "name": "The Wayside Prayer",
@@ -226,7 +242,8 @@
    ],
    "done": [
     "The chapel in Saltmere is open again, and Odric is home with a new axle. Go well, {name}."
-   ]
+   ],
+   "story": 1
   },
   "red_pyre": {
    "name": "The Red Pyre",
@@ -308,7 +325,8 @@
    "done": [
     "The Red Pyre still stands, but it is known. Pike lives, and Edric's note is here. Go well, {name}.",
     "On the trail between Ashvale and Saltmere, near 198, 11, a broken stone chapel. Ancient Chapel. The altar there is out of balance. Go and see what it does to you. The path it carves will take you to the one who keeps the balance."
-   ]
+   ],
+   "story": 3
   },
   "even_grove": {
    "name": "The Even Grove",
@@ -433,7 +451,8 @@
    "done": [
     "The grove is awake. If Mother Wenna has heard the Red Pyre out, I have another lesson. If she has not, the rope and I will still be here, arguing with the wind.",
     "The chapel altar will trade now. One log and some bones, and it gives you a sapling and 15 Prayer XP. Better than burying the bones, and the log is the tree you put back."
-   ]
+   ],
+   "story": 2
   },
   "even_guard": {
    "name": "The Even Guard",
@@ -500,7 +519,8 @@
    ],
    "done": [
     "The wreath remembers. The chapel too. Say the word and I will call the three again. Same warning: they fight until you fall, or you leave fifty tiles of this rope."
-   ]
+   ],
+   "story": 3
   },
   "manoomin": {
    "name": "Manoomin",
@@ -556,7 +576,8 @@
    "homes": [
     "ziibiing",
     "ashvale"
-   ]
+   ],
+   "story": 1
   },
   "sugar_bush": {
    "name": "Iskigamizigan",
@@ -681,7 +702,8 @@
    "homes": [
     "ziibiing",
     "ashvale"
-   ]
+   ],
+   "story": 2
   },
   "biiwaanag": {
    "name": "Biiwaanag",
@@ -735,7 +757,8 @@
     "When you come to an elder for teaching, {name}, bring a little asemaa (tobacco). That is how it is done. Come back with some, and I will show you where the biiwaanag (flint) lies."
    ],
    "askLack": "Bring asemaa (tobacco) to ask an elder for teaching.",
-   "askSay": "(When you say yes, you offer Mishoomis one asemaa (tobacco).)"
+   "askSay": "(When you say yes, you offer Mishoomis one asemaa (tobacco).)",
+   "story": 1
   },
   "mitigwaab": {
    "name": "Mitigwaab",
@@ -805,7 +828,8 @@
    "done": [
     "Boozhoo, {name}. Bring me a wiigwaasaatig (birch) log whenever you need more bikwak (arrows)."
    ],
-   "after": "waabooz"
+   "after": "waabooz",
+   "story": 1
   },
   "deer_hunt": {
    "name": "Waawaashkeshi",
@@ -845,7 +869,8 @@
    ],
    "done": [
     "Boozhoo, {name}. Any time you bring me the hide of a waawaashkeshi (deer), there is ojiitad (sinew) for you."
-   ]
+   ],
+   "story": 1
   },
   "obsidian_arrows": {
    "name": "Obsidian bikwak",
@@ -906,7 +931,8 @@
    ],
    "done": [
     "Boozhoo, {name}. Obsidian and birch, and I will make you more obsidian bikwak (arrows)."
-   ]
+   ],
+   "story": 1
   },
   "waabooz": {
    "name": "Waabooz",
@@ -956,7 +982,41 @@
    ],
    "done": [
     "Boozhoo, {name}. Three waabooz (rabbit) pelts or one waawaashkeshiwayaan (deer hide), and I will give you ojiitad (sinew)."
-   ]
+   ],
+   "story": 2
+  },
+  "hawk_ring": {
+   "story": 3
+  },
+  "elder_bow": {
+   "story": 3
+  },
+  "skinning_knife": {
+   "story": 3
+  },
+  "drove_road": {
+   "story": 2
+  },
+  "salt_road": {
+   "story": 2
+  },
+  "empty_water": {
+   "story": 2
+  },
+  "bronze_gate": {
+   "story": 2
+  },
+  "sail_loft": {
+   "story": 2
+  },
+  "kitchen_range": {
+   "story": 2
+  },
+  "rudder": {
+   "story": 1
+  },
+  "tin_pipe": {
+   "story": 1
   }
  }
 }

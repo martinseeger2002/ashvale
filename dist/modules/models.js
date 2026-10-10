@@ -20,7 +20,7 @@
    H (a character):
      H.object                      THREE.Group, origin at the feet, facing +Z; scale it freely (nothing assumes world size)
      H.height                      head-top height in the object's parent space (includes H.object.scale)
-                                   H.setGear({head, body, legs, weapon, shield, ammo, cape, pack})   item ids or null; the bow is two-handed (hides the shield);
+                                   H.setGear({head, body, legs, weapon, shield, ammo, cape, pack, feet})   item ids or null; the bow is two-handed (hides the shield);
                                    head may be a helmet OR a hat item (hat_cap...), cape a cape item (cape_red...),
                                    body a plate OR a cosmetic robe (robe_red...) that paints the shirt and pants as a robe
      H.setTool(id|null)            hatchet | pickaxe | net shown in hand instead of the weapon while skilling
@@ -235,7 +235,7 @@ function createModels(THREE, opts) {
       lift: { kind: 'y', o: J.hips, p0: J.hips.position.y }, fall: { kind: 'rx', o: J.body }
     };
     const H = character(root, joints, HUMAN);
-    const gear = { head: null, body: null, legs: null, weapon: null, shield: null, ammo: null, cape: null, pack: null, ring: null };
+    const gear = { head: null, body: null, legs: null, weapon: null, shield: null, ammo: null, cape: null, pack: null, feet: null, ring: null };
     let tool = null, tip = null, made = [];
     const place = jn => jn ? J[jn] || null : root;
 
@@ -258,11 +258,11 @@ function createModels(THREE, opts) {
       const sh = O.shirt && clothPart('shirt', O.shirt.style), pa = O.pants && clothPart('pants', O.pants.style);
       if (pa) pieces.push([pa, O.pants.color]);
       if (sh) pieces.push([sh, O.shirt.color]);
-      for (const sl of ['boots', 'gloves', 'belt', 'apron', 'cape']) if (O[sl]) pieces.push([clothPart(sl, sl === 'boots' ? O.feet : null), O[sl]]);
+      for (const sl of ['boots', 'gloves', 'belt', 'apron', 'cape']) if (O[sl] && !(sl === 'boots' && gear.feet)) pieces.push([clothPart(sl, sl === 'boots' ? O.feet : null), O[sl]]);
       const hairP = clothPart('hair', O.hair || 'short'), beardP = O.beard ? clothPart('beard', O.beard) : null, hatP = O.hat ? clothPart('hat', O.hat.style) : null;
       const gearParts = [];
       const add = (id, slot) => { const I = info(id); if (I.part && I.part.kind === 'gear') gearParts.push({ I, slot }); };
-      for (const sl of ['head', 'body', 'legs', 'shield', 'ammo', 'pack', 'ring']) if (gear[sl]) add(gear[sl], sl);
+      for (const sl of ['head', 'body', 'legs', 'shield', 'ammo', 'pack', 'feet', 'ring']) if (gear[sl]) add(gear[sl], sl);
       if (tool) add(tool, 'weapon'); else if (gear.weapon) add(gear.weapon, 'weapon');
       const twoHanded = gearParts.some(g => g.slot === 'weapon' && g.I.part.twoHanded);
       const hidden = new Set(), tags = new Set();

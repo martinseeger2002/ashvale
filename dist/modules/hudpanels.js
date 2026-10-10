@@ -50,9 +50,9 @@
       } else if (ST.tab === 'skills') {
         let tot = 0; let h = '<h4>Skills</h4><div class="skills">';
         for (const s of A.SKILL_ORDER) { const L = core.lv(p, s); tot += L; h += '<div class="sk" data-s="' + s + '">' + A.SKI[s] + A.cap(s).slice(0, 9) + '<span>' + (s === 'hitpoints' ? p.hp + '/' : '') + L + '</span></div>'; }
-        h += '</div><div class="info">Total level: ' + tot + ' · Combat: ' + core.combatLevel(p) + '<br>';
+        h += '</div><div class="info">Total level: ' + tot + ' · Combat: ' + core.combatLevel(p) + ' · Story points: ' + (core.storyPoints ? core.storyPoints(p) : 0) + ' / ' + (core.storyMax ? core.storyMax() : 0) + '<br>';
         if (ST.skillSel) { const L = core.lv(p, ST.skillSel), xp = Math.floor(p.xp[ST.skillSel] / 10), nx = core.xpFor(L + 1); h += '<span class="w" style="font-weight:400">' + A.esc(A.SKILL_INFO[ST.skillSel] || '') + '</span><br><span class="o">' + A.cap(ST.skillSel) + '</span> XP: ' + xp.toLocaleString() + (L < 99 ? '<br>Next level at: ' + nx.toLocaleString() + ' (' + (nx - xp).toLocaleString() + ' to go)' : ''); }
-        else h += 'Tap a skill to see what it does. <span class="o">Defence</span> makes you harder to hit.';
+        else h += 'Tap a skill to see what it does. <span class="o">Defence</span> makes you harder to hit. Finish quests for Story points.';
         panel.innerHTML = h + '</div>';
         for (const s of panel.querySelectorAll('.sk')) s.onclick = () => { ST.skillSel = s.dataset.s; refresh('skills'); };
       } else if (ST.tab === 'combat') {
@@ -88,7 +88,7 @@
           if (!q && !(core.questForHome ? core.questForHome(Q[id], p) : !Q[id].homes || Q[id].homes.indexOf(p.home || 'ashvale') >= 0)) continue;   /* another home's quest: never shown */
           const col = !q ? 'r' : !st ? 'g' : 'y';
           /* a quest you have started opens its story (2026-10-06: "each one of the quests should be clickable") */
-          h += '<div class="qrow"' + (q ? ' data-q="' + A.esc(id) + '" style="cursor:pointer"' : '') + '><div class="' + col + '" style="margin-bottom:4px">' + A.esc(Q[id].name) + (q ? ' <span style="opacity:.6">&#9656;</span>' : '') + '</div><div class="info" style="margin:0 0 8px">';
+          h += '<div class="qrow"' + (q ? ' data-q="' + A.esc(id) + '" style="cursor:pointer"' : '') + '><div class="' + col + '" style="margin-bottom:4px">' + A.esc(Q[id].name) + (Q[id].story ? ' <span class="o">' + (Q[id].story) + '</span>' : '') + (q ? ' <span style="opacity:.6">&#9656;</span>' : '') + '</div><div class="info" style="margin:0 0 8px">';
           const held = (iid) => { if (Array.isArray(iid)) return iid.reduce((a, k) => a + held(k), 0); let c = 0; for (const s of p.inv || []) if (s && s.id === iid) c += s.n; return c; };   /* a list: any of them (sap in a bucket or a pail) */
           const wl = (g) => !g.with ? [] : typeof g.with === 'string' ? [[g.with, g.wn == null ? 1 : g.wn]] : Object.entries(g.with);   /* "with": one item or {id: n} */
           const g = st && st.goal, need = g ? (g.n == null ? 1 : g.n) : 1;
@@ -96,7 +96,7 @@
           const waited = !(g && g.wait != null) || (core.natureHours && core.natureHours() >= (q.t0 == null ? Infinity : q.t0) + g.wait);
           const ready = !!(st && g && waited && (!((g.kill || g.cook || g.talk || g.plant || g.light) && (q.n | 0) < need)) && !(g.kills && killsLeft(g) > 0) && !(g.bring && held(g.bring) < (g.bn == null ? need : g.bn)) && !wl(g).some(([id, k]) => held(id) < k));
           if (!q) h += 'Speak to ' + who(Q[id].giver) + '.';
-          else if (!st) { h += 'Completed!'; const FL = (core.D.rules && core.D.rules.flags) || {}; for (const k in FL) if (FL[k].quest === id && core.hasFlag(p, k)) h += '<br><span class="g">' + A.esc(A.cap(FL[k].name)) + '</span> is on you.' + (FL[k].desc ? ' ' + A.esc(FL[k].desc.replace(/^[^:]*: /, '')).replace(/^./, c => c.toUpperCase()) : ''); }
+          else if (!st) { h += 'Completed!' + (Q[id].story ? ' +' + Q[id].story + ' story point' + (Q[id].story === 1 ? '' : 's') + '.' : ''); const FL = (core.D.rules && core.D.rules.flags) || {}; for (const k in FL) if (FL[k].quest === id && core.hasFlag(p, k)) h += '<br><span class="g">' + A.esc(A.cap(FL[k].name)) + '</span> is on you.' + (FL[k].desc ? ' ' + A.esc(FL[k].desc.replace(/^[^:]*: /, '')).replace(/^./, c => c.toUpperCase()) : ''); }
           else if (ready) h += 'Return to ' + who(st.ends || Q[id].giver) + '.';
           else {
             const have = q.n | 0;

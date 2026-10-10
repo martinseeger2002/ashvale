@@ -139,7 +139,7 @@
     for (const P of PORTALS) if (!M.npcs.some(n => n.id === 'portal_' + P.id))
       M.npcs.push({ id: 'portal_' + P.id, name: 'Town portal', look: 'portal', x: P.x, y: P.y, portal: P.id, examine: 'A ring of standing stones, humming softly. Step through to travel to another town.' });
     const R = Rng(opts.seed == null ? 'ashvale3d' : opts.seed);
-    const S = { t: 0, uid: 1, players: {}, order: [], mobs: [], ground: [], dep: {}, fell: {}, cleared: {}, plants: {}, lit: {}, night: false, pending: [], ev: [], noAuth: {}, seen: {}, fires: [], weather: {}, salt: 0, dyn: 0 };
+    const S = { t: 0, uid: 1, players: {}, order: [], mobs: [], ground: [], dep: {}, fell: {}, cleared: {}, plants: {}, lit: {}, night: false, pending: [], ev: [], noAuth: {}, seen: {}, fires: [], weather: {}, salt: 0, dyn: 0, took: new Set() };
     const queue = [], log = [];
     const idx = M.key, kx = M.kx, ky = M.ky, inMap = M.inWorld;
     const cheb = (ax, ay, bx, by) => Math.max(Math.abs(ax - bx), Math.abs(ay - by));
@@ -1028,7 +1028,11 @@
       if (p && !p.puppet) hitXp(p, h.cls, h.xd != null ? Math.min(h.xd, dmg) : dmg, h.xp, h.dex);   /* a hunted animal: XP from the ordinary roll */
       if (p && h.dmg >= 0 && !h.splash) { const w = weaponOf(p); if (w && w.effect && m.hp > 0) applyEffect(m, w, p.id); }
       if (p) {
-        m.hurt = p.id; m.hurtT = S.t; m.tgt = MON[m.key].fleeHit ? 0 : p.id; m.back = 0;   /* targets whoever hurt it most recently, so groups can tank; a timid animal runs instead */
+        m.hurt = p.id; m.hurtT = S.t; m.back = 0;
+        /* a chained / windup beast (the dragon) keeps the one it already has, so two rangers cannot bounce it
+           between them and cancel every blow. Other monsters still switch to the latest hitter so a group can tank. */
+        if (MON[m.key].fleeHit) m.tgt = 0;
+        else if (!(MON[m.key].windup || MON[m.key].chain) || !tgtOk(m)) m.tgt = p.id;
         const ai = MON[m.key].ai; if (ai) rally(m, p.id, ai.defended ? 10 : ai.rally || 6);
       }
       if (m.hp <= 0) killMob(m, p);
@@ -1223,7 +1227,7 @@
         p.deathPile = { x: p.x, y: p.y, t: S.t };
         ev({ e: 'inv', p: p.id }); ev({ e: 'equip', p: p.id });
       }
-      for (const m of S.mobs) if (m.tgt === p.id) { m.tgt = 0; m.back = 1; }
+      for (const m of S.mobs) if (m.tgt === p.id) loseTarget(m);
     }
 
     // ---------------- NPCs and quests
@@ -1590,7 +1594,11 @@
             q.step++; q.n = 0; if (q.step > Q.steps.length && Q.repeat) q.yr = natureYear();
             const nx = Q.steps[q.step - 1];
             openStep(p, q, nx);
-            if (!nx) lines = done.concat(fill(Q.done, null));
+            if (!nx) {
+              const pts = Q.story | 0;
+              if (pts) { msg(p, 'You have earned ' + pts + ' Story point' + (pts === 1 ? '' : 's') + '.', 'quest'); ev({ e: 'story', p: p.id, q: qid, n: pts, total: storyPoints(p) }); }
+              lines = done.concat(fill(Q.done, null));
+            }
             else if (!open(nx)) { lines = done.concat(st.locked && st.locked.length ? fill(st.locked, nx) : ['Rest now. When the road to ' + nx.zone + ' opens, come and see me again.']); q.wait = 1; }
             else lines = done.concat(fill(nx.talk, nx));
             ev({ e: 'quest', p: p.id, q: qid, step: q.step }); addXp(p, 'speechcraft', SPEECH.xpQuestTalk || 250);
@@ -1612,6 +1620,16 @@
         }
         ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines, axe, recall: recall ? qid : 0, replay, warn: recall ? 1 : 0 });
       }
+    }
+    function storyPoints(p) {
+      let n = 0; const Qs = D.quests.quests || {};
+      for (const id in Qs) { const Q = Qs[id], q = p && p.quests && p.quests[id]; if (q && q.step > (Q.steps || []).length) n += Q.story | 0; }
+      return n;
+    }
+    function storyMax() {
+      let n = 0; const Qs = D.quests.quests || {};
+      for (const id in Qs) n += Qs[id].story | 0;
+      return n;
     }
     function giveReward(p, r, giver, quest) {
       if (!r) return;
@@ -2477,22 +2495,26 @@
         if (!g) p.act = null;
         else {
           if (p.x !== g.x || p.y !== g.y) { p.path = findPath(p.x, p.y, (x, y) => x === g.x && y === g.y, g.x, g.y); stepPath(p); if (!p.path.length && (p.x !== g.x || p.y !== g.y)) p.act = null; }
-          if (p.act && p.x === g.x && p.y === g.y && !isAuth(zoneOf(g.x, g.y)) && g.bank == null) {   /* replica: ask the host; first claim wins (a persisted drop is the @ashvale Bank's: its 'took' decides, taken here) */
+          if (p.act && p.x === g.x && p.y === g.y && !isAuth(zoneOf(g.x, g.y))) {   /* replica: ask the host; first claim wins. Bank-persisted drops used to be taken here as well, then the host's 't' granted them again (a death pile came back as two of everything). */
             if (!canAdd(p, g.id, g.n)) msg(p, "You don't have enough inventory space to hold that item.", 'warn'); else ev({ e: 'claim', p: p.id, g: g.uid });
             p.act = null;
           }
           if (p.act && p.x === g.x && p.y === g.y) {
             /* a pile that does not stack (spider silk (10), and any drop like it) fills the free slots and leaves the rest (2026-10-08) */
+            if (S.took.has(g.uid)) { p.act = null; }
+            else {
             const room = (g.bank != null || IT[g.id].stack) ? (canAdd(p, g.id, g.n) ? g.n : 0) : Math.min(g.n, invFree(p));
             if (!room) msg(p, "You don't have enough inventory space to hold that item.", 'warn');
             else {
               const left = addItem(p, g.id, room), got = room - left;
+              S.took.add(g.uid);
               ev({ e: 'take', p: p.id, g: g.uid, id: g.id, n: got, x: g.x, y: g.y, own: g.from === p.id ? 1 : 0 });
               g.n -= got;
               if (g.n > 0) ev({ e: 'ground', g: g.uid, n: g.n, x: g.x, y: g.y });
               else { S.ground.splice(S.ground.indexOf(g), 1); if (g.bank != null) BANK_GONE.add(g.bank); }   /* a persisted drop taken here: no host's copy brings it back (2026-10-06: the same 200 Gold, picked up again and again) */
             }
             p.act = null;
+            }
           }
         }
       } else if (a && a.k === 'ride') {   /* step from the shore into the bow of a friend's canoe */
@@ -2565,9 +2587,36 @@
        (up to RETALIATE.beyond tiles beyond the leash), steps out of its zone to reach them and shoots back if it can. When the
        attacks stop, or the player dies or goes too far, the normal leash and walk-home logic takes over again. */
     const RETALIATE = RU.retaliate || { ticks: 10, beyond: 12 };
+    function tgtOk(m) { const p = m.tgt && S.players[m.tgt]; return !!(p && !p.dead); }
+    function otherFighter(m, except) {
+      for (const pid of S.order) {
+        if (pid === except) continue;
+        const q = S.players[pid];
+        if (q && !q.dead && q.act && q.act.k === 'attack' && q.act.uid === m.uid) return q;
+      }
+      return null;
+    }
+    function loseTarget(m) {   /* the one it had died or ran: keep fighting whoever is still swinging at it */
+      const nxt = otherFighter(m, m.tgt);
+      if (nxt) { m.tgt = nxt.id; m.back = 0; m.path = null; return nxt; }
+      m.tgt = 0; m.back = 1; m.path = null; return null;
+    }
+    function busyFight(m) {   /* a living player is still in this fight: do not heal the wound away under them */
+      if (m.hurt && S.t - (m.hurtT || 0) < 80) return true;
+      for (const pid of S.order) {
+        const q = S.players[pid];
+        if (!q || q.dead) continue;
+        if (m.zone && M.zoneAt(q.x, q.y) === m.zone) return true;
+        if (q.act && q.act.k === 'attack' && q.act.uid === m.uid) return true;
+      }
+      return false;
+    }
+    function mobHeal(m, md, every) { if (m.hp < md.hp && S.t % every === 0 && !busyFight(m)) m.hp++; }
     function retaliating(m, leash) {
-      if (!m.hurt || S.t - (m.hurtT || -1e9) > RETALIATE.ticks) return false;
-      const p = S.players[m.hurt]; if (!p || p.dead) return false;
+      const lock = (MON[m.key].windup || MON[m.key].chain) && tgtOk(m);
+      const p = lock ? S.players[m.tgt] : (m.hurt && S.players[m.hurt]);
+      if (!lock && (!m.hurt || S.t - (m.hurtT || -1e9) > RETALIATE.ticks)) return false;
+      if (!p || p.dead) return false;
       if (cheb(p.x, p.y, m.sx, m.sy) > leash + RETALIATE.beyond) return false;
       m.tgt = p.id; m.back = 0; return true;
     }
@@ -2683,7 +2732,7 @@
       }
       let p = m.tgt ? S.players[m.tgt] : null;
       m.crossing = retaliating(m, ai.leash);
-      if (p && !(m.crossing && p.id === m.hurt) && (p.dead || cheb(m.x, m.y, m.sx, m.sy) > (m.summon && m.home ? m.home[2] : ai.leash) || cheb(p.x, p.y, m.sx, m.sy) > (m.summon && m.home ? m.home[2] : ai.leash) + 4 || (!m.summon && M.zoneAt(p.x, p.y) !== m.zone))) { m.tgt = 0; m.back = 1; m.path = null; p = null; m.fleeing = 0; }
+      if (p && !(m.crossing && p.id === m.hurt) && (p.dead || cheb(m.x, m.y, m.sx, m.sy) > (m.summon && m.home ? m.home[2] : ai.leash) || cheb(p.x, p.y, m.sx, m.sy) > (m.summon && m.home ? m.home[2] : ai.leash) + 4 || (!m.summon && M.zoneAt(p.x, p.y) !== m.zone))) { p = loseTarget(m); m.fleeing = 0; }
       if (p && ai.fleePct && !m.fled && m.hp * 100 < md.hp * ai.fleePct) { m.fled = 1; m.fleeing = S.t; m.path = null; ev({ e: 'mobflee', mob: m.uid }); }
       if (m.fleeing) {
         if (S.t - m.fleeing > 12 || (m.x === m.sx && m.y === m.sy)) { m.fleeing = 0; if (m.tgt) rally(m, m.tgt, 8); }   /* regrouped: back into the fight with friends */
@@ -2691,7 +2740,7 @@
       }
       if (p && airborne(p) && !shooter(m, md)) { m.tgt = 0; m.back = 1; m.path = null; p = null; }   /* the hawk flew off: no sword reaches it (2026-10-08) */
       if (!p && !m.back && md.aggro > 0) p = acquire(m, md);
-      if (comeStep(m)) { if (m.hp < md.hp && S.t % 10 === 0) m.hp++; return; }   /* someone is trying to hit us and cannot: come out to them, without attacking */
+      if (comeStep(m)) { mobHeal(m, md, 10); return; }   /* someone is trying to hit us and cannot: come out to them, without attacking */
       if (p) {
         const d = cheb(m.x, m.y, p.x, p.y), archer = m.carry && Object.keys(m.carry).some(k => /^arrows_/.test(k) && m.carry[k] > 0);
         if (archer) {
@@ -2716,12 +2765,12 @@
       if (m.back) {
         if (m.x === m.sx && m.y === m.sy) { m.back = 0; m.stuck = 0; }
         else if (!mobPathStep(m, (x, y) => x === m.sx && y === m.sy, m.sx, m.sy, 30)) { m.stuck = (m.stuck || 0) + 1; if (m.stuck > 8 && !occupied(m.sx, m.sy, m)) { m.x = m.sx; m.y = m.sy; m.back = 0; m.stuck = 0; } }
-        if (m.hp < md.hp && S.t % 5 === 0) m.hp++;
+        mobHeal(m, md, 5);
         return;
       }
       if (R.int(12) === 0) { m.wx = m.sx + R.int(5) - 2; m.wy = m.sy + R.int(5) - 2; }   /* patrol a little around the post */
       if (m.wx != null && !(m.x === m.wx && m.y === m.wy)) { if (!mobStepToward(m, m.wx, m.wy)) m.wx = null; }
-      if (m.hp < md.hp && S.t % 10 === 0) m.hp++;
+      mobHeal(m, md, 10);
     }
     function mobTick(m) {
       const md = MON[m.key];
@@ -2761,16 +2810,16 @@
       if (m.home && m.homeAt && S.t >= m.homeAt && !m.tgt) { m.flight = { tx: m.home[0], ty: m.home[1], until: S.t + 400, run: 0 }; m.homeAt = 0; }
       /* a timid animal that is hit runs from whoever hit it, two steps a tick, instead of fighting back (the operator) */
       if (md.fleeHit && m.hurt && S.t - (m.hurtT || -1e9) <= 14) { const q = S.players[m.hurt]; if (q && !q.dead) { m.tgt = 0; m.wx = null; if (stepAway(m, q, 10)) stepAway(m, q, 10); return; } }
-      if (comeStep(m)) { if (m.hp < md.hp && S.t % 10 === 0) m.hp++; return; }   /* someone is trying to hit us and cannot: come out to them, without attacking */
+      if (comeStep(m)) { mobHeal(m, md, 10); return; }   /* someone is trying to hit us and cannot: come out to them, without attacking */
       if (m.follow) { if (S.t < m.follow.at) return; followThrough(m); }   /* coming up (or down) through a cave opening after its target */
       let p = m.tgt ? S.players[m.tgt] : null;
       /* RELENTLESS (2026-10-07, the Spider Cave: "they should follow you out of their spawn zone indefinitely"): once it
          has you it ignores its area and its leash, and only stops when you die (or leave the game) */
-      if (md.relentless) { m.crossing = !!p; if (p && p.dead) { m.tgt = 0; m.back = 1; p = null; } }
+      if (md.relentless) { m.crossing = !!p; if (p && p.dead) p = loseTarget(m); }
       else {
         const leash = md.chain || 10;
         m.crossing = retaliating(m, leash);
-        if (p && !(m.crossing && p.id === m.hurt) && (p.dead || cheb(m.x, m.y, m.sx, m.sy) > leash || cheb(p.x, p.y, m.sx, m.sy) > leash + 4)) { m.tgt = 0; m.back = 1; p = null; }
+        if (p && !(m.crossing && p.id === m.hurt) && (p.dead || cheb(m.x, m.y, m.sx, m.sy) > leash || cheb(p.x, p.y, m.sx, m.sy) > leash + 4)) p = loseTarget(m);
       }
       if (p && airborne(p) && !shooter(m, md)) { m.tgt = 0; m.back = 1; p = null; }   /* the hawk flew off: no bite or blow reaches it (2026-10-08) */
       if (!p && !m.back && md.aggro > 0) {
@@ -2782,7 +2831,7 @@
       if (!p && md.shy) {
         let q = null, qd = md.shy + 1;
         for (const pid of S.order) { const o = S.players[pid]; if (o.dead || o.lv > 0 || airborne(o)) continue; const d = cheb(o.x, o.y, m.x, m.y); if (d < qd) { qd = d; q = o; } }
-        if (q) { m.wx = null; if (stepAway(m, q, 10)) stepAway(m, q, 10); if (m.hp < md.hp && S.t % 10 === 0) m.hp++; return; }
+        if (q) { m.wx = null; if (stepAway(m, q, 10)) stepAway(m, q, 10); mobHeal(m, md, 10); return; }
       }
       if (p) {
         if (m.x === p.x && m.y === p.y) { for (const [dx, dy] of DIRS.slice(0, 4)) if (canStep(m.x, m.y, dx, dy) && !occupied(m.x + dx, m.y + dy, m) && !(md.chain && cheb(m.x + dx, m.y + dy, m.sx, m.sy) > md.chain)) { m.x += dx; m.y += dy; m.step = 1; break; } return; }
@@ -2812,14 +2861,14 @@
         else mobStepToward(m, p.x, p.y);
         return;
       }
-      if (m.back) { if (m.x === m.sx && m.y === m.sy) m.back = 0; else if (!mobStepToward(m, m.sx, m.sy)) { m.x = m.sx; m.y = m.sy; m.back = 0; } if (m.hp < md.hp && S.t % 5 === 0) m.hp++; return; }
+      if (m.back) { if (m.x === m.sx && m.y === m.sy) m.back = 0; else if (!mobStepToward(m, m.sx, m.sy)) { m.x = m.sx; m.y = m.sy; m.back = 0; } mobHeal(m, md, 5); return; }
       if (md.ownDice) {   /* wildlife wanders on its own dice (uid + tick), so a hen in a yard never shifts the fight rolls */
         const h = Math.imul((m.uid % 2147483647) ^ Math.imul(S.t, 0x9e3779b1), 0x85ebca6b) >>> 0, r = md.roam || 3;
         if (h % (md.roamEvery || 10) === 0) { m.wx = m.sx + ((h >>> 8) % (2 * r + 1)) - r; m.wy = m.sy + ((h >>> 16) % (2 * r + 1)) - r; }   /* roamEvery: birds potter about */
       } else if (md.chain) { if (R.int(8) === 0) { const r = md.chain; m.wx = m.sx + R.int(r * 2 + 1) - r; m.wy = m.sy + R.int(r * 2 + 1) - r; } }
       else if (R.int(10) === 0) { const tx = m.sx + R.int(7) - 3, ty = m.sy + R.int(7) - 3; m.wx = tx; m.wy = ty; }
       if (m.wx != null && !(m.x === m.wx && m.y === m.wy)) { if (!mobStepToward(m, m.wx, m.wy)) m.wx = null; }
-      if (m.hp < md.hp && S.t % 10 === 0) m.hp++;
+      mobHeal(m, md, 10);
     }
 
     /* ---------------- seeded land (globe P2 step B): the monster camps of worldgen's sites come to life when a player
@@ -2920,7 +2969,7 @@
         for (const q of Object.values(S.players)) if (q.boat === 2 && q.ride === id && !q.puppet) { q.x = p.x; q.y = p.y; }   /* whoever rides in this canoe moves with it at once - even on the last word before it crosses into the next region */
       }
       if (Number.isInteger(st.hp)) p.hp = st.hp;
-      if (st.dead != null) { const was = p.dead; p.dead = st.dead ? (p.dead || S.t) : 0; if (st.dead && !was) { p.act = null; for (const m of S.mobs) if (m.tgt === id) { m.tgt = 0; m.back = 1; } } }
+      if (st.dead != null) { const was = p.dead; p.dead = st.dead ? (p.dead || S.t) : 0; if (st.dead && !was) { p.act = null; for (const m of S.mobs) if (m.tgt === id) loseTarget(m); } }
       if (Array.isArray(st.L)) PUP_SKILLS.forEach((k, i) => { const L = st.L[i] | 0; if (L >= 1 && L <= 99) p.xp[k] = XP[L] * 10; });
       if (st.g && typeof st.g === 'object') { p.eq = {}; for (const k of EQ_SLOTS) { const v = st.g[k]; if (v && IT[v] && IT[v].eq === k) p.eq[k] = { id: v, n: IT[v].stack ? 9999 : 1 }; } }
       if (st.st && typeof st.st === 'object') for (const k in p.styles) if (Number.isInteger(st.st[k])) p.styles[k] = st.st[k];
@@ -2934,6 +2983,8 @@
     function claim(pid, uid) {   /* first claim wins; the picker's own game adds the item when it hears the 'take' */
       const g = S.ground.find(q => q.uid === uid), p = S.players[pid];
       if (!g || !p || !isAuth(zoneOf(g.x, g.y)) || cheb(p.x, p.y, g.x, g.y) > 3) return false;
+      if (g.bank != null) BANK_GONE.add(g.bank);
+      if (g.uid >= BANK_UID) BANK_GONE.add(g.uid - BANK_UID);
       S.ground.splice(S.ground.indexOf(g), 1); ev({ e: 'take', p: pid, g: g.uid, id: g.id, n: g.n, remote: 1, x: g.x, y: g.y }); return true;
     }
     function hostDrop(o) { return dropGround(o.id, o.n, o.x, o.y, null, o.life || 300, o.from ? { from: o.from, diedAt: o.diedAt || S.t } : null); }
@@ -2948,6 +2999,7 @@
     }
     function groundAdd(uid, id, n, x, y, from, sunk) {
       if (!IT[id] || isAuth(zoneOf(x, y))) return;
+      if (S.took.has(uid)) return;   /* already in our bag: a host snapshot must not lay the same pile down again */
       const did = uid >= BANK_UID ? uid - BANK_UID : null;   /* a persisted drop (its uid says so), even from a host too old to say */
       if (did != null && BANK_GONE.has(did)) return;         /* the Bank already told us somebody took it: an old host's copy stays gone */
       const g = S.ground.find(q => q.uid === uid); if (g) { g.n = n; return; }
@@ -2995,7 +3047,11 @@
       if (fromBag || left < n) { ev({ e: 'inv', p: pid }); burdenCheck(p); }
       return n - left;
     }
-    function grantItem(pid, id, n) { const p = S.players[pid]; if (!p || !IT[id]) return; const left = addItem(p, id, n); if (left) dropGround(id, left, p.x, p.y, null, 300); ev({ e: 'take', p: pid, id, n: n - left }); }
+    function grantItem(pid, id, n, gUid) {
+      const p = S.players[pid]; if (!p || !IT[id]) return;
+      if (gUid != null) { if (S.took.has(gUid)) return; S.took.add(gUid); }   /* the same death-pile uid must not land twice (host 't' after a local take, 2026-10-09) */
+      const left = addItem(p, id, n); if (left) dropGround(id, left, p.x, p.y, null, 300); ev({ e: 'take', p: pid, id, n: n - left });
+    }
     function addPlayer(id, save) {
       const p = newPlayer(id, save);
       /* a saved upper floor holds only if that building still has it */
@@ -3004,7 +3060,7 @@
       for (const qid in p.quests || {}) { const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.steps[q.step - 1]; if (st && st.kit) topUp(p, q, st); if (st && st.stumps) fellStumps(q, st); if (st) learnFlag(p, st); for (const s of (Q && Q.steps) || []) if (s.flag && q.step > s.id) learnFlag(p, s); }
       ev({ e: 'join', p: id }); return p;
     }
-    function removePlayer(id) { delete S.players[id]; S.order = S.order.filter(q => q !== id); for (const m of S.mobs) if (m.tgt === id) { m.tgt = 0; m.back = 1; } }
+    function removePlayer(id) { delete S.players[id]; S.order = S.order.filter(q => q !== id); for (const m of S.mobs) if (m.tgt === id) loseTarget(m); }
     function hash() {
       let h = 2166136261 >>> 0; const mix = (v) => { h ^= v >>> 0; h = Math.imul(h, 16777619) >>> 0; };
       mix(S.t); mix(R.state); for (const z in S.weather) { mix(hashStr(S.weather[z].kind)); mix(S.weather[z].intensity); }
@@ -3033,7 +3089,7 @@
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
       prayTicks(p, pts, drain) { let d = drain; if (d == null) { d = 0; for (const id in p.pray || {}) d += (PRAYERS[id] && PRAYERS[id].drain) || 0; } if (!d) return null; const n = pts == null ? (p.pp | 0) : pts, rs = resist(p, d); return n <= 0 ? 0 : Math.ceil(((n - 1) * rs + rs + 1 - (pts == null ? (p.pd | 0) : 0)) / d); },
-      isHawk, passageAt, crateAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, searchOpen, coverBlocks, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf,
+      isHawk, passageAt, crateAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, searchOpen, coverBlocks, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf, storyPoints, storyMax,
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
