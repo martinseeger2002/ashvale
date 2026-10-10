@@ -51,3 +51,12 @@ ok(n == 0, 'a deposit while that piece is on offer pays nothing, so nothing is m
 B.handle_offer(c, 'A', {'t': 'unoffer'})
 ok(c.execute("select count(*) from offers where addr='A'").fetchone()[0] == 0, 'the offer clears when the trade ends')
 print('ALL OK' if not fails else 'FAILED: %d' % fails)
+# dragon-killer board: global counts on the Bank
+c.execute('create table scores(k text, name text, n integer, by text, at real, primary key(k, name))')
+ok(B.handle_scores(c, 'A', {'t': 'score', 'k': 'chain_dragon', 'n': 'Wren', 'p': 2}) is None, 'a kill count is stored')
+B.handle_scores(c, 'A', {'t': 'score', 'k': 'chain_dragon', 'n': 'Wren', 'p': 1})
+B.handle_scores(c, 'B', {'t': 'score', 'k': 'chain_dragon', 'n': 'Maren', 'p': 4})
+r = B.handle_scores(c, 'C', {'t': 'scores?', 'k': 'chain_dragon'})
+ok(r and r[0]['n'] == 6 and r[0]['top'][0] == ['Maren', 4] and r[0]['top'][1] == ['Wren', 2], 'the Bank keeps the higher count per name and the global total: %r' % (r,))
+ok(not B.handle_scores(c, 'C', {'t': 'score', 'k': 'goblin', 'n': 'Wren', 'p': 9}), 'only the chained dragon is on this board')
+print('ALL OK' if not fails else 'FAILED: %d' % fails)

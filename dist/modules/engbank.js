@@ -424,6 +424,31 @@
         bankRoom().then(R => { if (R && R.me) for (const kind of ['sap', 'bark']) R.send({ t: 'marks?', v: 1, k: kind, x0: me.x - 80, y0: me.y - 80, x1: me.x + 80, y1: me.y + 80 }); });
       }
       setInterval(() => marksAsk(false), 15000); setTimeout(() => marksAsk(true), 9000);
+      /* the ruined keep's dragon-killer board (2026-10-10): the Bank holds every character's count, so the sign is the same
+         for anyone who reads it. A game reports its own name's total; 'scores?' answers the whole board. */
+      function scoreTell(e) {
+        if (!e || e.key !== 'chain_dragon' || !e.name) return;
+        const p = e.n | 0; if (p < 1) return;
+        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'score', v: 1, k: 'chain_dragon', n: String(e.name).slice(0, 12), p }); });
+      }
+      let scoreT = 0; const scoreGot = {};
+      function scoresAsk(force) {
+        if (!force && performance.now() - scoreT < 20000) return;
+        scoreT = performance.now();
+        bankRoom().then(R => { if (R && R.me) R.send({ t: 'scores?', v: 1, k: 'chain_dragon' }); });
+      }
+      function scoresHeard(d) {
+        const k = String(d.k || 'chain_dragon'), q = k + ':' + (d.of | 0), G = scoreGot[q] = scoreGot[q] || { top: [], n: 0, total: 0 };
+        G.top.push.apply(G.top, d.top || []); G.n++; G.total = Math.max(G.total, d.n | 0);
+        if (G.n < (d.of | 0)) return;
+        delete scoreGot[q];
+        const names = {}; for (const r of G.top) if (Array.isArray(r) && typeof r[0] === 'string') names[r[0]] = r[1] | 0;
+        if (core.mergeScores) core.mergeScores(k, names);
+        if (core.setScoreTotal) core.setScoreTotal(k, G.total);
+        if (K.hsSave) K.hsSave();
+        if (K.paintScores) K.paintScores();
+      }
+      setInterval(() => scoresAsk(false), 20000); setTimeout(() => scoresAsk(true), 7000);
       /* persisted drops near you, from the @ashvale Bank: asked when you arrive somewhere new and every minute (the operator
          2026-10-06: dropped Gold and valuables "should persist ... in the exact same location until a player picks them up") */
       let gAt = null, gT = 0, gSeq = 0; const gGot = {};
@@ -464,6 +489,7 @@
             if (data && data.t === 'felled' && bankFrom && R.me && data.to === R.me.address) { core.setFelled(data.cells || []); return; }
             if (data && data.t === 'carried' && bankFrom && R.me && data.to === R.me.address) { carriedHeard(data); return; }   /* carried in someone's canoe while away */
             if (data && data.t === 'marks' && bankFrom && R.me && data.to === R.me.address) { if (core.setMarks) core.setMarks(data.k, data.cells || []); return; }   /* maples tapped today, birches peeled this year */   /* trees others felled */
+            if (data && data.t === 'scores' && bankFrom && R.me && data.to === R.me.address) { scoresHeard(data); return; }   /* the ruined keep's global dragon-killer board */
             if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }   /* persisted drops near me */
             if (data && data.t === 'pals' && bankFrom && R.me && data.to === R.me.address) { palsHeard(data); return; }   /* the friends list */
             if (!data || data.t !== 'dep' || !bankFrom || !R.me || data.to !== R.me.address) return;   /* only @ashvale or @yourfirstname answers, only to me */
@@ -508,7 +534,7 @@
           R.send({ t: 'dep', v: 3, id, items, carried, chest, spent, reward, pend: pendOf(Object.keys(items)), from: fromAll(Object.keys(items)) });
         });
       }
-    return { CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer };
+    return { CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engbank', { api: 1, v: 1, needs: {} }, () => ({ api: 1, install }));
   if (typeof module !== 'undefined' && module.exports) module.exports = { install };

@@ -16,6 +16,7 @@
     const ORE = { R: 0xc8702c, N: 0xd8d8d0, I: 0x8a4632, C: 0x33333c, G: 0xd9a930, A: 0x6f86c8, S: 0x3a3a40, V: 0x0e0e14 };
     const WATER_Y = -0.16;
     let LAMPQ = null;   /* (x, y) -> whether a tended lamp or town torch is lit; the engine sets this from the guards */
+    const BOARDS = Object.create(null);   /* painted wooden signs (dragon killers): id -> { lines, faces } */
     const SNOWC = new THREE.Color(0xf2f1ec);
 
     function hash2(x, y) { let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
@@ -318,6 +319,26 @@
     /* a hanging shop sign (2026-10-05: "signs that stick out ... on a pole", "double sided"): an iron pole out
        from the wall under the eaves with a brace, a board on two chains, the name painted on both faces (each face its
        own plane, so neither reads mirrored). (x, y, z) = where the pole meets the wall, out = [dx, dz] the wall's outward normal. */
+    function drawBoardFace(mesh, lines) {
+      const c = mesh.userData.cv; if (!c) return;
+      const g = c.getContext('2d'), W = c.width, H = c.height;
+      g.fillStyle = '#c4a06a'; g.fillRect(0, 0, W, H);
+      g.strokeStyle = '#4a3014'; g.lineWidth = 10; g.strokeRect(5, 5, W - 10, H - 10);
+      g.fillStyle = '#2a180c'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      const L = lines && lines.length ? lines : ['—'];
+      let y = 28;
+      for (let i = 0; i < L.length; i++) {
+        g.font = i === 0 ? 'bold 24px Georgia, serif' : i === 1 ? 'italic 17px Georgia, serif' : 'bold 15px Georgia, serif';
+        g.fillText(String(L[i]).slice(0, 24), W / 2, y);
+        y += i === 0 ? 30 : i === 1 ? 26 : 22;
+      }
+      if (mesh.material && mesh.material.map) mesh.material.map.needsUpdate = true;
+    }
+    function boardPaint(id, lines) {
+      const B = BOARDS[id] = BOARDS[id] || { lines: ['DRAGON KILLERS', 'Slain 0 times', '', 'None yet.'], faces: [] };
+      if (lines) B.lines = lines;
+      for (const f of B.faces) drawBoardFace(f, B.lines);
+    }
     function hangSign(into, text, x, y, z, out) {
       const IRON = 0x2e2a26, ox = out[0], oz = out[1], L = 2.0, along = ox !== 0;   /* along: the pole runs along x */
       const box = (w, h, d, col, px, py, pz) => { const m = mesh(new THREE.BoxGeometry(w, h, d), col, px, py, pz); into.add(m); return m; };
@@ -868,6 +889,31 @@
             B.add('cyl', 0xc8ccd0, px, py + 3.55, pz, 0.28, 0.06, 0.28);
             break;
           }
+          case 'wsign': {   /* a wooden board nailed to posts on a wall (the ruined keep's dragon killers) */
+            const face = o.face || 's', id = o.board || ('s' + o.x + ',' + o.y);
+            const nx = face === 'e' ? 1 : face === 'w' ? -1 : 0, nz = face === 's' ? 1 : face === 'n' ? -1 : 0;
+            const px = x - nx * 0.28, pz = z - nz * 0.28, py = y;
+            const WOOD = 0x6b4424, PLANK = 0x8a5a30, IRON = 0x2a2a2e, BW = 1.18, BH = 1.62;
+            B.add('box', WOOD, px - (nz ? 0.48 : 0), py + 0.85, pz - (nx ? 0.48 : 0), nz ? 0.12 : 0.12, 1.7, nz ? 0.12 : 0.12);
+            B.add('box', WOOD, px + (nz ? 0.48 : 0), py + 0.85, pz + (nx ? 0.48 : 0), 0.12, 1.7, 0.12);
+            B.add('box', PLANK, px, py + 1.05, pz, nz ? BW + 0.08 : 0.08, BH + 0.08, nz ? 0.08 : BW + 0.08);
+            for (const [ox, oy] of [[-0.46, 0.42], [0.46, 0.42], [-0.46, -0.42], [0.46, -0.42]]) B.add('box', IRON, px + nz * ox, py + 1.05 + oy, pz + nx * ox, 0.06, 0.06, 0.06);
+            const B0 = BOARDS[id] = BOARDS[id] || { lines: ['DRAGON KILLERS', 'Slain 0 times', '', 'None yet.'], faces: [] };
+            const cv = document.createElement('canvas'); cv.width = 256; cv.height = 384;
+            const along = nz !== 0;
+            for (const side of [1, -1]) {
+              const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+              const faceM = new THREE.Mesh(new THREE.PlaneGeometry(BW, BH), new THREE.MeshLambertMaterial({ map: tex, side: THREE.FrontSide }));
+              faceM.userData.cv = cv; faceM.userData.boardId = id;
+              if (along) { faceM.rotation.y = side > 0 ? 0 : Math.PI; faceM.position.set(px, py + 1.05, pz + side * 0.05); }
+              else { faceM.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2; faceM.position.set(px + side * 0.05, py + 1.05, pz); }
+              group.add(faceM); B0.faces.push(faceM);
+            }
+            boardPaint(id);
+            const pk = new THREE.Mesh(new THREE.BoxGeometry(along ? 1.3 : 0.45, 1.8, along ? 0.45 : 1.3), new THREE.MeshBasicMaterial({ visible: false }));
+            pk.position.set(px, py + 1.05, pz); pk.userData.pick = { kind: 'sign', x: o.x, y: o.y, board: id }; group.add(pk); pickables.push(pk);
+            break;
+          }
           case 'ruin': {
             const STN = 0x8d8880, RUB = 0x6a655e, w = o.w || 7, h = o.h || 6, x0 = o.x, z0 = o.y;
             B.add('box', 0xb0aa9e, x0 + w / 2, y + 0.05, z0 + h / 2, w - 0.15, 0.1, h - 0.15);
@@ -1296,7 +1342,10 @@
            rice, with their meshes - so a long walk or a few trips to the Spider Cave filled an iPhone's memory until iOS closed
            the game; the instanced meshes also hold their per-instance buffers on the GPU until disposed) */
         dispose() {
-          group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); const mt = o.material; if (mt && mt.map && mt.map.isCanvasTexture) { mt.map.dispose(); mt.dispose(); } });   /* painted signs are this region's own */
+          group.traverse(o => {
+            if (o.userData && o.userData.boardId) { const B = BOARDS[o.userData.boardId]; if (B) B.faces = B.faces.filter(f => f !== o); }
+            if (o.geometry) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); const mt = o.material; if (mt && mt.map && mt.map.isCanvasTexture) { mt.map.dispose(); mt.dispose(); }
+          });   /* painted signs are this region's own */
           for (const L of [TREE_REG, FLORA_REG, RICE_REG]) for (let i = L.length - 1; i >= 0; i--) if (L[i].g === group) L.splice(i, 1);
         },
         pickInfo(hit) {
@@ -1346,7 +1395,7 @@
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, canoeMesh, seasonApply, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, canoeMesh, seasonApply, boardPaint, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -440,6 +440,7 @@
       if (typeof s.town === 'string') p.town = s.town;
       if (s.hawkHp != null) p.hawkHp = s.hawkHp | 0;
       if (s.cd) { p.cd = {}; for (const k in s.cd) p.cd[k] = S.t + (s.cd[k] | 0); }   /* cooldowns are saved as ticks left */
+      if (s.kills && typeof s.kills === 'object') { p.kills = {}; for (const k in s.kills) if (/^[a-z_]{1,32}$/.test(k) && (s.kills[k] | 0) > 0) p.kills[k] = s.kills[k] | 0; }
       if (Number.isInteger(s.hp)) p.hp = s.hp;
       if (Number.isInteger(s.energy)) p.energy = Math.max(0, Math.min(10000, s.energy));
     }
@@ -503,7 +504,7 @@
     function exportPlayer(id) {
       const p = S.players[id]; if (!p) return null;
       const at = p.dead ? wakeSpot(p).at : [p.x, p.y];
-      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, orders: p.orders || {}, traps: p.traps || [], bless: p.bless || [], town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
+      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, orders: p.orders || {}, traps: p.traps || [], bless: p.bless || [], town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, kills: p.kills || {}, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
     }
 
     // ---------------- pathfinding: BFS over the tile grid, 8 directions, no corner cutting (RuneScape-style)
@@ -1047,6 +1048,49 @@
         if (dex) addXp(p, 'dexterity', (DEX.xpPerDamage || 10) * dmg);
       }
     }
+    /* public kill boards (the ruined keep's wooden sign): a G-counter per character name. The @ashvale Bank holds the
+       global counts; two games merging take the higher count for each name and the painted total is the Bank's (or the
+       sum of names, if that is higher). */
+    const SCORES = {}, SCORE_N = {};
+    function scoreName(n) { return cleanName(n) || 'Adventurer'; }
+    function mergeScores(key, names) {
+      if (!/^[a-z_]{1,32}$/.test(String(key)) || !names || typeof names !== 'object') return 0;
+      const m = SCORES[key] = SCORES[key] || {}; let n = 0;
+      for (const raw in names) { const nm = cleanName(raw), v = names[raw] | 0; if (!nm || v <= 0 || v >= 1e9 || (m[nm] | 0) >= v) continue; m[nm] = v; n++; }
+      return n;
+    }
+    function setScoreTotal(key, n) {
+      if (!/^[a-z_]{1,32}$/.test(String(key))) return 0;
+      n = n | 0; if (n < 0 || n >= 1e9) return 0;
+      SCORE_N[key] = Math.max(SCORE_N[key] | 0, n); return SCORE_N[key];
+    }
+    function scoreKill(key, name) {
+      if (!/^[a-z_]{1,32}$/.test(String(key))) return 0;
+      const nm = scoreName(name), m = SCORES[key] = SCORES[key] || {};
+      m[nm] = (m[nm] | 0) + 1;
+      SCORE_N[key] = Math.max(SCORE_N[key] | 0, 0) + 1;
+      ev({ e: 'score', key, name: nm, n: m[nm], names: Object.assign({}, m) });
+      return m[nm];
+    }
+    function scoresOf(key) {
+      const m = SCORES[key] || {}; let sum = 0; const top = [];
+      for (const nm in m) { sum += m[nm] | 0; top.push([nm, m[nm] | 0]); }
+      top.sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+      return { total: Math.max(SCORE_N[key] | 0, sum), top: top.slice(0, 10), names: m };
+    }
+    function scoreBoard(key) {
+      const s = scoresOf(key), L = ['DRAGON KILLERS', 'Slain ' + s.total + (s.total === 1 ? ' time' : ' times')];
+      if (!s.top.length) L.push('', 'None yet.');
+      else s.top.forEach((r, i) => L.push((i + 1) + '. ' + r[0] + '  ' + r[1]));
+      return L;
+    }
+    function scoreRead(key) {
+      const s = scoresOf(key), L = ['The chained dragon has been slain ' + s.total + ' time' + (s.total === 1 ? '' : 's') + '.'];
+      if (!s.top.length) L.push('No names are carved here yet.');
+      else { L.push('The names of its slayers, by how many times:'); s.top.forEach((r, i) => L.push((i + 1) + '. ' + r[0] + ' — ' + r[1])); }
+      return L;
+    }
+    function signAt(x, y) { return (M.objects || []).find(o => o.k === 'wsign' && o.x === (x | 0) && o.y === (y | 0)) || null; }
     function creditKill(p, key) {
       const md = MON[key]; if (!md) return;
       p.kills[key] = (p.kills[key] || 0) + 1;
@@ -1077,6 +1121,7 @@
       m.dead = S.t; m.tgt = 0; m.dropAt = S.t + 2; m.killer = p ? p.id : null;
       ev({ e: 'die', mob: m.uid, killer: p ? p.id : null }); void md;
       if (p && !p.puppet) creditKill(p, m.key);
+      if (p && m.key === 'chain_dragon') scoreKill(m.key, p.name);
       for (const pid of S.order) { const o = S.players[pid]; if (o.act && o.act.k === 'attack' && o.act.uid === m.uid) o.act = null; }
     }
     function mobDrops(m) {
@@ -2978,6 +3023,7 @@
       if (st.pl !== undefined) p.pole = !!st.pl;
       if (st.kn !== undefined) p.knock = !!st.kn;
       if (st.pr !== undefined) p.pray = st.pr && PRAYERS[st.pr] && PRAYERS[st.pr].g === 'head' ? { [st.pr]: 1 } : {};
+      if (typeof st.n === 'string') { const nm = cleanName(st.n); if (nm) p.name = nm; }
       if (st.act !== undefined) p.act = st.act && st.act.k === 'attack' && mobByUid(st.act.uid) ? { k: 'attack', uid: st.act.uid } : null;
     }
     function claim(pid, uid) {   /* first claim wins; the picker's own game adds the item when it hears the 'take' */
@@ -3089,7 +3135,7 @@
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
       prayTicks(p, pts, drain) { let d = drain; if (d == null) { d = 0; for (const id in p.pray || {}) d += (PRAYERS[id] && PRAYERS[id].drain) || 0; } if (!d) return null; const n = pts == null ? (p.pp | 0) : pts, rs = resist(p, d); return n <= 0 ? 0 : Math.ceil(((n - 1) * rs + rs + 1 - (pts == null ? (p.pd | 0) : 0)) / d); },
-      isHawk, passageAt, crateAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, searchOpen, coverBlocks, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf, storyPoints, storyMax,
+      isHawk, passageAt, crateAt, signAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, searchOpen, coverBlocks, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf, storyPoints, storyMax, scoreKill, mergeScores, setScoreTotal, scoresOf, scoreBoard, scoreRead,
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,

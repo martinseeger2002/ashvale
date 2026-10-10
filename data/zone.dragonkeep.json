@@ -48,6 +48,14 @@
      -54,
      -99
     ]
+   },
+   {
+    "k": "wsign",
+    "x": -56,
+    "y": -94,
+    "board": "dragon",
+    "face": "s",
+    "title": "Dragon killers"
    }
   ],
   "npcs": [],
