@@ -296,6 +296,12 @@ ok(!core.canPlant(p, spot[0], spot[1]), 'the grown tree cannot be picked back up
 const gv = core.M.npcs.filter(n => n.watch === 'village'), gs = core.M.npcs.filter(n => n.watch === 'saltmere');
 ok(gv.length === 3 && gs.length === 4 && !!core.M.npcs.find(n => n.road), 'town guards stand in Ashvale and Saltmere, and one has the road');
 ok(gv.every(n => !n.foe) && core.guardCb === 33, 'the guards are combat 33 and do not start a fight');
+const said = [];
+for (let i = 0; i < 12; i++) { const d = talk(gv[i % gv.length].id); said.push(d && d.lines ? d.lines.join(' ') : ''); }
+ok(said.every(s => s.length > 0) && new Set(said).size === 12, 'each talk with a town guard is the next remark, then the set comes round');
+ok(said.some(s => /Lake Castle/.test(s)) && said[0] !== said[1], 'one of the remarks is the far castle they call Lake Castle');
+const again = talk(gv[0].id);
+ok(again && again.lines.join(' ') === said[0], 'the thirteenth talk starts the same remarks over');
 const g0 = gv[0];
 p.x = g0.x + 1; p.y = g0.y; if (core.M.blocked(p.x, p.y)) { p.x = g0.x; p.y = g0.y + 1; }
 p.path = []; p.act = null; p.dead = 0; p.hp = core.maxHp(p);

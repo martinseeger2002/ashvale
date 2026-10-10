@@ -1831,5 +1831,12 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
 }
 /* every shop lists each item once (a duplicate staff_frost broke Garrick's shop screen, 2026-10-01) */
 for (const [sid, sh] of Object.entries(mod('shops').shops)) { const dup = sh.stock.filter((k, i) => sh.stock.indexOf(k) !== i); ok(!dup.length, 'shop ' + sid + ' lists each item once' + (dup.length ? ' (twice: ' + dup + ')' : '')); }
+{
+  const helm = AshCore.create(D, { seed: 'trade-helm' }), h = helm.addPlayer('h1', {});
+  h.eq.head = { id: 'helmet_t4', n: 1 };
+  ok(helm.storeItem('h1', 'helmet_t4', 1) === 1 && !h.eq.head, 'a worn mithril helmet comes off when the chain trade takes it');
+  helm.grantItem('h1', 'helmet_t4', 1); h.eq.head = { id: 'helmet_t4', n: 1 };
+  ok(helm.storeItem('h1', 'helmet_t4', 1) === 1 && helm.invCount(h, 'helmet_t4') === 0 && h.eq.head && h.eq.head.id === 'helmet_t4', 'the bag copy goes first, the one on the head stays if you still have it');
+}
 console.log(fails ? fails + ' FAILED' : 'ALL OK');
 process.exit(fails ? 1 : 0);

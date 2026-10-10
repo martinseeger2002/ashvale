@@ -737,6 +737,7 @@
         }
         case 'take': { const g = S.ground.find(q => q.uid === c.uid); if (g) { p.act = { k: 'take', uid: g.uid }; p.skilling = null; closeShop(p); } break; }
         case 'enter': { const o = passageAt(c.x, c.y); if (o && !p.dead) { p.act = { k: 'enter', x: o.x, y: o.y }; p.skilling = null; closeShop(p); } break; }   /* a cave mouth, a way out */
+        case 'crate': { const o = crateAt(c.x | 0, c.y | 0); if (o && !p.dead) { p.act = { k: 'crate', x: o.x, y: o.y }; p.skilling = null; closeShop(p); } break; }
         case 'npc': { const n = M.npcs.find(q => q.id === c.id); if (n) { p._trade = !!c.trade; p.act = { k: 'npc', id: n.id }; p.skilling = null; closeShop(p); } break; }
         case 'acceptq': {   /* yes on a starting dialogue, or yes when Vael asks before calling the three again */
           const qid = String(c.q || ''), Q = D.quests.quests[qid];
@@ -1254,13 +1255,22 @@
       if (n.linesReady) return n.linesReady;
       return n.lines;
     }
+    function crateAt(x, y) { return (M.objects || []).find(o => o.k === 'crate' && o.loot && o.x === x && o.y === y) || null; }
+    function openCrate(p, o) {
+      const flag = o.once || ('crate_' + o.x + '_' + o.y);
+      if (hasFlag(p, flag)) { msg(p, 'The crate is empty. You already took what was hidden in it.', 'info'); return; }
+      if (!IT[o.loot]) return;
+      if (addItem(p, o.loot, o.n || 1)) { msg(p, 'Your bag is full. Make room before you take what is in the crate.', 'warn'); return; }
+      p.flags = p.flags || {}; p.flags[flag] = S.t || 1;
+      ev({ e: 'inv', p: p.id }); ev({ e: 'flag', p: p.id, flag: flag });
+      msg(p, 'Under the straw you find ' + IT[o.loot].name + '.', 'info');
+    }
     function searchOpen(p, n) {
       const s = n && n.search; if (!s) return false;
       const q = p.quests && p.quests[s.quest]; if (!q) return false;
       if (q.step > s.step) return true;
       if (q.step === s.step && (q.n | 0) >= 1) return true;
-      if (s.item && IT[s.item] && invCount(p, s.item) > 0) return true;
-      return false;
+      return false;   /* a quest item from someone else does not open the search */
     }
     function coverBlocks(p, m) {
       const md = MON[m.key]; if (!md || !md.cover) return false;
@@ -1506,6 +1516,7 @@
       if ((n.trade || n.craft) && !ends && !nextOffered(n, p) && tradeTalk(p, n)) return;   /* a quest of theirs comes first (Ma'iingan's deer hunt before his sinew trade) */
       const idle = npcIdleLines(n, p), offered = nextOffered(n, p);
       const hadQuest = (n.quests || []).concat(n.quest ? [n.quest] : []).some(id => p.quests[id]);
+      if (n.watch && !ends && !offered && !hadQuest) { ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: watchSay(p) }); return; }
       if (idle && idle.length && !ends && !offered && !hadQuest) { let tell = null; if (n.sky && SKYTELL) try { tell = SKYTELL(p); } catch (e) { tell = null; } let nat = null; if (n.nature && NATTELL) try { nat = NATTELL(n.nature, p); } catch (e) { nat = null; } ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: idle.concat(nat ? [nat] : [], tell ? [tell] : []) }); return; }   /* the sky-watchers end with the next eclipses */   /* dialogue straight off the zone data, checked after shop and quest */
       /* an NPC may offer the next quest only after the one before it is finished (Iria's supper, then the Gift of Angels) */
       let qid = ends || offered || n.quest;
@@ -1530,7 +1541,7 @@
         const withN = (st) => st.goal.wn == null ? 1 : st.goal.wn;
         const withs = (st) => !st.goal.with ? [] : typeof st.goal.with === 'string' ? [[st.goal.with, withN(st)]] : Object.entries(st.goal.with);   /* "with": one item (wn of it) or {id: n} */
         const bids = (g) => (Array.isArray(g.bring) ? g.bring : [g.bring]).filter(id => IT[id]);   /* bring: one item, or a list where any will do */
-        const bringHave = (g) => bids(g).reduce((a, id) => a + invCount(p, id), 0);
+        const bringHave = (g) => bids(g).reduce((a, id) => a + Math.max(0, invCount(p, id) - ((q.pre && q.pre[id]) | 0)), 0);
         const counted = (st) => {
           if (st.goal.kills) { let n = 0; for (const k in st.goal.kills) n += Math.min(st.goal.kills[k], (q.kn && q.kn[k]) | 0); return n; }
           return (st.goal.kill || st.goal.cook || st.goal.talk || st.goal.plant || st.goal.light) ? (q.n | 0) : (st.goal.bring && bids(st.goal).length ? bringHave(st.goal) : (q.n | 0));
@@ -1672,7 +1683,22 @@
       const own = S.players[m.owner];
       if (own && !own.summonBye) { own.summonBye = 1; msg(own, 'They vanish. A death, or fifty tiles from the rope, undoes the call. Ask again if you want them back.', 'warn'); }
     }
-    function openStep(p, q, st) { if (!st || !q) return; if (st.goal && st.goal.wait != null && q.tw !== q.step) { q.t0 = natureHours(); q.tw = q.step; } topUp(p, q, st); fellStumps(q, st); learnFlag(p, st); }   /* a wait starts the clock when its step opens */
+    function broughtBySearch(p, id) {
+      for (const n of M.npcs) {
+        const s = n && n.search;
+        if (!s || !s.flag || !hasFlag(p, s.flag)) continue;
+        const items = Array.isArray(s.items) ? s.items : [];
+        if (items.some(it => (it && (it.id || it)) === id)) return true;
+      }
+      return false;
+    }
+    function stampBring(p, q, st) {
+      q.pre = {};
+      if (!st || !st.goal || st.goal.bring == null) return;
+      const ids = (Array.isArray(st.goal.bring) ? st.goal.bring : [st.goal.bring]).filter(id => IT[id]);
+      for (const id of ids) q.pre[id] = broughtBySearch(p, id) ? 0 : invCount(p, id);
+    }
+    function openStep(p, q, st) { if (!st || !q) return; if (st.goal && st.goal.wait != null && q.tw !== q.step) { q.t0 = natureHours(); q.tw = q.step; } topUp(p, q, st); fellStumps(q, st); learnFlag(p, st); stampBring(p, q, st); }   /* a wait starts the clock when its step opens */
     function learnFlag(p, st) {
       const k = st && st.flag;
       if (!k || !FLAGS[k] || hasFlag(p, k)) return;
@@ -1680,7 +1706,7 @@
       ev({ e: 'flag', p: p.id, flag: k });
       msg(p, 'You learn ' + FLAGS[k].name + '.' + (FLAGS[k].desc ? ' ' + FLAGS[k].desc : ''), 'quest');
     }
-    function ensureStep(p, q, st) { openStep(p, q, st); }
+    function ensureStep(p, q, st) { if (!st || !q) return; topUp(p, q, st); fellStumps(q, st); learnFlag(p, st); }
     function isStump(x, y) { const i = idx(x, y); return isWood(x, y) && !!S.dep[i]; }
     const TOWN = {}; for (const z of ZINDEX) if (z.level === 'safe') TOWN[z.id] = 1;
     const GATES = [];
@@ -1768,6 +1794,7 @@
       if (count) { rec.qid = job.qid; rec.step = job.q.step; rec.counted = 1; }
       S.plants[i] = rec;
       ev({ e: 'plant', x, y, p: p.id });
+      if (!isAuth(zoneOf(x, y))) ev({ e: 'xplant', x, y, p: p.id });
       if (cleared) msg(p, 'You plant the sapling in the new grass. You can pick it up for one hour. After that, it grows into a tree and stays.');
       else msg(p, 'You plant the sapling in the grass. You can pick it up for one hour. After that, it grows into a tree and stays.');
       if (job && rec.counted) {
@@ -1787,7 +1814,53 @@
         if (pl.stump && q.sown) q.sown = q.sown.filter(s => s[0] !== x || s[1] !== y);
       }
       ev({ e: 'unplant', x, y, p: p.id }); ev({ e: 'inv', p: p.id });
+      if (!isAuth(zoneOf(x, y))) ev({ e: 'xunplant', x, y, p: p.id });
       msg(p, 'You pick the sapling back up.');
+    }
+    function hostPlant(x, y, pid) {
+      if (!inMap(x, y) || !isAuth(zoneOf(x, y))) return;
+      const i = idx(x, y);
+      if (S.plants[i] || plantWhy(x, y)) return;
+      if (isWood(x, y) && !S.dep[i]) return;
+      S.plants[i] = { x, y, at: S.t, tile: M.tileAt(x, y), stump: 0, owner: pid || 0, grown: 0 };
+      ev({ e: 'plant', x, y, p: pid || 0 });
+    }
+    function hostUnplant(x, y) {
+      if (!inMap(x, y) || !isAuth(zoneOf(x, y))) return;
+      const i = idx(x, y), pl = S.plants[i];
+      if (!pl || pl.grown || S.t - pl.at >= PLANT_HOUR) return;
+      delete S.plants[i];
+      ev({ e: 'unplant', x, y });
+    }
+    function plantSnap(area) {
+      const rows = [];
+      for (const k in S.plants) {
+        const pl = S.plants[k];
+        if (!pl || (area && zoneOf(pl.x, pl.y) !== area)) continue;
+        rows.push([pl.x, pl.y, Math.max(0, S.t - pl.at), pl.grown ? 1 : 0]);
+      }
+      return rows;
+    }
+    function acceptPlant(x, y, age, grown) {
+      if (!inMap(x, y) || isAuth(zoneOf(x, y))) return;
+      const i = idx(x, y);
+      if (grown) {
+        if (S.plants[i] && S.plants[i].grown) return;
+        if (M.growTree) M.growTree(x, y);
+        S.plants[i] = { x, y, at: S.t - (age | 0), tile: '.', stump: 0, owner: 0, grown: 1 };
+        ev({ e: 'grow', x, y, node: i });
+        return;
+      }
+      if (S.plants[i]) return;
+      S.plants[i] = { x, y, at: S.t - (age | 0), tile: M.tileAt(x, y), stump: 0, owner: 0, grown: 0 };
+      ev({ e: 'plant', x, y });
+    }
+    function acceptUnplant(x, y) {
+      if (!inMap(x, y) || isAuth(zoneOf(x, y))) return;
+      const i = idx(x, y);
+      if (!S.plants[i] || S.plants[i].grown) return;
+      delete S.plants[i];
+      ev({ e: 'unplant', x, y });
     }
 
     // ---------------- gathering
@@ -2113,7 +2186,27 @@
     }
     /* town guards (2026-10-07): combat 33, they do not start a fight. Hit one and every guard of that
        watch draws steel. At dusk they walk the town lamps and torches alight; at dawn they put the lamps out.
-       One guard walks the cobbles from Ashvale to Saltmere and tends the lamps along that road. */
+       One guard walks the cobbles from Ashvale to Saltmere and tends the lamps along that road.
+       Talk is the ordinary greeting. The same handful of remarks comes round again, guard after guard. */
+    const WATCH_SAY = [
+      ['We keep the peace. When the day goes we light the lamps and the torches. When it comes back we put the lamps out.', 'Walk easy after dark. The lamps are ours to tend.'],
+      ['Strike one of us and the whole watch answers. That is the only warning I give.', 'The square is for walking, not for swords.'],
+      ['Tam has bread if you are empty. Garrick has steel if you are not.', 'I do not sell either. I stand here.'],
+      ['The wolves in Whisperwood come down tidy, one lamb at a time. Maren does not like tidy wolves.', 'If you go, go with a hatchet and a reason.'],
+      ['Rain gets in at the collar. It always has.', 'A dry watch is a story the older men tell.'],
+      ['The well is Maren\'s. The lamps are ours. Try not to confuse the two after dark.', 'People do.'],
+      ['There is a dog that belongs to nobody and sleeps by the armoury.', 'He is not on the watch. He just looks it.'],
+      ['The cobbles run out to Saltmere. One of us walks them and lights those lamps.', 'The rest of us keep the towns.'],
+      ['The portal stones hum if you lay a hand on them. I have never liked it.', 'A road you can see is enough road for me.'],
+      ['Night watch is long and mostly nothing. Then it is not.', 'That is the whole of the job.'],
+      ['My boots are older than your sword, whatever sword that is.', 'They still get me to the next lamp.'],
+      ['A castle stands a long way off, past any road I walk.', 'People who have never been there call it Lake Castle. I could not tell you the lake, or who keeps it. That story is not ours yet.']
+    ];
+    function watchSay(p) {
+      const i = (p.watchAt | 0) % WATCH_SAY.length;
+      p.watchAt = i + 1;
+      return WATCH_SAY[i].map(l => String(l).replace(/\{name\}/g, p.name || 'traveller'));
+    }
     const GSTAT = { hp: 40, att: 16, def: 16, attb: 12, defb: 12, max: 7, cb: 33 };
     function isTended(o) {
       if (!o) return false;
@@ -2413,6 +2506,11 @@
       } else if (a && a.k === 'board') {   /* walk to the canoe, sit down in it: it floats where it lay */
         if (inReach(p.x, p.y, a.x, a.y, 1)) { const lb = BOATS.get(a.x + ',' + a.y); if (!lb && dockFull(a.x, a.y)) { msg(p, 'There is no canoe at the landing: three are already left at the banks nearby. Take one of those.', 'warn'); p.act = null; return; } if (lb) { p.face = lb.face; takeBoat(a.x, a.y, p.id); } p.act = null; p.path = []; p.boat = 1; p.x = a.x; p.y = a.y; p.land = null; ev({ e: 'boat', p: p.id, on: 1 }); msg(p, 'You sit down in the canoe and take up the paddle. Point at the water to paddle there, or at the shore to land.'); }
         else { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, a.x, a.y, 1), a.x, a.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, a.x, a.y, 1)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
+      } else if (a && a.k === 'crate') {
+        const o = crateAt(a.x, a.y);
+        if (!o) p.act = null;
+        else if (inReach(p.x, p.y, o.x, o.y, 1)) { p.face = faceTo(p.x, p.y, o.x, o.y); p.act = null; p.path = []; openCrate(p, o); }
+        else { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, o.x, o.y, 1), o.x, o.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, o.x, o.y, 1)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
       } else if (a && a.k === 'enter') {   /* walk up to a passage and go through: it takes you to its `to` */
         const o = passageAt(a.x, a.y);
         if (!o) p.act = null;
@@ -2759,6 +2857,7 @@
       for (const k in S.plants) {
         const pl = S.plants[k];
         if (!pl || pl.grown) continue;
+        if (!isAuth(zoneOf(pl.x, pl.y))) continue;
         if (S.t - pl.at < PLANT_HOUR) continue;
         const owner = S.players[pl.owner];
         if (pl.stump) {
@@ -2884,7 +2983,18 @@
     function groundFull(zone, list) { S.ground = S.ground.filter(g => zoneOf(g.x, g.y) !== zone || isAuth(zone) || g.bank != null);   /* the Bank's persisted drops stay: the Bank, not the host, says when they go */ for (const r of list) groundAdd(r[0], r[1], r[2], r[3], r[4], r[5], r[6]); }
     /* owner side: what the host resolved about OUR player */
     function applyHit(pid, dmg, cls, fromMob, fx, fxt) { const p = S.players[pid]; if (!p || p.puppet || p.dead) return; if (fromMob && cls && protects(p, cls)) dmg = 0; else if (fromMob && fx) magicFx(p, fx, fxt || 5); p.hp -= Math.min(dmg, p.hp); if (angelSave(p)) return; if (p.retal && !p.act && !p.path.length) { } if (p.hp <= 0) killPlayer(p); }
-    function storeItem(pid, id, n) { const p = S.players[pid]; if (!p || !IT[id]) return 0; const had = invCount(p, id); removeItem(p, id, Math.min(n, had)); ev({ e: 'inv', p: pid }); return Math.min(n, had); }   /* into the town chest: it stays in the wallet, only out of the bag */
+    function storeItem(pid, id, n) {
+      const p = S.players[pid]; if (!p || !IT[id] || n <= 0) return 0;
+      const had = invCount(p, id); const fromBag = Math.min(n, had); if (fromBag) removeItem(p, id, fromBag);
+      let left = n - fromBag;
+      if (left > 0) for (const k of EQ_SLOTS) {   /* a live arcade offer of a worn piece: it has to come off or the Bank mints another */
+        if (left <= 0) break;
+        const e = p.eq[k]; if (!e || e.id !== id) continue;
+        delete p.eq[k]; left -= 1; ev({ e: 'equip', p: pid });
+      }
+      if (fromBag || left < n) { ev({ e: 'inv', p: pid }); burdenCheck(p); }
+      return n - left;
+    }
     function grantItem(pid, id, n) { const p = S.players[pid]; if (!p || !IT[id]) return; const left = addItem(p, id, n); if (left) dropGround(id, left, p.x, p.y, null, 300); ev({ e: 'take', p: pid, id, n: n - left }); }
     function addPlayer(id, save) {
       const p = newPlayer(id, save);
@@ -2923,11 +3033,11 @@
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
       prayTicks(p, pts, drain) { let d = drain; if (d == null) { d = 0; for (const id in p.pray || {}) d += (PRAYERS[id] && PRAYERS[id].drain) || 0; } if (!d) return null; const n = pts == null ? (p.pp | 0) : pts, rs = resist(p, d); return n <= 0 ? 0 : Math.ceil(((n - 1) * rs + rs + 1 - (pts == null ? (p.pd | 0) : 0)) / d); },
-      isHawk, passageAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, searchOpen, coverBlocks, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf,
+      isHawk, passageAt, crateAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, searchOpen, coverBlocks, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf,
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
-      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
+      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, plantSnap, acceptPlant, acceptUnplant, hostPlant, hostUnplant, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
       applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, takeOff: (pid, k) => { const p = S.players[pid]; return p ? takeOff(p, k) : null; }, setFelled,
       hitXp: (pid, cls, dmg, dex) => { const p = S.players[pid]; if (p && !p.puppet) hitXp(p, cls, dmg, null, dex); },
       creditKill: (pid, key) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key); }
