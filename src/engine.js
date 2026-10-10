@@ -518,7 +518,10 @@
       const myEnt = makeEnt('p:' + PID, MOD.humanoid({ skin: '#e0b48c', hair: '#4a2c18', shirt: '#3d6a9a', pants: '#5a4632', shoes: '#3a2a1a' }), { kind: 'self' });
       VIEWS.me = myEnt;
       myEnt.H.setGear(gearOf(me)); place(myEnt, me.x, me.y); setTimeout(() => hawkify(myEnt, me.eq.ring && me.eq.ring.id), 0);
-      if (me.look && myEnt.H.setOutfit) myEnt.H.setOutfit(me.look);
+      /* a character with no look of its own yet wears its HOME's creator defaults, never the town's stand-in (2026-10-09:
+         "No ziibiing born should ever look like the villager placeholder") */
+      const homeLook = h => { const HC = ((D.rules.homes || {})[h || 'ashvale'] || {}).creator; return HC && HC.defaults ? HC.defaults : null; };
+      { const L0 = me.look || homeLook(core.homeOf(me)); if (L0 && myEnt.H.setOutfit) myEnt.H.setOutfit(L0); }
       const NPCN = {};
       /* which way a person stands when nobody is talking to them (2026-10-06: "all of the NPC's are all facing the same
          direction"): the zone data can say (n.face, radians); otherwise they look out over the most open ground within 5 tiles -
@@ -604,6 +607,21 @@
         for (const [uid, o] of gItems) if (!seen.has(uid)) { const fl = o.children[0] && o.children[0].userData.flame; if (fl) gFlames.splice(gFlames.indexOf(fl), 1); scene.remove(o); proxies.splice(proxies.indexOf(o.userData.px), 1); gItems.delete(uid); }
       }
 
+      /* your snares where you set them (core setTrap; 2026-10-09): only yours are drawn, a nagwaagan on the ground */
+      const gTraps = new Map();
+      function syncTraps() {
+        const L = (me && me.traps) || [], seen = new Set();
+        for (const t of L) {
+          const k = t.x + ',' + t.y; seen.add(k); if (gTraps.has(k)) continue;
+          const o = new THREE.Group(), m = MOD.item(t.id); o.add(m);
+          o.position.set(t.x + 0.5, 0, t.y + 0.5); o.position.y = heightAt(o.position.x, o.position.z) + 0.02;
+          m.traverse(c => { if (c.isMesh) c.castShadow = true; });
+          const px = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.5, 0.75), proxyMat); px.position.y = 0.2; px.userData.pick = { kind: 'trap', x: t.x, y: t.y }; o.add(px); proxies.push(px);
+          o.userData.px = px; scene.add(o); gTraps.set(k, o);
+        }
+        for (const [k, o] of gTraps) if (!seen.has(k)) { scene.remove(o); proxies.splice(proxies.indexOf(o.userData.px), 1); gTraps.delete(k); }
+      }
+
       /* ---------- combat presentation: impacts, projectiles, splats */
       const projs = [];
       function entOf(id) { return typeof id === 'number' ? ents.get('m:' + id) : id === PID ? ents.get('p:' + id) : typeof id === 'string' && id.indexOf('n:') === 0 ? ents.get(id) : ents.get('r:' + id); }   /* n:<id> = an NPC fighting (the castle guard) */
@@ -671,7 +689,7 @@
           if (mv && !p.boat) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else e.tyaw = faceYaw(p.face);   /* a canoe faces its heading, even backing up */
           const sk = p.skilling, skAnim = sk === 'chop' ? 'chop' : sk === 'mine' ? 'mine' : sk === 'fish' ? 'fish' : sk === 'cook' || sk === 'light' ? 'cook' : null;
           const ric = e === myEnt ? ricingNow() : false; e.ricing = ric;
-          const tl = p.boat === 1 ? (ric ? 'push_pole' : 'paddle') : p.boat === 2 ? (p.knocking ? 'ricing_sticks' : 'paddle') : skAnim === 'chop' || skAnim === 'mine' || skAnim === 'fish' ? p.toolId || (sk === 'chop' ? 'hatchet' : sk === 'mine' ? 'pickaxe' : 'net') : null;
+          const tl = p.boat === 1 ? (ric ? 'push_pole' : 'paddle') : p.boat === 2 ? (p.knocking ? 'ricing_sticks' : 'paddle') : skAnim === 'chop' || skAnim === 'mine' || skAnim === 'fish' ? p.toolId || null : null;   /* only a tool you really carry (2026-10-09: no pickaxe in the hand of someone who has none - flint is pried out by hand) */
           boatLook(e, p.boat === 1); e.boatRole = p.boat | 0; e.rideOf = p.boat === 2 ? p.ride : null; e.knocking = !!p.knocking;
           if (p.path && p.path.length && e.restPose) e.restPose = null;   /* up off the floor once you walk */
           if (e === myEnt) docksShow();   /* the landing's canoe is the one you are sitting in */
@@ -689,7 +707,7 @@
           if (mv) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else if (m.tgt) e.tyaw = faceYaw(m.face);
           e.hp = m.hp;
         }
-        syncGround();
+        syncGround(); syncTraps();
         for (const ev of evs) { handle(ev, now); netEvent(ev); }
         if (TRIP) { TRIP.events(evs); TRIP.tick(); }
         netAct();
@@ -811,9 +829,10 @@
             const choices = (e.offer || e.recall) ? [
               { id: 'yes', label: e.warn ? 'I understand. Call them.' : 'Yes. I will do it.' },
               { id: 'no', label: 'Not now.' }
-            ] : null;
+            ] : e.make ? e.make.map(m => ({ id: 'make' + m.i, label: m.label })).concat([{ id: 'no', label: 'Nothing for now.' }]) : null;   /* which thing to make (core orderCraft) */
             hud.dialog(e.name, e.lines, (pick) => {
               if (pick === 'no') return;
+              if (typeof pick === 'string' && pick.indexOf('make') === 0) { send({ c: 'craft', npc: e.npc, i: +pick.slice(4) }); return; }
               if (pick === 'yes') send({ c: 'acceptq', q: e.offer || e.recall, recall: e.recall ? 1 : 0, replay: e.replay ? 1 : 0 });
               if (after) after();
             }, choices);
@@ -948,7 +967,7 @@
       /* THE SKY lives in its own module (src/engsky.js, 2026-10-08): what it needs goes in, what the engine uses comes back */
       const ENGSKY = deps.engsky.install({ THREE, DATA, PI, SCENE, CAVE, D, PID, SKY, camera, core, coreCall, hemi, hud, isPhone, me, myEnt, q, say, scene, send, showWeather, sun, zoneHere,
         get cam() { return cam; }, get wxMod() { return wxMod; }, get wxShown() { return wxShown; }, set wxShown(v) { wxShown = v; } });
-      const { DAY_S, DEMO, NS, SEASON, SEASONS, SKYM, SKYV, STARS, SUNL, SUN_EPOCH, TL, dayTick, dot3, moonAt, skyNow, sunAt, sunTime } = ENGSKY;
+      const { DAY_S, DEMO, NS, SEASON, SEASONS, SKYM, SKYV, STARS, SUNL, SUN_EPOCH, TL, dayTick, underSeason, dot3, moonAt, skyNow, sunAt, sunTime } = ENGSKY;
       /* ---------- HAND TORCHES (2026-10-07: "a torch ... hold it at night and illuminate his surroundings"): whoever holds
          one (the off hand) carries a warm flickering light of its Light radius - you, and up to three players near you */
       const TORCH = { me: new THREE.PointLight(0xffa040, 0, 8, 1.3), pool: [] };   /* made now, not on first use: see A FIXED NUMBER OF LIGHTS */
@@ -1249,7 +1268,7 @@
           if (pt) { const g = { kind: 'ground', x: Math.floor(pt.x), y: Math.floor(pt.z) }; if (gi >= 0) out[gi] = g; else out.push(g); }
         }
         /* characters and loot win over trees in front of them (a canopy should not eat the click) */
-        const pri = t => t.kind === 'mob' || t.kind === 'npc' || t.kind === 'item' ? 0 : t.kind === 'node' || t.kind === 'remote' || t.kind === 'passage' || t.kind === 'caveout' || t.kind === 'canoe' ? 1 : 2;
+        const pri = t => t.kind === 'mob' || t.kind === 'npc' || t.kind === 'item' ? 0 : t.kind === 'node' || t.kind === 'remote' || t.kind === 'passage' || t.kind === 'caveout' || t.kind === 'canoe' || t.kind === 'trap' ? 1 : 2;
         out.sort((a, b) => pri(a) - pri(b));
         /* phones: a tap close to a monster counts as tapping it */
         if (isTouch && !out.some(t => t.kind === 'mob' || t.kind === 'npc' || t.kind === 'item')) {
@@ -1286,8 +1305,9 @@
         if (t.kind === 'node') {
           const n = core.nodeAt(t.i); if (!n) return [];
           const nd = core.nodeDef(n), verb = n.kind === 'altar' ? 'Pray-at' : n.kind === 'range' || n.kind === 'fire' ? 'Cook-at' : nd.skill === 'woodcutting' ? 'Chop down' : nd.skill === 'mining' ? 'Mine' : 'Net', nm = '<span class="c">' + nd.name + '</span>';
-          const o = [{ html: verb + ' ' + nm, act: { c: 'gather', x: n.x, y: n.y }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(nd.name + (nd.req ? ': needs ' + nd.skill + ' level ' + nd.req + '.' : '.'), 'sys') }];
+          const o = [nd.peelOnly ? null : { html: verb + ' ' + nm, act: { c: 'gather', x: n.x, y: n.y }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(nd.name + (nd.req ? ': needs ' + nd.skill + ' level ' + nd.req + '.' : '.'), 'sys') }];
           /* the sugar bush (2026-10-08): peel a birch's bark, tap a maple for sap - first in the list, before chopping */
+          if (!o[0]) o.shift();   /* a shrub that only gives bark: no "Chop down" */
           if (nd.peel) o.unshift({ html: (nd.peel.verb || 'Peel') + ' ' + nm, act: { c: 'gather', x: n.x, y: n.y, peel: 1 }, red: 1 });
           if (nd.tap) o.unshift({ html: (nd.tap.verb || 'Tap') + ' ' + nm, act: { c: 'gather', x: n.x, y: n.y, tap: 1 }, red: 1 });
           if (n.chapel === 'ancient') {
@@ -1299,6 +1319,9 @@
         if (t.kind === 'caveout') {   /* the cave's way out, up top: it only goes up (2026-10-07: "it should inform them in the chat that there is no way down") */
           const nm = '<span class="c">Cave opening</span>', say = () => hud.chat("The shaft drops away steep and narrow into the dark. There's no way down from here.", 'sys');
           return [{ html: 'Enter ' + nm, fn: say, act: null }, { html: 'Examine ' + nm, fn: () => hud.chat('A narrow opening in the rock. A cold draught breathes up out of it.', 'sys') }]; }
+        if (t.kind === 'trap') { const nm = '<span class="c">Nagwaagan (snare)</span>';
+          return [{ html: 'Check ' + nm, act: { c: 'trap', x: t.x, y: t.y }, red: 1 }, { html: 'Take up ' + nm, act: { c: 'trap', x: t.x, y: t.y, up: 1 } },
+                  { html: 'Examine ' + nm, fn: () => hud.chat('Your nagwaagan (snare): a noose of sinew across a waabooz (rabbit) run, tied to a bent sapling.', 'sys') }]; }
         if (t.kind === 'canoe') { const nm = '<span class="c">Birch bark canoe</span>';
           return [{ html: 'Get into the ' + nm, act: { c: 'board', x: t.x, y: t.y }, red: 1 },
                   { html: 'Examine ' + nm, fn: () => hud.chat('A canoe of birch bark over cedar ribs, sewn with spruce root and sealed with pitch. It floats light as a leaf.', 'sys') }]; }
@@ -1832,6 +1855,7 @@
       function stateMsg(now) {
         const p = myEnt.root.position;
         const m = { s: Math.round(now), p: [Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100], f: Math.round(myEnt.yaw * 100) / 100, a: myEnt.oneShot ? myEnt.lastOne || 'idle' : myEnt.loco || 'idle', j: myJoin, hp: me.hp, d: me.dead ? 1 : 0, k: myEnt.toolId || 0 };
+        if (HOME) m.h = HOME;   /* where I was born: until my outfit message arrives others draw me in my home's defaults */
         if (myEnt.hl) m.hl = Math.round(myEnt.hl * 100) / 100;   /* where your head is looking, up or down (first person) */
         if (me.boat) { m.bt = me.boat; if (me.boat === 2) m.rd = me.ride; if (me.boat === 1 && me.inv.some(sl => sl && sl.id === 'push_pole')) m.pl = 1; if (me.boat === 2 && me.knock) m.kn = 1; }   /* pl: a push pole aboard; kn: knocking rice in the bow */   /* in a canoe: 1 poling it, 2 riding in someone's bow (rd: whose) */
         const oh = core.overhead(me) || 0; if (oh || lastPr) { m.pr = oh; lastPr = oh; }   /* the overhead prayer, so hosts' monsters respect it and others see it */
@@ -1856,7 +1880,8 @@
            wrong (a missed message) must be corrected by the 10 s refresh */
         if (d.g && typeof d.g === 'object' && sameSet(d.g, r.e.H.gear) === false) r.e.H.setGear(d.g);
         if (d.g && typeof d.g === 'object') hawkify(r.e, d.g.ring);   /* another player's hawk ring */
-        if (d.o && typeof d.o === 'object' && r.e.H.setOutfit && sameSet(d.o, r.e.H.outfit || {}) === false) r.e.H.setOutfit(d.o);
+        if (d.o && typeof d.o === 'object' && r.e.H.setOutfit && sameSet(d.o, r.e.H.outfit || {}) === false) { r.e.H.setOutfit(d.o); r.dressed = 1; }
+        else if (!r.dressed && typeof d.h === 'string' && d.h !== r.home && r.e.H.setOutfit) { r.home = d.h; const L = homeLook(d.h); if (L) r.e.H.setOutfit(L); }   /* no outfit heard yet: their home's defaults */
         if (Array.isArray(d.p) && typeof d.a === 'string') { r.boat = d.bt | 0; r.ride = d.rd || null; r.pole = !!d.pl; r.knock = !!d.kn; r.hl = isFinite(+d.hl) ? Math.max(-1.5, Math.min(1.5, +d.hl)) : 0; }
         if ('k' in d) { const tl = typeof d.k === 'string' && /^[a-z0-9_]{1,24}$/.test(d.k) ? d.k : null; if (tl !== r.tool) { r.tool = tl; r.e.H.setTool && r.e.H.setTool(tl); } }
         if (d.T != null) r.total = Math.max(0, Math.min(9999, d.T | 0));
@@ -2017,7 +2042,7 @@
       function coreCall(fn) {   /* run a core change outside the tick and present its events */
         const keep = core.S.ev; core.S.ev = []; fn(); const evs = core.S.ev; core.S.ev = keep;
         const now = performance.now(); for (const e of evs) { handle(e, now); netEvent(e); }
-        syncGround(); if (dirty.inv || dirty.eq) { hud.refresh('all'); dirty = {}; } else hud.refresh('orbs');
+        syncGround(); syncTraps(); if (dirty.inv || dirty.eq) { hud.refresh('all'); dirty = {}; } else hud.refresh('orbs');
       }
       function shared(id, r, d) {
         if (d.j != null) { const nj = +d.j; if (r.j !== nj) { r.j = nj; elect(); } }
@@ -2167,7 +2192,7 @@
         }
         for (const g of fires.values()) { const u = g.userData, sc = 0.8 + 0.25 * Math.sin(now / 70 + u.ph) + 0.1 * Math.sin(now / 23 + u.ph); u.f1.scale.set(1, sc, 1); u.f2.scale.set(1, 1.1 * sc, 1); }
         if (wxMod && wxMod.update && !CAVE.on) wxMod.update(elapsed);
-        if (!CAVE.on) dayTick(); else if (STARS.pts) STARS.pts.visible = false;   /* day and night on top of the weather's sky */   /* underground the cave sets the fog and the sky */
+        if (!CAVE.on) dayTick(); else { if (STARS.pts) STARS.pts.visible = false; underSeason(); }   /* day and night on top of the weather's sky */   /* underground the cave sets the fog and the sky */
         updateRemotes(now, dt);
         for (let i = projs.length - 1; i >= 0; i--) {
           const p = projs[i]; p.t += dt; const k = Math.min(1, p.t / p.dur);
@@ -2250,6 +2275,21 @@
       function burstSmall(pos, color) { for (let k = 0; k < 8; k++) { const m = new THREE.Mesh(burstGeo, new THREE.MeshBasicMaterial({ color })); m.position.copy(pos); const a = k / 8 * 2 * PI; m.userData.v = new THREE.Vector3(Math.cos(a) * 1.2, 1 + (k % 2), Math.sin(a) * 1.2); m.userData.t = 0; m.userData.life = 0.45; scene.add(m); bursts.push(m); } }
       /* late hits: a projectile that already landed shows the splat when the hit event arrives */
       const _handle = handle;
+      /* QUEST BEACONS: a tall gold light over each place an open quest step names (its `at`), seen from up to 120 tiles - from the
+         river you can steer for it - with a slowly turning diamond on top */
+      const QB = new Map(), QB_GEO = [new THREE.CylinderGeometry(0.35, 0.6, 18, 10, 1, true), new THREE.OctahedronGeometry(0.5)];
+      const QB_MAT = [new THREE.MeshBasicMaterial({ color: 0xffd25a, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }), new THREE.MeshBasicMaterial({ color: 0xffe08a })];
+      function questBeacons(list) {
+        const want = new Set();
+        for (const m of list) {
+          if (Math.max(Math.abs(m.x - me.x), Math.abs(m.y - me.y)) > 120) continue;
+          const k = m.x + ',' + m.y; want.add(k); let b = QB.get(k);
+          if (!b) { b = new THREE.Group(); const col = new THREE.Mesh(QB_GEO[0], QB_MAT[0]), gem = new THREE.Mesh(QB_GEO[1], QB_MAT[1]); col.position.y = 8; gem.position.y = 3; b.add(col, gem); b.gem = gem;
+            b.position.set(m.x + 0.5, footY(m.x + 0.5, m.y + 0.5), m.y + 0.5); scene.add(b); QB.set(k, b); }
+          const t = performance.now() / 1000; b.gem.rotation.y = t; b.gem.position.y = 3 + 0.25 * Math.sin(t * 2);
+        }
+        for (const [k, b] of QB) if (!want.has(k)) { scene.remove(b); QB.delete(k); }
+      }
       function drawMinimap() {
         const p = myEnt.root.position, dots = [];
         for (const m of core.S.mobs) if (!m.dead) { const e = ents.get('m:' + m.uid); if (e) dots.push({ x: e.root.position.x, y: e.root.position.z, c: '#ffff00' }); }
@@ -2259,7 +2299,9 @@
         if (flag && me.x === flag[0] && me.y === flag[1]) flag = null;
         minimapFor();
         if (mmO[0] || mmO[1]) for (const d of dots) { d.x -= mmO[0]; d.y -= mmO[1]; }
-        hud.drawMinimap(mmImg, { x: p.x - mmO[0], y: p.z - mmO[1], yaw: cam.yaw, north: trueNorth(me.x, me.y), dots, flag: flag ? [flag[0] + 0.5 - mmO[0], flag[1] + 0.5 - mmO[1]] : null });
+        const qm = core.questMarks ? core.questMarks(me) : []; questBeacons(qm);
+        const marks = qm.map(m => ({ x: m.x + 0.5 - mmO[0], y: m.y + 0.5 - mmO[1] }));
+        hud.drawMinimap(mmImg, { x: p.x - mmO[0], y: p.z - mmO[1], yaw: cam.yaw, north: trueNorth(me.x, me.y), dots, marks, flag: flag ? [flag[0] + 0.5 - mmO[0], flag[1] + 0.5 - mmO[1]] : null });
       }
       /* TRUE NORTH (2026-10-06: the compass is a dot on the minimap's rim that always points north, and "make sure
          that north in the game matches in the Atlas" - the planet's north pole). The game's grid is laid on a face of the
@@ -2364,7 +2406,7 @@
 
       function hudApi() {
         return {
-          core, pid: PID, isPhone, isTouch,
+          core, pid: PID, isPhone, isTouch, theme: () => ((D.rules.homes || {})[core.homeOf(me)] || {}).hud || null,
           walletState: () => walletState, walletRefresh: () => walletRefresh(), pid: PID,
           chestState: (...a) => chestState(...a), chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a), depositInv: () => depositInv(), depositWorn: () => depositWorn(), withdrawAll: () => withdrawAll(),   /* the Bank part installs after the HUD is made */
           friends: () => ({ rows: PALS.rows.slice(), note: PALS.note }),
@@ -2425,7 +2467,7 @@
         teleport(x, y) { me.x = x; me.y = y; me.path = []; place(myEnt, x, y); cam.snap = true; streamRegions(); arriveCheck(); },
         netHealth: () => ({ online: !!room, lost: NW.lost, heardAgo: NW.heard ? Math.round(performance.now() - NW.heard) : null, fails: NW.fails, saveFails }), _netBreak: () => { if (room) { const R = room; R.send = () => Promise.resolve(false); } },
         zones: () => ({ loaded: (core.D.zones || []).map(z => z.id), index: ZINDEX ? ZINDEX.map(z => z.id) : null, waiting: Object.keys(LZ_WAIT), travelling }),
-        _ent: k => ents.get(k),   /* tests: an entity by key ('n:<npc id>', 'm:<uid>') */
+        _ent: k => ents.get(k), _traps: () => [...gTraps.keys()],   /* tests: an entity by key ('n:<npc id>', 'm:<uid>') */
         tap: tapAt, menuAt, targetsAt, pad: () => PAD && PAD.state(), fps: () => frames, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries }), setCam(y, p, d) { if (y != null) cam.tyaw = cam.yaw = y; if (p != null) cam.tpitch = cam.pitch = p; if (d != null) cam.tdist = cam.dist = d; },
         myPos: () => [myEnt.root.position.x, myEnt.root.position.z, myEnt.yaw],   /* tests: where I am drawn (fluid travel) */
         remotesInfo: () => Array.from(remotes).map(([id, r]) => ({ id, boat: r.boat, ride: r.ride, offline: !!r.offline, name: r.name, via: r.via || null, at: [Math.round(r.e.root.position.x), Math.round(r.e.root.position.z)] })),   /* tests: who rides with whom, and who is a dropped-out partner */

@@ -1368,6 +1368,12 @@
     "api": 1,
     "kind": "json"
    },
+   "item.asemaa": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.birchlogs": {
     "id": null,
     "v": 1,
@@ -1566,6 +1572,12 @@
     "api": 1,
     "kind": "json"
    },
+   "item.snare": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.stone": {
     "id": null,
     "v": 1,
@@ -1573,6 +1585,12 @@
     "kind": "json"
    },
    "item.wiigwaas": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.willowbark": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1679,6 +1697,12 @@
     "kind": "json"
    },
    "obsidianbank": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "willowbank": {
     "id": null,
     "v": 1,
     "api": 1,

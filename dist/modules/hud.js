@@ -10,8 +10,9 @@
   let A = null, PARTS = [];
   function create(host, api) {
     const core = api.core, P = () => core.S.players[api.pid];
+    const TH = api.theme && A.useTheme ? A.useTheme(api.theme()) : null;   /* the home's HUD theme (rules.homes.<h>.hud), before the CSS goes in */
     if (!document.getElementById('ash-css')) { const st = document.createElement('style'); st.id = 'ash-css'; st.textContent = A.CSS; document.head.appendChild(st); }
-    host.classList.add('ash');
+    host.classList.add('ash'); if (TH) host.classList.add(TH);
     const el = (cls, parent, html, tag) => { const e = document.createElement(tag || 'div'); if (cls) e.className = cls; if (html != null) e.innerHTML = html; (parent || host).appendChild(e); return e; };
     const layer = el('lay'), ui = el('lay');
     const hover = el('hover t', ui), opp = el('opp stone ui', ui), xy = el('xy', ui, '');
@@ -91,6 +92,8 @@
       if (d.eq) o.push({ html: (d.eq === 'weapon' ? 'Wield ' : 'Wear ') + nm, fn: () => api.cmd({ c: 'equip', slot }) });
       if (d.edible) o.push({ html: (d.drink ? 'Drink ' : 'Eat ') + nm, fn: () => api.cmd({ c: 'eat', slot }) });
       if (d.buryXp) o.push({ html: 'Bury ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
+      else if (core.trapOf && core.trapOf(d)) o.push({ html: 'Set ' + nm, fn: () => api.cmd({ c: 'use', slot }) });   /* a snare: set where you stand */
+      else if (core.offerOf && core.offerOf(d)) o.push({ html: A.esc(core.offerOf(d).verb || 'Offer') + ' ' + nm, fn: () => api.cmd({ c: 'use', slot }) });   /* asemaa: an offering where you stand */
       else if (d.burnTicks) o.push({ html: 'Light ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
       else if (d.teleport && d.eq !== 'ring') o.push({ html: 'Use ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
       else if (!d.eq && !d.edible) o.push({ html: 'Use ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
@@ -275,6 +278,10 @@
       g.save(); g.translate(S / 2, S / 2); g.rotate(st.yaw); g.scale(sc, sc);
       g.drawImage(img, -st.x * 4, -st.y * 4);
       for (const d of st.dots) { g.fillStyle = d.c; g.fillRect((d.x - st.x) * 4 - 2.4, (d.y - st.y) * 4 - 2.4, 4.8, 4.8); }
+      for (const m of st.marks || []) {   /* quest places: a gold diamond, held on the rim when it lies past the map's edge */
+        let dx = (m.x - st.x) * 4, dy = (m.y - st.y) * 4; const R = S / 2 / sc - 7, d = Math.hypot(dx, dy); if (d > R) { dx *= R / d; dy *= R / d; }
+        g.save(); g.translate(dx, dy); g.rotate(-st.yaw); g.fillStyle = '#ffd25a'; g.strokeStyle = '#3a2208'; g.lineWidth = 1.2;
+        g.beginPath(); g.moveTo(0, -6); g.lineTo(4.5, 0); g.lineTo(0, 6); g.lineTo(-4.5, 0); g.closePath(); g.fill(); g.stroke(); g.restore(); }
       if (st.flag) { g.fillStyle = '#f22'; g.fillRect((st.flag[0] - st.x) * 4 - 1, (st.flag[1] - st.y) * 4 - 6, 2, 8); g.fillRect((st.flag[0] - st.x) * 4, (st.flag[1] - st.y) * 4 - 6, 5, 3); }
       g.restore();
       g.fillStyle = '#fff'; g.fillRect(S / 2 - 4, S / 2 - 4, 8, 8);

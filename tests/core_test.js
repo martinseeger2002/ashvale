@@ -166,7 +166,7 @@ for (const [qid, Q] of Object.entries(D.quests.quests)) {
   const many = n => n == null || n > 0;
   ok(live.every(s => s.goal.kill ? (D.monsters[s.goal.kill] && many(s.goal.n) && (!s.goal.bring || D.items[s.goal.bring]))
                     : s.goal.cook ? (D.items[s.goal.cook] && many(s.goal.n))
-                    : s.goal.bring ? ([].concat(s.goal.bring).every(b => D.items[b]) && many(s.goal.n) && (!s.goal.with || D.items[s.goal.with]))   /* a list: any of them will do (sap in a bucket or a pail) */
+                    : s.goal.bring ? ([].concat(s.goal.bring).every(b => D.items[b]) && many(s.goal.n) && (!s.goal.with || (typeof s.goal.with === 'string' ? [s.goal.with] : Object.keys(s.goal.with)).every(w => D.items[w])))   /* a list: any of them will do (sap in a bucket or a pail) */
                     : s.goal.talk ? !!keeperZone(s.goal.talk)
                     : s.goal.plant ? (s.goal.plant === 'open' || s.goal.plant === 'stump') && many(s.goal.n)   /* sadfrog's Even Grove: saplings on open ground or stumps */
                     : s.goal.kills ? Object.keys(s.goal.kills).every(m => D.monsters[m]) && many(s.goal.n)

@@ -681,6 +681,19 @@
         if (ORE[c]) { rk.userData.pick = rk2.userData.pick = { kind: 'node', i: K(x, y) }; pickables.push(rk, rk2); }
         rockAt.set(K(x, y), { g, ore }); group.add(g);
       }
+      /* ---------- miskwaabiimizh (red willow, red osier dogwood) clumps by the river (J, 2026-10-09): bare red stems in a
+         vase shape; peeled for apaakozigan (kinnikinnick) */
+      for (let y = Y0; y < Y1; y++) for (let x = X0; x < X1; x++) {
+        if (at(x, y) !== 'J' || !mine(x, y)) continue;
+        const g = new THREE.Group(), h0 = hash2(x, y), parts = [];
+        for (let k = 0; k < 7; k++) {
+          const a = (k / 7) * 6.283 + h0 * 3, lean = 0.12 + 0.1 * ((k * 37 + Math.floor(h0 * 97)) % 5) / 5, ht = 0.9 + 0.5 * (((k * 53) % 7) / 7);
+          const st = mesh(new THREE.CylinderGeometry(0.018, 0.03, ht, 5), 0xa8322a); st.position.set(Math.cos(a) * 0.12 + Math.cos(a) * lean * ht / 2, ht / 2, Math.sin(a) * 0.12 + Math.sin(a) * lean * ht / 2);
+          st.rotation.z = -Math.cos(a) * lean * -1; st.rotation.x = Math.sin(a) * lean * -1;   /* each stem leans out from the root: a vase of red stems */ g.add(st); parts.push(st);
+        }
+        g.position.set(x + 0.5, heightAt(x + 0.5, y + 0.5), y + 0.5); group.add(g);
+        for (const m of parts) { m.userData.pick = { kind: 'node', i: K(x, y) }; pickables.push(m); }
+      }
       /* ---------- buildings, fences and props */
       const B = Batcher(group), BF = Batcher(group), anim = [], RICEP = [];   /* RICEP: the wild rice plants, grown by the seasons */   /* BF: the small flora, which the seasons take away and give back */
       const roofs = [];

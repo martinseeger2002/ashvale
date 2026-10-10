@@ -12,6 +12,7 @@ let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'ok  ' : 
 
 const core = AshCore.create(D, { seed: 'sugarbush' }), p = core.addPlayer('p1', {});
 for (let i = 0; i < p.inv.length; i++) p.inv[i] = null;
+core.grantItem('p1', 'asemaa', 5);   /* asemaa (tobacco): Nookomis is an elder, asked with it (2026-10-09) */
 const npc = (id) => core.M.npcs.find(n => n.id === id), has = (id) => p.inv.reduce((a, s) => a + (s && s.id === id ? s.n : 0), 0);
 const msgs = [];
 function run(n) { for (let i = 0; i < n; i++) for (const e of core.tick()) { if (e.e === 'msg' && e.p === 'p1') msgs.push(e.text); if (e.e === 'dialog' && e.p === 'p1') msgs.push(e.lines.join(' ')); } }

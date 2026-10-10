@@ -247,6 +247,18 @@ part('gear.bikwak', 'gear', slot='ammo', items={"birch_arrows": BIRCH, "obsidian
      shapes=qv, groundShapes=[dict(t='group', p=[-0.035 + k * 0.035, 0.02, 0], r=[-PI / 2, 0, -0.18 + k * 0.18], children=arrow) for k in range(3)], projectile=arrow)
 # biiwaanag (flint): a pale chalky nodule broken open on a grey-black glassy face; obsidian: a black glassy lump, sharp-edged
 part('item.flint', 'item', items={"flint": '#3a3a40'}, shapes=[S('ico', [0.1], '#d8d2c2', [0, 0.08, 0]), S('ico', [0.075], "$c", [0.05, 0.1, 0.04]), S('ico', [0.04], '#cfc8b6', [-0.07, 0.06, 0.02])])
+# the nagwaagan (snare): a loop of sinew cord on a bent stick, as it lies in the bag or on the ground (2026-10-09)
+# asemaa (tobacco): a little red cloth bundle tied at the neck, a few dry leaves beside it (2026-10-09)
+part('item.asemaa', 'item', items={"asemaa": '#b03028'}, shapes=[S('sphere', [0.07], "$c", [0, 0.07, 0], k=[1, 0.85, 1]), S('cone', [0.045, 0.06], "$c", [0, 0.15, 0]),
+     S('cyl', [0.03, 0.03, 0.012], '#e8d8a0', [0, 0.12, 0]), S('box', [0.09, 0.006, 0.05], '#7a5a2a', [0.1, 0.01, 0.02], r=[0, 0.5, 0]), S('box', [0.07, 0.006, 0.04], '#8a6a34', [-0.09, 0.01, -0.03], r=[0, -0.4, 0])])
+# miskwaabiimizh (red willow) bark: a few curled red strips (2026-10-09)
+part('item.willowbark', 'item', items={"willow_bark": '#a8322a'}, shapes=[S('box', [0.2, 0.012, 0.035], "$c", [0, 0.02, 0], r=[0, 0.3, 0.1]),
+     S('box', [0.18, 0.012, 0.03], '#8a2a22', [0.01, 0.035, 0.04], r=[0, -0.4, -0.1]), S('box', [0.16, 0.012, 0.03], '#c04a38', [-0.02, 0.05, -0.03], r=[0, 0.9, 0.05])])
+part('item.snare', 'item', items={"snare": '#d8c8a0'}, shapes=[S('cyl', [0.018, 0.026, 0.62], '#6a4a2a', [-0.12, 0.29, 0], r=[0, 0, 0.32]),   # the bent sapling
+     S('cyl', [0.012, 0.016, 0.22], '#6a4a2a', [0.02, 0.56, 0], r=[0, 0, 1.25]),                                        # its tip, bent over
+     S('cyl', [0.005, 0.005, 0.26], "$c", [0.1, 0.42, 0]),                                                              # the cord
+     S('torus', [0.11, 0.011], "$c", [0.1, 0.18, 0], r=[0, 1.5708, 0], seg=[4, 14]),                                    # the noose across the run
+     S('cyl', [0.03, 0.03, 0.05], '#5a4028', [-0.2, 0.02, 0])])
 part('item.obsidian', 'item', items={"obsidian": OBS}, shapes=[S('ico', [0.11], "$c", [0, 0.09, 0]), S('ico', [0.06], '#2a2a36', [0.07, 0.12, 0.04]), S('ico', [0.045], '#0e0e12', [-0.06, 0.07, -0.05])])
 # birch logs: white bark, a few dark lenticels
 bg = []
