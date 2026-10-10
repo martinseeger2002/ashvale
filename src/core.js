@@ -847,11 +847,11 @@
          trait Use to travel; Wear still equips a charm that also has an eq slot (Vorth's rosary in the shield hand). */
       if (d.eq && (d.eq === 'ring' || d.teleport == null)) { equip(p, slot); return; }
       if (d.teleport) {   /* a town stone: home, as often as you like, once its cooldown has passed (30 minutes) */
-        if (d.teleFrom) {   /* "questId:step" — beads stay cold until that quest step (or the quest is finished) */
+        if (d.teleFrom) {   /* "questId:step" — beads stay cold until that quest step. After Wenna sends you (and after the errand is done) they still know the cave. */
           const parts = String(d.teleFrom).split(':'), qid = parts[0], need = Math.max(1, parts[1] | 0);
           const q = p.quests && p.quests[qid];
           if (!(questFinished(p, qid) || (q && q.step >= need))) {
-            msg(p, 'The beads are cold. They will not carry you until Mother Wenna has sent you for them.', 'warn');
+            msg(p, 'The beads are warm, and they smell of old fire. You do not know the prayer that sends them.', 'warn');
             return;
           }
         }
@@ -2263,7 +2263,8 @@
       ['The portal stones hum if you lay a hand on them. I have never liked it.', 'A road you can see is enough road for me.'],
       ['Night watch is long and mostly nothing. Then it is not.', 'That is the whole of the job.'],
       ['My boots are older than your sword, whatever sword that is.', 'They still get me to the next lamp.'],
-      ['A castle stands a long way off, past any road I walk.', 'People who have never been there call it Lake Castle. I could not tell you the lake, or who keeps it. That story is not ours yet.']
+      ['A castle stands a long way off, past any road I walk.', 'People who have never been there call it Lake Castle. I could not tell you the lake, or who keeps it. That story is not ours yet.'],
+      ['The dragon\'s ruin is not the old king\'s keep. That one burned with him.', 'The ruin still has a chain on it. I do not walk that way.']
     ];
     function watchSay(p) {
       const i = (p.watchAt | 0) % WATCH_SAY.length;
