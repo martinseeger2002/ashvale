@@ -1,0 +1,21 @@
+{
+  "objects": [
+    {
+      "k": "truins",
+      "x": -62,
+      "y": -107,
+      "w": 16,
+      "h": 16,
+      "door": [-54, -95],
+      "pole": [-54, -99]
+    },
+    {
+      "k": "wsign",
+      "x": -56,
+      "y": -94,
+      "board": "dragon",
+      "face": "s",
+      "title": "Dragon killers"
+    }
+  ]
+}

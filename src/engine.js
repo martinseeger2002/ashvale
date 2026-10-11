@@ -265,6 +265,9 @@
          preview ?home=ziibiing does the same */
       if (HOME && core.setNewHome) core.setNewHome(HOME);
       const me = core.addPlayer(PID, save);
+      const SCORE_KEY = 'ashvale3d.scores.v1';
+      try { const j = JSON.parse(store.get(SCORE_KEY) || '{}'); if (j && j.chain_dragon) core.mergeScores('chain_dragon', j.chain_dragon); } catch (e) { /* a bad local board */ }
+      if (me.kills && me.kills.chain_dragon) core.mergeScores('chain_dragon', { [me.name]: me.kills.chain_dragon });
       function syncMounts() {   /* wall-hung quest rewards (Aldric's sword) stay on the wall until they're given */
         for (const r of regions) if (r.built && r.built.mounts) for (const m of r.built.mounts) { const q = me.quests && me.quests[m.quest]; m.obj.visible = !(q && q.step >= m.untilStep); }
       }
@@ -309,7 +312,10 @@
       const heightAt = SCENE.heights ? SCENE.heights(core.M) : (x, z) => 0;
       const chunkRegs = new Map();
       function regionDist(r, x, y) { const dx = Math.max(r.rect[0] - x, 0, x - (r.rect[0] + r.rect[2])), dy = Math.max(r.rect[1] - y, 0, y - (r.rect[1] + r.rect[3])); return Math.max(dx, dy); }
-      function addBuilt(r, opt) { r.built = SCENE.build(core.M, opt); scene.add(r.built.group); for (const k in core.S.dep) r.built.setDepleted(+k, true); }
+      function paintScores() { if (SCENE.boardPaint) SCENE.boardPaint('dragon', core.scoreBoard('chain_dragon')); }
+      function hsSave() { try { store.set(SCORE_KEY, JSON.stringify({ chain_dragon: core.scoresOf('chain_dragon').names })); } catch (e) { /* private mode */ } }
+      let scoreTell = () => {}, scoresAsk = () => {};
+      function addBuilt(r, opt) { r.built = SCENE.build(core.M, opt); scene.add(r.built.group); for (const k in core.S.dep) r.built.setDepleted(+k, true); paintScores(); }
       function streamRegions(force) {
         setReach();
         for (const r of regions) {
@@ -845,6 +851,7 @@
           case 'fireout': removeFire(e.fire); break;
           case 'fx': { const t = ents.get('m:' + e.mob); if (!t) break; t.fx = t.fx || {}; t.fx[e.fx] = 1; applyTint(t); const el = hud.fxSplat(e.fx); if (el) t.splats.push({ el, t: performance.now(), k: t.splats.length }); if (e.fx === 'freeze') sfx('freeze', t); break; }
           case 'fxend': { const t = ents.get('m:' + e.mob); if (!t || !t.fx) break; delete t.fx[e.fx]; applyTint(t); break; }
+          case 'score': hsSave(); paintScores(); scoreTell(e); setTimeout(() => scoresAsk(true), 800); break;   /* the Bank keeps the global dragon-killer board */
           case 'mark': if (e.p === PID) markTell(e); break;   /* a maple tapped or a birch peeled: the Bank keeps it for everyone */
           case 'deplete': {
             for (const r of regions) if (r.built) r.built.setDepleted(e.node, true);
@@ -1293,7 +1300,7 @@
           if (pt) { const g = { kind: 'ground', x: Math.floor(pt.x), y: Math.floor(pt.z) }; if (gi >= 0) out[gi] = g; else out.push(g); }
         }
         /* characters and loot win over trees in front of them (a canopy should not eat the click) */
-        const pri = t => t.kind === 'mob' || t.kind === 'npc' || t.kind === 'item' || t.kind === 'crate' ? 0 : t.kind === 'node' || t.kind === 'remote' || t.kind === 'passage' || t.kind === 'caveout' || t.kind === 'canoe' ? 1 : 2;
+        const pri = t => t.kind === 'mob' || t.kind === 'npc' || t.kind === 'item' || t.kind === 'crate' || t.kind === 'sign' ? 0 : t.kind === 'node' || t.kind === 'remote' || t.kind === 'passage' || t.kind === 'caveout' || t.kind === 'canoe' ? 1 : 2;
         out.sort((a, b) => pri(a) - pri(b));
         /* phones: a tap close to a monster counts as tapping it */
         if (isTouch && !out.some(t => t.kind === 'mob' || t.kind === 'npc' || t.kind === 'item')) {
@@ -1351,6 +1358,12 @@
         if (t.kind === 'canoe') { const nm = '<span class="c">Birch bark canoe</span>';
           return [{ html: 'Get into the ' + nm, act: { c: 'board', x: t.x, y: t.y }, red: 1 },
                   { html: 'Examine ' + nm, fn: () => hud.chat('A canoe of birch bark over cedar ribs, sewn with spruce root and sealed with pitch. It floats light as a leaf.', 'sys') }]; }
+        if (t.kind === 'sign') {
+          const o = core.signAt(t.x, t.y); if (!o) return [];
+          const nm = '<span class="c">Wooden sign</span>';
+          return [{ html: 'Read ' + nm, fn: () => { scoresAsk(true); core.scoreRead('chain_dragon').forEach(l => hud.chat(l, 'sys')); }, red: 1 },
+                  { html: 'Examine ' + nm, fn: () => hud.chat('A weathered oak board nailed to the ruin wall. Names of those who have slain the chained dragon are carved into it.', 'sys') }];
+        }
         if (t.kind === 'crate') {
           const o = core.crateAt(t.x, t.y); if (!o) return [];
           const nm = '<span class="c">Crate</span>';
@@ -1810,8 +1823,10 @@
       /* ASHVALE 3D engine part: THE TOWN CHEST AND THE @ashvale BANK (split out of engine.js, 2026-10-08). The chest ledger, returns, - in its own module (src/engbank.js, 2026-10-08) */
       const ENGBANK = deps.engbank.install({ get BANK_LOAD_ROOM() { return BANK_LOAD_ROOM; }, set BANK_LOAD_ROOM(v) { BANK_LOAD_ROOM = v; }, DATA, SCENE, THREE, YOURFIRST_ADDR, net, netGear, palsHeard, D, DAY_S, MOD, PID, SEASON, SEASONS, SKYM, SUNL, SUN_EPOCH, TL, WAL, carriedHeard, core, coreCall, evicted, hud, me, proxies, proxyMat, q, scene, skyNow, sunTime, walletRefresh, walletState, waterY,
         get CLOUD() { return CLOUD; }, HOME, withHome, homeIs, get trade() { return trade; },
-        get save() { return save; } });
+        get save() { return save; }, paintScores, hsSave });
       const { CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer } = ENGBANK;
+      scoreTell = ENGBANK.scoreTell; scoresAsk = ENGBANK.scoresAsk;
+      if (me.kills && me.kills.chain_dragon) scoreTell({ key: 'chain_dragon', name: me.name, n: me.kills.chain_dragon });
       const netStats = { sent: 0, dropped: 0, t0: performance.now(), times: [], max1s: 0, max2s: 0 };
       window.addEventListener('pagehide', () => { if (nb) nb.close(); if (room) { const r = room; room = null; r.leave(); } });
       let lastSend = 0;
@@ -1916,7 +1931,7 @@
         if (Array.isArray(d.p) && typeof d.a === 'string') { r.boat = d.bt | 0; r.ride = d.rd || null; r.pole = !!d.pl; r.knock = !!d.kn; r.hl = isFinite(+d.hl) ? Math.max(-1.5, Math.min(1.5, +d.hl)) : 0; }
         if ('k' in d) { const tl = typeof d.k === 'string' && /^[a-z0-9_]{1,24}$/.test(d.k) ? d.k : null; if (tl !== r.tool) { r.tool = tl; r.e.H.setTool && r.e.H.setTool(tl); } }
         if (d.T != null) r.total = Math.max(0, Math.min(9999, d.T | 0));
-        if (d.n || d.T != null) { if (d.n) r.name = cleanName(d.n); if (r.e.tag) setTag(r.e.tag, r.name, from, r.total); }
+        if (d.n || d.T != null) { if (d.n) { r.name = cleanName(d.n); if (core.S.players[id]) core.setPuppet(id, { n: r.name }); } if (r.e.tag) setTag(r.e.tag, r.name, from, r.total); }
         if (typeof d.t === 'string' && d.t.trim()) {
           /* chat is heard only near the speaker (2026-10-06: "only visible to players within a certain radius of each
              other ... doesn't reach all the way from Saltmere to Ashvale"): rules.chat.radius tiles, default 40 */
@@ -1992,6 +2007,7 @@
         for (const [a, h] of next) if (h === myNetId && !hosted.has(a)) {   /* I just took this area over */
           hosted.add(a); fullT = 0; for (const m of core.S.mobs) if (m.zone === a) mobSig.delete(m.uid);
           const was = hosts.get(a); if (was && was !== myNetId && a === here && !mem.some(m => m.id === was)) hud.chat('You are now keeping this area in sync for everyone (the previous player left).', 'sys');
+          if (a === 'dragonkeep') hsSend();
         }
         for (const a of Array.from(hosted)) if (next.get(a) !== myNetId) hosted.delete(a);
         hosts.clear(); for (const [a, h] of next) hosts.set(a, h);
@@ -2004,6 +2020,7 @@
         if (e.e === 'xdrop') { if (iHostAt(e.x, e.y)) core.hostDrop(e); else netSend({ X: [e.id, e.n, e.x, e.y, e.life || 300, e.from ? toNet(e.from) : 0, e.diedAt || 0] }); return; }
         if (e.e === 'xplant') { if (iHostAt(e.x, e.y)) core.hostPlant(e.x, e.y, e.p); else netSend({ XP: [e.x, e.y, e.p ? toNet(e.p) : 0] }); return; }
         if (e.e === 'xunplant') { if (iHostAt(e.x, e.y)) core.hostUnplant(e.x, e.y); else netSend({ XU: [e.x, e.y] }); return; }
+        if (e.e === 'score' && e.key === 'chain_dragon' && hosted.has('dragonkeep')) { hsSend(); return; }
         if (!hosted.size) return;
         const mobIn = u => iHost(mobArea(u)), fight = () => typeof e.src === 'number' ? mobIn(e.src) : typeof e.dst === 'number' ? mobIn(e.dst) : false;
         switch (e.e) {
@@ -2077,6 +2094,23 @@
         const Pl = [];
         for (const a of hosted) for (const r of core.plantSnap(a)) Pl.push(r);
         if (Pl.length) packSend({ F: seq }, 'Pl', Pl);
+        if (hosted.has('dragonkeep')) hsSend();
+      }
+      const hsSnap = new Map();
+      function hsSend() {
+        if (!room || !hosted.has('dragonkeep')) return;
+        const s = core.scoresOf('chain_dragon'), rows = Object.keys(s.names).sort().map(n => [n, s.names[n] | 0]);
+        packSend({ HS: 'chain_dragon' }, 'Hn', rows, 470, 'Hend');
+      }
+      function hsHeard(id, d) {
+        if (d.HS !== 'chain_dragon' || !Array.isArray(d.Hn) || !fromHostOf(id, 'dragonkeep')) return;
+        const key = id + '|HS|' + (d.F || 0), buf = hsSnap.get(key) || [];
+        buf.push.apply(buf, d.Hn);
+        if (d.Hend == null || d.Hend === 1) {
+          hsSnap.delete(key);
+          const names = {}; for (const r of buf) if (Array.isArray(r) && typeof r[0] === 'string') names[r[0]] = r[1] | 0;
+          if (core.mergeScores('chain_dragon', names)) { hsSave(); paintScores(); }
+        } else hsSnap.set(key, buf);
       }
       function coreCall(fn) {   /* run a core change outside the tick and present its events */
         const keep = core.S.ev; core.S.ev = []; fn(); const evs = core.S.ev; core.S.ev = keep;
@@ -2119,6 +2153,7 @@
           } else if (!d.Gr) for (const g of d.G) if (fromHostOf(id, areaAt(g[3], g[4]))) core.groundAdd(g[0], g[1], g[2], g[3], g[4], g[5] ? fromNet(g[5]) : null, g[6] || 0);
         });
         if (Array.isArray(d.E)) coreCall(() => { for (const a of d.E) if (Array.isArray(a) && eventFromHost(id, a)) applyEvent(a); });
+        if (d.HS) hsHeard(id, d);
       }
       function eventFromHost(id, a) {   /* is the sender the host of the area this event is about? */
         switch (a[0]) {
@@ -2512,6 +2547,7 @@
         give(id, n) { const p = me; for (let k = 0; k < (core.item(id).stack ? 1 : n || 1); k++) { const f = p.inv.indexOf(null); if (core.item(id).stack) { const i = p.inv.findIndex(s => s && s.id === id); if (i >= 0) { p.inv[i].n += n || 1; break; } } if (f < 0) break; p.inv[f] = { id, n: core.item(id).stack ? n || 1 : 1 }; } hud.refresh('all'); },
         setLevel(skill, L) { me.xp[skill] = core.xpFor(L) * 10; if (skill === 'hitpoints') me.hp = L; hud.refresh('all'); },
         teleport(x, y) { me.x = x; me.y = y; me.path = []; place(myEnt, x, y); cam.snap = true; streamRegions(); arriveCheck(); },
+        paintScores,
         netHealth: () => ({ online: !!room, lost: NW.lost, heardAgo: NW.heard ? Math.round(performance.now() - NW.heard) : null, fails: NW.fails, saveFails }), _netBreak: () => { if (room) { const R = room; R.send = () => Promise.resolve(false); } },
         zones: () => ({ loaded: (core.D.zones || []).map(z => z.id), index: ZINDEX ? ZINDEX.map(z => z.id) : null, waiting: Object.keys(LZ_WAIT), travelling }),
         _ent: k => ents.get(k), _traps: () => [...gTraps.keys()],   /* tests: an entity by key ('n:<npc id>', 'm:<uid>') */

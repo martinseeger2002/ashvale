@@ -59,7 +59,6 @@ ok(p.quests.red_pyre && p.quests.red_pyre.step === 1, 'saying yes begins The Red
   const slot = p.inv.findIndex(s => !s);
   p.inv[slot] = { id: 'vorth_rosary', n: 1 };
   p.inv[p.inv.findIndex(s => !s)] = { id: 'edric_note', n: 1 };
-  core.markGift('p1', 'vorth_rosary', 1); core.markGift('p1', 'edric_note', 1);   /* from someone else: gifts (2026-10-09: only gifts are blocked) */
   ok(!core.searchOpen(p, npc('edric_skel')), 'a rosary from someone else does not open the bones');
   d = talk('edric_skel');
   ok(d && /leave him alone/.test(d.lines[0]) && p.quests.red_pyre.step === 1 && !p.flags.vorth_bag, 'the gifted rosary does not move the quest or open the bag');
@@ -114,6 +113,12 @@ p.quests.red_pyre = { step: 3, n: 1 };
 core.cmd('p1', { c: 'use', slot });
 for (let i = 0; i < 4; i++) core.tick();
 ok(p.x === -124 && p.y === 10, 'the rosary carries you to the cave mouth once the kill step is open');
+p.x = 22; p.y = 52;
+p.quests.red_pyre = { step: 4, n: 0 };
+core.cmd('p1', { c: 'use', slot });
+for (let i = 0; i < 4; i++) core.tick();
+ok(p.x === -124 && p.y === 10, 'the rosary still carries you to the cave after the errand is finished');
+p.quests.red_pyre = { step: 3, n: 1 };
 
 ok(core.searchOpen(p, npc('edric_skel')), 'the bones can be searched after the kill');
 d = talk('edric_skel');

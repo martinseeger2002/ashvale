@@ -50,11 +50,11 @@
       "n": 1
      },
      "talk": [
-      "A lobster on the side. I do not keep them here.",
-      "Hollis sells lobster at the Saltmere Tap. Saltmere is the harbour northwest of the valley, along the coast. Ask for Hollis."
+      "A lobster on the side. I do not keep them here. This is the last ordinary thing I will ask of you.",
+      "Hollis sells lobster at the Saltmere Tap. Saltmere is the harbour east down the coast. Ask for Hollis."
      ],
      "progress": [
-      "One lobster, {name}. Hollis, at the Saltmere Tap. The harbour is northwest."
+      "One lobster, {name}. Hollis, at the Saltmere Tap. The harbour is east down the coast."
      ],
      "complete": [
       "That will do for supper. You have fed me. The ring is another matter."
@@ -101,7 +101,7 @@
      },
      "reward": "flag:gift_of_angels",
      "talk": [
-      "The hour is long. Kill three timber wolves and bring me their pelts. The same dens, southeast of the pond, off this path, and out in the woods.",
+      "The hour on that ring is long. Kill three timber wolves and bring me their pelts. The same dens, southeast of the pond, off this path, and out in the woods.",
       "Do that and I will give you the Gift of Angels. The ring will rest ten minutes, not an hour."
      ],
      "progress": [
@@ -115,7 +115,8 @@
    "done": [
     "The gift is yours. The ring rests ten minutes, then it can carry you home again."
    ],
-   "story": 1
+   "story": 1,
+   "after": "iria_supper"
   },
   "ashen_crown": {
    "steps": [
@@ -145,8 +146,8 @@
      "id": 6,
      "zone": "spidercave",
      "talk": [
-      "Beyond the Spider Queen's lair, at the very end of the cave, waits the one who wears the rest of the crown: the Lich of Ashvale.",
-      "End it, and the valley remembers what it was. Come back alive, and I will put iron on your feet."
+      "Beyond the queen's tunnels, at the very end of the cave, waits the one who wears the rest of the crown: the Lich of Ashvale.",
+      "End it, and the valley remembers what it was. Come back alive, and I will put fighter boots on your feet. They put real weight behind a blow."
      ],
      "progress": [
       "The Lich still holds the crown. Every night it does, the valley forgets a little more of itself."
@@ -159,9 +160,29 @@
       "xp:strength:8000",
       "fighter_boots"
      ]
+    },
+    {
+     "id": 2,
+     "locked": [
+      "The goblins have dug in at their camp northwest of the old forest. Garrick says go in strong, or not at all.",
+      "Train while you wait. Chop, fish, swing that sword. When you can walk into that camp and come out, come and find me."
+     ]
+    },
+    {
+     "id": 3,
+     "complete": [
+      "The Chief wore this round his neck? A shard of black glass... no. Not glass. Ash, hard as iron.",
+      "I have read of this. The Ashen Crown. The old king burned with his keep; what was left went into the dark under Whisperwood.",
+      "Orange-hoods have been walking that southeast trail. If they carry ash, they carry it toward the same hole. Take this shield. You will need it where this leads."
+     ]
     }
    ],
-   "story": 5
+   "story": 5,
+   "done": [
+    "The crown is ash again, and the valley is ours. There'll always be a seat by my fire for you, {name}.",
+    "The dragon's ruin is not the king's keep. That one burned. The other still has a chain on it.",
+    "Now go on. Somewhere out there, something else is waiting to be written down."
+   ]
   },
   "wayside_prayer": {
    "name": "The Wayside Prayer",
@@ -201,7 +222,7 @@
      },
      "reward": "xp:prayer:250",
      "talk": [
-      "Take the northwest road out of the village, the old trail towards Saltmere. Odric drives a covered wagon with a grey horse; you cannot miss it.",
+      "Take the Saltmere road out of the village, east along the cobbles. Odric drives a covered wagon with a grey horse; you cannot miss it.",
       "Find him, {name}. Then come back and tell me what you found - do not go on to Saltmere yet. If he is hurt I will need to know first."
      ],
      "say": [
@@ -210,7 +231,7 @@
       "Don't go on to Saltmere on my account. Go back to Ashvale and tell Father Aldous - he'll send help, and he'll know what to do with this."
      ],
      "progress": [
-      "Northwest out of the village, along the trail to Saltmere. Odric will be somewhere on the road.",
+      "East out of the village, along the Saltmere road. Odric will be somewhere on the cobbles.",
       "Come back and tell me what you find."
      ],
      "complete": [
@@ -234,7 +255,7 @@
       "The Saltmere chapel is at the southeast end of the town, where the trail comes in. Mother Wenna will be inside."
      ],
      "complete": [
-      "Aldous sent you? And the roll is found - and Odric alive on the road? Then the chapel opens again. I have waited eleven years to say that.",
+      "Aldous sent you? And the roll is found - and Odric alive on the road? Then the chapel opens again. I have waited since the fever years to say that.",
       "You walked the whole road for an old woman's church, {name}. Take this robe. It was sewn for the first monk of this chapel, and it has never been worn.",
       "Wear it when you pray. It steadies the mind: you will find your prayers hold a good while longer."
      ]
@@ -295,7 +316,7 @@
      ],
      "complete": [
       "Vorth the Unburied. I had hoped it was rumour. The Three are hearth, road and well - and they had a brother they would not name.",
-      "Pike cannot hold that gate forever. There is a keeper among them who carries burnt beads, a rosary. You must take it from him. Until I said this, you were not to raise a hand in there. Now you must.",
+      "Pike cannot hold that gate forever. There is a keeper among them who carries burnt beads, a rosary. Take them. One blow - Pike will look at the trees. Use the beads at once. Do not linger in the yard.",
       "The beads will put you at a cave in the southeast woods. Whatever they have been hiding, it is there. Bring me what you find."
      ]
     },
@@ -309,8 +330,9 @@
      },
      "reward": "xp:prayer:693",
      "talk": [
-      "Kill the Vorthan who keeps the rosary. Use the beads. They will carry you to the Spider Cave, southeast of Whisperwood.",
-      "Halfway down the first tunnel you will find what they left. Search it. Bring me the writing. The robe is yours if it still holds together."
+      "Take the beads from the keeper. One blow, then the dark - Pike is still on that latch. Use them. They will carry you to the Spider Cave, southeast of Whisperwood.",
+      "Halfway down the first tunnel you will find what they left. Search it. Bring me the writing. The robe is yours if it still holds together.",
+      "Do not go deeper than the first tunnel until Elder Maren sends you. There is a darker claim on that cave than ours."
      ],
      "progress": [
       "One Vorthan slain, and Edric's note in your bag. So far: {n} of {goal} slain. The rosary opens the cave. The bones wait halfway down the first tunnel."
@@ -318,13 +340,13 @@
      "complete": [
       "Edric. A Vorthan who ran. The Three hear a confession even when the mouth that made it is gone.",
       "You have done more than open a chapel, {name}. Pray. The Road, the Hearth and the Well will hold longer for you now.",
-      "{name}. One more thing. On the trail between Ashvale and Saltmere, near 198, 11, a broken stone chapel. Ancient Chapel. The altar there is out of balance. Go and see what it does to you."
+      "{name}. One more thing. A broken stone chapel on the trail between Ashvale and Saltmere. The altar is out of balance. Stand at it. It will show you the way."
      ]
     }
    ],
    "done": [
     "The Red Pyre still stands, but it is known. Pike lives, and Edric's note is here. Go well, {name}.",
-    "On the trail between Ashvale and Saltmere, near 198, 11, a broken stone chapel. Ancient Chapel. The altar there is out of balance. Go and see what it does to you. The path it carves will take you to the one who keeps the balance."
+    "A broken stone chapel on the trail between Ashvale and Saltmere. The altar is out of balance. Stand at it. The path it carves will take you to the one who keeps the balance."
    ],
    "story": 3
   },
@@ -542,7 +564,7 @@
       "Boozhoo (hello), {name}. Sit, sit. My knees have not stood up since the last ricing moon.",
       "Manoominike-giizis (the ricing moon) is here. Out on the zaaga'igan (lake) down the ziibi (river) the manoomin (wild rice) stands ripe, and my old arms cannot knock it.",
       "It takes two in the jiimaan (canoe). One stands in the back with the gaandakii'iganaak (push pole) and moves her through the stalks. The other sits forward with the bawa'iganaakoog (ricing sticks): bend the stalks over with one, knock them with the other, and the rice falls in.",
-      "Ziigwan will carve you the gaandakii'iganaak (push pole) and the bawa'iganaakoog (knockers) if you bring her tamarack and cedar. Find a friend, take the canoe from the landing, and bring me twenty handfuls of manoomin.",
+      "Ziigwan will carve you the gaandakii'iganaak (push pole) and the bawa'iganaakoog (knockers) if you bring her tamarack and cedar. Take the canoe from the landing. If you pole alone the rice still falls, just slower. A friend makes the work kind. Bring me twenty handfuls of manoomin.",
       "Do this, and I have a really special gift for you. Something I have kept a long time. You will see when you come back."
      ],
      "progress": [
@@ -992,10 +1014,33 @@
    "story": 3
   },
   "skinning_knife": {
-   "story": 3
+   "story": 3,
+   "steps": [
+    {
+     "id": 1,
+     "talk": [
+      "You have walked this lane more than once and never looked up. Fenn. I dress skins, which is a trade in this village the way a range is a trade to a village that cooks on an idea of a fire.",
+      "Six rat pelts to start, and it isn't beneath you. There are a hundred and ninety-one packs of rats inside three kilometres of that well, seven of them inside six hundred paces, and the nearest pack stands two hundred and fifty paces out. Three to a pack, level two, five hitpoints between an argument and a wet day.",
+      "Here's why I start you on rats and not on something with a reputation: a rat gives up its pelt one for one. Every one. That's the only even trade in this whole valley, and everything I ask you for after this one gets worse than it.",
+      "Mind the general store on your way back. They'll buy any skin you carry at four parts in ten of what it's worth, and they'll never once ask what anybody in this village intends to do with the other six parts. Six pelts, and your pay is in dexterity - which I know you've never had from a person before."
+     ]
+    }
+   ]
   },
   "drove_road": {
-   "story": 2
+   "story": 2,
+   "steps": [
+    {
+     "id": 1,
+     "talk": [
+      "Mind you stand between me and the gate. That heifer spooks at strangers and she's twenty stones of stranger.",
+      "Rowan. I take beasts down the Saltmere road and sell 'em there, eleven seasons running. This season I can't get a drove out of Ashvale.",
+      "Grey wolves come off the wood at dusk and run at the near side. They don't kill so much as scatter. Two miles an hour, and you'll walk 'em back twice over before dark.",
+      "Five of 'em. That's what it took last season and what it'll take now: thin the pack till the pack takes notice of a quieter road.",
+      "Southwest gate, then keep the old stumps on your left. Come back with five and I'll stand you shoeing at Garrick's."
+     ]
+    }
+   ]
   },
   "salt_road": {
    "story": 2
