@@ -15,8 +15,8 @@ const name7 = (a, b) => LIB.best(H(a), H(b)).name;
 /* ---- 1. the evaluator ------------------------------------------------------------------------------------ */
 ok(sc5('As Ks Qs Js Ts') > sc5('Ah Kh Qh Jh 9h'), 'royal beats king-high straight flush');
 ok(sc5('9c 8c 7c 6c 5c') > sc5('Ac Ad Ah Ks Kd'), 'straight flush beats four of a kind');
-ok(sc5('Ac Ad Ah Ks Kd') > sc5('Qs Jd Jc Th Tc'), 'quads beat a full house');
-ok(sc5('Qs Jd Jc Th Tc') > sc5('Ad Kd Qd Jd 9d'), 'a full house beats a flush');
+ok(sc5('Ac Ad Ah Ks Kd') > sc5('Td Tc Ts Jh Jd'), 'quads beat a full house');
+ok(sc5('Jd Jc Js Tc Th') > sc5('Ad Kd Qd Jd 9d'), 'a full house beats a flush');
 ok(sc5('9c 8c 7c 6c 5c') > sc5('Ah Ad Ac Ks Jh'), 'a straight beats three of a kind');
 ok(sc5('Ah Ad Ac Ks Jh') > sc5('Kd Kc Qd Qc 9c'), 'three of a kind beats two pair');
 ok(sc5('Ah Ad Kc Ks 2c') > sc5('Qd Qc Jd Jc Ac'), 'top two pair beats bottom two pair');
@@ -35,7 +35,7 @@ ok(name7('Ad Kh', 'As Kc Kd 3c 7h') === 'a full house', 'name: a full house');
 ok(name7('9c 9d', '9s 9h Kd 4c 2s') === 'four of a kind', 'name: quads');
 ok(name7('2c 7d', 'Ac Kh Qd Js 4s') === 'high card', 'name: high card');
 ok(sc7('Ac Kc', 'Ad Kh Qc Js Th') === sc7('2c 3d', 'Ad Kh Qc Js Th'), 'a straight on the board plays for everyone');
-ok(sc7('7c 2d', 'Ah Kh Qh Jh Th') === sc7('7d 2c', 'Ah Kh Qh Jh Td'), 'the same five cards tie exactly');
+ok(sc7('7c 2d', 'Ah Kh Qh Jh Th') === sc7('7s 2h', 'Ah Kh Qh Jh Th'), 'hole cards that cannot play never split a royal');
 ok(sc7('Ah 3h', 'Kh Qh 7h 2h 9c') > sc7('Ah 2h', 'Kh Qh 7h 2h 9c'), 'the nut flush still takes a kicker');
 ok(sc7('Kc Qc', 'Ah Kh Qd Jd Tc') === sc7('Kd Qd', 'Ah Kh Qd Jd Tc'), 'the same Broadway straight ties exactly');
 
@@ -81,83 +81,80 @@ ok(t.toAct === 0, 'three-handed: the button opens the betting');
 t.act(0, { a: 'raise', to: 60 });
 ok(t.bet === 60 && t.seats[0].chips === 440, 'a raise to 60');
 t.act(1, { a: 'fold' });
-t.act(2, { a: 'call', to: 60 });
+const err = t.act(2, { a: 'raise', to: 90 });
+ok(err.error, 'a re-raise under the minimum is refused: ' + (err.error || ''));
+const err2 = t.act(2, { a: 'raise', to: 100 });
+ok(!err2.error && t.bet === 100, 'the smallest legal re-raise is the size of the last one');
+ok(t.minRaise === 40, 'and that size is the minimum again');
+t.act(0, { a: 'call' });
 ok(t.street === 'flop', 'the flop comes after a call');
-const err = t.act(0, { a: 'raise', to: 65 });
-ok(err.error, 'a raise under the minimum is refused: ' + (err.error || ''));
-const err2 = t.act(0, { a: 'raise', to: 100 });
-ok(!err2.error, 'the smallest legal raise is allowed');
-ok(t.minRaise === 40, 'the size of the last raise becomes the minimum for the next one');
-t.act(1, { a: 'fold' });
-const q = t.act(2, { a: 'fold' });
-ok(q.end, 'everyone else folds and the hand is over');
-ok(t.seats[0].chips === 540 && t.seats[1].chips === 500 && t.seats[2].chips === 460, 'the uncalled bet comes back to the bettor');
+ok(t.toAct === 2, 'out of the flop the first seat left of the button speaks, the button last');
+t.act(2, { a: 'fold' });
+ok(t.street === 'none', 'and the hand is over when the last opponent folds');
+ok(t.seats[0].chips === 610 && t.seats[1].chips === 490 && t.seats[2].chips === 400,
+  'the uncalled bet comes back to the bettor: ' + t.seats.map(s => s && s.chips).join('/'));
 ok(total(t) === 1500, 'money conserved through a fold-out');
 
 /* ---- 4. all-in run-outs and side pots ------------------------------------------------------------------- */
-/* Ann has 30, Bo 60, Cy 90: three layers of 30 each, and the best hand must win the right one. */
-t = mk([['Ann', 30], ['Bo', 60], ['Cy', 90]]);
-t.newHand();
-function pin(t, holes, board) {   /* the cards this hand must hold, in seat order */
+function pin(t, holes, board) {   /* the exact cards this hand must hold: hole cards in seat order, then the board */
   const seats = t.seats.filter(s => s && s.hole);
   holes.forEach((h, i) => { if (seats[i]) seats[i].hole = H(h); });
-  const junk = []; for (let i = 0; i < 52 && junk.length < 8; i++) if (board.indexOf(LIB.cparse(t.cnameOf ? '' : '')) < 0) junk.push(i);
-  void junk;
-  const used = new Set(board.map(LIB.cparse));
-  const bs = board.map(LIB.cparse);
-  let jk = []; for (let i = 0; i < 52 && jk.length < 4; i++) if (!used.has(i)) jk.push(i);
+  const bs = H(board), used = new Set(bs), jk = [];
+  for (let i = 0; i < 52 && jk.length < 4; i++) if (!used.has(i)) jk.push(i);
   const pops = [];
-  if (t.board.length === 0) pops.push(jk.pop(), bs[0], bs[1], bs[2], jk.pop(), bs[3], jk.pop(), bs[4]);
-  else if (t.board.length === 3) pops.push(jk.pop(), bs[3], jk.pop(), bs[4]);
-  else if (t.board.length === 4) pops.push(jk.pop(), bs[4]);
-  t.deck = pops.reverse().concat(t.deck);
-  if (t.board.length === 0 && bs.length === 5) t.board = [];
+  if (t.board.length === 0) pops.push(jk.shift(), bs[0], bs[1], bs[2], jk.shift(), bs[3], jk.shift(), bs[4]);
+  else if (t.board.length === 3) pops.push(jk.shift(), bs[3], jk.shift(), bs[4]);
+  else if (t.board.length === 4) pops.push(jk.shift(), bs[4]);
+  t.deck = t.deck.concat(pops.reverse());   /* pop() takes from the end, so the queue is appended backwards */
   return t;
 }
-const B = '2c 7d 9s Jh Kc';
-/* seats by button: seat 0 is the button/small blind in a three-handed new hand? button is seat 0 -> sb seat 1, bb 2 */
-t = pin(t, ['Ah As', 'Kd Ks', 'Qc Qh'], B);
-t.act(0, { a: 'allin' });
-t.act(1, { a: 'call' });
-t.act(2, { a: 'call' });
-ok(t.street === 'none' && t.result, 'three all-ins run the board out');
-ok(t.board.length === 5, 'all five board cards are on the felt');
-ok(t.board.map(LIB.cname).join(' ') === B, 'the board is the one the test asked for');
-ok(t.result.pots.length === 3, 'three side pots for three betting levels: ' + t.result.pots.map(p => p.amount).join('+'));
-ok(t.result.pots.reduce((a, p) => a + p.amount, 0) === 180, 'the three pots hold every coin');
-ok(t.seats[0].chips === 180 && t.seats[1].chips === 0 && t.seats[2].chips === 0, 'aces aces aces take the whole thing');
-ok(total(t) === 180, 'money conserved through a side-pot showdown');
 
-/* the middle layer must go to the middle hand: Ann all-in for 30 with the best hand cannot win what Bo and Cy raced for */
+/* Ann 30, Bo 60, Cy 90, all three all-in. Three layers, and the money nobody called goes back where it came from. */
 t = mk([['Ann', 30], ['Bo', 60], ['Cy', 90]]);
 t.newHand();
-t = pin(t, ['9c 9d', 'Ah Ad', 'Kc Kh'], '2h 7s 4d Tc 3s');
-t.act(0, { a: 'allin' }); t.act(1, { a: 'call' }); t.act(2, { a: 'call' });
-ok(t.result.pots.length === 3, 'three layers again');
-ok(t.seats[1].chips === 150 && t.seats[2].chips === 30 && t.seats[0].chips === 0,
-  'aces win the whole race when the pairs do not flop: ' + t.seats.map(s => s && s.chips).join('/'));
+pin(t, ['Ah As', 'Kc Kh', 'Qd Qs'], '2h 7s 4d Tc 3s');
+t.act(0, { a: 'allin' }); t.act(1, { a: 'allin' }); t.act(2, { a: 'allin' });
+ok(t.street === 'none' && t.result, 'three all-ins run the board out');
+ok(t.board.length === 5 && t.board.map(LIB.cname).join(' ') === '2h 7s 4d Tc 3s', 'the board is the one the test asked for');
+ok(t.result.pots.map(p => p.amount).join('+') === '90+60+30', 'one pot per level a seat actually reached: ' +
+  t.result.pots.map(p => p.amount).join('+'));
+ok(t.result.pots.reduce((a, p) => a + p.amount, 0) === 180, 'the three pots hold every coin');
+ok(t.seats[0].chips === 90 && t.seats[1].chips === 60 && t.seats[2].chips === 30,
+  'aces take what they could win, kings the middle, and Cy gets back the 30 nobody called: ' +
+  t.seats.map(s => s && s.chips).join('/'));
+ok(t.result.pots[0].win[0] === 0 && t.result.pots[1].win[0] === 1, 'each layer went to the best hand that could win it');
+ok(total(t) === 180, 'money conserved through a side-pot showdown');
+
+/* the same three stacks, but Cy only calls: now the top 60 is really contested and aces win every layer */
+t = mk([['Ann', 30], ['Bo', 60], ['Cy', 90]]);
+t.newHand();
+pin(t, ['9c 9d', 'Ah Ad', 'Kc Kh'], '2h 7s 4d Tc 3s');
+t.act(0, { a: 'allin' }); t.act(1, { a: 'allin' }); t.act(2, { a: 'call' });
+ok(t.result.pots.length === 2 && t.seats[1].chips === 150 && t.seats[2].chips === 30,
+  'the best hand takes every layer it could reach: ' + t.seats.map(s => s && s.chips).join('/'));
 ok(total(t) === 180, 'money conserved again');
 
-/* a real side pot: the short stack wins the main pot, the tall stacks split nothing and race for the second */
-t = mk([['Ann', 100], ['Bo', 200], ['Cy', 200]]);
+/* the odd coin: a short all-in, then two players who tie for the main pot */
+t = mk([['Ann', 30], ['Bo', 30], ['Cy', 25]]);
 t.newHand();
-t = pin(t, ['Ac As', 'Kd Kc', '9s 9h'], 'As Kh 2d 7c 3s');   /* Ann has the trips of aces... board has As, so: */
-t.act(0, { a: 'allin' }); t.act(1, { a: 'call' }); t.act(2, { a: 'call' });
-ok(t.result.pots.length >= 2, 'the short stack only contests what they put in');
-ok(total(t) === 500, 'money conserved across a layered pot');
-for (const p of t.result.pots) ok(p.amount > 0, 'no empty pot on the table');
+pin(t, ['Ac Ad', 'As Ah', 'Qd Qh'], '2h 7s 4d Tc 3s');
+t.act(0, { a: 'allin' }); t.act(1, { a: 'allin' }); t.act(2, { a: 'allin' });
+ok(t.result.pots.map(p => p.amount).join('+') === '75+10', 'the short stack only contests 25 a head: ' +
+  t.result.pots.map(p => p.amount).join('+'));
+ok(t.seats[0].chips === 42 && t.seats[1].chips === 43,
+  'the odd coin goes to the first winner left of the button: ' + t.seats.map(s => s && s.chips).join('/'));
+ok(total(t) === 85, 'and nothing is lost on the felt');
 
-/* split pot, and the odd chip */
+/* an even split */
 t = mk([['Ann', 101], ['Bo', 101]]);
 t.newHand();
-t = pin(t, ['Ah Kh', 'Ad Kc'], 'Qs Jd Th 9c 2h');
+pin(t, ['Ah Kh', 'Ad Kc'], 'Qs Jd Th 9c 2h');
 t.act(0, { a: 'allin' });
 const res = t.act(1, { a: 'call' });
-ok(res.end, 'all-in and called goes to the river');
+ok(res.end, 'all-in and called runs to the river');
 ok(t.result.pots.length === 1, 'even stacks, one pot');
 ok(t.result.pots[0].win.length === 2, 'equal Broadway straights split it');
-ok(t.seats[0].chips + t.seats[1].chips === 202, 'an odd chip is still an odd chip: ' + t.seats.map(s => s && s.chips).join('/'));
-ok(Math.abs(t.seats[0].chips - t.seats[1].chips) === 1, 'exactly one coin is the odd one out');
+ok(t.seats[0].chips === 101 && t.seats[1].chips === 101, 'and split it exactly: ' + t.seats.map(s => s && s.chips).join('/'));
 
 /* ---- 5. sitting and leaving --------------------------------------------------------------------------- */
 t = mk([['Ann', 500], ['Bo', 500]]);
@@ -207,10 +204,10 @@ ok(t.act(at, { a: 'check' }).ok !== false || true, 'the table answers the seat i
         const d = int(6);
         let m;
         if (d === 0) m = { a: 'fold' };
-        else if (d === 1 || !can.raise) m = can.check ? { a: 'check' } : { a: 'call' };
-        else if (d === 2) m = can.check ? { a: 'raise', to: can.min } : { a: 'call' };
-        else if (d === 3) m = { a: 'allin' };
-        else m = can.check ? { a: 'check' } : { a: 'call' };
+        else if (d === 1) m = can.check ? { a: 'check' } : { a: 'call' };
+        else if (d === 2 || d === 3) m = { a: 'allin' };
+        else if (!can.raise) m = can.check ? { a: 'check' } : { a: 'call' };
+        else m = can.check ? { a: 'raise', to: can.min } : { a: 'call' };
         const out = t2.act(ref, m);
         if (out.error) { const f = can.check ? { a: 'check' } : (can.call > 0 ? { a: 'call' } : { a: 'fold' }); const r2 = t2.act(ref, f); if (r2.error) break; }
         if (m.a === 'allin') allin++;

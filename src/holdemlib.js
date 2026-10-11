@@ -231,11 +231,12 @@
     }
     function afterAction() {
       if (live().length <= 1) return settle();
-      if (!able().length) return runout();
       const a = nextActor();
-      if (a === null) return advance();
-      T.toAct = a;
-      return { ok: true, toAct: a };
+      if (a !== null) { T.toAct = a; return { ok: true, toAct: a }; }
+      /* nothing is owed anywhere and only one seat still has coins in front of them: whatever they would bet cannot be
+         called, so the rest of the board is dealt and the money is already in the middle */
+      if (able().length <= 1 && live().some(s => s.allin)) return runout();
+      return advance();
     }
     function dealStreet(n, name) {
       burn();
@@ -250,8 +251,8 @@
       else if (T.street === 'turn') { T.street = 'river'; dealStreet(1, 'River'); }
       else return settle();
       for (const s of cards()) s.acted = false;
-      if (!able().length) return runout();
-      T.toAct = able().slice().sort(byBtn)[0].ref;
+      if (able().length <= 1 && live().some(s => s.allin)) return runout();
+      T.toAct = able().slice().sort(byTurn)[0].ref;
       return { ok: true, street: T.street, toAct: T.toAct };
     }
     function runout() {   /* everyone still in is all-in: the board runs to the river with nobody left to bet */
@@ -300,10 +301,10 @@
       T.say(pots.map((p, i) => (pots.length > 1 ? 'Pot ' + (i + 1) + ' of ' + p.amount + ' to ' : 'The pot (' + p.amount + ') to ') +
         (p.who || []).join(' and ') + (p.note ? ' - ' + p.note : (p.who || []).length > 1 ? ' (split)' : '')).join('. '), 'sys');
       T.pot = 0;
+      for (const s of dealt()) s.bet = 0;   /* what was in front of a seat is in the pot, and the pot is paid out */
       T.result = { hand: T.hand, pots, total, contested: left.length > 1 };
       T.status = seated().length >= 2 ? 'playing' : 'open';
-      for (const s of seated()) if (s.chips <= 0) T.say((s.name || 'A player') + ' has nothing left and leaves the table.', 'sys');
-      for (const s of dealt()) if (s.chips <= 0) { s.in = false; s.out = true; }
+      for (const s of seated()) if (s.chips <= 0) T.say((s.name || 'A player') + ' has nothing left to play with.', 'sys');
       return { ok: true, end: true, result: T.result };
     }
 
