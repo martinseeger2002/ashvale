@@ -1743,14 +1743,26 @@
       if (r.indexOf('xp:') === 0) { const [, sk, n] = r.split(':'); addXp(p, sk, (+n) * 10); msg(p, 'You gain ' + n + ' ' + cap(sk) + ' XP.', 'quest'); return; }
       if (IT[r]) { if (addItem(p, r, 1)) dropGround(r, 1, p.x, p.y, p.id, 600); msg(p, (giver || 'You are given') + ' gives you: ' + IT[r].name + '.', 'quest'); ev({ e: 'inv', p: p.id }); }
     }
+    /* what of an item the engine can see in a player's hands: the pack, what is worn or wielded, and snares set in the field */
+    function heldCount(p, id) {
+      let n = invCount(p, id);
+      for (const s of Object.values(p.eq || {})) if (s && s.id === id) n += s.n | 0;
+      for (const t of p.traps || []) if (t.id === id) n++;
+      return n;
+    }
     function topUp(p, q, st) {
       if (!st || !st.kit) return;
       const left = Math.max(0, (st.goal.n == null ? 1 : st.goal.n) - (q.n | 0));
       for (const id in st.kit) {
         if (!IT[id]) continue;
         const want = Math.min(st.kit[id] | 0, left);
-        const have = invCount(p, id);
-        if (have < want) addItem(p, id, want - have);
+        /* a lent tool or weapon is handed over once in a quest (2026-10-11: Mitigwaabiike gave a tomahawk and Ma'iingan a
+           snare on every talk - a wielded tomahawk or a snare set in the field is not in the pack, so the pack count said "lost");
+           q.kit remembers the loan, so banking it does not fetch another. Things that are used up (logs, saplings) still top up. */
+        const durable = /^(tool|weapon|armour)$/.test(IT[id].category || '');
+        const have = heldCount(p, id);
+        if (durable) { q.kit = q.kit || {}; if (q.kit[id]) continue; if (have >= want) { q.kit[id] = 1; continue; } }
+        if (have < want) { addItem(p, id, want - have); if (durable) q.kit[id] = 1; }
       }
       ev({ e: 'inv', p: p.id });
     }

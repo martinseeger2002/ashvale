@@ -85,6 +85,10 @@ ok(has('snare') === 1, 'and lends a nagwaagan (snare)');
     let spot = null; for (let r = 1; r < 5 && !spot; r++) for (let dy = -r; dy <= r && !spot; dy++) for (let dx = -r; dx <= r && !spot; dx++) { const x = hz.x + dx, y = hz.y + dy; if (!core.M.blocked(x, y) && !core.M.insideAt(x, y) && !(p.traps || []).some(t => t.x === x && t.y === y)) spot = [x, y]; }
     p.x = spot[0]; p.y = spot[1]; p.path = []; p.act = null; Z.msgs.length = 0; core.cmd('p1', { c: 'use', slot: sl() }); Z.run(1);
     ok(!has('snare') && p.traps && p.traps.length === 1 && /noose/.test(Z.msgs.join()), 'the snare is set where the rabbits run (' + Z.msgs.join().slice(0, 40) + ')');
+    if (k === 0) {   /* 2026-10-11: Ma'iingan handed a snare on every talk while one was set in the field */
+      const sx = p.x, sy = p.y; talk('maiingan'); p.x = sx; p.y = sy; p.path = []; p.act = null;
+      ok(!has('snare') && p.traps.length === 1, 'talking to Ma\'iingan with the snare set does not hand another');
+    }
     const tr = p.traps[0];
     ok(tr.ready >= 9600 + 1 && tr.ready <= 9600 + 2.001, 'it will hold one in one to two game hours (' + (tr.ready - 9600).toFixed(2) + ')');
     Z.msgs.length = 0; core.cmd('p1', { c: 'trap', x: tr.x, y: tr.y }); Z.run(3);
@@ -105,6 +109,15 @@ t = talk('mitigwaabiike');
 ok(Z.offers[0] === 'mitigwaab' && /tomahawk/.test(t), 'Mitigwaabiike offers the bow quest');
 accept('mitigwaab');
 ok(has('tomahawk') === 1, 'and gives a tomahawk');
+{ /* 2026-10-11: Mitigwaabiike gave a tomahawk on every talk once it was wielded; the loan is made once in the quest */
+  talk('mitigwaabiike'); ok(has('tomahawk') === 1, 'talking again with it in the pack: still one tomahawk');
+  const ts = p.inv.findIndex(s => s && s.id === 'tomahawk'); p.eq.weapon = p.inv[ts]; p.inv[ts] = null;
+  talk('mitigwaabiike'); ok(has('tomahawk') === 1, 'talking again with it wielded: still one tomahawk');
+  p.inv[ts] = p.eq.weapon; p.eq.weapon = null;
+  const bank = p.inv[ts]; p.inv[ts] = null;   /* put in the chest: the engine no longer sees it */
+  talk('mitigwaabiike'); ok(has('tomahawk') === 0 && p.quests.mitigwaab.kit && p.quests.mitigwaab.kit.tomahawk === 1, 'banked and talking again: no second tomahawk');
+  p.inv[ts] = bank;
+}
 const cz = zones.find(z => z.id === 'sugarcamp'), trees = { E: [], M: [] };
 cz.tiles.forEach((r, j) => { for (let i = 0; i < r.length; i++) if (trees[r[i]] && core.nodeAt(core.M.key(cz.origin[0] + i, cz.origin[1] + j))) trees[r[i]].push([cz.origin[0] + i, cz.origin[1] + j]); });
 /* the bark wants a blade */
