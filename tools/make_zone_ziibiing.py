@@ -12,7 +12,7 @@ maple-birch grove; the manoomin stands in the broad shallows of the bend upstrea
 paddle downstream, the obsidian bank a short paddle upstream past the rice. The zone keeps the world's own tiles (the river, its
 shallows, the bank, the pond by the trail) and only clears the village ground.
 Writes data/zone.{ziibiing,lodges,ricelake,sugarcamp,flintbank,willowbank,obsidianbank}.json and data/extra/ziibiing_places.json
-(what tools/make_data.py needs to know: the portal stone, the sugar camp's fire and maples, the groves) and sets the quest
+(what tools/make_data.py needs to know: the sugar camp's fire and maples, the groves) and sets the quest
 markers in data/extra/quests.json.   python3 tools/make_zone_ziibiing.py   (then tools/make_data.py)"""
 import json, os, subprocess, math, random
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -141,10 +141,6 @@ for n, (wx, wy) in enumerate(WIGWAMS):
     assert land(wx + ox, wy + oy), ('a doorstep in the water', wx, wy)
     if land(wx + ox, wy + oy): put(wx + ox, wy + oy, 'd'); taken.add((wx + ox, wy + oy))
 obj('campfire', FIRE[0], FIRE[1]); taken.add(FIRE)
-# the town portal stone (rules.portals, an NPC the engine makes): beside the trail north of the ring, clear of the pond
-PORTAL = (FIRE[0] - 5, FIRE[1] - 15); PORTAL_TO = (PORTAL[0], PORTAL[1] + 1)
-assert land(*PORTAL) and land(*PORTAL_TO), 'the portal stone must stand on open ground'
-put(PORTAL[0], PORTAL[1], '.'); put(PORTAL_TO[0], PORTAL_TO[1], '.'); taken.add(PORTAL); taken.add(PORTAL_TO)
 RACK = nearland(SHORE[0] + 2, SHORE[1] - 4, 2, 1); obj('fishrack', RACK[0], RACK[1], w=2, h=1)
 obj('woodpile', FIRE[0] - 3, FIRE[1] - 3)
 obj('basket', FIRE[0] + 3, FIRE[1] + 3); obj('basket', FIRE[0] + 4, FIRE[1] + 3)
@@ -423,7 +419,7 @@ bank_site('obsidianbank', 'Obsidian bank', 32560, -2292, 22, 12, 'V', ('cairn', 
 
 # WHAT THE DATA NEEDS TO KNOW (tools/make_data.py reads this; the quest markers go straight into data/extra/quests.json)
 PLACES.update({'note': 'written by tools/make_zone_ziibiing.py - where the moved Ziibiing (site 8) put things; make_data.py reads it',
-               'fire': list(FIRE), 'landing': list(LAND), 'shore': list(SHORE), 'portal': list(PORTAL), 'portal_to': list(PORTAL_TO),
+               'fire': list(FIRE), 'landing': list(LAND), 'shore': list(SHORE),
                'camp_fire': list(CAMP_FIRE), 'kettle': list(CAMP_FIRE), 'sap_at': [CAMP_FIRE[0] + 2, CAMP_FIRE[1]], 'pour': [CAMP_FIRE[0], CAMP_FIRE[1] - 1],
                'sap_trees': SAP_TREES, 'hares': [list(h) for h in HARES], 'groves': GROVES, 'north': list(NORTH),
                'zones': {'ziibiing': [OX, OY, W, H], 'sugarcamp': [CX, CY, CW, CH], 'ricelake': [RX, RY, RW, RH]}})
@@ -437,4 +433,4 @@ for qid, steps in marks.items():
     for st in Q['quests'][qid]['steps']:
         if st['id'] in steps: st.update(steps[st['id']])
 json.dump(Q, open(qp, 'w'), indent=1, ensure_ascii=False)
-print('wrote data/extra/ziibiing_places.json and the quest markers; landing %s shore %s fire %s camp fire %s portal %s' % (LAND, SHORE, FIRE, CAMP_FIRE, PORTAL))
+print('wrote data/extra/ziibiing_places.json and the quest markers; landing %s shore %s fire %s camp fire %s' % (LAND, SHORE, FIRE, CAMP_FIRE))

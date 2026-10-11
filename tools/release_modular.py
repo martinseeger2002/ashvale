@@ -124,7 +124,29 @@ def send_only(d, path, json_text=None):
     return False
 # 2026-10-04: headless Firefox crashes unlocking @ashvale's stored wallet; Chromium (tools/pw_send.py) is solid. The module
 # and registry sends go through Chromium unless ASH_FIREFOX=1 (the rare new-launcher step below still uses Firefox).
-if not LOCAL and os.environ.get('ASH_FIREFOX') != '1' and os.environ.get('ASH_BROWSER') != 'chromium':
+if not LOCAL and os.environ.get('ASH_PUBLISH'):
+    # 2026-10-11 (the operator: "It could all be done with Python and RPC ... doesn't even have to use the arcade"): arcade-publish
+    # (dogecoin-arcade arcade/publish.py, D-194) builds, signs and broadcasts through the testnet node's RPC - no offer the
+    # interface can forget, no browser. ASH_PUBLISH = the arcade checkout holding arcade/publish.py; ASH_RPC_URL (an ssh
+    # tunnel to the node), ASH_RPC_COOKIE (its .cookie), ASH_PUBLISH_KEY (the secret, 64 hex, mode 600). Journal: chain/publish/.
+    import importlib
+    sys.path.insert(0, os.environ['ASH_PUBLISH']); PUB = importlib.import_module('arcade.publish')
+    _P = None
+    def browser():
+        global _P
+        if _P is None:
+            from arcade.config import TESTNET, RpcCredentials
+            from arcade.rpc import RpcClient
+            url = os.environ.get('ASH_RPC_URL', 'http://127.0.0.1:44873'); host, _, port = url.rpartition('://')[2].rstrip('/').partition(':')
+            user, _, pw = open(os.environ['ASH_RPC_COOKIE']).read().strip().partition(':')
+            rpc = RpcClient(RpcCredentials(host or '127.0.0.1', int(port or TESTNET.rpc_port), user, pw), timeout=600)
+            _P = PUB.Publisher(rpc, TESTNET, PUB.Key.from_file(os.environ['ASH_PUBLISH_KEY']), os.path.join(HERE, 'chain', 'publish'),
+                               say=lambda m: print('      ' + m, flush=True))
+        return _P
+    def send_only(d, path, json_text=None):
+        r = d.inscribe(open(path, 'rb').read(), '', json_text or '', os.path.basename(path))
+        print('   inscribed %s -> %s%s' % (os.path.basename(path), (r.get('id') or '?')[:16], ' (resumed)' if r.get('resumed') else ''), flush=True); return True
+elif not LOCAL and os.environ.get('ASH_FIREFOX') != '1' and os.environ.get('ASH_BROWSER') != 'chromium':
     # the standalone @ashvale wallet (2026-10-04): no browser at all - the node builds, the wallet signs
     _W = None
     def browser():

@@ -1147,8 +1147,8 @@ TRAIL = {
   # two, a boar one for one off a beast that is level nine and hits back. Herds within three kilometres of the well,
   # measured on the seeded world under wildlife v2 (wg_tables wild.chance 0.45, wild.size, 2026-10-06, probe
   # /tmp/herdcount.js): rats 191, seven inside six hundred paces, nearest two hundred and fifty, three to five to a
-  # pack; hares 495, twenty-six inside six hundred, nearest a hundred and twenty-three, two to a form; boars 81, six
-  # inside six hundred, nearest a hundred and thirty-eight, six to twelve to a sounder; timber wolves 236, none inside
+  # pack; hares 497, twenty-seven inside six hundred, nearest a hundred and seventeen, two to a form; boars 79, four
+  # inside six hundred (re-measured 2026-10-11 when Ziibiing's woods wall and groves left this face), nearest a hundred and thirty-eight, six to twelve to a sounder; timber wolves 236, none inside
   # six hundred, nearest seven hundred and seventy-four, seven to fifteen to a pack, eleven usual.
   # Goats and lizards are zero: no herd of either anywhere within three kilometres of Ashvale, which is worth knowing
   # before anybody sends you for goatskin. The pay is the skill nobody has ever paid and the tool on no counter.
@@ -1173,7 +1173,7 @@ TRAIL = {
       {"id": 2, "zone": "village", "goal": {"bring": "hare_pelt", "n": 8}, "reward": "xp:dexterity:3200",
        "talk": [
            "Now the vermin with manners in it. Eight hare pelts, and I'll tell you what eight costs you: sixteen hares, because a hare gives up its skin one time in two. A rat's pelt is worth eight pennies and comes off every rat; a hare's is worth five and comes off half the time. Count that before you count the next thing.",
-           "They're this village's own plague. Four hundred and ninety-five herds inside three kilometres of the well, twenty-six inside six hundred paces, two to a form and three when they're settling, and the nearest of them stands a hundred and twenty-three paces from the wall you're leaning on. The warden shoots six a season to prove he can hold a bow, the cook roasts three for a ladder he's building by the well, and not one skin of them ever comes back here.",
+           "They're this village's own plague. Four hundred and ninety-seven herds inside three kilometres of the well, twenty-seven inside six hundred paces, two to a form and three when they're settling, and the nearest of them stands a hundred and seventeen paces from the wall you're leaning on. The warden shoots six a season to prove he can hold a bow, the cook roasts three for a ladder he's building by the well, and not one skin of them ever comes back here.",
            "That's the thing I've waited eleven years to say out loud to somebody. The warden takes a trophy, the cook takes a dinner, the apprentice takes two pelts for washers, and between the three of them they ask for six skins - six - out of a parish where a thousand and three herds of rats, hares, boars and timber wolves stand inside three kilometres of that well, and every skin of every one of them goes on the same heap by the gate.",
            "Level one, shy, and they run the moment you think about them - so this is paid in dexterity again, and for a reason. Get behind one of them and you'll find out what your legs are actually for. Eight pelts, {name}, and I'd skin them here rather than there."],
        "progress": [
@@ -1183,12 +1183,12 @@ TRAIL = {
       },
       {"id": 3, "zone": "village", "goal": {"bring": "boar_hide", "n": 3}, "reward": "xp:dexterity:3800",
        "talk": [
-           "Three boar hides, and now we've come to the part of my trade nobody mentions: a hide worth anything is on an animal that will object. Eighty-one herds within three kilometres, six inside six hundred paces, nearest a hundred and thirty-eight, and they come nine to a sounder.",
+           "Three boar hides, and now we've come to the part of my trade nobody mentions: a hide worth anything is on an animal that will object. Seventy-nine herds within three kilometres, four inside six hundred paces, nearest a hundred and thirty-eight, and they come nine to a sounder.",
            "Level nine, twenty-two hitpoints, and an arm that hits at nine against a hide of eight. I'm not telling you that to frighten you - the last person who came here at your level went at a boar the way they'd gone at a rat, and I had to sell their boots.",
            "A boar gives up its hide one for one, like the rat, and twenty-eight pennies to anybody who'd know what to do with it. So three of them is a labourer's month of luck and one day of my work. The drover walks his beasts across that same ground every morning and has never once wondered where the skins go.",
            "Bring them back whole. A hide with a slash across the belly is a puddle, and I'd rather you took an hour cutting it badly in the right order than twenty minutes doing it well in the wrong one. Dexterity, three thousand eight hundred points - it's the skill you'll be short of when something with tusks turns round."],
        "progress": [
-           "{left} more boar hides, {name}. Six herds inside six hundred paces, nine to a sounder. Go at the small end of the group, cut it long and short, and don't stand where you'd have to walk to get away."],
+           "{left} more boar hides, {name}. Four herds inside six hundred paces, nine to a sounder. Go at the small end of the group, cut it long and short, and don't stand where you'd have to walk to get away."],
        "complete": [
            "Three whole hides and no slash across a belly. That's a labourer's month of luck come up the lane in a sack, and the stink of working them is mine from tonight, gladly. Eight of dexterity now, and you got there the way the trade gets there - off something that turned round at you."]
       },
@@ -1802,10 +1802,7 @@ module('rules', 3, {
     # `to` is where you arrive. The Ashvale stone (Teleport "ashvale") takes you to the same spot.
     "portals": [{"id": "ashvale", "name": "Ashvale", "x": 19, "y": 55, "to": [19, 56]},
                 {"id": "saltmere", "name": "Saltmere", "x": 462, "y": 28, "to": [462, 29]},
-                {"id": "castle", "name": "the Lake Castle", "x": 4048, "y": 8419, "to": [4049, 8418]},
-                # Ziibiing's stone (2026-10-11): the village moved to the other continent, 34 km of sea from Ashvale, so the
-                # portal is the way between them (2026-10-04: "put a town portal in each of the towns")
-                {"id": "ziibiing", "name": "Ziibiing", "x": ZP["portal"][0], "y": ZP["portal"][1], "to": ZP["portal_to"], "stone": False}],   # stone: False - no keepsake stone for it yet (a quest to write), like the castle's   # the lake castle's portal, here for good (2026-10-08: make_castle.js added it, every later make_data run dropped it, and the castle stone said "Nothing happens")
+                {"id": "castle", "name": "the Lake Castle", "x": 4048, "y": 8419, "to": [4049, 8418]}],   # no stone at Ziibiing (2026-10-11: "I didn't ask for a town portal")   # the lake castle's portal, here for good (2026-10-08: make_castle.js added it, every later make_data run dropped it, and the castle stone said "Nothing happens")
     # 2026-10-04: "logs, pelts arrows potions should all de spawn. Only Gear and tools and Gold should persist."
     # 2026-10-06: "Gold, and valuable items should stay there until somebody picks them up" (by value, 100 GOLD);
     # "All teleport or rune stone must always persist". The @ashvale Bank keeps them in the world across sessions.

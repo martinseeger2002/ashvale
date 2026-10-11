@@ -134,6 +134,7 @@
     }
     function profile(pc, edge) {
       const out = [], n = edge === 'n' || edge === 's' ? pc.w : pc.h;
+      if (pc.rot) { for (let i = 0; i < n; i++) out.push([0, '']); return out; }   /* a rotated piece (another face): its bounding box edges are open ground, the same whether its zone is loaded or a stub */
       for (let i = 0; i < n; i++) {
         let trees = 0, cnt = 0, sp = '';
         for (let a = -3; a <= 3; a++) for (let dpt = 0; dpt < 5; dpt++) {
@@ -280,7 +281,7 @@
           }
         }
         for (const e of pc.exits) ex.push({ x: e.x, y: e.y, dir: e.dir, w: e.w || 2, kind: 0 });
-        pc.ex = ex;
+        pc.ex = pc.rot ? [] : ex;   /* a rotated piece (another face): no path or stream runs continue out of its bounding box */
       }
       /* a gate the road to another town leaves from gets the road only, not a dirt path of its own beside it (the operator
          2026-10-07, the cobbled road): mark the exits the trails between towns will use */

@@ -72,7 +72,10 @@ STUB_BAND = 5   # worldgen reads this many tiles in from each edge (wg_paths.js 
 
 def zone_stub_tiles(z):
     """the zone's tiles as worldgen sees them from OUTSIDE: piers and bridges laid as 'B' (worldgen.js decks()), then
-    everything more than STUB_BAND tiles in from every edge blanked to '.' (only the inside of a town reads it)"""
+    everything more than STUB_BAND tiles in from every edge blanked to '.' (only the inside of a town reads it) - except
+    what BLOCKS (trees, rock, water, walls: rules.tiles.block), kept so the forest ways (wg_tiles.js wayCell) see the same
+    open/blocked map from a stub as from the loaded zone (2026-10-11: Ziibiing's zone keeps a strip of grove inside)"""
+    BLOCK = json.load(open(os.path.join(ROOT, 'data', 'rules.json')))['data']['tiles']['block']
     ox, oy = z['origin']; T = [list(r) for r in z['tiles']]
     for o in z.get('objects') or []:
         if o.get('k') not in ('pier', 'bridge'): continue
@@ -86,7 +89,7 @@ def zone_stub_tiles(z):
     for y, r in enumerate(T):
         w = len(r)
         if y < B or y >= h - B or w <= 2 * B: out.append(''.join(r))
-        else: out.append(''.join(r[:B]) + '.' * (w - 2 * B) + ''.join(r[w - B:]))
+        else: out.append(''.join(r[:B]) + ''.join(c if c in BLOCK else '.' for c in r[B:w - B]) + ''.join(r[w - B:]))
     return out
 
 
