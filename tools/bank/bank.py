@@ -624,7 +624,10 @@ def room_loop(stop):
                     if time.time() - t_rejoin > 6 * 3600: raise RuntimeError('periodic reopen')   # keep the sign-in and cert fresh
                     stop.wait(1)
         except Exception as e:
-            log('ROOM DOWN', str(e)[:200]); stop.wait(30)
+            log('ROOM DOWN', str(e)[:200])
+            if 'inside the asyncio loop' in str(e):   # a leaked Playwright loop in this thread never heals: die, systemd (Restart=always) brings a clean process
+                log('ROOM DOWN is permanent in this process: exiting for systemd to restart'); stop.set(); os._exit(3)
+            stop.wait(30)
 
 if __name__ == '__main__':
     if '--status' in sys.argv:

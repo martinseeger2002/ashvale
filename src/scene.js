@@ -16,6 +16,8 @@
     const ORE = { R: 0xc8702c, N: 0xd8d8d0, I: 0x8a4632, C: 0x33333c, G: 0xd9a930, A: 0x6f86c8, S: 0x3a3a40, V: 0x0e0e14 };
     const WATER_Y = -0.16;
     let LAMPQ = null;   /* (x, y) -> whether a tended lamp or town torch is lit; the engine sets this from the guards */
+    let FIREQ = null;   /* (x, y) -> whether the fire at a tile is burning (a zone fire with `litIn` is cold out of its season) */
+    let STEAMQ = null;  /* kind -> 0-1, how hard the kettle over that fire steams (core works it out from the season and the hour) */
     const BOARDS = Object.create(null);   /* painted wooden signs (dragon killers): id -> { lines, faces } */
     const SNOWC = new THREE.Color(0xf2f1ec);
 
@@ -1059,6 +1061,9 @@
             for (const e of [-1.1, 1.1]) { B.add('box', 0x5a4430, x + e, y + 0.75, z, 0.08, 1.5, 0.08); B.add('box', 0x5a4430, x + e - 0.08, y + 1.45, z, 0.05, 0.3, 0.05, 0, 0, 0.5); B.add('box', 0x5a4430, x + e + 0.08, y + 1.45, z, 0.05, 0.3, 0.05, 0, 0, -0.5); }
             B.add('cyl6', 0x6a4a2a, x, y + 1.42, z, 0.07, 2.5, 0.07, 0, 0, Math.PI / 2);
             for (const e of [-0.45, 0.45]) { B.add('box', 0x2a2a2a, x + e, y + 1.1, z, 0.012, 0.62, 0.012); B.add('cyl12', 0x2b2b2e, x + e, y + 0.6, z, 0.5, 0.42, 0.5); B.add('cyl12', 0xb5651d, x + e, y + 0.8, z, 0.44, 0.02, 0.44); }
+            /* the sap over the fire: steam while it boils (a kettle with `steamIn` steams only in its season, and
+               harder with every bucket poured in through the morning - core keeps that hour) */
+            for (const e of [-0.45, 0.45]) anim.push({ steam: true, x: x + e, y: y + 0.95, z, parts: [], steamIn: o.steamIn || null });
             break;
           }
           case 'barklodge': {   /* iskigamizigewigamig, the sap-boiling lodge: a low birch bark lodge, rolls of bark on a pole frame, a dark door */
@@ -1264,8 +1269,10 @@
           case 'campfire': {
             for (let k = 0; k < 4; k++) B.add('box', 0x5a3c24, x, y + 0.08, z, 0.7, 0.1, 0.1, k * Math.PI / 4);
             for (let k = 0; k < 6; k++) B.add('box', 0x6a6a6a, x + Math.cos(k) * 0.45, y + 0.07, z + Math.sin(k) * 0.45, 0.16, 0.14, 0.16, k);
-            if (o.smoke !== false) anim.push({ smoke: true, x, y: y + 0.8, z, parts: [] });   /* a camp's fire smokes */
-            const f = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 6), new THREE.MeshBasicMaterial({ color: 0xff8a20 })); f.position.set(x, y + 0.35, z); group.add(f); torches.push({ f, ph: 1, x, y, z });
+            /* a ring the village only lights in one season (zone data `litIn`) is cold stones outside it: the flame,
+               its smoke and its light all follow the season, which is core's rule, asked one tile at a time */
+            if (o.smoke !== false) anim.push({ smoke: true, x, y: y + 0.8, z, parts: [], litIn: o.litIn || null, tx: o.x, ty: o.y });   /* a camp's fire smokes */
+            const f = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 6), new THREE.MeshBasicMaterial({ color: 0xff8a20 })); f.position.set(x, y + 0.35, z); group.add(f); torches.push({ f, ph: 1, x, y, z, litIn: o.litIn || null, tx: o.x, ty: o.y });
             if (map.nodes && map.nodes.get && map.nodes.get(K(o.x, o.y))) { const pk = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.8, 8), new THREE.MeshBasicMaterial({ visible: false })); pk.position.set(x, y + 0.4, z); pk.userData.pick = { kind: 'node', i: K(o.x, o.y) }; group.add(pk); pickables.push(pk); }   /* a town's campfire: cook on it */
             break;
           }
@@ -1326,9 +1333,10 @@
       }
       /* torch light: two warm lights at the village plaza (more would cost too much on phones) */
       const lights = [];
-      for (const t of torches.filter(t => !t.glow && t.x != null).slice(0, 2)) { const L = new THREE.PointLight(0xffa050, 3, 6, 1.6); L.position.set(t.x, t.y + 1.5, t.z); group.add(L); lights.push(L); }
+      for (const t of torches.filter(t => !t.glow && t.x != null && !(t.litIn && FIREQ && !FIREQ(t.tx, t.ty))).slice(0, 2)) { const L = new THREE.PointLight(0xffa050, 3, 6, 1.6); L.position.set(t.x, t.y + 1.5, t.z); group.add(L); lights.push(L); }
 
       const smokeGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12), smokeMat = new THREE.MeshLambertMaterial({ color: 0xc8c8c8, transparent: true, opacity: 0.35, depthWrite: false });
+      const steamMat = new THREE.MeshLambertMaterial({ color: 0xf2f6fa, transparent: true, opacity: 0.22, depthWrite: false });   /* boiling sap: whiter and thinner than a fire's smoke */
       return {
         group, heightAt, pickables, waterY: seeded ? map.waterH() - 0.05 : WATER_Y, terrain: terrainMesh, rect: RC, roofs, mounts,
         setView(px, pz, r) {   /* seeded chunks: show a quadrant's trees only while it is within r metres of the player */
@@ -1369,6 +1377,7 @@
             const s = 0.85 + 0.15 * Math.sin(time * 13 + t.ph) + 0.08 * Math.sin(time * 31 + t.ph * 2);
             if (t.tend) { const on = LAMPQ ? !!LAMPQ(t.tx, t.ty) : true; t.f.visible = on; if (t.f2) t.f2.visible = on; }
             else if (t.night) { const on = NIGHTK > 0.04; t.f.visible = on; if (t.f2) t.f2.visible = on; }
+            else if (t.litIn) { const on = FIREQ ? !!FIREQ(t.tx, t.ty) : true; t.f.visible = on; }   /* a seasonal fire: cold ring outside its season */
             t.f.scale.set(1, s, 1); if (t.f2) t.f2.scale.set(1, s, 1);
           }
           for (const L of street) { const on = LAMPQ ? !!LAMPQ(L.x, L.y) : NIGHTK > 0.04; L.mat.color.copy(LAMP_OFF).lerp(LAMP_ON, on ? 1 : 0); }
@@ -1379,8 +1388,13 @@
           if (waterMesh) waterMesh.position.y = Math.sin(time * 0.55) * 0.014;   /* the whole sheet rides a slow swell, some water sits on it */
           for (const a of anim) if (a.bob) a.bob.position.y = a.y0 + 0.12 * Math.sin(time * 2.6);
           for (const a of anim) if (a.smoke) {
-            if (a.parts.length < 8 && Math.random() < dt * 3) { const m = new THREE.Mesh(smokeGeo, smokeMat); m.position.set(a.x, a.y, a.z); m.userData.t = 0; group.add(m); a.parts.push(m); }
+            if ((!a.litIn || !FIREQ || FIREQ(a.tx, a.ty)) && a.parts.length < 8 && Math.random() < dt * 3) { const m = new THREE.Mesh(smokeGeo, smokeMat); m.position.set(a.x, a.y, a.z); m.userData.t = 0; group.add(m); a.parts.push(m); }
             for (let k = a.parts.length - 1; k >= 0; k--) { const m = a.parts[k]; m.userData.t += dt; m.position.y += dt * 0.5; m.position.x += dt * 0.15; m.scale.setScalar(1 + m.userData.t * 0.8); m.rotation.y += dt; if (m.userData.t > 2.4) { group.remove(m); a.parts.splice(k, 1); } }
+          }
+          for (const a of anim) if (a.steam) {   /* the kettle: nothing at all over a cold fire, more with every bucket, a steady veil after noon */
+            const k = a.steamIn && STEAMQ ? STEAMQ(a.steamIn) : 1;
+            if (k > 0.02 && a.parts.length < 3 + Math.round(k * 6) && Math.random() < dt * (0.8 + k * 7)) { const m = new THREE.Mesh(smokeGeo, steamMat); m.position.set(a.x + (Math.random() - 0.5) * 0.3, a.y, a.z); m.userData.t = 0; group.add(m); a.parts.push(m); }
+            for (let k2 = a.parts.length - 1; k2 >= 0; k2--) { const m = a.parts[k2]; m.userData.t += dt; m.position.y += dt * (0.5 + k * 0.5); m.position.x += dt * 0.06; m.scale.setScalar(0.7 + m.userData.t * (0.5 + k * 0.5)); m.rotation.y += dt * 0.7; if (m.userData.t > 1.8) { group.remove(m); a.parts.splice(k2, 1); } }
           }
         }
       };
@@ -1395,7 +1409,7 @@
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, canoeMesh, seasonApply, boardPaint, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

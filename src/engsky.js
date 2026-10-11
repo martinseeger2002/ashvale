@@ -20,6 +20,10 @@
         const SEASONS = (() => { try { const SM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('seasons'); return SM && SM.create ? SM.create({ epoch: SUN_EPOCH, dayS: DAY_S }) : null; } catch (e) { return null; } })();
         const SUNL = { dark: 0, dir: [-0.45, 0.8, 0.3], key: '', b: null, lonA: null, base: new THREE.Color(SKY), col: new THREE.Color(), night: new THREE.Color(), phase: null };
         if (SCENE.lampQuery) SCENE.lampQuery((x, y) => core.lampLit ? core.lampLit(x, y) : true);
+        /* a fire or a kettle that only works in one season (zone data litIn / steamIn) asks the core, which asks the
+           seasons module - so a cold sugar bush in winter draws cold stones and no steam, and none of it is sugar law */
+        if (SCENE.fireQuery) SCENE.fireQuery((x, y) => core.fireLit ? core.fireLit(x, y) : true);
+        if (SCENE.steamQuery) SCENE.steamQuery(kind => core.steamFor ? core.steamFor(kind) : 0);
         const NEW_SKY = new THREE.Color(0x1a2434), NIGHT_SKY = new THREE.Color(0x2a3a52), DUSK_SKY = new THREE.Color(0xd8865a), SUNC = new THREE.Color(0xfff0d6), DUSKC = new THREE.Color(0xffa060), MOONC = new THREE.Color(0x9fb4ff);
         function sphereAt(x, y) { const S0 = core.M.sphereAt; if (!S0) return null; const u = S0(x + 0.5, y + 0.5); if (!u) return null; return [u, S0(x + 1.5, y + 0.5), S0(x + 0.5, y + 1.5)]; }   /* any face of the open globe (world.js sphereAt goes through the net) */
         function sunAt(tms) {   /* the sun's direction from the planet's centre */
@@ -317,7 +321,7 @@
             SEASON.noonDay = gday; SEASON.noon = bk / 96;
           }
           SEASON.lat = lat; SEASON.lon = SEASON.noon != null ? (0.5 - SEASON.noon) * 360 : Math.atan2(B.u[1], B.u[0]) * 180 / Math.PI;
-          if (core.setNature && SEASONS.sap) { const C = SEASONS.calendar(now); core.setNature({ day: Math.floor((now / 1000 - SUN_EPOCH) / DAY_S), hours: 24 * (now / 1000 - SUN_EPOCH) / DAY_S, year: C.year, sap: SEASONS.sap(lat, now), seasons: questSeasons(lat, now, gday) }); }   /* the sugar bush rules: which day and year it is, and whether the sap runs */
+          if (core.setNature && SEASONS.sap) { const C = SEASONS.calendar(now); core.setNature({ day: Math.floor((now / 1000 - SUN_EPOCH) / DAY_S), hours: 24 * (now / 1000 - SUN_EPOCH) / DAY_S, hour: (((C.dayFrac + (SEASON.lon || 0) / 360) % 1 + 1) % 1) * 24, year: C.year, sap: SEASONS.sap(lat, now), seasons: questSeasons(lat, now, gday) }); }   /* the sugar bush rules: which day and year it is, whether the sap runs, and the hour where you stand (noon = the sun highest) */
           if (TL.n > 1 && SEASONS.temperature) {   /* a time-lapse shows the date, the temperature and the sap run (2026-10-08) */
             let el = document.getElementById('tl-clock');
             if (!el) { el = document.createElement('div'); el.id = 'tl-clock'; el.style.cssText = 'position:fixed;left:12px;top:12px;z-index:50;padding:6px 10px;border-radius:6px;background:rgba(10,14,20,.72);color:#f2ead8;font:600 15px/1.35 system-ui,sans-serif;pointer-events:none;white-space:pre'; document.body.appendChild(el); }

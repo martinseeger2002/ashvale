@@ -234,10 +234,15 @@ console.log(JSON.stringify(W.tiles(19, %d + 8811, %d - 3368, %d, %d)));""" % (x0
         for x, y in r:
             if x0 <= x < x0 + len(rows[0]) and y0 <= y < y0 + len(rows) and rows[y - y0][x - x0] != 'X': rows[y - y0][x - x0] = L
     mouth['data']['tiles'] = [''.join(r) for r in rows]
+    # every place a town stone takes you has a chest its players can open (the stone for the cave stands at the mouth up top, 2026-10-10)
+    mouth['data']['npcs'] = [{"id": "cave_chest", "name": "Cave trail chest", "look": "chest", "x": MOUTH[0] + 4, "y": MOUTH[1] + 1, "chest": True,
+                              "examine": "A chest left by the path to the Spider Cave, iron-bound against the damp. Everything you own from Ashvale is kept in your arcade wallet; this is where you see it."}]
+    for n in mouth['data']['npcs']: rows[n['y'] - y0][n['x'] - x0] = ','   # and it stands on open ground
+    mouth['data']['tiles'] = [''.join(r) for r in rows]
     farmouth = None
     # people placed in the cave by hand (sadfrog's Red Pyre: Edric's bones and ghost) live in data/extra/zone.spidercave.json, kept here on every run
     xp = os.path.join(HERE, 'data', 'extra', 'zone.spidercave.json')
-    if os.path.exists(xp): cave['data']['npcs'] = json.load(open(xp)).get('npcs', [])
+    if os.path.exists(xp): cave['data']['npcs'] = json.load(open(xp)).get('npcs', []); cave['data']['objects'] += json.load(open(xp)).get('objects', [])   # and their things (the antidote crate), 2026-10-10
     json.dump(cave, open(os.path.join(HERE, 'data', 'zone.spidercave.json'), 'w'), separators=(',', ':'))
     json.dump(mouth, open(os.path.join(HERE, 'data', 'zone.cavemouth.json'), 'w'), separators=(',', ':'))
     fp = os.path.join(HERE, 'data', 'zone.caveexitup.json')

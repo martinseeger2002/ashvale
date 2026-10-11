@@ -704,8 +704,9 @@
         for (const n of core.M.npcs) {
           const e = ents.get('n:' + n.id); if (!e) continue;
           e.root.visible = npcShown(n);
-          if (n.patrol || n.guard || n.watch || n.sapAt) { if (moveTo(e, n.x, n.y, stamp)) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); }
-        }   /* a watchman walking his round, a guard answering the call to arms; hidden NPCs stay unseen until their flag */
+          if (n.patrol || n.guard || n.watch || n.sapAt || n.sapDay) { if (moveTo(e, n.x, n.y, stamp)) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else if (n.wface != null) e.tyaw = faceYaw(n.wface); }   /* a watchman walking his round, a guard answering the call to arms, the village at the sugar bush; standing still at a job, they face the maple or the akik (core says which way) */
+          if (n.sapDay) { const sk = n.work ? 'cook' : null; if (sk !== e.skill) e.skill = sk; }   /* hands at the work: the spile at a maple, a bucket tipped at the akik. Their buckets are not items, so nothing goes in them but the pose */
+        }   /* hidden NPCs stay unseen until their flag */
         syncMobEnts();
         for (const m of core.S.mobs) {
           const e = ents.get('m:' + m.uid); if (!e || m.dead) continue;   /* (syncMobEnts runs right before) */
@@ -944,7 +945,7 @@
              trails between them, sadfrog 2026-10-07), ranges, campfires, and torches dropped on the ground (2026-10-07) */
           /* every light out to the edge of what you can see (2026-10-07: "The light from the illumination should load
              farther out"): the nearest few are real lights, every one of them gets a pool of light on the ground (GLOW) */
-          const R = inCave ? 18 : Math.min(viewR(), 90), LT = { torch: 1.6, sconce: 1.5, lamp: 2.6, range: 0.9, campfire: 0.9 }, near = [], add = o => { if (!LT[o.k] || Math.abs(o.x - me.x) >= R || Math.abs(o.y - me.y) >= R) return; if (core.lampLit && !core.lampLit(o.x, o.y)) return; near.push([o.x, o.y, LT[o.k], o.k === 'lamp' ? 0xffd27a : 0xff9a3c, o.k === 'lamp']); };
+          const R = inCave ? 18 : Math.min(viewR(), 90), LT = { torch: 1.6, sconce: 1.5, lamp: 2.6, range: 0.9, campfire: 0.9 }, near = [], add = o => { if (!LT[o.k] || Math.abs(o.x - me.x) >= R || Math.abs(o.y - me.y) >= R) return; if (core.lampLit && !core.lampLit(o.x, o.y)) return; if (o.litIn && core.fireLit && !core.fireLit(o.x, o.y)) return;   /* a fire that lights only in one season (zone data `litIn`): out of it, the ring is cold, and cold stones light nothing */ near.push([o.x, o.y, LT[o.k], o.k === 'lamp' ? 0xffd27a : 0xff9a3c, o.k === 'lamp']); };
           for (const o of core.M.objects || []) add(o);
           if (!inCave && core.M.roadTorchesIn) for (const o of core.M.roadTorchesIn(me.x - R, me.y - R, me.x + R, me.y + R)) add(o);
           for (const f of fires.values()) { const q = f.position; if (Math.abs(q.x - me.x) < R && Math.abs(q.z - me.y) < R) near.push([q.x - 0.5, q.z - 0.5, 0.8, 0xff9a3c]); }

@@ -179,6 +179,15 @@ at('maiingan')['trade'] = [{'take': {'deer_hide': 1}, 'give': {'sinew': 2},
     {'take': {'snow_hare_pelt': 3}, 'give': {'sinew': 1}, 'say': ["Three white waabooz (rabbit) pelts, the winter coat. Miigwech (thank you).", "Here is a length of ojiitad (sinew) for them."]}]
 at('nookomis')['quest'] = 'sugar_bush'
 at('nookomis')['sapAt'] = [93, 545]   # by the sugar camp's fire while the sap runs (core moves her there and back)
+for _n in ('migizi', 'makwa', 'waabigwan', 'animikii', 'ziigwan'):   # the makak is the village chest, not a person
+    at(_n)['sapDay'] = 1   # the rest of the village works the maples with her on a sap day, 8:00 to noon (rules.fires.sapDay)
+# WHAT THEY SAY ON A SAP MORNING (2026-10-09: "short OPD-word sap dialogue with English"). Words the game
+# already uses, each glossed as everywhere else - no new Ojibwe sentences, those need a speaker's approval.
+at('migizi')['lines'].append("Before eight we take the biskitenaagan (sap buckets) up to the iskigamizigan (sugar camp). I folded those ones: two sheets of wiigwaas and one ojiitad, and a day drying in their folds.")
+at('makwa')['lines'].append("Crust the snow hard one night and warm the next day - then the ininaatig (maples) run, and we go up with the buckets.")
+at('waabigwan')['lines'].append("We are up at the sugar camp from eight until the sun is past the middle of the sky. Bring a bucket if you come: one tree fills one bucket in a day, and no tree gives twice.")
+at('animikii')['lines'].append("A night that freezes and a day that thaws - that is what sets the sap running. I watch for it every spring, and it is not every spring that brings it.")
+at('ziigwan')['lines'].append("Boil what you carry at the camp fire: zhiiwaagamizigan (maple syrup) first, and boil that again and you have ziinzibaakwadoons (candy). The bucket comes back empty either way.")
 at('nookomis').pop('lines', None)   # a quest giver chats of nothing (her quest's own words say it all)
 for i, k in (('animikii', 'weather'), ('ziigwan', 'plants'), ('waabigwan', 'moon'), ('makwa', 'sky')): at(i)['nature'] = k
 # THE RICING TOOLS (2026-10-08): Ziigwan carves a gaandakii'iganaak (push pole) from two tamarack logs and a pair of
@@ -293,7 +302,7 @@ for y in range(CH):
     for x in range(CW):
         if 2 <= x <= CW - 3 and 2 <= y <= CH - 3 and cg[y][x] not in '~v': cg[y][x] = '.'   # the clearing
 CAMP_FIRE = (CX + 8, CY + 7)
-cobj = [{'k': 'campfire', 'x': CAMP_FIRE[0], 'y': CAMP_FIRE[1]}, {'k': 'kettle', 'x': CAMP_FIRE[0], 'y': CAMP_FIRE[1]},
+cobj = [{'k': 'campfire', 'x': CAMP_FIRE[0], 'y': CAMP_FIRE[1], 'litIn': 'sap'}, {'k': 'kettle', 'x': CAMP_FIRE[0], 'y': CAMP_FIRE[1], 'steamIn': 'sap'},
         {'k': 'barklodge', 'x': CX + 5, 'y': CY + 4}, {'k': 'woodpile', 'x': CX + 11, 'y': CY + 4},
         {'k': 'fishrack', 'x': CX + 11, 'y': CY + 9}, {'k': 'basket', 'x': CX + 6, 'y': CY + 9}, {'k': 'basket', 'x': CX + 7, 'y': CY + 10}]
 for xx in range(CX + 4, CX + 7):

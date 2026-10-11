@@ -178,7 +178,7 @@
   },
   {
    "m": "bandit",
-   "x": 3,
+   "x": 5,
    "y": 1,
    "carry": {
     "arrows_t1": 10
@@ -244,7 +244,7 @@
   },
   {
    "m": "vorthan",
-   "x": 31,
+   "x": 27,
    "y": 4
   }
  ],
@@ -277,10 +277,10 @@
   "TTT,,TOT,TOTT,,,,,,,,,Pp,,O,,,,,,,,,,,,,,,,,,,pp",
   ",PTTPPPPPTTPT,,,,,,,,,~p,,,,TO,,,,,PP,,,,,,,XX,T",
   "TPTPP,PTTTTOP,,,,,,,,,,p,,,,,T,,,,,PP,,,,,,,XX,T",
-  "TTO,,,TTTPTTT,,,,,,,,,,,p,,P,,,,,,,OTP,,,,,,,,TP",
-  "TTTT,TTPP,TPT,,,,,,,,,T,p,,,,,,,,,,TTO,,,,,,OPTT",
-  "OPTT,P,TT,P,T,,,,,T,,T,pp,,,,,,,,,,PTT,,TTPTPTT,",
-  "pppppP,T,pppppp,,,,pppppp,,,,,,,,,,,,,,,TTTTTTOT",
+  "TTO,,,TTTMTTT,,,,,,,,,,,p,,P,,,,,,,OTP,,,,,,,,TP",
+  "TTTT,TTPM,MPT,,,,,,,,,T,p,,,,,,,,,,TTO,,,,,,OPTT",
+  "OPTT,M,MM,P,T,,,,,T,,T,pp,,,,,,,,,,PTT,,TTPTPTT,",
+  "pppppM,M,pppppp,,,,pppppp,,,,,,,,,,,,,,,TTTTTTOT",
   "T,PPppppppP,O,pppppp,,,pp,,,,,,,,,,PTP,TTTTTT,,,",
   ",TTPTOTPTOT,TP,T,T,,,,,pp,,,,,,r,,,,,PPPTPP,,,,,",
   "PPPTPTTTPTP,P,O,,,P,,,,pp,,,,,,,,,,,,,,,PTT,TTPP",

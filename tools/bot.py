@@ -36,7 +36,16 @@ def node_spots(item):
             for x, c in enumerate(row):
                 if c in letters: out.append((x + ox, y + oy))
     return out
-def spawns_of(key):
+# a species with no written spawn lives in a worldgen herd site - this is the lookup the probes use
+# (handoff/qwen_quest_bugs.md 2026-10-06: timber_wolf, deer, hare, boar and goat have no spawns in any zone file)
+WILD_JS = """const seen = new Set(), d = s => Math.max(Math.abs(s.x - ASH.me.x), Math.abs(s.y - ASH.me.y));
+  return ASH.core.M.sitesIn(ASH.me.x - 1200, ASH.me.y - 1200, ASH.me.x + 1200, ASH.me.y + 1200)
+    .filter(s => s.monster === %r && !seen.has(s.x + ',' + s.y) && seen.add(s.x + ',' + s.y))
+    .sort((a, b) => d(a) - d(b)).slice(0, 24)
+    .map(s => s.spawns && s.spawns.length ? [s.spawns[0].x, s.spawns[0].y] : [s.x, s.y])"""
+def spawns_of(key, bot=None):
+    """where a species is kept: the written spawn points in the zone maps and, when it has none at all (the wild
+    herds), the nearest worldgen herd sites around wherever the bot stands - which is what `bot` is for"""
     out = []
     for z in ('village', 'whisperwood', 'saltmere'):
         try: Z = D('zone.' + z)
@@ -44,6 +53,8 @@ def spawns_of(key):
         ox = 0
         for s in Z.get('spawns', []):
             if s.get('m') == key: out.append((s['x'], s['y']))
+    if not out and bot is not None:
+        out = [tuple(s) for s in (bot.r(WILD_JS % key) or [])]
     return out
 SELL = ('pelt', 'rat_pelt', 'hare_pelt', 'snow_hare_pelt', 'goat_hide', 'deer_hide', 'boar_hide', 'timber_wolf_pelt', 'lizard_skin',
         'logs', 'oak_logs', 'willow_logs', 'copper_ore', 'tin_ore', 'iron_ore', 'coal')
@@ -1080,6 +1091,14 @@ class Bot:
             self.blocked = self.mem.d.setdefault('blocked', {})
             self.blocked[qid] = (time.time() + seconds, why); self.mem.save()
 
+    def grounds(self, key, sp):
+        """which of a species' posts to try this trip. fight() walked to sp[0] every time: it wiped one pack, camped
+        that field through the 2000-tick respawn (which needs the zone empty to bring them back), and gave up after
+        six fruitless walks to the same tile, while its other nine fields were never visited
+        (handoff/qwen_quest_bugs.md 2026-10-06). A player rotates; so does he now. Returns the tile and which post it was."""
+        self.post = getattr(self, 'post', {})
+        i = self.post.get(key, 0); self.post[key] = i + 1
+        return sp[i % len(sp)], i % len(sp)
     def fight(self, key, n=1):
         """kill n of key near its spawns; returns kills. Eats; retreats to restock when out of food"""
         if not hasattr(self, 'absent'): self.absent = {}
@@ -1088,7 +1107,7 @@ class Bot:
         if self.beyond_bag(key): return 0
         spawn = self.r("const m = nearest(%r); return m && [m.x, m.y, m.dist]" % key)
         if not spawn or spawn[2] > 40:   # monsters load as you come near: walk to where they live first
-            sp = spawns_of(key)
+            sp = spawns_of(key, self)
             if not sp:
                 if spawn:   # no fixed place, but one is in sight (2026-10-07: a boar was there, 40+ tiles off): go to it
                     log('no fixed place for %s, but there is one at %s: going there' % (key, spawn[:2]))
@@ -1097,9 +1116,11 @@ class Bot:
                 if not spawn:
                     bug('fight', 'no %s spawns in any zone (wild herds only?) - a quest cannot send players to it without saying where' % key); return 0
                 sp = [spawn[:2]]
-            log('walking to the', key, 'grounds', sp[0]); self.walk(sp[0][0], sp[0][1] + 1, 6); self.r("await wait(3000); return 1")
+            here, npost = self.grounds(key, sp)
+            log('walking to the', key, 'grounds', here, '(post %d of %d)' % (npost + 1, len(sp)))
+            self.walk(here[0], here[1] + 1, 6); self.r("await wait(3000); return 1")
             spawn = self.r("const m = nearest(%r); return m && [m.x, m.y, m.dist]" % key)
-            if not spawn: log('reached the %s grounds at %s but none are there' % (key, sp[0])); self.leave_zone(key, sp[0]); return 0
+            if not spawn: log('reached the %s grounds at %s but none are there' % (key, here)); self.leave_zone(key, here); return 0
         kills = 0; deaths = 0; misses = 0; self.watch_deaths()
         self.run_deaths = getattr(self, 'run_deaths', {})
         while kills < n and self.time_left():
@@ -1121,16 +1142,18 @@ class Bot:
                 if not self.cook() and s.get('gold', 0) >= 10: self.gear()   # nothing to cook: buy bread (and a weapon once it can afford one)
             m = self.r("const m = nearest(%r); return m && [m.x, m.y, m.dist]" % key)
             if not m or m[2] > 40:   # e.g. back from cooking at the range: none loaded here, go back to their grounds
-                sp = spawns_of(key)
+                sp = spawns_of(key, self)
                 if not sp: return kills
                 misses += 1
+                here, npost = self.grounds(key, sp)
                 if misses >= 2:   # hunted out: monsters come back when their zone has been empty 30 s and someone walks in
-                    self.leave_zone(key, sp[0])
+                    self.leave_zone(key, here)
                     if misses > 3:   # 2026-10-06: ten fruitless trips for an absent bandit leader -- note it, move on
-                        bug('fight', 'left and came back to the %s grounds at %s %d times and found none' % (key, sp[0], misses))
+                        bug('fight', 'left and came back to the %s grounds at %s %d times and found none' % (key, here, misses))
                         self.absent[key] = time.time() + 1200; self._block_current('%s not around or not ready for' % key)
                         log('no %s to be found: on to other quests, back in 20 minutes' % key); return kills
-                log('back to the', key, 'grounds', sp[0]); self.walk(sp[0][0], sp[0][1] + 1, 6); self.r("await wait(3000); return 1")
+                log('back to the', key, 'grounds', here, '(post %d of %d)' % (npost + 1, len(sp)))
+                self.walk(here[0], here[1] + 1, 6); self.r("await wait(3000); return 1")
                 continue
             if m[2] > 12: self.walk(m[0], m[1], 3)
             lvl = MONS.get(key, {}).get('level', 1)
@@ -1206,7 +1229,7 @@ class Bot:
                 if getattr(self, 'absent', {}).get(G['kill'], 0) > time.time():
                     self.blocked[qid] = (self.absent[G['kill']], '%s not around' % G['kill']); self.mem.save()
                     log('%s is not around: %s waits, other quests first' % (G['kill'], Q['name'])); return False
-                if not spawns_of(G['kill']) and not self.r("return !!nearest(%r)" % G['kill']):
+                if not spawns_of(G['kill'], self) and not self.r("return !!nearest(%r)" % G['kill']):
                     self.blocked[qid] = (time.time() + 3600, 'no %s has a fixed place to be found' % G['kill']); self.mem.save()
                     return False
             elif kind == 'bring':

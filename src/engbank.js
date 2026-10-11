@@ -248,7 +248,7 @@
           if (k) { const m = core.storeItem(PID, k, n); L.bag[k] = Math.max(0, (L.bag[k] || 0) - m); L.gone[k] = (L.gone[k] || 0) + m; } }   /* it left your bag */
         if (got) { const k = got.key || 'coins', n = got.inscription ? 1 : +got.amount;   /* into your bag at once, counted as arriving (a
              promise, like a Bank delivery) until your wallet shows it (2026-10-08: "as soon as the trade transaction hits the mempool") */
-          if (k && n > 0) { core.grantItem(PID, k, n); L.pend[k] = (L.pend[k] || 0) + n; } }
+          if (k && n > 0) { core.grantItem(PID, k, n); if (core.markGift) core.markGift(PID, k, n); L.pend[k] = (L.pend[k] || 0) + n; } }   /* traded to you: a gift, for quests */
         ledgerSave(); hud.refresh('all'); for (const t of [20000, 60000, 120000, 300000]) setTimeout(walletRefresh, t);
       }
       function tradeUndone(gave, got) {   /* the chain refused a swap the game had already applied: each side gets its own back */

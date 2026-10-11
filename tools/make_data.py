@@ -170,7 +170,7 @@ items.update({
     "lobster": {"name": "Lobster", "kind": "food", "heal": 8, "value": 40},
     "lobster_burnt": {"name": "Burnt lobster", "kind": "junk", "value": 0},
     # the hawk ring (2026-10-04): worn, it turns you into a hawk flying over the tree line (src/core.js isHawk)
-    "ring_hawk": {"name": "Hawk ring", "kind": "ring", "value": 500, "form": "hawk", "nft": {"copies": 2, "key": "ring_hawk"}},
+    "ring_hawk": {"name": "Hawk ring", "kind": "ring", "value": 500, "form": "hawk", "nft": {"copies": 2, "key": "ring_hawk"}},   # twenty exist, minted into the Armoury; no quest hands one out any more (2026-10-10)
     # meat (2026-10-04: chickens and hens "should drop meat that can be cooked"): cooks like a shrimp
     "chicken_raw": {"name": "Raw chicken", "kind": "raw", "value": 3, "cooks": "chicken_cooked", "burns": "chicken_burnt", "cookReq": 1, "cookXp": 30},
     "chicken_cooked": {"name": "Cooked chicken", "kind": "food", "heal": 3, "value": 6},
@@ -1015,83 +1015,6 @@ TRAIL = {
     "done": [
         "It works. Three buckets in a minute and a half, out of a pipe, a hare's ear and a wolf I've said sorry to. It has no business doing that. It shouldn't work, {name} - which isn't the same as not working.",
         "Take the box with the spark in it. It's been in my pocket through three winters and I've no need of it now; the pit wants a fire under the joint and I can light that off the forge. And if anybody calls it a simple thing, invite them up the ladder to watch a hare pelt lift the southwest road."]},
-  # Auditor the clerk is the fifth thread out of Ashvale and the second one hung on a metal the game never used: the
-  # survey (probe, 2026-10-05) says the village's own coin is described on the chain as "GOLD, currency gold. Made in
-  # the valley of Ashvale", while the mine's gold seam has never been wanted by a single quest, shelf or gift in the
-  # data. So the ledger line is real rather than invented. Measured ground, all of it off the shipped map: GOLD is 3
-  # stones in the east end of the Ashvale mine (42,42 / 44,42 / 45,45), 21-22 m from the village centre and 22 m from
-  # the well at 22,52, mining 30, 420 xp; MITHRIL is exactly 2 stones in the same corner (45,42 / 43,43), 21-23 m,
-  # mining 40 - two stones in the whole shipped world, which is why the die is cut once; MAPLE is 66 tiles with the
-  # nearest 51 m off the centre (Whisperwood 21,1), mining's neighbour trade at woodcutting 30, so the third step
-  # leaves the mine without leaving the walk Pip's quest already taught. Nothing is asked for that the map doesn't
-  # hold, and Pax keeps his chat lines because a talk goal credits in anybody's conversation.
-  "hawk_ring": {
-    "name": "The Hawk Ring", "giver": "auditor",
-    "steps": [
-      {"id": 1, "zone": "village", "goal": {"bring": "gold_ore", "n": 6}, "reward": "xp:mining:2000",
-       "talk": [
-           "Every coin, every catch, every word in this village gets written down somewhere. It mostly balances. There is one line in it that has not balanced since before you were walking, and in forty years I have decided I would rather see it closed than die with it open.",
-           "Gold drawn out of the Ashvale seam: nil. Gold struck in Ashvale: nine hundred and forty coin, every one of them out of the old lord's hoard, and the hoard is spent. So the money in your purse was made in this valley and none of it was ever mined in it, which is the sort of sentence that keeps a clerk awake.",
-           "Six lumps, out of three stones, in the northwest end of the mine past the copper stopes where they went in first. Twenty-two paces from the well, and it wants thirty of mining to mark the rock - it's the grey one with the yellow in the vein, and it isn't a metal you'll find by looking, it's a metal you find by weighing.",
-           "Bring them up rough with the quartz on them. I'm not assaying polished stones; I'm weighing what this parish owns, and a washed stone tells me about your polishing and nothing whatever about my seam.",
-           "Ticket, please. No? Then we'll do it without paperwork, which is how everything gets done in this village - it's already closed and nobody told either of us."],
-       "progress": [
-           "{left} more gold, {name}. Northwest of the pit mouth, twenty-two paces from the well, thirty mining. And no, what the general store sells is brass, and I've weighed it twice."],
-       "complete": [
-           "That's the seam, and it's real, and it's the first line in this book I've closed with a witness standing over it. Six lumps, unpolished, exactly the way the rock sends them up."]},
-      {"id": 2, "zone": "village", "goal": {"bring": "mithril_ore", "n": 2}, "reward": "xp:mining:1600",
-       "talk": [
-           "Now the die, and this is where the ledger stops being an accounting and starts being a piece of metal. You cannot strike coin in a brass die, whatever the old lord did - brass rounds at the thousandth strike and by the ten-thousandth the village is coining blobs and calling it weight.",
-           "Mithril takes the cut and keeps it a hundred years. There are two mithril stones in this parish. Two. Same corner of the mine as your gold, twenty-two paces from the well, and it wants forty of mining, a good pick, and nobody hurrying.",
-           "I want both of them, and I want them counted in front of me, because the quantity of mithril in Ashvale is a fact I will write down once and nobody after me will ever be able to check it. If somebody tells you they found more, ask them where, and write that down too.",
-           "One stone cuts the die. The other is so that in fifty years, when the edge of the hawk has finally gone, there is still a stone in this village to cut it again. That is what a record is for."],
-       "progress": [
-           "{left} more mithril, {name}. Forty mining, same corner as the gold. There are two in the parish and I should like both of them in this room."],
-       "complete": [
-           "Two, weighed, written, initialled. One for the die and one so that whoever comes after can find out whether I was telling the truth."]},
-      {"id": 3, "zone": "village", "goal": {"bring": "maple_logs", "n": 8}, "reward": "xp:woodcutting:2200",
-       "talk": [
-           "A die has to be annealed before it's cut and hardened after it's cut, and an anneal is a heat held, not a heat reached. Which brings me to the one thing in forty years I have done badly, and I did it badly with somebody's good oak.",
-           "Willow burns quick and takes the temper off before you've counted to twenty. Oak splits, and a split in the pan leaves a cold spot under the die, and a cold spot is a die that looks finished and isn't.",
-           "Maple chars slow and even. It's up in the wood, fifty-odd paces from the well where the fern comes up out of the path, thirty of woodcutting, and it is the easiest tree in this parish to miss, because it looks like every other tree until you have burnt it.",
-           "Eight lengths, and burn them down in the pan rather than bringing them to me green - a green log smokes, and smoke in a coin goes into the metal and stays there in the shape of a bad year."],
-       "progress": [
-           "{left} more maple, {name}. Out of the wood, not out of the mine. Slow charcoal - I have one ruined die in forty years and it was somebody's excellent oak."],
-       "complete": [
-           "Eight, and charcoal that will hold forty minutes at one heat, which is the entire difference between a die and a very expensive mistake. The pan's ready whenever the metal is."]},
-      {"id": 4, "zone": "village", "goal": {"talk": "pax", "n": 1}, "reward": "ring_hawk",
-       "talk": [
-           "The metal's weighed and the pan's lit, and what's left is the pattern. That is a story I have not told in this village, because telling it means admitting the hole in the book was left there on purpose.",
-           "The old die was a ring. A signet, a hawk on its shoulder, worn by the man who cut the first Ashvale coin - and it went out of this village in the hungry year against a debt, and it came back as nothing at all. The weight of every coin struck since has been copied off a ring that isn't here.",
-           "So the hawk has to be remembered rather than traced, and the man in this village who remembers things by their colour is Pax. Go and tell him the seam is open. He'll say he has no interest in coin, and then he'll want to know whether there's enough for the sky.",
-           "Ask him about the ninth try. The blue door by the well is the last of the village's own gold, leaf on leaf, and if you've the patience he'll show you every one of the nine. Then come back to me, because the first thing off the new die is not going to be a coin."],
-       "progress": [
-           "Pax, {name}, in his new house on the Saltmere road, northwest of the square, blue to the wrist. Tell him the seam is open, and wait for him to pretend he doesn't care."],
-       "complete": [
-           "He said coin was nothing to him. Then he asked whether there would be enough leaf for the ceiling of the hall, and I wrote that down, because it's the first thing anybody has asked me for in twenty years that I couldn't already answer."]}],
-    "done": [
-        "It balances. One line closed in forty years, and closed with the metal in the room rather than a promise about it. Every coin, every catch, every word - it mostly balances, {name}, and now it is mostly more than mostly.",
-        "The hawk, in mithril, off a die cut from a ring that had to be remembered rather than copied. Wear it, and spend a coin beside it, and if anybody asks you which of the two came first, tell them the village did. And it is not only a thing to wear - put it up your sleeve and there is a hawk on the world again, which is the first entry in this book that has ever flown."]},
-  # Latency the warden is the sixth thread out of Ashvale and it came out of one line in the item table. The survey
-  # (probes ashvale-survey11.js / 11b.js, 2026-10-05) laid the bow ladder and the wood ladder side by side: the bows
-  # are NAMED after woods - Oak t1 (req 15, 92 tiles in the built map, nearest 10 m from the village), Willow t2 (req
-  # 20, 39 tiles, 13 m), Maple t3 (req 30, 66 tiles, 34 m), Yew t4 (req 40, 19 tiles, nearest 45 m off the centre and
-  # 36 m from the warden's post at 22,44, all nineteen along the north edge of Whisperwood, where the path up the
-  # range runs out). Ashvale's own counter carries tiers 1-3; Saltmere's carries tier 4 and calls it "Yew shortbow",
-  # value 1600 - a yew bow sold in a town that has never once cut a yew, because there isn't one inside its map. And
-  # tier 5, "Elder shortbow", value 5200, is on no shelf and in no quest and behind no gift in the whole data set: an
-  # obtainable-looking item that nothing in the world will ever hand you. So the thread is the ladder itself, and the
-  # pay is the rung. The hare and deer asks are the two surplus herds measured from his own post: hares 603 in the
-  # world, nearest herd 130 m; deer 1260, nearest herd 116 m, and deer_hide wanted by no quest, shelf or gift.
-  # Re-measured against wildlife v2 (wg_tables wild.chance 0.45, wild.size hare [2,3] deer [20,30], 2026-10-06, probes
-  # /home/you/ashvale-survey22.js and /home/you/ashvale-yew21.js): from the warden's post at 22,44 the hare
-  # forms are still 130 m off (south) but run 2-3 head over 493 herds, the deer are still 116 m off (east) but run
-  # 15-30 head, median 25, over 519 herds - the nearest field is 22 head - and no timber wolf stands inside 600 m of
-  # him at all (nearest 782 m). The nineteen yews, the 36 m to the nearest of them and the ladder under the bow are
-  # tree facts and none of them moved. What moved is the ground round them: 62 deer herds within 900 m of the
-  # nearest yew, the closest feed 95 m off the trunks at 22 head, seven herds inside 250 m, and the nearest timber
-  # wolf 816 m. The old line said the yews were empty ground where everything else was full; under these tables
-  # that is simply no longer true, so he now says what a player finds, which is the fern broken and no wolves.
   "elder_bow": {
     "name": "The Elder Bow", "giver": "latency",
     "steps": [
@@ -1189,11 +1112,11 @@ TRAIL = {
       {"id": 4, "zone": "village", "goal": {"bring": "venison_cooked", "n": 2}, "reward": "xp:cooking:1600",
        "talk": [
            "Last of the ladder, and it isn't on the water. Two haunches, cooked - you want fifteen on the fire for venison, and there's your ladder: a shrimp at one, a hare at five, a trout at five, and a stag at fifteen degrees of my heat. Four things, four ways to fill a kitchen, and one number that goes down the longer you stand here.",
-           "The deer are a hundred and twenty paces from this wall, due northwest of it. They're quieter than the boars and they run sooner, and the pasture they're on is the same ground the drover walks his beasts across, so you'll know the way and he'll have told you the rest.",
+           "The deer are a hundred and sixty-five paces from this wall, due north of it, a shade west. They're quieter than the boars and they run sooner, and the pasture they're on is the same ground the drover walks his beasts across, so you'll know the way and he'll have told you the rest.",
            "Fifteen is where a haunch will take the heat, and at fifteen the fire still takes two in five of them - forty at the rung, nothing at all ten degrees over it. So expect one black in the pan, mind the pigs, and know that the number goes down the longer you stand here. That's the point of the whole errand.",
            "Bring the haunches here and not to the tap. Saltmere would cook them beautifully, and then they'd sell them back to you as somebody else's dinner, at a price, with a sprig on the top."],
        "progress": [
-           "{left} more venison on the fire, {name}. The deer are a hundred and twenty paces due northwest and the fire wants fifteen - neither of them will come to you."],
+           "{left} more venison on the fire, {name}. The deer are a hundred and sixty-five paces due north and the fire wants fifteen - neither of them will come to you."],
        "complete": [
            "Two haunches off a stag, a hundred and twenty paces from this wall, and no black on either of them. That's the ladder and you're at the top of it without having noticed, which is how it works."]},
       {"id": 5, "zone": "village", "goal": {"talk": "symmetry", "n": 1}, "reward": "pack_t4",
@@ -1594,7 +1517,7 @@ npcs = [
     # the game only remembers which holdings you carry). Opening it is engine-side (event 'chest').
     {"id": "chest", "name": "Ashvale chest", "look": "chest", "x": 24, "y": 53, "chest": True,
      "examine": "The Ashvale chest. Everything you own from Ashvale is kept in your arcade wallet; this is where you see it."},
-    {"id": "auditor", "name": "Auditor the clerk", "look": "auditor", "x": 26, "y": 53, "talk": "quest", "quest": "hawk_ring",
+    {"id": "auditor", "name": "Auditor the clerk", "look": "auditor", "x": 26, "y": 53, "lines": ["Every coin, every catch, every word in this village gets written down somewhere. It mostly balances.", "Gold drawn out of the Ashvale seam: nil. Gold struck in Ashvale: nine hundred and forty coin, every one out of the old lord's hoard."],   # the Hawk Ring quest is gone (2026-10-10: the twenty rings that exist are the only ones), so he talks again
      "examine": "Auditor the clerk, with a ledger, a scale, and one line in the ledger he has waited forty years to close."},
 ]
 for o in objs:
@@ -1811,7 +1734,14 @@ module('rules', 3, {
         "range": {"skill": "cooking", "name": "Cooking range", "speed": 4},
         "fire": {"skill": "cooking", "name": "Campfire", "speed": 4, "burnBonus": 10}},
     "skills": ["attack", "strength", "defence", "hitpoints", "ranged", "magic", "dexterity", "speechcraft", "woodcutting", "mining", "fishing", "cooking", "firemaking"],
-    "fires": {"lightTicks": 3, "basePct": 50, "pctPerLevel": 2, "maxPct": 95},
+    "fires": {"lightTicks": 3, "basePct": 50, "pctPerLevel": 2, "maxPct": 95,
+              # the sugar camp's morning (2026-10-09): the people walk up just before 8:00, tap the maples till noon,
+              # and pour what they carry into the akik. The tiles are the camp's own - see THE SUGAR CAMP in tools/make_zone_ziibiing.py
+              "sapDay": {"walk": [6.75, 8], "gather": [8, 12], "trips": 4,
+                         "at": [-16252, 15290], "kettle": [-16254, 15290], "pour": [-16254, 15289], "steam": [0.25, 0.6],
+                         "trees": [[-16252, 15292, -16252, 15293], [-16255, 15293, -16255, 15294],
+                                   [-16260, 15284, -16260, 15283], [-16249, 15288, -16248, 15288]]},
+              },
     "effects": {"note": "effect library (core.js EFFECTS); item JSON: Effect, Effect ticks, Effect chance (%), Effect damage. Unknown effects are ignored.",
                 "known": ["freeze", "stun", "slow", "poison", "burn"]},
     "spells": [[1, 2, "Wind strike"], [5, 4, "Water strike"], [9, 6, "Earth strike"], [13, 8, "Fire strike"], [17, 9, "Wind bolt"],

@@ -51,5 +51,15 @@
    ],
    "examine": "A pale figure in a ruined orange hood. You can see the cave wall through him."
   }
+ ],
+ "objects": [
+  {
+   "k": "crate",
+   "x": 24005,
+   "y": 24006,
+   "loot": "antidote",
+   "once": "cave_antidote",
+   "examine": "A crate shoved against the wall just inside the shaft, half in the dark."
+  }
  ]
 }

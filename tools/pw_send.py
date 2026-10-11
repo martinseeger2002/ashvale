@@ -16,10 +16,20 @@ sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 class AshvaleBrowser:
     def __enter__(self):
         from playwright.sync_api import sync_playwright
-        self._p = sync_playwright().start(); self.b = self._p.chromium.launch()
-        self.ctx = self.b.new_context(viewport={'width': 540, 'height': 960}, storage_state=STATE if os.path.exists(STATE) else None)
-        self.pg = self.ctx.new_page(); self.pg.on('dialog', lambda d: d.accept())
-        self.login(); return self
+        self._p = sync_playwright().start(); self.b = None
+        try:
+            self.b = self._p.chromium.launch()
+            self.ctx = self.b.new_context(viewport={'width': 540, 'height': 960}, storage_state=STATE if os.path.exists(STATE) else None)
+            self.pg = self.ctx.new_page(); self.pg.on('dialog', lambda d: d.accept())
+            self.login(); return self
+        except BaseException:
+            # a failure in here never reaches __exit__, and a started-but-never-stopped Playwright leaves its loop
+            # flagged "running" in this thread: every later sync_playwright().start() then fails with "Playwright Sync
+            # API inside the asyncio loop" until the process dies (the Bank was deaf 20 h this way, 2026-10-09 22:28)
+            try:
+                if self.b: self.b.close()
+            finally: self._p.stop()
+            raise
     def __exit__(self, *a):
         try: self.ctx.storage_state(path=STATE); os.chmod(STATE, 0o600)
         finally: self.b.close(); self._p.stop()

@@ -364,6 +364,19 @@
    "model": "item.mouse",
    "value": 1,
    "attributes": []
+  },
+  "prayer_potion": {
+   "description": "Prayer potion, potion healing. Restores 25% of your Prayer points. Made in the valley of Ashvale."
+  },
+  "dragon_bones": {
+   "description": "Dragon bones, resource bones. Bury them for a great deal of Prayer XP. From the ruined keep."
+  },
+  "dragon_cape": {
+   "description": "Dragon cape, cosmetic cape. Magic +8. Dragonfire from the chained dragon cannot pass it.",
+   "weight": 900
+  },
+  "castle_stone": {
+   "description": "Lake Castle stone, tool stone. Teleport castle, Cooldown ticks 3000. Call to arms: the castle guard comes to your side. Made in the valley of Ashvale."
   }
  }
 }

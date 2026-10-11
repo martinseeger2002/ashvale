@@ -439,7 +439,8 @@
       if (Array.isArray(s.traps)) p.traps = s.traps.filter(t => t && IT[t.id] && trapOf(IT[t.id]) && Number.isInteger(t.x) && Number.isInteger(t.y)).slice(0, 8).map(t => ({ id: t.id, x: t.x, y: t.y, prey: String(t.prey || ''), ready: +t.ready || 0 }));
       if (typeof s.town === 'string') p.town = s.town;
       if (s.hawkHp != null) p.hawkHp = s.hawkHp | 0;
-      if (s.cd) { p.cd = {}; for (const k in s.cd) p.cd[k] = S.t + (s.cd[k] | 0); }   /* cooldowns are saved as ticks left */
+      if (s.cd) { p.cd = {}; for (const k in s.cd) p.cd[k] = S.t + (s.cd[k] | 0); }
+      if (s.gift && typeof s.gift === 'object') { p.gift = {}; for (const k in s.gift) if (IT[k] && s.gift[k] > 0) p.gift[k] = s.gift[k] | 0; }   /* items given by other players (quests do not count them) */   /* cooldowns are saved as ticks left */
       if (s.kills && typeof s.kills === 'object') { p.kills = {}; for (const k in s.kills) if (/^[a-z_]{1,32}$/.test(k) && (s.kills[k] | 0) > 0) p.kills[k] = s.kills[k] | 0; }
       if (Number.isInteger(s.hp)) p.hp = s.hp;
       if (Number.isInteger(s.energy)) p.energy = Math.max(0, Math.min(10000, s.energy));
@@ -504,7 +505,7 @@
     function exportPlayer(id) {
       const p = S.players[id]; if (!p) return null;
       const at = p.dead ? wakeSpot(p).at : [p.x, p.y];
-      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, orders: p.orders || {}, traps: p.traps || [], bless: p.bless || [], town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, kills: p.kills || {}, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
+      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, orders: p.orders || {}, traps: p.traps || [], bless: p.bless || [], town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, gift: p.gift && Object.keys(p.gift).length ? p.gift : undefined, kills: p.kills || {}, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
     }
 
     // ---------------- pathfinding: BFS over the tile grid, 8 directions, no corner cutting (RuneScape-style)
@@ -1350,6 +1351,31 @@
        a sky (a test, a headless host) every season is open, as before */
     function seasonOf(Q) { return Q && Q.season && NATURE && NATURE.seasons && NATURE.seasons[Q.season] || null; }
     function inSeason(Q) { const s = seasonOf(Q); return !s || !!s.open; }
+    /* A FIRE THAT BURNS ONLY IN A SEASON (2026-10-09, the sugar bush): a campfire in the zone data with
+       `litIn: "sap"` is cold outside the run - nothing cooks or boils over it - and whether it burns is the seasons
+       module's own rule, the one the sap runs by, not a sugar-camp special case. With no word from a sky it is lit,
+       as every season is open in a test or a headless host. */
+    function seasonOn(kind) {
+      if (!NATURE) return true;
+      if (kind === 'sap' && NATURE.sap) return !!NATURE.sap.season;
+      const s = NATURE.seasons && NATURE.seasons[kind]; return !s || !!s.open;
+    }
+    /* the hour of the LOCAL day, 0-24: noon is where the sun stands highest, which is how the sky already keeps its
+       clock (the same hour the weather table and the time-lapse clock read). Without a sky, the game day's own hours. */
+    function dayHour() { return NATURE && NATURE.hour != null ? NATURE.hour : natureHours() % 24; }
+    /* whether the fire at a tile is burning. The drawing and the lights ask this, so a ring that only lights in a
+       season gives neither flame, smoke, nor light outside it - the same rule as the cook above, in one place. */
+    function fireLit(x, y) { const n = M.nodeAt(M.key(Math.floor(x), Math.floor(y))); return !n || !n.litIn || seasonOn(n.litIn); }
+    /* how hard the kettle over a seasonal fire steams, 0-1: nothing while the ring is cold, a little once the sap is
+       set over a fresh fire, thicker with every bucket poured in through the morning, and after noon what a long
+       slow boil raises. The buckets are the morning's own trips (rules.fires.sapDay), not anyone's inventory. */
+    function steamFor(kind) {
+      if (!seasonOn(kind || 'sap')) return 0;
+      const R = SAPDAY || {}, SM = R.steam || [0.25, 0.6], G = R.gather || [8, 12], T = R.trips || 4, h = dayHour();
+      if (h >= G[1]) return SM[1];
+      if (h < G[0]) return 0.12;
+      return Math.min(1, 0.12 + SM[0] * Math.min(T, Math.ceil((h - G[0]) / ((G[1] - G[0]) / T))));
+    }
     function whenText(days) { return days == null ? 'next year' : days <= 1 ? 'tomorrow' : days <= 6 ? 'in ' + days + ' days' : 'in about ' + days + ' days'; }
     function realText(days) { const h = (days || 0) * 2; return h < 48 ? 'about ' + h + ' hours' : 'about ' + Math.round(h / 24) + ' days'; }   /* a game day is two real hours */
     function natureYear() { return NATURE && NATURE.year != null ? NATURE.year : 1 + Math.floor(S.t / (12000 * 365)); }
@@ -1590,7 +1616,7 @@
         const withN = (st) => st.goal.wn == null ? 1 : st.goal.wn;
         const withs = (st) => !st.goal.with ? [] : typeof st.goal.with === 'string' ? [[st.goal.with, withN(st)]] : Object.entries(st.goal.with);   /* "with": one item (wn of it) or {id: n} */
         const bids = (g) => (Array.isArray(g.bring) ? g.bring : [g.bring]).filter(id => IT[id]);   /* bring: one item, or a list where any will do */
-        const bringHave = (g) => bids(g).reduce((a, id) => a + Math.max(0, invCount(p, id) - ((q.pre && q.pre[id]) | 0)), 0);
+        const bringHave = (g) => bids(g).reduce((a, id) => a + Math.max(0, invCount(p, id) - giftOf(p, id)), 0);   /* what another player gave you does not count (2026-10-09: block gifts only - what you gathered yourself counts, even from before the quest) */
         const counted = (st) => {
           if (st.goal.kills) { let n = 0; for (const k in st.goal.kills) n += Math.min(st.goal.kills[k], (q.kn && q.kn[k]) | 0); return n; }
           return (st.goal.kill || st.goal.cook || st.goal.talk || st.goal.plant || st.goal.light) ? (q.n | 0) : (st.goal.bring && bids(st.goal).length ? bringHave(st.goal) : (q.n | 0));
@@ -1755,6 +1781,10 @@
       }
       return false;
     }
+    /* GIFTS (2026-10-09): how many of each item came from another player (their drop, a trade). Capped by what you still carry,
+       so gifts used up, dropped or handed in stop counting against what you gather yourself */
+    function giftOf(p, id) { const g = p.gift && p.gift[id] | 0; if (!g) return 0; const n = invCount(p, id); if (g > n) { if (n) p.gift[id] = n; else delete p.gift[id]; } return Math.min(g, n); }
+    function markGift(p, id, n) { if (!p || !IT[id] || !(n > 0)) return; p.gift = p.gift || {}; p.gift[id] = (p.gift[id] | 0) + n; }
     function stampBring(p, q, st) {
       q.pre = {};
       if (!st || !st.goal || st.goal.bring == null) return;
@@ -1964,6 +1994,9 @@
         ev({ e: 'pray', p: p.id, altar: 1, x: n.x, y: n.y }); return;
       }
       if (n.kind === 'range' || n.kind === 'fire') {
+        /* a fire the village only lights in one season (zone data `litIn`) is a cold ring of stones outside it: the
+           kettle frame still stands there, but nothing cooks or boils over it (2026-10-09, the sugar bush) */
+        if (n.litIn && !seasonOn(n.litIn)) { msg(p, 'The fire ring here is cold. Nothing is lit.', 'warn'); p.act = null; p.skilling = null; return; }
         /* FIRE MIXES (rules.items.fireMix, 2026-10-09): what is made at a fire from several things at once, before any
            cooking - apaakozigan (kinnikinnick): two red willow bark and one asemaa (tobacco) make three */
         const mix = ((RU.items || {}).fireMix || []).find(m => Object.keys(m.take).every(k => invCount(p, k) >= m.take[k]) && Object.keys(m.give).every(k => canAdd(p, k, m.give[k])));
@@ -2024,6 +2057,7 @@
           if (g && canAdd(p, g.id, g.n)) {
             const left = addItem(p, g.id, g.n); addXp(p, skill, n.xp || nd.xp);
             ev({ e: 'take', p: p.id, g: g.uid, id: g.id, n: g.n - left, x: g.x, y: g.y, own: g.from === p.id ? 1 : 0, fished: 1 });
+            if (g.from && g.from !== p.id) markGift(p, g.id, g.n - left);
             if (left) g.n = left; else { S.ground.splice(S.ground.indexOf(g), 1); if (g.bank != null) BANK_GONE.add(g.bank); ev({ e: 'vanish', g: g.uid, x: g.x, y: g.y }); }
             msg(p, 'Something heavy on the line... you haul up ' + (g.n - left > 1 ? (g.n - left) + ' x ' : '') + IT[g.id].name + ' from the bottom of the lake!', 'quest');
             ev({ e: 'gather', p: p.id, node: i, ok: true, item: g.id });
@@ -2374,11 +2408,39 @@
         });
       }
     }
+    /* WHO GOES UP TO THE BUSH, AND WHEN (2026-10-09, correction 2): on a day of the sap run the villagers whose
+       data says `sapDay` walk up to Iskigamizigan just before 8:00, gather until noon, then walk home; Nookomis keeps
+       the fire for the whole run (`sapAt`, unchanged), and anyone without the flag stays at their own post. The shape
+       of the morning is rules.fires.sapDay - when they set off, the gathering hours, how many maple-to-kettle trips
+       each makes, and which trees the camp works - so no rule here mentions sugar. This is only where they STAND:
+       an NPC's bucket is not an item, and what a player taps off a tree is untouched by any of it. `n.work` is what
+       the drawing puts in their hands that hour: 1 a biskitenaagan at a tree, 2 a bucket at the akik. */
+    const SAPDAY = (RU.fires || {}).sapDay || null;
+    let SAP_ORDER = null;
+    function sapWhere(n) {
+      n.work = null; n.wface = null;
+      const home = [n.hx, n.hy], run = seasonOn('sap');
+      if (n.sapAt && !n.sapDay) return run ? n.sapAt : home;                 /* Nookomis: by the camp fire the whole run, home again after */
+      if (!SAPDAY || !n.sapDay || !run) return n.sapAt || home;               /* the rest go only on a day of the run */
+      const G = SAPDAY.gather || [8, 12], W = SAPDAY.walk || [G[0] - 1, G[0]], h = dayHour();
+      if (h < W[0] || h >= G[1]) return home;                                 /* not time to set off yet, or past noon: home */
+      if (h < G[0]) return SAPDAY.at || n.sapAt || home;                      /* walking up: the camp, before the gathering begins */
+      const trees = SAPDAY.trees || [];
+      if (!trees.length) return SAPDAY.at || n.sapAt || home;
+      if (!SAP_ORDER) SAP_ORDER = M.npcs.filter(q => q.sapDay).map(q => q.id);
+      const T = SAPDAY.trips || 4, u = (h - G[0]) / ((G[1] - G[0]) / T), k = Math.max(0, Math.min(T - 1, Math.floor(u)));
+      const t = trees[(k + Math.max(0, SAP_ORDER.indexOf(n.id))) % trees.length];   /* each person a tree along, so they are not all at one */
+      n.wface = faceTo(n.x, n.y, t[2] == null ? t[0] : t[2], t[3] == null ? t[1] : t[3]);   /* the standing tile, and the tree they face */
+      if (u - k < 0.72) { n.work = 1; return [t[0], t[1]]; }                  /* the spile in: tapping */
+      const K = SAPDAY.pour || SAPDAY.kettle || [0, 0];
+      n.work = 2; n.wface = faceTo(n.x, n.y, K[0], K[1]);
+      return SAPDAY.kettle || [t[0], t[1]];                                    /* and carried to the akik */
+    }
     function watchTick() {
       for (const n of M.npcs) {
-        if (n.sapAt) {   /* Nookomis walks up to the sugar camp while the sap runs, and home again after (2026-10-08) */
+        if (n.sapAt || n.sapDay) {   /* Nookomis walks up to the sugar camp while the sap runs, and home again after (2026-10-08); the rest of the village works the maples with her (2026-10-09) */
           if (n.hx == null) { n.hx = n.x; n.hy = n.y; }
-          const w = NATURE && NATURE.sap && NATURE.sap.season ? n.sapAt : [n.hx, n.hy];
+          const w = sapWhere(n);
           if (n.x !== w[0] || n.y !== w[1]) { const x0 = n.x, y0 = n.y; stepNpc(n, w[0], w[1], 0); n.stuck = n.x === x0 && n.y === y0 ? (n.stuck | 0) + 1 : 0; if (n.stuck > 30) { n.x = w[0]; n.y = w[1]; n.stuck = 0; n.path = null; } }   /* no way through: she is there all the same */
           continue;
         }
@@ -2541,7 +2603,7 @@
         if (!g) p.act = null;
         else {
           if (p.x !== g.x || p.y !== g.y) { p.path = findPath(p.x, p.y, (x, y) => x === g.x && y === g.y, g.x, g.y); stepPath(p); if (!p.path.length && (p.x !== g.x || p.y !== g.y)) p.act = null; }
-          if (p.act && p.x === g.x && p.y === g.y && !isAuth(zoneOf(g.x, g.y))) {   /* replica: ask the host; first claim wins. Bank-persisted drops used to be taken here as well, then the host's 't' granted them again (a death pile came back as two of everything). */
+          if (p.act && p.x === g.x && p.y === g.y && !isAuth(zoneOf(g.x, g.y)) && g.bank == null) {   /* replica: ask the host; first claim wins. A Bank-persisted drop (g.bank != null) is NOT claimed through the host: the Bank's 'took' decides who has it, so this game takes it itself - and only here does S.took (line below) and BANK_GONE remember it, which is what stops the host's next ground snapshot, or an old host's copy, laying the same 200 Gold back down (2026-10-06: "I am able to keep picking up the same 200 Gold over and over again"). The death-pile doubling this branch used to be blamed for (2026-10-09) is closed by that same S.took uid guard, not by routing persisted drops through the host. */
             if (!canAdd(p, g.id, g.n)) msg(p, "You don't have enough inventory space to hold that item.", 'warn'); else ev({ e: 'claim', p: p.id, g: g.uid });
             p.act = null;
           }
@@ -2555,6 +2617,7 @@
               const left = addItem(p, g.id, room), got = room - left;
               S.took.add(g.uid);
               ev({ e: 'take', p: p.id, g: g.uid, id: g.id, n: got, x: g.x, y: g.y, own: g.from === p.id ? 1 : 0 });
+              if (g.from && g.from !== p.id) markGift(p, g.id, got);   /* another player's drop: a gift, for quests */
               g.n -= got;
               if (g.n > 0) ev({ e: 'ground', g: g.uid, n: g.n, x: g.x, y: g.y });
               else { S.ground.splice(S.ground.indexOf(g), 1); if (g.bank != null) BANK_GONE.add(g.bank); }   /* a persisted drop taken here: no host's copy brings it back (2026-10-06: the same 200 Gold, picked up again and again) */
@@ -3130,8 +3193,8 @@
       return true;
     }
     return {
-      setNewHome: h => { if (HOMES[h]) NEWHOME = h; }, homeOf: p => (p && p.home) || 'ashvale', npcFor, lineFor, questForHome, questMarks,
-      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, trapOf, offerOf, isBlessed: (pid, x, y) => !!(S.players[pid] && blessed(S.players[pid], x, y)), setNature, natureHours, setNatureTell, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
+      setNewHome: h => { if (HOMES[h]) NEWHOME = h; }, markGift: (pid, id, n) => markGift(S.players[pid], id, n), homeOf: p => (p && p.home) || 'ashvale', npcFor, lineFor, questForHome, questMarks,
+      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, trapOf, offerOf, isBlessed: (pid, x, y) => !!(S.players[pid] && blessed(S.players[pid], x, y)), setNature, natureHours, setNatureTell, seasonOn, dayHour, fireLit, steamFor, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */

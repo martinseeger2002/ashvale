@@ -105,7 +105,7 @@
     }
     for (const z of D.zones) ingest(z);
     /* ranges, altars, and a town's own campfires (2026-10-07: "You should also be able to cook on the campfire in the Indian village"): cook at a campfire as at one you lit */
-    const ranges = (objs) => { for (const o of objs) if (o.k === 'range' || o.k === 'altar' || o.k === 'campfire') { const k = key(o.x, o.y); nodes.set(k, { kind: o.k === 'campfire' ? 'fire' : o.k, x: o.x, y: o.y, chapel: o.chapel || null }); fixed.add(k); } };
+    const ranges = (objs) => { for (const o of objs) if (o.k === 'range' || o.k === 'altar' || o.k === 'campfire') { const k = key(o.x, o.y); nodes.set(k, { kind: o.k === 'campfire' ? 'fire' : o.k, x: o.x, y: o.y, chapel: o.chapel || null, litIn: o.litIn || null }); fixed.add(k); } };
     ranges(objects);
     let minX = 0, minY = 0;
     for (const P of pieces) { if (P.x0 < minX) minX = P.x0; if (P.y0 < minY) minY = P.y0; }

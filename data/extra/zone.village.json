@@ -572,9 +572,11 @@
    "look": "auditor",
    "x": 25,
    "y": 53,
-   "talk": "quest",
-   "quest": "hawk_ring",
-   "examine": "Auditor the clerk, with a ledger, a scale, and one line in the ledger he has waited forty years to close."
+   "examine": "Auditor the clerk, with a ledger, a scale, and one line in the ledger he has waited forty years to close.",
+   "lines": [
+    "Every coin, every catch, every word in this village gets written down somewhere. It mostly balances.",
+    "Gold drawn out of the Ashvale seam: nil. Gold struck in Ashvale: nine hundred and forty coin, every one out of the old lord's hoard."
+   ]
   },
   {
    "id": "aldous",
