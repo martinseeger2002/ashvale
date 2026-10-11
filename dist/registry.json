@@ -87,6 +87,12 @@
    "api": 1,
    "kind": "js"
   },
+  "chesslib": {
+   "id": null,
+   "v": "1.0.0",
+   "api": 1,
+   "kind": "js"
+  },
   "core": {
    "id": null,
    "v": "1",
@@ -94,6 +100,12 @@
    "kind": "js"
   },
   "audit": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "castle": {
    "id": null,
    "v": "1",
    "api": 1,
@@ -141,9 +153,15 @@
    "api": 1,
    "kind": "js"
   },
+  "hudchess": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
   "hud": {
    "id": null,
-   "v": "2",
+   "v": "3",
    "api": 1,
    "kind": "js"
   },
@@ -1627,6 +1645,12 @@
    "saltmere": {
     "id": null,
     "v": 3,
+    "api": 1,
+    "kind": "json"
+   },
+   "castle": {
+    "id": null,
+    "v": 1,
     "api": 1,
     "kind": "json"
    },

@@ -139,7 +139,7 @@
     for (const P of PORTALS) if (!M.npcs.some(n => n.id === 'portal_' + P.id))
       M.npcs.push({ id: 'portal_' + P.id, name: 'Town portal', look: 'portal', x: P.x, y: P.y, portal: P.id, examine: 'A ring of standing stones, humming softly. Step through to travel to another town.' });
     const R = Rng(opts.seed == null ? 'ashvale3d' : opts.seed);
-    const S = { t: 0, uid: 1, players: {}, order: [], mobs: [], ground: [], dep: {}, fell: {}, cleared: {}, plants: {}, lit: {}, night: false, pending: [], ev: [], noAuth: {}, seen: {}, fires: [], weather: {}, salt: 0, dyn: 0, took: new Set() };
+    const S = { t: 0, uid: 1, players: {}, order: [], mobs: [], ground: [], dep: {}, fell: {}, cleared: {}, plants: {}, lit: {}, night: false, pending: [], ev: [], noAuth: {}, seen: {}, fires: [], weather: {}, salt: 0, dyn: 0, took: new Set(), chess: {} };
     const queue = [], log = [];
     const idx = M.key, kx = M.kx, ky = M.ky, inMap = M.inWorld;
     const cheb = (ax, ay, bx, by) => Math.max(Math.abs(ax - bx), Math.abs(ay - by));
@@ -680,15 +680,17 @@
     // ---------------- commands
     function cmd(pid, c) { if (!c || typeof c.c !== 'string') return; queue.push([pid, c]); log.push([S.t, pid, c]); }
     function apply(p, c) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); BOAT = !!p.boat && !FLY; GATE_P = p; try { apply0(p, c); } finally { LV_LIMIT = -1; FLY = false; BOAT = false; GATE_P = null; } }
+    const SEATED_BLOCK = new Set(['walk', 'attack', 'attackn', 'npc', 'take', 'gather', 'board', 'ride', 'climb', 'enter', 'crate', 'sign', 'follow', 'perch', 'sit']);
     function apply0(p, c) {
       if (p.dead && c.c !== 'style' && c.c !== 'run' && c.c !== 'retal' && c.c !== 'look') return;
+      if (p.seat && SEATED_BLOCK.has(c.c)) { msg(p, 'You are at the chess table - use Stand up to leave it.', 'warn'); return; }   /* 2026-10-10: no walking off a wagered game by accident */
       if (isHawk(p) && ['npc', 'light', 'climb', 'buy', 'sell', 'trade', 'eat', 'use'].indexOf(c.c) >= 0 && !(c.c === 'use' && p.inv[c.slot | 0] && IT[p.inv[c.slot | 0].id].teleport)) { msg(p, 'A hawk can only fly, strike, fish and carry. Take off the ring over open ground to land.', 'warn'); return; }
       if (isHawk(p) && c.c === 'gather') { const n = nodeAt(idx(c.x | 0, c.y | 0)); if (n && nodeDef(n).skill !== 'fishing') { msg(p, 'A hawk catches fish; it cannot chop or mine.', 'warn'); return; } }
       if (c.c !== 'perch') p.perch = null;
       if (c.c === 'walk' || c.c === 'attack' || c.c === 'take' || c.c === 'npc' || c.c === 'gather') { p.runNow = !!c.run; p._spread = 0; }   /* the operator: click = walk, double-click = run */
       switch (c.c) {
         case 'walk': if (inMap(c.x | 0, c.y | 0)) {
-          p.act = null; p.skilling = null; closeShop(p);
+          p.act = null; p.skilling = null; closeShop(p); p.seatWait = null;
           const tx = c.x | 0, ty = c.y | 0;
           if (p.boat === 2) {   /* riding: your partner steers; pointing at the shore beside the canoe gets you out */
             if (!isWet(tx, ty) && cheb(p.x, p.y, tx, ty) <= 2 && !M.blocked(tx, ty)) { leaveRide(p, [tx, ty]); break; }
@@ -740,6 +742,19 @@
         case 'take': { const g = S.ground.find(q => q.uid === c.uid); if (g) { p.act = { k: 'take', uid: g.uid }; p.skilling = null; closeShop(p); } break; }
         case 'enter': { const o = passageAt(c.x, c.y); if (o && !p.dead) { p.act = { k: 'enter', x: o.x, y: o.y }; p.skilling = null; closeShop(p); } break; }   /* a cave mouth, a way out */
         case 'crate': { const o = crateAt(c.x | 0, c.y | 0); if (o && !p.dead) { p.act = { k: 'crate', x: o.x, y: o.y }; p.skilling = null; closeShop(p); } break; }
+        case 'sit': {   /* a bench at a chess table: walk there, sit; the host of the area seats you (see THE CHESS PARK) */
+          const T = tableById(String(c.table || '')), si = c.seat === 1 ? 1 : 0;
+          if (!T || !T.seats || !T.seats[si] || p.dead || p.boat || isHawk(p)) { msg(p, 'There is no seat there.', 'warn'); break; }
+          if (p.seat && p.seat.t === T.id && p.seat.s === si) break;
+          p.act = { k: 'sit', t: T.id, s: si }; p.skilling = null; closeShop(p); break;
+        }
+        case 'stand': { if (p.seat) { if (isAuth(zoneOf(p.x, p.y))) standUp(p); else { const t = p.seat.t; p.seat = null; ev({ e: 'stand', p: p.id, t }); ev({ e: 'xstand', p: p.id, t }); } } p.seatWait = null; break; }
+        case 'cmove': {   /* from, to in algebraic ('e2','e4'), promo one of q r b n */
+          if (!p.seat) break;
+          const id = p.seat.t, from = String(c.from || '').slice(0, 2), to = String(c.to || '').slice(0, 2), promo = /^[qrbn]$/.test(String(c.promo || '')) ? String(c.promo) : null;
+          if (isAuth(zoneOf(p.x, p.y))) chessMove(p, id, from, to, promo); else ev({ e: 'xcmove', p: p.id, t: id, from, to, promo });
+          break;
+        }
         case 'npc': { const n = M.npcs.find(q => q.id === c.id); if (n) { p._trade = !!c.trade; p.act = { k: 'npc', id: n.id }; p.skilling = null; closeShop(p); } break; }
         case 'acceptq': {   /* yes on a starting dialogue, or yes when Vael asks before calling the three again */
           const qid = String(c.q || ''), Q = D.quests.quests[qid];
@@ -885,7 +900,7 @@
     function passageAt(x, y) { for (const o of M.objects) if (o.to && o.x === x && o.y === y) return o; return null; }
     function teleport(p, P, text) {
       const ox = p.x, oy = p.y, passage = P.id === 'cavemouth' || P.id === 'caveexit';
-      p.x = P.to[0]; p.y = P.to[1]; p.path = []; p.act = null; p.skilling = null; p.lv = 0; p.bld = -1; closeShop(p); if (p.boat === 1) landBoat(ox, oy, p.face, p.id); if (p.boat) { p.boat = 0; p.land = null; p.ride = null; ev({ e: 'boat', p: p.id, on: 0 }); }
+      if (p.seat) standUp(p, 'left'); p.x = P.to[0]; p.y = P.to[1]; p.path = []; p.act = null; p.skilling = null; p.lv = 0; p.bld = -1; closeShop(p); if (p.boat === 1) landBoat(ox, oy, p.face, p.id); if (p.boat) { p.boat = 0; p.land = null; p.ride = null; ev({ e: 'boat', p: p.id, on: 0 }); }
       let k = 0;
       for (const m of S.mobs) if (m.tgt === p.id) {
         /* through a cave opening, the relentless ones close behind you come too, a few ticks apart (the operator: "Follow you up") */
@@ -2146,6 +2161,104 @@
       }
       return hold;
     }
+
+    // ---------------- THE CHESS PARK (2026-10-10, handoff/chess_park_plan.md)
+    /* Four stone tables on Saltmere's quay green. A table is a zone object {k:'chesstable', id, x, y, seats:[[x,y],[x,y]]}:
+       seat 0 (the north bench) plays Black and seat 1 (the south bench) White, so the pieces nearest you are yours. The
+       HOST of the table's area owns the match, like fires and drops: a replica's sit / stand / move is asked of the host
+       (events xsit / xstand / xcmove, which the engine carries) and comes back in the host's Ch rows (applyChess). Rules
+       are chess.js (module chesslib); the state carried round is the FEN + the last move, so a newcomer rebuilds the
+       position exactly. Phase 1: no clocks, no stakes - standing up with a move played is resigning. */
+    const CHESS_START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    let CHESSLIB = null;
+    function chessLib() {
+      if (CHESSLIB) return CHESSLIB;
+      try { CHESSLIB = AshCore.chesslib || (root.ASH3D && root.ASH3D.get && root.ASH3D.get('chesslib')) || root.AshChessLib || (typeof require === 'function' ? require('./chesslib.js') : null); } catch (e) { CHESSLIB = null; }
+      return CHESSLIB;
+    }
+    const CHG = {};   /* chess.js games by table, rebuilt from the state when it moved under them */
+    function tableAt(x, y) { return (M.objects || []).find(o => o.k === 'chesstable' && o.x === (x | 0) && o.y === (y | 0)) || null; }
+    function tableById(id) { return (M.objects || []).find(o => o.k === 'chesstable' && o.id === id) || null; }
+    function tables() { return (M.objects || []).filter(o => o.k === 'chesstable'); }
+    function chessOf(id) { return S.chess[id] || (S.chess[id] = { w: null, b: null, wn: '', bn: '', fen: CHESS_START, moves: [], status: 'open', result: null, why: null, lm: null, v: 0 }); }
+    function chessGame(id) {   /* the chess.js position for a table, kept in step with its FEN */
+      const L = chessLib(); if (!L) return null;
+      const st = chessOf(id), c = CHG[id];
+      if (c && c.key === st.fen) return c.g;
+      const g = new L.Chess(st.fen); CHG[id] = { key: st.fen, g }; return g;
+    }
+    function chessRow(id) { const st = chessOf(id); return { t: id, w: st.w, b: st.b, wn: st.wn, bn: st.bn, fen: st.fen, status: st.status, result: st.result, why: st.why, n: st.moves.length, lm: st.lm, v: st.v }; }
+    function chessTurn(id) { const g = chessGame(id); return g ? g.turn() : 'w'; }
+    function chessMoves(id, square) {   /* where a piece on `square` may go: [{to, flags, promotion}] (for the page's highlights) */
+      const g = chessGame(id); if (!g) return [];
+      try { return g.moves({ square, verbose: true }).map(m => ({ to: m.to, flags: m.flags, promotion: m.promotion || null })); } catch (e) { return []; }
+    }
+    function emitChess(id, extra) { ev(Object.assign({ e: 'chess' }, chessRow(id), extra || {})); }
+    function seatColour(st, pid) { return st.w === pid ? 'w' : st.b === pid ? 'b' : null; }
+    function sitAt(p, T, si) {   /* p stands on the bench already: take the seat; both seats taken = the game begins */
+      const st = chessOf(T.id), col = si === 1 ? 'w' : 'b', other = col === 'w' ? 'b' : 'w';
+      if (st[col] && st[col] !== p.id && S.players[st[col]] && S.players[st[col]].seat && S.players[st[col]].seat.t === T.id) { msg(p, 'That seat is taken.', 'warn'); st.v++; emitChess(T.id); return false; }
+      if (st[other] === p.id) st[other] = null;
+      if (p.seat && p.seat.t !== T.id) standUp(p);
+      st[col] = p.id; st[col + 'n'] = String(p.name || 'Someone').slice(0, 16);
+      const seat = T.seats[si]; p.x = seat[0]; p.y = seat[1]; p.path = []; p.act = null; p.skilling = null; p.seat = { t: T.id, s: si }; p.seatWait = null;
+      p.face = faceTo(p.x, p.y, T.x, T.y); closeShop(p);
+      if (st.status === 'over' || (st.status === 'open' && st.moves.length)) { st.fen = CHESS_START; st.moves = []; st.result = null; st.why = null; st.lm = null; st.status = 'open'; }
+      if (st.w && st.b && st.status === 'open') { st.status = 'playing'; st.fen = CHESS_START; st.moves = []; st.lm = null; }
+      st.v++; ev({ e: 'sit', p: p.id, t: T.id, s: si }); emitChess(T.id); return true;
+    }
+    function standUp(p, why) {   /* leave the bench: with a move on the board that is resigning (phase 1: no clocks) */
+      if (!p.seat) return;
+      const id = p.seat.t, st = chessOf(id), col = seatColour(st, p.id);
+      p.seat = null; p.seatWait = null;
+      if (col) {
+        if (st.status === 'playing') {
+          if (st.moves.length) { st.status = 'over'; st.result = col === 'w' ? '0-1' : '1-0'; st.why = why || 'resigned'; }
+          else st.status = 'open';
+        }
+        st[col] = null; st[col + 'n'] = '';
+      }
+      if (!st.w && !st.b && st.status !== 'open') { st.status = 'open'; st.fen = CHESS_START; st.moves = []; st.result = null; st.why = null; st.lm = null; }
+      st.v++; ev({ e: 'stand', p: p.id, t: id }); emitChess(id);
+    }
+    function chessMove(p, id, from, to, promo) {
+      const st = chessOf(id), col = seatColour(st, p.id), g = chessGame(id);
+      if (!g) { msg(p, 'The chess rules are not loaded.', 'warn'); return false; }
+      if (st.status !== 'playing' || !col) { msg(p, st.status === 'open' ? 'No opponent has sat down yet.' : 'The game is over.', 'warn'); return false; }
+      if (g.turn() !== col) { msg(p, 'Not your move.', 'warn'); return false; }
+      let m = null; try { m = g.move({ from, to, promotion: promo || 'q' }); } catch (e) { m = null; }
+      if (!m) { msg(p, 'That is not a legal move.', 'warn'); return false; }
+      st.moves.push(m.san); st.fen = g.fen(); CHG[id] = { key: st.fen, g }; st.lm = [m.from, m.to, m.flags, m.promotion || null, m.san];
+      if (g.isCheckmate()) { st.status = 'over'; st.result = col === 'w' ? '1-0' : '0-1'; st.why = 'checkmate'; }
+      else if (g.isStalemate()) { st.status = 'over'; st.result = '1/2-1/2'; st.why = 'stalemate'; }
+      else if (g.isThreefoldRepetition()) { st.status = 'over'; st.result = '1/2-1/2'; st.why = 'repetition'; }
+      else if (g.isInsufficientMaterial()) { st.status = 'over'; st.result = '1/2-1/2'; st.why = 'insufficient material'; }
+      else if (g.isDraw()) { st.status = 'over'; st.result = '1/2-1/2'; st.why = 'fifty-move rule'; }
+      st.v++; emitChess(id, { move: st.lm, check: g.inCheck() });
+      return true;
+    }
+    function hostSit(pid, id, si) { const p = S.players[pid], T = tableById(id); if (!p || !T || !T.seats[si]) return false; const seat = T.seats[si]; if (cheb(p.x, p.y, seat[0], seat[1]) > 8) return false; return sitAt(p, T, si | 0); }   /* the puppet's spot lags the walker by a message or two */
+    function hostStand(pid, id) { const p = S.players[pid]; if (p && p.seat && p.seat.t === id) standUp(p); }
+    function hostMove(pid, id, from, to, promo) { const p = S.players[pid]; return !!p && chessMove(p, id, String(from), String(to), promo ? String(promo) : null); }
+    function applyChess(rows) {   /* the host's word on its tables: fen, seats, result; our own seat follows it */
+      for (const r of rows || []) {
+        if (!r || !r.t) continue;
+        const st = chessOf(r.t), was = st.fen, wasV = st.v;
+        Object.assign(st, { w: r.w || null, b: r.b || null, wn: r.wn || '', bn: r.bn || '', fen: r.fen || CHESS_START, status: r.status || 'open', result: r.result || null, why: r.why || null, lm: r.lm || null, v: r.v | 0 });
+        if (typeof r.n === 'number' && r.lm && st.moves.length < r.n) { while (st.moves.length < r.n - 1) st.moves.push('…'); st.moves.push(r.lm[4] || '…'); }
+        if (r.n === 0) st.moves = [];
+        const T = tableById(r.t);
+        for (const p of Object.values(S.players)) {
+          const col = seatColour(st, p.id);
+          if (col && (!p.seat || p.seat.t !== r.t)) {   /* the host seated us (or another local player) */
+            if (T) { const si = col === 'w' ? 1 : 0, seat = T.seats[si]; p.x = seat[0]; p.y = seat[1]; p.path = []; p.act = null; p.seat = { t: r.t, s: si }; p.seatWait = null; p.face = faceTo(p.x, p.y, T.x, T.y); ev({ e: 'sit', p: p.id, t: r.t, s: si }); }
+          } else if (!col && p.seat && p.seat.t === r.t) { p.seat = null; ev({ e: 'stand', p: p.id, t: r.t }); }
+          else if (!col && p.seatWait && p.seatWait.t === r.t && st[p.seatWait.s === 1 ? 'w' : 'b'] && st[p.seatWait.s === 1 ? 'w' : 'b'] !== p.id) { const otherFree = !st[p.seatWait.s === 1 ? 'b' : 'w']; p.seatWait = null; msg(p, otherFree ? 'That seat is taken - the other bench is free.' : 'Both seats at this table are taken.', 'warn'); }
+        }
+        if (was !== st.fen || wasV !== st.v) emitChess(r.t, st.lm && was !== st.fen ? { move: st.lm } : {});
+      }
+    }
+    function chessRows(keep) { const out = []; for (const T of tables()) { if (keep && !keep(T.x, T.y)) continue; const st = S.chess[T.id]; if (st && (st.w || st.b || st.status !== 'open')) out.push(chessRow(T.id)); } return out; }
     function faceTo(ax, ay, bx, by) { const dx = Math.sign(bx - ax), dy = Math.sign(by - ay); for (let k = 0; k < 8; k++) if (DIRS[k][0] === dx && DIRS[k][1] === dy) return k; return 2; }
 
     // ---------------- per-tick: players
@@ -2556,7 +2669,7 @@
       if (p.dead) {
         if (S.t - p.dead >= 4) {
           const W0 = wakeSpot(p);
-          p.dead = 0; p.hp = maxHp(p); p.pp = maxPp(p); p.pd = 0; p.x = W0.at[0]; p.y = W0.at[1]; p.lv = 0; p.bld = -1; p.path = []; p.atk = 0; p.spawnT = S.t; p.boat = 0; p.land = null; p.ride = null;
+          if (p.seat) standUp(p, 'left'); p.dead = 0; p.hp = maxHp(p); p.pp = maxPp(p); p.pd = 0; p.x = W0.at[0]; p.y = W0.at[1]; p.lv = 0; p.bld = -1; p.path = []; p.atk = 0; p.spawnT = S.t; p.boat = 0; p.land = null; p.ride = null;
           ev({ e: 'respawn', p: p.id }); msg(p, W0.name ? 'You wake up by the town portal in ' + W0.name + '.' : ((homeOf(p) || {}).wakeSay || 'You wake up by the well in Ashvale village.')); burdenCheck(p);
         }
         return;
@@ -2643,6 +2756,11 @@
       } else if (a && a.k === 'trap') {   /* walk to your snare, then look in it (or take it up) */
         if (inReach(p.x, p.y, a.x, a.y, 1)) { p.act = null; p.path = []; checkTrap(p, a.x, a.y, a.up); }
         else { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, a.x, a.y, 1), a.x, a.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, a.x, a.y, 1)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
+      } else if (a && a.k === 'sit') {   /* walk onto the bench, then sit (a replica asks the area's host, which seats it through Ch rows) */
+        const T = tableById(a.t), seat = T && T.seats[a.s];
+        if (!seat) p.act = null;
+        else if (p.x === seat[0] && p.y === seat[1]) { if (isAuth(zoneOf(p.x, p.y))) sitAt(p, T, a.s); else { p.seatWait = { t: T.id, s: a.s }; p.act = null; p.path = []; p.face = faceTo(p.x, p.y, T.x, T.y); ev({ e: 'xsit', p: p.id, t: T.id, s: a.s }); } }
+        else { p.path = findPath(p.x, p.y, (x, y) => x === seat[0] && y === seat[1], seat[0], seat[1]); stepPath(p); if (!p.path.length && !(p.x === seat[0] && p.y === seat[1])) { msg(p, "I can't reach that bench!", 'warn'); p.act = null; } }
       } else if (a && a.k === 'board') {   /* walk to the canoe, sit down in it: it floats where it lay */
         if (inReach(p.x, p.y, a.x, a.y, 1)) { const lb = BOATS.get(a.x + ',' + a.y); if (!lb && dockFull(a.x, a.y)) { msg(p, 'There is no canoe at the landing: three are already left at the banks nearby. Take one of those.', 'warn'); p.act = null; return; } if (lb) { p.face = lb.face; takeBoat(a.x, a.y, p.id); } p.act = null; p.path = []; p.boat = 1; p.x = a.x; p.y = a.y; p.land = null; ev({ e: 'boat', p: p.id, on: 1 }); msg(p, 'You sit down in the canoe and take up the paddle. Point at the water to paddle there, or at the shore to land.'); }
         else { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, a.x, a.y, 1), a.x, a.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, a.x, a.y, 1)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
@@ -3179,7 +3297,7 @@
       for (const qid in p.quests || {}) { const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.steps[q.step - 1]; if (st && st.kit) topUp(p, q, st); if (st && st.stumps) fellStumps(q, st); if (st) learnFlag(p, st); for (const s of (Q && Q.steps) || []) if (s.flag && q.step > s.id) learnFlag(p, s); }
       ev({ e: 'join', p: id }); return p;
     }
-    function removePlayer(id) { delete S.players[id]; S.order = S.order.filter(q => q !== id); for (const m of S.mobs) if (m.tgt === id) loseTarget(m); }
+    function removePlayer(id) { if (S.players[id] && S.players[id].seat) standUp(S.players[id], 'left'); delete S.players[id]; S.order = S.order.filter(q => q !== id); for (const m of S.mobs) if (m.tgt === id) loseTarget(m); }
     function hash() {
       let h = 2166136261 >>> 0; const mix = (v) => { h ^= v >>> 0; h = Math.imul(h, 16777619) >>> 0; };
       mix(S.t); mix(R.state); for (const z in S.weather) { mix(hashStr(S.weather[z].kind)); mix(S.weather[z].intensity); }
@@ -3204,6 +3322,7 @@
     return {
       setNewHome: h => { if (HOMES[h]) NEWHOME = h; }, markGift: (pid, id, n) => markGift(S.players[pid], id, n), homeOf: p => (p && p.home) || 'ashvale', npcFor, lineFor, questForHome, questMarks,
       API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, trapOf, offerOf, isBlessed: (pid, x, y) => !!(S.players[pid] && blessed(S.players[pid], x, y)), setNature, natureHours, setNatureTell, seasonOn, dayHour, fireLit, steamFor, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
+      tableAt, tableById, tables, chessOf, chessRow, chessRows, chessGame, chessTurn, chessMoves, applyChess, hostSit, hostStand, hostMove, standUp,
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
@@ -3227,8 +3346,9 @@
     return c.hash();
   }
 
-  const AshCore = { API, create, replay, Rng, STYLES, normItem, validItem, clampItem, fromArmoury };
-  if (root.ASH3D && root.ASH3D.define) root.ASH3D.define('core', { api: API, v: 1, needs: { world: 1 } }, (deps) => { if (deps && deps.world) WORLD = deps.world; return AshCore; });
+  let CHESSLIB_DEP = null;   /* chess.js, handed in by the loader (node tests require it) */
+  const AshCore = { API, create, replay, Rng, STYLES, normItem, validItem, clampItem, fromArmoury, get chesslib() { return CHESSLIB_DEP; } };
+  if (root.ASH3D && root.ASH3D.define) root.ASH3D.define('core', { api: API, v: 1, needs: { world: 1, chesslib: 1 } }, (deps) => { if (deps && deps.world) WORLD = deps.world; if (deps && deps.chesslib) CHESSLIB_DEP = deps.chesslib; return AshCore; });
   if (typeof module !== 'undefined' && module.exports) module.exports = AshCore;
   root.AshCore = AshCore;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

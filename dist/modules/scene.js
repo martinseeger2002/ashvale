@@ -19,6 +19,62 @@
     let FIREQ = null;   /* (x, y) -> whether the fire at a tile is burning (a zone fire with `litIn` is cold out of its season) */
     let STEAMQ = null;  /* kind -> 0-1, how hard the kettle over that fire steams (core works it out from the season and the hour) */
     const BOARDS = Object.create(null);   /* painted wooden signs (dragon killers): id -> { lines, faces } */
+    /* THE CHESS PARK (2026-10-10): the sets on Saltmere's tables, id -> { ox, oy, oz, pieces: [{m, type, color, sq}], group };
+       pieces are plain meshes (not batched) so a move can slide them; TWEENS are played by update(dt) */
+    const CHESS = Object.create(null), TWEENS = [], CHESS_FEN = Object.create(null);
+    const CHESS_DARK = 0x5a4030, CHESS_LIGHT = 0xefe8d6, SQ = 0.12;   /* tarred driftwood, whalebone - lifted a shade and self-lit a little so they read at night (2026-10-10) */
+    const PIECE_OPTS = { dark: { emissive: 0x2a1a10, emissiveIntensity: 0.9 }, light: { emissive: 0x3a362e, emissiveIntensity: 0.9 } };
+    const PIECE_GEO = {};
+    function pieceGeo(type) {   /* low-poly, lathe-free: cylinders, cones, spheres and boxes, 0.1-0.2 m tall */
+      if (PIECE_GEO[type]) return PIECE_GEO[type];
+      const parts = [];
+      const add = (g, y, rx) => { g.translate(0, y, 0); if (rx) g.rotateX(rx); parts.push(g); };
+      add(new THREE.CylinderGeometry(0.038, 0.046, 0.02, 10), 0.01);
+      if (type === 'p') { add(new THREE.CylinderGeometry(0.018, 0.03, 0.05, 8), 0.045); add(new THREE.SphereGeometry(0.026, 8, 6), 0.095); }
+      if (type === 'r') { add(new THREE.CylinderGeometry(0.03, 0.036, 0.09, 8), 0.065); add(new THREE.BoxGeometry(0.08, 0.025, 0.08), 0.12); for (const [dx, dz] of [[-0.028, -0.028], [0.028, -0.028], [-0.028, 0.028], [0.028, 0.028]]) { const t = new THREE.BoxGeometry(0.02, 0.02, 0.02); t.translate(dx, 0.142, dz); parts.push(t); } }
+      if (type === 'n') { add(new THREE.CylinderGeometry(0.028, 0.036, 0.05, 8), 0.045); const h = new THREE.BoxGeometry(0.04, 0.1, 0.03); h.rotateX(-0.55); h.translate(0, 0.11, 0.01); parts.push(h); const e = new THREE.BoxGeometry(0.03, 0.03, 0.05); e.translate(0, 0.145, 0.03); parts.push(e); }
+      if (type === 'b') { add(new THREE.ConeGeometry(0.04, 0.13, 8), 0.085); add(new THREE.SphereGeometry(0.016, 8, 6), 0.16); }
+      if (type === 'q') { add(new THREE.ConeGeometry(0.044, 0.15, 8), 0.095); add(new THREE.SphereGeometry(0.03, 8, 6), 0.175); for (let k = 0; k < 5; k++) { const d = new THREE.SphereGeometry(0.008, 6, 4); d.translate(Math.cos(k * 1.2566) * 0.025, 0.2, Math.sin(k * 1.2566) * 0.025); parts.push(d); } }
+      if (type === 'k') { add(new THREE.ConeGeometry(0.046, 0.16, 8), 0.1); add(new THREE.SphereGeometry(0.024, 8, 6), 0.185); add(new THREE.BoxGeometry(0.012, 0.05, 0.012), 0.225); add(new THREE.BoxGeometry(0.036, 0.012, 0.012), 0.228); }
+      PIECE_GEO[type] = mergeGeos(parts.map(geo => ({ geo }))); return PIECE_GEO[type];   /* the scene's own merger (further down): {geo, m} items */
+    }
+    const sqOf = (sq) => [sq.charCodeAt(0) - 97, +sq[1] - 1];   /* 'e4' -> [4, 3] */
+    function sqPos(set, sq) { const [f, r] = sqOf(sq); return [set.ox - 3.5 * SQ + f * SQ, set.oy, set.oz + 3.5 * SQ - r * SQ]; }   /* White sits south (+z): rank 1 nearest him, file a on his left (-x) */
+    function chessSquare(id, point) {   /* which square a world point over the board is, or null */
+      const set = CHESS[id]; if (!set || !point) return null;
+      const f = Math.floor((point.x - (set.ox - 4 * SQ)) / SQ), r = Math.floor(((set.oz + 4 * SQ) - point.z) / SQ);
+      return f >= 0 && f < 8 && r >= 0 && r < 8 ? String.fromCharCode(97 + f) + (r + 1) : null;
+    }
+    function fenBoard(fen) {   /* { sq: 'wP' ... } from the first FEN field */
+      const out = {}; const rows = String(fen || '').split(' ')[0].split('/'); if (rows.length !== 8) return out;
+      for (let i = 0; i < 8; i++) { let f = 0; for (const ch of rows[i]) { if (/\d/.test(ch)) f += +ch; else { out[String.fromCharCode(97 + f) + (8 - i)] = (ch === ch.toUpperCase() ? 'w' : 'b') + ch.toLowerCase(); f++; } } }
+      return out;
+    }
+    function makePiece(set, code, sq) {
+      const m = new THREE.Mesh(pieceGeo(code[1]), lam(code[0] === 'w' ? CHESS_LIGHT : CHESS_DARK, code[0] === 'w' ? PIECE_OPTS.light : PIECE_OPTS.dark)); m.castShadow = true;
+      const [x, y, z] = sqPos(set, sq); m.position.set(x, y, z); if (code[1] === 'n') m.rotation.y = code[0] === 'w' ? 0 : Math.PI;   /* the knights face the enemy */
+      set.group.add(m); const pc = { m, code, sq }; set.pieces.push(pc); return pc;
+    }
+    function dropPiece(set, pc) { set.group.remove(pc.m); set.pieces.splice(set.pieces.indexOf(pc), 1); }
+    function chessApply(id, fen, move) {   /* lay the position out; a move (from, to) slides its piece and the rest is reconciled in place */
+      CHESS_FEN[id] = fen; const set = CHESS[id]; if (!set) return;
+      const want = fenBoard(fen), at = (sq) => set.pieces.find(q => q.sq === sq);
+      if (move && move[0] && move[1]) {
+        const pc = at(move[0]), taken = at(move[1]);
+        if (pc) { if (taken && taken !== pc) dropPiece(set, taken); const [x, y, z] = sqPos(set, move[1]); pc.sq = move[1]; TWEENS.push({ m: pc.m, x0: pc.m.position.x, z0: pc.m.position.z, x, z, y, t: 0, dur: 0.45, lift: 0.08 }); }
+      }
+      for (const sq of Object.keys(want)) { const pc = at(sq); if (pc && pc.code === want[sq]) continue; if (pc) dropPiece(set, pc); makePiece(set, want[sq], sq); }
+      for (const pc of set.pieces.slice()) if (!want[pc.sq]) dropPiece(set, pc);
+    }
+    const MARK_GEO = new THREE.BoxGeometry(SQ * 0.96, 0.004, SQ * 0.96);
+    const MARK_MAT = { sel: new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.8 }), to: new THREE.MeshBasicMaterial({ color: 0x5aa8ff, transparent: true, opacity: 0.65 }), cap: new THREE.MeshBasicMaterial({ color: 0xff5a5a, transparent: true, opacity: 0.75 }) };
+    function chessMark(id, sel, targets) {   /* the selected square lights gold, where it may go blue, a capture red: whole squares, unlit, so they read at night too */
+      const set = CHESS[id]; if (!set) return;
+      for (const m of set.marks || []) set.group.remove(m); set.marks = [];
+      const put = (sq, mat) => { const m = new THREE.Mesh(MARK_GEO, mat); const [x, y, z] = sqPos(set, sq); m.position.set(x, y + 0.003, z); m.renderOrder = 2; set.group.add(m); set.marks.push(m); };
+      if (sel) put(sel, MARK_MAT.sel);
+      for (const t of targets || []) put(t.to || t, t.capture ? MARK_MAT.cap : MARK_MAT.to);
+    }
     const SNOWC = new THREE.Color(0xf2f1ec);
 
     function hash2(x, y) { let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
@@ -1223,6 +1279,23 @@
             break; }
           case 'counter': { const fl = floorY(o, y); B.add('box', 0x7a5232, x, fl + 0.45, z, (o.w || 1) - 0.05, 0.9, (o.h || 1) - 0.25); B.add('box', 0xa07a48, x, fl + 0.92, z, (o.w || 1) + 0.05, 0.06, (o.h || 1) - 0.1); B.add('box', 0xd29a52, x - 0.3, fl + 1.02, z, 0.25, 0.12, 0.15); break; }
           case 'table': { const fl = floorY(o, y), w = (o.w || 1) - 0.2, d = (o.h || 1) - 0.2; B.add('box', 0x8a5a30, x, fl + 0.62, z, w, 0.07, d); for (const sx of [-1, 1]) for (const sz of [-1, 1]) B.add('box', 0x5a3a1e, x + sx * (w / 2 - 0.06), fl + 0.3, z + sz * (d / 2 - 0.06), 0.07, 0.6, 0.07); B.add('cyl', 0xd8d0b8, x + 0.1, fl + 0.7, z, 0.18, 0.06, 0.18); B.add('box', 0xf4eccc, x - 0.15, fl + 0.75, z - 0.1, 0.05, 0.16, 0.05); break; }
+          case 'bench': {   /* a chess-park bench: a tarred plank on two sandstone blocks, its long side east-west */
+            const fl = floorY(o, y);
+            B.add('box', 0x4a3626, x, fl + 0.42, z, 0.98, 0.06, 0.34); for (const dx of [-0.36, 0.36]) B.add('box', 0x9a8c78, x + dx, fl + 0.2, z, 0.16, 0.4, 0.28);
+            break;
+          }
+          case 'chesstable': {   /* a stone table with a slate-and-sandstone board and a driftwood-and-whalebone set (2026-10-10) */
+            const fl = floorY(o, y), top = fl + 0.78;
+            B.add('box', 0x9a8c78, x, fl + 0.36, z, 0.5, 0.72, 0.5); B.add('box', 0x8a7c68, x, fl + 0.04, z, 0.9, 0.08, 0.9);
+            B.add('box', 0x3c4047, x, top - 0.03, z, 1.18, 0.06, 1.18);   /* the slate slab */
+            for (let r = 0; r < 8; r++) for (let f = 0; f < 8; f++) B.add('box', (f + r) % 2 ? 0xdccfae : 0x414950, x - 3.5 * SQ + f * SQ, top + 0.005, z + 3.5 * SQ - r * SQ, SQ, 0.01, SQ);   /* sandstone / slate, the slate a shade lighter than the dark set */
+            const id = o.id || ('t' + o.x + ',' + o.y), set = CHESS[id] = { ox: x, oy: top + 0.01, oz: z, pieces: [], group: new THREE.Group() };
+            group.add(set.group);
+            chessApply(id, (CHESS_FEN[id] || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'), null);
+            const pk = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.75, 1.3), new THREE.MeshBasicMaterial({ visible: false })); pk.position.set(x, fl + 0.38, z); pk.userData.pick = { kind: 'chesstable', id, x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
+            const bd = new THREE.Mesh(new THREE.BoxGeometry(8 * SQ, 0.06, 8 * SQ), new THREE.MeshBasicMaterial({ visible: false })); bd.position.set(x, top + 0.03, z); bd.userData.pick = { kind: 'square', id, x: o.x, y: o.y }; group.add(bd); pickables.push(bd);
+            break;
+          }
           case 'chair': { const fl = floorY(o, y); B.add('box', 0x7a4a26, x, fl + 0.36, z, 0.42, 0.06, 0.42); B.add('box', 0x7a4a26, x, fl + 0.65, z - 0.19, 0.42, 0.55, 0.05); for (const sx of [-1, 1]) for (const sz of [-1, 1]) B.add('box', 0x5a3a1e, x + sx * 0.17, fl + 0.18, z + sz * 0.17, 0.05, 0.36, 0.05); break; }
           case 'bed': { const fl = floorY(o, y), w = (o.w || 1) - 0.15, d = (o.h || 1) - 0.15; B.add('box', 0x6a4426, x, fl + 0.2, z, w, 0.4, d); B.add('box', [0xa03a3a, 0x3a6aa0, 0x6a8a3a][(o.x + o.y) % 3], x, fl + 0.43, z + 0.12, w - 0.06, 0.1, d - 0.4); B.add('box', 0xf0ead8, x, fl + 0.46, z - d / 2 + 0.25, w - 0.25, 0.12, 0.3); B.add('box', 0x5a3a1e, x, fl + 0.55, z - d / 2 + 0.04, w, 0.7, 0.08); break; }
           case 'fireplace': case 'furnace': {
@@ -1404,6 +1477,7 @@
           if (waterMesh) waterMesh.material.emissive.setHSL(0.58, 0.6, 0.08 + 0.02 * Math.sin(time * 1.5));
           if (waterMesh) waterMesh.position.y = Math.sin(time * 0.55) * 0.014;   /* the whole sheet rides a slow swell, some water sits on it */
           for (const a of anim) if (a.bob) a.bob.position.y = a.y0 + 0.12 * Math.sin(time * 2.6);
+          for (let i = TWEENS.length - 1; i >= 0; i--) { const w = TWEENS[i]; w.t = Math.min(1, w.t + dt / w.dur); const e = w.t < 0.5 ? 2 * w.t * w.t : 1 - Math.pow(-2 * w.t + 2, 2) / 2; w.m.position.set(w.x0 + (w.x - w.x0) * e, w.y + Math.sin(w.t * Math.PI) * w.lift, w.z0 + (w.z - w.z0) * e); if (w.t >= 1) TWEENS.splice(i, 1); }
           for (const a of anim) if (a.smoke) {
             if ((!a.litIn || !FIREQ || FIREQ(a.tx, a.ty)) && a.parts.length < 8 && Math.random() < dt * 3) { const m = new THREE.Mesh(smokeGeo, smokeMat); m.position.set(a.x, a.y, a.z); m.userData.t = 0; group.add(m); a.parts.push(m); }
             for (let k = a.parts.length - 1; k >= 0; k--) { const m = a.parts[k]; m.userData.t += dt; m.position.y += dt * 0.5; m.position.x += dt * 0.15; m.scale.setScalar(1 + m.userData.t * 0.8); m.rotation.y += dt; if (m.userData.t > 2.4) { group.remove(m); a.parts.splice(k, 1); } }
@@ -1426,7 +1500,7 @@
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

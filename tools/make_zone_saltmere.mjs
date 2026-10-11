@@ -4,7 +4,11 @@
    over it: a clearing in the wood, a quay along the beach, streets, buildings, an exit path at the west gate.
    Run:  node tools/make_zone_saltmere.mjs            writes data/zone.saltmere.json
          node tools/make_zone_saltmere.mjs --map      prints the finished tile map instead
-   Re-run it if the globe seed or the coastline changes. Everything below the "the layout" line is the town. */
+   Re-run it if the globe seed or the coastline changes. Everything below the "the layout" line is the town.
+   WARNING (2026-10-10): data/zone.saltmere.json has been edited by hand and by imports since this was last the only
+   source - the cobbled road, the Saltmere chapel (altar, pews, Mother Wenna), the two-storey hall and more live only in
+   the JSON. Re-running this script DROPS them (it did, the chess park's first build). Until those are ported into this
+   file, add to the JSON directly (tools/add_saltmere_objects.py style) and keep this script as the record. */
 import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
@@ -222,6 +226,20 @@ const props = [
   { k: 'anvil', x: 3449, y: 1870 }, { k: 'furnace', x: 3451, y: 1871 },
   { k: 'crate', x: 3480, y: 1775 }, { k: 'crate', x: 3482, y: 1775 }, { k: 'barrel', x: 3486, y: 1776 },
   { k: 'crate', x: 3480, y: 1876 }, { k: 'barrel', x: 3484, y: 1876 }, { k: 'crate', x: 3486, y: 1877 },
+  /* the chess park on the quay green (2026-10-10, handoff/chess_park_plan.md): four stone tables with slate-and-
+     sandstone boards, a bench north and south of each so the players face each other, two lamps, and the standings
+     board facing the cobbled road. Authoring frame = vale (x + 3013, y + 1796): the tables stand at vale (465,35) (471,35)
+     (465,41) (471,41). The north bench is Black's seat, the south bench White's (rank 1 nearest White). */
+  { k: 'chesstable', id: 'salt1', x: 3478, y: 1831, seats: [[3478, 1830], [3478, 1832]], board: 'driftwood' },
+  { k: 'bench', x: 3478, y: 1830, face: 's' }, { k: 'bench', x: 3478, y: 1832, face: 'n' },
+  { k: 'chesstable', id: 'salt2', x: 3484, y: 1831, seats: [[3484, 1830], [3484, 1832]], board: 'driftwood' },
+  { k: 'bench', x: 3484, y: 1830, face: 's' }, { k: 'bench', x: 3484, y: 1832, face: 'n' },
+  { k: 'chesstable', id: 'salt3', x: 3478, y: 1837, seats: [[3478, 1836], [3478, 1838]], board: 'driftwood' },
+  { k: 'bench', x: 3478, y: 1836, face: 's' }, { k: 'bench', x: 3478, y: 1838, face: 'n' },
+  { k: 'chesstable', id: 'salt4', x: 3484, y: 1837, seats: [[3484, 1836], [3484, 1838]], board: 'driftwood' },
+  { k: 'bench', x: 3484, y: 1836, face: 's' }, { k: 'bench', x: 3484, y: 1838, face: 'n' },
+  { k: 'lamp', x: 3476, y: 1834 }, { k: 'lamp', x: 3486, y: 1834 },
+  { k: 'wsign', x: 3481, y: 1828, face: 'n', board: 'chess', title: 'CHESS PARK' },
   /* town hall rooms: bank west, hall centre, mayor east */
   { k: 'iwall', x: 3400, y: 1811, w: 1, h: 5, door: [3400, 1813], face: 'w' },
   { k: 'iwall', x: 3407, y: 1811, w: 1, h: 5, door: [3407, 1813], face: 'w' },
@@ -331,9 +349,11 @@ function moveRect(o) {
   r.x = Math.min(a[0], b[0]); r.y = Math.min(a[1], b[1]); r.w = Math.abs(a[0] - b[0]) + 1; r.h = Math.abs(a[1] - b[1]) + 1;
   if (o.door) r.door = L2W(o.door[0], o.door[1]);
   if (o.face) r.face = FACE[o.face] || o.face;
+  if (Array.isArray(o.seats)) r.seats = o.seats.map(s => L2W(s[0], s[1]));   /* a chess table's two benches move with it (2026-10-10) */
   return r;
 }
-const movePt = o => { const [x, y] = L2W(o.x, o.y); return Object.assign({}, o, { x, y }); };
+const movePt = o => { const [x, y] = L2W(o.x, o.y); const r = Object.assign({}, o, { x, y }); if (o.face) r.face = FACE[o.face] || o.face;
+  if (Array.isArray(o.seats)) r.seats = o.seats.map(s => L2W(s[0], s[1])); return r; };   /* a chess table's two benches move with it (2026-10-10) */
 /* The town's portal square: where the stones stand, at the chest end of the high street. rules.json's portals entry
    for saltmere has to say that same place, because the engine stands the stones from rules, not from this file - so
    the two files hold one fact. This town has been moved a number of times ("Saltmere may move anywhere it needs to",
