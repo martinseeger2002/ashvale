@@ -17531,11 +17531,14 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       /* ---------- character creator (first start) and the tailor's wardrobe */
       /* ---------------- THE CHESS PARK: sitting down swings the camera over the board and swaps the HUD for the chess one */
       const BENCH_SEAT = 0.42;   /* the plank's height in scene.js 'bench' */
+      let TABLES_CACHE = { n: -1, list: [] };   /* core.tables() filters every loaded object: once per area change, not per remote per frame */
+      function tablesCached() { const O = core.M.objects || []; if (O.length !== TABLES_CACHE.n) TABLES_CACHE = { n: O.length, list: core.tables() }; return TABLES_CACHE.list; }
       function seatLift(e) {   /* a seated chess player sits on the bench, not on the ground: you by your seat, a remote by the table rows */
         if (e === myEnt) return me.seat ? BENCH_SEAT : 0;
         if (!e.key || e.key.charCodeAt(0) !== 114) return 0;   /* 'r:' remotes: seated when a table's row names them (their anim lives on the remote record, not here) */
+        const T4 = tablesCached(); if (!T4.length) return 0;
         const id = e.key.slice(2);
-        for (const T of core.tables()) { const st = core.chessOf(T.id); if (st.w === id || st.b === id) return BENCH_SEAT; }
+        for (const T of T4) { const st = core.S.chess[T.id]; if (st && (st.w === id || st.b === id)) return BENCH_SEAT; }
         return 0;
       }
       let CHESSV = null, CHESS_SEL = null;
