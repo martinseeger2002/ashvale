@@ -2362,7 +2362,7 @@
       p.x = seat[0]; p.y = seat[1]; p.path = []; p.act = null; p.skilling = null; p.seat = { t: T.id, s: si, k: 'pk' }; p.seatWait = null;
       p.face = faceTo(p.x, p.y, T.x, T.y); closeShop(p);
       pokerSync(T.id, t);
-      if (t.street === 'none' && t.seatsIn().length >= 2) t.newHand();
+      if (t.street === 'none' && t.playable() >= 2) t.newHand();
       pokerSync(T.id, t);
       ev({ e: 'psit', p: p.id, t: T.id, s: si }); emitPoker(T.id);
       msg(p, 'You sit down at the poker table with ' + chips + ' chips. They are chips, not coins - you can get up whenever you like.', 'info');
@@ -2426,7 +2426,7 @@
         const t = pokerGame(T.id); if (!t) continue;
         if (t.street === 'none') {
           if (st.wt == null) { pokerSync(T.id, t); continue; }
-          if (S.t >= st.wt) { if (t.seatsIn().length < 2) { if (t.status !== 'open') { t.status = 'open'; pokerSync(T.id, t); emitPoker(T.id); } st.wt = S.t + PK_WAIT; continue; } t.newHand(); pokerSync(T.id, t); emitPoker(T.id); }
+          if (S.t >= st.wt) { if (t.playable() < 2) { if (t.status !== 'open') { t.status = 'open'; pokerSync(T.id, t); emitPoker(T.id); } st.wt = S.t + PK_WAIT; continue; } t.newHand(); pokerSync(T.id, t); emitPoker(T.id); }
           continue;
         }
         if (t.toAct < 0) { pokerSync(T.id, t); continue; }

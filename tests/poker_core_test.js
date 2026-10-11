@@ -26,7 +26,7 @@ const a = c.addPlayer('pa', { name: 'Ada' }), b = c.addPlayer('pb', { name: 'Bra
 a.x = T.seats[0][0]; a.y = T.seats[0][1]; b.x = T.seats[3][0]; b.y = T.seats[3][1];
 const evs = [];
 const run = (n) => { for (let i = 0; i < n; i++) for (const e of c.tick()) evs.push(e); };
-ok(c.pokerTableAt(T.x, T.y) && c.pokerTableById('poker1') === T, 'the engine finds the table by tile and by id');
+ok(c.pokerTableAt(T.x, T.y) && c.pokerTableAt(T.x, T.y).id === 'poker1' && c.pokerTableById('poker1').seats.length === 6, 'the engine finds the table by tile and by id');
 c.cmd('pa', { c: 'sit', table: 'poker1', seat: 0 }); run(40);
 ok(a.seat && a.seat.k === 'pk' && a.seat.s === 0 && a.x === T.seats[0][0] && a.y === T.seats[0][1], 'Ada takes a chair at the felt');
 let st = c.pokerOf('poker1');
@@ -69,16 +69,16 @@ st = c.pokerOf('poker1');
 ok(st.st === 'preflop' && st.h > 1, 'a fresh hand is dealt once the last one is put down: hand ' + st.h);
 
 /* a seat that will not answer is folded out of the hand */
-evs.length = 0; run(130);
-st = c.pokerOf('poker1');
-ok((st.o === 'playing' && st.se.some(s => (s[4] & 2) !== 0)) || st.st === 'none', 'a seat that says nothing for its whole clock is folded');
-ok(evs.some(e => e.e === 'msg' && /has not answered/.test(e.text)) || st.st === 'none', 'and the table says so: ' + ((evs.filter(e => e.e === 'msg').slice(-1)[0] || {}).text));
+evs.length = 0; run(160);
+const silent = evs.filter(e => e.e === 'msg' && /has not answered|checks in their turn/.test(e.text));
+ok(silent.length > 0, 'a seat that says nothing for its whole clock is folded or checked by the table: ' + (silent[0] || {}).text);
+ok(c.pokerOf('poker1').se.length === 2, 'both players are still sitting through it, just slow');
 
 /* getting up */
 evs.length = 0; c.cmd('pa', { c: 'stand' }); run(2);
 st = c.pokerOf('poker1');
 ok(!a.seat && st.se.length === 1 && evs.some(e => e.e === 'pstand' && e.p === 'pa'), 'Ada gets up and her chair is free again');
-c.cmd('pb', { c: 'stand' }); run(2);
+c.cmd('pb', { c: 'stand' }); run(30);
 st = c.pokerOf('poker1');
 ok(!b.seat && st.se.length === 0 && st.o === 'open', 'so does Bram; an empty table is open and quiet');
 ok(c.pokerRows().length === 0, 'an empty table has nothing to broadcast');

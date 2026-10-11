@@ -93,6 +93,12 @@
    "api": 1,
    "kind": "js"
   },
+  "holdemlib": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
   "core": {
    "id": null,
    "v": "1",
@@ -154,6 +160,12 @@
    "kind": "js"
   },
   "hudchess": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "hudpoker": {
    "id": null,
    "v": "1",
    "api": 1,

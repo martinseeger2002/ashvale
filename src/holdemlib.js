@@ -103,6 +103,10 @@
     const fromBtn = (a, b) => dpos(a) - dpos(b);
     const byTurn = (a, b) => rel(a, T.street === 'preflop' ? T.bbSeat : T.dealer) - rel(b, T.street === 'preflop' ? T.bbSeat : T.dealer);
     T.seatsIn = () => cards().slice().sort(byBtn);
+    /* seatsIn is who is in the hand right now. playable is who could be dealt a hand, which before the first card goes
+       out is not the same list - a seat with no cards in it is not counted as dealt - and a table deciding whether to
+       deal needs this one, so it does not sit silent with two players waiting. */
+    T.playable = () => seated().filter(s => s.chips > 0).length;
 
     T.addSeat = (ref, who) => {   /* take the chair: ref is the world seat number, who is {id, name, chips} */
       const s = T.seats[ref] || (T.seats[ref] = { ref });

@@ -9172,6 +9172,343 @@ POSSIBILITY OF SUCH DAMAGE. */
 
 </script>
 <script>
+/* ASHVALE 3D module 'holdemlib' (api 1): the rules of no-limit Texas Hold'em for the Saltmere poker tables
+   (handoff/poker_plan.md, 2026-10-11). Like chesslib this is pure rules - no DOM, no three.js, no ASHVALE state -
+   so core.js can drive it deterministically on the host of a zone and a node test can require it directly.
+   The rules are the standard ones. ptwu/distributed-texasholdem is unlicensed (holdem-ref/NOTES.md), so nothing is
+   copied from it; it was read only for the shape of the problem - an integer hand score, the all-in line, and pots
+   layered by what each player actually put in.
+   Everything random goes through opts.int(n), which core.js hands in as its own seeded R.int(n), so a hand replays the
+   same way on another device. Money is whole units (in-game GOLD). A pot that cannot split evenly gives its odd chip to
+   the first eligible seat to the left of the button, which is the usual rule and what the tests pin.
+   Card ids are 0..51: id = rank*4 + suit, rank 0..12 = 2,3..9,T,J,Q,A, suit 0..3 = clubs, diamonds, hearts, spades.
+   What may be seen is split on purpose: row() is the row for the whole room, rowFor(ref) adds that one seat's two hole
+   cards. Only rowFor ever goes to the seat that owns them - poker is the first game in the world with hidden
+   information, and a room broadcast is public (handoff/poker_plan.md §2.4). */
+(function (G) {
+  'use strict';
+
+  const SUITS = 'cdhs', RANKN = '23456789TJQKA';
+  const CATS = ['high card', 'one pair', 'two pair', 'three of a kind', 'a straight', 'a flush', 'a full house',
+    'four of a kind', 'a straight flush'];
+  const STREETS = ['preflop', 'flop', 'turn', 'river'];
+  const CAT0 = 1 << 20;   /* the category sits above five rank nibbles, so a bigger score is always the better hand */
+
+  const rk = id => (id >> 2) + 2;   /* 2..14 - the ace is 14 and the wheel is looked for by name */
+  const ft = id => id & 3;
+  function cname(id) { return RANKN[id >> 2] + SUITS[id & 3]; }
+  function cparse(s) {
+    const r = RANKN.indexOf(String(s[0]).toUpperCase()), f = SUITS.indexOf(String(s[1]).toLowerCase());
+    return (r < 0 || f < 0) ? -1 : r * 4 + f;
+  }
+
+  const SUB = {};
+  function subsets(n, k) {   /* every k-subset of 0..n-1, built once and kept */
+    const key = n + ':' + k; if (SUB[key]) return SUB[key];
+    const out = [];
+    (function walk(from, pick) {
+      if (pick.length === k) return out.push(pick.slice());
+      for (let i = from; i <= n - (k - pick.length); i++) { pick.push(i); walk(i + 1, pick); pick.pop(); }
+    })(0, []);
+    return SUB[key] = out;
+  }
+
+  function score5(c) {   /* five card ids -> one comparable integer */
+    const R = [rk(c[0]), rk(c[1]), rk(c[2]), rk(c[3]), rk(c[4])].sort((a, b) => b - a);   /* high card first */
+    const flush = ft(c[0]) === ft(c[1]) && ft(c[1]) === ft(c[2]) && ft(c[2]) === ft(c[3]) && ft(c[3]) === ft(c[4]);
+    let straight = true, wheel = false;
+    for (let i = 1; i < 5; i++) if (R[i] !== R[0] - i) straight = false;
+    if (!straight && R[0] === 14 && R[1] === 5 && R[2] === 4 && R[3] === 3 && R[4] === 2) straight = wheel = true;
+    if (wheel) R[0] = 5, R[1] = 4, R[2] = 3, R[3] = 2, R[4] = 1;   /* the wheel is a five-high straight */
+    const n = {}; for (let i = 0; i < 5; i++) n[R[i]] = (n[R[i]] || 0) + 1;
+    const grp = Object.keys(n).map(k => [n[k], +k]).sort((a, b) => b[0] - a[0] || b[1] - a[1]);   /* by count, then rank */
+    let cat, seq;
+    if (straight && flush) cat = 8, seq = R;
+    else if (grp[0][0] === 4) cat = 7, seq = [grp[0][1], grp[0][1], grp[0][1], grp[0][1], grp[1][1]];
+    else if (grp[0][0] === 3 && grp[1][0] === 2) cat = 6, seq = [grp[0][1], grp[0][1], grp[0][1], grp[1][1], grp[1][1]];
+    else if (flush) cat = 5, seq = R;
+    else if (straight) cat = 4, seq = R;
+    else if (grp[0][0] === 3) cat = 3, seq = [grp[0][1], grp[0][1], grp[0][1], grp[1][1], grp[2][1]];
+    else if (grp[1] && grp[1][0] === 2) cat = 2, seq = [grp[0][1], grp[0][1], grp[1][1], grp[1][1], grp[2][1]];
+    else if (grp[0][0] === 2) cat = 1, seq = [grp[0][1], grp[0][1], grp[1][1], grp[2][1], grp[3][1]];
+    else cat = 0, seq = R;
+    return cat * CAT0 + seq[0] * 65536 + seq[1] * 4096 + seq[2] * 256 + seq[3] * 16 + seq[4];
+  }
+
+  function score7(ids) {   /* the best five of 5, 6 or 7 cards */
+    let hi = -1, five = null;
+    for (const c of subsets(ids.length, 5)) {
+      const pick = c.map(i => ids[i]), sc = score5(pick);
+      if (sc > hi) hi = sc, five = pick;
+    }
+    const cat = Math.floor(hi / CAT0);
+    return { score: hi, five, cat, name: CATS[cat] };
+  }
+  function best(hole, board) { return score7((hole || []).concat(board || [])); }
+  function describe(r) {   /* words a player can read */
+    if (!r || !r.five) return 'no hand';
+    const five = r.five.slice().sort((a, b) => (b >> 2) - (a >> 2) || ft(a) - ft(b));
+    return r.name + ' (' + five.map(cname).join(' ') + ')';
+  }
+
+  /* ---- a table -------------------------------------------------------------------------------------------- */
+  function table(opts) {
+    const O = opts || {}, rnd = O.int || ((n) => Math.floor(Math.random() * n));
+    const SB = O.small || 10, BB = O.big || SB * 2;
+    const T = {
+      id: O.id || 'poker', seats: [], board: [], deck: [], street: 'none', pot: 0, bet: 0, minRaise: BB,
+      dealer: -1, hand: 0, toAct: -1, status: 'open', result: null, log: [], small: SB, big: BB, sbSeat: -1, bbSeat: -1
+    };
+    T.say = (text, by) => { T.log.push({ t: text, by: by || '' }); if (O.tell) O.tell(text, by || ''); return T; };
+
+    const seated = () => T.seats.filter(s => s && s.id && s.in);
+    const dealt = () => T.seats.filter(s => s && s.id && s.in && s.hole);
+    const cards = () => dealt().filter(s => !s.out);
+    const live = () => cards().filter(s => !s.folded);
+    const able = () => live().filter(s => !s.allin);
+    /* Three orders, and mixing them up is the classic poker bug. fromBtn starts AT the button: the order the blinds go
+       and the cards are dealt. byBtn starts at the seat to the button's left and puts the button LAST: the betting
+       order on every street after the flop, and who gets an odd chip. byTurn is the betting order - before the flop it
+       runs from the seat left of the big blind, with the big blind answering last; after the flop it is byBtn. */
+    const rel = (s, from) => ((((s.ref - from + 98) % 99) + 99) % 99);
+    const pos = s => rel(s, T.dealer);
+    const dpos = s => ((((s.ref - T.dealer) % 99) + 99) % 99);
+    const byBtn = (a, b) => pos(a) - pos(b);
+    const fromBtn = (a, b) => dpos(a) - dpos(b);
+    const byTurn = (a, b) => rel(a, T.street === 'preflop' ? T.bbSeat : T.dealer) - rel(b, T.street === 'preflop' ? T.bbSeat : T.dealer);
+    T.seatsIn = () => cards().slice().sort(byBtn);
+    /* seatsIn is who is in the hand right now. playable is who could be dealt a hand, which before the first card goes
+       out is not the same list - a seat with no cards in it is not counted as dealt - and a table deciding whether to
+       deal needs this one, so it does not sit silent with two players waiting. */
+    T.playable = () => seated().filter(s => s.chips > 0).length;
+
+    T.addSeat = (ref, who) => {   /* take the chair: ref is the world seat number, who is {id, name, chips} */
+      const s = T.seats[ref] || (T.seats[ref] = { ref });
+      if (who) { if (who.id != null) s.id = who.id; if (who.name != null) s.name = who.name;
+        if (who.chips != null) s.chips = who.chips; }
+      s.in = true; s.out = T.street !== 'none';
+      if (s.hole === undefined) s.hole = null;
+      if (s.chips == null) s.chips = 0;
+      s.bet = 0; s.folded = false; s.allin = false; s.acted = false; s.showdown = false; s.won = s.won || 0;
+      if (T.street !== 'none') T.say((s.name || 'Someone') + ' sits down and waits for the next hand.', 'sys');
+      return s;
+    };
+    T.leave = (ref) => {   /* get up. Cards in the air means the hand is folded - Robert's Rules */
+      const s = T.seats[ref]; if (!s || !s.id) return T;
+      const name = s.name;
+      if (T.street !== 'none' && s.hole && !s.out && !s.folded) {
+        T.say((name || 'A player') + ' gets up - their hand is folded.', 'sys');
+        s.folded = true; afterAction();
+      }
+      s.in = false; s.id = null; s.name = null; s.hole = null; s.bet = 0; s.folded = false; s.allin = false; s.out = false;
+      return T;
+    };
+
+    function shuffle() {   /* Fisher-Yates over the seeded rng, so the hand can be replayed */
+      const d = []; for (let i = 0; i < 52; i++) d.push(i);
+      for (let i = 51; i > 0; i--) { const j = rnd(i + 1), t = d[i]; d[i] = d[j]; d[j] = t; }
+      return d;
+    }
+    const pop = () => T.deck.pop();
+    const burn = () => T.deck.pop();
+
+    T.newHand = () => {   /* move the button, post the blinds, deal two to each seat */
+      const pl = seated().filter(s => s.chips > 0);
+      if (pl.length < 2) { T.status = 'open'; T.street = 'none'; return { error: 'nobody to play against' }; }
+      T.hand++; T.street = 'preflop'; T.status = 'playing'; T.board = []; T.pot = 0; T.bet = 0; T.minRaise = BB;
+      T.result = null; T.deck = shuffle();
+      for (const s of T.seats) if (s) { s.hole = null; s.bet = 0; s.committed = 0; s.folded = false; s.allin = false;
+        s.won = 0; s.out = true; s.showdown = false; s.acted = false; s.score = 0; s.rank = null; }
+      let d = T.dealer, guard = 0;
+      do { d = (d + 1) % T.seats.length; guard++; }
+      while (guard < 400 && !(T.seats[d] && T.seats[d].id && T.seats[d].in && T.seats[d].chips > 0));
+      if (!(T.seats[d] && T.seats[d].id && T.seats[d].in && T.seats[d].chips > 0)) d = pl.slice().sort(fromBtn)[0].ref;
+      T.dealer = d;
+      const btn = pl.slice().sort(fromBtn);   /* the button, then the rest clockwise: the order blinds and cards go */
+      T.say('Hand ' + T.hand + '. ' + (btn[0].name || 'Someone') + ' is on the button.', 'sys');
+      T.sbSeat = (btn.length === 2 ? btn[0] : btn[1]).ref;
+      T.bbSeat = (btn.length === 2 ? btn[1] : btn[2]).ref;
+      post(T.seats[T.sbSeat], SB, 'small blind');
+      post(T.seats[T.bbSeat], BB, 'big blind');
+      T.bet = BB; T.minRaise = BB;
+      for (const s of btn) s.hole = [pop(), pop()];
+      for (const s of T.seats) if (s && s.id && s.in) s.out = !s.hole;
+      T.toAct = nextActor() == null ? -1 : nextActor();
+      return { dealt: true, toAct: T.toAct };
+    };
+
+    function post(s, want, why) {
+      if (!s) return 0;
+      const n = Math.min(want, s.chips); s.chips -= n; s.bet += n; s.committed += n; T.pot += n;
+      if (s.chips === 0) s.allin = true;
+      T.say((s.name || 'Someone') + ' posts the ' + why + (s.allin ? ' all-in (' + n + ')' : ' (' + n + ')') + '.', 'sys');
+      return n;
+    }
+    const seatOf = (ref) => T.seats[ref];
+
+    T.can = (ref) => {   /* what the HUD needs to light up its own buttons */
+      const s = seatOf(ref), out = { turn: false, fold: false, check: false, call: 0, raise: false, min: 0, max: 0, bet: T.bet };
+      if (!s || !s.id || T.status !== 'playing' || T.street === 'none') return out;
+      out.turn = T.toAct === ref && !s.folded && !s.allin && !s.out;
+      if (!out.turn) return out;
+      const need = Math.max(0, T.bet - s.bet), upTo = s.bet + s.chips;
+      out.call = Math.min(need, s.chips); out.check = need === 0; out.fold = true;
+      out.raise = upTo > T.bet;
+      out.min = Math.min(T.bet + T.minRaise, upTo);   /* an all-in for less than a full raise is still legal */
+      out.max = upTo;
+      return out;
+    };
+
+    T.act = (ref, m) => {   /* the one way in: {a:'fold'|'check'|'call'|'raise'|'allin', to} */
+      const s = seatOf(ref);
+      if (T.status !== 'playing' || T.street === 'none') return { error: "There's no hand running." };
+      if (!s || !s.id) return { error: 'You are not at this table.' };
+      if (T.toAct !== ref) return { error: "It's not your turn." };
+      if (s.out) return { error: 'You sat down after the cards went out.' };
+      if (s.folded) return { error: 'Your hand is folded.' };
+      if (s.allin) return { error: 'You are already all-in.' };
+      const need = Math.max(0, T.bet - s.bet), kind = (m && m.a) || 'check';
+      if (kind === 'fold') { T.say((s.name || 'A player') + ' folds.', 'sys'); s.folded = true; return afterAction(); }
+      if (kind === 'check') {
+        if (need > 0) return { error: 'You owe ' + need + ' - call or fold.' };
+        s.acted = true; T.say((s.name || 'A player') + ' checks.', 'sys'); return afterAction();
+      }
+      if (kind === 'call') {
+        const n = Math.min(need, s.chips); s.chips -= n; s.bet += n; s.committed += n; T.pot += n;
+        if (s.chips === 0) s.allin = true;
+        s.acted = true;
+        T.say((s.name || 'A player') + (s.allin ? ' calls all-in (' + s.bet + ').' : ' calls ' + n + '.'), 'sys');
+        return afterAction();
+      }
+      const upTo = s.bet + s.chips;
+      if (kind !== 'raise' && kind !== 'allin') return { error: 'What do you want to do?' };
+      let to = kind === 'allin' ? upTo : (m.to == null ? 0 : Math.floor(m.to));
+      if (to > upTo) to = upTo;
+      if (to <= T.bet) {   /* an all-in that cannot cover the bet in front of you is a call with everything you have */
+        if (kind !== 'allin' || upTo <= s.bet) return { error: 'A raise has to beat ' + T.bet + '.' };
+        const rest = upTo - s.bet; s.chips = 0; s.bet += rest; s.committed += rest; T.pot += rest;
+        s.allin = true; s.acted = true;
+        T.say((s.name || 'A player') + ' calls all-in (' + s.bet + ').', 'sys');
+        return afterAction();
+      }
+      if (to !== upTo && to < T.bet + T.minRaise) return { error: 'The smallest raise just now is to ' + (T.bet + T.minRaise) + ' - or all-in.' };
+      const n = to - s.bet;
+      T.minRaise = Math.max(BB, to - T.bet); T.bet = to;
+      for (const o of cards()) if (!o.folded) o.acted = (o === s);   /* everyone else gets another look */
+      s.chips -= n; s.bet += n; s.committed += n; T.pot += n;
+      if (s.chips === 0) s.allin = true;
+      T.say((s.name || 'A player') + (s.allin ? ' raises all-in (' + to + ').' : ' raises to ' + to + '.'), 'sys');
+      return afterAction();
+    };
+
+    function nextActor() {   /* someone still owing a chip, or one that has not answered since the last raise */
+      const l = able().slice().sort(byTurn);
+      const owing = l.find(s => s.bet < T.bet); if (owing) return owing.ref;
+      const next = l.find(s => !s.acted); if (next) return next.ref;
+      return null;
+    }
+    function afterAction() {
+      if (live().length <= 1) return settle();
+      const a = nextActor();
+      if (a !== null) { T.toAct = a; return { ok: true, toAct: a }; }
+      /* nothing is owed anywhere and only one seat still has coins in front of them: whatever they would bet cannot be
+         called, so the rest of the board is dealt and the money is already in the middle */
+      if (able().length <= 1 && live().some(s => s.allin)) return runout();
+      return advance();
+    }
+    function dealStreet(n, name) {
+      burn();
+      for (let i = 0; i < n; i++) T.board.push(pop());
+      T.say(name + ': ' + T.board.map(cname).join(' ') + '.', 'sys');
+    }
+    function advance() {   /* one street finished: clear what is owed, deal, and let the seats answer again */
+      for (const s of dealt()) s.bet = 0;
+      T.bet = 0; T.minRaise = BB;
+      if (T.street === 'preflop') { T.street = 'flop'; dealStreet(3, 'Flop'); }
+      else if (T.street === 'flop') { T.street = 'turn'; dealStreet(1, 'Turn'); }
+      else if (T.street === 'turn') { T.street = 'river'; dealStreet(1, 'River'); }
+      else return settle();
+      for (const s of cards()) s.acted = false;
+      if (able().length <= 1 && live().some(s => s.allin)) return runout();
+      T.toAct = able().slice().sort(byTurn)[0].ref;
+      return { ok: true, street: T.street, toAct: T.toAct };
+    }
+    function runout() {   /* everyone still in is all-in: the board runs to the river with nobody left to bet */
+      for (let g = 0; g < 5 && T.board.length < 5; g++) {
+        if (T.board.length === 0) { T.street = 'flop'; dealStreet(3, 'Flop'); }
+        else if (T.board.length === 3) { T.street = 'turn'; dealStreet(1, 'Turn'); }
+        else { T.street = 'river'; dealStreet(1, 'River'); }
+      }
+      return settle();
+    }
+
+    function settle() {   /* pay from the bottom up: one pot per level a player actually committed to */
+      T.street = 'none'; T.toAct = -1;
+      const who = cards(), left = live();
+      for (const s of who) { s.showdown = false; s.acted = false;
+        if (!s.folded && s.hole) { s.rank = best(s.hole, T.board); s.score = s.rank.score; s.showdown = true; } }
+      const pots = [];
+      if (left.length <= 1) {   /* nobody to show down against - the pot, uncalled money included, goes across */
+        const w = left[0] || who.find(s => !s.folded);
+        if (w && T.pot > 0) { w.chips += T.pot; w.won += T.pot; pots.push({ amount: T.pot, win: [w.ref], who: [w.name], note: 'uncontested' }); }
+      } else {
+        const lv = []; for (const s of who) if (s.committed > 0 && lv.indexOf(s.committed) < 0) lv.push(s.committed);
+        lv.sort((a, b) => a - b);
+        let prev = 0;
+        for (const L of lv) {
+          let amt = 0; for (const s of who) amt += Math.max(0, Math.min(s.committed, L) - prev);
+          if (amt > 0) pots.push({ amount: amt, elig: who.filter(s => !s.folded && s.committed >= L) });
+          prev = L;
+        }
+        let sum = 0; for (const p of pots) sum += p.amount;
+        if (sum !== T.pot && pots.length) pots[pots.length - 1].amount += T.pot - sum;   /* never lose a chip to rounding */
+        for (const p of pots) {
+          const e = p.elig && p.elig.length ? p.elig : left.slice(0, 1);
+          let top = -1; for (const s of e) if (s.score > top) top = s.score;
+          const w = e.filter(s => s.score === top);
+          const share = Math.floor(p.amount / w.length);
+          for (const x of w) { x.chips += share; x.won += share; }
+          let odd = p.amount - share * w.length;
+          if (odd > 0) { const first = w.slice().sort(byBtn)[0]; first.chips += odd; first.won += odd; }
+          p.win = w.map(x => x.ref); p.who = w.map(x => x.name); p.score = top; delete p.elig;
+        }
+        for (const s of left.slice().sort((a, b) => b.score - a.score))
+          T.say((s.name || 'A player') + ': ' + s.hole.map(cname).join(' ') + ' - ' + describe(s.rank) + '.', 'sys');
+      }
+      const total = pots.reduce((a, p) => a + p.amount, 0);
+      T.say(pots.map((p, i) => (pots.length > 1 ? 'Pot ' + (i + 1) + ' of ' + p.amount + ' to ' : 'The pot (' + p.amount + ') to ') +
+        (p.who || []).join(' and ') + (p.note ? ' - ' + p.note : (p.who || []).length > 1 ? ' (split)' : '')).join('. '), 'sys');
+      T.pot = 0;
+      for (const s of dealt()) s.bet = 0;   /* what was in front of a seat is in the pot, and the pot is paid out */
+      T.result = { hand: T.hand, pots, total, contested: left.length > 1 };
+      T.status = seated().length >= 2 ? 'playing' : 'open';
+      for (const s of seated()) if (s.chips <= 0) T.say((s.name || 'A player') + ' has nothing left to play with.', 'sys');
+      return { ok: true, end: true, result: T.result };
+    }
+
+    T.row = () => ({   /* the public row: everything a client in the room is allowed to know */
+      id: T.id, street: T.street, board: T.board.slice(), pot: T.pot, bet: T.bet, hand: T.hand, toAct: T.toAct,
+      dealer: T.dealer, status: T.status,
+      seats: T.seats.filter(s => s && s.id).map(s => ({
+        ref: s.ref, name: s.name, chips: s.chips, bet: s.bet, in: !!s.in, has: !!s.hole && !s.out,
+        folded: !!s.folded, allin: !!s.allin, out: !!s.out, won: s.won || 0, show: !!(s.showdown && s.hole && !s.folded)
+      }))
+    });
+    T.rowFor = (ref) => { const r = T.row(), s = seatOf(ref);
+      if (s && s.hole) { const e = r.seats.find(x => x.ref === ref); if (e) e.hole = s.hole.slice(); } return r; };
+    T.pocket = (ref) => { const s = seatOf(ref); return s && s.hole ? s.hole.slice() : null; };
+    T.lastLog = () => T.log.slice(-1);
+    return T;
+  }
+
+  const LIB = { api: 1, v: 1, table, score5, score7, best, cname, cparse, CATS, STREETS, describe };
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('holdemlib', { api: 1, v: 1 }, () => LIB);
+  if (typeof module !== 'undefined' && module.exports) module.exports = LIB;
+  G.AshHoldemLib = LIB;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+<script>
 /* ASHVALE 3D rules core: the rules of the world and nothing else (no screen, no sound, no clock).
    Deterministic: fixed 0.6 s ticks, a seeded random with a saveable state, integer maths for every rule, no Date and no
    Math.random. The same data modules + seed + recorded commands replay to the same state (the arcade's referee can judge a
@@ -9313,7 +9650,7 @@ POSSIBILITY OF SUCH DAMAGE. */
     for (const P of PORTALS) if (!M.npcs.some(n => n.id === 'portal_' + P.id))
       M.npcs.push({ id: 'portal_' + P.id, name: 'Town portal', look: 'portal', x: P.x, y: P.y, portal: P.id, examine: 'A ring of standing stones, humming softly. Step through to travel to another town.' });
     const R = Rng(opts.seed == null ? 'ashvale3d' : opts.seed);
-    const S = { t: 0, uid: 1, players: {}, order: [], mobs: [], ground: [], dep: {}, fell: {}, cleared: {}, plants: {}, lit: {}, night: false, pending: [], ev: [], noAuth: {}, seen: {}, fires: [], weather: {}, salt: 0, dyn: 0, took: new Set(), chess: {} };
+    const S = { t: 0, uid: 1, players: {}, order: [], mobs: [], ground: [], dep: {}, fell: {}, cleared: {}, plants: {}, lit: {}, night: false, pending: [], ev: [], noAuth: {}, seen: {}, fires: [], weather: {}, salt: 0, dyn: 0, took: new Set(), chess: {}, poker: {} };
     const queue = [], log = [];
     const idx = M.key, kx = M.kx, ky = M.ky, inMap = M.inWorld;
     const cheb = (ax, ay, bx, by) => Math.max(Math.abs(ax - bx), Math.abs(ay - by));
@@ -9863,7 +10200,7 @@ POSSIBILITY OF SUCH DAMAGE. */
     const SEATED_BLOCK = new Set(['walk', 'attack', 'attackn', 'npc', 'take', 'gather', 'board', 'ride', 'climb', 'enter', 'crate', 'sign', 'follow', 'perch', 'sit']);
     function apply0(p, c) {
       if (p.dead && c.c !== 'style' && c.c !== 'run' && c.c !== 'retal' && c.c !== 'look') return;
-      if (p.seat && SEATED_BLOCK.has(c.c)) { msg(p, 'You are at the chess table - use Stand up to leave it.', 'warn'); return; }   /* 2026-10-10: no walking off a wagered game by accident */
+      if (p.seat && SEATED_BLOCK.has(c.c)) { msg(p, 'You are at the ' + (p.seat.k === 'pk' ? 'poker table' : 'chess table') + ' - use Stand up to leave it.', 'warn'); return; }   /* 2026-10-10: no walking off a wagered game by accident */
       if (isHawk(p) && ['npc', 'light', 'climb', 'buy', 'sell', 'trade', 'eat', 'use'].indexOf(c.c) >= 0 && !(c.c === 'use' && p.inv[c.slot | 0] && IT[p.inv[c.slot | 0].id].teleport)) { msg(p, 'A hawk can only fly, strike, fish and carry. Take off the ring over open ground to land.', 'warn'); return; }
       if (isHawk(p) && c.c === 'gather') { const n = nodeAt(idx(c.x | 0, c.y | 0)); if (n && nodeDef(n).skill !== 'fishing') { msg(p, 'A hawk catches fish; it cannot chop or mine.', 'warn'); return; } }
       if (c.c !== 'perch') p.perch = null;
@@ -9922,15 +10259,22 @@ POSSIBILITY OF SUCH DAMAGE. */
         case 'take': { const g = S.ground.find(q => q.uid === c.uid); if (g) { p.act = { k: 'take', uid: g.uid }; p.skilling = null; closeShop(p); } break; }
         case 'enter': { const o = passageAt(c.x, c.y); if (o && !p.dead) { p.act = { k: 'enter', x: o.x, y: o.y }; p.skilling = null; closeShop(p); } break; }   /* a cave mouth, a way out */
         case 'crate': { const o = crateAt(c.x | 0, c.y | 0); if (o && !p.dead) { p.act = { k: 'crate', x: o.x, y: o.y }; p.skilling = null; closeShop(p); } break; }
-        case 'sit': {   /* a bench at a chess table: walk there, sit; the host of the area seats you (see THE CHESS PARK) */
-          const T = tableById(String(c.table || '')), si = c.seat === 1 ? 1 : 0;
-          if (!T || !T.seats || !T.seats[si] || p.dead || p.boat || isHawk(p)) { msg(p, 'There is no seat there.', 'warn'); break; }
+        case 'sit': {   /* a chair at a chess table or a poker table: walk there, sit; the host of the area seats you */
+          const T = tableById(String(c.table || '')) || pokerTableById(String(c.table || '')), n = T && T.seats ? T.seats.length : 0;
+          if (!T || !n || p.dead || p.boat || isHawk(p)) { msg(p, 'There is no seat there.', 'warn'); break; }
+          const si = Math.max(0, Math.min(n - 1, c.seat | 0));
           if (p.seat && p.seat.t === T.id && p.seat.s === si) break;
           p.act = { k: 'sit', t: T.id, s: si }; p.skilling = null; closeShop(p); break;
         }
-        case 'stand': { if (p.seat) { if (isAuth(zoneOf(p.x, p.y))) standUp(p); else { const t = p.seat.t; p.seat = null; ev({ e: 'stand', p: p.id, t }); ev({ e: 'xstand', p: p.id, t }); } } p.seatWait = null; break; }
+        case 'stand': { if (p.seat) { if (isAuth(zoneOf(p.x, p.y))) standUp(p); else { const t = p.seat.t, pk = p.seat.k === 'pk'; p.seat = null; ev({ e: pk ? 'pstand' : 'stand', p: p.id, t }); ev({ e: pk ? 'xpstand' : 'xstand', p: p.id, t }); } } p.seatWait = null; break; }
+        case 'pact': {   /* fold / check / call / raise to N / all-in: the host of the area deals, as with a chess move */
+          if (!p.seat || p.seat.k !== 'pk') break;
+          const id = p.seat.t, a = String(c.a || '').slice(0, 6), to = c.to == null ? 0 : Math.max(0, Math.min(999999, c.to | 0));
+          if (isAuth(zoneOf(p.x, p.y))) pokerAct(p, id, a, to); else ev({ e: 'xpact', p: p.id, t: id, a, to });
+          break;
+        }
         case 'cmove': {   /* from, to in algebraic ('e2','e4'), promo one of q r b n */
-          if (!p.seat) break;
+          if (!p.seat || p.seat.k === 'pk') break;
           const id = p.seat.t, from = String(c.from || '').slice(0, 2), to = String(c.to || '').slice(0, 2), promo = /^[qrbn]$/.test(String(c.promo || '')) ? String(c.promo) : null;
           if (isAuth(zoneOf(p.x, p.y))) chessMove(p, id, from, to, promo); else ev({ e: 'xcmove', p: p.id, t: id, from, to, promo });
           break;
@@ -11401,6 +11745,7 @@ POSSIBILITY OF SUCH DAMAGE. */
     }
     function standUp(p, why) {   /* leave the bench: with a move on the board that is resigning (phase 1: no clocks) */
       if (!p.seat) return;
+      if (p.seat.k === 'pk') return pokerLeave(p, why);
       const id = p.seat.t, st = chessOf(id), col = seatColour(st, p.id);
       p.seat = null; p.seatWait = null;
       if (col) {
@@ -11452,6 +11797,159 @@ POSSIBILITY OF SUCH DAMAGE. */
     }
     function chessRows(keep) { const out = []; for (const T of tables()) { if (keep && !keep(T.x, T.y)) continue; const st = S.chess[T.id]; if (st && (st.w || st.b || st.status !== 'open')) out.push(chessRow(T.id)); } return out; }
     function faceTo(ax, ay, bx, by) { const dx = Math.sign(bx - ax), dy = Math.sign(by - ay); for (let k = 0; k < 8; k++) if (DIRS[k][0] === dx && DIRS[k][1] === dy) return k; return 2; }
+
+    // ---------------- THE POKER TABLES (2026-10-11, handoff/poker_plan.md)
+    /* Felt in the Saltmere tavern. A table is a zone object {k:'pokertable', id, x, y, seats:[[x,y] x 6]}: its seat
+       numbers are places in that list and the button moves round the ones that are taken. The HOST of the table's area
+       deals, like the chess park: a replica's sit / stand / action is asked of the host (events psit / pstand / pact,
+       which the engine carries) and comes back in the host's Pk rows (applyPoker). Rules are holdemlib. What travels is
+       the public row - everything but the cards in hands - with the hole cards of every seat beside it (hc), since the
+       room has one voice and no way to whisper to one player; a client shows a player only their own two. The table's
+       own word (g, the dealer's copy of the hand) stays home: it is what lets a reload continue a hand, and it is not
+       sent. The chips are chips: a thousand of them are laid out to whoever sits, they are not coins, nothing of yours
+       is at risk, and there are no stakes - that question is the operator's. */
+    const PK_BUY = 1000, PK_SB = 25, PK_BB = 50, PK_WAIT = 12, PK_CLOCK = 100, PK_IN = 1, PK_FOLD = 2, PK_ALLIN = 4, PK_CARD = 8, PK_ACTED = 16;
+    let HOLDEM = null;
+    function holdemLib() {
+      if (HOLDEM) return HOLDEM;
+      try { HOLDEM = AshCore.holdemlib || (root.ASH3D && root.ASH3D.get && root.ASH3D.get('holdemlib')) || root.AshHoldemLib || (typeof require === 'function' ? require('./holdemlib.js') : null); } catch (e) { HOLDEM = null; }
+      return HOLDEM;
+    }
+    const PKG = {};   /* the hand each table this game deals is actually running, by table id */
+    function pokerOf(id) { return S.poker[id] || (S.poker[id] = { t: id, v: 0, o: 'open', st: 'none', d: -1, sb: -1, bb: -1, p: 0, b: 0, a: -1, h: 0, bo: [], se: [], lg: [], r: null }); }
+    function pokerTableAt(x, y) { return (M.objects || []).find(o => o.k === 'pokertable' && o.x === (x | 0) && o.y === (y | 0)) || null; }
+    function pokerTableById(id) { return (M.objects || []).find(o => o.k === 'pokertable' && o.id === id) || null; }
+    function pokerTables() { return (M.objects || []).filter(o => o.k === 'pokertable'); }
+    function pokerGame(id) {   /* the hand a table this game deals is running; from the stored word when it is new here */
+      if (PKG[id]) return PKG[id];
+      const L = holdemLib(); if (!L) return null;
+      if (!pokerTableById(id)) return null;
+      const st = pokerOf(id), t = L.table({ id: String(id), small: PK_SB, big: PK_BB, int: (n) => R.int(n), tell: (text, by) => { for (const pid of S.order) { const p = S.players[pid]; if (p.x != null && zoneOf(p.x, p.y) === zoneOf(pokerTableById(id).x, pokerTableById(id).y)) msg(p, text, by || 'info'); } } });
+      if (st.g) { try { Object.assign(t, JSON.parse(st.g)); } catch (e) { return null; } }
+      else if (st.se.length) return null;   /* taken over from another game mid-hand: there is no deck to carry, so it is dealt out below */
+      PKG[id] = t; return t;
+    }
+    function pokerAbandon(id) {   /* this game has taken over a hand it cannot continue: the table is dealt out again */
+      const st = pokerOf(id);
+      st.o = 'open'; st.st = 'none'; st.a = -1; st.b = 0; st.p = 0; st.r = null; st.g = null; st.wt = S.t + PK_WAIT; st.mine = 1;
+      st.se = []; st.hc = null; st.v = (st.v | 0) + 1;
+      for (const p of Object.values(S.players)) if (p.seat && p.seat.t === id && p.seat.k === 'pk') { p.seat = null; ev({ e: 'pstand', p: p.id, t: id }); msg(p, 'The poker table is dealt out again - take a chair.', 'info'); }
+      emitPoker(id, { again: 1 });
+    }
+    function pokerSync(id, t) {   /* the dealer's copy into the row that travels: one shape, host and replica alike */
+      const st = pokerOf(id);
+      if (t.log.length > 40) t.log.splice(0, t.log.length - 40);
+      st.v = (st.v | 0) + 1; st.mine = 1; st.o = t.status; st.st = t.street; st.d = t.dealer; st.sb = t.sbSeat; st.bb = t.bbSeat;
+      st.p = t.pot | 0; st.b = t.bet | 0; st.a = t.toAct; st.h = t.hand | 0; st.bo = t.board.slice();
+      st.se = t.seats.filter(s => s && s.id != null).map(s => [s.ref | 0, s.id, s.chips | 0, s.bet | 0,
+        (s.in ? PK_IN : 0) | (s.folded ? PK_FOLD : 0) | (s.allin ? PK_ALLIN : 0) | ((s.hole && !s.out) ? PK_CARD : 0) | (s.acted ? PK_ACTED : 0)]);
+      st.lg = t.log.slice(-2).map(l => String(l.t || '').slice(0, 90));
+      st.r = t.result ? { p: t.result.pots.map(q => [q.amount | 0, (q.win || []).map(x => x | 0)]), c: t.result.contested ? 1 : 0 } : null;
+      st.hc = null;
+      for (const s of t.seats) if (s && s.id != null && s.hole && !s.out) { (st.hc = st.hc || []).push([s.ref | 0, s.hole[0] | 0, s.hole[1] | 0]); }
+      st.g = JSON.stringify(t);
+      st.wt = t.street === 'none' && S.t != null ? S.t + PK_WAIT : null;
+      st.tt = t.toAct >= 0 ? S.t : null;
+      return st;
+    }
+    function pokerRow(id) { const st = pokerOf(id), r = {}; for (const k in st) if (k !== 'g' && k !== 'mine' && k !== 'wt' && k !== 'tt') r[k] = st[k]; return r; }
+    function pokerRows(keep) { const out = []; for (const T of pokerTables()) { if (keep && !keep(T.x, T.y)) continue; const st = S.poker[T.id]; if (st && st.se && st.se.length) out.push(pokerRow(T.id)); } return out; }
+    function emitPoker(id, extra) { ev(Object.assign({ e: 'poker', t: id }, pokerRow(id), extra || {})); }
+    function pokerSeatName(p) { return String((p && p.name) || 'Someone').slice(0, 16); }
+    function pokerSitAt(p, T, si) {   /* p has walked onto the chair: take it. Two who can play and the hand is dealt */
+      si = si | 0;
+      const t = pokerGame(T.id);
+      if (!t) { msg(p, 'This table is being dealt out and will take players again in a moment.', 'warn'); return false; }
+      if (!T.seats || !T.seats[si]) return false;
+      const here = t.seats[si];
+      if (here && here.id && here.id !== p.id && here.in) { msg(p, 'That chair is taken.', 'warn'); return false; }
+      for (let k = 0; k < t.seats.length; k++) if (t.seats[k] && t.seats[k].id === p.id && k !== si) pokerUnseat(t, k);
+      if (p.seat && p.seat.t !== T.id) standUp(p);
+      const same = here && here.id === p.id;
+      let chips = same ? here.chips : PK_BUY;
+      if (chips <= 0) chips = PK_BUY;
+      t.addSeat(si, { id: p.id, name: pokerSeatName(p), chips });
+      const seat = T.seats[si];
+      p.x = seat[0]; p.y = seat[1]; p.path = []; p.act = null; p.skilling = null; p.seat = { t: T.id, s: si, k: 'pk' }; p.seatWait = null;
+      p.face = faceTo(p.x, p.y, T.x, T.y); closeShop(p);
+      pokerSync(T.id, t);
+      if (t.street === 'none' && t.playable() >= 2) t.newHand();
+      pokerSync(T.id, t);
+      ev({ e: 'psit', p: p.id, t: T.id, s: si }); emitPoker(T.id);
+      msg(p, 'You sit down at the poker table with ' + chips + ' chips. They are chips, not coins - you can get up whenever you like.', 'info');
+      return true;
+    }
+    function pokerUnseat(t, ref) {   /* a chair given up: cards in the air means the hand is folded */
+      t.leave(ref);
+    }
+    function pokerLeave(p, why) {
+      if (!p.seat) return;
+      const id = p.seat.t, ref = p.seat.s | 0;
+      p.seat = null; p.seatWait = null;
+      const t = pokerGame(id);
+      if (t) { pokerUnseat(t, ref); pokerSync(id, t); }
+      else { const st = pokerOf(id); st.se = (st.se || []).filter(s => s[1] !== p.id); st.v = (st.v | 0) + 1; }
+      ev({ e: 'pstand', p: p.id, t: id }); emitPoker(id);
+      if (why === 'left') return;
+      msg(p, 'You get up from the poker table.', 'info');
+    }
+    function pokerAct(p, id, a, to) {   /* the one way a hand moves: fold, check, call, raise to N, or all-in */
+      const t = pokerGame(id);
+      if (!t) { msg(p, 'This table is being dealt out and will take players again in a moment.', 'warn'); return false; }
+      if (!p.seat || p.seat.t !== id || p.seat.k !== 'pk') { msg(p, 'You are not sitting at that table.', 'warn'); return false; }
+      const ref = p.seat.s | 0;
+      if (['fold', 'check', 'call', 'raise', 'allin'].indexOf(a) < 0) return false;
+      const can = t.can(ref);
+      if (a === 'raise' && !can.raise) { msg(p, can.check ? 'There is nothing to raise into - check, or bet.' : 'You cannot raise here.', 'warn'); pokerSync(id, t); emitPoker(id); return false; }
+      const r = t.act(ref, a === 'raise' ? { a, to: Math.max(0, to | 0) } : { a });
+      pokerSync(id, t);
+      if (r.error) { msg(p, r.error, 'warn'); emitPoker(id); return false; }
+      emitPoker(id, {});
+      return true;
+    }
+    function hostPokerSit(pid, id, si) { const p = S.players[pid], T = pokerTableById(id); if (!p || !T || !T.seats[si]) return false; const seat = T.seats[si]; if (cheb(p.x, p.y, seat[0], seat[1]) > 8) return false; return pokerSitAt(p, T, si | 0); }
+    function hostPokerStand(pid, id) { const p = S.players[pid]; if (p && p.seat && p.seat.t === id) pokerLeave(p); }
+    function hostPokerAct(pid, id, a, to) { const p = S.players[pid]; return !!p && pokerAct(p, id, String(a || ''), to | 0); }
+    function applyPoker(rows) {   /* the dealer's word on its tables: the row, and our own seat follows it, as in chess */
+      for (const r of rows || []) {
+        if (!r || !r.t) continue;
+        const st = pokerOf(r.t), was = st.v;
+        for (const k of ['o', 'st', 'd', 'sb', 'bb', 'p', 'b', 'a', 'h', 'bo', 'se', 'lg', 'r', 'hc']) if (r[k] !== undefined) st[k] = r[k];
+        if (r.v != null) st.v = r.v | 0;
+        st.mine = 0;
+        const T = pokerTableById(r.t);
+        const at = {}; for (const s of st.se || []) if (s && s[1] != null) at[s[1]] = s[0] | 0;
+        for (const p of Object.values(S.players)) {
+          if (at[p.id] != null && (!p.seat || p.seat.t !== r.t)) {
+            const si = at[p.id], seat = T && T.seats[si];
+            if (seat) { p.x = seat[0]; p.y = seat[1]; p.path = []; p.act = null; p.seat = { t: r.t, s: si, k: 'pk' }; p.seatWait = null; p.face = faceTo(p.x, p.y, T.x, T.y); ev({ e: 'psit', p: p.id, t: r.t, s: si }); }
+          } else if (p.seat && p.seat.t === r.t && p.seat.k === 'pk' && at[p.id] == null) { p.seat = null; ev({ e: 'pstand', p: p.id, t: r.t }); }
+        }
+        if (st.o === 'playing' && !Object.keys(at).length) { for (const p of Object.values(S.players)) if (p.seat && p.seat.t === r.t && p.seat.k === 'pk') { p.seat = null; ev({ e: 'pstand', p: p.id, t: r.t }); } }
+        if (was !== st.v) emitPoker(r.t, {});
+      }
+    }
+    function pokerTick() {   /* the dealer's own clock: a fresh hand once the last is settled, and a seat that will not answer folded */
+      for (const T of pokerTables()) {
+        if (!isAuth(zoneOf(T.x, T.y))) continue;
+        const st = pokerOf(T.id);
+        if (st.mine === 0 && st.se && st.se.length) { if (st.o === 'playing') pokerAbandon(T.id); continue; }
+        const t = pokerGame(T.id); if (!t) continue;
+        if (t.street === 'none') {
+          if (st.wt == null) { pokerSync(T.id, t); continue; }
+          if (S.t >= st.wt) { if (t.playable() < 2) { if (t.status !== 'open') { t.status = 'open'; pokerSync(T.id, t); emitPoker(T.id); } st.wt = S.t + PK_WAIT; continue; } t.newHand(); pokerSync(T.id, t); emitPoker(T.id); }
+          continue;
+        }
+        if (t.toAct < 0) { pokerSync(T.id, t); continue; }
+        if (st.tt == null) { st.tt = S.t; continue; }
+        if (S.t - st.tt >= PK_CLOCK) {
+          const can = t.can(t.toAct), s = t.seats[t.toAct];
+          t.act(t.toAct, can.check ? { a: 'check' } : { a: 'fold' });
+          t.say((s && s.name ? s.name : 'A player') + (can.check ? ' checks in their turn.' : ' has not answered and folds.'), 'sys');
+          pokerSync(T.id, t); emitPoker(T.id);
+        }
+      }
+    }
 
     // ---------------- per-tick: players
     /* RICING (2026-10-07): the knocker rides where the poler takes the canoe; every few ticks, from a clump of manoomin
@@ -11948,10 +12446,10 @@ POSSIBILITY OF SUCH DAMAGE. */
       } else if (a && a.k === 'trap') {   /* walk to your snare, then look in it (or take it up) */
         if (inReach(p.x, p.y, a.x, a.y, 1)) { p.act = null; p.path = []; checkTrap(p, a.x, a.y, a.up); }
         else { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, a.x, a.y, 1), a.x, a.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, a.x, a.y, 1)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
-      } else if (a && a.k === 'sit') {   /* walk onto the bench, then sit (a replica asks the area's host, which seats it through Ch rows) */
-        const T = tableById(a.t), seat = T && T.seats[a.s];
+      } else if (a && a.k === 'sit') {   /* walk onto the bench, then sit (a replica asks the area's host, which seats it through Ch or Pk rows) */
+        const T = tableById(a.t) || pokerTableById(a.t), pk = !!(T && T.k === 'pokertable'), seat = T && T.seats[a.s];
         if (!seat) p.act = null;
-        else if (p.x === seat[0] && p.y === seat[1]) { if (isAuth(zoneOf(p.x, p.y))) sitAt(p, T, a.s); else { p.seatWait = { t: T.id, s: a.s }; p.act = null; p.path = []; p.face = faceTo(p.x, p.y, T.x, T.y); ev({ e: 'xsit', p: p.id, t: T.id, s: a.s }); } }
+        else if (p.x === seat[0] && p.y === seat[1]) { if (isAuth(zoneOf(p.x, p.y))) (pk ? pokerSitAt : sitAt)(p, T, a.s); else { p.seatWait = { t: T.id, s: a.s }; p.act = null; p.path = []; p.face = faceTo(p.x, p.y, T.x, T.y); ev({ e: pk ? 'xpsit' : 'xsit', p: p.id, t: T.id, s: a.s }); } }
         else { p.path = findPath(p.x, p.y, (x, y) => x === seat[0] && y === seat[1], seat[0], seat[1]); stepPath(p); if (!p.path.length && !(p.x === seat[0] && p.y === seat[1])) { msg(p, "I can't reach that bench!", 'warn'); p.act = null; } }
       } else if (a && a.k === 'board') {   /* walk to the canoe, sit down in it: it floats where it lay */
         if (inReach(p.x, p.y, a.x, a.y, 1)) { const lb = BOATS.get(a.x + ',' + a.y); if (!lb && dockFull(a.x, a.y)) { msg(p, 'There is no canoe at the landing: three are already left at the banks nearby. Take one of those.', 'warn'); p.act = null; return; } if (lb) { p.face = lb.face; takeBoat(a.x, a.y, p.id); } p.act = null; p.path = []; p.boat = 1; p.x = a.x; p.y = a.y; p.land = null; ev({ e: 'boat', p: p.id, on: 1 }); msg(p, 'You sit down in the canoe and take up the paddle. Point at the water to paddle there, or at the shore to land.'); }
@@ -12384,6 +12882,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       ageStumps();
       for (const k in S.dep) if (S.dep[k] <= S.t) { delete S.dep[k]; ev({ e: 'regrow', node: +k }); }
       for (const f of S.fires.slice()) if (f.until <= S.t && isAuth(zoneOf(f.x, f.y))) fireOut(f.uid);
+      pokerTick();
       weatherTick();
       return S.ev;
     }
@@ -12515,6 +13014,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       setNewHome: h => { if (HOMES[h]) NEWHOME = h; }, markGift: (pid, id, n) => markGift(S.players[pid], id, n), homeOf: p => (p && p.home) || 'ashvale', npcFor, lineFor, questForHome, questMarks,
       API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, trapOf, offerOf, isBlessed: (pid, x, y) => !!(S.players[pid] && blessed(S.players[pid], x, y)), setNature, natureHours, setNatureTell, seasonOn, dayHour, fireLit, steamFor, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       tableAt, tableById, tables, chessOf, chessRow, chessRows, chessGame, chessTurn, chessMoves, applyChess, hostSit, hostStand, hostMove, standUp,
+      pokerTableAt, pokerTableById, pokerTables, pokerOf, pokerRow, pokerRows, pokerGame, applyPoker, hostPokerSit, hostPokerStand, hostPokerAct, pokerLeave, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED],
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
@@ -13037,6 +13537,130 @@ POSSIBILITY OF SUCH DAMAGE. */
       const put = (sq, mat) => { const m = new THREE.Mesh(MARK_GEO, mat); const [x, y, z] = sqPos(set, sq); m.position.set(x, y + 0.003, z); m.renderOrder = 2; set.group.add(m); set.marks.push(m); };
       if (sel) put(sel, MARK_MAT.sel);
       for (const t of targets || []) put(t.to || t, t.capture ? MARK_MAT.cap : MARK_MAT.to);
+    }
+    /* THE POKER TABLE (handoff/poker_plan.md, move 5). One canvas of 64 faces - the 52 cards and a back - and one mesh
+       per card, so a whole table costs a dozen draw calls. Card ids are holdemlib's: rank*4 + suit, the suits in the
+       order clubs diamonds hearts spades. The felt and the rail are built with the props; pokerShow lays out the cards,
+       the bets and the button, and a card travels out to its seat on a TWEEN, as a chess piece slides. The last model
+       a table was shown is kept in PK_STATE, so rebuilding the region puts the hand back on the felt. */
+    const POKER = Object.create(null), PK_STATE = Object.create(null);
+    const CARD_W = 0.15, CARD_H = 0.212, PW = 96, PH = 144, PBACK = 63, CARD_Y = 0.007;
+    const PRANKS = '23456789TJQKA', PINK = ['#20202a', '#b23a30', '#b23a30', '#20202a'];
+    const CHIP_GEO = new THREE.CylinderGeometry(0.075, 0.075, 0.028, 12);
+    const CHIP_MAT = [0xa8302a, 0x2f5f9a, 0x2f7a44, 0xe8e2d0].map(c => new THREE.MeshLambertMaterial({ color: c, flatShading: true }));
+    const BTN_GEO = new THREE.CylinderGeometry(0.065, 0.065, 0.022, 14), BTN_MAT = new THREE.MeshLambertMaterial({ color: 0xf2eee0 });
+    const TURN_GEO = new THREE.TorusGeometry(0.15, 0.014, 6, 22), TURN_MAT = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.85 });
+    let CARD_TEX = null;
+    function roundedRect(g, x, y, w, h, r) {
+      g.beginPath(); g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
+      g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      g.lineTo(x + r, y + h); g.quadraticCurveTo(x, y + h, x, y + h - r);
+      g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y); g.closePath();
+    }
+    function pip(g, suit, cx, cy, s) {   /* a club, a diamond, a heart, a spade, as paths - no font can be trusted for them */
+      g.beginPath();
+      if (suit === 0) {
+        for (const d of [[0, -0.46], [-0.40, 0.20], [0.40, 0.20]]) { g.moveTo(cx + d[0] * s + 0.27 * s, cy + d[1] * s); g.arc(cx + d[0] * s, cy + d[1] * s, 0.27 * s, 0, Math.PI * 2); }
+        g.moveTo(cx - 0.06 * s, cy + 0.10 * s); g.lineTo(cx + 0.16 * s, cy + 0.74 * s); g.lineTo(cx - 0.16 * s, cy + 0.74 * s); g.closePath();
+      } else if (suit === 1) {
+        g.moveTo(cx, cy - 0.72 * s); g.lineTo(cx + 0.52 * s, cy); g.lineTo(cx, cy + 0.72 * s); g.lineTo(cx - 0.52 * s, cy); g.closePath();
+      } else if (suit === 2) {
+        g.moveTo(cx, cy + 0.72 * s);
+        g.bezierCurveTo(cx - 0.95 * s, cy - 0.06 * s, cx - 0.42 * s, cy - 0.76 * s, cx, cy - 0.30 * s);
+        g.bezierCurveTo(cx + 0.42 * s, cy - 0.76 * s, cx + 0.95 * s, cy - 0.06 * s, cx, cy + 0.72 * s);
+      } else {
+        g.moveTo(cx, cy - 0.76 * s);
+        g.bezierCurveTo(cx + 0.92 * s, cy + 0.02 * s, cx + 0.46 * s, cy + 0.44 * s, cx + 0.11 * s, cy + 0.30 * s);
+        g.lineTo(cx + 0.17 * s, cy + 0.74 * s); g.lineTo(cx - 0.17 * s, cy + 0.74 * s); g.lineTo(cx - 0.11 * s, cy + 0.30 * s);
+        g.bezierCurveTo(cx - 0.46 * s, cy + 0.44 * s, cx - 0.92 * s, cy + 0.02 * s, cx, cy - 0.76 * s);
+      }
+      g.fill();
+    }
+    function cardKit() {   /* the atlas, painted once for the whole game: 8 cells across, 8 down, the last one the back */
+      if (CARD_TEX) return CARD_TEX;
+      const cv = document.createElement('canvas'); cv.width = PW * 8; cv.height = PH * 8;
+      const g = cv.getContext('2d');
+      for (let i = 0; i < 64; i++) {
+        const px = (i % 8) * PW, py = ((i / 8) | 0) * PH;
+        roundedRect(g, px + 4, py + 4, PW - 8, PH - 8, 9);
+        if (i === PBACK) {
+          g.fillStyle = '#2f4f86'; g.fill(); g.strokeStyle = '#d8e0ee'; g.lineWidth = 3; g.stroke();
+          g.save(); roundedRect(g, px + 11, py + 11, PW - 22, PH - 22, 6); g.clip();
+          g.strokeStyle = 'rgba(216,224,238,0.5)'; g.lineWidth = 2;
+          for (let k = -PH; k < PW + PH; k += 11) { g.beginPath(); g.moveTo(px + k, py); g.lineTo(px + k + PH, py + PH); g.stroke(); }
+          g.restore(); continue;
+        }
+        g.fillStyle = '#f8f5ec'; g.fill(); g.strokeStyle = '#bdb49d'; g.lineWidth = 2; g.stroke();
+        const rank = PRANKS[i >> 2], suit = i & 3;
+        g.fillStyle = PINK[suit]; g.textAlign = 'left'; g.textBaseline = 'top';
+        g.font = 'bold ' + (rank === 'T' ? 19 : 24) + 'px "DejaVu Sans", sans-serif';
+        g.fillText(rank === 'T' ? '10' : rank, px + 10, py + 8);
+        pip(g, suit, px + PW / 2, py + PH / 2, PW * 0.40);
+        pip(g, suit, px + PW - 26, py + PH - 32, PW * 0.17);
+      }
+      CARD_TEX = new THREE.CanvasTexture(cv); CARD_TEX.colorSpace = THREE.SRGBColorSpace; CARD_TEX.anisotropy = 4;
+      return CARD_TEX;
+    }
+    const cardUV = (id) => { const c = id % 8, r = (id / 8) | 0; return [c / 8, 1 - (r + 1) / 8, (c + 1) / 8, 1 - r / 8]; };
+    function cardFace(mesh, id) {   /* which cell of the atlas this card shows: turn it over by asking for the back */
+      const uv = cardUV(id), a = mesh.geometry.attributes.uv;
+      a.setXY(0, uv[0], uv[3]); a.setXY(1, uv[2], uv[3]); a.setXY(2, uv[0], uv[1]); a.setXY(3, uv[2], uv[1]);
+      a.needsUpdate = true; mesh.userData.card = id;
+    }
+    function cardMesh(mat, id) { const m = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W, CARD_H), mat); cardFace(m, id); return m; }
+    function pokerShow(id, m) {   /* the engine's model of a table: board, each seat's two cards (down for the ones it keeps),
+                                     the bets in front of each chair, who has the button, whose turn it is */
+      PK_STATE[id] = m;
+      const T = POKER[id]; if (!T) return;
+      if (!m) { for (const k of Object.keys(T.cards)) { T.group.remove(T.cards[k].g); delete T.cards[k]; } return; }
+      const top = T.oy, want = {};
+      for (let i = 0; i < (m.board || []).length; i++) want['b' + i] = { face: m.board[i] | 0, x: T.ox + (i - 2) * 0.17, z: T.oz - 0.07, ang: 0 };
+      for (const h of m.hands || []) {
+        const s = T.spots[h.ref | 0]; if (!s) continue;
+        const dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1, ux = dx / L, uz = dz / L, ang = Math.atan2(dx, dz);
+        const px = T.ox + ux * 0.60, pz = T.oz + uz * 0.60, face = h.down ? PBACK : (h.c && h.c[0] != null ? h.c[0] : PBACK);
+        want['h' + (h.ref | 0) + 0] = { face, x: px + uz * 0.048, z: pz - ux * 0.048, ang: ang + 0.11 };
+        want['h' + (h.ref | 0) + 1] = { face: h.down ? PBACK : (h.c && h.c[1] != null ? h.c[1] : PBACK), x: px - uz * 0.048, z: pz + ux * 0.048, ang: ang - 0.11 };
+      }
+      for (const k of Object.keys(T.cards)) if (!want[k]) { T.group.remove(T.cards[k].g); delete T.cards[k]; }
+      for (const k of Object.keys(want)) {
+        const w = want[k], c = T.cards[k], cy = top + CARD_Y;
+        if (c) {
+          if (c.g.userData.face !== w.face) { cardFace(c.m, w.face); c.g.userData.face = w.face; }
+          c.g.rotation.y = w.ang;
+          if (Math.abs(c.g.position.x - w.x) > 0.004 || Math.abs(c.g.position.z - w.z) > 0.004) {
+            TWEENS.push({ m: c.g, x0: c.g.position.x, z0: c.g.position.z, x: w.x, z: w.z, y: cy, t: 0, dur: 0.34, lift: 0.06 });
+          }
+          continue;
+        }
+        const g = new THREE.Group(), holder = new THREE.Group(), mesh = cardMesh(T.mat, w.face);
+        holder.rotation.x = -Math.PI / 2; g.add(holder); holder.add(mesh);
+        g.position.set(w.x, cy, w.z); g.rotation.y = w.ang; g.userData.face = w.face;
+        T.group.add(g); T.cards[k] = { g, m: mesh };
+      }
+      for (const s of T.spots) {   /* the pot in front of each chair: one chip to a big blind, stacked, capped */
+        const ref = s.ref, n = (m.bets && m.bets[ref]) | 0, st = T.chips[ref] = T.chips[ref] || { n: -1, g: new THREE.Group() };
+        if (st.n === n) continue;
+        st.n = n; for (const c of st.g.children.slice()) st.g.remove(c);
+        const dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1;
+        const px = T.ox + dx / L * 0.80, pz = T.oz + dz / L * 0.80;
+        const k = Math.max(0, Math.min(9, Math.round(n / 25)));
+        for (let i = 0; i < k; i++) {
+          const c = new THREE.Mesh(CHIP_GEO, CHIP_MAT[i % 4]); c.position.set(px, top + 0.016 + i * 0.03, pz); st.g.add(c);
+        }
+        if (!st.g.parent) T.group.add(st.g);
+      }
+      if (T.btn) { T.group.remove(T.btn); T.btn = null; }
+      if (m.dealer != null && T.spots[m.dealer | 0]) {
+        const s = T.spots[m.dealer | 0], dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1;
+        const b = new THREE.Mesh(BTN_GEO, BTN_MAT); b.position.set(T.ox + dx / L * 0.86, top + 0.02, T.oz + dz / L * 0.86); T.group.add(b); T.btn = b;
+      }
+      if (T.turn) { T.group.remove(T.turn); T.turn = null; }
+      if (m.turn != null && T.spots[m.turn | 0]) {
+        const s = T.spots[m.turn | 0], dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1;
+        const r = new THREE.Mesh(TURN_GEO, TURN_MAT); r.rotation.x = Math.PI / 2;
+        r.position.set(T.ox + dx / L * 0.60, top + 0.05, T.oz + dz / L * 0.60); T.group.add(r); T.turn = r;
+      }
     }
     const SNOWC = new THREE.Color(0xf2f1ec);
 
@@ -14259,6 +14883,24 @@ POSSIBILITY OF SUCH DAMAGE. */
             const bd = new THREE.Mesh(new THREE.BoxGeometry(8 * SQ, 0.06, 8 * SQ), new THREE.MeshBasicMaterial({ visible: false })); bd.position.set(x, top + 0.03, z); bd.userData.pick = { kind: 'square', id, x: o.x, y: o.y }; group.add(bd); pickables.push(bd);
             break;
           }
+          case 'pokertable': {   /* the felt, the rail and the six chairs' places; pokerShow (called by the engine, and again
+               here after a rebuild) lays the cards, the bets and the button on it. Seats are tile pairs beside the table. */
+            const fl = floorY(o, y), top = fl + 0.74, id = o.id || ('p' + o.x + ',' + o.y);
+            const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 0.7, 12), lam(0x3d2b1d)); leg.position.set(x, fl + 0.36, z); group.add(leg);
+            const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.40, 0.48, 0.07, 16), lam(0x33241a)); foot.position.set(x, fl + 0.04, z); group.add(foot);
+            const felt = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.07, 40), lam(new THREE.Color(o.felt || 0x1f4d38).getHex()));
+            felt.scale.set(0.95, 1, 0.70); felt.position.set(x, top - 0.035, z); group.add(felt);
+            const rail = new THREE.Mesh(new THREE.TorusGeometry(1, 0.09, 8, 36), lam(0x54341f));
+            rail.rotation.x = Math.PI / 2; rail.scale.set(0.95, 0.70, 1); rail.position.set(x, top + 0.01, z); group.add(rail);
+            const mat = new THREE.MeshBasicMaterial({ map: cardKit(), side: THREE.DoubleSide });
+            mat.userData.shared = true;   /* the atlas is one for the whole game - dispose() must not take it with this region */
+            const gg = new THREE.Group(); group.add(gg);
+            POKER[id] = { ox: x, oy: top, oz: z, spots: (o.seats || []).map((s, i) => ({ x: s[0] + 0.5, z: s[1] + 0.5, ref: i })), cards: {}, chips: {}, group: gg, mat };
+            const pk = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.9, 1.8), new THREE.MeshBasicMaterial({ visible: false }));
+            pk.position.set(x, fl + 0.4, z); pk.userData.pick = { kind: 'pokertable', id, x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
+            pokerShow(id, PK_STATE[id]);
+            break;
+          }
           case 'chair': { const fl = floorY(o, y); B.add('box', 0x7a4a26, x, fl + 0.36, z, 0.42, 0.06, 0.42); B.add('box', 0x7a4a26, x, fl + 0.65, z - 0.19, 0.42, 0.55, 0.05); for (const sx of [-1, 1]) for (const sz of [-1, 1]) B.add('box', 0x5a3a1e, x + sx * 0.17, fl + 0.18, z + sz * 0.17, 0.05, 0.36, 0.05); break; }
           case 'bed': { const fl = floorY(o, y), w = (o.w || 1) - 0.15, d = (o.h || 1) - 0.15; B.add('box', 0x6a4426, x, fl + 0.2, z, w, 0.4, d); B.add('box', [0xa03a3a, 0x3a6aa0, 0x6a8a3a][(o.x + o.y) % 3], x, fl + 0.43, z + 0.12, w - 0.06, 0.1, d - 0.4); B.add('box', 0xf0ead8, x, fl + 0.46, z - d / 2 + 0.25, w - 0.25, 0.12, 0.3); B.add('box', 0x5a3a1e, x, fl + 0.55, z - d / 2 + 0.04, w, 0.7, 0.08); break; }
           case 'fireplace': case 'furnace': {
@@ -14405,7 +15047,7 @@ POSSIBILITY OF SUCH DAMAGE. */
         dispose() {
           group.traverse(o => {
             if (o.userData && o.userData.boardId) { const B = BOARDS[o.userData.boardId]; if (B) B.faces = B.faces.filter(f => f !== o); }
-            if (o.geometry) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); const mt = o.material; if (mt && mt.map && mt.map.isCanvasTexture) { mt.map.dispose(); mt.dispose(); }
+            if (o.geometry) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); const mt = o.material; if (mt && mt.map && mt.map.isCanvasTexture && !(mt.userData && mt.userData.shared)) { mt.map.dispose(); mt.dispose(); }   /* a shared atlas (the cards) outlives the region */
           });   /* painted signs are this region's own */
           for (const L of [TREE_REG, FLORA_REG, RICE_REG]) for (let i = L.length - 1; i >= 0; i--) if (L[i].g === group) L.splice(i, 1);
         },
@@ -14463,7 +15105,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -15346,6 +15988,97 @@ POSSIBILITY OF SUCH DAMAGE. */
 
 </script>
 <script>
+/* ASHVALE 3D HUD: the poker table in the Saltmere tap room (handoff/poker_plan.md). Seated at the felt the Ashvale HUD
+   steps aside (the chat stays) and this small panel takes over: who is sitting, their chips and their bet, the pot and
+   the bet to answer, the board, your own two cards, the last words the table said, and your answer to the bet - fold,
+   check, call, raise, all-in - with the way up. The cards themselves lie on the 3D felt (scene.js pokerShow); this is
+   the reading of the table's row. The table's own rules (holdemlib) answer whether a button was a legal one.
+   install(K) adds K.pokerOpen(view, cb), K.pokerUpdate(view), K.pokerClose(). */
+(function (G) {
+  'use strict';
+  const CSS = `
+.ash .lay.poker > .ui:not(.pokerp):not(.chatw):not(.help){display:none !important}
+.ash .lay.poker .hover{display:none !important}
+.ash .lay.poker .chatw .chat{max-height:54px}
+.ash .pokerp{position:absolute;right:8px;top:8px;width:216px;opacity:.94;max-width:calc(100vw - 20px);padding:8px 10px;font-size:13px;line-height:1.35;color:#eee;background:linear-gradient(#2b3a33,#1b241f);border:2px solid #12181a;border-radius:6px;box-shadow:0 4px 14px #0008;pointer-events:auto}
+.ash .pokerp h3{margin:0 0 6px;font:bold 15px Georgia,serif;color:#e9e2cf;letter-spacing:.5px}
+.ash .pokerp .pl{display:flex;justify-content:space-between;align-items:center;padding:3px 6px;border-radius:4px;margin:2px 0;background:#0003}
+.ash .pokerp .pl.turn{background:#ffd23f22;box-shadow:inset 0 0 0 1px #ffd23f88}
+.ash .pokerp .pl.out{opacity:.45}
+.ash .pokerp .pl b{font-weight:normal;color:#cbd6cd}
+.ash .pokerp .pl .ch{font-family:ui-monospace,Menlo,Consolas,monospace;color:#e8e2d0}
+.ash .pokerp .pl .bt{color:#ffd23f;margin-left:6px}
+.ash .pokerp .pl .d{display:inline-block;width:13px;height:13px;border-radius:50%;background:#f2eee0;color:#26302a;font-size:9px;font-weight:bold;text-align:center;line-height:13px;margin-right:5px;vertical-align:-1px}
+.ash .pokerp .stt{margin:7px 0 3px;color:#ffd23f;font-weight:bold}
+.ash .pokerp .stt.wait{color:#9fc3ff}
+.ash .pokerp .cards{margin:2px 0 5px;font-size:17px;letter-spacing:1px;min-height:20px}
+.ash .pokerp .cd{display:inline-block;min-width:20px;padding:1px 3px;margin-right:3px;background:#f4f1e8;color:#20202a;border-radius:3px;box-shadow:0 1px 2px #0007;font-size:14px;text-align:center}
+.ash .pokerp .cd.r{color:#b23a30}
+.ash .pokerp .cd.b{background:repeating-linear-gradient(45deg,#3a5f86,#3a5f86 3px,#2b4a6b 3px,#2b4a6b 6px);color:transparent}
+.ash .pokerp .pot{color:#c8c3b4;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+.ash .pokerp .lg{font-size:11px;color:#a9b3a6;max-height:30px;overflow:hidden;margin:4px 0}
+.ash .pokerp .btns{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
+.ash .pokerp .btn{margin:0;padding:6px 9px}
+.ash .pokerp .rz{display:none;margin-top:6px;padding:6px;background:#0005;border-radius:4px}
+.ash .pokerp .rz.on{display:block}
+@media (max-width:600px){.ash .pokerp{right:6px;top:6px;width:180px;font-size:12px}.ash .pokerp .lg{max-height:20px}}`;
+  const RANK = '23456789TJQKA', SUIT = ['♣', '♦', '♥', '♠'], RED = [0, 1, 1, 0];
+  const STREET = { none: 'between hands', preflop: 'the first round', flop: 'the flop', turn: 'the turn', river: 'the river' };
+  function cardTxt(id) { return id == null ? '<span class="cd b">•</span>' : '<span class="cd' + (RED[id & 3] ? ' r' : '') + '">' + RANK[(id >> 2) % 13] + SUIT[id & 3] + '</span>'; }
+  function install(K) {
+    const { api, el, ui, A } = K, esc = A.esc;
+    if (!document.getElementById('ash-poker-css')) { const st = document.createElement('style'); st.id = 'ash-poker-css'; st.textContent = CSS; document.head.appendChild(st); }
+    let box = null, cb = null, view = null, raise = false;
+    function statusOf(v) {
+      if (v.open) return { cls: 'wait', text: v.seats.length > 1 ? 'The table is dealing the next hand' : 'Waiting for players to take chairs' };
+      const t = v.seats.find(s => s.ref === v.turn);
+      if (v.myTurn) return { text: 'Your turn' + (v.call > 0 ? ' — call ' + v.call : ' — check') };
+      if (v.inHand && v.call > 0 && t) return { cls: 'wait', text: esc(t.name) + (t.allin ? ' is all-in' : ' bets ' + v.bet) };
+      if (t) return { cls: 'wait', text: esc(t.name) + ' to act' };
+      return { cls: 'wait', text: (STREET[v.street] || v.street || '') + (v.hand ? ' — hand ' + v.hand : '') };
+    }
+    function winTxt(v) {
+      if (!v.result || !(v.result.p || []).length) return '';
+      const bits = [];
+      for (const q of v.result.p) { const ns = v.seats.filter(s => (q[1] || []).indexOf(s.ref) >= 0).map(s => s.name); if (ns.length) bits.push(ns.join(' & ') + ' take' + (ns.length > 1 ? '' : 's') + ' ' + q[0]); }
+      return bits.join('; ');
+    }
+    function draw() {
+      if (!box || !view) return;
+      const v = view, you = (s) => s.id === v.me, pot = v.pot, st = statusOf(v);
+      const mine = v.seats.filter(s => you(s))[0] || null;
+      const lo = v.bet ? v.bet * 2 : 100, hi = v.bet + (mine ? mine.chips : 0), potR = v.bet + pot;
+      const amounts = [];
+      if (hi > Math.max(v.bet, lo - 1)) { amounts.push(Math.min(Math.max(lo, v.bet + 1), hi)); if (potR > amounts[0] && potR < hi) amounts.push(potR); if (hi > amounts[amounts.length - 1]) amounts.push(hi); }
+      box.innerHTML = '<h3>Poker</h3>'
+        + v.seats.map(s => '<div class="pl' + (v.turn === s.ref && !v.open ? ' turn' : '') + (((s.folded || !s.dealt) && !v.open) ? ' out' : '') + '">'
+          + '<span>' + (v.dealer === s.ref ? '<i class="d">D</i>' : '') + '<b>' + esc(s.name) + (you(s) ? ' <span style="color:#9fc3ff">(you)</span>' : '') + '</b></span>'
+          + '<span><span class="ch">' + s.chips + '</span>' + (s.bet ? '<span class="bt">' + s.bet + '</span>' : '') + '</span></div>').join('')
+        + '<div class="stt ' + (st.cls || '') + '">' + st.text + '</div>'
+        + '<div class="cards">' + (v.hole ? cardTxt(v.hole[0]) + cardTxt(v.hole[1]) : (v.inHand ? cardTxt(null) + cardTxt(null) : '<span style="font-size:12px;color:#9aa79c">not in this hand</span>'))
+        + (v.board.length ? '<span style="margin:0 4px;color:#8fa08c">|</span>' + v.board.map(cardTxt).join('') : '') + '</div>'
+        + '<div class="pot">pot ' + pot + (v.bet ? ' · to call ' + v.bet : ' · nobody to beat') + (mine ? ' · your chips ' + mine.chips : '') + '</div>'
+        + (winTxt(v) ? '<div class="pot" style="color:#ffd23f">' + winTxt(v) + '</div>' : '')
+        + '<div class="lg">' + v.log.map(esc).join('<br>') + '</div>'
+        + '<div class="btns">' + (v.myTurn ? '<button class="btn" data-a="fold">Fold</button>'
+          + '<button class="btn" data-a="' + (v.call > 0 ? 'call' : 'check') + '">' + (v.call > 0 ? 'Call ' + v.call : 'Check') + '</button>'
+          + (amounts.length ? '<button class="btn" data-r>Raise</button><button class="btn" data-a="allin">All-in</button>' : '') : '')
+        + '<button class="btn" data-a="stand">' + (v.inHand && !v.open ? 'Fold & stand' : 'Stand up') + '</button></div>'
+        + '<div class="rz' + (raise ? ' on' : '') + '" data-rz>' + amounts.map(n => '<button class="btn" data-to="' + n + '">' + n + '</button>').join(' ') + '</div>';
+      for (const b of box.querySelectorAll('[data-a]')) b.onclick = () => { const a = b.dataset.a; raise = false; if (a === 'stand') { if (cb && cb.stand) cb.stand(); } else if (cb && cb.act) cb.act(a); api.sfx && api.sfx('click'); };
+      const r = box.querySelector('[data-r]'); if (r) r.onclick = () => { raise = !raise; draw(); };
+      for (const b of box.querySelectorAll('[data-to]')) b.onclick = () => { raise = false; if (cb && cb.act) cb.act('raise', b.dataset.to | 0); api.sfx && api.sfx('click'); };
+    }
+    function pokerOpen(v, callbacks) { cb = callbacks || null; view = v; raise = false; if (!box) box = el('pokerp felt ui', ui); ui.classList.add('poker'); draw(); }
+    function pokerUpdate(v) { if (!box) return; view = v; draw(); }
+    function pokerClose() { ui.classList.remove('poker'); if (box) { box.remove(); box = null; } view = null; cb = null; raise = false; }
+    K.pokerOpen = pokerOpen; K.pokerUpdate = pokerUpdate; K.pokerClose = pokerClose;
+  }
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('hudpoker', { api: 1, v: 1 }, () => ({ api: 1, install }));
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+<script>
 /* ASHVALE 3D HUD module: every piece of 2D interface: minimap + orbs, side tabs, chat box, NPC dialogue, the options menu
    (right-click / long-press), hover text, opponent box, hit splats and HP bars layer, XP drops, level-up banner, death
    screen, help card. Since 2026-10-02 (the operator: "modularize the HUD") the big pieces are their own modules, so a fix to
@@ -15652,7 +16385,8 @@ POSSIBILITY OF SUCH DAMAGE. */
     /* ---------- the parts (each its own module/inscription): they get this kit and add their functions to it */
     const K = { host, api, core, P, A, el, ui, layer, panel, st, shopEl, ccEl, slotHtml, longPress, menu, hideMenu, chatLine, examine, itemOptions, updateOrbs, showHelp, promptSay,
       refresh() { }, drawShop() { }, openShop() { }, closeShop() { }, openChest() { }, closeChest() { }, drawChest() { }, invPointer() { }, creator() { }, creatorOpen: () => false,
-      chessOpen() { }, chessUpdate() { }, chessClose() { }, chessPromo: null };
+      chessOpen() { }, chessUpdate() { }, chessClose() { }, chessPromo: null,
+      pokerOpen() { }, pokerUpdate() { }, pokerClose() { } };
     for (const part of PARTS) part.install(K);
     K.onChestClose = () => { if (st.tabWas === undefined) return; const back = st.tabWas; st.tabWas = undefined; setTab(back); };
     /* a quest's story so far, in the words of the one who gave it (2026-10-06): every step you finished - what they
@@ -15680,12 +16414,13 @@ POSSIBILITY OF SUCH DAMAGE. */
       layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab(api.isPhone ? null : 'inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       chessOpen: (v, cb) => K.chessOpen(v, cb), chessUpdate: v => K.chessUpdate(v), chessClose: () => K.chessClose(), get chessPromo() { return K.chessPromo; },
+      pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(),
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };
   }
 
-  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('hud', { api: 1, v: 3, needs: { hudart: 1, hudpanels: 1, hudshop: 1, huddrag: 1, hudcreator: 1, hudchest: 1, hudchess: 1 } },
-    deps => { A = deps.hudart; PARTS = [deps.hudpanels, deps.hudshop, deps.huddrag, deps.hudcreator, deps.hudchest, deps.hudchess]; return { api: 1, create }; });
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('hud', { api: 1, v: 3, needs: { hudart: 1, hudpanels: 1, hudshop: 1, huddrag: 1, hudcreator: 1, hudchest: 1, hudchess: 1, hudpoker: 1 } },
+    deps => { A = deps.hudart; PARTS = [deps.hudpanels, deps.hudshop, deps.huddrag, deps.hudcreator, deps.hudchest, deps.hudchess, deps.hudpoker]; return { api: 1, create }; });
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 
 </script>
@@ -20692,6 +21427,20 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           case 'xsit': netSend({ CS: [e.t, e.s | 0] }); break;
           case 'xstand': netSend({ CT: [e.t] }); break;
           case 'xcmove': netSend({ CM: [e.t, e.from, e.to, e.promo || 0] }); break;
+          /* THE POKER TABLE (handoff/poker_plan.md): psit/pstand is "you are (no longer) in a chair at the felt", said
+             the same way whether the table seated you or a host's row did; poker is the felt changing - cards, chips,
+             the button, whose turn. The row itself carries everything the page draws. */
+          case 'psit': if (mine) pokerEnter(e.t); break;
+          case 'pstand': if (mine) pokerLeave(e.t); break;
+          case 'poker': {
+            if (SCENE.pokerShow) SCENE.pokerShow(e.t, pokerModel(e.t));
+            if (me.seat && me.seat.t === e.t && me.seat.k === 'pk') { pokerFx(e.t, e); if (hud.pokerUpdate) hud.pokerUpdate(pokerView(e.t)); }
+            const T = core.pokerTableById(e.t); if (T && iHostAt(T.x, T.y)) netSend({ Pk: [pkNet(core.pokerRow(e.t))] });
+            break;
+          }
+          case 'xpsit': netSend({ PS: [e.t, e.s | 0] }); break;
+          case 'xpstand': netSend({ PT: [e.t] }); break;
+          case 'xpact': netSend({ PA: [e.t, e.a, e.to | 0] }); break;
           case 'respawn': { const t = ents.get('p:' + e.p); if (!t) break; t.dead = false; t.oneShot = false; t.loco = null; t.H.setOpacity && t.H.setOpacity(1); t.root.visible = true; const p = core.S.players[e.p]; place(t, p.x, p.y); t.H.play('idle', { loop: true }); if (e.p === PID) { hud.death(false); cam.snap = true; arriveCheck(); } break; }
           case 'gone': { const t = ents.get('m:' + e.mob); if (t) { t.dead = true; t.deadT = now - 5000; t.oneShot = true; t.root.visible = false; } break; }   /* the host says it is dead: hide it at once (2026-10-02: frozen monsters after re-entering a zone) */
           case 'spawn': { const m = core.mobByUid(e.mob), t = ents.get('m:' + e.mob); if (!t) break; t.dead = false; t.oneShot = false; t.loco = null; t.root.visible = true; t.H.setOpacity && t.H.setOpacity(1); place(t, m.x, m.y); t.H.play('idle', { loop: true }); t.spawnT = now; t.hp = m.hp; break; }
@@ -21141,6 +21890,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           const side = host.clientWidth > 500 ? 0.55 : 0.4; tg.x -= Math.cos(cam.yaw) * side; tg.z += Math.sin(cam.yaw) * side;
         }
         if (cam.mode === 'chess' && CHESSV) { tg.set(CHESSV.x, CHESSV.y, CHESSV.z); cam.tyaw = CHESSV.yaw; cam.tpitch = isPhone ? 1.32 : 1.22; cam.tdist = isPhone ? 1.9 : 1.55; }   /* seated at a chess table: close over the board, your side nearest */
+        if (cam.mode === 'poker' && POKERV) { tg.set(POKERV.x, POKERV.y, POKERV.z); cam.tyaw = POKERV.yaw; cam.tpitch = 1.2; cam.tdist = 1.4; }   /* seated at the felt: the light centre is the middle of the table */
         if (cam.snap) camT.copy(tg); else camT.lerp(tg, Math.min(1, dt * 12));
         cam.snap = false;
         const cp = Math.max(0.3, cam.pitch);
@@ -21185,6 +21935,14 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           fov = Math.max(42, Math.min(100, fov));
           if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
           if (myEnt.root.visible) { myEnt.root.visible = false; FPV.hid = true; }   /* your own head would fill the view */
+        }
+        if (cam.mode === 'poker' && POKERV && POKERV.eye) {   /* THE POKER TABLE: first person at the felt, leaning a little over your own side of it */
+          const E = POKERV.eye, L = POKERV.look; camera.position.set(E.x, E.y, E.z); camera.lookAt(L.x, L.y, L.z);
+          const aspect = (host.clientWidth || 1) / (host.clientHeight || 1), d = Math.hypot(L.x - E.x, L.y - E.y, L.z - E.z), half = 0.66;
+          let fov = 2 * Math.atan((aspect < 1 ? half / aspect : half) / d) * 180 / Math.PI * 1.18;   /* portrait: the whole width of the felt has to fit */
+          fov = Math.max(45, Math.min(95, fov));
+          if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+          if (myEnt.root.visible) { myEnt.root.visible = false; FPV.hid = true; }   /* your own body would sit in the middle of your own cards */
         }
         sun.position.set(camT.x + SUNL.dir[0] * 20, camT.y + SUNL.dir[1] * 20, camT.z + SUNL.dir[2] * 20); sun.target.position.copy(camT);   /* from the real sun (or the moon) */
       }
@@ -21293,6 +22051,19 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             if (bFree) out.push({ html: 'Sit down as Black <span class="c">(north bench)</span>', act: { c: 'sit', table: t.id, seat: 0 }, red: out.length ? 0 : 1 }); else taken.push({ html: 'Black: <span class="y">' + esc(st.bn || 'someone') + '</span>', fn: () => hud.chat(esc(st.bn) + ' is playing Black here.', 'sys') });
           }
           out.push(...taken, { html: 'Examine <span class="c">Chess table</span>', fn: () => hud.chat(chessExamine(st), 'sys') });
+          return out;
+        }
+        if (t.kind === 'pokertable') {   /* THE POKER TABLE: six chairs round one felt in the Saltmere tap room; once you are sitting, the panel in front of you does the talking */
+          const T = core.pokerTableById(t.id); if (!T) return [];
+          const st = core.pokerOf(t.id), out = [], taken = [], at = {};
+          for (const s of st.se || []) at[s[0] | 0] = s[1];
+          if (me.seat && me.seat.t === t.id && me.seat.k === 'pk') out.push({ html: 'Stand up', act: { c: 'stand' }, red: 1 });
+          else (T.seats || []).forEach((s, i) => {
+            const who = at[i];
+            if (who && who !== PID) taken.push({ html: 'Chair ' + (i + 1) + ': <span class="y">' + pokerWho(who) + '</span>', fn: () => hud.chat(pokerWho(who) + ' is sitting there.', 'sys') });
+            else out.push({ html: 'Sit down <span class="c">(chair ' + (i + 1) + ')</span>', act: { c: 'sit', table: t.id, seat: i }, red: out.length ? 0 : 1 });
+          });
+          out.push(...taken, { html: 'Examine <span class="c">Poker table</span>', fn: () => hud.chat(pokerExamine(st), 'sys') });
           return out;
         }
         if (t.kind === 'crate') {
@@ -21907,6 +22678,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       let myNetId = PID;
       const toNet = x => x === PID ? myNetId : x, fromNet = x => x === myNetId ? PID : x;
       const netRow = r => Object.assign({}, r, { w: r.w ? toNet(r.w) : null, b: r.b ? toNet(r.b) : null });   /* a chess row with the room's ids for the players */
+      /* A poker row names its players in one place, the seat rows [ref, id, chips, bet, flags]. The cards beside them
+         (hc) are references into those rows, not ids, so they need nothing. */
+      const pkNet = r => Object.assign({}, r, { se: (r.se || []).map(s => [s[0], toNet(s[1]), s[2], s[3], s[4]]) });
+      const pkLocal = r => Object.assign({}, r, { se: (r.se || []).map(s => [s[0], fromNet(s[1]), s[2], s[3], s[4]]) });
       const CLS = { m: 'melee', r: 'ranged', g: 'magic' };
       const areaAt = (x, y) => core.areaOf(x | 0, y | 0);
       const hostOf = a => hosts.get(a) || null;
@@ -22039,6 +22814,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         const Fi = core.S.fires.filter(f => iHostAt(f.x, f.y)).map(f => [f.uid, f.x, f.y, f.until - core.S.t, f.log]);
         if (Fi.length) packSend({ F: seq }, 'Fi', Fi);
         const Ch = core.chessRows((x, y) => iHostAt(x, y)).map(netRow); if (Ch.length) packSend({ F: seq }, 'Ch', Ch);   /* the chess park's tables this game hosts */
+        const Pk = core.pokerRows((x, y) => iHostAt(x, y)).map(pkNet); if (Pk.length) packSend({ F: seq }, 'Pk', Pk);   /* and the felt in the tap room */
         const Pl = [];
         for (const a of hosted) for (const r of core.plantSnap(a)) Pl.push(r);
         if (Pl.length) packSend({ F: seq }, 'Pl', Pl);
@@ -22087,6 +22863,12 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (Array.isArray(d.CT)) { const T = core.tableById(String(d.CT[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostStand(id, T.id)); }
         if (Array.isArray(d.CM)) { const T = core.tableById(String(d.CM[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostMove(id, T.id, String(d.CM[1] || ''), String(d.CM[2] || ''), d.CM[3] ? String(d.CM[3]) : null)); }
         if (Array.isArray(d.Ch)) { const rows = d.Ch.filter(r => r && r.t).filter(r => { const T = core.tableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).map(r => Object.assign({}, r, { w: r.w ? fromNet(r.w) : null, b: r.b ? fromNet(r.b) : null })); if (rows.length) coreCall(() => core.applyChess(rows)); }
+        /* the felt: a chair asked for, a player getting up, an action, or the host's word on a table. Same rules as the
+           chess park: only the host of the area the table stands in answers, and a row only counts from that host. */
+        if (Array.isArray(d.PS)) { const T = core.pokerTableById(String(d.PS[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerSit(id, T.id, d.PS[1] | 0)); }
+        if (Array.isArray(d.PT)) { const T = core.pokerTableById(String(d.PT[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerStand(id, T.id)); }
+        if (Array.isArray(d.PA)) { const T = core.pokerTableById(String(d.PA[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerAct(id, T.id, String(d.PA[1] || ''), d.PA[2] | 0)); }
+        if (Array.isArray(d.Pk)) { const rows = d.Pk.filter(r => r && r.t).filter(r => { const T = core.pokerTableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).map(pkLocal); if (rows.length) coreCall(() => core.applyPoker(rows)); }
         if (Array.isArray(d.X)) { const x = d.X; if (core.item(x[0]) && iHostAt(x[2], x[3])) coreCall(() => core.hostDrop({ id: x[0], n: Math.max(1, x[1] | 0), x: x[2] | 0, y: x[3] | 0, life: x[4] | 0, from: x[5] ? fromNet(x[5]) : null, diedAt: x[6] | 0 })); }
         /* below: only the word of the host of the area concerned counts */
         if (Array.isArray(d.M)) { const rows = d.M.filter(w => Array.isArray(w) && fromHostOf(id, mobArea(w[0]))); if (rows.length) coreCall(() => core.applyMobs(rows)); }
@@ -22467,14 +23249,17 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       /* ---------- character creator (first start) and the tailor's wardrobe */
       /* ---------------- THE CHESS PARK: sitting down swings the camera over the board and swaps the HUD for the chess one */
       const BENCH_SEAT = 0.42;   /* the plank's height in scene.js 'bench' */
+      const CHAIR_SEAT = 0.39;   /* the seat top in scene.js 'chair' - the poker table's chairs */
       let TABLES_CACHE = { n: -1, list: [] };   /* core.tables() filters every loaded object: once per area change, not per remote per frame */
       function tablesCached() { const O = core.M.objects || []; if (O.length !== TABLES_CACHE.n) TABLES_CACHE = { n: O.length, list: core.tables() }; return TABLES_CACHE.list; }
-      function seatLift(e) {   /* a seated chess player sits on the bench, not on the ground: you by your seat, a remote by the table rows */
-        if (e === myEnt) return me.seat ? BENCH_SEAT : 0;
+      let PKTABLES_CACHE = { n: -1, list: [] };
+      function pkTablesCached() { const O = core.M.objects || []; if (O.length !== PKTABLES_CACHE.n) PKTABLES_CACHE = { n: O.length, list: core.pokerTables() }; return PKTABLES_CACHE.list; }
+      function seatLift(e) {   /* a seated player sits on the bench or the chair, not on the ground: you by your seat, a remote by the table rows */
+        if (e === myEnt) return me.seat ? (me.seat.k === 'pk' ? CHAIR_SEAT : BENCH_SEAT) : 0;
         if (!e.key || e.key.charCodeAt(0) !== 114) return 0;   /* 'r:' remotes: seated when a table's row names them (their anim lives on the remote record, not here) */
-        const T4 = tablesCached(); if (!T4.length) return 0;
         const id = e.key.slice(2);
-        for (const T of T4) { const st = core.S.chess[T.id]; if (st && (st.w === id || st.b === id)) return BENCH_SEAT; }
+        for (const T of tablesCached()) { const st = core.S.chess[T.id]; if (st && (st.w === id || st.b === id)) return BENCH_SEAT; }
+        for (const T of pkTablesCached()) { const st = core.S.poker[T.id]; if (st && (st.se || []).some(s => s[1] === id)) return CHAIR_SEAT; }
         return 0;
       }
       let CHESSV = null, CHESS_SEL = null;
@@ -22523,6 +23308,76 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (st.status === 'over') return 'The last game ended ' + st.result + ' (' + st.why + ').';
         if (st.w || st.b) return esc(st.wn || st.bn) + ' is waiting for an opponent.';
         return 'A stone chess table: slate and sandstone squares, a driftwood set against a whalebone one. Sit on a bench to play.';
+      }
+      /* ---------------- THE POKER TABLE (handoff/poker_plan.md): the same sitting and the same swap of camera and HUD as
+         the chess park, with a felt instead of a board. Everything the page draws comes from the table's row - see
+         core.js's poker block for what travels and for why the hole cards travel with it. */
+      let POKERV = null;
+      const PK_FX = {};   /* per table, what the felt last looked like to you - so a card going out is one sound, not five */
+      const PKF = core.pokerSeatFlags ? core.pokerSeatFlags() : [1, 2, 4, 8, 16];   /* in the hand, folded, all-in, dealt in, has answered */
+      const pkEsc = s => String(s == null ? '' : s).replace(/</g, '&lt;');   /* the names in the panel and the log; esc() below is only ever local to the tap menu */
+      function pokerWho(pid) { const p = core.S.players[pid]; return p && p.name ? pkEsc(p.name) : 'someone'; }
+      function pokerSeatOf(st, ref) { return (st.se || []).find(s => (s[0] | 0) === (ref | 0)) || null; }
+      function pokerModel(t) {   /* what lies on the felt: the board, each chair's two cards - face down unless they are yours, or the hand has been shown - the bets, the button, whose turn */
+        const st = core.pokerOf(t), show = st.o === 'playing' && st.st === 'none', hands = [], bets = {};
+        for (const s of st.se || []) {
+          const ref = s[0] | 0, f = s[4] | 0, h = (st.hc || []).find(x => (x[0] | 0) === ref);
+          if (!h) continue;   /* nothing in front of that chair - sitting it out, or the hand is folded and mucked */
+          if ((f & PKF[1]) && !show) continue;
+          const up = show || s[1] === PID;
+          hands.push({ ref, c: h && up ? [h[1] | 0, h[2] | 0] : null, down: up ? 0 : 1 });
+          bets[ref] = s[3] | 0;
+        }
+        return { board: (st.bo || []).slice(), hands, bets, dealer: st.d >= 0 ? st.d : null, turn: st.a >= 0 && st.o === 'playing' && st.st !== 'none' ? st.a : null };
+      }
+      function pokerView(t) {   /* the panel's view of the table, all of it out of the row it was sent */
+        const st = core.pokerOf(t), s = me.seat && me.seat.t === t ? me.seat.s | 0 : -1, mine = pokerSeatOf(st, s);
+        const f = mine ? mine[4] | 0 : 0, dealt = !!((f & PKF[3]) && !(f & PKF[1])), call = Math.max(0, (st.b | 0) - ((mine && mine[3]) | 0));
+        const live = st.o === 'playing' && st.st !== 'none', hh = (st.hc || []).find(x => (x[0] | 0) === s);
+        return {
+          t, seat: s, me: PID, hand: st.h | 0, street: st.st, open: !live, pot: st.p | 0, bet: st.b | 0, dealer: st.d, turn: st.a,
+          seats: (st.se || []).map(x => ({ ref: x[0] | 0, id: x[1], name: pokerWho(x[1]), chips: x[2] | 0, bet: x[3] | 0, folded: !!((x[4] | 0) & PKF[1]), allin: !!((x[4] | 0) & PKF[2]), dealt: !!((x[4] | 0) & PKF[3]) })),
+          board: (st.bo || []).slice(), hole: hh && hh[1] != null ? [hh[1] | 0, hh[2] | 0] : null,
+          log: (st.lg || []).slice(), result: st.r, inHand: dealt, myTurn: live && dealt && (st.a | 0) === s, call, stack: (mine && mine[2]) | 0,
+          winners: st.r ? st.r.p.map(q => q[1]).reduce((a, b) => a.concat(b), []) : []
+        };
+      }
+      function pokerFx(t, row) {   /* the small sound of the felt changing under your hands: a card going out, a new street */
+        const sig = ((row.bo || []).length) + ':' + row.st;
+        if (PK_FX[t] !== sig) { PK_FX[t] = sig; sfx('click'); }
+      }
+      function pokerEnter(t) {
+        const at = SCENE.pokerAt ? SCENE.pokerAt(t) : null, T = core.pokerTableById(t), s = me.seat && me.seat.t === t ? me.seat.s | 0 : -1;
+        if (at && T && T.seats[s]) {   /* from your own eyes at the felt: leaning a little over your own side of it, the whole table in front of you */
+          if (cam.mode !== 'poker') cam.save = { yaw: cam.tyaw, pitch: cam.tpitch, dist: cam.tdist };
+          const seat = T.seats[s], dx = seat[0] + 0.5 - at.x, dz = seat[1] + 0.5 - at.z, L = Math.hypot(dx, dz) || 1;
+          POKERV = { x: at.x, y: at.y + 0.55, z: at.z, yaw: Math.atan2(-dx, -dz), eye: { x: at.x + dx / L * 0.72, y: at.y + 0.62, z: at.z + dz / L * 0.72 }, look: { x: at.x - dx / L * 0.5, y: at.y - 0.02, z: at.z - dz / L * 0.5 } };
+          cam.mode = 'poker';
+        }
+        myEnt.restPose = 'sit';
+        const askStand = () => { const st = core.pokerOf(t), inHand = (st.se || []).some(x => x[1] === PID && ((x[4] | 0) & PKF[3]) && !((x[4] | 0) & PKF[1])) && st.st !== 'none';
+          hud.confirm(inHand ? 'Fold and stand up?' : 'Stand up?', inHand ? 'You are in a hand: standing up now folds it and leaves the chips already in the pot.' : 'Leave the poker table?', inHand ? 'Fold and stand' : 'Stand up', 'Stay', () => send({ c: 'stand' })); };
+        if (hud.pokerOpen) hud.pokerOpen(pokerView(t), { act: (a, to) => pokerAct(t, a, to), stand: askStand });
+      }
+      function pokerLeave(t) {
+        if (cam.mode === 'poker') { cam.mode = null; if (cam.save) { cam.tyaw = cam.save.yaw; cam.tpitch = cam.save.pitch; cam.tdist = cam.save.dist; cam.save = null; } }
+        POKERV = null; myEnt.restPose = null; delete PK_FX[t];
+        if (hud.pokerClose) hud.pokerClose();
+      }
+      function pokerAct(t, a, to) {   /* the panel's buttons: the table's own rules answer whether it was a legal one */
+        if (!me.seat || me.seat.k !== 'pk' || me.seat.t !== t) return;
+        const st = core.pokerOf(t), mine = pokerSeatOf(st, me.seat.s);
+        if (!mine || !((mine[4] | 0) & PKF[3]) || (mine[4] | 0) & PKF[1]) { hud.chat('You are not in this hand.', 'sys'); return; }
+        if (st.o !== 'playing' || st.st === 'none') { hud.chat('Nothing is on the felt at the moment.', 'sys'); return; }
+        if ((st.a | 0) !== (me.seat.s | 0)) { hud.chat('It is not your turn yet.', 'sys'); return; }
+        send({ c: 'pact', a: String(a), to: to == null ? undefined : to | 0 });
+        if (hud.pokerUpdate) hud.pokerUpdate(pokerView(t));
+      }
+      function pokerExamine(st) {
+        const inhand = (st.se || []).filter(s => (s[4] | 0) & PKF[3]).map(s => pokerWho(s[1]));
+        if (st.o === 'playing' && st.st !== 'none') return 'A hand is on the felt: ' + (st.p | 0) + ' in the pot, ' + inhand.length + ' in it' + (st.bo.length ? ', ' + st.bo.length + ' cards on the board.' : ', nothing on the board yet.') + ' Sit in a free chair and it will deal you in.';
+        if ((st.se || []).length) return 'A felt table for six, with ' + (st.se || []).map(s => pokerWho(s[1])).join(', ') + ' sitting. ' + (st.o === 'playing' ? 'They are between hands.' : 'Waiting for players.');
+        return 'A felt table for six under the lamps, brass rail turned dark, a chip tray in the middle. Sit in a chair to play: the table deals itself.';
       }
       function openWardrobe(first, who) {
         if (!myEnt.H.setOutfit || !MOD.outfitStyles) return;
@@ -22654,7 +23509,7 @@ ASH3D.defineData({"ashvale3d":"module","name":"zoneindex","api":1,"v":1,"data":{
 
 </script>
 <script>
-(window.ASH3D_LAZY = window.ASH3D_LAZY || {})["zone.saltmere"] = {"ashvale3d":"module","name":"zone.saltmere","api":1,"v":3,"data":{"name":"Saltmere","level":"safe","origin":[377,-24],"size":[160,112],"ground":"coast","tiles":["TTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTT","T.......................................................................................iiiiiiiiiii...............................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~","P...............................W.......f...............f...............................iiiiiiiiiii..............................ssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...........................T.................T............T............................iiiiiiiiiii............................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................................f...............f...............iiiiiiiiiii.....f.f................W..ssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T............f.........................................f............W.......f...........iiiiiiiiiii........f.....f...........sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..............f.........f.......................................T............................T.............................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..f................................T.........T........................T...................................................sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.....W........................................T..................................T.................pp...................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.f.iiiii................................................................T.....f....................pp.................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii...........................................................................................pp................sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.f.iiiii.....................T.................................................................T...pp..............ssss~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiii..................f................iiiii...........................f.......................pp.............ssss~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiii...........f..........f............iiiii.........................................f.........pp.............sss~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","P................T.....................f....iiiii...................................................ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~","T...........................................iiiii............................T......................ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~","T.......................................pp..iiiii...................................................pp............sss~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T............W..........................pp..........................................................pp............sss~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T............................f.........fpp.......f......................pppppppppppppppppppppppppppppp...........ssss~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T.......................................pp..........................................................pp..........ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.........W.............................pp............................pp............................pp.........sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp............................pp............................pp.........sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................iiiii....f........pp....................iiiii...pp............iiiiiii.........pp.......sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................iiiii...........f.pp....................iiiii...pp............iiiiiii.........pp......sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T................TT...iiiii.............pp....................iiiii...pp............iiiiiii.........pp.....sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T................ff...iiiii.........f...pp..............f.....iiiii...pp............iiiiiii.........pp....ssssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.....................iiiii.............pp....................iiiii...pp............iiiiiii.........pp...ssssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....f......T....T.....................pp.....................f.W....pp............................pp...sssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiiii.......f......................pp............................pp............................pp..sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiiii..............f...............pp............................pp.......W....................pp..srsss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiiii......................T.......pp............................pp............................pp..srss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiiii..............................pp............................pp............................pp..srss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P...iiiiii.................ff...........pp....W.......................ppf...........................pp..sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..T....................................pp............................pp.....f......................pp..sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........f...............iiiiii........pp............iiiiii..........pp..................pppppppppppp.ssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..........f..............iiiiii........pp............iiiiii..........pp...........f................pp.rsss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........................iiiiii........pp............iiiiii..........pp............................ppsssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T.........................iiiiii........pp............iiiiii..........pp............................ppssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","P.........................iiiiii........pp............iiiiii......f...pp............................ppssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T...iiiiiiiiiiiiiiiiiiii........iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp...........W................pprssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T...iiiiiiiiiiiiiiiiiiiif.......iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp........f...................ccBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~","T...iXXXiiiiiiiiiiXXXiii........iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp......f.....................ccBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~","T...iiiiiiiiiiiiiiiiiiii........iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp.T..........................ccsss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T...iiiiiiiiiiiiiiiiiiii........iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp..........W.................ccss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","P..............f...........f..........f.pp............................pp............................ccsr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T................f......................pp............................pp...........................sccss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp............................pp............................ppss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........iiiiii.iiiiii.........iiiiii..pp............................pp....iiiiiiii................pps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.........iiiiii.iiiiii.........iiiiii..pp.......T....................pp....iiiiiiii................pps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........iiiiii.iiiiii.........iiiiii..pp..............f.............pp....iiiiiiii...............spp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........iiiiii.iiiiii.........iiiiii..pp..T.........................pp....iiiiiiii...............spp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........W.........W...................pp...f........................pp....iiiiiiii..............sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii.........................T.....pp............................pp....iiiiiiii..............sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii...............................pp............................pp..........................sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P...XXiXX.............T.................pp........T...................pp..........................sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii...............................pp............................pp...f......................sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiXii...............................pp........iiiii...............pp..W........................spp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp.......fiiiii..............Tpp...........................spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp........iiiii...............pp...........................spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T....................f....T.............pp........iiiii..........f....pp...........................spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.......................................pp........iiiii.............T.pp...........................spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp....f.......................pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T....................f..................pp..............T.............pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp.............f..............pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T............T..........................pp............Tf..............pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................................T.pp........f...................pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.....................iiiii.............pp...T....f...................pp................iiiiiiiiiisspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T....................fiiiii.............pp............................pp................iiiiiiiiiisspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..ff.................iiiii.............pp............................pp................iiiiiiiiii.spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.............T.......iiiii.............pp............................pp................iiiiiiiiii.spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T.....................iiiii.............pp............................pp..........f.....iiiiiiiiii..ppr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T.......................................pp............................pp................iiiiiiiiii..ppss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","P...iiiiii..............................pp..............iiiii.........pp................W...........ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~","T.T.iiiiii................f.............pp..............iiiii.........pp............................ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~","T...iiiiii..T...........................pp..............iiiii.f.......pp............................pp..ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiiii..............................pp..............iiiii.f.......pp................f...........pp...sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiiii..............................pp..............iiiii.f.......pp..........f.................pp....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiiii.W............................pp................T........f..pp............................pp....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P...........................iiiii.......pp............................pp..........T.................pp.....sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...........................iiiii.......pp.....W.f....................pp............................pp.T...ssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................T...iiiii.......pp............................pp............................pp.....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................T.....iiiii.......pp............................pp......f.....................pp......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...........................iiiii.......pp............................pp............................pp......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................f.................pp.........f..................pp............................pp......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.......................................pp....T.........f.............pp............................pp......sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...........T...........................pp............................pp................f...........pp......ssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................ppf..f.......................Wpp................f...f.......pp.....ssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T....................f..................pp...................W........pp....ff..........W...........pp.....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp....iiiii...................ppppppppppppppppppppppppppppppppf....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.............................................iiiii........W....................................f...pp......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.........................W...................iiiii.......................f.......T.................pp.......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.............................................iiiii...W............................................Tpp........ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii..............f..........iiiii.......iiiii...........................iiiiiii...............pp.........ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii.........................iiiii...................................f...iiiiiii...............pp.....f....sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii............f............iiiii.................iiiiiiiT..............iiiiiii...............pp..........sssss~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~~~~~","T.W.iiiii.........................iiiii.................iiiiiii...............iiiiiii...............pp...........ssrss~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~~~~~","P...iiiii.......f.................iiiii.................iiiiiii...............iiiiiii...............ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~~~~~","T..............................................f........iiiiiiif............f..............T........ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~~~~~","T.............................f................f.W......iiiiiii.....................T.Wf............pp...............srss~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~~~~~","T...................f.................W.............................................................pp................ssss~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~~~~~","T.........................f.............................f...........T...................iiiiiiiiiii.pp...T...........f.sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..T.........................................................................f..........iiiiiiiiiii.pp..................sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P..................f....................................................................iiiiiiiiiii.pp.f.................ssrss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.............................................................f...f..............f......iiiiiiiiiii.....T...f..............srss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.................................................f.....................................iiiiiiiiiii.........................sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T........................................W..T......................f.......................T.........W...........T............ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T............................f..........................................................................................f.......ssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T............f......................f................................f............f...............Tf.........f..................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P................................................................................................................................rsss~~~~~~~~~~~~~~~~~~~~~~~~~~~","T................................................................................................................................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~"],"objects":[{"k":"stall","x":473,"y":8,"w":1,"h":1},{"k":"stall","x":473,"y":12,"w":1,"h":1},{"k":"stall","x":473,"y":16,"w":1,"h":1},{"k":"table","x":471,"y":10,"w":1,"h":1},{"k":"crate","x":476,"y":-8,"w":1,"h":1},{"k":"barrel","x":476,"y":-2,"w":1,"h":1},{"k":"crate","x":476,"y":4,"w":1,"h":1},{"k":"barrel","x":476,"y":14,"w":1,"h":1},{"k":"crate","x":476,"y":28,"w":1,"h":1},{"k":"barrel","x":476,"y":36,"w":1,"h":1},{"k":"crate","x":476,"y":56,"w":1,"h":1},{"k":"barrel","x":476,"y":62,"w":1,"h":1},{"k":"crate","x":476,"y":70,"w":1,"h":1},{"k":"rack","x":495,"y":-10,"w":1,"h":1},{"k":"rack","x":495,"y":50,"w":1,"h":1},{"k":"range","x":463,"y":47,"w":1,"h":1},{"k":"torch","x":476,"y":-12,"w":1,"h":1},{"k":"torch","x":476,"y":4,"w":1,"h":1},{"k":"torch","x":476,"y":20,"w":1,"h":1},{"k":"torch","x":476,"y":36,"w":1,"h":1},{"k":"torch","x":476,"y":52,"w":1,"h":1},{"k":"torch","x":476,"y":68,"w":1,"h":1},{"k":"torch","x":416,"y":34,"w":1,"h":1},{"k":"torch","x":446,"y":44,"w":1,"h":1},{"k":"counter","x":455,"y":27,"w":2,"h":1},{"k":"table","x":458,"y":28,"w":1,"h":1},{"k":"chair","x":459,"y":28,"w":1,"h":1},{"k":"barrel","x":459,"y":26,"w":1,"h":1},{"k":"fireplace","x":453,"y":30,"face":"n","w":1,"h":1},{"k":"crate","x":467,"y":46,"w":1,"h":1},{"k":"crate","x":468,"y":46,"w":1,"h":1},{"k":"barrel","x":472,"y":48,"w":1,"h":1},{"k":"shelf","x":466,"y":44,"w":3,"h":1},{"k":"bed","x":400,"y":0,"w":1,"h":2},{"k":"table","x":402,"y":1,"w":1,"h":1},{"k":"bed","x":400,"y":46,"w":1,"h":2},{"k":"table","x":402,"y":47,"w":1,"h":1},{"k":"bed","x":422,"y":-10,"w":1,"h":2},{"k":"bed","x":424,"y":68,"w":1,"h":2},{"k":"bed","x":440,"y":0,"w":1,"h":2},{"k":"bed","x":428,"y":36,"w":1,"h":2},{"k":"chair","x":430,"y":37,"w":1,"h":1},{"k":"barrel","x":491,"y":-10,"w":1,"h":1},{"k":"crate","x":503,"y":-9,"w":1,"h":1},{"k":"torch","x":517,"y":-13,"w":1,"h":1},{"k":"barrel","x":515,"y":-7,"w":1,"h":1},{"k":"crate","x":487,"y":17,"w":1,"h":1},{"k":"barrel","x":499,"y":16,"w":1,"h":1},{"k":"rack","x":509,"y":17,"w":1,"h":1},{"k":"torch","x":523,"y":12,"w":1,"h":1},{"k":"crate","x":522,"y":20,"w":1,"h":1},{"k":"barrel","x":493,"y":51,"w":1,"h":1},{"k":"crate","x":505,"y":50,"w":1,"h":1},{"k":"torch","x":517,"y":47,"w":1,"h":1},{"k":"barrel","x":514,"y":53,"w":1,"h":1},{"k":"crate","x":489,"y":75,"w":1,"h":1},{"k":"torch","x":513,"y":72,"w":1,"h":1},{"k":"stall","x":425,"y":25,"w":1,"h":1},{"k":"stall","x":431,"y":25,"w":1,"h":1},{"k":"stall","x":437,"y":25,"w":1,"h":1},{"k":"stall","x":403,"y":25,"w":1,"h":1},{"k":"counter","x":463,"y":0,"w":2,"h":1},{"k":"shelf","x":462,"y":-2,"w":3,"h":1},{"k":"anvil","x":436,"y":74,"w":1,"h":1},{"k":"furnace","x":438,"y":75,"w":1,"h":1},{"k":"crate","x":467,"y":-21,"w":1,"h":1},{"k":"crate","x":469,"y":-21,"w":1,"h":1},{"k":"barrel","x":473,"y":-20,"w":1,"h":1},{"k":"crate","x":467,"y":80,"w":1,"h":1},{"k":"barrel","x":471,"y":80,"w":1,"h":1},{"k":"crate","x":473,"y":81,"w":1,"h":1},{"k":"shop","x":453,"y":25,"w":8,"h":6,"door":[456,25],"sign":"The Saltmere Tap","roof":"#4a3324","wall":"#e2d7bd","enter":true,"floors":3},{"k":"house","x":465,"y":44,"w":10,"h":6,"door":[469,44],"sign":"Fish Store","roof":"#4d5560","wall":"#cbc3b0","enter":true,"floors":3},{"k":"house","x":455,"y":70,"w":7,"h":5,"door":[457,70],"sign":"Shipwright","roof":"#6a4a2a","wall":"#d5cab2","enter":true,"floors":3},{"k":"house","x":399,"y":-2,"w":5,"h":5,"door":[401,-2],"roof":"#5b4a8a","wall":"#e0d6c0","enter":true,"floors":2},{"k":"shop","x":399,"y":44,"w":5,"h":5,"door":[401,44],"sign":"Saltmere General Store","roof":"#3f6a4a","wall":"#ddd2bb","enter":true,"floors":2},{"k":"house","x":421,"y":-12,"w":5,"h":5,"door":[423,-12],"roof":"#7a5a2a","wall":"#d6cbb2","enter":true,"floors":2},{"k":"house","x":423,"y":66,"w":5,"h":5,"door":[425,66],"roof":"#7a3b2a","wall":"#d8c9a3","enter":true,"floors":3},{"k":"house","x":439,"y":-2,"w":5,"h":5,"door":[441,-2],"roof":"#4a6a7a","wall":"#ded4bf","enter":true,"floors":2},{"k":"house","x":427,"y":34,"w":5,"h":5,"door":[429,34],"roof":"#6a5a3a","wall":"#dbd1ba","enter":true,"floors":2},{"k":"shop","x":461,"y":-2,"w":7,"h":5,"door":[464,2],"sign":"Harbour Master","roof":"#2f4a6a","wall":"#e4dccb","enter":true,"floors":3},{"k":"house","x":465,"y":-23,"w":11,"h":5,"door":[470,-19],"sign":"South Warehouse","roof":"#5a4a3a","wall":"#b9ad95","floors":2,"enter":true},{"k":"house","x":465,"y":78,"w":11,"h":5,"door":[470,78],"sign":"North Warehouse","roof":"#5a4a3a","wall":"#b9ad95","floors":2,"enter":true},{"k":"smithy","x":433,"y":72,"w":7,"h":5,"door":[436,72],"sign":"Saltmere Armoury","roof":"#3a3a3a","wall":"#a59a88","floors":1},{"k":"shop","x":411,"y":70,"w":5,"h":5,"door":[413,70],"sign":"Saltmere Enchantery","roof":"#4a2f6a","wall":"#ddd6e2","enter":true,"floors":2},{"k":"house","x":381,"y":-15,"w":5,"h":5,"door":[383,-11],"roof":"#7a4a2a","wall":"#ddd2bb","floors":3,"enter":true},{"k":"house","x":381,"y":4,"w":6,"h":5,"door":[383,4],"roof":"#4a5a7a","wall":"#e0d6c0","floors":2,"enter":true},{"k":"church","x":381,"y":30,"w":5,"h":5,"door":[383,30],"roof":"#3e4a5a","wall":"#dcd4c2","enter":true,"sign":"Saltmere Chapel"},{"k":"house","x":381,"y":50,"w":6,"h":6,"door":[383,50],"roof":"#3f5a3a","wall":"#ded4bf","enter":true,"floors":2},{"k":"house","x":381,"y":70,"w":5,"h":5,"door":[383,70],"roof":"#7a5a2a","wall":"#d8c9a3","floors":2,"enter":true},{"k":"house","x":403,"y":10,"w":6,"h":5,"door":[405,14],"roof":"#5a3a5a","wall":"#dbd1ba","floors":3,"enter":true},{"k":"house","x":405,"y":56,"w":5,"h":5,"door":[407,56],"roof":"#3a5a6a","wall":"#e2d7bd","floors":2,"enter":true},{"k":"house","x":431,"y":10,"w":6,"h":5,"door":[433,14],"roof":"#6a4a3a","wall":"#cbc3b0","floors":2,"enter":true},{"k":"house","x":433,"y":50,"w":5,"h":5,"door":[435,50],"roof":"#4d5560","wall":"#d5cab2","floors":2,"enter":true},{"k":"house","x":409,"y":15,"w":6,"h":5,"door":[411,19],"roof":"#6a4a3a","wall":"#ded4bf","floors":2,"enter":true},{"k":"house","x":420,"y":15,"w":6,"h":5,"door":[422,19],"roof":"#3f4a5a","wall":"#cbc3b0","floors":2,"enter":true},{"k":"house","x":427,"y":15,"w":6,"h":5,"door":[429,19],"roof":"#5a3a2a","wall":"#e2d7bd","floors":2,"enter":true},{"k":"house","x":434,"y":15,"w":6,"h":5,"door":[436,19],"roof":"#4a3a4a","wall":"#d6cbb2","floors":3,"enter":true},{"k":"house","x":441,"y":15,"w":5,"h":5,"door":[443,19],"roof":"#6a4a3a","wall":"#ded4bf","floors":2,"enter":true},{"k":"house","x":387,"y":25,"w":6,"h":4,"door":[389,25],"roof":"#5a4a3a","wall":"#e0d6c0","floors":2,"enter":true},{"k":"house","x":394,"y":25,"w":6,"h":4,"door":[396,25],"roof":"#4a3a3a","wall":"#d8c9a3","floors":2,"enter":true},{"k":"house","x":409,"y":25,"w":6,"h":4,"door":[411,25],"roof":"#4a3a3a","wall":"#d8c9a3","floors":2,"enter":true},{"k":"altar","x":383,"y":34,"w":1,"h":1},{"k":"pew","x":381,"y":32,"w":2,"h":1},{"k":"pew","x":384,"y":32,"w":2,"h":1},{"k":"lamp","x":379,"y":21,"w":1,"h":1},{"k":"lamp","x":387,"y":24,"w":1,"h":1},{"k":"lamp","x":395,"y":21,"w":1,"h":1},{"k":"lamp","x":403,"y":24,"w":1,"h":1},{"k":"lamp","x":411,"y":21,"w":1,"h":1},{"k":"lamp","x":419,"y":24,"w":1,"h":1},{"k":"lamp","x":427,"y":21,"w":1,"h":1},{"k":"lamp","x":435,"y":24,"w":1,"h":1},{"k":"lamp","x":443,"y":21,"w":1,"h":1},{"k":"house","x":381,"y":15,"w":20,"h":5,"door":[390,19],"sign":"Town Hall","roof":"#2a3a52","wall":"#e8e0d0","enter":true,"floors":2,"stairsAt":[390,16]},{"k":"iwall","x":387,"y":15,"w":1,"h":5,"door":[387,17],"face":"w"},{"k":"iwall","x":394,"y":15,"w":1,"h":5,"door":[394,17],"face":"w"},{"k":"counter","x":382,"y":17,"w":3,"h":1},{"k":"shelf","x":381,"y":15,"w":2,"h":1},{"k":"counter","x":395,"y":17,"w":3,"h":1},{"k":"chair","x":397,"y":18},{"k":"table","x":390,"y":17,"w":1,"h":1},{"k":"sconce","x":457,"y":25,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":470,"y":44,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":458,"y":70,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":402,"y":44,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":437,"y":72,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":414,"y":70,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":384,"y":30,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":391,"y":19,"w":1,"h":1,"face":"s","night":true},{"k":"chesstable","id":"salt1","x":465,"y":35,"seats":[[465,34],[465,36]],"board":"driftwood","w":1,"h":1},{"k":"bench","x":465,"y":34,"face":"s","w":1,"h":1},{"k":"bench","x":465,"y":36,"face":"n","w":1,"h":1},{"k":"chesstable","id":"salt2","x":471,"y":35,"seats":[[471,34],[471,36]],"board":"driftwood","w":1,"h":1},{"k":"bench","x":471,"y":34,"face":"s","w":1,"h":1},{"k":"bench","x":471,"y":36,"face":"n","w":1,"h":1},{"k":"chesstable","id":"salt3","x":465,"y":41,"seats":[[465,40],[465,42]],"board":"driftwood","w":1,"h":1},{"k":"bench","x":465,"y":40,"face":"s","w":1,"h":1},{"k":"bench","x":465,"y":42,"face":"n","w":1,"h":1},{"k":"chesstable","id":"salt4","x":471,"y":41,"seats":[[471,40],[471,42]],"board":"driftwood","w":1,"h":1},{"k":"bench","x":471,"y":40,"face":"s","w":1,"h":1},{"k":"bench","x":471,"y":42,"face":"n","w":1,"h":1},{"k":"lamp","x":463,"y":38,"w":1,"h":1},{"k":"lamp","x":473,"y":38,"w":1,"h":1},{"k":"wsign","x":468,"y":32,"face":"n","board":"chess","title":"CHESS PARK","w":1,"h":1}],"npcs":[{"id":"hollis","name":"Hollis the taverner","look":"hollis","x":456,"y":24,"shop":"tavern"},{"id":"nettie","name":"Nettie the fishmonger","look":"nettie","x":474,"y":12,"shop":"fish"},{"id":"sela","name":"Sela the chandler","look":"sela","x":470,"y":50,"shop":"chandler"},{"id":"cobb","name":"Cobb the town elder","look":"cobb","x":464,"y":27,"talk":"quest","quest":"salt_road","gift":"saltmere_stone","giftAfter":{"quest":"salt_road","step":4},"giftLine":"Hold it at the harbour wall and think of the tide running, {name}. It will put you back on this stone every half hour, and it is the only entry in my accounts I ever wanted to write.","examine":"Cobb the town elder, salt in his beard and the harbour accounts in his head."},{"id":"bela","name":"Bela the storekeeper","look":"bela","x":401,"y":43,"shop":"salt_general"},{"id":"orin","name":"Orin the armourer","look":"orin","x":436,"y":71,"shop":"salt_armoury"},{"id":"mabb","name":"Mabb the sailmaker","look":"mabb","x":457,"y":62,"talk":"quest","quest":"sail_loft","examine":"Mabb the sailmaker, mending something white and enormous with more needle than is strictly necessary."},{"id":"tolly","name":"Tolly the dockhand","look":"tolly","x":475,"y":40,"examine":"Tolly the dockhand, on his fourth crate of the morning and no worse for it.","lines":["Everything in this town came off a boat or goes off one. I move both ends of that.","Mind the third pier, the third plank. Nobody has fixed it and nobody will, so long as it holds a rope."]},{"id":"perla","name":"Perla the net-mender","look":"perla","x":471,"y":60,"talk":"quest","quest":"empty_water","examine":"Perla the net-mender, knots going so fast they are almost a kind of speech."},{"id":"salt_chest","name":"Saltmere chest","look":"chest","x":466,"y":30,"chest":true,"examine":"The Saltmere chest, tarred against the damp. Everything you own from Ashvale is kept in your arcade wallet; this is where you see it."},{"id":"bryce","name":"Bryce the shipwright","look":"bryce","x":453,"y":68,"quest":"rudder","examine":"Bryce the shipwright, half a lifetime of Saltmere hulls behind him and one rudder in front of him."},{"id":"nessa","name":"Nessa the enchanter","look":"nessa","x":413,"y":69,"shop":"salt_magic","examine":"Nessa the enchanter, who learned her trade off the wreck of a wizard's chest that the sea gave back."},{"id":"wenna","name":"Mother Wenna","look":"wenna","x":384,"y":34,"examine":"Mother Wenna, keeper of the Saltmere chapel, a broom never far from her hand.","lines":["Eleven years I've swept this floor and nobody's knelt on it. Still, the dust doesn't know that.","Ashvale has a priest, they tell me. Father Aldous. He writes a fair letter but never comes himself."],"quests":["red_pyre"]},{"id":"hall_bank","name":"Town Hall bank","look":"chest","x":383,"y":16,"chest":true,"examine":"The Town Hall bank. Same arcade wallet as the chest by the stones; this counter is just nearer the ledgers."},{"id":"calder","name":"Mayor Calder","look":"calder","x":396,"y":16,"examine":"Mayor Calder of Saltmere, chain of office and a stack of plans that are not yet a desk.","lines":["Welcome to Saltmere's town hall. I am Mayor Calder. The southeast counter is the bank. This one is talk.","Ashvale is a living world on Dogecoin. You gather, fight, cook, bury bones for Prayer, and keep what you earn. Tam sells bread, Garrick smiths, Wren stitches hats and capes as tokens. The chest in each town is your arcade wallet - bag and bank are the same holdings.","Day and night here run on a two-hour wheel, not a real day. Follow the lamps after dark. Portals between towns remember you once you have touched the stones.","The tokens you hold are Omni assets. The Omni protocol writes them on Dogecoin itself, the same chain that carries the coin. They are not a costume the game invented. They are entries the chain can prove.","We mean to let those assets travel. Other chains, other protocols, markets outside this valley - wrap, bridge, list, swap. You will be able to trade an Ashvale piece where Ashvale is not running.","Whatever leaves can come home. Every ported token stays an Ashvale Omni game asset at heart, and it can always be reintegrated - brought back into this world with the same rights it had when it left. We will not mint a copy that strands the original.","None of that desk is built yet. When the bridges exist, you will hear it from this hall first."]},{"id":"guard_salt_1","name":"Town guard","look":"town_guard","x":390,"y":22,"watch":"saltmere","examine":"A town guard. Combat level 33. He keeps the peace, and the lamps.","lines":["We keep the peace. When the day goes we light the lamps and the torches. When it comes back we put the lamps out.","Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."]},{"id":"guard_salt_2","name":"Town guard","look":"town_guard","x":410,"y":23,"watch":"saltmere","examine":"A town guard. Combat level 33. He keeps the peace, and the lamps.","lines":["Strike one of us and the whole watch answers.","Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."]},{"id":"guard_salt_3","name":"Town guard","look":"town_guard","x":430,"y":22,"watch":"saltmere","examine":"A town guard. Combat level 33. He keeps the peace, and the lamps.","lines":["Saltmere's lamps are ours to light.","Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."]},{"id":"guard_salt_4","name":"Town guard","look":"town_guard","x":450,"y":23,"watch":"saltmere","examine":"A town guard. Combat level 33. He keeps the peace, and the lamps.","lines":["The road guard has the cobbles. The town is ours.","Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."]}],"fishing":[{"x":520,"y":-11,"fish":"shrimp_raw"},{"x":518,"y":-5,"fish":"shrimp_raw"},{"x":526,"y":15,"fish":"salmon_raw","req":30,"xp":350,"tool":"fishing_rod"},{"x":521,"y":22,"fish":"salmon_raw","req":30,"xp":350,"tool":"fishing_rod"},{"x":520,"y":49,"fish":"lobster_raw","req":40,"xp":500,"tool":"lobster_pot"},{"x":516,"y":73,"fish":"shrimp_raw"},{"x":480,"y":35,"fish":"shrimp_raw"}],"spawns":[],"weather":{"kinds":{"clear":48,"rain":32,"fog":20},"min":240,"max":720}}};
+(window.ASH3D_LAZY = window.ASH3D_LAZY || {})["zone.saltmere"] = {"ashvale3d":"module","name":"zone.saltmere","api":1,"v":3,"data":{"name":"Saltmere","level":"safe","origin":[377,-24],"size":[160,112],"ground":"coast","tiles":["TTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTT","T.......................................................................................iiiiiiiiiii...............................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~","P...............................W.......f...............f...............................iiiiiiiiiii..............................ssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...........................T.................T............T............................iiiiiiiiiii............................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................................f...............f...............iiiiiiiiiii.....f.f................W..ssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T............f.........................................f............W.......f...........iiiiiiiiiii........f.....f...........sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..............f.........f.......................................T............................T.............................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..f................................T.........T........................T...................................................sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.....W........................................T..................................T.................pp...................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.f.iiiii................................................................T.....f....................pp.................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii...........................................................................................pp................sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.f.iiiii.....................T.................................................................T...pp..............ssss~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiii..................f................iiiii...........................f.......................pp.............ssss~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiii...........f..........f............iiiii.........................................f.........pp.............sss~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","P................T.....................f....iiiii...................................................ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~","T...........................................iiiii............................T......................ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~","T.......................................pp..iiiii...................................................pp............sss~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T............W..........................pp..........................................................pp............sss~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T............................f.........fpp.......f......................pppppppppppppppppppppppppppppp...........ssss~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T.......................................pp..........................................................pp..........ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.........W.............................pp............................pp............................pp.........sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp............................pp............................pp.........sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................iiiii....f........pp....................iiiii...pp............iiiiiii.........pp.......sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................iiiii...........f.pp....................iiiii...pp............iiiiiii.........pp......sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T................TT...iiiii.............pp....................iiiii...pp............iiiiiii.........pp.....sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T................ff...iiiii.........f...pp..............f.....iiiii...pp............iiiiiii.........pp....ssssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.....................iiiii.............pp....................iiiii...pp............iiiiiii.........pp...ssssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....f......T....T.....................pp.....................f.W....pp............................pp...sssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiiii.......f......................pp............................pp............................pp..sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiiii..............f...............pp............................pp.......W....................pp..srsss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiiii......................T.......pp............................pp............................pp..srss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiiii..............................pp............................pp............................pp..srss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P...iiiiii.................ff...........pp....W.......................ppf...........................pp..sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..T....................................pp............................pp.....f......................pp..sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........f...............iiiiii........pp............iiiiii..........pp..................pppppppppppp.ssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..........f..............iiiiii........pp............iiiiii..........pp...........f................pp.rsss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........................iiiiii........pp............iiiiii..........pp............................ppsssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T.........................iiiiii........pp............iiiiii..........pp............................ppssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","P.........................iiiiii........pp............iiiiii......f...pp............................ppssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T...iiiiiiiiiiiiiiiiiiii........iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp...........W................pprssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T...iiiiiiiiiiiiiiiiiiiif.......iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp........f...................ccBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~","T...iXXXiiiiiiiiiiXXXiii........iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp......f.....................ccBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~","T...iiiiiiiiiiiiiiiiiiii........iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp.T..........................ccsss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T...iiiiiiiiiiiiiiiiiiii........iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp..........W.................ccss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","P..............f...........f..........f.pp............................pp............................ccsr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T................f......................pp............................pp...........................sccss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp............................pp............................ppss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........iiiiii.iiiiii.........iiiiii..pp............................pp....iiiiiiii................pps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.........iiiiii.iiiiii.........iiiiii..pp.......T....................pp....iiiiiiii................pps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........iiiiii.iiiiii.........iiiiii..pp..............f.............pp....iiiiiiii...............spp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........iiiiii.iiiiii.........iiiiii..pp..T.........................pp....iiiiiiii...............spp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........W.........W...................pp...f........................pp....iiiiiiii..............sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii.........................T.....pp............................pp....iiiiiiii..............sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii...............................pp............................pp..........................sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P...XXiXX.............T.................pp........T...................pp..........................sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii...............................pp............................pp...f......................sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiXii...............................pp........iiiii...............pp..W........................spp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp.......fiiiii..............Tpp...........................spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp........iiiii...............pp...........................spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T....................f....T.............pp........iiiii..........f....pp...........................spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.......................................pp........iiiii.............T.pp...........................spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp....f.......................pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T....................f..................pp..............T.............pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp.............f..............pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T............T..........................pp............Tf..............pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................................T.pp........f...................pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.....................iiiii.............pp...T....f...................pp................iiiiiiiiiisspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T....................fiiiii.............pp............................pp................iiiiiiiiiisspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..ff.................iiiii.............pp............................pp................iiiiiiiiii.spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.............T.......iiiii.............pp............................pp................iiiiiiiiii.spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T.....................iiiii.............pp............................pp..........f.....iiiiiiiiii..ppr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T.......................................pp............................pp................iiiiiiiiii..ppss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","P...iiiiii..............................pp..............iiiii.........pp................W...........ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~","T.T.iiiiii................f.............pp..............iiiii.........pp............................ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~","T...iiiiii..T...........................pp..............iiiii.f.......pp............................pp..ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiiii..............................pp..............iiiii.f.......pp................f...........pp...sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiiii..............................pp..............iiiii.f.......pp..........f.................pp....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiiii.W............................pp................T........f..pp............................pp....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P...........................iiiii.......pp............................pp..........T.................pp.....sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...........................iiiii.......pp.....W.f....................pp............................pp.T...ssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................T...iiiii.......pp............................pp............................pp.....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................T.....iiiii.......pp............................pp......f.....................pp......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...........................iiiii.......pp............................pp............................pp......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................f.................pp.........f..................pp............................pp......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.......................................pp....T.........f.............pp............................pp......sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...........T...........................pp............................pp................f...........pp......ssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................ppf..f.......................Wpp................f...f.......pp.....ssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T....................f..................pp...................W........pp....ff..........W...........pp.....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp....iiiii...................ppppppppppppppppppppppppppppppppf....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.............................................iiiii........W....................................f...pp......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.........................W...................iiiii.......................f.......T.................pp.......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.............................................iiiii...W............................................Tpp........ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii..............f..........iiiii.......iiiii...........................iiiiiii...............pp.........ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii.........................iiiii...................................f...iiiiiii...............pp.....f....sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii............f............iiiii.................iiiiiiiT..............iiiiiii...............pp..........sssss~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~~~~~","T.W.iiiii.........................iiiii.................iiiiiii...............iiiiiii...............pp...........ssrss~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~~~~~","P...iiiii.......f.................iiiii.................iiiiiii...............iiiiiii...............ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~~~~~","T..............................................f........iiiiiiif............f..............T........ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~~~~~","T.............................f................f.W......iiiiiii.....................T.Wf............pp...............srss~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~~~~~","T...................f.................W.............................................................pp................ssss~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~~~~~","T.........................f.............................f...........T...................iiiiiiiiiii.pp...T...........f.sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..T.........................................................................f..........iiiiiiiiiii.pp..................sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P..................f....................................................................iiiiiiiiiii.pp.f.................ssrss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.............................................................f...f..............f......iiiiiiiiiii.....T...f..............srss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.................................................f.....................................iiiiiiiiiii.........................sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T........................................W..T......................f.......................T.........W...........T............ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T............................f..........................................................................................f.......ssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T............f......................f................................f............f...............Tf.........f..................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P................................................................................................................................rsss~~~~~~~~~~~~~~~~~~~~~~~~~~~","T................................................................................................................................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~"],"objects":[{"k":"stall","x":473,"y":8,"w":1,"h":1},{"k":"stall","x":473,"y":12,"w":1,"h":1},{"k":"stall","x":473,"y":16,"w":1,"h":1},{"k":"table","x":471,"y":10,"w":1,"h":1},{"k":"crate","x":476,"y":-8,"w":1,"h":1},{"k":"barrel","x":476,"y":-2,"w":1,"h":1},{"k":"crate","x":476,"y":4,"w":1,"h":1},{"k":"barrel","x":476,"y":14,"w":1,"h":1},{"k":"crate","x":476,"y":28,"w":1,"h":1},{"k":"barrel","x":476,"y":36,"w":1,"h":1},{"k":"crate","x":476,"y":56,"w":1,"h":1},{"k":"barrel","x":476,"y":62,"w":1,"h":1},{"k":"crate","x":476,"y":70,"w":1,"h":1},{"k":"rack","x":495,"y":-10,"w":1,"h":1},{"k":"rack","x":495,"y":50,"w":1,"h":1},{"k":"range","x":463,"y":47,"w":1,"h":1},{"k":"torch","x":476,"y":-12,"w":1,"h":1},{"k":"torch","x":476,"y":4,"w":1,"h":1},{"k":"torch","x":476,"y":20,"w":1,"h":1},{"k":"torch","x":476,"y":36,"w":1,"h":1},{"k":"torch","x":476,"y":52,"w":1,"h":1},{"k":"torch","x":476,"y":68,"w":1,"h":1},{"k":"torch","x":416,"y":34,"w":1,"h":1},{"k":"torch","x":446,"y":44,"w":1,"h":1},{"k":"counter","x":455,"y":27,"w":2,"h":1},{"k":"table","x":460,"y":27,"w":1,"h":1},{"k":"chair","x":460,"y":28,"w":1,"h":1},{"k":"barrel","x":459,"y":26,"w":1,"h":1},{"k":"fireplace","x":453,"y":30,"face":"n","w":1,"h":1},{"k":"crate","x":467,"y":46,"w":1,"h":1},{"k":"crate","x":468,"y":46,"w":1,"h":1},{"k":"barrel","x":472,"y":48,"w":1,"h":1},{"k":"shelf","x":466,"y":44,"w":3,"h":1},{"k":"bed","x":400,"y":0,"w":1,"h":2},{"k":"table","x":402,"y":1,"w":1,"h":1},{"k":"bed","x":400,"y":46,"w":1,"h":2},{"k":"table","x":402,"y":47,"w":1,"h":1},{"k":"bed","x":422,"y":-10,"w":1,"h":2},{"k":"bed","x":424,"y":68,"w":1,"h":2},{"k":"bed","x":440,"y":0,"w":1,"h":2},{"k":"bed","x":428,"y":36,"w":1,"h":2},{"k":"chair","x":430,"y":37,"w":1,"h":1},{"k":"barrel","x":491,"y":-10,"w":1,"h":1},{"k":"crate","x":503,"y":-9,"w":1,"h":1},{"k":"torch","x":517,"y":-13,"w":1,"h":1},{"k":"barrel","x":515,"y":-7,"w":1,"h":1},{"k":"crate","x":487,"y":17,"w":1,"h":1},{"k":"barrel","x":499,"y":16,"w":1,"h":1},{"k":"rack","x":509,"y":17,"w":1,"h":1},{"k":"torch","x":523,"y":12,"w":1,"h":1},{"k":"crate","x":522,"y":20,"w":1,"h":1},{"k":"barrel","x":493,"y":51,"w":1,"h":1},{"k":"crate","x":505,"y":50,"w":1,"h":1},{"k":"torch","x":517,"y":47,"w":1,"h":1},{"k":"barrel","x":514,"y":53,"w":1,"h":1},{"k":"crate","x":489,"y":75,"w":1,"h":1},{"k":"torch","x":513,"y":72,"w":1,"h":1},{"k":"stall","x":425,"y":25,"w":1,"h":1},{"k":"stall","x":431,"y":25,"w":1,"h":1},{"k":"stall","x":437,"y":25,"w":1,"h":1},{"k":"stall","x":403,"y":25,"w":1,"h":1},{"k":"counter","x":463,"y":0,"w":2,"h":1},{"k":"shelf","x":462,"y":-2,"w":3,"h":1},{"k":"anvil","x":436,"y":74,"w":1,"h":1},{"k":"furnace","x":438,"y":75,"w":1,"h":1},{"k":"crate","x":467,"y":-21,"w":1,"h":1},{"k":"crate","x":469,"y":-21,"w":1,"h":1},{"k":"barrel","x":473,"y":-20,"w":1,"h":1},{"k":"crate","x":467,"y":80,"w":1,"h":1},{"k":"barrel","x":471,"y":80,"w":1,"h":1},{"k":"crate","x":473,"y":81,"w":1,"h":1},{"k":"shop","x":453,"y":25,"w":8,"h":6,"door":[456,25],"sign":"The Saltmere Tap","roof":"#4a3324","wall":"#e2d7bd","enter":true,"floors":3},{"k":"house","x":465,"y":44,"w":10,"h":6,"door":[469,44],"sign":"Fish Store","roof":"#4d5560","wall":"#cbc3b0","enter":true,"floors":3},{"k":"house","x":455,"y":70,"w":7,"h":5,"door":[457,70],"sign":"Shipwright","roof":"#6a4a2a","wall":"#d5cab2","enter":true,"floors":3},{"k":"house","x":399,"y":-2,"w":5,"h":5,"door":[401,-2],"roof":"#5b4a8a","wall":"#e0d6c0","enter":true,"floors":2},{"k":"shop","x":399,"y":44,"w":5,"h":5,"door":[401,44],"sign":"Saltmere General Store","roof":"#3f6a4a","wall":"#ddd2bb","enter":true,"floors":2},{"k":"house","x":421,"y":-12,"w":5,"h":5,"door":[423,-12],"roof":"#7a5a2a","wall":"#d6cbb2","enter":true,"floors":2},{"k":"house","x":423,"y":66,"w":5,"h":5,"door":[425,66],"roof":"#7a3b2a","wall":"#d8c9a3","enter":true,"floors":3},{"k":"house","x":439,"y":-2,"w":5,"h":5,"door":[441,-2],"roof":"#4a6a7a","wall":"#ded4bf","enter":true,"floors":2},{"k":"house","x":427,"y":34,"w":5,"h":5,"door":[429,34],"roof":"#6a5a3a","wall":"#dbd1ba","enter":true,"floors":2},{"k":"shop","x":461,"y":-2,"w":7,"h":5,"door":[464,2],"sign":"Harbour Master","roof":"#2f4a6a","wall":"#e4dccb","enter":true,"floors":3},{"k":"house","x":465,"y":-23,"w":11,"h":5,"door":[470,-19],"sign":"South Warehouse","roof":"#5a4a3a","wall":"#b9ad95","floors":2,"enter":true},{"k":"house","x":465,"y":78,"w":11,"h":5,"door":[470,78],"sign":"North Warehouse","roof":"#5a4a3a","wall":"#b9ad95","floors":2,"enter":true},{"k":"smithy","x":433,"y":72,"w":7,"h":5,"door":[436,72],"sign":"Saltmere Armoury","roof":"#3a3a3a","wall":"#a59a88","floors":1},{"k":"shop","x":411,"y":70,"w":5,"h":5,"door":[413,70],"sign":"Saltmere Enchantery","roof":"#4a2f6a","wall":"#ddd6e2","enter":true,"floors":2},{"k":"house","x":381,"y":-15,"w":5,"h":5,"door":[383,-11],"roof":"#7a4a2a","wall":"#ddd2bb","floors":3,"enter":true},{"k":"house","x":381,"y":4,"w":6,"h":5,"door":[383,4],"roof":"#4a5a7a","wall":"#e0d6c0","floors":2,"enter":true},{"k":"church","x":381,"y":30,"w":5,"h":5,"door":[383,30],"roof":"#3e4a5a","wall":"#dcd4c2","enter":true,"sign":"Saltmere Chapel"},{"k":"house","x":381,"y":50,"w":6,"h":6,"door":[383,50],"roof":"#3f5a3a","wall":"#ded4bf","enter":true,"floors":2},{"k":"house","x":381,"y":70,"w":5,"h":5,"door":[383,70],"roof":"#7a5a2a","wall":"#d8c9a3","floors":2,"enter":true},{"k":"house","x":403,"y":10,"w":6,"h":5,"door":[405,14],"roof":"#5a3a5a","wall":"#dbd1ba","floors":3,"enter":true},{"k":"house","x":405,"y":56,"w":5,"h":5,"door":[407,56],"roof":"#3a5a6a","wall":"#e2d7bd","floors":2,"enter":true},{"k":"house","x":431,"y":10,"w":6,"h":5,"door":[433,14],"roof":"#6a4a3a","wall":"#cbc3b0","floors":2,"enter":true},{"k":"house","x":433,"y":50,"w":5,"h":5,"door":[435,50],"roof":"#4d5560","wall":"#d5cab2","floors":2,"enter":true},{"k":"house","x":409,"y":15,"w":6,"h":5,"door":[411,19],"roof":"#6a4a3a","wall":"#ded4bf","floors":2,"enter":true},{"k":"house","x":420,"y":15,"w":6,"h":5,"door":[422,19],"roof":"#3f4a5a","wall":"#cbc3b0","floors":2,"enter":true},{"k":"house","x":427,"y":15,"w":6,"h":5,"door":[429,19],"roof":"#5a3a2a","wall":"#e2d7bd","floors":2,"enter":true},{"k":"house","x":434,"y":15,"w":6,"h":5,"door":[436,19],"roof":"#4a3a4a","wall":"#d6cbb2","floors":3,"enter":true},{"k":"house","x":441,"y":15,"w":5,"h":5,"door":[443,19],"roof":"#6a4a3a","wall":"#ded4bf","floors":2,"enter":true},{"k":"house","x":387,"y":25,"w":6,"h":4,"door":[389,25],"roof":"#5a4a3a","wall":"#e0d6c0","floors":2,"enter":true},{"k":"house","x":394,"y":25,"w":6,"h":4,"door":[396,25],"roof":"#4a3a3a","wall":"#d8c9a3","floors":2,"enter":true},{"k":"house","x":409,"y":25,"w":6,"h":4,"door":[411,25],"roof":"#4a3a3a","wall":"#d8c9a3","floors":2,"enter":true},{"k":"altar","x":383,"y":34,"w":1,"h":1},{"k":"pew","x":381,"y":32,"w":2,"h":1},{"k":"pew","x":384,"y":32,"w":2,"h":1},{"k":"lamp","x":379,"y":21,"w":1,"h":1},{"k":"lamp","x":387,"y":24,"w":1,"h":1},{"k":"lamp","x":395,"y":21,"w":1,"h":1},{"k":"lamp","x":403,"y":24,"w":1,"h":1},{"k":"lamp","x":411,"y":21,"w":1,"h":1},{"k":"lamp","x":419,"y":24,"w":1,"h":1},{"k":"lamp","x":427,"y":21,"w":1,"h":1},{"k":"lamp","x":435,"y":24,"w":1,"h":1},{"k":"lamp","x":443,"y":21,"w":1,"h":1},{"k":"house","x":381,"y":15,"w":20,"h":5,"door":[390,19],"sign":"Town Hall","roof":"#2a3a52","wall":"#e8e0d0","enter":true,"floors":2,"stairsAt":[390,16]},{"k":"iwall","x":387,"y":15,"w":1,"h":5,"door":[387,17],"face":"w"},{"k":"iwall","x":394,"y":15,"w":1,"h":5,"door":[394,17],"face":"w"},{"k":"counter","x":382,"y":17,"w":3,"h":1},{"k":"shelf","x":381,"y":15,"w":2,"h":1},{"k":"counter","x":395,"y":17,"w":3,"h":1},{"k":"chair","x":397,"y":18},{"k":"table","x":390,"y":17,"w":1,"h":1},{"k":"sconce","x":457,"y":25,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":470,"y":44,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":458,"y":70,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":402,"y":44,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":437,"y":72,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":414,"y":70,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":384,"y":30,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":391,"y":19,"w":1,"h":1,"face":"s","night":true},{"k":"chesstable","id":"salt1","x":465,"y":35,"seats":[[465,34],[465,36]],"board":"driftwood","w":1,"h":1},{"k":"bench","x":465,"y":34,"face":"s","w":1,"h":1},{"k":"bench","x":465,"y":36,"face":"n","w":1,"h":1},{"k":"chesstable","id":"salt2","x":471,"y":35,"seats":[[471,34],[471,36]],"board":"driftwood","w":1,"h":1},{"k":"bench","x":471,"y":34,"face":"s","w":1,"h":1},{"k":"bench","x":471,"y":36,"face":"n","w":1,"h":1},{"k":"chesstable","id":"salt3","x":465,"y":41,"seats":[[465,40],[465,42]],"board":"driftwood","w":1,"h":1},{"k":"bench","x":465,"y":40,"face":"s","w":1,"h":1},{"k":"bench","x":465,"y":42,"face":"n","w":1,"h":1},{"k":"chesstable","id":"salt4","x":471,"y":41,"seats":[[471,40],[471,42]],"board":"driftwood","w":1,"h":1},{"k":"bench","x":471,"y":40,"face":"s","w":1,"h":1},{"k":"bench","x":471,"y":42,"face":"n","w":1,"h":1},{"k":"lamp","x":463,"y":38,"w":1,"h":1},{"k":"lamp","x":473,"y":38,"w":1,"h":1},{"k":"wsign","x":468,"y":32,"face":"n","board":"chess","title":"CHESS PARK","w":1,"h":1},{"k":"chair","x":456,"y":28,"w":1,"h":1},{"k":"chair","x":458,"y":28,"w":1,"h":1},{"k":"chair","x":458,"y":29,"w":1,"h":1},{"k":"chair","x":458,"y":30,"w":1,"h":1},{"k":"chair","x":456,"y":30,"w":1,"h":1},{"k":"chair","x":456,"y":29,"w":1,"h":1},{"k":"pokertable","id":"poker1","x":457,"y":29,"seats":[[456,28],[458,28],[458,29],[458,30],[456,30],[456,29]],"felt":"#1f4d38","w":1,"h":1}],"npcs":[{"id":"hollis","name":"Hollis the taverner","look":"hollis","x":456,"y":24,"shop":"tavern"},{"id":"nettie","name":"Nettie the fishmonger","look":"nettie","x":474,"y":12,"shop":"fish"},{"id":"sela","name":"Sela the chandler","look":"sela","x":470,"y":50,"shop":"chandler"},{"id":"cobb","name":"Cobb the town elder","look":"cobb","x":464,"y":27,"talk":"quest","quest":"salt_road","gift":"saltmere_stone","giftAfter":{"quest":"salt_road","step":4},"giftLine":"Hold it at the harbour wall and think of the tide running, {name}. It will put you back on this stone every half hour, and it is the only entry in my accounts I ever wanted to write.","examine":"Cobb the town elder, salt in his beard and the harbour accounts in his head."},{"id":"bela","name":"Bela the storekeeper","look":"bela","x":401,"y":43,"shop":"salt_general"},{"id":"orin","name":"Orin the armourer","look":"orin","x":436,"y":71,"shop":"salt_armoury"},{"id":"mabb","name":"Mabb the sailmaker","look":"mabb","x":457,"y":62,"talk":"quest","quest":"sail_loft","examine":"Mabb the sailmaker, mending something white and enormous with more needle than is strictly necessary."},{"id":"tolly","name":"Tolly the dockhand","look":"tolly","x":475,"y":40,"examine":"Tolly the dockhand, on his fourth crate of the morning and no worse for it.","lines":["Everything in this town came off a boat or goes off one. I move both ends of that.","Mind the third pier, the third plank. Nobody has fixed it and nobody will, so long as it holds a rope."]},{"id":"perla","name":"Perla the net-mender","look":"perla","x":471,"y":60,"talk":"quest","quest":"empty_water","examine":"Perla the net-mender, knots going so fast they are almost a kind of speech."},{"id":"salt_chest","name":"Saltmere chest","look":"chest","x":466,"y":30,"chest":true,"examine":"The Saltmere chest, tarred against the damp. Everything you own from Ashvale is kept in your arcade wallet; this is where you see it."},{"id":"bryce","name":"Bryce the shipwright","look":"bryce","x":453,"y":68,"quest":"rudder","examine":"Bryce the shipwright, half a lifetime of Saltmere hulls behind him and one rudder in front of him."},{"id":"nessa","name":"Nessa the enchanter","look":"nessa","x":413,"y":69,"shop":"salt_magic","examine":"Nessa the enchanter, who learned her trade off the wreck of a wizard's chest that the sea gave back."},{"id":"wenna","name":"Mother Wenna","look":"wenna","x":384,"y":34,"examine":"Mother Wenna, keeper of the Saltmere chapel, a broom never far from her hand.","lines":["Eleven years I've swept this floor and nobody's knelt on it. Still, the dust doesn't know that.","Ashvale has a priest, they tell me. Father Aldous. He writes a fair letter but never comes himself."],"quests":["red_pyre"]},{"id":"hall_bank","name":"Town Hall bank","look":"chest","x":383,"y":16,"chest":true,"examine":"The Town Hall bank. Same arcade wallet as the chest by the stones; this counter is just nearer the ledgers."},{"id":"calder","name":"Mayor Calder","look":"calder","x":396,"y":16,"examine":"Mayor Calder of Saltmere, chain of office and a stack of plans that are not yet a desk.","lines":["Welcome to Saltmere's town hall. I am Mayor Calder. The southeast counter is the bank. This one is talk.","Ashvale is a living world on Dogecoin. You gather, fight, cook, bury bones for Prayer, and keep what you earn. Tam sells bread, Garrick smiths, Wren stitches hats and capes as tokens. The chest in each town is your arcade wallet - bag and bank are the same holdings.","Day and night here run on a two-hour wheel, not a real day. Follow the lamps after dark. Portals between towns remember you once you have touched the stones.","The tokens you hold are Omni assets. The Omni protocol writes them on Dogecoin itself, the same chain that carries the coin. They are not a costume the game invented. They are entries the chain can prove.","We mean to let those assets travel. Other chains, other protocols, markets outside this valley - wrap, bridge, list, swap. You will be able to trade an Ashvale piece where Ashvale is not running.","Whatever leaves can come home. Every ported token stays an Ashvale Omni game asset at heart, and it can always be reintegrated - brought back into this world with the same rights it had when it left. We will not mint a copy that strands the original.","None of that desk is built yet. When the bridges exist, you will hear it from this hall first."]},{"id":"guard_salt_1","name":"Town guard","look":"town_guard","x":390,"y":22,"watch":"saltmere","examine":"A town guard. Combat level 33. He keeps the peace, and the lamps.","lines":["We keep the peace. When the day goes we light the lamps and the torches. When it comes back we put the lamps out.","Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."]},{"id":"guard_salt_2","name":"Town guard","look":"town_guard","x":410,"y":23,"watch":"saltmere","examine":"A town guard. Combat level 33. He keeps the peace, and the lamps.","lines":["Strike one of us and the whole watch answers.","Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."]},{"id":"guard_salt_3","name":"Town guard","look":"town_guard","x":430,"y":22,"watch":"saltmere","examine":"A town guard. Combat level 33. He keeps the peace, and the lamps.","lines":["Saltmere's lamps are ours to light.","Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."]},{"id":"guard_salt_4","name":"Town guard","look":"town_guard","x":450,"y":23,"watch":"saltmere","examine":"A town guard. Combat level 33. He keeps the peace, and the lamps.","lines":["The road guard has the cobbles. The town is ours.","Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."]}],"fishing":[{"x":520,"y":-11,"fish":"shrimp_raw"},{"x":518,"y":-5,"fish":"shrimp_raw"},{"x":526,"y":15,"fish":"salmon_raw","req":30,"xp":350,"tool":"fishing_rod"},{"x":521,"y":22,"fish":"salmon_raw","req":30,"xp":350,"tool":"fishing_rod"},{"x":520,"y":49,"fish":"lobster_raw","req":40,"xp":500,"tool":"lobster_pot"},{"x":516,"y":73,"fish":"shrimp_raw"},{"x":480,"y":35,"fish":"shrimp_raw"}],"spawns":[],"weather":{"kinds":{"clear":48,"rain":32,"fog":20},"min":240,"max":720}}};
 
 </script>
 <script>
@@ -23594,7 +24449,7 @@ ASH3D.defineData({"ashvale3d":"module","name":"part.palette","api":1,"v":1,"data
 
 </script>
 <script>
-ASH3D.boot({ baked: {"ashvale3d":"registry","version":1,"loader":1,"modules":{"three":{"id":null,"v":"0.160.0","api":160,"kind":"esm"},"netretry":{"id":null,"v":"3","api":1,"kind":"js"},"net":{"id":null,"v":"3","api":2,"kind":"js"},"trade":{"id":null,"v":"2","api":1,"kind":"js"},"wallet":{"id":null,"v":"1","api":1,"kind":"js"},"trip":{"id":null,"v":"2","api":1,"kind":"js"},"globe":{"id":null,"v":"V","api":1,"kind":"js"},"wg_geo":{"id":null,"v":1,"api":1,"kind":"js"},"wg_terrain":{"id":null,"v":1,"api":1,"kind":"js"},"wg_paths":{"id":null,"v":1,"api":1,"kind":"js"},"wg_sites":{"id":null,"v":1,"api":1,"kind":"js"},"wg_tiles":{"id":null,"v":1,"api":1,"kind":"js"},"worldgen":{"id":null,"v":1,"api":1,"kind":"js"},"world":{"id":null,"v":"V","api":1,"kind":"js"},"chesslib":{"id":null,"v":"1.0.0","api":1,"kind":"js"},"core":{"id":null,"v":"1","api":1,"kind":"js"},"audit":{"id":null,"v":"1","api":1,"kind":"js"},"castle":{"id":null,"v":"1","api":1,"kind":"js"},"scene":{"id":null,"v":"1","api":2,"kind":"js"},"hudart":{"id":null,"v":"1","api":1,"kind":"js"},"hudpanels":{"id":null,"v":"1","api":1,"kind":"js"},"hudshop":{"id":null,"v":"1","api":1,"kind":"js"},"hudchest":{"id":null,"v":"2","api":1,"kind":"js"},"huddrag":{"id":null,"v":"1","api":1,"kind":"js"},"hudcreator":{"id":null,"v":"1","api":1,"kind":"js"},"hudchess":{"id":null,"v":"1","api":1,"kind":"js"},"hud":{"id":null,"v":"3","api":1,"kind":"js"},"models":{"id":null,"v":"1","api":1,"kind":"js"},"gamepad":{"id":null,"v":"1","api":1,"kind":"js"},"weather":{"id":null,"v":"1","api":1,"kind":"js"},"seasons":{"id":null,"v":"1","api":1,"kind":"js"},"atlas_shapes":{"id":null,"v":1,"api":1,"kind":"js"},"atlas_chunk":{"id":null,"v":1,"api":1,"kind":"js"},"earth":{"id":null,"v":1,"api":1,"kind":"js"},"engsky":{"id":null,"v":"1","api":1,"kind":"js"},"engbank":{"id":null,"v":"1","api":1,"kind":"js"},"sky":{"id":null,"v":"1","api":1,"kind":"js"},"skyview":{"id":null,"v":"1","api":1,"kind":"js"},"geo":{"id":null,"v":"1","api":1,"kind":"js"},"fog":{"id":null,"v":"1","api":1,"kind":"js"},"engine":{"id":null,"v":"2","api":1,"kind":"js"},"data":{"items":{"id":null,"v":4,"api":1,"kind":"json"},"monsters":{"id":null,"v":1,"api":1,"kind":"json"},"shops":{"id":null,"v":3,"api":1,"kind":"json"},"quests":{"id":null,"v":2,"api":1,"kind":"json"},"rules":{"id":null,"v":3,"api":1,"kind":"json"},"globecfg":{"id":null,"v":1,"api":1,"kind":"json"},"assets":{"id":null,"v":1,"api":1,"kind":"json"},"housekit":{"id":null,"v":1,"api":1,"kind":"json"},"starmap":{"id":null,"v":1,"api":1,"kind":"json"},"wg_tables":{"id":null,"v":2,"api":1,"kind":"json"},"atlas_palette":{"id":null,"v":1,"api":1,"kind":"json"},"zoneindex":{"id":null,"v":1,"api":1,"kind":"json"}},"parts":{"body.human":{"id":null,"v":1,"api":1,"kind":"json"},"char.aldous":{"id":null,"v":1,"api":1,"kind":"json"},"char.animikii":{"id":null,"v":1,"api":1,"kind":"json"},"char.ash_knight":{"id":null,"v":1,"api":1,"kind":"json"},"char.auditor":{"id":null,"v":1,"api":1,"kind":"json"},"char.bandit":{"id":null,"v":1,"api":1,"kind":"json"},"char.bandit_leader":{"id":null,"v":1,"api":1,"kind":"json"},"char.bela":{"id":null,"v":1,"api":1,"kind":"json"},"char.boar":{"id":null,"v":1,"api":1,"kind":"json"},"char.bramble":{"id":null,"v":1,"api":1,"kind":"json"},"char.brannoc":{"id":null,"v":1,"api":1,"kind":"json"},"char.bryce":{"id":null,"v":1,"api":1,"kind":"json"},"char.calder":{"id":null,"v":1,"api":1,"kind":"json"},"char.chain_dragon":{"id":null,"v":1,"api":1,"kind":"json"},"char.chest":{"id":null,"v":1,"api":1,"kind":"json"},"char.chicken":{"id":null,"v":1,"api":1,"kind":"json"},"char.cobb":{"id":null,"v":1,"api":1,"kind":"json"},"char.deer":{"id":null,"v":1,"api":1,"kind":"json"},"char.edric_ghost":{"id":null,"v":1,"api":1,"kind":"json"},"char.edric_skel":{"id":null,"v":1,"api":1,"kind":"json"},"char.fenn":{"id":null,"v":1,"api":1,"kind":"json"},"char.gale":{"id":null,"v":1,"api":1,"kind":"json"},"char.garrick":{"id":null,"v":1,"api":1,"kind":"json"},"char.giant_rat":{"id":null,"v":1,"api":1,"kind":"json"},"char.giant_spider":{"id":null,"v":1,"api":1,"kind":"json"},"char.goat":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin_chief":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin_shaman":{"id":null,"v":1,"api":1,"kind":"json"},"char.hale":{"id":null,"v":1,"api":1,"kind":"json"},"char.hare":{"id":null,"v":1,"api":1,"kind":"json"},"char.hawk":{"id":null,"v":1,"api":1,"kind":"json"},"char.hen_brown":{"id":null,"v":1,"api":1,"kind":"json"},"char.hob":{"id":null,"v":1,"api":1,"kind":"json"},"char.hollis":{"id":null,"v":1,"api":1,"kind":"json"},"char.iria":{"id":null,"v":1,"api":1,"kind":"json"},"char.keel":{"id":null,"v":1,"api":1,"kind":"json"},"char.latency":{"id":null,"v":1,"api":1,"kind":"json"},"char.lich":{"id":null,"v":1,"api":1,"kind":"json"},"char.lizard":{"id":null,"v":1,"api":1,"kind":"json"},"char.mabb":{"id":null,"v":1,"api":1,"kind":"json"},"char.maiingan":{"id":null,"v":1,"api":1,"kind":"json"},"char.makak":{"id":null,"v":1,"api":1,"kind":"json"},"char.makwa":{"id":null,"v":1,"api":1,"kind":"json"},"char.maren":{"id":null,"v":1,"api":1,"kind":"json"},"char.marta":{"id":null,"v":1,"api":1,"kind":"json"},"char.migizi":{"id":null,"v":1,"api":1,"kind":"json"},"char.mishoomis":{"id":null,"v":1,"api":1,"kind":"json"},"char.mitigwaabiike":{"id":null,"v":1,"api":1,"kind":"json"},"char.modulus":{"id":null,"v":1,"api":1,"kind":"json"},"char.nessa":{"id":null,"v":1,"api":1,"kind":"json"},"char.nettie":{"id":null,"v":1,"api":1,"kind":"json"},"char.ningashi":{"id":null,"v":1,"api":1,"kind":"json"},"char.nookomis":{"id":null,"v":1,"api":1,"kind":"json"},"char.odric":{"id":null,"v":1,"api":1,"kind":"json"},"char.orin":{"id":null,"v":1,"api":1,"kind":"json"},"char.pax":{"id":null,"v":1,"api":1,"kind":"json"},"char.perla":{"id":null,"v":1,"api":1,"kind":"json"},"char.pike":{"id":null,"v":1,"api":1,"kind":"json"},"char.pip":{"id":null,"v":1,"api":1,"kind":"json"},"char.portal":{"id":null,"v":1,"api":1,"kind":"json"},"char.rat":{"id":null,"v":1,"api":1,"kind":"json"},"char.rowan":{"id":null,"v":1,"api":1,"kind":"json"},"char.sela":{"id":null,"v":1,"api":1,"kind":"json"},"char.silas":{"id":null,"v":1,"api":1,"kind":"json"},"char.snow_hare":{"id":null,"v":1,"api":1,"kind":"json"},"char.spider":{"id":null,"v":1,"api":1,"kind":"json"},"char.spider_queen":{"id":null,"v":1,"api":1,"kind":"json"},"char.swamp_monster":{"id":null,"v":1,"api":1,"kind":"json"},"char.symmetry":{"id":null,"v":1,"api":1,"kind":"json"},"char.tam":{"id":null,"v":1,"api":1,"kind":"json"},"char.timber_wolf":{"id":null,"v":1,"api":1,"kind":"json"},"char.tolly":{"id":null,"v":1,"api":1,"kind":"json"},"char.town_guard":{"id":null,"v":1,"api":1,"kind":"json"},"char.vael":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan_acolyte":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan_reader":{"id":null,"v":1,"api":1,"kind":"json"},"char.voss":{"id":null,"v":1,"api":1,"kind":"json"},"char.waabigwan":{"id":null,"v":1,"api":1,"kind":"json"},"char.wagon":{"id":null,"v":1,"api":1,"kind":"json"},"char.wenna":{"id":null,"v":1,"api":1,"kind":"json"},"char.wolf":{"id":null,"v":1,"api":1,"kind":"json"},"char.wraith":{"id":null,"v":1,"api":1,"kind":"json"},"char.wren":{"id":null,"v":1,"api":1,"kind":"json"},"char.ziigwan":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.apron":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_full":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_goatee":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_moustache":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_stubble":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.belt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.boots":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.boots_moccasins":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.cape":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.gloves":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_bald":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_braids":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_bun":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_curly":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_long":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_loose":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_mohawk":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_mohawklong":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_ponytail":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_short":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_ashcrown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_ashshard":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bandana":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_beadband":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bigchief":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bonewrap":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_cap":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_crown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_feather":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_featherband":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_hood":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_otterturban":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_shroud":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_spidercrown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_verdant":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_wizard":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_breechcloth":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_buckskinskirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_jingle":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_ribbonskirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_shorts":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_skirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_trousers":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_beadvest":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_buckskin":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_jingle":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_ribbon":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_ribbondress":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_shirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_tunic":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_vest":{"id":null,"v":1,"api":1,"kind":"json"},"gear.angel_wings":{"id":null,"v":1,"api":1,"kind":"json"},"gear.arrows":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bandolier":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bikwak":{"id":null,"v":1,"api":1,"kind":"json"},"gear.boots":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bow":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bow_snare":{"id":null,"v":1,"api":1,"kind":"json"},"gear.chainbody":{"id":null,"v":1,"api":1,"kind":"json"},"gear.dagger":{"id":null,"v":1,"api":1,"kind":"json"},"gear.dagger_venom":{"id":null,"v":1,"api":1,"kind":"json"},"gear.fishing_rod":{"id":null,"v":1,"api":1,"kind":"json"},"gear.ghostlight":{"id":null,"v":1,"api":1,"kind":"json"},"gear.hammer":{"id":null,"v":1,"api":1,"kind":"json"},"gear.handdrum":{"id":null,"v":1,"api":1,"kind":"json"},"gear.hatchet":{"id":null,"v":1,"api":1,"kind":"json"},"gear.helmet":{"id":null,"v":1,"api":1,"kind":"json"},"gear.lobster_pot":{"id":null,"v":1,"api":1,"kind":"json"},"gear.longsword":{"id":null,"v":1,"api":1,"kind":"json"},"gear.mace":{"id":null,"v":1,"api":1,"kind":"json"},"gear.mitigwaab":{"id":null,"v":1,"api":1,"kind":"json"},"gear.net":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pack":{"id":null,"v":1,"api":1,"kind":"json"},"gear.paddle":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pickaxe":{"id":null,"v":1,"api":1,"kind":"json"},"gear.platebody":{"id":null,"v":1,"api":1,"kind":"json"},"gear.platelegs":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pushpole":{"id":null,"v":1,"api":1,"kind":"json"},"gear.quillmakak":{"id":null,"v":1,"api":1,"kind":"json"},"gear.ricesticks":{"id":null,"v":1,"api":1,"kind":"json"},"gear.robe":{"id":null,"v":1,"api":1,"kind":"json"},"gear.rosary":{"id":null,"v":4,"api":1,"kind":"json"},"gear.shield":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_ember":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_frost":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_storm":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_verdant":{"id":null,"v":1,"api":1,"kind":"json"},"gear.sword":{"id":null,"v":1,"api":1,"kind":"json"},"gear.tinderbox":{"id":null,"v":1,"api":1,"kind":"json"},"gear.tomahawk":{"id":null,"v":1,"api":1,"kind":"json"},"gear.torch":{"id":null,"v":1,"api":1,"kind":"json"},"item.asemaa":{"id":null,"v":1,"api":1,"kind":"json"},"item.birchlogs":{"id":null,"v":1,"api":1,"kind":"json"},"item.bones":{"id":null,"v":1,"api":1,"kind":"json"},"item.bread":{"id":null,"v":1,"api":1,"kind":"json"},"item.candy":{"id":null,"v":1,"api":1,"kind":"json"},"item.castlestone":{"id":null,"v":1,"api":1,"kind":"json"},"item.chanterelle":{"id":null,"v":1,"api":1,"kind":"json"},"item.chicken":{"id":null,"v":1,"api":1,"kind":"json"},"item.coins":{"id":null,"v":1,"api":1,"kind":"json"},"item.fish":{"id":null,"v":1,"api":1,"kind":"json"},"item.flint":{"id":null,"v":1,"api":1,"kind":"json"},"item.knockers":{"id":null,"v":1,"api":1,"kind":"json"},"item.lobster":{"id":null,"v":1,"api":1,"kind":"json"},"item.logs":{"id":null,"v":1,"api":1,"kind":"json"},"item.manoomin":{"id":null,"v":1,"api":1,"kind":"json"},"item.mouse":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_fly":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_glow":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_porcini":{"id":null,"v":1,"api":1,"kind":"json"},"item.note":{"id":null,"v":1,"api":1,"kind":"json"},"item.obsidian":{"id":null,"v":1,"api":1,"kind":"json"},"item.ore":{"id":null,"v":1,"api":1,"kind":"json"},"item.pail":{"id":null,"v":1,"api":1,"kind":"json"},"item.pelt":{"id":null,"v":1,"api":1,"kind":"json"},"item.potion":{"id":null,"v":1,"api":1,"kind":"json"},"item.pushpole":{"id":null,"v":1,"api":1,"kind":"json"},"item.ring":{"id":null,"v":1,"api":1,"kind":"json"},"item.ring_angels":{"id":null,"v":1,"api":1,"kind":"json"},"item.rosary":{"id":null,"v":1,"api":1,"kind":"json"},"item.sapbucket":{"id":null,"v":1,"api":1,"kind":"json"},"item.sapling":{"id":null,"v":1,"api":1,"kind":"json"},"item.shrimp":{"id":null,"v":1,"api":1,"kind":"json"},"item.sinew":{"id":null,"v":1,"api":1,"kind":"json"},"item.snare":{"id":null,"v":1,"api":1,"kind":"json"},"item.stone":{"id":null,"v":1,"api":1,"kind":"json"},"item.wiigwaas":{"id":null,"v":1,"api":1,"kind":"json"},"item.willowbark":{"id":null,"v":1,"api":1,"kind":"json"},"palette":{"id":null,"v":1,"api":1,"kind":"json"}}},"lazy":{"zones":{"village":{"id":null,"v":2,"api":1,"kind":"json"},"eastend":{"id":null,"v":1,"api":1,"kind":"json"},"whisperwood":{"id":null,"v":2,"api":1,"kind":"json"},"saltmere":{"id":null,"v":3,"api":1,"kind":"json"},"castle":{"id":null,"v":1,"api":1,"kind":"json"},"wolfden":{"id":null,"v":1,"api":1,"kind":"json"},"cavemouth":{"id":null,"v":1,"api":1,"kind":"json"},"spidercave":{"id":null,"v":1,"api":1,"kind":"json"},"ancientchapel":{"id":null,"v":1,"api":1,"kind":"json"},"evengrove":{"id":null,"v":1,"api":1,"kind":"json"},"ziibiing":{"id":null,"v":1,"api":1,"kind":"json"},"lodges":{"id":null,"v":1,"api":1,"kind":"json"},"ricelake":{"id":null,"v":1,"api":1,"kind":"json"},"sugarcamp":{"id":null,"v":1,"api":1,"kind":"json"},"flintbank":{"id":null,"v":1,"api":1,"kind":"json"},"obsidianbank":{"id":null,"v":1,"api":1,"kind":"json"},"willowbank":{"id":null,"v":1,"api":1,"kind":"json"},"dragonkeep":{"id":null,"v":1,"api":1,"kind":"json"}}}}, registryUrl: window.ASH3D_REGISTRY_URL || null, content: false }).then(function (m) { return m.engine.openStore().then(function (st) { window.ASH = m.engine.start(document.getElementById('ash'), { report: m.$report, store: st }); }); }).catch(function (e) { console.error(e); var d = document.getElementById('ash'); d.innerHTML = '<div style="color:#fff;padding:24px;font:16px sans-serif">ASHVALE could not start: ' + String(e && e.message || e).replace(/</g, '&lt;') + '</div>'; });
+ASH3D.boot({ baked: {"ashvale3d":"registry","version":1,"loader":1,"modules":{"three":{"id":null,"v":"0.160.0","api":160,"kind":"esm"},"netretry":{"id":null,"v":"3","api":1,"kind":"js"},"net":{"id":null,"v":"3","api":2,"kind":"js"},"trade":{"id":null,"v":"2","api":1,"kind":"js"},"wallet":{"id":null,"v":"1","api":1,"kind":"js"},"trip":{"id":null,"v":"2","api":1,"kind":"js"},"globe":{"id":null,"v":"V","api":1,"kind":"js"},"wg_geo":{"id":null,"v":1,"api":1,"kind":"js"},"wg_terrain":{"id":null,"v":1,"api":1,"kind":"js"},"wg_paths":{"id":null,"v":1,"api":1,"kind":"js"},"wg_sites":{"id":null,"v":1,"api":1,"kind":"js"},"wg_tiles":{"id":null,"v":1,"api":1,"kind":"js"},"worldgen":{"id":null,"v":1,"api":1,"kind":"js"},"world":{"id":null,"v":"V","api":1,"kind":"js"},"chesslib":{"id":null,"v":"1.0.0","api":1,"kind":"js"},"holdemlib":{"id":null,"v":"1","api":1,"kind":"js"},"core":{"id":null,"v":"1","api":1,"kind":"js"},"audit":{"id":null,"v":"1","api":1,"kind":"js"},"castle":{"id":null,"v":"1","api":1,"kind":"js"},"scene":{"id":null,"v":"1","api":2,"kind":"js"},"hudart":{"id":null,"v":"1","api":1,"kind":"js"},"hudpanels":{"id":null,"v":"1","api":1,"kind":"js"},"hudshop":{"id":null,"v":"1","api":1,"kind":"js"},"hudchest":{"id":null,"v":"2","api":1,"kind":"js"},"huddrag":{"id":null,"v":"1","api":1,"kind":"js"},"hudcreator":{"id":null,"v":"1","api":1,"kind":"js"},"hudchess":{"id":null,"v":"1","api":1,"kind":"js"},"hudpoker":{"id":null,"v":"1","api":1,"kind":"js"},"hud":{"id":null,"v":"3","api":1,"kind":"js"},"models":{"id":null,"v":"1","api":1,"kind":"js"},"gamepad":{"id":null,"v":"1","api":1,"kind":"js"},"weather":{"id":null,"v":"1","api":1,"kind":"js"},"seasons":{"id":null,"v":"1","api":1,"kind":"js"},"atlas_shapes":{"id":null,"v":1,"api":1,"kind":"js"},"atlas_chunk":{"id":null,"v":1,"api":1,"kind":"js"},"earth":{"id":null,"v":1,"api":1,"kind":"js"},"engsky":{"id":null,"v":"1","api":1,"kind":"js"},"engbank":{"id":null,"v":"1","api":1,"kind":"js"},"sky":{"id":null,"v":"1","api":1,"kind":"js"},"skyview":{"id":null,"v":"1","api":1,"kind":"js"},"geo":{"id":null,"v":"1","api":1,"kind":"js"},"fog":{"id":null,"v":"1","api":1,"kind":"js"},"engine":{"id":null,"v":"2","api":1,"kind":"js"},"data":{"items":{"id":null,"v":4,"api":1,"kind":"json"},"monsters":{"id":null,"v":1,"api":1,"kind":"json"},"shops":{"id":null,"v":3,"api":1,"kind":"json"},"quests":{"id":null,"v":2,"api":1,"kind":"json"},"rules":{"id":null,"v":3,"api":1,"kind":"json"},"globecfg":{"id":null,"v":1,"api":1,"kind":"json"},"assets":{"id":null,"v":1,"api":1,"kind":"json"},"housekit":{"id":null,"v":1,"api":1,"kind":"json"},"starmap":{"id":null,"v":1,"api":1,"kind":"json"},"wg_tables":{"id":null,"v":2,"api":1,"kind":"json"},"atlas_palette":{"id":null,"v":1,"api":1,"kind":"json"},"zoneindex":{"id":null,"v":1,"api":1,"kind":"json"}},"parts":{"body.human":{"id":null,"v":1,"api":1,"kind":"json"},"char.aldous":{"id":null,"v":1,"api":1,"kind":"json"},"char.animikii":{"id":null,"v":1,"api":1,"kind":"json"},"char.ash_knight":{"id":null,"v":1,"api":1,"kind":"json"},"char.auditor":{"id":null,"v":1,"api":1,"kind":"json"},"char.bandit":{"id":null,"v":1,"api":1,"kind":"json"},"char.bandit_leader":{"id":null,"v":1,"api":1,"kind":"json"},"char.bela":{"id":null,"v":1,"api":1,"kind":"json"},"char.boar":{"id":null,"v":1,"api":1,"kind":"json"},"char.bramble":{"id":null,"v":1,"api":1,"kind":"json"},"char.brannoc":{"id":null,"v":1,"api":1,"kind":"json"},"char.bryce":{"id":null,"v":1,"api":1,"kind":"json"},"char.calder":{"id":null,"v":1,"api":1,"kind":"json"},"char.chain_dragon":{"id":null,"v":1,"api":1,"kind":"json"},"char.chest":{"id":null,"v":1,"api":1,"kind":"json"},"char.chicken":{"id":null,"v":1,"api":1,"kind":"json"},"char.cobb":{"id":null,"v":1,"api":1,"kind":"json"},"char.deer":{"id":null,"v":1,"api":1,"kind":"json"},"char.edric_ghost":{"id":null,"v":1,"api":1,"kind":"json"},"char.edric_skel":{"id":null,"v":1,"api":1,"kind":"json"},"char.fenn":{"id":null,"v":1,"api":1,"kind":"json"},"char.gale":{"id":null,"v":1,"api":1,"kind":"json"},"char.garrick":{"id":null,"v":1,"api":1,"kind":"json"},"char.giant_rat":{"id":null,"v":1,"api":1,"kind":"json"},"char.giant_spider":{"id":null,"v":1,"api":1,"kind":"json"},"char.goat":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin_chief":{"id":null,"v":1,"api":1,"kind":"json"},"char.goblin_shaman":{"id":null,"v":1,"api":1,"kind":"json"},"char.hale":{"id":null,"v":1,"api":1,"kind":"json"},"char.hare":{"id":null,"v":1,"api":1,"kind":"json"},"char.hawk":{"id":null,"v":1,"api":1,"kind":"json"},"char.hen_brown":{"id":null,"v":1,"api":1,"kind":"json"},"char.hob":{"id":null,"v":1,"api":1,"kind":"json"},"char.hollis":{"id":null,"v":1,"api":1,"kind":"json"},"char.iria":{"id":null,"v":1,"api":1,"kind":"json"},"char.keel":{"id":null,"v":1,"api":1,"kind":"json"},"char.latency":{"id":null,"v":1,"api":1,"kind":"json"},"char.lich":{"id":null,"v":1,"api":1,"kind":"json"},"char.lizard":{"id":null,"v":1,"api":1,"kind":"json"},"char.mabb":{"id":null,"v":1,"api":1,"kind":"json"},"char.maiingan":{"id":null,"v":1,"api":1,"kind":"json"},"char.makak":{"id":null,"v":1,"api":1,"kind":"json"},"char.makwa":{"id":null,"v":1,"api":1,"kind":"json"},"char.maren":{"id":null,"v":1,"api":1,"kind":"json"},"char.marta":{"id":null,"v":1,"api":1,"kind":"json"},"char.migizi":{"id":null,"v":1,"api":1,"kind":"json"},"char.mishoomis":{"id":null,"v":1,"api":1,"kind":"json"},"char.mitigwaabiike":{"id":null,"v":1,"api":1,"kind":"json"},"char.modulus":{"id":null,"v":1,"api":1,"kind":"json"},"char.nessa":{"id":null,"v":1,"api":1,"kind":"json"},"char.nettie":{"id":null,"v":1,"api":1,"kind":"json"},"char.ningashi":{"id":null,"v":1,"api":1,"kind":"json"},"char.nookomis":{"id":null,"v":1,"api":1,"kind":"json"},"char.odric":{"id":null,"v":1,"api":1,"kind":"json"},"char.orin":{"id":null,"v":1,"api":1,"kind":"json"},"char.pax":{"id":null,"v":1,"api":1,"kind":"json"},"char.perla":{"id":null,"v":1,"api":1,"kind":"json"},"char.pike":{"id":null,"v":1,"api":1,"kind":"json"},"char.pip":{"id":null,"v":1,"api":1,"kind":"json"},"char.portal":{"id":null,"v":1,"api":1,"kind":"json"},"char.rat":{"id":null,"v":1,"api":1,"kind":"json"},"char.rowan":{"id":null,"v":1,"api":1,"kind":"json"},"char.sela":{"id":null,"v":1,"api":1,"kind":"json"},"char.silas":{"id":null,"v":1,"api":1,"kind":"json"},"char.snow_hare":{"id":null,"v":1,"api":1,"kind":"json"},"char.spider":{"id":null,"v":1,"api":1,"kind":"json"},"char.spider_queen":{"id":null,"v":1,"api":1,"kind":"json"},"char.swamp_monster":{"id":null,"v":1,"api":1,"kind":"json"},"char.symmetry":{"id":null,"v":1,"api":1,"kind":"json"},"char.tam":{"id":null,"v":1,"api":1,"kind":"json"},"char.timber_wolf":{"id":null,"v":1,"api":1,"kind":"json"},"char.tolly":{"id":null,"v":1,"api":1,"kind":"json"},"char.town_guard":{"id":null,"v":1,"api":1,"kind":"json"},"char.vael":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan_acolyte":{"id":null,"v":1,"api":1,"kind":"json"},"char.vorthan_reader":{"id":null,"v":1,"api":1,"kind":"json"},"char.voss":{"id":null,"v":1,"api":1,"kind":"json"},"char.waabigwan":{"id":null,"v":1,"api":1,"kind":"json"},"char.wagon":{"id":null,"v":1,"api":1,"kind":"json"},"char.wenna":{"id":null,"v":1,"api":1,"kind":"json"},"char.wolf":{"id":null,"v":1,"api":1,"kind":"json"},"char.wraith":{"id":null,"v":1,"api":1,"kind":"json"},"char.wren":{"id":null,"v":1,"api":1,"kind":"json"},"char.ziigwan":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.apron":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_full":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_goatee":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_moustache":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.beard_stubble":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.belt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.boots":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.boots_moccasins":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.cape":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.gloves":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_bald":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_braids":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_bun":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_curly":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_long":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_loose":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_mohawk":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_mohawklong":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_ponytail":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hair_short":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_ashcrown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_ashshard":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bandana":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_beadband":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bigchief":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_bonewrap":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_cap":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_crown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_feather":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_featherband":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_hood":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_otterturban":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_shroud":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_spidercrown":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_verdant":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.hat_wizard":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_breechcloth":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_buckskinskirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_jingle":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_ribbonskirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_shorts":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_skirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.pants_trousers":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_beadvest":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_buckskin":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_jingle":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_ribbon":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_ribbondress":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_robe":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_shirt":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_tunic":{"id":null,"v":1,"api":1,"kind":"json"},"cloth.shirt_vest":{"id":null,"v":1,"api":1,"kind":"json"},"gear.angel_wings":{"id":null,"v":1,"api":1,"kind":"json"},"gear.arrows":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bandolier":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bikwak":{"id":null,"v":1,"api":1,"kind":"json"},"gear.boots":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bow":{"id":null,"v":1,"api":1,"kind":"json"},"gear.bow_snare":{"id":null,"v":1,"api":1,"kind":"json"},"gear.chainbody":{"id":null,"v":1,"api":1,"kind":"json"},"gear.dagger":{"id":null,"v":1,"api":1,"kind":"json"},"gear.dagger_venom":{"id":null,"v":1,"api":1,"kind":"json"},"gear.fishing_rod":{"id":null,"v":1,"api":1,"kind":"json"},"gear.ghostlight":{"id":null,"v":1,"api":1,"kind":"json"},"gear.hammer":{"id":null,"v":1,"api":1,"kind":"json"},"gear.handdrum":{"id":null,"v":1,"api":1,"kind":"json"},"gear.hatchet":{"id":null,"v":1,"api":1,"kind":"json"},"gear.helmet":{"id":null,"v":1,"api":1,"kind":"json"},"gear.lobster_pot":{"id":null,"v":1,"api":1,"kind":"json"},"gear.longsword":{"id":null,"v":1,"api":1,"kind":"json"},"gear.mace":{"id":null,"v":1,"api":1,"kind":"json"},"gear.mitigwaab":{"id":null,"v":1,"api":1,"kind":"json"},"gear.net":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pack":{"id":null,"v":1,"api":1,"kind":"json"},"gear.paddle":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pickaxe":{"id":null,"v":1,"api":1,"kind":"json"},"gear.platebody":{"id":null,"v":1,"api":1,"kind":"json"},"gear.platelegs":{"id":null,"v":1,"api":1,"kind":"json"},"gear.pushpole":{"id":null,"v":1,"api":1,"kind":"json"},"gear.quillmakak":{"id":null,"v":1,"api":1,"kind":"json"},"gear.ricesticks":{"id":null,"v":1,"api":1,"kind":"json"},"gear.robe":{"id":null,"v":1,"api":1,"kind":"json"},"gear.rosary":{"id":null,"v":4,"api":1,"kind":"json"},"gear.shield":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_ember":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_frost":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_storm":{"id":null,"v":1,"api":1,"kind":"json"},"gear.staff_verdant":{"id":null,"v":1,"api":1,"kind":"json"},"gear.sword":{"id":null,"v":1,"api":1,"kind":"json"},"gear.tinderbox":{"id":null,"v":1,"api":1,"kind":"json"},"gear.tomahawk":{"id":null,"v":1,"api":1,"kind":"json"},"gear.torch":{"id":null,"v":1,"api":1,"kind":"json"},"item.asemaa":{"id":null,"v":1,"api":1,"kind":"json"},"item.birchlogs":{"id":null,"v":1,"api":1,"kind":"json"},"item.bones":{"id":null,"v":1,"api":1,"kind":"json"},"item.bread":{"id":null,"v":1,"api":1,"kind":"json"},"item.candy":{"id":null,"v":1,"api":1,"kind":"json"},"item.castlestone":{"id":null,"v":1,"api":1,"kind":"json"},"item.chanterelle":{"id":null,"v":1,"api":1,"kind":"json"},"item.chicken":{"id":null,"v":1,"api":1,"kind":"json"},"item.coins":{"id":null,"v":1,"api":1,"kind":"json"},"item.fish":{"id":null,"v":1,"api":1,"kind":"json"},"item.flint":{"id":null,"v":1,"api":1,"kind":"json"},"item.knockers":{"id":null,"v":1,"api":1,"kind":"json"},"item.lobster":{"id":null,"v":1,"api":1,"kind":"json"},"item.logs":{"id":null,"v":1,"api":1,"kind":"json"},"item.manoomin":{"id":null,"v":1,"api":1,"kind":"json"},"item.mouse":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_fly":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_glow":{"id":null,"v":1,"api":1,"kind":"json"},"item.mushroom_porcini":{"id":null,"v":1,"api":1,"kind":"json"},"item.note":{"id":null,"v":1,"api":1,"kind":"json"},"item.obsidian":{"id":null,"v":1,"api":1,"kind":"json"},"item.ore":{"id":null,"v":1,"api":1,"kind":"json"},"item.pail":{"id":null,"v":1,"api":1,"kind":"json"},"item.pelt":{"id":null,"v":1,"api":1,"kind":"json"},"item.potion":{"id":null,"v":1,"api":1,"kind":"json"},"item.pushpole":{"id":null,"v":1,"api":1,"kind":"json"},"item.ring":{"id":null,"v":1,"api":1,"kind":"json"},"item.ring_angels":{"id":null,"v":1,"api":1,"kind":"json"},"item.rosary":{"id":null,"v":1,"api":1,"kind":"json"},"item.sapbucket":{"id":null,"v":1,"api":1,"kind":"json"},"item.sapling":{"id":null,"v":1,"api":1,"kind":"json"},"item.shrimp":{"id":null,"v":1,"api":1,"kind":"json"},"item.sinew":{"id":null,"v":1,"api":1,"kind":"json"},"item.snare":{"id":null,"v":1,"api":1,"kind":"json"},"item.stone":{"id":null,"v":1,"api":1,"kind":"json"},"item.wiigwaas":{"id":null,"v":1,"api":1,"kind":"json"},"item.willowbark":{"id":null,"v":1,"api":1,"kind":"json"},"palette":{"id":null,"v":1,"api":1,"kind":"json"}}},"lazy":{"zones":{"village":{"id":null,"v":2,"api":1,"kind":"json"},"eastend":{"id":null,"v":1,"api":1,"kind":"json"},"whisperwood":{"id":null,"v":2,"api":1,"kind":"json"},"saltmere":{"id":null,"v":3,"api":1,"kind":"json"},"castle":{"id":null,"v":1,"api":1,"kind":"json"},"wolfden":{"id":null,"v":1,"api":1,"kind":"json"},"cavemouth":{"id":null,"v":1,"api":1,"kind":"json"},"spidercave":{"id":null,"v":1,"api":1,"kind":"json"},"ancientchapel":{"id":null,"v":1,"api":1,"kind":"json"},"evengrove":{"id":null,"v":1,"api":1,"kind":"json"},"ziibiing":{"id":null,"v":1,"api":1,"kind":"json"},"lodges":{"id":null,"v":1,"api":1,"kind":"json"},"ricelake":{"id":null,"v":1,"api":1,"kind":"json"},"sugarcamp":{"id":null,"v":1,"api":1,"kind":"json"},"flintbank":{"id":null,"v":1,"api":1,"kind":"json"},"obsidianbank":{"id":null,"v":1,"api":1,"kind":"json"},"willowbank":{"id":null,"v":1,"api":1,"kind":"json"},"dragonkeep":{"id":null,"v":1,"api":1,"kind":"json"}}}}, registryUrl: window.ASH3D_REGISTRY_URL || null, content: false }).then(function (m) { return m.engine.openStore().then(function (st) { window.ASH = m.engine.start(document.getElementById('ash'), { report: m.$report, store: st }); }); }).catch(function (e) { console.error(e); var d = document.getElementById('ash'); d.innerHTML = '<div style="color:#fff;padding:24px;font:16px sans-serif">ASHVALE could not start: ' + String(e && e.message || e).replace(/</g, '&lt;') + '</div>'; });
 
 </script>
 </body></html>

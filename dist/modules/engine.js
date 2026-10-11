@@ -796,6 +796,20 @@
           case 'xsit': netSend({ CS: [e.t, e.s | 0] }); break;
           case 'xstand': netSend({ CT: [e.t] }); break;
           case 'xcmove': netSend({ CM: [e.t, e.from, e.to, e.promo || 0] }); break;
+          /* THE POKER TABLE (handoff/poker_plan.md): psit/pstand is "you are (no longer) in a chair at the felt", said
+             the same way whether the table seated you or a host's row did; poker is the felt changing - cards, chips,
+             the button, whose turn. The row itself carries everything the page draws. */
+          case 'psit': if (mine) pokerEnter(e.t); break;
+          case 'pstand': if (mine) pokerLeave(e.t); break;
+          case 'poker': {
+            if (SCENE.pokerShow) SCENE.pokerShow(e.t, pokerModel(e.t));
+            if (me.seat && me.seat.t === e.t && me.seat.k === 'pk') { pokerFx(e.t, e); if (hud.pokerUpdate) hud.pokerUpdate(pokerView(e.t)); }
+            const T = core.pokerTableById(e.t); if (T && iHostAt(T.x, T.y)) netSend({ Pk: [pkNet(core.pokerRow(e.t))] });
+            break;
+          }
+          case 'xpsit': netSend({ PS: [e.t, e.s | 0] }); break;
+          case 'xpstand': netSend({ PT: [e.t] }); break;
+          case 'xpact': netSend({ PA: [e.t, e.a, e.to | 0] }); break;
           case 'respawn': { const t = ents.get('p:' + e.p); if (!t) break; t.dead = false; t.oneShot = false; t.loco = null; t.H.setOpacity && t.H.setOpacity(1); t.root.visible = true; const p = core.S.players[e.p]; place(t, p.x, p.y); t.H.play('idle', { loop: true }); if (e.p === PID) { hud.death(false); cam.snap = true; arriveCheck(); } break; }
           case 'gone': { const t = ents.get('m:' + e.mob); if (t) { t.dead = true; t.deadT = now - 5000; t.oneShot = true; t.root.visible = false; } break; }   /* the host says it is dead: hide it at once (2026-10-02: frozen monsters after re-entering a zone) */
           case 'spawn': { const m = core.mobByUid(e.mob), t = ents.get('m:' + e.mob); if (!t) break; t.dead = false; t.oneShot = false; t.loco = null; t.root.visible = true; t.H.setOpacity && t.H.setOpacity(1); place(t, m.x, m.y); t.H.play('idle', { loop: true }); t.spawnT = now; t.hp = m.hp; break; }
@@ -1245,6 +1259,7 @@
           const side = host.clientWidth > 500 ? 0.55 : 0.4; tg.x -= Math.cos(cam.yaw) * side; tg.z += Math.sin(cam.yaw) * side;
         }
         if (cam.mode === 'chess' && CHESSV) { tg.set(CHESSV.x, CHESSV.y, CHESSV.z); cam.tyaw = CHESSV.yaw; cam.tpitch = isPhone ? 1.32 : 1.22; cam.tdist = isPhone ? 1.9 : 1.55; }   /* seated at a chess table: close over the board, your side nearest */
+        if (cam.mode === 'poker' && POKERV) { tg.set(POKERV.x, POKERV.y, POKERV.z); cam.tyaw = POKERV.yaw; cam.tpitch = 1.2; cam.tdist = 1.4; }   /* seated at the felt: the light centre is the middle of the table */
         if (cam.snap) camT.copy(tg); else camT.lerp(tg, Math.min(1, dt * 12));
         cam.snap = false;
         const cp = Math.max(0.3, cam.pitch);
@@ -1289,6 +1304,14 @@
           fov = Math.max(42, Math.min(100, fov));
           if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
           if (myEnt.root.visible) { myEnt.root.visible = false; FPV.hid = true; }   /* your own head would fill the view */
+        }
+        if (cam.mode === 'poker' && POKERV && POKERV.eye) {   /* THE POKER TABLE: first person at the felt, leaning a little over your own side of it */
+          const E = POKERV.eye, L = POKERV.look; camera.position.set(E.x, E.y, E.z); camera.lookAt(L.x, L.y, L.z);
+          const aspect = (host.clientWidth || 1) / (host.clientHeight || 1), d = Math.hypot(L.x - E.x, L.y - E.y, L.z - E.z), half = 0.66;
+          let fov = 2 * Math.atan((aspect < 1 ? half / aspect : half) / d) * 180 / Math.PI * 1.18;   /* portrait: the whole width of the felt has to fit */
+          fov = Math.max(45, Math.min(95, fov));
+          if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+          if (myEnt.root.visible) { myEnt.root.visible = false; FPV.hid = true; }   /* your own body would sit in the middle of your own cards */
         }
         sun.position.set(camT.x + SUNL.dir[0] * 20, camT.y + SUNL.dir[1] * 20, camT.z + SUNL.dir[2] * 20); sun.target.position.copy(camT);   /* from the real sun (or the moon) */
       }
@@ -1397,6 +1420,19 @@
             if (bFree) out.push({ html: 'Sit down as Black <span class="c">(north bench)</span>', act: { c: 'sit', table: t.id, seat: 0 }, red: out.length ? 0 : 1 }); else taken.push({ html: 'Black: <span class="y">' + esc(st.bn || 'someone') + '</span>', fn: () => hud.chat(esc(st.bn) + ' is playing Black here.', 'sys') });
           }
           out.push(...taken, { html: 'Examine <span class="c">Chess table</span>', fn: () => hud.chat(chessExamine(st), 'sys') });
+          return out;
+        }
+        if (t.kind === 'pokertable') {   /* THE POKER TABLE: six chairs round one felt in the Saltmere tap room; once you are sitting, the panel in front of you does the talking */
+          const T = core.pokerTableById(t.id); if (!T) return [];
+          const st = core.pokerOf(t.id), out = [], taken = [], at = {};
+          for (const s of st.se || []) at[s[0] | 0] = s[1];
+          if (me.seat && me.seat.t === t.id && me.seat.k === 'pk') out.push({ html: 'Stand up', act: { c: 'stand' }, red: 1 });
+          else (T.seats || []).forEach((s, i) => {
+            const who = at[i];
+            if (who && who !== PID) taken.push({ html: 'Chair ' + (i + 1) + ': <span class="y">' + pokerWho(who) + '</span>', fn: () => hud.chat(pokerWho(who) + ' is sitting there.', 'sys') });
+            else out.push({ html: 'Sit down <span class="c">(chair ' + (i + 1) + ')</span>', act: { c: 'sit', table: t.id, seat: i }, red: out.length ? 0 : 1 });
+          });
+          out.push(...taken, { html: 'Examine <span class="c">Poker table</span>', fn: () => hud.chat(pokerExamine(st), 'sys') });
           return out;
         }
         if (t.kind === 'crate') {
@@ -2011,6 +2047,10 @@
       let myNetId = PID;
       const toNet = x => x === PID ? myNetId : x, fromNet = x => x === myNetId ? PID : x;
       const netRow = r => Object.assign({}, r, { w: r.w ? toNet(r.w) : null, b: r.b ? toNet(r.b) : null });   /* a chess row with the room's ids for the players */
+      /* A poker row names its players in one place, the seat rows [ref, id, chips, bet, flags]. The cards beside them
+         (hc) are references into those rows, not ids, so they need nothing. */
+      const pkNet = r => Object.assign({}, r, { se: (r.se || []).map(s => [s[0], toNet(s[1]), s[2], s[3], s[4]]) });
+      const pkLocal = r => Object.assign({}, r, { se: (r.se || []).map(s => [s[0], fromNet(s[1]), s[2], s[3], s[4]]) });
       const CLS = { m: 'melee', r: 'ranged', g: 'magic' };
       const areaAt = (x, y) => core.areaOf(x | 0, y | 0);
       const hostOf = a => hosts.get(a) || null;
@@ -2143,6 +2183,7 @@
         const Fi = core.S.fires.filter(f => iHostAt(f.x, f.y)).map(f => [f.uid, f.x, f.y, f.until - core.S.t, f.log]);
         if (Fi.length) packSend({ F: seq }, 'Fi', Fi);
         const Ch = core.chessRows((x, y) => iHostAt(x, y)).map(netRow); if (Ch.length) packSend({ F: seq }, 'Ch', Ch);   /* the chess park's tables this game hosts */
+        const Pk = core.pokerRows((x, y) => iHostAt(x, y)).map(pkNet); if (Pk.length) packSend({ F: seq }, 'Pk', Pk);   /* and the felt in the tap room */
         const Pl = [];
         for (const a of hosted) for (const r of core.plantSnap(a)) Pl.push(r);
         if (Pl.length) packSend({ F: seq }, 'Pl', Pl);
@@ -2191,6 +2232,12 @@
         if (Array.isArray(d.CT)) { const T = core.tableById(String(d.CT[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostStand(id, T.id)); }
         if (Array.isArray(d.CM)) { const T = core.tableById(String(d.CM[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostMove(id, T.id, String(d.CM[1] || ''), String(d.CM[2] || ''), d.CM[3] ? String(d.CM[3]) : null)); }
         if (Array.isArray(d.Ch)) { const rows = d.Ch.filter(r => r && r.t).filter(r => { const T = core.tableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).map(r => Object.assign({}, r, { w: r.w ? fromNet(r.w) : null, b: r.b ? fromNet(r.b) : null })); if (rows.length) coreCall(() => core.applyChess(rows)); }
+        /* the felt: a chair asked for, a player getting up, an action, or the host's word on a table. Same rules as the
+           chess park: only the host of the area the table stands in answers, and a row only counts from that host. */
+        if (Array.isArray(d.PS)) { const T = core.pokerTableById(String(d.PS[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerSit(id, T.id, d.PS[1] | 0)); }
+        if (Array.isArray(d.PT)) { const T = core.pokerTableById(String(d.PT[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerStand(id, T.id)); }
+        if (Array.isArray(d.PA)) { const T = core.pokerTableById(String(d.PA[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerAct(id, T.id, String(d.PA[1] || ''), d.PA[2] | 0)); }
+        if (Array.isArray(d.Pk)) { const rows = d.Pk.filter(r => r && r.t).filter(r => { const T = core.pokerTableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).map(pkLocal); if (rows.length) coreCall(() => core.applyPoker(rows)); }
         if (Array.isArray(d.X)) { const x = d.X; if (core.item(x[0]) && iHostAt(x[2], x[3])) coreCall(() => core.hostDrop({ id: x[0], n: Math.max(1, x[1] | 0), x: x[2] | 0, y: x[3] | 0, life: x[4] | 0, from: x[5] ? fromNet(x[5]) : null, diedAt: x[6] | 0 })); }
         /* below: only the word of the host of the area concerned counts */
         if (Array.isArray(d.M)) { const rows = d.M.filter(w => Array.isArray(w) && fromHostOf(id, mobArea(w[0]))); if (rows.length) coreCall(() => core.applyMobs(rows)); }
@@ -2571,14 +2618,17 @@
       /* ---------- character creator (first start) and the tailor's wardrobe */
       /* ---------------- THE CHESS PARK: sitting down swings the camera over the board and swaps the HUD for the chess one */
       const BENCH_SEAT = 0.42;   /* the plank's height in scene.js 'bench' */
+      const CHAIR_SEAT = 0.39;   /* the seat top in scene.js 'chair' - the poker table's chairs */
       let TABLES_CACHE = { n: -1, list: [] };   /* core.tables() filters every loaded object: once per area change, not per remote per frame */
       function tablesCached() { const O = core.M.objects || []; if (O.length !== TABLES_CACHE.n) TABLES_CACHE = { n: O.length, list: core.tables() }; return TABLES_CACHE.list; }
-      function seatLift(e) {   /* a seated chess player sits on the bench, not on the ground: you by your seat, a remote by the table rows */
-        if (e === myEnt) return me.seat ? BENCH_SEAT : 0;
+      let PKTABLES_CACHE = { n: -1, list: [] };
+      function pkTablesCached() { const O = core.M.objects || []; if (O.length !== PKTABLES_CACHE.n) PKTABLES_CACHE = { n: O.length, list: core.pokerTables() }; return PKTABLES_CACHE.list; }
+      function seatLift(e) {   /* a seated player sits on the bench or the chair, not on the ground: you by your seat, a remote by the table rows */
+        if (e === myEnt) return me.seat ? (me.seat.k === 'pk' ? CHAIR_SEAT : BENCH_SEAT) : 0;
         if (!e.key || e.key.charCodeAt(0) !== 114) return 0;   /* 'r:' remotes: seated when a table's row names them (their anim lives on the remote record, not here) */
-        const T4 = tablesCached(); if (!T4.length) return 0;
         const id = e.key.slice(2);
-        for (const T of T4) { const st = core.S.chess[T.id]; if (st && (st.w === id || st.b === id)) return BENCH_SEAT; }
+        for (const T of tablesCached()) { const st = core.S.chess[T.id]; if (st && (st.w === id || st.b === id)) return BENCH_SEAT; }
+        for (const T of pkTablesCached()) { const st = core.S.poker[T.id]; if (st && (st.se || []).some(s => s[1] === id)) return CHAIR_SEAT; }
         return 0;
       }
       let CHESSV = null, CHESS_SEL = null;
@@ -2627,6 +2677,76 @@
         if (st.status === 'over') return 'The last game ended ' + st.result + ' (' + st.why + ').';
         if (st.w || st.b) return esc(st.wn || st.bn) + ' is waiting for an opponent.';
         return 'A stone chess table: slate and sandstone squares, a driftwood set against a whalebone one. Sit on a bench to play.';
+      }
+      /* ---------------- THE POKER TABLE (handoff/poker_plan.md): the same sitting and the same swap of camera and HUD as
+         the chess park, with a felt instead of a board. Everything the page draws comes from the table's row - see
+         core.js's poker block for what travels and for why the hole cards travel with it. */
+      let POKERV = null;
+      const PK_FX = {};   /* per table, what the felt last looked like to you - so a card going out is one sound, not five */
+      const PKF = core.pokerSeatFlags ? core.pokerSeatFlags() : [1, 2, 4, 8, 16];   /* in the hand, folded, all-in, dealt in, has answered */
+      const pkEsc = s => String(s == null ? '' : s).replace(/</g, '&lt;');   /* the names in the panel and the log; esc() below is only ever local to the tap menu */
+      function pokerWho(pid) { const p = core.S.players[pid]; return p && p.name ? pkEsc(p.name) : 'someone'; }
+      function pokerSeatOf(st, ref) { return (st.se || []).find(s => (s[0] | 0) === (ref | 0)) || null; }
+      function pokerModel(t) {   /* what lies on the felt: the board, each chair's two cards - face down unless they are yours, or the hand has been shown - the bets, the button, whose turn */
+        const st = core.pokerOf(t), show = st.o === 'playing' && st.st === 'none', hands = [], bets = {};
+        for (const s of st.se || []) {
+          const ref = s[0] | 0, f = s[4] | 0, h = (st.hc || []).find(x => (x[0] | 0) === ref);
+          if (!h) continue;   /* nothing in front of that chair - sitting it out, or the hand is folded and mucked */
+          if ((f & PKF[1]) && !show) continue;
+          const up = show || s[1] === PID;
+          hands.push({ ref, c: h && up ? [h[1] | 0, h[2] | 0] : null, down: up ? 0 : 1 });
+          bets[ref] = s[3] | 0;
+        }
+        return { board: (st.bo || []).slice(), hands, bets, dealer: st.d >= 0 ? st.d : null, turn: st.a >= 0 && st.o === 'playing' && st.st !== 'none' ? st.a : null };
+      }
+      function pokerView(t) {   /* the panel's view of the table, all of it out of the row it was sent */
+        const st = core.pokerOf(t), s = me.seat && me.seat.t === t ? me.seat.s | 0 : -1, mine = pokerSeatOf(st, s);
+        const f = mine ? mine[4] | 0 : 0, dealt = !!((f & PKF[3]) && !(f & PKF[1])), call = Math.max(0, (st.b | 0) - ((mine && mine[3]) | 0));
+        const live = st.o === 'playing' && st.st !== 'none', hh = (st.hc || []).find(x => (x[0] | 0) === s);
+        return {
+          t, seat: s, me: PID, hand: st.h | 0, street: st.st, open: !live, pot: st.p | 0, bet: st.b | 0, dealer: st.d, turn: st.a,
+          seats: (st.se || []).map(x => ({ ref: x[0] | 0, id: x[1], name: pokerWho(x[1]), chips: x[2] | 0, bet: x[3] | 0, folded: !!((x[4] | 0) & PKF[1]), allin: !!((x[4] | 0) & PKF[2]), dealt: !!((x[4] | 0) & PKF[3]) })),
+          board: (st.bo || []).slice(), hole: hh && hh[1] != null ? [hh[1] | 0, hh[2] | 0] : null,
+          log: (st.lg || []).slice(), result: st.r, inHand: dealt, myTurn: live && dealt && (st.a | 0) === s, call, stack: (mine && mine[2]) | 0,
+          winners: st.r ? st.r.p.map(q => q[1]).reduce((a, b) => a.concat(b), []) : []
+        };
+      }
+      function pokerFx(t, row) {   /* the small sound of the felt changing under your hands: a card going out, a new street */
+        const sig = ((row.bo || []).length) + ':' + row.st;
+        if (PK_FX[t] !== sig) { PK_FX[t] = sig; sfx('click'); }
+      }
+      function pokerEnter(t) {
+        const at = SCENE.pokerAt ? SCENE.pokerAt(t) : null, T = core.pokerTableById(t), s = me.seat && me.seat.t === t ? me.seat.s | 0 : -1;
+        if (at && T && T.seats[s]) {   /* from your own eyes at the felt: leaning a little over your own side of it, the whole table in front of you */
+          if (cam.mode !== 'poker') cam.save = { yaw: cam.tyaw, pitch: cam.tpitch, dist: cam.tdist };
+          const seat = T.seats[s], dx = seat[0] + 0.5 - at.x, dz = seat[1] + 0.5 - at.z, L = Math.hypot(dx, dz) || 1;
+          POKERV = { x: at.x, y: at.y + 0.55, z: at.z, yaw: Math.atan2(-dx, -dz), eye: { x: at.x + dx / L * 0.72, y: at.y + 0.62, z: at.z + dz / L * 0.72 }, look: { x: at.x - dx / L * 0.5, y: at.y - 0.02, z: at.z - dz / L * 0.5 } };
+          cam.mode = 'poker';
+        }
+        myEnt.restPose = 'sit';
+        const askStand = () => { const st = core.pokerOf(t), inHand = (st.se || []).some(x => x[1] === PID && ((x[4] | 0) & PKF[3]) && !((x[4] | 0) & PKF[1])) && st.st !== 'none';
+          hud.confirm(inHand ? 'Fold and stand up?' : 'Stand up?', inHand ? 'You are in a hand: standing up now folds it and leaves the chips already in the pot.' : 'Leave the poker table?', inHand ? 'Fold and stand' : 'Stand up', 'Stay', () => send({ c: 'stand' })); };
+        if (hud.pokerOpen) hud.pokerOpen(pokerView(t), { act: (a, to) => pokerAct(t, a, to), stand: askStand });
+      }
+      function pokerLeave(t) {
+        if (cam.mode === 'poker') { cam.mode = null; if (cam.save) { cam.tyaw = cam.save.yaw; cam.tpitch = cam.save.pitch; cam.tdist = cam.save.dist; cam.save = null; } }
+        POKERV = null; myEnt.restPose = null; delete PK_FX[t];
+        if (hud.pokerClose) hud.pokerClose();
+      }
+      function pokerAct(t, a, to) {   /* the panel's buttons: the table's own rules answer whether it was a legal one */
+        if (!me.seat || me.seat.k !== 'pk' || me.seat.t !== t) return;
+        const st = core.pokerOf(t), mine = pokerSeatOf(st, me.seat.s);
+        if (!mine || !((mine[4] | 0) & PKF[3]) || (mine[4] | 0) & PKF[1]) { hud.chat('You are not in this hand.', 'sys'); return; }
+        if (st.o !== 'playing' || st.st === 'none') { hud.chat('Nothing is on the felt at the moment.', 'sys'); return; }
+        if ((st.a | 0) !== (me.seat.s | 0)) { hud.chat('It is not your turn yet.', 'sys'); return; }
+        send({ c: 'pact', a: String(a), to: to == null ? undefined : to | 0 });
+        if (hud.pokerUpdate) hud.pokerUpdate(pokerView(t));
+      }
+      function pokerExamine(st) {
+        const inhand = (st.se || []).filter(s => (s[4] | 0) & PKF[3]).map(s => pokerWho(s[1]));
+        if (st.o === 'playing' && st.st !== 'none') return 'A hand is on the felt: ' + (st.p | 0) + ' in the pot, ' + inhand.length + ' in it' + (st.bo.length ? ', ' + st.bo.length + ' cards on the board.' : ', nothing on the board yet.') + ' Sit in a free chair and it will deal you in.';
+        if ((st.se || []).length) return 'A felt table for six, with ' + (st.se || []).map(s => pokerWho(s[1])).join(', ') + ' sitting. ' + (st.o === 'playing' ? 'They are between hands.' : 'Waiting for players.');
+        return 'A felt table for six under the lamps, brass rail turned dark, a chip tray in the middle. Sit in a chair to play: the table deals itself.';
       }
       function openWardrobe(first, who) {
         if (!myEnt.H.setOutfit || !MOD.outfitStyles) return;
