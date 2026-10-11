@@ -80,7 +80,7 @@ const shut = (kind, days) => ({ [kind]: { open: false, days } }), open = (kind) 
 /* no free canoe; Migizi builds one */
 {
   const Z = born('ziibiing', 'sc'), core = Z.core, p = Z.p;
-  ok(!core.M.objects.some(o => o.k === 'canoe' && o.x >= 56 && o.x < 112 && o.y >= 588 && o.y < 624), 'no free canoe waits at the Ziibiing landing');
+  ok(!core.M.objects.some(o => o.k === 'canoe' && o.x >= 32464 && o.x < 32524 && o.y >= -2411 && o.y < -2336), 'no free canoe waits at the Ziibiing landing');
   p.x = 89; p.y = 620; core.cmd('p1', { c: 'board', x: 89, y: 621 }); Z.run(5);
   ok(!p.boat, 'nothing to board at the landing');
   core.setNature({ day: 100, year: 1, hours: 2400 });
@@ -97,7 +97,8 @@ const shut = (kind, days) => ({ [kind]: { open: false, days } }), open = (kind) 
   core.setNature({ day: 102, year: 1, hours: 2448 });
   Z.evs.length = 0; t = Z.talk('migizi');
   const land = Z.evs.find(e => e.e === 'boatland');
-  ok(land && land.x === 89 && land.y === 621 && land.by === 'p1' && /in the water at the landing/.test(t), 'two days later he sets it in the water at the landing (told to the Bank as yours)');
+  const ZP = JSON.parse(fs.readFileSync(path.join(DD, 'extra', 'ziibiing_places.json'), 'utf8'));
+  ok(land && land.x === ZP.landing[0] && land.y === ZP.landing[1] && land.by === 'p1' && /in the water at the landing/.test(t), 'two days later he sets it in the water at the landing (told to the Bank as yours)');
   const C = born('ashvale', 'sc2'); C.core.setNature({ day: 1, year: 1, hours: 24 });
   C.core.setBoats([80, 610, 100, 630], [[89, 621, land.face]]);
   C.p.x = 89; C.p.y = 620; C.core.cmd('p1', { c: 'board', x: 89, y: 621 }); C.run(5);

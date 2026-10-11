@@ -17,6 +17,10 @@ WORLD = json.load(open(os.path.expanduser('~/ashvale/world.json')))
 DATA_API = 1          # bump only when a field's MEANING changes (adding fields is fine without a bump)
 
 
+# ZIIBIING'S PLACES (2026-10-11, the village on the other continent): everything the data needs to know about where
+# tools/make_zone_ziibiing.py put things - the portal stone, the sugar camp's fire and maples, the groves. Run that tool first.
+ZP = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'extra', 'ziibiing_places.json')))
+
 def overlay(base, extra):
     """data/extra/<module>.json is merged over what this script makes (hand-written additions, e.g. a collaborator's
     NPC, quests and items from GitHub, kept so a rerun does not wipe them): dicts merge, lists of {id: ...} merge by id,
@@ -1738,9 +1742,9 @@ module('rules', 3, {
               # the sugar camp's morning (2026-10-09): the people walk up just before 8:00, tap the maples till noon,
               # and pour what they carry into the akik. The tiles are the camp's own - see THE SUGAR CAMP in tools/make_zone_ziibiing.py
               "sapDay": {"walk": [6.75, 8], "gather": [8, 12], "trips": 4,
-                         "at": [-16252, 15290], "kettle": [-16254, 15290], "pour": [-16254, 15289], "steam": [0.25, 0.6],
-                         "trees": [[-16252, 15292, -16252, 15293], [-16255, 15293, -16255, 15294],
-                                   [-16260, 15284, -16260, 15283], [-16249, 15288, -16248, 15288]]},
+                         # the camp's places come from tools/make_zone_ziibiing.py (data/extra/ziibiing_places.json, 2026-10-11)
+                         "at": ZP["sap_at"], "kettle": ZP["kettle"], "pour": ZP["pour"], "steam": [0.25, 0.6],
+                         "trees": ZP["sap_trees"]},
               },
     "effects": {"note": "effect library (core.js EFFECTS); item JSON: Effect, Effect ticks, Effect chance (%), Effect damage. Unknown effects are ignored.",
                 "known": ["freeze", "stun", "slow", "poison", "burn"]},
@@ -1798,7 +1802,10 @@ module('rules', 3, {
     # `to` is where you arrive. The Ashvale stone (Teleport "ashvale") takes you to the same spot.
     "portals": [{"id": "ashvale", "name": "Ashvale", "x": 19, "y": 55, "to": [19, 56]},
                 {"id": "saltmere", "name": "Saltmere", "x": 462, "y": 28, "to": [462, 29]},
-                {"id": "castle", "name": "the Lake Castle", "x": 4048, "y": 8419, "to": [4049, 8418]}],   # the lake castle's portal, here for good (2026-10-08: make_castle.js added it, every later make_data run dropped it, and the castle stone said "Nothing happens")
+                {"id": "castle", "name": "the Lake Castle", "x": 4048, "y": 8419, "to": [4049, 8418]},
+                # Ziibiing's stone (2026-10-11): the village moved to the other continent, 34 km of sea from Ashvale, so the
+                # portal is the way between them (2026-10-04: "put a town portal in each of the towns")
+                {"id": "ziibiing", "name": "Ziibiing", "x": ZP["portal"][0], "y": ZP["portal"][1], "to": ZP["portal_to"], "stone": False}],   # stone: False - no keepsake stone for it yet (a quest to write), like the castle's   # the lake castle's portal, here for good (2026-10-08: make_castle.js added it, every later make_data run dropped it, and the castle stone said "Nothing happens")
     # 2026-10-04: "logs, pelts arrows potions should all de spawn. Only Gear and tools and Gold should persist."
     # 2026-10-06: "Gold, and valuable items should stay there until somebody picks them up" (by value, 100 GOLD);
     # "All teleport or rune stone must always persist". The @ashvale Bank keeps them in the world across sessions.
@@ -1827,9 +1834,8 @@ module('rules', 3, {
 # then to the coast of one of two continents on a mostly-ocean globe (2026-10-03 evening): face 19, Saltmere's shore parcel next door.
 module('globecfg', 1, {"seed": "ashvale", "n": 128, "radius_m": 36110, "face": 19, "north": -1, "origin": [8811, -3368], "grid": [8619, -3560],
                        "chunk": 64, "area": 128, "region": 512, "belt": {"whisperwood": 90, "village": 30},
-                       "links": [["eastend", "saltmere"]],   # the trail to Ziibiing is gone (2026-10-09: a wall of old woods between the two)
-                       "walls": [{"piece": "ziibiing", "w": 40, "wide": 70, "edge": 14, "sp": "ZZD", "pts": [[-1840, -140], [-1200, -108], [-640, -122], [-520, 70], [-360, 320], [-150, 330], [60, 335], [260, 340], [330, 450], [420, 600], [480, 676], [600, 720], [800, 748], [920, 760]]}],
-                       # the maple and birch woods (2026-10-08: "a large deciduous forest with maple and Birch", on Ziibiing's own side of
-                       # the river, between it and Ashvale; the trail runs through) - game tiles, an ellipse with a wandering edge
-                       "groves": [{"piece": "ziibiing", "x": 70, "y": 470, "rx": 160, "ry": 105, "sp": "MMMEE", "dens": 0.6, "edge": 35},
-                                  {"piece": "ziibiing", "x": 22, "y": 602, "rx": 30, "ry": 18, "sp": "QQLL", "dens": 0.6, "edge": 10}]})   # the road to Saltmere leaves from Eastend, one straight cobbled road (2026-10-08); village and Eastend touch, one street   # + the skinny trail up from Ziibiing (2026-10-07)   # the trail from Ashvale down to Saltmere (2026-10-03)   # a cedar and tamarack stand by the river (the push pole and the knockers)
+                       "links": [["eastend", "saltmere"]],   # no trail to Ziibiing: it stands on the other continent (2026-10-11); the portal stones join the two
+                       # the maple and birch woods (2026-10-08: "a large deciduous forest with maple and Birch") round Ziibiing's sugar
+                       # camp, and the cedar-tamarack wet wood by the obsidian bank - game tiles, ellipses with a wandering edge, placed by
+                       # tools/make_zone_ziibiing.py with the village (data/extra/ziibiing_places.json)
+                       "groves": ZP["groves"]})   # the road to Saltmere leaves from Eastend, one straight cobbled road (2026-10-08); village and Eastend touch, one street   # + the skinny trail up from Ziibiing (2026-10-07)   # the trail from Ashvale down to Saltmere (2026-10-03)   # a cedar and tamarack stand by the river (the push pole and the knockers)

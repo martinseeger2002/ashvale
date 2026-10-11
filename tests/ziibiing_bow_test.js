@@ -58,7 +58,7 @@ ok(D0.length === 3 && Z0.length === 3, 'three flint and three obsidian deposits 
 ok(zones.find(z => z.id === 'flintbank').objects.some(o => o.k === 'paintedrock') && zones.find(z => z.id === 'obsidianbank').objects.some(o => o.k === 'cairn'), 'each bank has its landmark: the painted rock, the cairn');
 const wetNear = (x, y) => [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [-1, -1], [1, -1], [-1, 1]].some(([dx, dy]) => '~vB'.includes(core.M.tileAt(x + dx, y + dy)));
 ok(D0.concat(Z0).filter(([x, y]) => wetNear(x, y)).length >= 2, 'deposits lie at the water\'s edge, where a canoe lands');
-const lx = 89, ly = 621, dist = (q) => Math.hypot(q[0] - lx, q[1] - ly);
+const ZP = JSON.parse(fs.readFileSync(path.join(DD, 'extra', 'ziibiing_places.json'), 'utf8')), lx = ZP.landing[0], ly = ZP.landing[1], dist = (q) => Math.hypot(q[0] - lx, q[1] - ly);   /* the landing, from the zone tool's places file */
 ok(D0.every(q => dist(q) > 30 && dist(q) < 120) && Z0.every(q => dist(q) > 30 && dist(q) < 120), 'both a short paddle from the Ziibiing landing (' + Math.round(dist(D0[0])) + ', ' + Math.round(dist(Z0[0])) + ' tiles)');
 for (let k = 0; k < 8 && !has('flint'); k++) t = work(D0[0][0], D0[0][1], null, 10);
 ok(has('flint') >= 1, 'flint is pried out by hand, no tool (' + t.slice(0, 70) + ')');

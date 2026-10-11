@@ -436,7 +436,7 @@
       if (s.attuned) p.attuned = JSON.parse(JSON.stringify(s.attuned));
       if (s.orders && typeof s.orders === 'object') p.orders = JSON.parse(JSON.stringify(s.orders));   /* what the people are making for you (a canoe takes two days) */
       if (Array.isArray(s.bless)) p.bless = s.bless.filter(b => b && Number.isInteger(b.x) && Number.isInteger(b.y)).slice(-12).map(b => ({ x: b.x, y: b.y, day: b.day | 0, r: Math.min(30, b.r | 0) }));
-      if (Array.isArray(s.traps)) p.traps = s.traps.filter(t => t && IT[t.id] && trapOf(IT[t.id]) && Number.isInteger(t.x) && Number.isInteger(t.y)).slice(0, 8).map(t => ({ id: t.id, x: t.x, y: t.y, prey: String(t.prey || ''), ready: +t.ready || 0 }));
+      if (Array.isArray(s.traps)) p.traps = s.traps.filter(t => t && IT[t.id] && trapOf(IT[t.id]) && Number.isInteger(t.x) && Number.isInteger(t.y)).slice(0, 8).map(t => ({ id: t.id, x: underMove(t.x, t.y)[0], y: underMove(t.x, t.y)[1], prey: String(t.prey || ''), ready: +t.ready || 0 }));
       if (typeof s.town === 'string') p.town = s.town;
       if (s.hawkHp != null) p.hawkHp = s.hawkHp | 0;
       if (s.cd) { p.cd = {}; for (const k in s.cd) p.cd[k] = S.t + (s.cd[k] | 0); }
@@ -479,7 +479,13 @@
     /* THE UNDERGROUND MOVED (2026-10-08): when the globe opened, the Spider Cave and the wigwam rooms of Ziibiing left their old spots
        (now open sea) for the empty space of the flat net. A position saved inside an old spot is carried along. */
     const UNDER_MOVES = [[-200, 16100, -80, 16184, 24200, 7900], [40, 16300, 253, 16313, 23960, 8100]];
-    function underMove(x, y) { for (const r of UNDER_MOVES) if (x >= r[0] && x < r[2] && y >= r[1] && y < r[3]) return [x + r[4], y + r[5]]; return [x, y]; }
+    /* ZIIBIING MOVED (2026-10-10/11, handoff/site_search/sites.md "site 8"): the village, its sugar camp, rice water and
+       riverbank sites left the brook south of Ashvale for a real river on the other continent (34 km of sea between). A position
+       saved in one of the old places goes to the same place of the new one (the old rectangles, then the shift); a snare set
+       there goes along. Old village 56..111 x 588..623 -> new village at 32464,-2411; the rest likewise. */
+    const ZIIB_MOVES = [[56, 588, 112, 624, 32432, -2947], [84, 536, 100, 549, 32404, -2960], [300, 722, 410, 768, 32205, -3038],
+      [132, 636, 154, 646, 32234, -3004], [124, 610, 142, 619, 32268, -3010], [14, 612, 36, 624, 32546, -2904]];
+    function underMove(x, y) { for (const r of UNDER_MOVES.concat(ZIIB_MOVES)) if (x >= r[0] && x < r[2] && y >= r[1] && y < r[3]) return [x + r[4], y + r[5]]; return [x, y]; }
     function placeFrom(p, s) {
       let xy = null;
       if ((s.v | 0) >= 2 && Array.isArray(s.pos) && s.pos.length === 3) xy = M.fromFace(s.pos[0] | 0, s.pos[1] | 0, s.pos[2] | 0);

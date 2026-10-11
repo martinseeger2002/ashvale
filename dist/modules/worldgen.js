@@ -171,10 +171,38 @@
         return T.map(r => r.join('')); };
       function piecesFromZones(zones, face, gx, gy, popts) {
         const belt = (popts && popts.belt) || {}, links = (popts && popts.links) || [];   /* links: [[fromId, toId]] trails between pieces */
+        /* A ZONE ON ANOTHER FACE (Ziibiing moved to the other continent, 2026-10-11): the game lays a zone's tiles in its own
+           vale frame wherever it is, but the seeded land only knows pieces per face - so a zone whose rectangle lies wholly on
+           another face of the net is registered THERE, as a rotated rectangle (`rot`: its origin corner and the vale axes in that
+           face's plane). Its x, y, w, h are the bounding box on that face; pieceDist and pieceTile (wg_paths) read `rot`. */
+        const N = face >= 0 && ctx.ADJ ? net(face) : null;
+        const onFace = (vx, vy) => N ? N.toFace(vx, -vy) : null;   /* vale tile (planar y = -game y) -> {f, x, y, d} */
         return zones.map(z => {
           const ox = z.origin[0], oy = z.origin[1], w = z.size[0], h = z.size[1];
+          const X0 = gx + ox, Y0 = gy + oy;
           const objs = (z.objects || []).filter(o => o.x >= ox && o.y >= oy && o.x < ox + w && o.y < oy + h).map(o => Object.assign({}, o, { x: o.x + gx, y: o.y + gy }, o.x2 != null ? { x2: o.x2 + gx, y2: o.y2 + gy } : null));   /* a run (a castle wall) moves both ends */
-          return { id: z.id, face, x: gx + ox, y: gy + oy, w, h, tiles: decks(z), objects: objs, belt: belt[z.id] || 0, groves: ((popts && popts.groves) || []).filter(q => q.piece === z.id).map(q => Object.assign({}, q, { x: q.x + gx, y: q.y + gy })), walls: ((popts && popts.walls) || []).filter(q => q.piece === z.id).map(q => Object.assign({}, q, { pts: (q.pts || []).map(p => [p[0] + gx, p[1] + gy]) })), links: links.filter(l => l[0] === z.id).map(l => l[1]), linkStyles: Object.fromEntries(links.filter(l => l[0] === z.id && l[2]).map(l => [l[1], l[2]])) };   /* a third word: 'trail' = a skinny dirt trail, no cobbles, no lamps */
+          const groves = ((popts && popts.groves) || []).filter(q => q.piece === z.id).map(q => Object.assign({}, q, { x: q.x + gx, y: q.y + gy }));
+          const walls = ((popts && popts.walls) || []).filter(q => q.piece === z.id).map(q => Object.assign({}, q, { pts: (q.pts || []).map(p => [p[0] + gx, p[1] + gy]) }));
+          const pc = { id: z.id, face, x: X0, y: Y0, w, h, tiles: decks(z), objects: objs, belt: belt[z.id] || 0, groves, walls, links: links.filter(l => l[0] === z.id).map(l => l[1]), linkStyles: Object.fromEntries(links.filter(l => l[0] === z.id && l[2]).map(l => [l[1], l[2]])) };
+          if (N) {
+            const C = [[X0, Y0], [X0 + w, Y0], [X0, Y0 + h], [X0 + w, Y0 + h]].map(c => onFace(c[0], c[1]));
+            const f = C[0].f;
+            if (f !== face && C.every(c => c.f === f && c.d === 0)) {
+              /* the vale's +x and +y (south) directions in that face's plane, from the net's placement of the face */
+              const o = C[0], ax = [(C[1].x - o.x) / w, (C[1].y - o.y) / w], ay = [(C[2].x - o.x) / h, (C[2].y - o.y) / h];
+              const xs = C.map(c => c.x), ys = C.map(c => -c.y);
+              const bx = Math.floor(Math.min.apply(null, xs)), by = Math.floor(Math.min.apply(null, ys));
+              const toF = (vx, vy) => { const q = onFace(vx + 0.5, vy + 0.5); return [Math.floor(q.x), Math.floor(-q.y)]; };   /* a vale tile -> that face's game tile */
+              pc.face = f; pc.x = bx; pc.y = by; pc.w = Math.ceil(Math.max.apply(null, xs)) - bx; pc.h = Math.ceil(Math.max.apply(null, ys)) - by;
+              pc.rot = { ox: o.x, oy: o.y, ax, ay, w, h, tiles: pc.tiles };
+              pc.tiles = [];   /* no axis-aligned rows: pieceTile reads `rot`; the edge profiles see open ground */
+              pc.objects = objs.map(ob => { const t = toF(ob.x, ob.y); return Object.assign({}, ob, { x: t[0], y: t[1] }, ob.x2 != null ? (() => { const u = toF(ob.x2, ob.y2); return { x2: u[0], y2: u[1] }; })() : null); });
+              pc.groves = groves.map(q => { const t = toF(q.x, q.y); return Object.assign({}, q, { x: t[0], y: t[1] }); });
+              pc.walls = walls.map(q => Object.assign({}, q, { pts: (q.pts || []).map(p => toF(p[0], p[1])) }));
+              pc.links = []; pc.linkStyles = {};
+            }
+          }
+          return pc;
         });
       }
       if (O.setPieces) { LASTPC = O.setPieces; ctx.setSetPieces(O.setPieces); }
@@ -236,14 +264,14 @@
         api: API, V, WATER, BIOME, BLOCK, LOS, seed, G, climOf: ctx.climOf || null, climate: ctx.climate || null, rivers: ctx.rivers || null, riverLines: () => ctx.rivers ? ctx.rivers.lines() : null,
         sample, newSample: ctx.newSample, field, lattice, height: (f, x, y) => sample(f, x, y, SMP).h,
         setEdits, edits: () => EDL,
-        walkable: ctx.walkable, tileAt: ctx.tileAt, tiles: ctx.tiles, forTiles: ctx.forTiles, sites: ctx.sites, setSetPieces: (l) => { LASTPC = l; ctx.setSetPieces(l); }, piecesFromZones, objectsIn,
+        walkable: ctx.walkable, tileAt: ctx.tileAt, tiles: ctx.tiles, forTiles: ctx.forTiles, sites: ctx.sites, setSetPieces: (l) => { LASTPC = l; ctx.setSetPieces(l); }, setGroves: (l) => { ctx.setGroves(l); ctx.clearCaches(); }, piecesFromZones, objectsIn,
         roadObjects: (face, gx0, gy0, gx1, gy1) => { const L = ctx.ROAD_OBJ || []; return face == null ? L.slice() : L.filter(o => o.face === face && o.x >= gx0 && o.x <= gx1 && o.y >= gy0 && o.y <= gy1); },
         /* area loading (handoff/area_loading.md): a town first placed as its index STUB (edge band + building pads, all that
            is read outside it) gets its real tiles and objects when its zone arrives. Paths, pads and edge profiles were made
            from the stub and are identical, so only the samples are dropped (the inside of the town reads the new tiles). */
         replacePiece: (sp) => {
           const pc = ctx.PIECE_BY_ID && ctx.PIECE_BY_ID.get(String(sp.id)); if (!pc) return false;
-          pc.tiles = sp.tiles || []; pc.objects = sp.objects || [];
+          pc.tiles = sp.tiles || []; pc.objects = sp.objects || []; pc.rot = sp.rot || null;   /* a rotated piece (another face) keeps its real tiles in rot */
           if (LASTPC) LASTPC = LASTPC.map(q => String(q.id) === String(sp.id) ? sp : q);
           ctx.clearCaches(); return true;
         },
