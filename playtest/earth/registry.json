@@ -111,13 +111,6 @@
    }
   },
   "zones": {
-   "whisperwood": {
-    "id": null,
-    "v": 2,
-    "api": 1,
-    "kind": "json",
-    "file": "playtest/earth/modules/zone.whisperwood.json"
-   },
    "village": {
     "id": null,
     "v": 2,
@@ -125,12 +118,33 @@
     "kind": "json",
     "file": "playtest/earth/modules/zone.village.json"
    },
+   "eastend": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/zone.eastend.json"
+   },
+   "whisperwood": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/zone.whisperwood.json"
+   },
    "saltmere": {
     "id": null,
     "v": 3,
     "api": 1,
     "kind": "json",
     "file": "playtest/earth/modules/zone.saltmere.json"
+   },
+   "castle": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/zone.castle.json"
    },
    "wolfden": {
     "id": null,
@@ -145,6 +159,69 @@
     "api": 1,
     "kind": "json",
     "file": "playtest/earth/modules/zone.cavemouth.json"
+   },
+   "ancientchapel": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/zone.ancientchapel.json"
+   },
+   "evengrove": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/zone.evengrove.json"
+   },
+   "ziibiing": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/zone.ziibiing.json"
+   },
+   "ricelake": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/zone.ricelake.json"
+   },
+   "sugarcamp": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/zone.sugarcamp.json"
+   },
+   "flintbank": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/zone.flintbank.json"
+   },
+   "obsidianbank": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/zone.obsidianbank.json"
+   },
+   "willowbank": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/zone.willowbank.json"
+   },
+   "dragonkeep": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json",
+    "file": "playtest/earth/modules/zone.dragonkeep.json"
    }
   }
  }

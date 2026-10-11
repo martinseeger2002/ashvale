@@ -189,6 +189,24 @@
    "api": 1,
    "kind": "js"
   },
+  "atlas_shapes": {
+   "id": null,
+   "v": 1,
+   "api": 1,
+   "kind": "js"
+  },
+  "atlas_chunk": {
+   "id": null,
+   "v": 1,
+   "api": 1,
+   "kind": "js"
+  },
+  "earth": {
+   "id": null,
+   "v": 1,
+   "api": 1,
+   "kind": "js"
+  },
   "engsky": {
    "id": null,
    "v": "1",
@@ -289,6 +307,12 @@
    "wg_tables": {
     "id": null,
     "v": 2,
+    "api": 1,
+    "kind": "json"
+   },
+   "atlas_palette": {
+    "id": null,
+    "v": 1,
     "api": 1,
     "kind": "json"
    },

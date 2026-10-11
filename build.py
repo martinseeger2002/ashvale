@@ -25,6 +25,7 @@ if os.path.exists(os.path.join(SRC, 'weather.js')):   # weather visuals (local a
     JS_MODULES.insert(JS_MODULES.index('engine'), 'weather')      # load order does not matter (factories), kept stable
 if os.path.exists(os.path.join(SRC, 'seasons.js')):   # the year and its seasons (2026-10-07): its own module/inscription
     JS_MODULES.insert(JS_MODULES.index('engine'), 'seasons')
+for _m in ('atlas_shapes', 'atlas_chunk', 'earth'): JS_MODULES.insert(JS_MODULES.index('engine'), _m)   # the Atlas (src/earth.js) is a game module since 2026-10-11: it boots from the game's registry, so every release updates it
 JS_MODULES.insert(JS_MODULES.index('engine'), 'engsky')
 JS_MODULES.insert(JS_MODULES.index('engine'), 'engbank')   # the chest and the @ashvale Bank client   # the engine's sky, its own inscription (2026-10-08: the engine split into parts)
 if os.path.exists(os.path.join(SRC, 'sky.js')):
@@ -43,7 +44,8 @@ DATA_MODULES = DATA_MODULES + (['pools'] if os.path.exists(os.path.join(os.path.
 if os.path.exists(os.path.join(SRC, 'worldgen.js')):
     JS_MODULES[JS_MODULES.index('world'):JS_MODULES.index('world')] = ['globe', 'wg_geo', 'wg_terrain', 'wg_paths', 'wg_sites', 'wg_tiles', 'worldgen']
     DATA_MODULES.append('wg_tables')
-DATA_PATHS = {'wg_tables': 'atlas/wg_tables'}   # data modules that live in a subfolder of data/
+DATA_MODULES.append('atlas_palette')   # the Atlas's colours (src/earth.js PAL): the Atlas boots from the game's registry since 2026-10-11
+DATA_PATHS = {'wg_tables': 'atlas/wg_tables', 'atlas_palette': 'atlas/atlas_palette'}   # data modules that live in a subfolder of data/
 ZONES = ['village', 'eastend', 'whisperwood', 'saltmere', 'castle', 'wolfden', 'cavemouth', 'spidercave', 'ancientchapel', 'evengrove', 'ziibiing', 'lodges', 'ricelake', 'sugarcamp', 'flintbank', 'obsidianbank', 'willowbank', 'dragonkeep']   # ziibiing + lodges: the Ojibwe village on the river and its wigwams' insides (tools/make_zone_ziibiing.py)   # castle: the lake castle 4 km out (tools/castle/make_castle.js)   # dragonkeep: the ruined keep at -54,-99
 ZONES = ZONES   # saltmere: the second town, on the sea shore 3.4 km east (tools/make_zone_saltmere.mjs)
 if os.environ.get('ASH_NO_CASTLE') == '1':   # 2026-10-05: "forget about this castle for now" - a release without it

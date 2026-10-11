@@ -28,12 +28,18 @@ st = json.load(open(STATE)) if os.path.exists(STATE) else {"modules": {}, "regis
 def save(): json.dump(st, open(STATE, 'w'), indent=1)
 sha = lambda p: hashlib.sha256(open(p, 'rb').read()).hexdigest()
 
-if '--no-build' not in sys.argv:   # --no-build: release the dist/ already built (and playtested), even if src/ has moved on
+if '--atlas-launcher' in sys.argv:
+    # THE ATLAS LAUNCHER (2026-10-11: "a better way for the Atlas to render so that it always automatically integrates any
+    # changes made in the game"): the same launcher page as the game's, booting the game's NEWEST registry (so every game release
+    # updates the Atlas: modules, zones, worldgen), but starting m.earth instead of the engine. A new page = a new inscription id;
+    # the Atlas keeps no saves, so that is fine. Run after the release that shipped the earth module. Env as for ASH_PUBLISH.
+    pass
+if '--no-build' not in sys.argv and '--atlas-launcher' not in sys.argv:   # --no-build: release the dist/ already built (and playtested), even if src/ has moved on
   subprocess.run([sys.executable if os.path.basename(sys.executable).startswith('python3') else 'python3', os.path.join(HERE, 'build.py'), '--arcade'], cwd=HERE, check=True, capture_output=True)
 reg = json.load(open(os.path.join(HERE, 'dist', 'registry.json')))
 MOD = os.path.join(HERE, 'dist', 'modules')
 
-def launcher_page(reg, home=None, title='ASHVALE'):
+def launcher_page(reg, home=None, title='ASHVALE', app=None):
     """the launcher: loader + arcade SDK scripts + the boot. A HOME launcher (2026-10-09, the Ziibiing card) is the same page with
     ASH3D_HOME set before boot, so a new character is born there; its own inscription id = its own arcade storage = its own save"""
     loader = open(os.path.join(HERE, 'src', 'loader.js')).read()
@@ -46,8 +52,9 @@ def launcher_page(reg, home=None, title='ASHVALE'):
             "let reg = BAKED;\n"
             "/* the newest registry by @ashvale wins: every release is just new modules + a new registry */\n"
             "try { const L = await (await fetch('/r/inscriptions?creator=" + ASHVALE + "&limit=300')).json();\n"
-            "  for (const p of L || []) { const j = p.json; if (j && j.ashvale3d === 'registry' && (j.loader || 1) <= ASH3D.LOADER && j.version > reg.version) reg = j; } } catch (e) { console.warn('ASHVALE: registry lookup failed, using the built-in one', e); }\n"
-            "ASH3D.boot({ baked: reg, content: true }).then(function (m) { document.getElementById('boot').remove(); return m.engine.openStore().then(function (st) { window.ASH = m.engine.start(document.getElementById('ash'), { report: m.$report, store: st }); }); })\n"
+            "  for (const p of L || []) { const j = p.json; if (j && j.ashvale3d === 'registry' && (j.loader || 1) <= ASH3D.LOADER && j.version > reg.version) reg = j; } } catch (e) { console.warn('ASHVALE: registry lookup failed, using the built-in one', e); }\n" +
+            ("ASH3D.boot({ baked: reg, content: true }).then(function (m) { window.EARTH = m.earth.start(document.getElementById('ash')); document.getElementById('boot').remove(); })\n" if app == 'earth' else
+             "ASH3D.boot({ baked: reg, content: true }).then(function (m) { document.getElementById('boot').remove(); return m.engine.openStore().then(function (st) { window.ASH = m.engine.start(document.getElementById('ash'), { report: m.$report, store: st }); }); })\n") +
             ".catch(function (e) { console.error(e); const b = document.getElementById('boot'); b.innerHTML = '<div style=\"text-align:center;padding:20px\"><p>ASHVALE could not finish loading (' + String(e && e.message || e).replace(/</g, '&lt;') + ').</p><p>Check the connection and try again.</p><button onclick=\"location.reload()\" style=\"font:inherit;padding:10px 22px;border-radius:8px;border:1px solid #e8b54a;background:#2a1f0e;color:#e8b54a\">Try again</button></div>'; });\n")
     page = ('<!doctype html>\n<html lang="en"><head>\n<title>' + title + '</title>\n<meta charset="utf-8">\n'
             '<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">\n'
@@ -74,7 +81,7 @@ for k, e in (reg.get('lazy') or {}).items():   # zones that load by area (handof
     for n, sub in e.items(): todo.append((k + '/' + n, file_of(n, k, sub), sub))
 changed = [(key, p, e) for key, p, e in todo if st['modules'].get(key, {}).get('sha') != sha(p)]
 print(len(todo), 'modules,', len(changed), 'changed:', ', '.join(k for k, _, _ in changed[:12]) + (' ...' if len(changed) > 12 else ''), flush=True)
-if DRY: sys.exit()
+if DRY and '--atlas-launcher' not in sys.argv: sys.exit()
 
 d = None
 def browser():
@@ -185,6 +192,26 @@ def ids_by_sha(want):
     """{sha: id} for our recent inscriptions (newest 300)."""
     L = json.load(urllib.request.urlopen('https://app.dogecoinarcade.com/r/inscriptions?creator=' + ASHVALE + '&limit=300', timeout=30))
     return {p['sha256']: p['id'] for p in L if p.get('sha256') in want}
+if '--atlas-launcher' in sys.argv:
+    # THE ATLAS LAUNCHER (2026-10-11: "a better way for the Atlas to render so that it always automatically integrates
+    # any changes made in the game"): the game's launcher page, booting the game's NEWEST registry (every game release updates
+    # the Atlas: modules, zones, worldgen) and starting m.earth instead of the engine. A new page = a new inscription id; the Atlas
+    # keeps no saves, so that is fine. Run after the release that shipped the earth module. State: chain/earth.json atlas_launcher.
+    EST = os.path.join(HERE, 'chain', 'earth.json'); est = json.load(open(EST)) if os.path.exists(EST) else {}
+    rp = os.path.join(HERE, 'chain', 'registry_v%d.json' % st['registry_version']); regj = json.load(open(rp))
+    page = launcher_page(regj, None, 'ASHVALE Atlas', app='earth')
+    pp = os.path.join(HERE, 'playtest', 'atlas_launcher.html'); open(pp, 'w').write(page)
+    print('atlas launcher page: %d bytes, baked registry v%d' % (len(page), regj['version']), flush=True)
+    if DRY: sys.exit()
+    if not send_only(browser(), pp): sys.exit('the atlas launcher was not sent')
+    rid = None
+    for _ in range(40):
+        time.sleep(30); rid = ids_by_sha({sha(pp)}).get(sha(pp))
+        if rid: break
+    if not rid: sys.exit('the atlas launcher is not listed yet - check /r/inscriptions later')
+    est['atlas_launcher'] = {'id': rid, 'registry': regj['version'], 'at': time.strftime('%Y-%m-%d %H:%M')}
+    json.dump(est, open(EST, 'w'), indent=1)
+    print('DONE: atlas launcher %s (boots the game registry, newest first)' % rid, flush=True); sys.exit()
 BATCH = 999   # keep sending (2026-10-01: "Shouldn't be a problem to keep tx-ing"); a refused send pauses for a block, then continues
 try:
     pending = list(changed)
