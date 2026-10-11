@@ -439,8 +439,8 @@
       if (Array.isArray(s.traps)) p.traps = s.traps.filter(t => t && IT[t.id] && trapOf(IT[t.id]) && Number.isInteger(t.x) && Number.isInteger(t.y)).slice(0, 8).map(t => ({ id: t.id, x: t.x, y: t.y, prey: String(t.prey || ''), ready: +t.ready || 0 }));
       if (typeof s.town === 'string') p.town = s.town;
       if (s.hawkHp != null) p.hawkHp = s.hawkHp | 0;
-      if (s.cd) { p.cd = {}; for (const k in s.cd) p.cd[k] = S.t + (s.cd[k] | 0); }   /* cooldowns are saved as ticks left */
-      if (s.kills && typeof s.kills === 'object') { p.kills = {}; for (const k in s.kills) if (/^[a-z_]{1,32}$/.test(k) && (s.kills[k] | 0) > 0) p.kills[k] = s.kills[k] | 0; }
+      if (s.cd) { p.cd = {}; for (const k in s.cd) p.cd[k] = S.t + (s.cd[k] | 0); }
+      if (s.gift && typeof s.gift === 'object') { p.gift = {}; for (const k in s.gift) if (IT[k] && s.gift[k] > 0) p.gift[k] = s.gift[k] | 0; }   /* items given by other players (quests do not count them) */   /* cooldowns are saved as ticks left */
       if (Number.isInteger(s.hp)) p.hp = s.hp;
       if (Number.isInteger(s.energy)) p.energy = Math.max(0, Math.min(10000, s.energy));
     }
@@ -504,7 +504,7 @@
     function exportPlayer(id) {
       const p = S.players[id]; if (!p) return null;
       const at = p.dead ? wakeSpot(p).at : [p.x, p.y];
-      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, orders: p.orders || {}, traps: p.traps || [], bless: p.bless || [], town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, kills: p.kills || {}, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
+      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, orders: p.orders || {}, traps: p.traps || [], bless: p.bless || [], town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, gift: p.gift && Object.keys(p.gift).length ? p.gift : undefined, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
     }
 
     // ---------------- pathfinding: BFS over the tile grid, 8 directions, no corner cutting (RuneScape-style)
@@ -847,11 +847,11 @@
          trait Use to travel; Wear still equips a charm that also has an eq slot (Vorth's rosary in the shield hand). */
       if (d.eq && (d.eq === 'ring' || d.teleport == null)) { equip(p, slot); return; }
       if (d.teleport) {   /* a town stone: home, as often as you like, once its cooldown has passed (30 minutes) */
-        if (d.teleFrom) {   /* "questId:step" — beads stay cold until that quest step. After Wenna sends you (and after the errand is done) they still know the cave. */
+        if (d.teleFrom) {   /* "questId:step" — beads stay cold until that quest step (or the quest is finished) */
           const parts = String(d.teleFrom).split(':'), qid = parts[0], need = Math.max(1, parts[1] | 0);
           const q = p.quests && p.quests[qid];
           if (!(questFinished(p, qid) || (q && q.step >= need))) {
-            msg(p, 'The beads are warm, and they smell of old fire. You do not know the prayer that sends them.', 'warn');
+            msg(p, 'The beads are cold. They will not carry you until Mother Wenna has sent you for them.', 'warn');
             return;
           }
         }
@@ -1048,49 +1048,6 @@
         if (dex) addXp(p, 'dexterity', (DEX.xpPerDamage || 10) * dmg);
       }
     }
-    /* public kill boards (the ruined keep's wooden sign): a G-counter per character name. The @ashvale Bank holds the
-       global counts; two games merging take the higher count for each name and the painted total is the Bank's (or the
-       sum of names, if that is higher). */
-    const SCORES = {}, SCORE_N = {};
-    function scoreName(n) { return cleanName(n) || 'Adventurer'; }
-    function mergeScores(key, names) {
-      if (!/^[a-z_]{1,32}$/.test(String(key)) || !names || typeof names !== 'object') return 0;
-      const m = SCORES[key] = SCORES[key] || {}; let n = 0;
-      for (const raw in names) { const nm = cleanName(raw), v = names[raw] | 0; if (!nm || v <= 0 || v >= 1e9 || (m[nm] | 0) >= v) continue; m[nm] = v; n++; }
-      return n;
-    }
-    function setScoreTotal(key, n) {
-      if (!/^[a-z_]{1,32}$/.test(String(key))) return 0;
-      n = n | 0; if (n < 0 || n >= 1e9) return 0;
-      SCORE_N[key] = Math.max(SCORE_N[key] | 0, n); return SCORE_N[key];
-    }
-    function scoreKill(key, name) {
-      if (!/^[a-z_]{1,32}$/.test(String(key))) return 0;
-      const nm = scoreName(name), m = SCORES[key] = SCORES[key] || {};
-      m[nm] = (m[nm] | 0) + 1;
-      SCORE_N[key] = Math.max(SCORE_N[key] | 0, 0) + 1;
-      ev({ e: 'score', key, name: nm, n: m[nm], names: Object.assign({}, m) });
-      return m[nm];
-    }
-    function scoresOf(key) {
-      const m = SCORES[key] || {}; let sum = 0; const top = [];
-      for (const nm in m) { sum += m[nm] | 0; top.push([nm, m[nm] | 0]); }
-      top.sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-      return { total: Math.max(SCORE_N[key] | 0, sum), top: top.slice(0, 10), names: m };
-    }
-    function scoreBoard(key) {
-      const s = scoresOf(key), L = ['DRAGON KILLERS', 'Slain ' + s.total + (s.total === 1 ? ' time' : ' times')];
-      if (!s.top.length) L.push('', 'None yet.');
-      else s.top.forEach((r, i) => L.push((i + 1) + '. ' + r[0] + '  ' + r[1]));
-      return L;
-    }
-    function scoreRead(key) {
-      const s = scoresOf(key), L = ['The chained dragon has been slain ' + s.total + ' time' + (s.total === 1 ? '' : 's') + '.'];
-      if (!s.top.length) L.push('No names are carved here yet.');
-      else { L.push('The names of its slayers, by how many times:'); s.top.forEach((r, i) => L.push((i + 1) + '. ' + r[0] + ' — ' + r[1])); }
-      return L;
-    }
-    function signAt(x, y) { return (M.objects || []).find(o => o.k === 'wsign' && o.x === (x | 0) && o.y === (y | 0)) || null; }
     function creditKill(p, key) {
       const md = MON[key]; if (!md) return;
       p.kills[key] = (p.kills[key] || 0) + 1;
@@ -1121,7 +1078,6 @@
       m.dead = S.t; m.tgt = 0; m.dropAt = S.t + 2; m.killer = p ? p.id : null;
       ev({ e: 'die', mob: m.uid, killer: p ? p.id : null }); void md;
       if (p && !p.puppet) creditKill(p, m.key);
-      if (p && m.key === 'chain_dragon') scoreKill(m.key, p.name);
       for (const pid of S.order) { const o = S.players[pid]; if (o.act && o.act.k === 'attack' && o.act.uid === m.uid) o.act = null; }
     }
     function mobDrops(m) {
@@ -1590,7 +1546,7 @@
         const withN = (st) => st.goal.wn == null ? 1 : st.goal.wn;
         const withs = (st) => !st.goal.with ? [] : typeof st.goal.with === 'string' ? [[st.goal.with, withN(st)]] : Object.entries(st.goal.with);   /* "with": one item (wn of it) or {id: n} */
         const bids = (g) => (Array.isArray(g.bring) ? g.bring : [g.bring]).filter(id => IT[id]);   /* bring: one item, or a list where any will do */
-        const bringHave = (g) => bids(g).reduce((a, id) => a + Math.max(0, invCount(p, id) - ((q.pre && q.pre[id]) | 0)), 0);
+        const bringHave = (g) => bids(g).reduce((a, id) => a + Math.max(0, invCount(p, id) - giftOf(p, id)), 0);   /* what another player gave you does not count (2026-10-09: block gifts only - what you gathered yourself counts, even from before the quest) */
         const counted = (st) => {
           if (st.goal.kills) { let n = 0; for (const k in st.goal.kills) n += Math.min(st.goal.kills[k], (q.kn && q.kn[k]) | 0); return n; }
           return (st.goal.kill || st.goal.cook || st.goal.talk || st.goal.plant || st.goal.light) ? (q.n | 0) : (st.goal.bring && bids(st.goal).length ? bringHave(st.goal) : (q.n | 0));
@@ -1755,6 +1711,10 @@
       }
       return false;
     }
+    /* GIFTS (2026-10-09): how many of each item came from another player (their drop, a trade). Capped by what you still carry,
+       so gifts used up, dropped or handed in stop counting against what you gather yourself */
+    function giftOf(p, id) { const g = p.gift && p.gift[id] | 0; if (!g) return 0; const n = invCount(p, id); if (g > n) { if (n) p.gift[id] = n; else delete p.gift[id]; } return Math.min(g, n); }
+    function markGift(p, id, n) { if (!p || !IT[id] || !(n > 0)) return; p.gift = p.gift || {}; p.gift[id] = (p.gift[id] | 0) + n; }
     function stampBring(p, q, st) {
       q.pre = {};
       if (!st || !st.goal || st.goal.bring == null) return;
@@ -2024,6 +1984,7 @@
           if (g && canAdd(p, g.id, g.n)) {
             const left = addItem(p, g.id, g.n); addXp(p, skill, n.xp || nd.xp);
             ev({ e: 'take', p: p.id, g: g.uid, id: g.id, n: g.n - left, x: g.x, y: g.y, own: g.from === p.id ? 1 : 0, fished: 1 });
+            if (g.from && g.from !== p.id) markGift(p, g.id, g.n - left);
             if (left) g.n = left; else { S.ground.splice(S.ground.indexOf(g), 1); if (g.bank != null) BANK_GONE.add(g.bank); ev({ e: 'vanish', g: g.uid, x: g.x, y: g.y }); }
             msg(p, 'Something heavy on the line... you haul up ' + (g.n - left > 1 ? (g.n - left) + ' x ' : '') + IT[g.id].name + ' from the bottom of the lake!', 'quest');
             ev({ e: 'gather', p: p.id, node: i, ok: true, item: g.id });
@@ -2263,8 +2224,7 @@
       ['The portal stones hum if you lay a hand on them. I have never liked it.', 'A road you can see is enough road for me.'],
       ['Night watch is long and mostly nothing. Then it is not.', 'That is the whole of the job.'],
       ['My boots are older than your sword, whatever sword that is.', 'They still get me to the next lamp.'],
-      ['A castle stands a long way off, past any road I walk.', 'People who have never been there call it Lake Castle. I could not tell you the lake, or who keeps it. That story is not ours yet.'],
-      ['The dragon\'s ruin is not the old king\'s keep. That one burned with him.', 'The ruin still has a chain on it. I do not walk that way.']
+      ['A castle stands a long way off, past any road I walk.', 'People who have never been there call it Lake Castle. I could not tell you the lake, or who keeps it. That story is not ours yet.']
     ];
     function watchSay(p) {
       const i = (p.watchAt | 0) % WATCH_SAY.length;
@@ -2555,6 +2515,7 @@
               const left = addItem(p, g.id, room), got = room - left;
               S.took.add(g.uid);
               ev({ e: 'take', p: p.id, g: g.uid, id: g.id, n: got, x: g.x, y: g.y, own: g.from === p.id ? 1 : 0 });
+              if (g.from && g.from !== p.id) markGift(p, g.id, got);   /* another player's drop: a gift, for quests */
               g.n -= got;
               if (g.n > 0) ev({ e: 'ground', g: g.uid, n: g.n, x: g.x, y: g.y });
               else { S.ground.splice(S.ground.indexOf(g), 1); if (g.bank != null) BANK_GONE.add(g.bank); }   /* a persisted drop taken here: no host's copy brings it back (2026-10-06: the same 200 Gold, picked up again and again) */
@@ -3024,7 +2985,6 @@
       if (st.pl !== undefined) p.pole = !!st.pl;
       if (st.kn !== undefined) p.knock = !!st.kn;
       if (st.pr !== undefined) p.pray = st.pr && PRAYERS[st.pr] && PRAYERS[st.pr].g === 'head' ? { [st.pr]: 1 } : {};
-      if (typeof st.n === 'string') { const nm = cleanName(st.n); if (nm) p.name = nm; }
       if (st.act !== undefined) p.act = st.act && st.act.k === 'attack' && mobByUid(st.act.uid) ? { k: 'attack', uid: st.act.uid } : null;
     }
     function claim(pid, uid) {   /* first claim wins; the picker's own game adds the item when it hears the 'take' */
@@ -3130,13 +3090,13 @@
       return true;
     }
     return {
-      setNewHome: h => { if (HOMES[h]) NEWHOME = h; }, homeOf: p => (p && p.home) || 'ashvale', npcFor, lineFor, questForHome, questMarks,
+      setNewHome: h => { if (HOMES[h]) NEWHOME = h; }, markGift: (pid, id, n) => markGift(S.players[pid], id, n), homeOf: p => (p && p.home) || 'ashvale', npcFor, lineFor, questForHome, questMarks,
       API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, trapOf, offerOf, isBlessed: (pid, x, y) => !!(S.players[pid] && blessed(S.players[pid], x, y)), setNature, natureHours, setNatureTell, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
       prayTicks(p, pts, drain) { let d = drain; if (d == null) { d = 0; for (const id in p.pray || {}) d += (PRAYERS[id] && PRAYERS[id].drain) || 0; } if (!d) return null; const n = pts == null ? (p.pp | 0) : pts, rs = resist(p, d); return n <= 0 ? 0 : Math.ceil(((n - 1) * rs + rs + 1 - (pts == null ? (p.pd | 0) : 0)) / d); },
-      isHawk, passageAt, crateAt, signAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, searchOpen, coverBlocks, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf, storyPoints, storyMax, scoreKill, mergeScores, setScoreTotal, scoresOf, scoreBoard, scoreRead,
+      isHawk, passageAt, crateAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, searchOpen, coverBlocks, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf, storyPoints, storyMax,
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
