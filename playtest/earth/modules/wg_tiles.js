@@ -42,13 +42,20 @@
         return L; } }
       const cx = gx + 0.5, cy = -gy - 0.5;
       const st = ctx.siteOf(f, Math.floor(cx / SITE), Math.floor(cy / SITE));
-      if (st) { const L = st.foot.get(ctx.tkey(gx, gy)); if (L) return L; }
+      const FTL = st ? st.foot.get(ctx.tkey(gx, gy)) : null;
       ctx.fieldTrue(f, cx, cy, TF);
+      if (FTL && !(TF[16] > 0.5) && TF[0] >= WATER) return FTL;   /* a site's own tiles, never on water (2026-10-08) */
       const h = TF[0];
       if (TF[12] < 3 && h > WATER + 0.1 && TF[3] < 0.1 && seamStone(f, gx, gy, cx, cy)) return 'K';
       const pd = PI.length ? ctx.pathDist(f, cx, cy) : 1e9;
       /* rivers: a creek is shallow water you wade through ('v'); a river is deep ('~') but for a ford now and then, and a
          path over it is a bridge */
+      if (PI.length && ctx.wallAt && !(TF[16] > 0.5) && h >= WATER) {   /* a wall of old woods (globecfg.walls): no path, no clearing,
+        nothing chops these. On dry land only (2026-10-09: never into the sea or across the river - a buffer, not a cage); a pond
+        left inside is out of reach anyway, since hawks cannot fly over these trees (rules.tiles.noFly) */
+        const WL = ctx.wallAt(f, cx, cy);
+        if (WL && (WL.k >= 1 || g.u01(g.hash3(cx, cy, (f * 31337) ^ ctx.S.tl ^ 0x77a1)) < WL.k * 0.8)) { FOREST_HIT = true; return WL.sp[Math.floor(g.u01(g.hash3(cy, cx, f ^ 0x1d2b)) * WL.sp.length)]; }
+      }
       if (TF[16] > 3.5) return 'J';   /* a frozen lake: ice you can walk on */
       if (TF[16] > 2.5) return pd < 0 && ctx.bridgeDist(f, cx, cy) < 0 ? 'B' : '~';   /* a lake */
       if (TF[16] > 0.5) {
@@ -70,7 +77,11 @@
       if (!clear && r1 < forest) {
         FOREST_HIT = true;
         if (PI.length) { ctx.pieceFlora(f, cx, cy, PFL); if (PFL.sp && g.u01(g.mix32(hv ^ 0x3c6ef372)) >= PFL.k) { FOREST_HIT = false; return PFL.sp[Math.floor(r2 * PFL.sp.length)]; } }
-        if (TF[4] > 0.02 || TF[2] > 0.12 || (TF[9] > 0.12 && r2 < 0.5)) return TR.wet;
+        if (TF[4] > 0.02 || TF[2] > 0.12 || (TF[9] > 0.12 && r2 < 0.5)) {   /* wet ground: willow; in the cool woods also tamarack and cedar (2026-10-08) */
+          const cl = CMT && TR.wetCool ? ctx.climOf(TF[15], TF[14]) : -1;
+          return cl === 0 || cl === 6 ? TR.wetCool[Math.floor(r2 * TR.wetCool.length)] : TR.wet;
+        }
+        if (PI.length && ctx.groveAt) { const GV = ctx.groveAt(f, cx, cy); if (GV && g.u01(g.mix32(hv ^ 0x2545f491)) < GV.k) return GV.sp[Math.floor(r2 * GV.sp.length)]; }   /* in a grove: its own trees */
         /* the climate's own trees: pines in the taiga, broadleaf mixes in the rainforest (2026-10-03) */
         const zt = CMT ? CMT.trees[ctx.climOf(TF[15], TF[14])] : '';
         if (zt) return zt[Math.floor(r2 * zt.length)];
