@@ -230,10 +230,26 @@ part('cloth.boots', 'cloth', slot='boots', style='boots', paint={"foot": C, "toe
 part('cloth.gloves', 'cloth', slot='gloves', style='gloves', paint={"hand": C})
 part('cloth.belt', 'cloth', slot='belt', style='belt', unless="robeTop", shapes=[dict(ring("0.172*W", 0.06, C, 0, 0.03, 0, k=[1, 1, 0.66]), j="torso"), dict(box(0.06, 0.05, 0.02, "$gold", 0, 0.03, 0.115), j="torso")])
 part('cloth.apron', 'cloth', slot='apron', style='apron', shapes=[dict(box("0.3*W", 0.66, 0.02, C, 0, 0.12, 0.125), j="torso")])
-CAPES = {"cape_red": "#8a2a2a", "cape_blue": "#2f4f8a", "cape_green": "#3f6a34", "cape_purple": "#5b3a7a", "cape_gold": "#c8a040", "cape_black": "#262226"}
+CAPES = {"cape_red": "#8a2a2a", "cape_blue": "#2f4f8a", "cape_green": "#3f6a34", "cape_purple": "#5b3a7a", "cape_gold": "#c8a040", "cape_black": "#262226", "dragon_cape": "#d65a18"}
+WHT = "#f4f1ea"
 part('cloth.cape', 'cloth', slot='cape', style='cape', items=CAPES,
-     shapes=[dict(box("0.44*W", 0.86, 0.025, C, 0, -0.43, 0), j="cape"), dict(box("0.46*W", 0.05, 0.05, "$c:0.7", 0, 0, 0.01), j="cape")],
-     groundShapes=[box(0.42, 0.06, 0.34, C, 0, 0.03, 0), box(0.44, 0.03, 0.06, "$c:0.7", 0, 0.07, -0.15), box(0.4, 0.04, 0.3, "$c:1.12", 0, 0.075, 0.02)])
+     shapes=[dict(box("0.44*W", 0.86, 0.025, C, 0, -0.43, 0), j="cape"), dict(box("0.46*W", 0.05, 0.05, "$c:0.7", 0, 0, 0.01), j="cape"),
+             dict(box(0.08, 0.07, 0.014, WHT, 0, -0.28, -0.02), j="cape", **{"if": "dragon"}),
+             dict(box(0.045, 0.03, 0.012, WHT, 0, -0.235, -0.02), j="cape", **{"if": "dragon"}),
+             dict(box(0.018, 0.06, 0.01, WHT, -0.035, -0.205, -0.02), j="cape", **{"if": "dragon"}),
+             dict(box(0.018, 0.06, 0.01, WHT, 0.035, -0.205, -0.02), j="cape", **{"if": "dragon"}),
+             dict(box(0.09, 0.16, 0.012, WHT, 0, -0.42, -0.02), j="cape", **{"if": "dragon"}),
+             dict(box(0.14, 0.1, 0.01, WHT, -0.14, -0.36, -0.02), j="cape", **{"if": "dragon"}),
+             dict(box(0.09, 0.06, 0.01, WHT, -0.185, -0.3, -0.02), j="cape", **{"if": "dragon"}),
+             dict(box(0.14, 0.1, 0.01, WHT, 0.14, -0.36, -0.02), j="cape", **{"if": "dragon"}),
+             dict(box(0.09, 0.06, 0.01, WHT, 0.185, -0.3, -0.02), j="cape", **{"if": "dragon"}),
+             dict(box(0.04, 0.14, 0.01, WHT, 0, -0.56, -0.02), j="cape", **{"if": "dragon"}),
+             dict(box(0.07, 0.03, 0.01, WHT, 0.04, -0.62, -0.02), j="cape", **{"if": "dragon"}),
+             dict(box(0.03, 0.07, 0.01, WHT, -0.04, -0.52, -0.02), j="cape", **{"if": "dragon"}),
+             dict(box(0.03, 0.07, 0.01, WHT, 0.04, -0.52, -0.02), j="cape", **{"if": "dragon"})],
+     groundShapes=[box(0.42, 0.06, 0.34, C, 0, 0.03, 0), box(0.44, 0.03, 0.06, "$c:0.7", 0, 0.07, -0.15), box(0.4, 0.04, 0.3, "$c:1.12", 0, 0.075, 0.02),
+                   box(0.05, 0.008, 0.08, WHT, 0, 0.1, 0, **{"if": "dragon"}), box(0.16, 0.008, 0.05, WHT, 0, 0.1, -0.01, **{"if": "dragon"}),
+                   box(0.04, 0.008, 0.035, WHT, 0, 0.1, 0.055, **{"if": "dragon"}), box(0.025, 0.008, 0.055, WHT, 0, 0.1, -0.065, **{"if": "dragon"})])
 # robes (cosmetic body gear, sold by Wren; worn they paint shirt+pants as the robe cut that used to sit in the creator)
 ROBES = {"robe_red": "#8a2a2a", "robe_blue": "#2f4f8a", "robe_green": "#3f6a34", "robe_purple": "#5b3a7a", "robe_gold": "#c8a040", "robe_black": "#262226", "robe_linen": "#d8d0bc"}
 part('cloth.robe', 'cloth', slot='robe', style='robe', items=ROBES,

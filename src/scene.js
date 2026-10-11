@@ -371,7 +371,20 @@
          inside one the ground is flat at its top (worldgen's frame; groundH's = top - HB = top + waterH) */
       const PADS = (map.objects || []).filter(o => o.k === 'cpad' && o.top != null);
       const padTop = (cx, cy) => { let t = null; for (const o of PADS) if (cx >= o.x && cy >= o.y && cx <= o.x + o.w && cy <= o.y + o.h) t = Math.max(t == null ? -1e9 : t, o.top); return t == null ? null : t + (map.waterH ? map.waterH() : 0); };
+      /* ruined keep yard: one height for the whole site (the land at the pole), so the stone floor is not a
+         floating slab through your knees while the hillside still tilts under it */
+      const KEEP = (map.objects || []).find(o => o.k === 'truins');
+      let keepYard = null;
+      const inKeep = (cx, cy) => KEEP && cx >= KEEP.x && cy >= KEEP.y && cx <= KEEP.x + (KEEP.w || 16) && cy <= KEEP.y + (KEEP.h || 16);
+      const keepH = () => {
+        if (keepYard != null) return keepYard;
+        if (!KEEP) return (keepYard = 0);
+        const px = KEEP.pole ? KEEP.pole[0] : KEEP.x + (KEEP.w || 16) / 2, py = KEEP.pole ? KEEP.pole[1] : KEEP.y + (KEEP.h || 16) / 2;
+        keepYard = (seeded && map.groundH) ? map.groundH(px, py) : 0;
+        return keepYard;
+      };
       function own(cx, cy) {
+        if (inKeep(cx, cy)) return keepH();
         const pt = PADS.length ? padTop(cx, cy) : null;
         if (pt != null && !(at(cx - 1, cy - 1) === '~' && at(cx, cy - 1) === '~' && at(cx - 1, cy) === '~' && at(cx, cy) === '~')) return pt;
         let h = (vnoise(cx * 0.11, cy * 0.11) - 0.5) * 1.5 + (vnoise(cx * 0.37 + 9, cy * 0.37 + 3) - 0.5) * 0.35;
@@ -408,6 +421,7 @@
           return 8;
         };
         const fade = (cx, cy) => {   /* the ground as it will be drawn: worldgen outside the set pieces, own() inside them, mixed by distance to the piece edge */
+          if (inKeep(cx, cy)) return keepH();
           if (map.underNear && map.underNear(cx, cy)) return map.underAt(cx, cy) != null ? own(cx, cy) : 3.1;   /* underground: the cave's own floor and walls, solid rock round it */
           const sh = map.groundH(cx, cy);
           if (!(P(cx - 1, cy - 1) || P(cx, cy - 1) || P(cx - 1, cy) || P(cx, cy))) return sh;
@@ -873,7 +887,10 @@
           case 'house': case 'shop': case 'smithy': case 'church': building(o); break;
           case 'truins': {   /* a tall ruined keep: broken towers, no roof, a pole in the yard */
             const ST = 0x8c8880, DK = 0x5a564e, x0 = o.x, z0 = o.y, w = o.w || 16, h = o.h || 16, yb = y;
-            B.add('box', 0xa39e92, x0 + w / 2, yb + 0.05, z0 + h / 2, (w - 6) * 0.98, 0.1, (h - 6) * 0.98);
+            for (let tz = 3; tz < h - 3; tz++) for (let tx = 3; tx < w - 3; tx++) {
+              const gx = x0 + tx + 0.5, gz = z0 + tz + 0.5, gy = heightAt(gx, gz);
+              B.add('box', 0xa39e92, gx, gy - 0.01, gz, 0.98, 0.04, 0.98);   /* paving flush with the ground, not a slab through the ankles */
+            }
             const towers = [[3.2, 3.2, 9.4], [w - 3.2, 3.2, 7.2], [3.2, h - 3.2, 6.4], [w - 3.2, h - 3.2, 8.6]];
             for (const [tx, tz, th] of towers) {
               B.add('box', ST, x0 + tx, yb + th / 2, z0 + tz, 2.15, th, 2.15);

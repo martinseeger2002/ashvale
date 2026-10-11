@@ -267,7 +267,7 @@
       const me = core.addPlayer(PID, save);
       const SCORE_KEY = 'ashvale3d.scores.v1';
       try { const j = JSON.parse(store.get(SCORE_KEY) || '{}'); if (j && j.chain_dragon) core.mergeScores('chain_dragon', j.chain_dragon); } catch (e) { /* a bad local board */ }
-      if (me.kills && me.kills.chain_dragon) core.mergeScores('chain_dragon', { [me.name]: me.kills.chain_dragon });
+      if (me.kills && me.kills.chain_dragon && me.name && me.name !== 'Adventurer') core.mergeScores('chain_dragon', { [me.name]: me.kills.chain_dragon });
       function syncMounts() {   /* wall-hung quest rewards (Aldric's sword) stay on the wall until they're given */
         for (const r of regions) if (r.built && r.built.mounts) for (const m of r.built.mounts) { const q = me.quests && me.quests[m.quest]; m.obj.visible = !(q && q.step >= m.untilStep); }
       }
@@ -562,7 +562,7 @@
         e.H.object.position.set(0, 0.16, 0.55);
         if (e.proxy) { e.proxy.position.set(0, 0.22, 0.05); e.proxy.scale.set(1.5, 0.22, 1.15); }
       }
-      function npcEnt(n) { const e = makeEnt('n:' + n.id, MOD.npc(n.look || n.id), { kind: 'npc', id: n.id }); place(e, n.x, n.y); e.homeYaw = homeYaw(n); e.yaw = e.tyaw = e.homeYaw; NPCN[n.id] = n; if (n.gear && e.H && e.H.setGear) e.H.setGear(n.gear); if (n.lie) layDead(e); else if (n.rope) { e.alt = +n.rope || 1.5; e.held = true; if (e.blob) e.blob.visible = false; if (e.H && e.H.play) e.H.play('balance', { loop: true }); } else if (n.pose) e.skill = n.pose; e.root.visible = npcShown(n); return e; }   /* pose: an elder who sits cross-legged by his fire */
+      function npcEnt(n) { const e = makeEnt('n:' + n.id, MOD.npc(n.look || n.id), { kind: 'npc', id: n.id }); place(e, n.x, n.y); e.homeYaw = homeYaw(n); e.yaw = e.tyaw = e.homeYaw; NPCN[n.id] = n; if (n.gear && e.H && e.H.setGear) e.H.setGear(n.gear); if (n.lie) layDead(e); else if (n.rope) { e.alt = +n.rope || 1.5; e.held = true; if (e.blob) e.blob.visible = false; if (e.H && e.H.play) e.H.play(n.pose || 'perch', { loop: true }); } else if (n.pose) e.skill = n.pose; e.root.visible = npcShown(n); return e; }   /* pose: an elder who sits cross-legged by his fire */
       for (const n of core.M.npcs) npcEnt(n);   /* gear: what an NPC carries (the castle's watchmen hold bows) */
       /* monsters get a model while they are within MOB_NEAR tiles (seeded land wakes camps everywhere you have been) */
       const MOB_NEAR = 60, MOB_FAR = 90;
@@ -1687,6 +1687,7 @@
           else if (NW.was && (NW.lost || NW.quietTry)) { NW.quietTry = false; NW.tries++; if (!NW.lost) NW.lost = true; hud.netLost && hud.netLost(true, 'net', 'the arcade is not answering' + (NW.tries > 2 ? ': reload the page' : ', still trying')); }
           if (res && res.online && core.regionOf(me.x, me.y) === z) {
             const R = res.room; room = R; myNetId = R.me.id; oneDevice(R.me); netStatus = res.backend + ' as ' + (R.me.tag ? '@' + R.me.tag : 'guest');
+            seedDragonBoard();
             { let h = 2166136261; for (let i = 0; i < myNetId.length; i++) h = Math.imul(h ^ myNetId.charCodeAt(i), 16777619) >>> 0; core.uidSpace(1 + h % 4095); }   /* my own uid space for things I create as a host */
             R.on('message', ev => { if (room === R) onNet(ev); });
             R.on('message', () => { if (room === R) NW.heard = performance.now(); }); R.on('join', () => { if (room === R) NW.heard = performance.now(); }); R.on('leave', () => { if (room === R) NW.heard = performance.now(); });
@@ -1827,7 +1828,21 @@
         get save() { return save; }, paintScores, hsSave });
       const { CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer } = ENGBANK;
       scoreTell = ENGBANK.scoreTell; scoresAsk = ENGBANK.scoresAsk;
-      if (me.kills && me.kills.chain_dragon) scoreTell({ key: 'chain_dragon', name: me.name, n: me.kills.chain_dragon });
+      function boardWho() {   /* the keep board is the arcade @tag, not the default Adventurer (2026-10-10) */
+        const t = (room && room.me && room.me.tag) || hintedTag || me.tag;
+        if (t) { const h = String(t).replace(/^@/, '').replace(/[^\w]/g, '').slice(0, 16); if (h.length >= 2 && !/^adventurer$/i.test(h)) return '@' + h; }
+        const n = String(me.name || '').replace(/[^\w -]/g, '').trim().slice(0, 12);
+        return n.length >= 2 && n !== 'Adventurer' ? n : null;
+      }
+      function seedDragonBoard() {
+        const who = boardWho();
+        if (who && who.charAt(0) === '@') me.tag = who.slice(1);
+        if (!(me.kills && me.kills.chain_dragon && who)) return;
+        core.mergeScores('chain_dragon', { [who]: me.kills.chain_dragon });
+        scoreTell({ key: 'chain_dragon', name: who, n: me.kills.chain_dragon });
+        paintScores();
+      }
+      seedDragonBoard();
       const netStats = { sent: 0, dropped: 0, t0: performance.now(), times: [], max1s: 0, max2s: 0 };
       window.addEventListener('pagehide', () => { if (nb) nb.close(); if (room) { const r = room; room = null; r.leave(); } });
       let lastSend = 0;

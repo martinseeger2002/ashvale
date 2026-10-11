@@ -1,5 +1,8 @@
 {
  "items": {
+  "dragon_cape": {
+   "description": "Dragon cape, cosmetic cape. Magic +8. Orange cloth with a white dragon on the back. Dragonfire from the chained dragon cannot pass it."
+  },
   "ring_angels": {
    "name": "The Ring of Angels",
    "description": "The Ring of Angels. Worn, it saves you when a hit leaves you below one fifth of your hitpoints, by carrying you to Ashvale. It rests for an hour between saves, or ten minutes once Iria has given you the Gift of Angels.",

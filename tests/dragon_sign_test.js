@@ -1,5 +1,5 @@
 'use strict';
-/* Wooden sign on the ruined keep: total chained-dragon kills and a top 10 by character name. */
+/* Wooden sign on the ruined keep: total chained-dragon kills and a top 10 by arcade @name. */
 const fs = require('fs'), path = require('path');
 const AshCore = require('../src/core.js');
 const DD = path.join(__dirname, '..', 'data');
@@ -46,6 +46,8 @@ let died = 0;
 for (let i = 0; i < 40; i++) { p.hp = core.maxHp(p); for (const e of core.tick()) if (e.e === 'die' && e.mob === dr.uid) died++; if (dr.dead) break; }
 ok(died && dr.dead, 'the chained dragon can fall without putting Maren in danger (protections, full hitpoints each tick)');
 ok(core.scoresOf('chain_dragon').names.Maren === 1, 'her kill is carved on the board under Maren');
+ok(core.scoreKill('chain_dragon', 'Adventurer') === 0 && core.scoresOf('chain_dragon').names.Adventurer == null, 'the default Adventurer is never carved');
+ok(core.scoreKill('chain_dragon', '@yourfirstname') === 1 && core.scoresOf('chain_dragon').names['@yourfirstname'] === 1, 'a kill is carved under the arcade @name');
 ok((p.kills.chain_dragon || 0) === 1, 'her own kill count matches');
 const save = core.exportPlayer('p1');
 ok(save.kills && save.kills.chain_dragon === 1, 'the save keeps her dragon kills so a later game can seed the board');

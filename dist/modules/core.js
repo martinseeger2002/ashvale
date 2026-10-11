@@ -1053,11 +1053,19 @@
        global counts; two games merging take the higher count for each name and the painted total is the Bank's (or the
        sum of names, if that is higher). */
     const SCORES = {}, SCORE_N = {};
-    function scoreName(n) { return cleanName(n) || 'Adventurer'; }
+    function scoreName(n) {   /* the keep board uses the arcade @tag, never the default Adventurer (2026-10-10) */
+      n = String(n || '').trim();
+      if (n.charAt(0) === '@') {
+        const h = n.slice(1).replace(/[^\w]/g, '').trim().slice(0, 16);
+        return h.length >= 2 && !/^adventurer$/i.test(h) ? '@' + h : null;
+      }
+      const c = cleanName(n);
+      return c && !/^adventurer$/i.test(c) ? c : null;
+    }
     function mergeScores(key, names) {
       if (!/^[a-z_]{1,32}$/.test(String(key)) || !names || typeof names !== 'object') return 0;
       const m = SCORES[key] = SCORES[key] || {}; let n = 0;
-      for (const raw in names) { const nm = cleanName(raw), v = names[raw] | 0; if (!nm || v <= 0 || v >= 1e9 || (m[nm] | 0) >= v) continue; m[nm] = v; n++; }
+      for (const raw in names) { const nm = scoreName(raw), v = names[raw] | 0; if (!nm || v <= 0 || v >= 1e9 || (m[nm] | 0) >= v) continue; m[nm] = v; n++; }
       return n;
     }
     function setScoreTotal(key, n) {
@@ -1067,7 +1075,8 @@
     }
     function scoreKill(key, name) {
       if (!/^[a-z_]{1,32}$/.test(String(key))) return 0;
-      const nm = scoreName(name), m = SCORES[key] = SCORES[key] || {};
+      const nm = scoreName(name); if (!nm) return 0;
+      const m = SCORES[key] = SCORES[key] || {};
       m[nm] = (m[nm] | 0) + 1;
       SCORE_N[key] = Math.max(SCORE_N[key] | 0, 0) + 1;
       ev({ e: 'score', key, name: nm, n: m[nm], names: Object.assign({}, m) });
@@ -1075,7 +1084,7 @@
     }
     function scoresOf(key) {
       const m = SCORES[key] || {}; let sum = 0; const top = [];
-      for (const nm in m) { sum += m[nm] | 0; top.push([nm, m[nm] | 0]); }
+      for (const nm in m) { if (!scoreName(nm)) continue; sum += m[nm] | 0; top.push([nm, m[nm] | 0]); }
       top.sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
       return { total: Math.max(SCORE_N[key] | 0, sum), top: top.slice(0, 10), names: m };
     }
@@ -1122,7 +1131,7 @@
       m.dead = S.t; m.tgt = 0; m.dropAt = S.t + 2; m.killer = p ? p.id : null;
       ev({ e: 'die', mob: m.uid, killer: p ? p.id : null }); void md;
       if (p && !p.puppet) creditKill(p, m.key);
-      if (p && m.key === 'chain_dragon') scoreKill(m.key, p.name);
+      if (p && m.key === 'chain_dragon') scoreKill(m.key, p.tag ? '@' + String(p.tag).replace(/^@/, '') : p.name);
       for (const pid of S.order) { const o = S.players[pid]; if (o.act && o.act.k === 'attack' && o.act.uid === m.uid) o.act = null; }
     }
     function mobDrops(m) {

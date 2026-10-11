@@ -248,6 +248,7 @@ function createModels(THREE, opts) {
       const hatI = info(gear.head), capeI = info(gear.cape), bodyI = info(gear.body);
       if (hatI.slot === 'hat') O.hat = { style: hatI.part.style, color: hatI.color };
       if (capeI.slot === 'cape') O.cape = capeI.color;
+      V0.dragon = gear.cape === 'dragon_cape' ? 1 : 0;   /* white dragon mark on the orange cape's back */
       if (bodyI.slot === 'robe') {
         O.shirt = { style: 'robe', color: bodyI.color }; O.pants = { style: 'robe', color: bodyI.color };
         if (gear.body === 'vorthan_robe') O.hat = { style: 'hood', color: bodyI.color };
@@ -387,6 +388,12 @@ function createModels(THREE, opts) {
       torso: [0.06, 0, 0.1 * s], neck: [-0.05, 0.15 * s, -0.08 * s],
       hipL: [0.08, 0, 0.12], hipR: [-0.06, 0, -0.1], kneeL: [0.18], kneeR: [0.28]
     }); } },
+    /* sitting on a rope (Vael): hips on the line, legs hanging, looking up as if a hawk decided the field */
+    perch: { loop: true, dur: 3.2, fn: (t, b) => { const s = Math.sin(TAU * t); return withBase(b, {
+      lift: [-0.9], hipL: [-1.15, 0, 0.12], hipR: [-1.1, 0, -0.12], kneeL: [0.55], kneeR: [0.65],
+      torso: [0.16 + 0.02 * s, 0, 0], neck: [-0.38, 0.06 * s, 0],
+      shL: [-0.55, 0, 0.72], elL: [-0.7], shR: [-0.55, 0, -0.72], elR: [-0.7]
+    }); } },
     bow: { dur: 1, impact: 0.62, fn: K(0, {}, 0.35, { shL: [-1.55, 0.1, 0], elL: [0], shR: [-1.55, -0.15, 0], elR: [-0.4], torso: [0, 0.5, 0], neck: [0, -0.5, 0] },
       0.6, { shL: [-1.55, 0.1, 0], elL: [0], shR: [-1.45, -0.55, -0.25], elR: [-2.4], torso: [0, 0.6, 0], neck: [0, -0.6, 0] },
       0.68, { shL: [-1.55, 0.1, 0], elL: [0], shR: [-1.3, -0.3, -0.7], elR: [-1], torso: [0, 0.6, 0], neck: [0, -0.6, 0] }, 1, {}) },
@@ -428,8 +435,8 @@ function createModels(THREE, opts) {
   };
   const BEAST = {
     idle: { loop: true, dur: 2, fn: t => ({ tail: [0.3, 0.35 * Math.sin(TAU * t), 0], neck: [0.04 * Math.sin(TAU * t)] }) },
-    walk: { loop: true, dur: 0.8, fn: t => { const s = Math.sin(TAU * t); return { legFL: [0.5 * s], legBR: [0.5 * s], legFR: [-0.5 * s], legBL: [-0.5 * s], tail: [0.3, 0.2 * s, 0], lift: [0.015 * Math.abs(Math.cos(TAU * t))] }; } },
-    run: { loop: true, dur: 0.5, fn: t => { const s = Math.sin(TAU * t); return { legFL: [0.9 * s], legFR: [0.8 * s], legBL: [-0.9 * s], legBR: [-0.8 * s], pitch: [0.12 * s], tail: [0.6, 0, 0], lift: [0.05 * Math.abs(Math.cos(TAU * t))] }; } },
+    walk: { loop: true, dur: 0.8, fn: (t, _, H) => { const s = Math.sin(TAU * t), hip = (H && H._hipY) || 0.32; return { legFL: [0.5 * s], legBR: [0.5 * s], legFR: [-0.5 * s], legBL: [-0.5 * s], tail: [0.3, 0.2 * s, 0], lift: [hip * (1 - Math.cos(0.5 * s))] }; } },
+    run: { loop: true, dur: 0.5, fn: (t, _, H) => { const s = Math.sin(TAU * t), hip = (H && H._hipY) || 0.32; return { legFL: [0.9 * s], legFR: [0.8 * s], legBL: [-0.9 * s], legBR: [-0.8 * s], pitch: [0.12 * s], tail: [0.6, 0, 0], lift: [hip * (1 - Math.cos(0.85 * s))] }; } },
     bite: { dur: 0.7, impact: 0.55, fn: K(0, {}, 0.4, { neck: [0.35], legFL: [0.3], legFR: [0.3], legBL: [-0.2], legBR: [-0.2], dz: [-0.06] }, 0.55, { neck: [-0.45], dz: [0.14], legFL: [-0.5], legFR: [-0.5], pitch: [-0.1] }, 1, {}) },
     /* a chained dragon's tells: the whole body, held until the blow. A bite rears. Dragonfire opens the wings and the jaw. */
     rear: { loop: true, dur: 0.7, fn: t => { const s = Math.sin(TAU * t); return { lift: [1.15 + 0.12 * s], pitch: [-1.05], neck: [-1.45 + 0.12 * s], jaw: [0.35], legFL: [-1.5], legFR: [-1.5], legBL: [0.55], legBR: [0.55], wingL: [0, 0, 0.7], wingR: [0, 0, -0.7], tail: [-0.6] }; } },
@@ -448,7 +455,7 @@ function createModels(THREE, opts) {
     function poseNow() {
       if (!cur) return {};
       const P = poses[cur.name], t = P.loop ? (cur.t / P.dur) % 1 : Math.min(1, cur.t / P.dur);
-      return P.fn(t, H.carry);
+      return P.fn(t, H.carry, H);
     }
     function apply(p) {
       for (const n in joints) {
@@ -566,9 +573,24 @@ function createModels(THREE, opts) {
     let jaw = null;
     if (o.wings) { jaw = group(0, -0.05 * S, 0.26 * S); neck.add(jaw); jaw.add(box(0.15 * S, 0.04 * S, 0.2 * S, o.snout || dk, 0, -0.02 * S, 0.08 * S)); }
     const tail = group(0, 0.08 * S, -0.35 * S); trunk.add(tail);
-    const tl = o.tailLen || 0.32;
-    const tm = box(o.tailW || 0.07 * S, o.tailW || 0.07 * S, tl * S, o.tail || c, 0, 0, -tl * S / 2); tail.add(tm);
-    function leg(x, z) { const g = group(x * S, -0.08 * S, z * S); trunk.add(g); g.add(box(0.09 * S, hipY - 0.02 * S, 0.1 * S, dk, 0, -(hipY - 0.02 * S) / 2 + 0.02 * S, 0)); g.add(box(0.1 * S, 0.04 * S, 0.12 * S, shade(c, 0.55), 0, -hipY + 0.06 * S, 0.01 * S)); return g; }
+    const tl = o.tailLen || 0.32, h = tl * S, col = o.tail || c;
+    const tb = o.tailBase != null ? o.tailBase : (o.tailW || 0.09 * S);
+    const tt = o.tailTip != null ? o.tailTip : tb * (o.wings ? 0.2 : 0.55);
+    /* a dragon's tail is thick at the hips and tapers to a point; other beasts get a milder cone */
+    if (o.wings) {
+      const h0 = h * 0.42, h1 = h - h0, mid = tb * 0.48;
+      const a = cyl(mid, tb, h0, col, 0, 0, -h0 / 2, 7); a.rotation.x = Math.PI / 2; tail.add(a);
+      const b = cyl(tt, mid, h1, col, 0, 0, -(h0 + h1 / 2), 7); b.rotation.x = Math.PI / 2; tail.add(b);
+    } else {
+      const tm = cyl(tt, tb, h, col, 0, 0, -h / 2, 7); tm.rotation.x = Math.PI / 2; tail.add(tm);
+    }
+    function leg(x, z) {
+      const g = group(x * S, -0.08 * S, z * S); trunk.add(g);
+      const fh = 0.04 * S, joint = hipY - 0.08 * S, shinH = Math.max(0.08 * S, joint - fh);
+      g.add(box(0.09 * S, shinH, 0.1 * S, dk, 0, -shinH / 2, 0));
+      g.add(box(0.1 * S, fh, 0.12 * S, shade(c, 0.55), 0, fh / 2 - joint, 0.01 * S));   /* soles on the ground, not through it */
+      return g;
+    }
     const FL = leg(-0.11, 0.25), FR = leg(0.11, 0.25), BL = leg(-0.11, -0.25), BR = leg(0.11, -0.25);
     let wingL = null, wingR = null;
     if (o.wings) {
@@ -599,6 +621,7 @@ function createModels(THREE, opts) {
     if (wingL) { joints.wingL = rot(wingL); joints.wingR = rot(wingR); }
     if (jaw) joints.jaw = rot(jaw);
     const H = character(root, joints, BEAST);
+    H._hipY = hipY;
     H.setGear = () => H; H.setTool = () => H; H.attackAnim = () => 'bite';
     if (glowMat) {
       let tell = null, tt = 0; const up = H.update;
@@ -818,7 +841,7 @@ function createModels(THREE, opts) {
   function item(id) {
     const g = new THREE.Group(), e = ITEMS[id];
     if (!e) { g.add(box(0.15, 0.15, 0.15, '#aa44aa', 0, 0.075, 0)); return g; }   /* unknown id: visible, never invisible */
-    const P = e.part, V = { t: e.t, W: 1, small: 0, big: 0 }, I = info(id);
+    const P = e.part, V = { t: e.t, W: 1, small: 0, big: 0, dragon: id === 'dragon_cape' ? 1 : 0 }, I = info(id);
     const C = { t: e.t, family: P.family, c: I.color, skin: DEFAULT_OUTFIT.skin, hair: DEFAULT_OUTFIT.hairColor, beard: DEFAULT_OUTFIT.hairColor, eyes: DEFAULT_OUTFIT.eyes, brow: DEFAULT_OUTFIT.hairColor };
     const inner = new THREE.Group(); g.add(inner);
     if (P.groundShapes) build(P.groundShapes, C, V, () => inner);

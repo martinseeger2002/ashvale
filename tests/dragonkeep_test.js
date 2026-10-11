@@ -10,7 +10,7 @@ let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
 const core = AshCore.create(D, { seed: 'dragon' });
 const md = D.monsters.chain_dragon;
-ok(md && md.chain === 4 && md.windup === 4 && md.aggro === 0 && md.drops[0].item === 'dragon_cape' && md.drops[0].one_in === 5 && md.bones === 'dragon_bones', 'the chained dragon is a slow, non-aggressive fight with a 1 in 5 cape');
+ok(md && md.chain === 4 && md.windup === 4 && md.aggro === 0 && md.drops[0].item === 'dragon_cape' && md.drops[0].one_in === 10 && md.bones === 'dragon_bones', 'the chained dragon is a slow, non-aggressive fight with a 1 in 10 cape');
 const pool = (md.drops.find(d => d.any) || {}).any || [];
 ok(md.drops.some(d => d.one_in === 10 && d.any && d.any.length === 9) && pool.every(id => core.item(id) && core.item(id).tier === 5), 'one kill in ten drops one random adamant piece (' + pool.join(', ') + ')');
 ok(core.item('dragon_cape').magic === 8 && core.item('dragon_cape').ward === 'chain_dragon' && core.item('dragon_bones').buryXp === 720 && core.item('bones').buryXp === 45, 'dragon bones bury for far more Prayer than ordinary bones, and the cape has Magic +8');

@@ -161,6 +161,18 @@
     "rally": 0,
     "leash": 30
    }
+  },
+  "chain_dragon": {
+   "drops": [
+    {
+     "item": "dragon_cape",
+     "one_in": 10
+    },
+    {
+     "any": ["helmet_t5", "body_t5", "legs_t5", "chain_t5", "shield_t5", "sword_t5", "dagger_t5", "longsword_t5", "mace_t5"],
+     "one_in": 10
+    }
+   ]
   }
  }
 }

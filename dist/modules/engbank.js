@@ -429,7 +429,7 @@
       function scoreTell(e) {
         if (!e || e.key !== 'chain_dragon' || !e.name) return;
         const p = e.n | 0; if (p < 1) return;
-        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'score', v: 1, k: 'chain_dragon', n: String(e.name).slice(0, 12), p }); });
+        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'score', v: 1, k: 'chain_dragon', n: String(e.name).slice(0, 20), p }); });
       }
       let scoreT = 0; const scoreGot = {};
       function scoresAsk(force) {

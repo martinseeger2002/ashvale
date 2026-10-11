@@ -229,8 +229,13 @@ def handle_scores(c, addr, msg):
     k = str(msg.get('k') or '')
     if k != 'chain_dragon': return None
     if msg.get('t') == 'score':
-        name = str(msg.get('n') or '').strip()[:12]
-        if not re.match(r'^[\w -]{2,12}$', name): return None
+        name = str(msg.get('n') or '').strip()[:20]
+        if re.match(r'^@[\w]{2,16}$', name):
+            pass
+        elif re.match(r'^[\w -]{2,16}$', name) and name.lower() != 'adventurer':
+            pass
+        else:
+            return None
         try: p = int(msg.get('p') or 0)
         except (TypeError, ValueError): return None
         if p < 1 or p > 1000000000: return None

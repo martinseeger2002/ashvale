@@ -59,4 +59,8 @@ B.handle_scores(c, 'B', {'t': 'score', 'k': 'chain_dragon', 'n': 'Maren', 'p': 4
 r = B.handle_scores(c, 'C', {'t': 'scores?', 'k': 'chain_dragon'})
 ok(r and r[0]['n'] == 6 and r[0]['top'][0] == ['Maren', 4] and r[0]['top'][1] == ['Wren', 2], 'the Bank keeps the higher count per name and the global total: %r' % (r,))
 ok(not B.handle_scores(c, 'C', {'t': 'score', 'k': 'goblin', 'n': 'Wren', 'p': 9}), 'only the chained dragon is on this board')
+B.handle_scores(c, 'C', {'t': 'score', 'k': 'chain_dragon', 'n': 'Adventurer', 'p': 9})
+ok(c.execute("select count(*) from scores where name='Adventurer'").fetchone()[0] == 0, 'the default Adventurer is not stored')
+B.handle_scores(c, 'C', {'t': 'score', 'k': 'chain_dragon', 'n': '@yourfirstname', 'p': 3})
+ok(c.execute("select n from scores where name='@yourfirstname'").fetchone()[0] == 3, 'a kill is stored under the arcade @name')
 print('ALL OK' if not fails else 'FAILED: %d' % fails)
