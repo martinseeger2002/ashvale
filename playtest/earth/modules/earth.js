@@ -11,7 +11,7 @@
 (function (root) {
   'use strict';
   const META = { api: 1, v: 1, needs: { three: 160, globe: 1, worldgen: 1, atlas_chunk: 1, atlas_shapes: 1, data: 1 } };
-  const K = 24, MAXL = 10, GROUND_ALT = 650, MIN_ALT = 6, MAX_ALT = 120000;
+  const K = 24, MAXL = 10, GROUND_ALT = 650, MIN_ALT = 6, MAX_ALT = 120000, EYE = 1.7;
 
   function factory(deps) {
     function start(host, opts) {
@@ -22,7 +22,22 @@
       const G = deps.globe.createGlobe({ n: CFG.n, radius_m: CFG.radius_m, seed: CFG.seed });
       const W = deps.worldgen.createWorldgen(G, { seed: CFG.seed });
       const zones = Object.keys(DATA).filter(k => k.indexOf('zone.') === 0).map(k => Object.assign({ id: k.slice(5) }, DATA[k])).filter(z => !z.under);   /* an underground area (the Spider Cave) is not on the land */
-      if (zones.length && CFG.origin) W.setSetPieces(W.piecesFromZones(zones, CFG.face, CFG.origin[0], CFG.origin[1], { belt: CFG.belt || {}, links: CFG.links || [] }));
+      const setPieces = () => { if (zones.length && CFG.origin) W.setSetPieces(W.piecesFromZones(zones, CFG.face, CFG.origin[0], CFG.origin[1], { belt: CFG.belt || {}, links: CFG.links || [], groves: CFG.groves || [], walls: CFG.walls || [] })); };
+      setPieces();
+      /* THE GAME'S OWN ZONES (2026-10-11: "a better way for the Atlas to render so that it always automatically
+         integrates any changes made in the game"): the Atlas boots from the game's registry, so every zone the game ships
+         is here - the ones in `modules` arrive as data, the lazy ones (registry `lazy.zones`, fetched by the game near the
+         player) are fetched here all at once, then the pieces are placed again and the land redrawn. */
+      function lazyZones() {
+        const reg = root.ASH3D && root.ASH3D._values && root.ASH3D._values.$registry, L = reg && reg.lazy && reg.lazy.zones;
+        if (!L) return Promise.resolve([]);
+        const have = new Set(zones.map(z => z.id));
+        return Promise.all(Object.keys(L).filter(id => !have.has(id)).map(id => {
+          const page = root.ASH3D_LAZY && root.ASH3D_LAZY['zone.' + id], e = L[id];
+          const got = page ? Promise.resolve(page) : (!e || !e.id) ? Promise.resolve(null) : fetch('/content/' + e.id).then(r => r.ok ? r.json() : null);
+          return got.then(j => { const d = j && j.ashvale3d === 'module' ? j.data : j; return d && d.tiles && !d.under ? Object.assign({ id }, d) : null; }).catch(() => null);
+        })).then(zs => zs.filter(Boolean));
+      }
       const R = G.radius_m, CL = G.classes();
 
       /* ---- colours (natural; the parcel map is an overlay) ---- */
@@ -221,7 +236,7 @@
       const uToLL = u => [Math.asin(Math.max(-1, Math.min(1, NSA * u[2]))) * 180 / Math.PI, Math.atan2(NSA * u[1], u[0]) * 180 / Math.PI];
       const exAt = alt => 1 + 2 * Math.min(1, Math.max(0, (Math.log10(alt) - 3.3) / 1.5));   /* at most 3x from orbit (the operator: the mountains looked out of scale) */
       const tiltAt = alt => { const t = Math.min(1, Math.max(0, (Math.log10(alt) - 1.6) / 2.2)); return 0.62 + (1.5 - 0.62) * t; };
-      const PLACES = {};
+      const PLACES = {}; let placesFromZones = () => {};
       const SUN_EPOCH = 1791353761, DAY_S = 7200;
       let sunLon = null, sunBall = null, moonBall = null;
       { const g = new THREE.Group(), core = new THREE.Mesh(new THREE.SphereGeometry(R * 0.32, 24, 16), new THREE.MeshBasicMaterial({ color: 0xfff4c0, fog: false }));
@@ -248,17 +263,31 @@
         return [Math.cos(L) * cd, Math.sin(L) * cd, Math.sin(dl)];
       }
       /* a game tile (the x, y a character stands on) -> the sphere direction and the planar point, the same mapping as the places */
-      const gameAt = (vx, vy) => { if (!CFG.origin) return null; const fx = vx + CFG.origin[0] + 0.5, fy = -(vy + CFG.origin[1]) - 0.5; return { u: W.toSphere(CFG.face, fx, fy), face: CFG.face, x: fx, y: fy }; };
+      /* through the flat net of the open globe (handoff/globe_net.md): a game point anywhere on the planet -> its face and sphere */
+      const NETA = W.net && !CFG.fenced ? W.net(CFG.face) : null;
+      const gameAt = (vx, vy) => { if (!CFG.origin) return null; const px = vx + CFG.origin[0] + 0.5, py = -(vy + CFG.origin[1]) - 0.5; if (!NETA) return { u: W.toSphere(CFG.face, px, py), face: CFG.face, x: px, y: py }; const r = NETA.toFace(px, py), h = W.fold(r.f, r.x, r.y); return { u: W.toSphere(h[0], h[1], h[2]), face: h[0], x: h[1], y: h[2] }; };
       { const at = (vx, vy) => { const fx = vx + CFG.origin[0] + 0.5, fy = -(vy + CFG.origin[1]) - 0.5; return W.toSphere(CFG.face, fx, fy); };
         if (CFG.origin) PLACES.ashvale = { u: at(22, 52), alt: 60 };
         /* every area is a place (?at=<zone id>): over its middle, high enough to see the whole of it */
-        if (CFG.origin) for (const z of zones) if (z && z.id && z.origin && z.size && !PLACES[z.id]) PLACES[z.id] = { u: at(z.origin[0] + (z.size[0] >> 1), z.origin[1] + (z.size[1] >> 1)), alt: Math.max(160, Math.round(Math.max(z.size[0], z.size[1]) * 1.4)) }; }
+        placesFromZones = () => { for (const z of zones) if (z && z.id && z.origin && z.size && !PLACES[z.id]) PLACES[z.id] = { u: at(z.origin[0] + (z.size[0] >> 1), z.origin[1] + (z.size[1] >> 1)), alt: Math.max(160, Math.round(Math.max(z.size[0], z.size[1]) * 1.4)) }; };
+        if (CFG.origin) placesFromZones(); }
       let groundH = 0, tP = null;
       function updateCamera() {
         const u = cam.u; frameAt(u);
         tP = toPlanar(u);
         const s = W.sample(tP.face, tP.x, tP.y); groundH = Math.max(W.WATER, s.h);
+        if (walk) cam.alt = EYE;
         const ex = exAt(cam.alt); U.uEx.value = ex;
+        if (walk) {   /* ON FOOT (2026-10-11: "put back in the walk here feature"): eye height on the ground, looking along the heading */
+          const ch0 = Math.cos(cam.hd), sh0 = Math.sin(cam.hd), rW = R + groundH * ex + EYE;
+          F3[0] = N3[0] * ch0 + E3[0] * sh0; F3[1] = N3[1] * ch0 + E3[1] * sh0; F3[2] = N3[2] * ch0 + E3[2] * sh0;
+          for (let i = 0; i < 3; i++) camW[i] = u[i] * rW;
+          const cp0 = Math.cos(walk.pitch), sp0 = Math.sin(walk.pitch);
+          camera.position.set(0, 0, 0); camera.up.set(up3[0], up3[1], up3[2]);
+          camera.lookAt(F3[0] * cp0 + up3[0] * sp0, F3[1] * cp0 + up3[1] * sp0, F3[2] * cp0 + up3[2] * sp0);
+          camera.near = 0.1; camera.far = 4e6; camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+          walkSky(); return;
+        }
         const el = Math.max(0.15, Math.min(1.5, tiltAt(cam.alt) + cam.tilt));
         const ch = Math.cos(cam.hd), sh = Math.sin(cam.hd);
         F3[0] = N3[0] * ch + E3[0] * sh; F3[1] = N3[1] * ch + E3[1] * sh; F3[2] = N3[2] * ch + E3[2] * sh;
@@ -271,7 +300,9 @@
         camera.up.set(up3[0] * ce + F3[0] * se, up3[1] * ce + F3[1] * se, up3[2] * ce + F3[2] * se);
         camera.lookAt(u[0] * rT - camW[0], u[1] * rT - camW[1], u[2] * rT - camW[2]);
         camera.near = Math.max(0.1, Math.min(cam.alt * 0.05, 200)); camera.far = 4e6; camera.updateProjectionMatrix(); camera.updateMatrixWorld();
-        /* sky, haze, sun */
+        walkSky();
+      }
+      function walkSky() {   /* sky, haze, sun (shared by the camera in the air and on foot) */
         const k = Math.min(1, Math.max(0, (Math.log10(cam.alt) - 3.4) / 1.2));
         bg.copy(SKY).lerp(SPACE, k); stars.material.opacity = 0.85 * k;
         const fogOn = cam.alt < 25000;
@@ -413,7 +444,8 @@
       function tick(now) {
         const dt = Math.min(0.1, (now - last) / 1000); last = now; frame++;
         if (cam.fly) stepFly(dt);
-        if (keys.size) keyMove(dt);
+        if (walkAfter && !cam.fly) enterWalk(walkAfter);
+        if (walk) walkStep(dt); else if (keys.size) keyMove(dt);
         updateCamera();
         pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(pv);
         for (const nd of drawn) nd.mesh && (nd.mesh.visible = false);
@@ -433,8 +465,50 @@
         if (equatorLine) { EQW.value = Math.max(1.2, cam.alt * 0.004) / R; equatorLine.matrix.makeTranslation(-camW[0], -camW[1], -camW[2]); equatorLine.matrixWorld.copy(equatorLine.matrix); }
         if (frame % 60 === 0) prune();
         renderer.render(scene, camera);
-        youTick(); marksTick(); if (frame % 2 === 0) friendsTick(); hudTick();
+        youTick(); marksTick(); if (frame % 2 === 0) friendsTick(); hudTick(); pickTick();
         requestAnimationFrame(tick);
+      }
+
+      /* ---- on foot: Walk here / Fly up (the first Atlas had it: "tap a parcel -> Walk here ... and you stand on the ground") ---- */
+      let walk = null, walkAfter = null, pick = null;
+      const padV = [0, 0];   /* the touch pad's push: strafe, forward (-1..1) */
+      function walkableAt(u) { const pl = toPlanar(u); return W.walkable(pl.face, pl.x, pl.y); }
+      function nearestFoot(u) {   /* the nearest spot a person can stand on: a shore for the sea, the foot of a peak */
+        if (walkableAt(u)) return u;
+        frameAt(u);
+        for (let r = 2; r <= 120; r += 2) for (let k = 0; k < 16; k++) {
+          const a = k / 16 * 2 * Math.PI, de = Math.cos(a) * r / R, dn = Math.sin(a) * r / R;
+          const v = norm([u[0] + E3[0] * de + N3[0] * dn, u[1] + E3[1] * de + N3[1] * dn, u[2] + E3[2] * de + N3[2] * dn]);
+          if (walkableAt(v)) return v;
+        }
+        return null;
+      }
+      function walkHere(u) {
+        const spot = nearestFoot(u || (pick && performance.now() - pick.t < 30000 ? pick.u : cam.u));
+        if (!spot) return false;
+        pick = null; walkAfter = spot;
+        flyToU(spot, EYE + 0.5, Math.max(cam.alt, 40), 3.5);
+        return true;
+      }
+      function enterWalk(u) { walk = { pitch: 0 }; cam.u = u.slice(); cam.tilt = 0; cam.alt = EYE; cam.fly = null; walkAfter = null; hudWalk(); }
+      function flyUp() { if (!walk) return; walk = null; cam.tilt = 0.3; flyToU(cam.u, 160, 160, 2.5); hudWalk(); }
+      function flyToU(u, alt, top, maxDur) {   /* a flight to a sphere direction, no lat/lon round trip (flyTo takes lat/lon) */
+        const ang = Math.acos(Math.max(-1, Math.min(1, cam.u[0] * u[0] + cam.u[1] * u[1] + cam.u[2] * u[2])));
+        const dur = Math.min(maxDur || 4, 2.2 + 2.2 * Math.min(1, Math.log10(Math.max(top, 1) / Math.min(cam.alt, alt)) / 4) + (ang > 0.01 ? 1.2 : 0));
+        cam.fly = { u0: cam.u.slice(), u1: u.slice(), a0: cam.alt, a1: alt, top: Math.max(cam.alt, alt, top || 0), t: 0, dur, ang, tilt0: cam.tilt };
+      }
+      function walkStep(dt) {   /* keys and the pad move along the ground; a step into water, rock or a wall is not taken */
+        let f = 0, sd = 0;
+        if (keys.has('KeyW') || keys.has('ArrowUp')) f += 1; if (keys.has('KeyS') || keys.has('ArrowDown')) f -= 1;
+        if (keys.has('KeyD')) sd += 1; if (keys.has('KeyA')) sd -= 1;
+        if (keys.has('ArrowLeft') || keys.has('KeyQ')) cam.hd += dt * 1.6; if (keys.has('ArrowRight') || keys.has('KeyE')) cam.hd -= dt * 1.6;
+        f += padV[1]; sd += padV[0];
+        if (!f && !sd) return;
+        const speed = (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 7 : 3.6) * dt / R, ch = Math.cos(cam.hd), sh = Math.sin(cam.hd);
+        frameAt(cam.u);
+        const fw = [N3[0] * ch + E3[0] * sh, N3[1] * ch + E3[1] * sh, N3[2] * ch + E3[2] * sh], rt = [E3[0] * ch - N3[0] * sh, E3[1] * ch - N3[1] * sh, E3[2] * ch - N3[2] * sh];
+        const tryMove = (a, b) => { const v = norm([cam.u[0] + (fw[0] * a + rt[0] * b) * speed, cam.u[1] + (fw[1] * a + rt[1] * b) * speed, cam.u[2] + (fw[2] * a + rt[2] * b) * speed]); if (walkableAt(v)) { cam.u = v; return true; } return false; };
+        tryMove(f, sd) || tryMove(f, 0) || tryMove(0, sd);
       }
 
       /* ---- input ---- */
@@ -465,6 +539,7 @@
         return norm([o[0] + d.x * t, o[1] + d.y * t, o[2] + d.z * t]);
       }
       function zoom(f, cx, cy) {
+        if (walk) { if (f > 1) flyUp(); return; }
         const before = cam.alt, after = Math.max(MIN_ALT, Math.min(MAX_ALT, cam.alt * f));
         if (cx != null) {
           const g = groundUnder(cx, cy);
@@ -476,7 +551,7 @@
       canvas.addEventListener('contextmenu', e => e.preventDefault());
       canvas.addEventListener('pointerdown', e => {
         canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); cam.fly = null;
-        if (ptrs.size === 1) drag = { x: e.clientX, y: e.clientY, rot: e.button === 2 || e.ctrlKey || e.shiftKey };
+        if (ptrs.size === 1) drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, rot: !!walk || e.button === 2 || e.ctrlKey || e.shiftKey };
         if (ptrs.size === 2) { const [a, b] = Array.from(ptrs.values()); pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), ang: Math.atan2(b.y - a.y, b.x - a.x), my: (a.y + b.y) / 2, alt: cam.alt, hd: cam.hd, tilt: cam.tilt }; drag = null; }
       });
       canvas.addEventListener('pointermove', e => {
@@ -487,14 +562,19 @@
           cam.hd = pinch.hd - (ang - pinch.ang); cam.tilt = Math.max(-0.9, Math.min(0.9, pinch.tilt + (my - pinch.my) / 300));
         } else if (drag) {
           const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
-          if (drag.rot) { cam.hd -= dx * 0.005; cam.tilt = Math.max(-0.9, Math.min(0.9, cam.tilt + dy * 0.004)); } else pan(dx, dy);
+          if (walk) { cam.hd -= dx * 0.005; walk.pitch = Math.max(-1.2, Math.min(1.2, walk.pitch - dy * 0.004)); }
+          else if (drag.rot) { cam.hd -= dx * 0.005; cam.tilt = Math.max(-0.9, Math.min(0.9, cam.tilt + dy * 0.004)); } else pan(dx, dy);
         }
       });
-      const endP = e => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) drag = null; };
+      const endP = e => {
+        /* a tap (no drag, one finger) marks the spot for Walk here */
+        if (drag && !pinch && ptrs.size === 1 && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6 && !walk) { const g = groundUnder(e.clientX, e.clientY); if (g) { pick = { u: g, t: performance.now() }; hudWalk(); } }
+        ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) drag = null;
+      };
       canvas.addEventListener('pointerup', endP); canvas.addEventListener('pointercancel', endP);
       canvas.addEventListener('wheel', e => { e.preventDefault(); zoom(Math.pow(1.0018, e.deltaY * (e.deltaMode === 1 ? 30 : 1)), e.clientX, e.clientY); }, { passive: false });
       const keys = new Set();
-      addEventListener('keydown', e => { if (/^(Arrow|Key[WASDQE]|Equal|Minus)/.test(e.code)) { keys.add(e.code); e.preventDefault(); } });
+      addEventListener('keydown', e => { if (/^(Arrow|Key[WASDQE]|Equal|Minus|Shift)/.test(e.code)) { keys.add(e.code); if (e.code.indexOf('Shift') < 0) e.preventDefault(); } });
       addEventListener('keyup', e => keys.delete(e.code));
       function keyMove(dt) {
         const m = mpp() * H * 0.6 * dt;
@@ -536,6 +616,10 @@
         '.ea .you i{display:block;width:14px;height:14px;border-radius:50%;background:#2fd3ff;border:2px solid #fff;box-shadow:0 0 0 3px #0a2a3a99,0 0 10px #2fd3ff}' +
         '.ea .you i::after{content:"";position:absolute;left:50%;top:7px;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;border:2px solid #2fd3ff;animation:eaPing 1.8s ease-out infinite}' +
         '.ea .you b{position:absolute;left:50%;top:18px;transform:translateX(-50%);padding:1px 6px;border-radius:4px;background:rgba(10,30,40,.85);color:#bff1ff;font-size:12px;white-space:nowrap}' +
+        '.ea .pk{position:absolute;left:0;top:0;display:none;transform:translate(-50%,-100%);pointer-events:none;text-align:center}.ea .pk i{display:block;width:12px;height:12px;margin:0 auto;border-radius:50%;background:#ffcf3f;border:2px solid #fff;box-shadow:0 0 8px #ffcf3f}' +
+        '.ea .pk b{display:block;margin-top:2px;padding:1px 6px;border-radius:4px;background:rgba(30,24,16,.85);color:#ffe9a8;font-size:12px;white-space:nowrap}' +
+        '.ea .pad{position:absolute;left:calc(max(14px,env(safe-area-inset-left)) + 150px);bottom:max(14px,env(safe-area-inset-bottom));width:120px;height:120px;border-radius:50%;background:rgba(30,24,16,.45);border:1px solid #8a7550;display:none;pointer-events:auto;touch-action:none}' +
+        '.ea .pad i{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;background:linear-gradient(#7a6a3a,#5a4a29);border:1px solid #ffcf3f}' +
         '@keyframes eaPing{from{transform:scale(1);opacity:.9}to{transform:scale(3.2);opacity:0}}' +
         '.ea .you.fr i{background:#ff9a2e;box-shadow:0 0 0 3px #3a200899,0 0 10px #ff9a2e;width:12px;height:12px}.ea .you.fr i::after{display:none}.ea .you.fr b{background:rgba(50,26,6,.85);color:#ffd8a8}' +
         '.ea .rose{position:absolute;left:14px;bottom:max(14px,env(safe-area-inset-bottom));width:min(26vmin,150px);height:min(26vmin,150px);opacity:.5;pointer-events:auto;cursor:pointer;transition:opacity .2s}.ea .rose:hover{opacity:.8}' +
@@ -551,7 +635,8 @@
         '<text x="52" y="4" text-anchor="middle" font-size="11" fill="#e8d9b4">E</text><text x="-52" y="4" text-anchor="middle" font-size="11" fill="#e8d9b4">W</text></g></svg></div>' +
         '<div class="you" id="ea-you"><i></i><b>You</b></div><div class="t">ASHVALE Atlas<small id="ea-alt">-</small><small id="ea-note" hidden></small></div><div class="b">' +
         '<button id="ea-me" hidden>You</button><button id="ea-ash">Ashvale</button><button id="ea-salt">Saltmere</button><button id="ea-in">+</button><button id="ea-out">&minus;</button>' +
-        '<button id="ea-globe">Globe</button><button id="ea-par">Parcels</button></div></div>';
+        '<button id="ea-globe">Globe</button><button id="ea-par">Parcels</button><button id="ea-walk">Walk here</button></div>' +
+        '<div class="pk" id="ea-pick"><i></i><b>Walk here?</b></div><div class="pad" id="ea-pad"><i></i></div></div>';
       host.appendChild(hud);
       const $ = id => hud.querySelector('#' + id), altEl = $('ea-alt');
       $('ea-ash').onclick = () => flyTo('ashvale'); $('ea-salt').onclick = () => flyTo('saltmere'); $('ea-globe').onclick = () => flyTo('globe');
@@ -573,6 +658,13 @@
          measured from north, toward east); tap it to face north. Pole and equator labels sit on the ground there. */
       const roseG = hud.querySelector('#ea-rose-g'), npEl = $('ea-np'), spEl = $('ea-sp'), eqEl = $('ea-eq'), vL = new THREE.Vector3();
       $('ea-rose').onclick = () => { cam.hd = Math.round(cam.hd / (2 * Math.PI)) * 2 * Math.PI; };
+      const walkBtn = $('ea-walk'), pickEl = $('ea-pick'), padEl = $('ea-pad'), padKnob = padEl.querySelector('i');
+      function hudWalk() { walkBtn.textContent = walk ? 'Fly up' : 'Walk here'; walkBtn.classList.toggle('on', !!walk); padEl.style.display = walk ? 'block' : 'none'; if (walk || !pick) pickEl.style.display = 'none'; }
+      walkBtn.onclick = () => { if (walk) flyUp(); else if (!walkHere()) { $('ea-note').hidden = false; $('ea-note').textContent = 'no ground to stand on here'; setTimeout(() => { $('ea-note').hidden = true; }, 2500); } };
+      padEl.addEventListener('pointerdown', e => { padEl.setPointerCapture(e.pointerId); padEl._on = e.pointerId; e.stopPropagation(); });
+      padEl.addEventListener('pointermove', e => { if (padEl._on !== e.pointerId) return; const r = padEl.getBoundingClientRect(), dx = (e.clientX - r.left - r.width / 2) / 48, dy = (e.clientY - r.top - r.height / 2) / 48, L = Math.hypot(dx, dy) || 1, k = Math.min(1, L); padV[0] = dx / L * k; padV[1] = -dy / L * k; padKnob.style.transform = 'translate(' + (padV[0] * 36) + 'px,' + (-padV[1] * 36) + 'px)'; });
+      const padEnd = e => { if (padEl._on !== e.pointerId) return; padEl._on = null; padV[0] = padV[1] = 0; padKnob.style.transform = ''; };
+      padEl.addEventListener('pointerup', padEnd); padEl.addEventListener('pointercancel', padEnd);
       function screenOf(u, lift) {   /* a point on the ground at direction u -> [x, y] on screen, or null behind the planet / off screen */
         const pl = toPlanar(u), h = Math.max(W.WATER, W.sample(pl.face, pl.x, pl.y).h) * U.uEx.value, rr = R + h + (lift || 0);
         const px = u[0] * rr, py = u[1] * rr, pz = u[2] * rr;
@@ -656,9 +748,20 @@
       setTimeout(() => { try { buildEquator(); } catch (e) { console.warn('Atlas: no equator line', e && e.message); } }, 300);
       setTimeout(() => findMe().catch(e => { YOU.state = 'error'; console.warn('Atlas: could not find you', e && e.message); }), 1500);
       let hudT = 0;
+      const pkV = new THREE.Vector3(), pkD = new THREE.Vector3();
+      function pickTick() {
+        if (!pick || walk) { pickEl.style.display = 'none'; return; }
+        if (performance.now() - pick.t > 30000) { pick = null; pickEl.style.display = 'none'; return; }
+        const pl = toPlanar(pick.u), h = Math.max(W.WATER, W.sample(pl.face, pl.x, pl.y).h) * U.uEx.value + R;
+        pkV.set(pick.u[0] * h - camW[0], pick.u[1] * h - camW[1], pick.u[2] * h - camW[2]);
+        const behind = pkV.dot(camera.getWorldDirection(pkD)) < 0; pkV.project(camera);
+        if (behind || Math.abs(pkV.x) > 1.2 || Math.abs(pkV.y) > 1.2) { pickEl.style.display = 'none'; return; }
+        pickEl.style.display = 'block'; pickEl.style.left = (pkV.x + 1) / 2 * Wd + 'px'; pickEl.style.top = (1 - pkV.y) / 2 * H + 'px';
+      }
       function hudTick() {
         if (frame - hudT < 10) return; hudT = frame;
         const a = cam.alt, ll = uToLL(cam.u);
+        if (walk) { altEl.textContent = 'on foot  ·  ' + Math.abs(ll[0]).toFixed(3) + '°' + (ll[0] >= 0 ? 'N' : 'S') + ' ' + Math.abs(ll[1]).toFixed(3) + '°' + (ll[1] >= 0 ? 'E' : 'W') + '  ·  WASD or the pad to walk, drag to look'; return; }
         altEl.textContent = (a >= 1000 ? (a / 1000).toFixed(a >= 10000 ? 0 : 1) + ' km' : Math.round(a) + ' m') + ' up  ·  ' + Math.abs(ll[0]).toFixed(2) + '°' + (ll[0] >= 0 ? 'N' : 'S') + ' ' + Math.abs(ll[1]).toFixed(2) + '°' + (ll[1] >= 0 ? 'E' : 'W');
       }
 
@@ -669,8 +772,11 @@
       if (q.has('alt')) cam.alt = +q.get('alt');
       if (at && PLACES[at]) { cam.u = PLACES[at].u.slice(); cam.alt = PLACES[at].alt; }
       requestAnimationFrame(tick);
+      lazyZones().then(zs => { if (!zs.length) return; zones.push(...zs); setPieces(); placesFromZones(); app.redraw(); const at2 = q.get('at'); if (at2 && PLACES[at2] && !cam.fly && frame < 600) { cam.u = PLACES[at2].u.slice(); cam.alt = PLACES[at2].alt; } }).catch(e => console.warn('Atlas: lazy zones', e && e.message));
       const app = {
         flyTo, setAlt: a => { cam.alt = Math.max(MIN_ALT, Math.min(MAX_ALT, a)); },
+        walk: (on, u) => { if (on === false) flyUp(); else walkHere(u); return !!walkAfter || !!walk; }, onFoot: () => !!walk, zones: () => zones.map(z => z.id),
+        redraw: () => app.setEdits(W.edits ? W.edits() : null),
         state: () => ({ lat: uToLL(cam.u)[0], lon: uToLL(cam.u)[1], alt: cam.alt, hd: cam.hd, tilt: cam.tilt, flying: !!cam.fly, ex: U.uEx.value, ground: groundH, face: tP && tP.face }),
         stats: () => ({ patches: drawn.length, built, live, queue: buildQ.size, chunks: chunks.size, chunksBuilt: Array.from(chunks.values()).filter(c => c.mesh).length, frame }),
         places: PLACES, W, G,

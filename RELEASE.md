@@ -1,20 +1,5 @@
 # ASHVALE: fix, test, release (for the local agent)
 
-## Note for the authorizing / inscribing operator (2026-10-10)
-
-**Dragon cape (orange, white dragon on the back).** Inscriptions cannot be edited after they are written. Existing `dragon_cape` NFTs on the Flag (`ASHVALE Items`, key `dragon_cape`) still carry the old blue cape in their inscribed JSON and any inscribed icon.
-
-In the live game, worn look comes from the current `cloth.cape` part, so a new parts/models release already paints those copies orange in-world. Chain explorers and the arcade inventory still show whatever was inscribed.
-
-Please, unless you have a way to rewrite those inscriptions (there is none on-chain):
-1. Take a list of current `dragon_cape` owners from the Flag.
-2. Delete / burn the old blue cape NFTs from the Flag.
-3. Reissue each owner a new `dragon_cape` of this orange design.
-
-Do not mint extras. Drop rate is now 1 in 10.
-
----
-
 2026-10-02: "Give the local agent clear instructions on how to continue to build, test and release so that as
 it fixes bugs, it can publish them without you." This is the whole loop. Follow it in order, every time.
 
@@ -92,13 +77,25 @@ python3 tools/check_gather_reach_pw.py        # a gather the character cannot wa
 `python3 build.py` writes `playtest/ashvale3d_playtest.html` (one self-contained file). Tell the operator the path and what
 changed; he can open it from his machine. Wait for his OK.
 
-## 5. Release (the modular way)
+## 5. Release (the modular way, through arcade-publish - no browser, no arcade web offer, never the mini PC)
+Since 0.8.86 (2026-10-11) every inscription goes through `arcade-publish` (dogecoin-arcade `arcade/publish.py`,
+D-194): the transactions are built and signed HERE with @ashvale's key (`chain/ashvale_publish.key`, 0600) and
+broadcast through this machine's own testnet node (pepecoind-staging-testnet, RPC 127.0.0.1:44873). The operator: "It
+shouldn't even have to open a web browser"; "You should be using your own instance of DA not the one on .25".
+The local agent has it as the `local-publish` tools (publish_whoami, ashvale_release, ashvale_card, publish_file,
+publish_status - ~/qwen-tools/publish_mcp.py); by hand it is:
 ```
 cd ~/ashvale3d
-/home/you/cartoon-toolkit/ghost-devs/tools/venv/bin/python tools/release_modular.py --dry          # what will be inscribed
+export PATH=$HOME/.local/bin:$PATH PYTHONPATH=$HOME/arcade-work/runs/claude-publish ASH_PUBLISH=$HOME/arcade-work/runs/claude-publish \
+       ASH_RPC_URL=http://127.0.0.1:44873 ASH_RPC_COOKIE=$HOME/.pepecoin-testnet/testnet3/.cookie ASH_PUBLISH_KEY=$HOME/ashvale3d/chain/ashvale_publish.key
+~/arcade-work/venv/bin/python -m arcade.publish -testnet --key $ASH_PUBLISH_KEY --rpc-url $ASH_RPC_URL --rpc-cookie $ASH_RPC_COOKIE --whoami   # balance
+~/arcade-work/venv/bin/python tools/release_modular.py --dry --no-build          # what will be inscribed (build.py --arcade first)
 echo "=== vX.Y (what) $(date '+%F %T')" >> chain/release_modular.log
-nohup /home/you/cartoon-toolkit/ghost-devs/tools/venv/bin/python tools/release_modular.py >> chain/release_modular.log 2>&1 < /dev/null &
+~/arcade-work/venv/bin/python tools/release_modular.py --no-build 2>&1 | grep -v "HTTP Request" | tee -a chain/release_modular.log
 ```
+(ASH_PUBLISH points at the arcade checkout holding arcade/publish.py: `~/arcade-work/runs/master` once the branch
+claude/rpc-publisher is merged.) Without ASH_PUBLISH the tool falls back to the arcade's offer path through the
+wallet, which the operator's node keeps breaking (its interface restarts every 15 minutes and forgets offers).
 - It runs `build.py --arcade` itself, inscribes ONLY the modules whose content changed (as @ashvale), then a new
   REGISTRY (with its JSON beside the file, which is how the launcher finds it). The launcher never changes.
   Everyone who opens ASHVALE gets the new version on their next load, with their progress kept.
@@ -115,11 +112,10 @@ nohup /home/you/cartoon-toolkit/ghost-devs/tools/venv/bin/python tools/release_m
   out in pieces (a split transaction, then all pieces a block later).
 - **It's resumable.** If it stops (machine restart, a crash), run the same command again. It picks up what's already
   on chain by content hash.
-- **If it seems stuck** (no new line for 20+ minutes): check the account's unfinished jobs (signed-in browser as
-  @ashvale: `GET https://app.dogecoinarcade.com/account/inscribe/unfinished`; `/r/blockheight` shows the chain is
-  moving). The script already gives up stale jobs and retries. If a job is stuck at "N of M pieces", stop the script
-  (kill its exact PID and its geckodriver/firefox children) and run it again. The arcade node now waits out its own
-  restarts. If it keeps failing, write what you saw in `handoff/arcade_issues.md` and tell the operator.
+- **If it seems stuck** (no new line for 20+ minutes): a split waits for its block (`pepecoin-cli -datadir
+  ~/.pepecoin-testnet getblockcount` should be moving). The publisher journals every send in `chain/publish/<sha>.json`:
+  stop the script and run it again, nothing is paid for twice. If it keeps failing, write what you saw in
+  `handoff/arcade_issues.md` and tell the operator.
 - **Daily limit:** about 250 KB per account per day. A full core+engine release is ~150 KB; plan big releases.
 - Don't run `build.py` while a release is running (it would change the files being sent).
 
@@ -135,7 +131,10 @@ If two_players_live shows nobody seeing anybody once, run it again (joining can 
    No unannounced plans (the globe is not public yet).
 2. New Games-tab card, so the label matches. Copy the newest `listing_vNN/` folder to a new one, change `version` in
    its `game.json` (keep `play` = the launcher id, keep the cover id), then:
-   `/home/you/cartoon-toolkit/ghost-devs/tools/venv/bin/python /home/you/cartoon-toolkit/ghost-devs/tools/list_game.py ashvale /dev/null listing_vNN/game.json`
+   `~/arcade-work/venv/bin/python tools/list_game_publish.py listing_vNN/game.json <cover id from the previous listing_ids.json>`
+   (same env as the release; the agent's `ashvale_card` tool). The Ziibiing card is `listing_ziibiing_vNN/`, the Atlas
+   card `listing_earth/` (its `play` is the Atlas launcher in chain/earth.json; the Atlas boots the game's newest
+   registry by itself, so a game release needs no Atlas release).
    The newest card replaces the old one on the Games tab automatically.
 3. Release note as @ashvale: write `chain/post_vNN.txt` (paragraphs separated by a blank line, each ≤ 280 characters,
    plain words, what players will notice; no other games named), then

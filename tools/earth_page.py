@@ -17,7 +17,8 @@ REGF = os.path.join(ROOT, 'playtest', 'earth', 'registry.json')
 JS = ['globe', 'wg_geo', 'wg_terrain', 'wg_paths', 'wg_sites', 'wg_tiles', 'worldgen', 'atlas_shapes', 'atlas_chunk', 'sky', 'earth']
 DATA_MODS = [('wg_tables', os.path.join(DATA, 'atlas', 'wg_tables.json')), ('atlas_palette', os.path.join(DATA, 'atlas', 'atlas_palette.json')),
              ('globecfg', os.path.join(DATA, 'globecfg.json'))]
-ZONES = ['whisperwood', 'village', 'saltmere', 'wolfden', 'cavemouth']   # spidercave is underground: not on the Atlas
+sys.path.insert(0, ROOT); import build as _B
+ZONES = [z for z in _B.ZONES if z not in ('spidercave', 'lodges')]   # every zone the game has (underground ones are not on the land)
 
 
 def main():

@@ -1,12 +1,12 @@
 {
  "game": {
   "name": "ASHVALE Atlas",
-  "description": "The whole ASHVALE planet in one view: start from orbit and zoom all the way down to the ground, seamlessly. Two continents in a wide ocean, island chains, rivers from mountain creeks to the sea, deserts, rainforest, taiga and snowy ranges, Ashvale village and the harbour town of Saltmere. Drag to pan, scroll or pinch to zoom, right-drag to turn.",
-  "version": "1.0",
+  "description": "ASHVALE Atlas 2.0: the whole planet, now drawn from the game's own registry, so every release of the game shows here at once - every village and camp, Ziibiing on the far continent included. The equator and the poles are marked. Tap a spot and Walk here: you stand on the ground at eye height and walk it; Fly up returns you to the air.",
+  "version": "2.0",
   "players": "Solo",
   "multiplayer": false,
   "family": "ashvale",
   "genre": "explorer",
-  "play": "a4597d82acb371406e493f222061aecab2858d392355f74ea24e38ee8045e25d"
+  "play": "b87e82829e9da154c90ebd6e447db9f51af5846e0929ebc1ce3639952ead6f95"
  }
 }

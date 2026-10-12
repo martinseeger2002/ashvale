@@ -241,12 +241,12 @@
           await talk('migizi');
           say('...the next day.'); nextDay(); await wait(2500);
           await talk('migizi');
-          say('Up to the iskigamizigan (sugar camp). Nookomis is here while the sap runs.'); await walk(95, 548, 1);
+          say('Up to the iskigamizigan (sugar camp). Nookomis is here while the sap runs.'); await walk(32499, -2412, 1);
           await talk('nookomis');
           say('A long press on an ininaatig (maple): Collect sap. One bucket per tree a day, one sap per bucket.');
           await work(Mp[0][0], Mp[0][1], { tap: 1 }); await work(Mp[1][0], Mp[1][1], { tap: 1 });
           say('One bucket of ziinzibaakwadwaaboo (maple sap) to Nookomis. She gives the bucket back.'); await talk('nookomis');
-          const F = { x: 92, y: 543 };
+          const F = { x: 32496, y: -2417 };   /* the sugar camp's fire (tools/make_zone_ziibiing.py CAMP_FIRE) */
           say('Boil the other at the fire: zhiiwaagamizigan (maple syrup), in the same bucket.'); await work(F.x, F.y);
           await talk('nookomis');
           say('Another day, another bucket of sap.'); nextDay(); await wait(2500); await work(Mp[2][0], Mp[2][1], { tap: 1 });

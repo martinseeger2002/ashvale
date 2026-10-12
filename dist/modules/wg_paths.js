@@ -24,12 +24,18 @@
     let SEG = [];   /* per segment: face, x0, y0, x1, y1, halfWidth, kind (0 path, 1 water), carve height */
     const NS = 8, BRIDGE = 14;   /* the widest stream a path bridges, metres */
     ctx.PIECES = []; ctx.PIECE_BY_ID = new Map(); ctx.ROAD_OBJ = [];
+    /* a piece from another face of the net (worldgen.js piecesFromZones, Ziibiing 2026-10-11) is a ROTATED rectangle here:
+       pc.rot = {ox, oy (its origin corner, planar), ax, ay (the zone's +x and +y tile axes, planar), w, h, tiles}; (u, v) are
+       a planar point's zone-tile coordinates. Its x, y, w, h stay the bounding box. */
+    const rotUV = (pc, x, y) => { const R = pc.rot, dx = x - R.ox, dy = y - R.oy; return [dx * R.ax[0] + dy * R.ax[1], dx * R.ay[0] + dy * R.ay[1]]; };
     function pieceDist(pc, x, y) {
+      if (pc.rot) { const q = rotUV(pc, x, y), dx = Math.max(-q[0], 0, q[0] - pc.rot.w), dy = Math.max(-q[1], 0, q[1] - pc.rot.h); return Math.sqrt(dx * dx + dy * dy); }
       const dx = Math.max(pc.px0 - x, 0, x - pc.px1), dy = Math.max(pc.py0 - y, 0, y - pc.py1);
       return Math.sqrt(dx * dx + dy * dy);
     }
     function pieceTile(pc, gx, gy) {
       if (!pc || gx < pc.x || gy < pc.y || gx >= pc.x + pc.w || gy >= pc.y + pc.h) return '';
+      if (pc.rot) { const q = rotUV(pc, gx + 0.5, -(gy + 0.5)); if (q[0] < 0 || q[1] < 0 || q[0] >= pc.rot.w || q[1] >= pc.rot.h) return ''; const row = pc.rot.tiles[Math.floor(q[1])]; return row ? (row[Math.floor(q[0])] || '.') : '.'; }
       const row = pc.tiles[gy - pc.y]; return row ? (row[gx - pc.x] || '.') : '.';
     }
     function segDist(f, x, y, kind) {
@@ -58,11 +64,19 @@
        piece (globecfg.groves: {piece, x, y, rx, ry, sp, dens, edge}, game tiles), its edge wandering with noise. Returns the
        grove's species and density and k, how fully this spot is in it (0 outside .. 1 well inside), or null */
     const GROVE = { k: 0, sp: '', dens: 0 };
+    /* groves given on their own, {face, x, y (that face's game tiles), rx, ry, sp, dens, edge}: the zone tools plant a grove
+       before the piece it belongs to exists (tools/make_zone_ziibiing.py samples the woods its camp stands in) */
+    ctx.FREE_GROVES = []; ctx.setGroves = (l) => { ctx.FREE_GROVES = (l || []).slice(); };
     function groveAt(f, x, y) {
       const gx = x, gy = -y;
-      for (const pc of ctx.PIECES) if (pc.face === f && pc.groves && pc.groves.length) for (const q of pc.groves) {
+      for (const q of ctx.FREE_GROVES) if (q.face === f) { const r = groveOne(q, f, gx, gy); if (r) return r; }
+      for (const pc of ctx.PIECES) if (pc.face === f && pc.groves && pc.groves.length) for (const q of pc.groves) { const r = groveOne(q, f, gx, gy); if (r) return r; }
+      return null;
+    }
+    function groveOne(q, f, gx, gy) {
+      {
         const dx = (gx - q.x) / q.rx, dy = (gy - q.y) / q.ry, d = Math.sqrt(dx * dx + dy * dy) * (0.85 + 0.3 * g.vnoise(gx / 37, gy / 37, f, ctx.S.pa ^ 0x6b43));
-        if (d >= 1) continue;
+        if (d >= 1) return null;
         const e = Math.max(0.05, (q.edge || 30) / Math.min(q.rx, q.ry)), t = Math.min(1, (1 - d) / e);
         GROVE.k = t * t * (3 - 2 * t); GROVE.sp = q.sp || 'M'; GROVE.dens = q.dens == null ? 0.6 : q.dens; return GROVE;
       }
@@ -120,6 +134,7 @@
     }
     function profile(pc, edge) {
       const out = [], n = edge === 'n' || edge === 's' ? pc.w : pc.h;
+      if (pc.rot) { for (let i = 0; i < n; i++) out.push([0, '']); return out; }   /* a rotated piece (another face): its bounding box edges are open ground, the same whether its zone is loaded or a stub */
       for (let i = 0; i < n; i++) {
         let trees = 0, cnt = 0, sp = '';
         for (let a = -3; a <= 3; a++) for (let dpt = 0; dpt < 5; dpt++) {
@@ -163,7 +178,7 @@
         }
       }
       for (const sp of (list || [])) {
-        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, groves: sp.groves || [], walls: sp.walls || [], links: sp.links || [], linkStyles: sp.linkStyles || {} };
+        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, groves: sp.groves || [], walls: sp.walls || [], links: sp.links || [], linkStyles: sp.linkStyles || {}, rot: sp.rot || null };
         pc.px0 = pc.x; pc.px1 = pc.x + pc.w; pc.py0 = -(pc.y + pc.h); pc.py1 = -pc.y;
         PIECES.push(pc); ctx.PIECE_BY_ID.set(pc.id, pc);
       }
@@ -266,7 +281,7 @@
           }
         }
         for (const e of pc.exits) ex.push({ x: e.x, y: e.y, dir: e.dir, w: e.w || 2, kind: 0 });
-        pc.ex = ex;
+        pc.ex = pc.rot ? [] : ex;   /* a rotated piece (another face): no path or stream runs continue out of its bounding box */
       }
       /* a gate the road to another town leaves from gets the road only, not a dirt path of its own beside it (the operator
          2026-10-07, the cobbled road): mark the exits the trails between towns will use */

@@ -19,6 +19,191 @@
     let FIREQ = null;   /* (x, y) -> whether the fire at a tile is burning (a zone fire with `litIn` is cold out of its season) */
     let STEAMQ = null;  /* kind -> 0-1, how hard the kettle over that fire steams (core works it out from the season and the hour) */
     const BOARDS = Object.create(null);   /* painted wooden signs (dragon killers): id -> { lines, faces } */
+    /* THE CHESS PARK (2026-10-10): the sets on Saltmere's tables, id -> { ox, oy, oz, pieces: [{m, type, color, sq}], group };
+       pieces are plain meshes (not batched) so a move can slide them; TWEENS are played by update(dt) */
+    const CHESS = Object.create(null), TWEENS = [], CHESS_FEN = Object.create(null);
+    const CHESS_DARK = 0x5a4030, CHESS_LIGHT = 0xefe8d6, SQ = 0.12;   /* tarred driftwood, whalebone - lifted a shade and self-lit a little so they read at night (2026-10-10) */
+    const PIECE_OPTS = { dark: { emissive: 0x2a1a10, emissiveIntensity: 0.9 }, light: { emissive: 0x3a362e, emissiveIntensity: 0.9 } };
+    const PIECE_GEO = {};
+    function pieceGeo(type) {   /* low-poly, lathe-free: cylinders, cones, spheres and boxes, 0.1-0.2 m tall */
+      if (PIECE_GEO[type]) return PIECE_GEO[type];
+      const parts = [];
+      const add = (g, y, rx) => { g.translate(0, y, 0); if (rx) g.rotateX(rx); parts.push(g); };
+      add(new THREE.CylinderGeometry(0.038, 0.046, 0.02, 10), 0.01);
+      if (type === 'p') { add(new THREE.CylinderGeometry(0.018, 0.03, 0.05, 8), 0.045); add(new THREE.SphereGeometry(0.026, 8, 6), 0.095); }
+      if (type === 'r') { add(new THREE.CylinderGeometry(0.03, 0.036, 0.09, 8), 0.065); add(new THREE.BoxGeometry(0.08, 0.025, 0.08), 0.12); for (const [dx, dz] of [[-0.028, -0.028], [0.028, -0.028], [-0.028, 0.028], [0.028, 0.028]]) { const t = new THREE.BoxGeometry(0.02, 0.02, 0.02); t.translate(dx, 0.142, dz); parts.push(t); } }
+      if (type === 'n') { add(new THREE.CylinderGeometry(0.028, 0.036, 0.05, 8), 0.045); const h = new THREE.BoxGeometry(0.04, 0.1, 0.03); h.rotateX(-0.55); h.translate(0, 0.11, 0.01); parts.push(h); const e = new THREE.BoxGeometry(0.03, 0.03, 0.05); e.translate(0, 0.145, 0.03); parts.push(e); }
+      if (type === 'b') { add(new THREE.ConeGeometry(0.04, 0.13, 8), 0.085); add(new THREE.SphereGeometry(0.016, 8, 6), 0.16); }
+      if (type === 'q') { add(new THREE.ConeGeometry(0.044, 0.15, 8), 0.095); add(new THREE.SphereGeometry(0.03, 8, 6), 0.175); for (let k = 0; k < 5; k++) { const d = new THREE.SphereGeometry(0.008, 6, 4); d.translate(Math.cos(k * 1.2566) * 0.025, 0.2, Math.sin(k * 1.2566) * 0.025); parts.push(d); } }
+      if (type === 'k') { add(new THREE.ConeGeometry(0.046, 0.16, 8), 0.1); add(new THREE.SphereGeometry(0.024, 8, 6), 0.185); add(new THREE.BoxGeometry(0.012, 0.05, 0.012), 0.225); add(new THREE.BoxGeometry(0.036, 0.012, 0.012), 0.228); }
+      PIECE_GEO[type] = mergeGeos(parts.map(geo => ({ geo }))); return PIECE_GEO[type];   /* the scene's own merger (further down): {geo, m} items */
+    }
+    const sqOf = (sq) => [sq.charCodeAt(0) - 97, +sq[1] - 1];   /* 'e4' -> [4, 3] */
+    function sqPos(set, sq) { const [f, r] = sqOf(sq); return [set.ox - 3.5 * SQ + f * SQ, set.oy, set.oz + 3.5 * SQ - r * SQ]; }   /* White sits south (+z): rank 1 nearest him, file a on his left (-x) */
+    function chessSquare(id, point) {   /* which square a world point over the board is, or null */
+      const set = CHESS[id]; if (!set || !point) return null;
+      const f = Math.floor((point.x - (set.ox - 4 * SQ)) / SQ), r = Math.floor(((set.oz + 4 * SQ) - point.z) / SQ);
+      return f >= 0 && f < 8 && r >= 0 && r < 8 ? String.fromCharCode(97 + f) + (r + 1) : null;
+    }
+    function fenBoard(fen) {   /* { sq: 'wP' ... } from the first FEN field */
+      const out = {}; const rows = String(fen || '').split(' ')[0].split('/'); if (rows.length !== 8) return out;
+      for (let i = 0; i < 8; i++) { let f = 0; for (const ch of rows[i]) { if (/\d/.test(ch)) f += +ch; else { out[String.fromCharCode(97 + f) + (8 - i)] = (ch === ch.toUpperCase() ? 'w' : 'b') + ch.toLowerCase(); f++; } } }
+      return out;
+    }
+    function makePiece(set, code, sq) {
+      const m = new THREE.Mesh(pieceGeo(code[1]), lam(code[0] === 'w' ? CHESS_LIGHT : CHESS_DARK, code[0] === 'w' ? PIECE_OPTS.light : PIECE_OPTS.dark)); m.castShadow = true;
+      const [x, y, z] = sqPos(set, sq); m.position.set(x, y, z); if (code[1] === 'n') m.rotation.y = code[0] === 'w' ? 0 : Math.PI;   /* the knights face the enemy */
+      set.group.add(m); const pc = { m, code, sq }; set.pieces.push(pc); return pc;
+    }
+    function dropPiece(set, pc) { set.group.remove(pc.m); set.pieces.splice(set.pieces.indexOf(pc), 1); }
+    function chessApply(id, fen, move) {   /* lay the position out; a move (from, to) slides its piece and the rest is reconciled in place */
+      CHESS_FEN[id] = fen; const set = CHESS[id]; if (!set) return;
+      const want = fenBoard(fen), at = (sq) => set.pieces.find(q => q.sq === sq);
+      if (move && move[0] && move[1]) {
+        const pc = at(move[0]), taken = at(move[1]);
+        if (pc) { if (taken && taken !== pc) dropPiece(set, taken); const [x, y, z] = sqPos(set, move[1]); pc.sq = move[1]; TWEENS.push({ m: pc.m, x0: pc.m.position.x, z0: pc.m.position.z, x, z, y, t: 0, dur: 0.45, lift: 0.08 }); }
+      }
+      for (const sq of Object.keys(want)) { const pc = at(sq); if (pc && pc.code === want[sq]) continue; if (pc) dropPiece(set, pc); makePiece(set, want[sq], sq); }
+      for (const pc of set.pieces.slice()) if (!want[pc.sq]) dropPiece(set, pc);
+    }
+    const MARK_GEO = new THREE.BoxGeometry(SQ * 0.96, 0.004, SQ * 0.96);
+    const MARK_MAT = { sel: new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.8 }), to: new THREE.MeshBasicMaterial({ color: 0x5aa8ff, transparent: true, opacity: 0.65 }), cap: new THREE.MeshBasicMaterial({ color: 0xff5a5a, transparent: true, opacity: 0.75 }) };
+    function chessMark(id, sel, targets, osel, otargets) {   /* the selected square lights gold, where it may go blue, a capture red: whole squares, unlit, so they read at night too.
+                                                                 [Claude 2026-10-11] osel/otargets: the OPPONENT's pick, the same lights at half strength (the operator: "the same squares that light up on their screen should light up on your screen") */
+      const set = CHESS[id]; if (!set) return;
+      for (const m of set.marks || []) set.group.remove(m); set.marks = [];
+      if (!MARK_MAT.osel) { MARK_MAT.osel = MARK_MAT.sel.clone(); MARK_MAT.osel.opacity = 0.42; MARK_MAT.oto = MARK_MAT.to.clone(); MARK_MAT.oto.opacity = 0.32; MARK_MAT.ocap = MARK_MAT.cap.clone(); MARK_MAT.ocap.opacity = 0.32; }
+      const put = (sq, mat) => { const m = new THREE.Mesh(MARK_GEO, mat); const [x, y, z] = sqPos(set, sq); m.position.set(x, y + 0.003, z); m.renderOrder = 2; set.group.add(m); set.marks.push(m); };
+      if (osel) put(osel, MARK_MAT.osel);
+      for (const t of otargets || []) put(t.to || t, t.capture ? MARK_MAT.ocap : MARK_MAT.oto);
+      if (sel) put(sel, MARK_MAT.sel);
+      for (const t of targets || []) put(t.to || t, t.capture ? MARK_MAT.cap : MARK_MAT.to);
+    }
+    /* THE POKER TABLE (handoff/poker_plan.md, move 5). One canvas of 64 faces - the 52 cards and a back - and one mesh
+       per card, so a whole table costs a dozen draw calls. Card ids are holdemlib's: rank*4 + suit, the suits in the
+       order clubs diamonds hearts spades. The felt and the rail are built with the props; pokerShow lays out the cards,
+       the bets and the button, and a card travels out to its seat on a TWEEN, as a chess piece slides. The last model
+       a table was shown is kept in PK_STATE, so rebuilding the region puts the hand back on the felt. */
+    const POKER = Object.create(null), PK_STATE = Object.create(null);
+    const CARD_W = 0.15, CARD_H = 0.212, PW = 96, PH = 144, PBACK = 63, CARD_Y = 0.007;
+    const PRANKS = '23456789TJQKA', PINK = ['#20202a', '#b23a30', '#b23a30', '#20202a'];
+    const CHIP_GEO = new THREE.CylinderGeometry(0.075, 0.075, 0.028, 12);
+    const CHIP_MAT = [0xa8302a, 0x2f5f9a, 0x2f7a44, 0xe8e2d0].map(c => new THREE.MeshLambertMaterial({ color: c, flatShading: true }));
+    const BTN_GEO = new THREE.CylinderGeometry(0.065, 0.065, 0.022, 14), BTN_MAT = new THREE.MeshLambertMaterial({ color: 0xf2eee0 });
+    const TURN_GEO = new THREE.TorusGeometry(0.15, 0.014, 6, 22), TURN_MAT = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.85 });
+    let CARD_TEX = null;
+    function roundedRect(g, x, y, w, h, r) {
+      g.beginPath(); g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
+      g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      g.lineTo(x + r, y + h); g.quadraticCurveTo(x, y + h, x, y + h - r);
+      g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y); g.closePath();
+    }
+    function pip(g, suit, cx, cy, s) {   /* a club, a diamond, a heart, a spade, as paths - no font can be trusted for them */
+      g.beginPath();
+      if (suit === 0) {
+        for (const d of [[0, -0.46], [-0.40, 0.20], [0.40, 0.20]]) { g.moveTo(cx + d[0] * s + 0.27 * s, cy + d[1] * s); g.arc(cx + d[0] * s, cy + d[1] * s, 0.27 * s, 0, Math.PI * 2); }
+        g.moveTo(cx - 0.06 * s, cy + 0.10 * s); g.lineTo(cx + 0.16 * s, cy + 0.74 * s); g.lineTo(cx - 0.16 * s, cy + 0.74 * s); g.closePath();
+      } else if (suit === 1) {
+        g.moveTo(cx, cy - 0.72 * s); g.lineTo(cx + 0.52 * s, cy); g.lineTo(cx, cy + 0.72 * s); g.lineTo(cx - 0.52 * s, cy); g.closePath();
+      } else if (suit === 2) {
+        g.moveTo(cx, cy + 0.72 * s);
+        g.bezierCurveTo(cx - 0.95 * s, cy - 0.06 * s, cx - 0.42 * s, cy - 0.76 * s, cx, cy - 0.30 * s);
+        g.bezierCurveTo(cx + 0.42 * s, cy - 0.76 * s, cx + 0.95 * s, cy - 0.06 * s, cx, cy + 0.72 * s);
+      } else {
+        g.moveTo(cx, cy - 0.76 * s);
+        g.bezierCurveTo(cx + 0.92 * s, cy + 0.02 * s, cx + 0.46 * s, cy + 0.44 * s, cx + 0.11 * s, cy + 0.30 * s);
+        g.lineTo(cx + 0.17 * s, cy + 0.74 * s); g.lineTo(cx - 0.17 * s, cy + 0.74 * s); g.lineTo(cx - 0.11 * s, cy + 0.30 * s);
+        g.bezierCurveTo(cx - 0.46 * s, cy + 0.44 * s, cx - 0.92 * s, cy + 0.02 * s, cx, cy - 0.76 * s);
+      }
+      g.fill();
+    }
+    function cardKit() {   /* the atlas, painted once for the whole game: 8 cells across, 8 down, the last one the back */
+      if (CARD_TEX) return CARD_TEX;
+      const cv = document.createElement('canvas'); cv.width = PW * 8; cv.height = PH * 8;
+      const g = cv.getContext('2d');
+      for (let i = 0; i < 64; i++) {
+        const px = (i % 8) * PW, py = ((i / 8) | 0) * PH;
+        roundedRect(g, px + 4, py + 4, PW - 8, PH - 8, 9);
+        if (i === PBACK) {
+          g.fillStyle = '#2f4f86'; g.fill(); g.strokeStyle = '#d8e0ee'; g.lineWidth = 3; g.stroke();
+          g.save(); roundedRect(g, px + 11, py + 11, PW - 22, PH - 22, 6); g.clip();
+          g.strokeStyle = 'rgba(216,224,238,0.5)'; g.lineWidth = 2;
+          for (let k = -PH; k < PW + PH; k += 11) { g.beginPath(); g.moveTo(px + k, py); g.lineTo(px + k + PH, py + PH); g.stroke(); }
+          g.restore(); continue;
+        }
+        g.fillStyle = '#f8f5ec'; g.fill(); g.strokeStyle = '#bdb49d'; g.lineWidth = 2; g.stroke();
+        const rank = PRANKS[i >> 2], suit = i & 3;
+        g.fillStyle = PINK[suit]; g.textAlign = 'left'; g.textBaseline = 'top';
+        g.font = 'bold ' + (rank === 'T' ? 19 : 24) + 'px "DejaVu Sans", sans-serif';
+        g.fillText(rank === 'T' ? '10' : rank, px + 10, py + 8);
+        pip(g, suit, px + PW / 2, py + PH / 2, PW * 0.40);
+        pip(g, suit, px + PW - 26, py + PH - 32, PW * 0.17);
+      }
+      CARD_TEX = new THREE.CanvasTexture(cv); CARD_TEX.colorSpace = THREE.SRGBColorSpace; CARD_TEX.anisotropy = 4;
+      return CARD_TEX;
+    }
+    const cardUV = (id) => { const c = id % 8, r = (id / 8) | 0; return [c / 8, 1 - (r + 1) / 8, (c + 1) / 8, 1 - r / 8]; };
+    function cardFace(mesh, id) {   /* which cell of the atlas this card shows: turn it over by asking for the back */
+      const uv = cardUV(id), a = mesh.geometry.attributes.uv;
+      a.setXY(0, uv[0], uv[3]); a.setXY(1, uv[2], uv[3]); a.setXY(2, uv[0], uv[1]); a.setXY(3, uv[2], uv[1]);
+      a.needsUpdate = true; mesh.userData.card = id;
+    }
+    function cardMesh(mat, id) { const m = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W, CARD_H), mat); cardFace(m, id); return m; }
+    function pokerShow(id, m) {   /* the engine's model of a table: board, each seat's two cards (down for the ones it keeps),
+                                     the bets in front of each chair, who has the button, whose turn it is */
+      PK_STATE[id] = m;
+      const T = POKER[id]; if (!T) return;
+      if (!m) { for (const k of Object.keys(T.cards)) { T.group.remove(T.cards[k].g); delete T.cards[k]; } return; }
+      const top = T.oy, want = {}, TILT = 0.42;   /* a card lying flat is below your own eye line at a felt - too flat to
+                                     read: a card that is face up leans up toward the chair it belongs to, the two you hold */
+      for (let i = 0; i < (m.board || []).length; i++) want['b' + i] = { face: m.board[i] | 0, x: T.ox + (i - 2) * 0.17, z: T.oz - 0.07, ang: 0, tilt: 0 };
+      for (const h of m.hands || []) {
+        const s = T.spots[h.ref | 0]; if (!s) continue;
+        const dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1, ux = dx / L, uz = dz / L, ang = Math.atan2(dx, dz);
+        const px = T.ox + ux * 0.60, pz = T.oz + uz * 0.60, tl = h.tilt ? TILT : 0, face = h.down ? PBACK : (h.c && h.c[0] != null ? h.c[0] : PBACK);
+        want['h' + (h.ref | 0) + 0] = { face, x: px + uz * 0.048, z: pz - ux * 0.048, ang: ang + 0.11, tilt: tl };
+        want['h' + (h.ref | 0) + 1] = { face: h.down ? PBACK : (h.c && h.c[1] != null ? h.c[1] : PBACK), x: px - uz * 0.048, z: pz + ux * 0.048, ang: ang - 0.11, tilt: tl };
+      }
+      for (const k of Object.keys(T.cards)) if (!want[k]) { T.group.remove(T.cards[k].g); delete T.cards[k]; }
+      for (const k of Object.keys(want)) {
+        const w = want[k], c = T.cards[k], cy = top + CARD_Y + (w.tilt ? 0.03 : 0);
+        if (c) {
+          if (c.g.userData.face !== w.face) { cardFace(c.m, w.face); c.g.userData.face = w.face; }
+          c.g.rotation.y = w.ang; c.h.rotation.x = -Math.PI / 2 + (w.tilt || 0);
+          if (Math.abs(c.g.position.x - w.x) > 0.004 || Math.abs(c.g.position.z - w.z) > 0.004) {
+            TWEENS.push({ m: c.g, x0: c.g.position.x, z0: c.g.position.z, x: w.x, z: w.z, y: cy, t: 0, dur: 0.34, lift: 0.06 });
+          } else if (Math.abs(c.g.position.y - cy) > 0.004) c.g.position.y = cy;
+          continue;
+        }
+        const g = new THREE.Group(), holder = new THREE.Group(), mesh = cardMesh(T.mat, w.face);
+        holder.rotation.x = -Math.PI / 2 + (w.tilt || 0); g.add(holder); holder.add(mesh);
+        g.position.set(w.x, cy, w.z); g.rotation.y = w.ang; g.userData.face = w.face;
+        T.group.add(g); T.cards[k] = { g, m: mesh, h: holder };
+      }
+      for (const s of T.spots) {   /* the pot in front of each chair: one chip to a big blind, stacked, capped */
+        const ref = s.ref, n = (m.bets && m.bets[ref]) | 0, st = T.chips[ref] = T.chips[ref] || { n: -1, g: new THREE.Group() };
+        if (st.n === n) continue;
+        st.n = n; for (const c of st.g.children.slice()) st.g.remove(c);
+        const dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1;
+        const px = T.ox + dx / L * 0.80, pz = T.oz + dz / L * 0.80;
+        const k = Math.max(0, Math.min(9, Math.round(n / 25)));
+        for (let i = 0; i < k; i++) {
+          const c = new THREE.Mesh(CHIP_GEO, CHIP_MAT[i % 4]); c.position.set(px, top + 0.016 + i * 0.03, pz); st.g.add(c);
+        }
+        if (!st.g.parent) T.group.add(st.g);
+      }
+      if (T.btn) { T.group.remove(T.btn); T.btn = null; }
+      if (m.dealer != null && T.spots[m.dealer | 0]) {
+        const s = T.spots[m.dealer | 0], dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1;
+        const b = new THREE.Mesh(BTN_GEO, BTN_MAT); b.position.set(T.ox + dx / L * 0.86, top + 0.02, T.oz + dz / L * 0.86); T.group.add(b); T.btn = b;
+      }
+      if (T.turn) { T.group.remove(T.turn); T.turn = null; }
+      if (m.turn != null && T.spots[m.turn | 0]) {
+        const s = T.spots[m.turn | 0], dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1;
+        const r = new THREE.Mesh(TURN_GEO, TURN_MAT); r.rotation.x = Math.PI / 2;
+        r.position.set(T.ox + dx / L * 0.60, top + 0.05, T.oz + dz / L * 0.60); T.group.add(r); T.turn = r;
+      }
+    }
     const SNOWC = new THREE.Color(0xf2f1ec);
 
     function hash2(x, y) { let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
@@ -1239,6 +1424,42 @@
             break; }
           case 'counter': { const fl = floorY(o, y); B.add('box', 0x7a5232, x, fl + 0.45, z, (o.w || 1) - 0.05, 0.9, (o.h || 1) - 0.25); B.add('box', 0xa07a48, x, fl + 0.92, z, (o.w || 1) + 0.05, 0.06, (o.h || 1) - 0.1); B.add('box', 0xd29a52, x - 0.3, fl + 1.02, z, 0.25, 0.12, 0.15); break; }
           case 'table': { const fl = floorY(o, y), w = (o.w || 1) - 0.2, d = (o.h || 1) - 0.2; B.add('box', 0x8a5a30, x, fl + 0.62, z, w, 0.07, d); for (const sx of [-1, 1]) for (const sz of [-1, 1]) B.add('box', 0x5a3a1e, x + sx * (w / 2 - 0.06), fl + 0.3, z + sz * (d / 2 - 0.06), 0.07, 0.6, 0.07); B.add('cyl', 0xd8d0b8, x + 0.1, fl + 0.7, z, 0.18, 0.06, 0.18); B.add('box', 0xf4eccc, x - 0.15, fl + 0.75, z - 0.1, 0.05, 0.16, 0.05); break; }
+          case 'bench': {   /* a chess-park bench: a tarred plank on two sandstone blocks, its long side east-west */
+            const fl = floorY(o, y);
+            B.add('box', 0x4a3626, x, fl + 0.42, z, 0.98, 0.06, 0.34); for (const dx of [-0.36, 0.36]) B.add('box', 0x9a8c78, x + dx, fl + 0.2, z, 0.16, 0.4, 0.28);
+            break;
+          }
+          case 'chesstable': {   /* a stone table with a slate-and-sandstone board and a driftwood-and-whalebone set (2026-10-10) */
+            const fl = floorY(o, y), top = fl + 0.78;
+            B.add('box', 0x9a8c78, x, fl + 0.36, z, 0.5, 0.72, 0.5); B.add('box', 0x8a7c68, x, fl + 0.04, z, 0.9, 0.08, 0.9);
+            B.add('box', 0x3c4047, x, top - 0.03, z, 1.18, 0.06, 1.18);   /* the slate slab */
+            for (let r = 0; r < 8; r++) for (let f = 0; f < 8; f++) B.add('box', (f + r) % 2 ? 0xdccfae : 0x414950, x - 3.5 * SQ + f * SQ, top + 0.005, z + 3.5 * SQ - r * SQ, SQ, 0.01, SQ);   /* sandstone / slate, the slate a shade lighter than the dark set */
+            const id = o.id || ('t' + o.x + ',' + o.y), set = CHESS[id] = { ox: x, oy: top + 0.01, oz: z, pieces: [], group: new THREE.Group() };
+            group.add(set.group);
+            chessApply(id, (CHESS_FEN[id] || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'), null);
+            const pk = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.75, 1.3), new THREE.MeshBasicMaterial({ visible: false })); pk.position.set(x, fl + 0.38, z); pk.userData.pick = { kind: 'chesstable', id, x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
+            const bd = new THREE.Mesh(new THREE.BoxGeometry(8 * SQ, 0.06, 8 * SQ), new THREE.MeshBasicMaterial({ visible: false })); bd.position.set(x, top + 0.03, z); bd.userData.pick = { kind: 'square', id, x: o.x, y: o.y }; group.add(bd); pickables.push(bd);
+            break;
+          }
+          case 'pokertable': {   /* the felt, the rail and the six chairs' places; pokerShow (called by the engine, and again
+               here after a rebuild) lays the cards, the bets and the button on it. Seats are tile pairs beside the table. */
+            const fl = floorY(o, y), top = fl + 0.74, id = o.id || ('p' + o.x + ',' + o.y);
+            const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 0.7, 12), lam(0x3d2b1d)); leg.position.set(x, fl + 0.36, z); group.add(leg);
+            const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.40, 0.48, 0.07, 16), lam(0x33241a)); foot.position.set(x, fl + 0.04, z); group.add(foot);
+            const FELT = new THREE.Color(o.felt || 0x1f4d38).getHex();   /* a felt in a dim tavern would otherwise read as black, so it carries a little of its own light */
+            const felt = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.07, 40), lam(FELT, { emissive: FELT, emissiveIntensity: 0.4 }));
+            felt.scale.set(0.95, 1, 0.70); felt.position.set(x, top - 0.035, z); group.add(felt);
+            const rail = new THREE.Mesh(new THREE.TorusGeometry(1, 0.09, 8, 36), lam(0x54341f));
+            rail.rotation.x = Math.PI / 2; rail.scale.set(0.95, 0.70, 1); rail.position.set(x, top + 0.01, z); group.add(rail);
+            const mat = new THREE.MeshBasicMaterial({ map: cardKit(), side: THREE.DoubleSide });
+            mat.userData.shared = true;   /* the atlas is one for the whole game - dispose() must not take it with this region */
+            const gg = new THREE.Group(); group.add(gg);
+            POKER[id] = { ox: x, oy: top, oz: z, spots: (o.seats || []).map((s, i) => ({ x: s[0] + 0.5, z: s[1] + 0.5, ref: i })), cards: {}, chips: {}, group: gg, mat };
+            const pk = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.9, 1.8), new THREE.MeshBasicMaterial({ visible: false }));
+            pk.position.set(x, fl + 0.4, z); pk.userData.pick = { kind: 'pokertable', id, x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
+            pokerShow(id, PK_STATE[id]);
+            break;
+          }
           case 'chair': { const fl = floorY(o, y); B.add('box', 0x7a4a26, x, fl + 0.36, z, 0.42, 0.06, 0.42); B.add('box', 0x7a4a26, x, fl + 0.65, z - 0.19, 0.42, 0.55, 0.05); for (const sx of [-1, 1]) for (const sz of [-1, 1]) B.add('box', 0x5a3a1e, x + sx * 0.17, fl + 0.18, z + sz * 0.17, 0.05, 0.36, 0.05); break; }
           case 'bed': { const fl = floorY(o, y), w = (o.w || 1) - 0.15, d = (o.h || 1) - 0.15; B.add('box', 0x6a4426, x, fl + 0.2, z, w, 0.4, d); B.add('box', [0xa03a3a, 0x3a6aa0, 0x6a8a3a][(o.x + o.y) % 3], x, fl + 0.43, z + 0.12, w - 0.06, 0.1, d - 0.4); B.add('box', 0xf0ead8, x, fl + 0.46, z - d / 2 + 0.25, w - 0.25, 0.12, 0.3); B.add('box', 0x5a3a1e, x, fl + 0.55, z - d / 2 + 0.04, w, 0.7, 0.08); break; }
           case 'fireplace': case 'furnace': {
@@ -1385,7 +1606,7 @@
         dispose() {
           group.traverse(o => {
             if (o.userData && o.userData.boardId) { const B = BOARDS[o.userData.boardId]; if (B) B.faces = B.faces.filter(f => f !== o); }
-            if (o.geometry) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); const mt = o.material; if (mt && mt.map && mt.map.isCanvasTexture) { mt.map.dispose(); mt.dispose(); }
+            if (o.geometry) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); const mt = o.material; if (mt && mt.map && mt.map.isCanvasTexture && !(mt.userData && mt.userData.shared)) { mt.map.dispose(); mt.dispose(); }   /* a shared atlas (the cards) outlives the region */
           });   /* painted signs are this region's own */
           for (const L of [TREE_REG, FLORA_REG, RICE_REG]) for (let i = L.length - 1; i >= 0; i--) if (L[i].g === group) L.splice(i, 1);
         },
@@ -1420,6 +1641,7 @@
           if (waterMesh) waterMesh.material.emissive.setHSL(0.58, 0.6, 0.08 + 0.02 * Math.sin(time * 1.5));
           if (waterMesh) waterMesh.position.y = Math.sin(time * 0.55) * 0.014;   /* the whole sheet rides a slow swell, some water sits on it */
           for (const a of anim) if (a.bob) a.bob.position.y = a.y0 + 0.12 * Math.sin(time * 2.6);
+          for (let i = TWEENS.length - 1; i >= 0; i--) { const w = TWEENS[i]; w.t = Math.min(1, w.t + dt / w.dur); const e = w.t < 0.5 ? 2 * w.t * w.t : 1 - Math.pow(-2 * w.t + 2, 2) / 2; w.m.position.set(w.x0 + (w.x - w.x0) * e, w.y + Math.sin(w.t * Math.PI) * w.lift, w.z0 + (w.z - w.z0) * e); if (w.t >= 1) TWEENS.splice(i, 1); }
           for (const a of anim) if (a.smoke) {
             if ((!a.litIn || !FIREQ || FIREQ(a.tx, a.ty)) && a.parts.length < 8 && Math.random() < dt * 3) { const m = new THREE.Mesh(smokeGeo, smokeMat); m.position.set(a.x, a.y, a.z); m.userData.t = 0; group.add(m); a.parts.push(m); }
             for (let k = a.parts.length - 1; k >= 0; k--) { const m = a.parts[k]; m.userData.t += dt; m.position.y += dt * 0.5; m.position.x += dt * 0.15; m.scale.setScalar(1 + m.userData.t * 0.8); m.rotation.y += dt; if (m.userData.t > 2.4) { group.remove(m); a.parts.splice(k, 1); } }
@@ -1442,7 +1664,7 @@
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -19,12 +19,13 @@ SRC, DATA, DIST = os.path.join(ROOT, 'src'), os.path.join(ROOT, 'data'), os.path
 ESB = os.path.join(ROOT, 'tools', 'esb')
 THREE_V = '0.160.0'
 THREE_ARCADE_ID = '374cfd2b2f114e9da4ade8add495fe8aa0b2b996a710fb538759a956f15f9539'   # Pip's on-chain three.module.min.js r160 (official, unmodified)
-JS_MODULES = ['netretry', 'net', 'trade', 'wallet', 'trip', 'world', 'core', 'audit', 'castle', 'scene', 'hudart', 'hudpanels', 'hudshop', 'hudchest', 'huddrag', 'hudcreator', 'hud', 'models', 'gamepad', 'engine']   # the HUD is split in parts (2026-10-02)
+JS_MODULES = ['netretry', 'net', 'trade', 'wallet', 'trip', 'world', 'chesslib', 'holdemlib', 'core', 'audit', 'castle', 'scene', 'hudart', 'hudpanels', 'hudshop', 'hudchest', 'huddrag', 'hudcreator', 'hudchess', 'hudpoker', 'hud', 'models', 'gamepad', 'engine']   # the HUD is split in parts (2026-10-02)
 if os.environ.get('ASH_NO_CASTLE') == '1': JS_MODULES = [m for m in JS_MODULES if m != 'castle']
 if os.path.exists(os.path.join(SRC, 'weather.js')):   # weather visuals (local agent, task 6): its own module/inscription
     JS_MODULES.insert(JS_MODULES.index('engine'), 'weather')      # load order does not matter (factories), kept stable
 if os.path.exists(os.path.join(SRC, 'seasons.js')):   # the year and its seasons (2026-10-07): its own module/inscription
     JS_MODULES.insert(JS_MODULES.index('engine'), 'seasons')
+for _m in ('atlas_shapes', 'atlas_chunk', 'earth'): JS_MODULES.insert(JS_MODULES.index('engine'), _m)   # the Atlas (src/earth.js) is a game module since 2026-10-11: it boots from the game's registry, so every release updates it
 JS_MODULES.insert(JS_MODULES.index('engine'), 'engsky')
 JS_MODULES.insert(JS_MODULES.index('engine'), 'engbank')   # the chest and the @ashvale Bank client   # the engine's sky, its own inscription (2026-10-08: the engine split into parts)
 if os.path.exists(os.path.join(SRC, 'sky.js')):
@@ -43,7 +44,8 @@ DATA_MODULES = DATA_MODULES + (['pools'] if os.path.exists(os.path.join(os.path.
 if os.path.exists(os.path.join(SRC, 'worldgen.js')):
     JS_MODULES[JS_MODULES.index('world'):JS_MODULES.index('world')] = ['globe', 'wg_geo', 'wg_terrain', 'wg_paths', 'wg_sites', 'wg_tiles', 'worldgen']
     DATA_MODULES.append('wg_tables')
-DATA_PATHS = {'wg_tables': 'atlas/wg_tables'}   # data modules that live in a subfolder of data/
+DATA_MODULES.append('atlas_palette')   # the Atlas's colours (src/earth.js PAL): the Atlas boots from the game's registry since 2026-10-11
+DATA_PATHS = {'wg_tables': 'atlas/wg_tables', 'atlas_palette': 'atlas/atlas_palette'}   # data modules that live in a subfolder of data/
 ZONES = ['village', 'eastend', 'whisperwood', 'saltmere', 'castle', 'wolfden', 'cavemouth', 'spidercave', 'ancientchapel', 'evengrove', 'ziibiing', 'lodges', 'ricelake', 'sugarcamp', 'flintbank', 'obsidianbank', 'willowbank', 'dragonkeep']   # ziibiing + lodges: the Ojibwe village on the river and its wigwams' insides (tools/make_zone_ziibiing.py)   # castle: the lake castle 4 km out (tools/castle/make_castle.js)   # dragonkeep: the ruined keep at -54,-99
 ZONES = ZONES   # saltmere: the second town, on the sea shore 3.4 km east (tools/make_zone_saltmere.mjs)
 if os.environ.get('ASH_NO_CASTLE') == '1':   # 2026-10-05: "forget about this castle for now" - a release without it
@@ -72,7 +74,10 @@ STUB_BAND = 5   # worldgen reads this many tiles in from each edge (wg_paths.js 
 
 def zone_stub_tiles(z):
     """the zone's tiles as worldgen sees them from OUTSIDE: piers and bridges laid as 'B' (worldgen.js decks()), then
-    everything more than STUB_BAND tiles in from every edge blanked to '.' (only the inside of a town reads it)"""
+    everything more than STUB_BAND tiles in from every edge blanked to '.' (only the inside of a town reads it) - except
+    what BLOCKS (trees, rock, water, walls: rules.tiles.block), kept so the forest ways (wg_tiles.js wayCell) see the same
+    open/blocked map from a stub as from the loaded zone (2026-10-11: Ziibiing's zone keeps a strip of grove inside)"""
+    BLOCK = json.load(open(os.path.join(ROOT, 'data', 'rules.json')))['data']['tiles']['block']
     ox, oy = z['origin']; T = [list(r) for r in z['tiles']]
     for o in z.get('objects') or []:
         if o.get('k') not in ('pier', 'bridge'): continue
@@ -86,7 +91,7 @@ def zone_stub_tiles(z):
     for y, r in enumerate(T):
         w = len(r)
         if y < B or y >= h - B or w <= 2 * B: out.append(''.join(r))
-        else: out.append(''.join(r[:B]) + '.' * (w - 2 * B) + ''.join(r[w - B:]))
+        else: out.append(''.join(r[:B]) + ''.join(c if c in BLOCK else '.' for c in r[B:w - B]) + ''.join(r[w - B:]))
     return out
 
 

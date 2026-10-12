@@ -314,6 +314,7 @@
       /* next to a set piece its own woods continue (same density) and fade into the seeded land */
       forest = Math.min(T.forest.max || 1, forest);   /* the densest woods a little thinner (2026-10-06); a set piece's own woods still continue below */
       if (NP) { ctx.pieceFlora(f, x, y, PFL); if (PFL.k < 1) forest = PFL.dens * (1 - PFL.k) + forest * PFL.k; }
+      if (NP && ctx.groveAt) { const GV = ctx.groveAt(f, x, y); if (GV) forest += (GV.dens - forest) * GV.k; }   /* a grove's woods (maple and birch by Ziibiing) */
       forest *= clamp01((h - 0.35) * 2) * (1 - peakS) * (1 - pond) * (RG && RG.treeLine ? 1 - sstep(RG.treeLine[0], RG.treeLine[1], h) : 1);   /* the tree line: the woods thin out and stop (the operator: like a real mountain) */
       /* the climate (the operator: "a desert region and all kinds of regions, according to how the weather would flow"):
          the zone from temperature (latitude, height) and moisture (carried in from the sea by the prevailing winds,

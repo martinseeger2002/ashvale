@@ -1665,11 +1665,14 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
      'and the threads that have ever asked for one of the seven skins are exactly these - everything this village has wanted off a carcass is: ' + wanted.join(', '));
   /* Re-measured on the current worldgen 2026-10-10 (they were rat 191, hare 495, boar 81, timber wolf 236 - 1003
      together - and the nearest timber wolf stood 774 m off; the herd seeds moved, the quest ladder under them did not). */
-  const COUNT = { rat: 190, hare: 494, boar: 79, timber_wolf: 232 }, NEAR = { rat: 250, hare: 117, boar: 138, timber_wolf: 909 }, IN6 = { rat: 7, hare: 24, boar: 4 };
+  /* Re-measured 2026-10-11 when Ziibiing moved to the other continent: its woods wall and groves left this face, and the
+     herd seeds round Ashvale went back to where they stood before them (rat 191, hare 497, boar 79, timber wolf 236 -
+     1003 - the nearest timber wolf 774 m off again). */
+  const COUNT = { rat: 191, hare: 497, boar: 79, timber_wolf: 236 }, NEAR = { rat: 250, hare: 117, boar: 138, timber_wolf: 774 }, IN6 = { rat: 7, hare: 27, boar: 4 };
   ok(Object.keys(COUNT).every(k => herds(k, 3000).length === COUNT[k]),
      'within three kilometres of the well: ' + Object.keys(COUNT).map(k => k + ' ' + herds(k, 3000).length + ' herds, nearest ' + dv(nearest(k, 3000).x, nearest(k, 3000).y) + ' m').join(' | '));
-  ok(Object.keys(COUNT).reduce((a, k) => a + herds(k, 3000).length, 0) === 995 && Object.keys(NEAR).every(k => dv(nearest(k, 3000).x, nearest(k, 3000).y) === NEAR[k]),
-     '995 herds of the four of them, and the nearest of each stands exactly where he says it does');
+  ok(Object.keys(COUNT).reduce((a, k) => a + herds(k, 3000).length, 0) === 1003 && Object.keys(NEAR).every(k => dv(nearest(k, 3000).x, nearest(k, 3000).y) === NEAR[k]),
+     '1003 herds of the four of them, and the nearest of each stands exactly where he says it does');
   ok(Object.keys(IN6).every(k => herds(k, 600).length === IN6[k]) && herds('timber_wolf', 600).length === 0,
      'inside six hundred paces: ' + Object.keys(IN6).map(k => k + ' ' + herds(k, 600).length).join(', ') + ', and no timber wolf inside six hundred, which is why the last rung is the long walk');
   ok(!herds('goat', 3000).length && !herds('lizard', 3000).length,

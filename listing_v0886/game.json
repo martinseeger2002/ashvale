@@ -1,0 +1,13 @@
+{
+ "game": {
+  "name": "ASHVALE",
+  "description": "New in 0.8.86: Ziibiing has moved. The Ojibwe village now stands on the far continent, on a wide two-banked river in maple country, a sugar bush up the trail and manoomin in the shallows of the bend. Fenn's herd counts hold again, and a lent snare or tomahawk is lent once.",
+  "version": "0.8.86",
+  "players": "Solo or online",
+  "multiplayer": true,
+  "family": "ashvale",
+  "genre": "rpg",
+  "play": "c879bc1f5f3cfc1300b9f24252a47ce395028dc65fc78a0ab3004a9f272649f5",
+  "cover": "28d1007491d413d4c07cce95d43eff4c54600cffd78661ff3456606a15493210"
+ }
+}

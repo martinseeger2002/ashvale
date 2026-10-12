@@ -87,6 +87,18 @@
    "api": 1,
    "kind": "js"
   },
+  "chesslib": {
+   "id": null,
+   "v": "1.0.0",
+   "api": 1,
+   "kind": "js"
+  },
+  "holdemlib": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
   "core": {
    "id": null,
    "v": "1",
@@ -94,6 +106,12 @@
    "kind": "js"
   },
   "audit": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "castle": {
    "id": null,
    "v": "1",
    "api": 1,
@@ -141,9 +159,21 @@
    "api": 1,
    "kind": "js"
   },
+  "hudchess": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "hudpoker": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
   "hud": {
    "id": null,
-   "v": "2",
+   "v": "3",
    "api": 1,
    "kind": "js"
   },
@@ -168,6 +198,24 @@
   "seasons": {
    "id": null,
    "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "atlas_shapes": {
+   "id": null,
+   "v": 1,
+   "api": 1,
+   "kind": "js"
+  },
+  "atlas_chunk": {
+   "id": null,
+   "v": 1,
+   "api": 1,
+   "kind": "js"
+  },
+  "earth": {
+   "id": null,
+   "v": 1,
    "api": 1,
    "kind": "js"
   },
@@ -271,6 +319,12 @@
    "wg_tables": {
     "id": null,
     "v": 2,
+    "api": 1,
+    "kind": "json"
+   },
+   "atlas_palette": {
+    "id": null,
+    "v": 1,
     "api": 1,
     "kind": "json"
    },
@@ -1627,6 +1681,12 @@
    "saltmere": {
     "id": null,
     "v": 3,
+    "api": 1,
+    "kind": "json"
+   },
+   "castle": {
+    "id": null,
+    "v": 1,
     "api": 1,
     "kind": "json"
    },

@@ -16,7 +16,7 @@
 (function (root) {
   'use strict';
   const META = { api: 1, v: 3, needs: { wg_geo: 1 } };
-  const TREES = 'TPOWMYU';
+  const TREES = 'TPOWMYUELQZD';
   function attach(ctx) {
     const g = ctx.geo, T = ctx.T, PT = T.paths, PC = T.pieces, BK = 32;
     const bkey = (f, bx, by) => (f * 8192 + (bx + 4096)) * 8192 + (by + 4096);
@@ -24,12 +24,18 @@
     let SEG = [];   /* per segment: face, x0, y0, x1, y1, halfWidth, kind (0 path, 1 water), carve height */
     const NS = 8, BRIDGE = 14;   /* the widest stream a path bridges, metres */
     ctx.PIECES = []; ctx.PIECE_BY_ID = new Map(); ctx.ROAD_OBJ = [];
+    /* a piece from another face of the net (worldgen.js piecesFromZones, Ziibiing 2026-10-11) is a ROTATED rectangle here:
+       pc.rot = {ox, oy (its origin corner, planar), ax, ay (the zone's +x and +y tile axes, planar), w, h, tiles}; (u, v) are
+       a planar point's zone-tile coordinates. Its x, y, w, h stay the bounding box. */
+    const rotUV = (pc, x, y) => { const R = pc.rot, dx = x - R.ox, dy = y - R.oy; return [dx * R.ax[0] + dy * R.ax[1], dx * R.ay[0] + dy * R.ay[1]]; };
     function pieceDist(pc, x, y) {
+      if (pc.rot) { const q = rotUV(pc, x, y), dx = Math.max(-q[0], 0, q[0] - pc.rot.w), dy = Math.max(-q[1], 0, q[1] - pc.rot.h); return Math.sqrt(dx * dx + dy * dy); }
       const dx = Math.max(pc.px0 - x, 0, x - pc.px1), dy = Math.max(pc.py0 - y, 0, y - pc.py1);
       return Math.sqrt(dx * dx + dy * dy);
     }
     function pieceTile(pc, gx, gy) {
       if (!pc || gx < pc.x || gy < pc.y || gx >= pc.x + pc.w || gy >= pc.y + pc.h) return '';
+      if (pc.rot) { const q = rotUV(pc, gx + 0.5, -(gy + 0.5)); if (q[0] < 0 || q[1] < 0 || q[0] >= pc.rot.w || q[1] >= pc.rot.h) return ''; const row = pc.rot.tiles[Math.floor(q[1])]; return row ? (row[Math.floor(q[0])] || '.') : '.'; }
       const row = pc.tiles[gy - pc.y]; return row ? (row[gx - pc.x] || '.') : '.';
     }
     function segDist(f, x, y, kind) {
@@ -54,6 +60,58 @@
       const r = segDist(f, x, y, 1); if (!r || r[0] > 1.5) return h;
       const k = g.sstep(-0.6, 1.5, r[0]); return Math.min(h, r[1] * (1 - k) + h * k);
     }
+    /* GROVES (2026-10-08: "a large deciduous forest with maple and birch" by Ziibiing): an ellipse of woods tied to a
+       piece (globecfg.groves: {piece, x, y, rx, ry, sp, dens, edge}, game tiles), its edge wandering with noise. Returns the
+       grove's species and density and k, how fully this spot is in it (0 outside .. 1 well inside), or null */
+    const GROVE = { k: 0, sp: '', dens: 0 };
+    /* groves given on their own, {face, x, y (that face's game tiles), rx, ry, sp, dens, edge}: the zone tools plant a grove
+       before the piece it belongs to exists (tools/make_zone_ziibiing.py samples the woods its camp stands in) */
+    ctx.FREE_GROVES = []; ctx.setGroves = (l) => { ctx.FREE_GROVES = (l || []).slice(); };
+    function groveAt(f, x, y) {
+      const gx = x, gy = -y;
+      for (const q of ctx.FREE_GROVES) if (q.face === f) { const r = groveOne(q, f, gx, gy); if (r) return r; }
+      for (const pc of ctx.PIECES) if (pc.face === f && pc.groves && pc.groves.length) for (const q of pc.groves) { const r = groveOne(q, f, gx, gy); if (r) return r; }
+      return null;
+    }
+    function groveOne(q, f, gx, gy) {
+      {
+        const dx = (gx - q.x) / q.rx, dy = (gy - q.y) / q.ry, d = Math.sqrt(dx * dx + dy * dy) * (0.85 + 0.3 * g.vnoise(gx / 37, gy / 37, f, ctx.S.pa ^ 0x6b43));
+        if (d >= 1) return null;
+        const e = Math.max(0.05, (q.edge || 30) / Math.min(q.rx, q.ry)), t = Math.min(1, (1 - d) / e);
+        GROVE.k = t * t * (3 - 2 * t); GROVE.sp = q.sp || 'M'; GROVE.dens = q.dens == null ? 0.6 : q.dens; return GROVE;
+      }
+      return null;
+    }
+    /* WALLS OF OLD WOODS (2026-10-09: "a natural looking dense forest separating the two regions. Dense enough that players
+       cannot walk through it ... a couple kilometers in each direction following the river path"): a band along a line of points
+       (globecfg.walls: {piece, pts: [[x, y], ...], w, edge, sp}, game tiles). Inside its core every land tile is an old tree
+       nothing chops; its edges wander with noise and thin out over `edge` metres, like a forest's own margin. Returns {k, sp}:
+       k = 1 in the core, 0..1 in the margin; or null */
+    const WALL = { k: 0, sp: '' };
+    function wallAt(f, x0, y0) {
+      /* the line wanders (2026-10-09: "Don't make the line of trees so straight"): the ground is warped before it is
+         measured - big slow bends of up to ~60 m and small ones of ~15 m - so the band curves like a forest edge, never a ruler */
+      const sx = x0, sy = -y0, S0 = ctx.S.pa ^ 0x51ed;
+      const gx = sx + 60 * (2 * g.vnoise(sx / 230, sy / 230, f, S0) - 1) + 15 * (2 * g.vnoise(sx / 47, sy / 47, f, S0 ^ 0x9e37) - 1);
+      const gy = sy + 60 * (2 * g.vnoise(sx / 230 + 17.3, sy / 230 - 9.1, f, S0 ^ 0x3c6e) - 1) + 15 * (2 * g.vnoise(sx / 47 - 5.7, sy / 47 + 3.3, f, S0 ^ 0x85eb) - 1);
+      for (const pc of ctx.PIECES) if (pc.face === f && pc.walls && pc.walls.length) for (const q of pc.walls) {
+        const P = q.pts, half0 = (q.w || 40) / 2, edge = q.edge || 12, wide = q.wide || 0, pad = half0 * 1.3 + edge + 80 + wide;
+        if (!q.bb) { let a = 1e18, b = -1e18, c = 1e18, d = -1e18; for (const p of P) { a = Math.min(a, p[0]); b = Math.max(b, p[0]); c = Math.min(c, p[1]); d = Math.max(d, p[1]); } q.bb = [a - pad, b + pad, c - pad, d + pad]; }
+        if (gx < q.bb[0] || gx > q.bb[1] || gy < q.bb[2] || gy > q.bb[3]) continue;
+        let best = 1e18, left = false;
+        for (let i = 1; i < P.length; i++) {
+          const ax = P[i - 1][0], ay = P[i - 1][1], dx = P[i][0] - ax, dy = P[i][1] - ay, L2 = dx * dx + dy * dy;
+          const t = L2 ? Math.max(0, Math.min(1, ((gx - ax) * dx + (gy - ay) * dy) / L2)) : 0, ex = gx - ax - t * dx, ey = gy - ay - t * dy;
+          const e2 = ex * ex + ey * ey; if (e2 < best) { best = e2; left = dx * ey - dy * ex < 0; }
+        }
+        /* `wide`: extra depth on the left of the line as it is walked (the Ashvale side, 2026-10-09: "so wide that the trees on the
+           far side don't render in the players view") */
+        const d = Math.sqrt(best), half = half0 * (0.8 + 0.45 * g.vnoise(gx / 53, gy / 53, f, ctx.S.pa ^ 0x2f17)) + (left ? wide : 0);
+        if (d >= half + edge) continue;
+        WALL.sp = q.sp || 'ZZD'; WALL.k = d <= half ? 1 : 1 - (d - half) / edge; return WALL;
+      }
+      return null;
+    }
     /* flora near a piece: the profile of the nearest edge tile, and how far the seeded land has taken over */
     function pieceFlora(f, x, y, out) {
       out.k = 1; out.dens = 0; out.sp = '';
@@ -76,6 +134,7 @@
     }
     function profile(pc, edge) {
       const out = [], n = edge === 'n' || edge === 's' ? pc.w : pc.h;
+      if (pc.rot) { for (let i = 0; i < n; i++) out.push([0, '']); return out; }   /* a rotated piece (another face): its bounding box edges are open ground, the same whether its zone is loaded or a stub */
       for (let i = 0; i < n; i++) {
         let trees = 0, cnt = 0, sp = '';
         for (let a = -3; a <= 3; a++) for (let dpt = 0; dpt < 5; dpt++) {
@@ -98,8 +157,8 @@
       const inPiece = (face, gx, gy) => PIECES.some(q => q.face === face && gx >= q.x && gy >= q.y && gx < q.x + q.w && gy < q.y + q.h);
       function lightTrail(face, pts, w0) {   /* lit posts along a trail between towns (the road to Saltmere) */
         if (!pts || pts.length < 2) return;
-        const SPACE = 8, off = Math.max(1.15, (w0 || 1) + 0.85), seen = new Set();
-        let acc = SPACE * 0.45, n = 0;
+        const SPACE = 16 /* every other lamp gone (2026-10-08) */, off = Math.max(1.15, (w0 || 1) + 0.85), seen = new Set();
+        let acc = SPACE * 0.45;
         for (let i = 1; i < pts.length; i++) {
           const ax = pts[i - 1][0], ay = pts[i - 1][1], bx = pts[i][0], by = pts[i][1];
           const L = Math.hypot(bx - ax, by - ay); if (L < 0.05) continue;
@@ -107,7 +166,7 @@
           let d = 0;
           while (acc + (L - d) >= SPACE) {
             const step = SPACE - acc; d += step; acc = 0;
-            const px = ax + ux * d, py = ay + uy * d, side = (n++ & 1) ? 1 : -1;
+            const px = ax + ux * d, py = ay + uy * d, side = 1;   /* all down one side of the road (2026-10-08), not alternating */
             ctx.foldInto(face, px, py, SB);
             const s0 = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false);
             if (s0.h < ctx.WATER + 0.2 || s0.peakS > 0.08) continue;
@@ -119,7 +178,7 @@
         }
       }
       for (const sp of (list || [])) {
-        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, links: sp.links || [], linkStyles: sp.linkStyles || {} };
+        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, groves: sp.groves || [], walls: sp.walls || [], links: sp.links || [], linkStyles: sp.linkStyles || {}, rot: sp.rot || null };
         pc.px0 = pc.x; pc.px1 = pc.x + pc.w; pc.py0 = -(pc.y + pc.h); pc.py1 = -pc.y;
         PIECES.push(pc); ctx.PIECE_BY_ID.set(pc.id, pc);
       }
@@ -222,7 +281,7 @@
           }
         }
         for (const e of pc.exits) ex.push({ x: e.x, y: e.y, dir: e.dir, w: e.w || 2, kind: 0 });
-        pc.ex = ex;
+        pc.ex = pc.rot ? [] : ex;   /* a rotated piece (another face): no path or stream runs continue out of its bounding box */
       }
       /* a gate the road to another town leaves from gets the road only, not a dirt path of its own beside it (the operator
          2026-10-07, the cobbled road): mark the exits the trails between towns will use */
@@ -282,13 +341,24 @@
             if (!di && !dj) continue; const ni = i + di, nj = j + dj; if (ni < 0 || nj < 0 || ni >= GW || nj >= GH) continue;
             const nk = nj * GW + ni; if (nk !== tk && !ok(ni, nj)) continue;
             const step = (di && dj ? 1.414 : 1) * CS, dh = Math.abs((hgt[nk] === hgt[nk] && hgt[nk] > -1e8 ? hgt[nk] : h0) - h0);
-            const ng = gsc[k] + step * (1 + 0.6 * dh / CS) * (0.92 + 0.16 * g.u01(g.hash3(ni, nj, hv)));
+            const ng = gsc[k] + step * (1 + (trail ? 0.6 : 0.3) * dh / CS) * (trail ? 0.92 + 0.16 * g.u01(g.hash3(ni, nj, hv)) : 0.98 + 0.04 * g.u01(g.hash3(ni, nj, hv)));   /* a road between towns runs as straight as the ground allows (2026-10-08); a trail wanders */
             if (ng < gsc[nk]) { gsc[nk] = ng; from[nk] = k; hpush(ng + Math.hypot(ni - ti, nj - tj) * CS, nk); }
           }
         }
         if (found) {
           const pts = []; for (let k = tk; k >= 0; k = from[k]) { const i = k % GW, j = (k - i) / GW; pts.push([gx0 + i * CS, gy0 + j * CS]); if (k === sk) break; }
           pts.reverse(); pts[0] = [x, y]; pts[pts.length - 1] = [tx, ty];
+          /* STRAIGHTEN (2026-10-08: "as straight as possible from Ashvale to Saltmere"): a road skips every corner it can - from
+             each point, on to the farthest point it reaches in a straight line over open ground - so it runs in long straight
+             reaches and bends only where water, rock or a town is in the way. A trail keeps its wander. */
+          if (!trail && pts.length > 2) {
+            const clear = (a2, b2) => { const n = Math.ceil(Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) / (CS / 2)); for (let q = 1; q < n; q++) { const px = a2[0] + (b2[0] - a2[0]) * q / n, py = a2[1] + (b2[1] - a2[1]) * q / n, ci = Math.round((px - gx0) / CS), cj = Math.round((py - gy0) / CS); if (ci < 0 || cj < 0 || ci >= GW || cj >= GH || !ok(ci, cj)) return false; } return true; };
+            const st = [pts[0]]; let i0 = 0;
+            while (i0 < pts.length - 1) { let j = pts.length - 1; while (j > i0 + 1 && !clear(pts[i0], pts[j])) j--; st.push(pts[j]); i0 = j; }
+            const fine = [st[0]];   /* back to points every step or so, so the road is laid (and lit) as before */
+            for (let q = 1; q < st.length; q++) { const a2 = st[q - 1], b2 = st[q], n = Math.max(1, Math.ceil(Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) / CS)); for (let r = 1; r <= n; r++) fine.push([a2[0] + (b2[0] - a2[0]) * r / n, a2[1] + (b2[1] - a2[1]) * r / n]); }
+            pts.length = 0; pts.push(...fine);
+          }
           let px0 = pts[0][0], py0 = pts[0][1];
           for (let k = 2; k < pts.length; k += 2) { const q = pts[Math.min(k, pts.length - 1)]; segs.push(A.face, px0, py0, q[0], q[1], w0, RK, A.hb - 0.75); px0 = q[0]; py0 = q[1]; }
           segs.push(A.face, px0, py0, tx, ty, w0, RK, A.hb - 0.75);
@@ -319,7 +389,7 @@
       if (ctx.clearCaches) ctx.clearCaches();
       return PIECES.map(p => ({ id: p.id, face: p.face, x: p.x, y: p.y, w: p.w, h: p.h, hb: p.hb }));
     }
-    Object.assign(ctx, { pieceDist, pieceTile, pathDist, roadDist, bridgeDist, waterCarve, pieceFlora, setSetPieces, pathCount: () => SEG.length / NS, roadObjects: () => ctx.ROAD_OBJ || [] });
+    Object.assign(ctx, { pieceDist, pieceTile, pathDist, roadDist, bridgeDist, waterCarve, pieceFlora, groveAt, wallAt, setSetPieces, pathCount: () => SEG.length / NS, roadObjects: () => ctx.ROAD_OBJ || [] });
     return ctx;
   }
   const api = { api: 1, attach };

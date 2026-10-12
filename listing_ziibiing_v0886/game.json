@@ -1,0 +1,12 @@
+{
+ "game": {
+  "name": "Ziibiing",
+  "description": "New in 0.8.86: the village has moved to its true country - the other continent, 50 N, where the maples run and the manoomin stands. Wigwams on the east bank of a river 34 paces wide, the sugar camp up the trail, the flint, red willow and obsidian banks a short paddle away. Ma'iingan lends one snare and Mitigwaabiike one tomahawk.",
+  "version": "0.8.86",
+  "players": "Solo or online",
+  "multiplayer": true,
+  "family": "ziibiing",
+  "genre": "rpg",
+  "play": "9632c68c1f38ed8167b1cf01728cf8d1e419eedc2d69cfeeba99087437d21409"
+ }
+}

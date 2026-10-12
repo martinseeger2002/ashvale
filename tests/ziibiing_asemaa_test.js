@@ -109,9 +109,8 @@ function born(home, seed, keep) {
 {
   const wz = zones.find(z => z.id === 'willowbank'), J = [];
   wz.tiles.forEach((r, j) => { for (let i = 0; i < r.length; i++) if (r[i] === 'J') J.push([wz.origin[0] + i, wz.origin[1] + j]); });
-  const lx = 89, ly = 621, far = J.map(q => Math.hypot(q[0] - lx, q[1] - ly));
+  const ZP = JSON.parse(fs.readFileSync(path.join(DD, 'extra', 'ziibiing_places.json'), 'utf8')), lx = ZP.landing[0], ly = ZP.landing[1], far = J.map(q => Math.hypot(q[0] - lx, q[1] - ly));
   ok(J.length >= 4 && far.every(d => d > 30 && d < 120) && wz.objects.some(o => o.k === 'fishrack' && /Drying rack/.test(o.name)), 'miskwaabiimizh (red willow) clumps on the riverbank, a short paddle away, by a drying rack (' + J.length + ' clumps, ' + Math.round(far[0]) + ' tiles)');
-  ok(J.every(q => q[1] > 450), 'south of the old woods wall, on the village side');
   const Z = born('ziibiing', 'k10'), core = Z.core, p = Z.p;
   core.setNature({ day: 70, year: 1, hours: 1680 });
   const peel = (q, extra) => { for (const [dx, dy] of [[0, -1], [1, 0], [-1, 0], [0, 1]]) if (!core.M.blocked(q[0] + dx, q[1] + dy)) { p.x = q[0] + dx; p.y = q[1] + dy; break; } Z.msgs.length = 0; core.cmd('p1', Object.assign({ c: 'gather', x: q[0], y: q[1] }, extra || {})); Z.run(12); return Z.msgs.join(' | '); };
@@ -123,7 +122,7 @@ function born(home, seed, keep) {
   t = peel(J[1], { peel: 1 }); ok(Z.has('willow_bark') === 2, 'another clump gives');
   core.setNature({ day: 71, year: 1, hours: 1704 }); t = peel(J[0], { peel: 1 }); ok(Z.has('willow_bark') === 3, 'the next day it has grown back');
   const a0 = Z.has('asemaa'); Z.give('asemaa', 1);
-  p.x = 92; p.y = 545; Z.msgs.length = 0; core.cmd('p1', { c: 'gather', x: 92, y: 543 }); Z.run(12);
+  p.x = 32498; p.y = -2415; Z.msgs.length = 0; core.cmd('p1', { c: 'gather', x: 32496, y: -2417 }); Z.run(12);
   ok(Z.has('apaakozigan') === 3 && Z.has('willow_bark') === 1 && Z.has('asemaa') === a0 && /apaakozigan \(kinnikinnick\)/.test(Z.msgs.join()), 'at a fire: two bark and one asemaa make three apaakozigan (kinnikinnick)');
   const x0 = p.xp.prayer | 0; core.cmd('p1', { c: 'use', slot: Z.slot('apaakozigan') }); Z.run(1);
   ok(Z.has('apaakozigan') === 2 && (p.xp.prayer | 0) - x0 === core.item('bones').buryXp && core.isBlessed('p1', p.x, p.y), 'apaakozigan is offered exactly like asemaa: Prayer XP and the blessing');

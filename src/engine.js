@@ -785,6 +785,32 @@
             if (e.p === PID) setTimeout(() => hud.death(true), 700);
             break;
           }
+          case 'sit': if (mine) chessEnter(e.t); break;
+          case 'stand': if (mine) chessLeave(e.t); break;
+          case 'chess': {   /* a table changed: lay the pieces out for everyone near, tell the seated player's board, and (as host) tell the room */
+            if (SCENE.chessApply) SCENE.chessApply(e.t, e.fen, e.move || null);
+            if (me.seat && me.seat.t === e.t) { if (e.move) sfx('click'); if (e.move) CHESS_SEL = null; markBoard(e.t); if (hud.chessUpdate) hud.chessUpdate(chessView(e.t)); }   /* [Claude] the opponent's pick lights here too */
+            const T = core.tableById(e.t); if (T && iHostAt(T.x, T.y)) netSend({ Ch: [netRow(core.chessRow(e.t))] });
+            break;
+          }
+          case 'xsit': netSend({ CS: [e.t, e.s | 0, e.stake | 0] }); break;   /* [Claude] the stake the first sitter sets rides along */
+          case 'xstand': netSend({ CT: [e.t] }); break;
+          case 'xcmove': netSend({ CM: [e.t, e.from, e.to, e.promo || 0] }); break;
+          case 'xcsel': netSend({ CX: [e.t, e.sq || ''] }); break;   /* [Claude] a replica's pick, asked of the host */
+          /* THE POKER TABLE (handoff/poker_plan.md): psit/pstand is "you are (no longer) in a chair at the felt", said
+             the same way whether the table seated you or a host's row did; poker is the felt changing - cards, chips,
+             the button, whose turn. The row itself carries everything the page draws. */
+          case 'psit': if (mine) pokerEnter(e.t); break;
+          case 'pstand': if (mine) pokerLeave(e.t); break;
+          case 'poker': {
+            if (SCENE.pokerShow) SCENE.pokerShow(e.t, pokerModel(e.t));
+            if (me.seat && me.seat.t === e.t && me.seat.k === 'pk') { pokerFx(e.t, e); if (hud.pokerUpdate) hud.pokerUpdate(pokerView(e.t)); }
+            const T = core.pokerTableById(e.t); if (T && iHostAt(T.x, T.y)) netSend({ Pk: [pkNet(core.pokerRow(e.t))] });
+            break;
+          }
+          case 'xpsit': netSend({ PS: [e.t, e.s | 0, e.stake | 0] }); break;   /* [Claude] the buy-in the first sitter sets rides along */
+          case 'xpstand': netSend({ PT: [e.t] }); break;
+          case 'xpact': netSend({ PA: [e.t, e.a, e.to | 0] }); break;
           case 'respawn': { const t = ents.get('p:' + e.p); if (!t) break; t.dead = false; t.oneShot = false; t.loco = null; t.H.setOpacity && t.H.setOpacity(1); t.root.visible = true; const p = core.S.players[e.p]; place(t, p.x, p.y); t.H.play('idle', { loop: true }); if (e.p === PID) { hud.death(false); cam.snap = true; arriveCheck(); } break; }
           case 'gone': { const t = ents.get('m:' + e.mob); if (t) { t.dead = true; t.deadT = now - 5000; t.oneShot = true; t.root.visible = false; } break; }   /* the host says it is dead: hide it at once (2026-10-02: frozen monsters after re-entering a zone) */
           case 'spawn': { const m = core.mobByUid(e.mob), t = ents.get('m:' + e.mob); if (!t) break; t.dead = false; t.oneShot = false; t.loco = null; t.root.visible = true; t.H.setOpacity && t.H.setOpacity(1); place(t, m.x, m.y); t.H.play('idle', { loop: true }); t.spawnT = now; t.hp = m.hp; break; }
@@ -1233,6 +1259,8 @@
           cam.tyaw = myEnt.yaw; cam.tpitch = 0.2; cam.tdist = isPhone ? 3.2 : 3.6; tg.y = p.y + 0.95;
           const side = host.clientWidth > 500 ? 0.55 : 0.4; tg.x -= Math.cos(cam.yaw) * side; tg.z += Math.sin(cam.yaw) * side;
         }
+        if (cam.mode === 'chess' && CHESSV) { tg.set(CHESSV.x, CHESSV.y, CHESSV.z); cam.tyaw = CHESSV.yaw + CHESS_TURN; cam.tpitch = isPhone ? 1.32 : 1.22; cam.tdist = isPhone ? 1.9 : 1.55; }   /* seated at a chess table: close over the board, your side nearest */
+        if (cam.mode === 'poker' && POKERV) { tg.set(POKERV.x, POKERV.y, POKERV.z); cam.tyaw = POKERV.yaw; cam.tpitch = 1.2; cam.tdist = 1.4; }   /* seated at the felt: the light centre is the middle of the table */
         if (cam.snap) camT.copy(tg); else camT.lerp(tg, Math.min(1, dt * 12));
         cam.snap = false;
         const cp = Math.max(0.3, cam.pitch);
@@ -1270,6 +1298,23 @@
         if (fp > 0.5 && !myEnt.hawk) { myEnt.tyaw = cam.yaw + PI; myEnt.hl = fpEl; } else myEnt.hl = 0;
         if (fp > 0.85 && myEnt.root.visible) { myEnt.root.visible = false; FPV.hid = true; }   /* your own head would fill the view */
         else if (fp <= 0.85 && FPV.hid) { myEnt.root.visible = true; FPV.hid = false; }
+        if (cam.mode === 'chess' && CHESSV && CHESSV.eye) {   /* THE CHESS PARK: first person over the board, the board filling the screen */
+          const tc = Math.cos(CHESS_TURN), tsn = Math.sin(CHESS_TURN), turn = (P) => ({ x: CHESSV.x + (P.x - CHESSV.x) * tc - (P.z - CHESSV.z) * tsn, y: P.y, z: CHESSV.z + (P.x - CHESSV.x) * tsn + (P.z - CHESSV.z) * tc });   /* [Claude] the eye and the look swung round the board's centre */
+          const E = turn(CHESSV.eye), L = turn(CHESSV.look); camera.position.set(E.x, E.y, E.z); camera.lookAt(L.x, L.y, L.z);
+          const aspect = (host.clientWidth || 1) / (host.clientHeight || 1), d = Math.hypot(L.x - E.x, L.y - E.y, L.z - E.z), half = 0.6;
+          let fov = 2 * Math.atan((aspect < 1 ? half / aspect : half) / d) * 180 / Math.PI * 1.22;   /* portrait: the board has to fit the width; the margin keeps the near rank above the chat */
+          fov = Math.max(42, Math.min(100, fov));
+          if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+          if (myEnt.root.visible) { myEnt.root.visible = false; FPV.hid = true; }   /* your own head would fill the view */
+        }
+        if (cam.mode === 'poker' && POKERV && POKERV.eye) {   /* THE POKER TABLE: first person at the felt, leaning a little over your own side of it */
+          const E = POKERV.eye, L = POKERV.look; camera.position.set(E.x, E.y, E.z); camera.lookAt(L.x, L.y, L.z);
+          const aspect = (host.clientWidth || 1) / (host.clientHeight || 1), d = Math.hypot(L.x - E.x, L.y - E.y, L.z - E.z), half = 0.66;
+          let fov = 2 * Math.atan((aspect < 1 ? half / aspect : half) / d) * 180 / Math.PI * 1.18;   /* portrait: the whole width of the felt has to fit */
+          fov = Math.max(45, Math.min(95, fov));
+          if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+          if (myEnt.root.visible) { myEnt.root.visible = false; FPV.hid = true; }   /* your own body would sit in the middle of your own cards */
+        }
         sun.position.set(camT.x + SUNL.dir[0] * 20, camT.y + SUNL.dir[1] * 20, camT.z + SUNL.dir[2] * 20); sun.target.position.copy(camT);   /* from the real sun (or the moon) */
       }
 
@@ -1288,6 +1333,7 @@
           if (t.kind === 'ground') { const x = Math.floor(t.point.x), y = Math.floor(t.point.z); t = { kind: 'ground', x, y }; }
           if (t.kind === 'self') continue;
           if (t.kind === 'node' && h.point) t = Object.assign({}, t, { hp: [h.point.x, h.point.z] });   /* where on the tree you tapped (a hawk perches on that side) */
+          if (t.kind === 'square' && h.point) t = Object.assign({}, t, { pt: { x: h.point.x, z: h.point.z } });   /* which square of a chess board */
           if (t.kind === 'remote' && !remotes.has(t.id)) continue;
           const k = t.kind + ':' + (t.uid || t.id || t.i || (t.x + ',' + t.y)); if (seen.has(k)) continue; seen.add(k); out.push(t);
           if (t.kind === 'ground') break;
@@ -1364,6 +1410,39 @@
           const nm = '<span class="c">Wooden sign</span>';
           return [{ html: 'Read ' + nm, fn: () => { scoresAsk(true); core.scoreRead('chain_dragon').forEach(l => hud.chat(l, 'sys')); }, red: 1 },
                   { html: 'Examine ' + nm, fn: () => hud.chat('A weathered oak board nailed to the ruin wall. Names of those who have slain the chained dragon are carved into it.', 'sys') }];
+        }
+        if (t.kind === 'chesstable' || t.kind === 'square') {   /* THE CHESS PARK (2026-10-10): a bench each side; seated, the board itself takes the taps */
+          const T = core.tableById(t.id); if (!T) return [];
+          if (t.kind === 'square' && me.seat && me.seat.t === t.id) { const sq = SCENE.chessSquare ? SCENE.chessSquare(t.id, t.pt) : null; return sq ? [{ html: 'Square ' + sq, fn: () => chessTap(sq) }] : []; }
+          const st = core.chessOf(t.id), out = [], taken = [];
+          if (me.seat && me.seat.t === t.id) return MENU_MODE ? [{ html: 'Stand up', fn: () => { if (CHESS_ASK) CHESS_ASK(); } }] : [];   /* [Claude] seated: a tap on the table's edge does nothing (the operator: only the button, and it asks first) */
+          else {   /* the free bench first (a plain tap takes the first line), the one that is taken as a note */
+            const wFree = !st.w || st.w === PID, bFree = !st.b || st.b === PID, empty = !st.w && !st.b, stake = st.stake | 0;
+            /* [Claude 2026-10-11] STAKES: at an empty table the first to sit sets them (the operator); at a table with someone the
+               line says what the game is played for, and sitting is agreeing to it */
+            const note = empty ? '' : stake ? ' <span class="y">(stake ' + stake.toLocaleString() + ' GOLD)</span>' : ' <span class="c">(friendly)</span>';
+            if (wFree) out.push({ html: 'Sit down as White <span class="c">(south bench)</span>' + note, act: { c: 'sit', table: t.id, seat: 1, stake: 0 }, red: 1 }); else taken.push({ html: 'White: <span class="y">' + esc(st.wn || 'someone') + '</span>', fn: () => hud.chat(esc(st.wn) + ' is playing White here.', 'sys') });
+            if (bFree) out.push({ html: 'Sit down as Black <span class="c">(north bench)</span>' + note, act: { c: 'sit', table: t.id, seat: 0, stake: 0 }, red: out.length ? 0 : 1 });
+            if (empty) for (const n of [100, 500, 1000]) out.push({ html: 'Sit as White for a stake of <span class="y">' + n.toLocaleString() + ' GOLD</span>', act: { c: 'sit', table: t.id, seat: 1, stake: n } }); else taken.push({ html: 'Black: <span class="y">' + esc(st.bn || 'someone') + '</span>', fn: () => hud.chat(esc(st.bn) + ' is playing Black here.', 'sys') });
+          }
+          out.push(...taken, { html: 'Examine <span class="c">Chess table</span>', fn: () => hud.chat(chessExamine(st), 'sys') });
+          return out;
+        }
+        if (t.kind === 'pokertable') {   /* THE POKER TABLE: six chairs round one felt in the Saltmere tap room; once you are sitting, the panel in front of you does the talking */
+          const T = core.pokerTableById(t.id); if (!T) return [];
+          const st = core.pokerOf(t.id), out = [], taken = [], at = {};
+          for (const s of st.se || []) at[s[0] | 0] = s[1];
+          const pkEmpty = !(st.se || []).length, buy = st.buy | 0;   /* [Claude 2026-10-11] BUY-INS in GOLD: the first to sit sets the buy-in (the operator) */
+          const pkNote = pkEmpty ? '' : buy ? ' <span class="y">(buy-in ' + buy.toLocaleString() + ' GOLD)</span>' : ' <span class="c">(free chips)</span>';
+          if (me.seat && me.seat.t === t.id && me.seat.k === 'pk') return MENU_MODE ? [{ html: 'Stand up', fn: () => { if (POKER_ASK) POKER_ASK(); } }] : [];   /* [Claude] seated: the same rule at the felt */
+          else (T.seats || []).forEach((s, i) => {
+            const who = at[i];
+            if (who && who !== PID) taken.push({ html: 'Chair ' + (i + 1) + ': <span class="y">' + pokerWho(who) + '</span>', fn: () => hud.chat(pokerWho(who) + ' is sitting there.', 'sys') });
+            else out.push({ html: 'Sit down <span class="c">(chair ' + (i + 1) + ')</span>' + pkNote, act: { c: 'sit', table: t.id, seat: i, buy: 0 }, red: out.length ? 0 : 1 });
+          });
+          if (pkEmpty && !(me.seat && me.seat.t === t.id)) { const free = (T.seats || []).findIndex((s, i) => !at[i]); if (free >= 0) for (const n of [500, 1000, 5000]) out.push({ html: 'Buy in for <span class="y">' + n.toLocaleString() + ' GOLD</span> <span class="c">(chair ' + (free + 1) + ', sets the table\'s stakes)</span>', act: { c: 'sit', table: t.id, seat: free, buy: n } }); }
+          out.push(...taken, { html: 'Examine <span class="c">Poker table</span>', fn: () => hud.chat(pokerExamine(st), 'sys') });
+          return out;
         }
         if (t.kind === 'crate') {
           const o = core.crateAt(t.x, t.y); if (!o) return [];
@@ -1473,7 +1552,7 @@
       }
       function menuAt(cx, cy) {
         const ts = targetsAt(cx, cy), list = [];
-        for (const t of ts) for (const o of optionsFor(t)) list.push(o);
+        MENU_MODE = true; try { for (const t of ts) for (const o of optionsFor(t)) list.push(o); } finally { MENU_MODE = false; }
         if (!ts.some(t => t.kind === 'ground')) { const g = groundAt(cx, cy); if (g) list.push({ html: 'Walk here', act: { c: 'walk', x: g.x, y: g.y } }); }
         const r = host.getBoundingClientRect();
         hud.menu(cx - r.left, cy - r.top, list.map(o => ({ html: o.html, fn: () => doAct(o, cx, cy) })));
@@ -1518,7 +1597,8 @@
           cam.tyaw = pinch.yaw - da; cam.tpitch = pinch.pitch + (my - pinch.my) * 0.005; return;
         }
         const rotating = p.b === 1 || (p.moved > (p.type === 'mouse' ? 5 : 9));
-        if (rotating) { clearTimeout(lpTimer); cam.tyaw -= dx * 0.0085; cam.tpitch += dy * 0.006; }
+        if (rotating) { clearTimeout(lpTimer); if (cam.mode === 'chess' && CHESSV) CHESS_TURN = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, CHESS_TURN - dx * 0.006));   /* [Claude] seated at chess: press and drag turns the view round the board, a quarter turn each way (the operator) */
+          else { cam.tyaw -= dx * 0.0085; cam.tpitch += dy * 0.006; } }
       });
       const endPtr = e => {
         const p = ptrs.get(e.pointerId); ptrs.delete(e.pointerId); clearTimeout(lpTimer);
@@ -1976,6 +2056,19 @@
       const myNetIdOf = () => room && room.me ? room.me.id : PID;
       let myNetId = PID;
       const toNet = x => x === PID ? myNetId : x, fromNet = x => x === myNetId ? PID : x;
+      const netRow = r => Object.assign({}, r, { w: r.w ? toNet(r.w) : null, b: r.b ? toNet(r.b) : null, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [toNet(k), v])) : null });   /* a chess row with the room's ids for the players (and who is owed the stake [Claude]) */
+      /* A poker row names its players in one place, the seat rows [ref, id, chips, bet, flags]. The cards beside them
+         (hc) are references into those rows, not ids, so they need nothing. */
+      const pkNet = r => Object.assign({}, r, { se: (r.se || []).map(s => [s[0], toNet(s[1]), s[2], s[3], s[4]]), co: (r.co || []).map(c => [toNet(c[0]), c[1], c[2]]) });   /* [Claude] cashouts too */
+      const pkLocal = r => {   /* the room hears everything, so a hole card is dropped here, on the way in: a replica
+                                  keeps faces only for its own seat, and a shown-down hand is public anyway. It says
+                                  nothing about the wire - see handoff/poker_plan.md decision 4. */
+        const se = (r.se || []).map(s => [s[0], fromNet(s[1]), s[2], s[3], s[4]]), co = (r.co || []).map(c => [fromNet(c[0]), c[1], c[2]]);   /* [Claude] the cashouts name players as this page knows them */
+        if (r.o === 'playing' && r.st === 'none') return Object.assign({}, r, { se, co });
+        const mine = {};   /* my chair at that table, as the row names it - a room can hold two players both called "me" */
+        for (const s of se) if (s[1] === PID || (me.seat && me.seat.k === 'pk' && me.seat.t === r.t && (s[0] | 0) === (me.seat.s | 0))) mine[s[0] | 0] = 1;
+        return Object.assign({}, r, { se, co, hc: (r.hc || []).map(h => mine[h[0] | 0] ? h : [h[0] | 0, null, null]) });
+      };
       const CLS = { m: 'melee', r: 'ranged', g: 'magic' };
       const areaAt = (x, y) => core.areaOf(x | 0, y | 0);
       const hostOf = a => hosts.get(a) || null;
@@ -2107,6 +2200,8 @@
         }
         const Fi = core.S.fires.filter(f => iHostAt(f.x, f.y)).map(f => [f.uid, f.x, f.y, f.until - core.S.t, f.log]);
         if (Fi.length) packSend({ F: seq }, 'Fi', Fi);
+        const Ch = core.chessRows((x, y) => iHostAt(x, y)).map(netRow); if (Ch.length) packSend({ F: seq }, 'Ch', Ch);   /* the chess park's tables this game hosts */
+        const Pk = core.pokerRows((x, y) => iHostAt(x, y)).map(pkNet); if (Pk.length) packSend({ F: seq }, 'Pk', Pk);   /* and the felt in the tap room */
         const Pl = [];
         for (const a of hosted) for (const r of core.plantSnap(a)) Pl.push(r);
         if (Pl.length) packSend({ F: seq }, 'Pl', Pl);
@@ -2150,6 +2245,18 @@
         if (Object.keys(pst).length) core.setPuppet(id, pst);
         if (d.C != null) { const g = core.S.ground.find(q => q.uid === +d.C); if (g && iHostAt(g.x, g.y)) coreCall(() => core.claim(id, +d.C)); }
         if (Array.isArray(d.XF)) { const f = d.XF; if (iHostAt(f[0], f[1])) coreCall(() => core.hostFire(f[0] | 0, f[1] | 0, f[2] | 0, String(f[3] || 'logs'))); }
+        /* the chess park: a replica asks the host of the table's area to seat it, stand it up or play its move; the host answers in Ch rows */
+        if (Array.isArray(d.CS)) { const T = core.tableById(String(d.CS[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostSit(id, T.id, d.CS[1] | 0, d.CS[2] | 0)); }
+        if (Array.isArray(d.CT)) { const T = core.tableById(String(d.CT[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostStand(id, T.id)); }
+        if (Array.isArray(d.CX)) { const T = core.tableById(String(d.CX[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostSel(id, T.id, String(d.CX[1] || ''))); }   /* [Claude] */
+        if (Array.isArray(d.CM)) { const T = core.tableById(String(d.CM[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostMove(id, T.id, String(d.CM[1] || ''), String(d.CM[2] || ''), d.CM[3] ? String(d.CM[3]) : null)); }
+        if (Array.isArray(d.Ch)) { const rows = d.Ch.filter(r => r && r.t).filter(r => { const T = core.tableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).map(r => Object.assign({}, r, { w: r.w ? fromNet(r.w) : null, b: r.b ? fromNet(r.b) : null, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [fromNet(k), v])) : null })); if (rows.length) coreCall(() => core.applyChess(rows)); }   /* [Claude] who is owed the stake, named as this page knows them */
+        /* the felt: a chair asked for, a player getting up, an action, or the host's word on a table. Same rules as the
+           chess park: only the host of the area the table stands in answers, and a row only counts from that host. */
+        if (Array.isArray(d.PS)) { const T = core.pokerTableById(String(d.PS[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerSit(id, T.id, d.PS[1] | 0, d.PS[2] | 0)); }
+        if (Array.isArray(d.PT)) { const T = core.pokerTableById(String(d.PT[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerStand(id, T.id)); }
+        if (Array.isArray(d.PA)) { const T = core.pokerTableById(String(d.PA[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerAct(id, T.id, String(d.PA[1] || ''), d.PA[2] | 0)); }
+        if (Array.isArray(d.Pk)) { const rows = d.Pk.filter(r => r && r.t).filter(r => { const T = core.pokerTableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).map(pkLocal); if (rows.length) coreCall(() => core.applyPoker(rows)); }
         if (Array.isArray(d.X)) { const x = d.X; if (core.item(x[0]) && iHostAt(x[2], x[3])) coreCall(() => core.hostDrop({ id: x[0], n: Math.max(1, x[1] | 0), x: x[2] | 0, y: x[3] | 0, life: x[4] | 0, from: x[5] ? fromNet(x[5]) : null, diedAt: x[6] | 0 })); }
         /* below: only the word of the host of the area concerned counts */
         if (Array.isArray(d.M)) { const rows = d.M.filter(w => Array.isArray(w) && fromHostOf(id, mobArea(w[0]))); if (rows.length) coreCall(() => core.applyMobs(rows)); }
@@ -2236,7 +2343,7 @@
           if (core.M.netNear && Math.abs(x - me.x) + Math.abs(z - me.y) > 400) { const q = core.M.netNear(x, z, me.x + 0.5, me.y + 0.5); if (q && Math.abs(q[0] - me.x) + Math.abs(q[1] - me.y) < 400) { x = q[0]; z = q[1]; turnS = q[2]; } }   /* across a seam: at their true place beside us */
           boatLook(r.e, r.boat === 1);
           r.e.root.position.set(x, 0, z); smoothPos(r.e, dt, false); x = r.e.root.position.x; z = r.e.root.position.z;   /* fluid travel: other players glide too */
-          r.e.root.position.set(x, (r.e.canoe ? waterY(x, z) + (r.anim === 'pole' || r.anim === 'idle' ? 0.14 : 0) : heightAt(x, z)) + (r.e.alt || 0), z); r.e.tyaw = Bs.f + turnS;
+          r.e.root.position.set(x, (r.e.canoe ? waterY(x, z) + (r.anim === 'pole' || r.anim === 'idle' ? 0.14 : 0) : heightAt(x, z) + seatLift(r.e)) + (r.e.alt || 0), z); r.e.tyaw = Bs.f + turnS;   /* a chess player sits on the bench */
           const an = Bs.a; if (an !== r.anim) { r.anim = an; r.e.H.play(an, { loop: /idle|walk|run|chop|mine|fish|cook|sit|paddle|pole|knock|crosslegged/.test(an) }); }
           r.e.yaw += (((r.e.tyaw - r.e.yaw + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI) * Math.min(1, dt * 10); r.e.root.rotation.y = r.e.yaw;
           if (r.boat === 2) { const T = r.ride === myNetId ? myEnt : (remotes.get(r.ride) || {}).e; if (T) { bowSeat(r.e, T, r.anim === 'knock'); } }
@@ -2271,7 +2378,7 @@
           if (e.fadeIn) { const k = (now - e.fadeIn) / 500; if (k >= 1) { e.H.setOpacity(1); e.fadeIn = 0; } else e.H.setOpacity(Math.max(0.02, k)); }   /* a person whose zone just arrived */
           if (e.key.charAt(0) === 'r') continue;
           const a = Math.min(1, (now - e.t0) / e.dur);
-          if (!e.dead || a < 1) { e.root.position.lerpVectors(e.from, e.to, a); smoothPos(e, elapsed, a < 1); e.root.position.y = (e.canoe ? waterY(e.root.position.x, e.root.position.z) + (e.ricing ? 0.14 : 0) : footY(e.root.position.x, e.root.position.z) + liftOf(e, a)) + hawkAlt(e); }   /* the poler stands on the canoe's floor */   /* on an upper floor; a hawk over the trees */
+          if (!e.dead || a < 1) { e.root.position.lerpVectors(e.from, e.to, a); smoothPos(e, elapsed, a < 1); e.root.position.y = (e.canoe ? waterY(e.root.position.x, e.root.position.z) + (e.ricing ? 0.14 : 0) : footY(e.root.position.x, e.root.position.z) + liftOf(e, a) + seatLift(e)) + hawkAlt(e); }   /* the poler stands on the canoe's floor; a chess player sits on the bench */   /* on an upper floor; a hawk over the trees */
           let d = e.tyaw - e.yaw; d = ((d + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI; e.yaw += d * Math.min(1, dt * 12); e.root.rotation.y = e.yaw + (e === myEnt && cam.mode === 'creator' ? cam.spin || 0 : 0);   /* the creator's Turn spins only the model; the camera stays (walls) */
           const moving = a < 1 && e.from.distanceToSquared(e.to) > 1e-4;
           if (!e.dead && !e.oneShot && !e.prone && !e.held) { const want = e.boatRole === 2 ? (e.knocking ? 'knock' : moving ? 'paddle' : 'sit') : e.canoe ? (e.ricing ? (moving ? 'pole' : 'idle') : moving ? 'paddle' : 'sit') : moving ? (e.running ? 'run' : 'walk') : (e.restPose || e.skill || 'idle'); if (want !== e.loco) { e.loco = want; e.H.play(want, { loop: true }); } }
@@ -2528,6 +2635,150 @@
       }
       let stopped = false;
       /* ---------- character creator (first start) and the tailor's wardrobe */
+      /* ---------------- THE CHESS PARK: sitting down swings the camera over the board and swaps the HUD for the chess one */
+      const BENCH_SEAT = 0.42;   /* the plank's height in scene.js 'bench' */
+      const CHAIR_SEAT = 0.39;   /* the seat top in scene.js 'chair' - the poker table's chairs */
+      let TABLES_CACHE = { n: -1, list: [] };   /* core.tables() filters every loaded object: once per area change, not per remote per frame */
+      function tablesCached() { const O = core.M.objects || []; if (O.length !== TABLES_CACHE.n) TABLES_CACHE = { n: O.length, list: core.tables() }; return TABLES_CACHE.list; }
+      let PKTABLES_CACHE = { n: -1, list: [] };
+      function pkTablesCached() { const O = core.M.objects || []; if (O.length !== PKTABLES_CACHE.n) PKTABLES_CACHE = { n: O.length, list: core.pokerTables() }; return PKTABLES_CACHE.list; }
+      function seatLift(e) {   /* a seated player sits on the bench or the chair, not on the ground: you by your seat, a remote by the table rows */
+        if (e === myEnt) return me.seat ? (me.seat.k === 'pk' ? CHAIR_SEAT : BENCH_SEAT) : 0;
+        if (!e.key || e.key.charCodeAt(0) !== 114) return 0;   /* 'r:' remotes: seated when a table's row names them (their anim lives on the remote record, not here) */
+        const id = e.key.slice(2);
+        for (const T of tablesCached()) { const st = core.S.chess[T.id]; if (st && (st.w === id || st.b === id)) return BENCH_SEAT; }
+        for (const T of pkTablesCached()) { const st = core.S.poker[T.id]; if (st && (st.se || []).some(s => s[1] === id)) return CHAIR_SEAT; }
+        return 0;
+      }
+      let CHESSV = null, CHESS_SEL = null, CHESS_TURN = 0, CHESS_ASK = null, POKER_ASK = null, MENU_MODE = false;   /* [Claude 2026-10-11] CHESS_TURN: the view turned round the board by a drag (up to a quarter turn each way); *_ASK: the Stand up confirms; MENU_MODE: a long press / right-click, where Stand up may be offered */
+      function chessView(t) {
+        const st = core.chessOf(t), col = st.w === PID ? 'w' : st.b === PID ? 'b' : null, turn = core.chessTurn(t);
+        const g = core.chessGame(t);
+        return { t, st, col, turn, mine: !!col && st.status === 'playing' && turn === col, inCheck: !!(g && g.inCheck()), sel: CHESS_SEL, targets: CHESS_SEL ? core.chessMoves(t, CHESS_SEL) : [], me: PID };
+      }
+      function chessEnter(t) {
+        const at = SCENE.chessAt ? SCENE.chessAt(t) : null, st = core.chessOf(t), col = st.w === PID ? 'w' : 'b';
+        CHESS_SEL = null; CHESS_TURN = 0;
+        if (at) {   /* from your own eyes (the operator: first person, the board dominating the screen): leaning over your edge of the board */
+          if (cam.mode !== 'chess') cam.save = { yaw: cam.tyaw, pitch: cam.tpitch, dist: cam.tdist };
+          const s = col === 'w' ? 1 : -1;
+          CHESSV = { x: at.x, y: at.y, z: at.z, yaw: col === 'w' ? 0 : Math.PI, eye: { x: at.x, y: at.y + 0.9, z: at.z + s * 0.68 }, look: { x: at.x, y: at.y, z: at.z + s * 0.1 } };   /* look a shade towards your own edge: the near rank clears the chat box */
+          cam.mode = 'chess';
+        }
+        myEnt.restPose = 'sit';
+        const askStand = () => { const st0 = core.chessOf(t), resigning = st0.status === 'playing' && (st0.moves || []).length > 0;
+          hud.confirm(resigning ? 'Resign and stand up?' : 'Stand up?', resigning ? 'A move has been played: standing up now resigns the game' + ' and loses any stake on it.' : 'Leave the chess table?', resigning ? 'Resign' : 'Stand up', 'Stay', () => send({ c: 'stand' })); };
+        CHESS_ASK = askStand;
+        if (hud.chessOpen) hud.chessOpen(chessView(t), { tap: chessTap, stand: askStand });
+      }
+      function chessLeave(t) {
+        if (cam.mode === 'chess') { cam.mode = null; if (cam.save) { cam.tyaw = cam.save.yaw; cam.tpitch = cam.save.pitch; cam.tdist = cam.save.dist; cam.save = null; } }
+        CHESSV = null; CHESS_SEL = null; CHESS_TURN = 0; CHESS_ASK = null; myEnt.restPose = null;
+        if (SCENE.chessMark) SCENE.chessMark(t, null, [], null, []);
+        if (hud.chessClose) hud.chessClose();
+      }
+      function chessTap(sq) {
+        if (!me.seat) return;
+        const t = me.seat.t, v = chessView(t);
+        if (!v.mine) { hud.chat(v.st.status === 'open' ? 'Waiting for an opponent to sit down.' : v.st.status === 'over' ? 'The game is over. Stand up to leave the table.' : 'It is not your move.', 'sys'); return; }
+        if (CHESS_SEL && v.targets.some(m => m.to === sq)) {
+          const promo = v.targets.some(m => m.to === sq && m.promotion);
+          const go = (pr) => { send({ c: 'cmove', from: CHESS_SEL, to: sq, promo: pr || undefined }); CHESS_SEL = null; markBoard(t); if (hud.chessUpdate) hud.chessUpdate(chessView(t)); };
+          if (promo && hud.chessPromo) hud.chessPromo(go); else go(null);
+          return;
+        }
+        const own = core.chessMoves(t, sq);
+        CHESS_SEL = own.length ? sq : null;
+        send({ c: 'csel', sq: CHESS_SEL || '' });   /* [Claude] the table hears what you picked up, so the opponent's board lights it too */
+        markBoard(t);
+        if (hud.chessUpdate) hud.chessUpdate(chessView(t));
+      }
+      function markBoard(t) {   /* [Claude 2026-10-11] my pick in full, the opponent's at half strength, on the same board */
+        if (!SCENE.chessMark) return;
+        const st = core.chessOf(t), col = st.w === PID ? 'w' : st.b === PID ? 'b' : null, osq = col ? (col === 'w' ? st.sb : st.sw) : null;
+        const lit = (sq) => sq ? core.chessMoves(t, sq).map(m => ({ to: m.to, capture: /[ce]/.test(m.flags || '') })) : [];
+        SCENE.chessMark(t, CHESS_SEL, lit(CHESS_SEL), osq && osq !== CHESS_SEL ? osq : null, osq && osq !== CHESS_SEL ? lit(osq) : []);
+      }
+      function chessExamine(st) {
+        if (st.status === 'playing') return esc(st.wn) + ' (White) and ' + esc(st.bn) + ' (Black) are playing: ' + st.moves.length + ' moves so far.';
+        if (st.status === 'over') return 'The last game ended ' + st.result + ' (' + st.why + ').';
+        if (st.w || st.b) return esc(st.wn || st.bn) + ' is waiting for an opponent.';
+        return 'A stone chess table: slate and sandstone squares, a driftwood set against a whalebone one. Sit on a bench to play.';
+      }
+      /* ---------------- THE POKER TABLE (handoff/poker_plan.md): the same sitting and the same swap of camera and HUD as
+         the chess park, with a felt instead of a board. Everything the page draws comes from the table's row - see
+         core.js's poker block for what travels and for why the hole cards travel with it. */
+      let POKERV = null;
+      const PK_FX = {};   /* per table, what the felt last looked like to you - so a card going out is one sound, not five */
+      const PKF = core.pokerSeatFlags ? core.pokerSeatFlags() : [1, 2, 4, 8, 16];   /* in the hand, folded, all-in, dealt in, has answered */
+      const pkEsc = s => String(s == null ? '' : s).replace(/</g, '&lt;');   /* the names in the panel and the log; esc() below is only ever local to the tap menu */
+      function pokerWho(pid) { const p = core.S.players[pid]; return p && p.name ? pkEsc(p.name) : 'someone'; }
+      function pokerSeatOf(st, ref) { return (st.se || []).find(s => (s[0] | 0) === (ref | 0)) || null; }
+      function pokerModel(t) {   /* what lies on the felt: the board, each chair's two cards - face down unless they are yours, or the hand has been shown - the bets, the button, whose turn */
+        const st = core.pokerOf(t), show = st.o === 'playing' && st.st === 'none', hands = [], bets = {};
+        const ms = me.seat && me.seat.k === 'pk' && me.seat.t === t ? me.seat.s | 0 : -1;   /* whose cards are yours is your chair at this table, not the id beside it: in a room both games call their own player "me" */
+        for (const s of st.se || []) {
+          const ref = s[0] | 0, f = s[4] | 0, h = (st.hc || []).find(x => (x[0] | 0) === ref);
+          if (!h) continue;   /* nothing in front of that chair - sitting it out, or the hand is folded and mucked */
+          if ((f & PKF[1]) && !show) continue;
+          const up = h[1] != null && (show || ref === ms);
+          hands.push({ ref, c: h && up ? [h[1] | 0, h[2] | 0] : null, down: up ? 0 : 1, tilt: up ? 1 : 0 });
+          bets[ref] = s[3] | 0;
+        }
+        return { board: (st.bo || []).slice(), hands, bets, dealer: st.d >= 0 ? st.d : null, turn: st.a >= 0 && st.o === 'playing' && st.st !== 'none' ? st.a : null };
+      }
+      function pokerView(t) {   /* the panel's view of the table, all of it out of the row it was sent */
+        const st = core.pokerOf(t), s = me.seat && me.seat.t === t ? me.seat.s | 0 : -1, mine = pokerSeatOf(st, s);
+        const f = mine ? mine[4] | 0 : 0, dealt = !!((f & PKF[3]) && !(f & PKF[1])), call = Math.max(0, (st.b | 0) - ((mine && mine[3]) | 0));
+        const live = st.o === 'playing' && st.st !== 'none', hh = (st.hc || []).find(x => (x[0] | 0) === s);
+        return {
+          t, seat: s, me: PID, hand: st.h | 0, street: st.st, open: !live, pot: st.p | 0, bet: st.b | 0, dealer: st.d, turn: st.a, buy: st.buy | 0,   /* [Claude] the buy-in, for the panel */
+          seats: (st.se || []).map(x => ({ ref: x[0] | 0, id: x[1], name: pokerWho(x[1]), chips: x[2] | 0, bet: x[3] | 0, folded: !!((x[4] | 0) & PKF[1]), allin: !!((x[4] | 0) & PKF[2]), dealt: !!((x[4] | 0) & PKF[3]), away: !!((x[4] | 0) & (PKF[5] || 32)) })),
+          away: !!(mine && ((mine[4] | 0) & (PKF[5] || 32))),   /* [Claude] dealt out for sitting on a hand: the panel offers the way back */
+          board: (st.bo || []).slice(), hole: hh && hh[1] != null ? [hh[1] | 0, hh[2] | 0] : null,
+          log: (st.lg || []).slice(), result: st.r, inHand: dealt, myTurn: live && dealt && (st.a | 0) === s, call, stack: (mine && mine[2]) | 0,
+          winners: st.r ? st.r.p.map(q => q[1]).reduce((a, b) => a.concat(b), []) : []
+        };
+      }
+      function pokerFx(t, row) {   /* the small sound of the felt changing under your hands: a card going out, a new street */
+        const sig = ((row.bo || []).length) + ':' + row.st;
+        if (PK_FX[t] !== sig) { PK_FX[t] = sig; sfx('click'); }
+      }
+      function pokerEnter(t) {
+        const at = SCENE.pokerAt ? SCENE.pokerAt(t) : null, T = core.pokerTableById(t), s = me.seat && me.seat.t === t ? me.seat.s | 0 : -1;
+        if (at && T && T.seats[s]) {   /* from your own eyes at the felt: leaning a little over your own side of it, the whole table in front of you */
+          if (cam.mode !== 'poker') cam.save = { yaw: cam.tyaw, pitch: cam.tpitch, dist: cam.tdist };
+          const seat = T.seats[s], dx = seat[0] + 0.5 - at.x, dz = seat[1] + 0.5 - at.z, L = Math.hypot(dx, dz) || 1;
+          POKERV = { x: at.x, y: at.y + 0.55, z: at.z, yaw: Math.atan2(-dx, -dz), eye: { x: at.x + dx / L * 1.30, y: at.y + 0.92, z: at.z + dz / L * 1.30 }, look: { x: at.x - dx / L * 0.45, y: at.y - 0.08, z: at.z - dz / L * 0.45 } };   /* your own cards lie 0.60 out from the centre and the chair back is 1.0, so sit just behind your own chair: an eye over the cards themselves leaves them under your nose, out of the frame */
+          cam.mode = 'poker';
+        }
+        myEnt.restPose = 'sit';
+        const askStand = () => { const st = core.pokerOf(t), inHand = (st.se || []).some(x => x[1] === PID && ((x[4] | 0) & PKF[3]) && !((x[4] | 0) & PKF[1])) && st.st !== 'none';
+          hud.confirm(inHand ? 'Fold and stand up?' : 'Stand up?', inHand ? 'You are in a hand: standing up now folds it and leaves the chips already in the pot.' : 'Leave the poker table?', inHand ? 'Fold and stand' : 'Stand up', 'Stay', () => send({ c: 'stand' })); };
+        POKER_ASK = askStand;
+        if (hud.pokerOpen) hud.pokerOpen(pokerView(t), { act: (a, to) => pokerAct(t, a, to), stand: askStand });
+      }
+      function pokerLeave(t) {
+        if (cam.mode === 'poker') { cam.mode = null; if (cam.save) { cam.tyaw = cam.save.yaw; cam.tpitch = cam.save.pitch; cam.tdist = cam.save.dist; cam.save = null; } }
+        POKERV = null; myEnt.restPose = null; delete PK_FX[t];
+        if (hud.pokerClose) hud.pokerClose();
+      }
+      function pokerAct(t, a, to) {   /* the panel's buttons: the table's own rules answer whether it was a legal one */
+        if (!me.seat || me.seat.k !== 'pk' || me.seat.t !== t) return;
+        const st = core.pokerOf(t), mine = pokerSeatOf(st, me.seat.s);
+        if (a === 'back') { send({ c: 'pact', a: 'back' }); return; }   /* [Claude] dealt out: come back for the next hand */
+        if (!mine || !((mine[4] | 0) & PKF[3]) || (mine[4] | 0) & PKF[1]) { hud.chat('You are not in this hand.', 'sys'); return; }
+        if (st.o !== 'playing' || st.st === 'none') { hud.chat('Nothing is on the felt at the moment.', 'sys'); return; }
+        if ((st.a | 0) !== (me.seat.s | 0)) { hud.chat('It is not your turn yet.', 'sys'); return; }
+        send({ c: 'pact', a: String(a), to: to == null ? undefined : to | 0 });
+        if (hud.pokerUpdate) hud.pokerUpdate(pokerView(t));
+      }
+      function pokerExamine(st) {
+        const inhand = (st.se || []).filter(s => (s[4] | 0) & PKF[3]).map(s => pokerWho(s[1]));
+        if (st.o === 'playing' && st.st !== 'none') return 'A hand is on the felt: ' + (st.p | 0) + ' in the pot, ' + inhand.length + ' in it' + (st.bo.length ? ', ' + st.bo.length + ' cards on the board.' : ', nothing on the board yet.') + ' Sit in a free chair and it will deal you in.';
+        if ((st.se || []).length) return 'A felt table for six, with ' + (st.se || []).map(s => pokerWho(s[1])).join(', ') + ' sitting. ' + (st.o === 'playing' ? 'They are between hands.' : 'Waiting for players.');
+        return 'A felt table for six under the lamps, brass rail turned dark, a chip tray in the middle. Sit in a chair to play: the table deals itself.';
+      }
       function openWardrobe(first, who) {
         if (!myEnt.H.setOutfit || !MOD.outfitStyles) return;
         const before = myEnt.H.outfit;
@@ -2559,7 +2810,7 @@
       /* ---------- debug / test handle */
       const game = {
         core, pid: PID, me, camera, cam, scene, ents, hud, regions, settings,
-        screenOf(kind, id) { let pos, up = 0.8; if (kind === 'mob') { const e = ents.get('m:' + id); pos = e.root.position; up = (e.H.height || 1) * e.scale * 0.5; } else if (kind === 'npc') { const e = ents.get('n:' + id); pos = e.root.position; } else if (kind === 'item') { const o = gItems.get(id); pos = o.position; up = 0.08; } else if (kind === 'tile') { pos = new THREE.Vector3(id[0] + 0.5, heightAt(id[0] + 0.5, id[1] + 0.5), id[1] + 0.5); up = 0; } else if (kind === 'me') { pos = myEnt.root.position; } else if (kind === 'remote') { const e = ents.get('r:' + id); if (!e || !e.root.visible) return null; pos = e.root.position; up = (e.H.height || 1.6) * e.scale * 0.5; } const s = toScreen(pos, up); if (!s) return null; const r = host.getBoundingClientRect(); return { x: s.x + r.left, y: s.y + r.top }; },
+        screenOf(kind, id) { let pos, up = 0.8; if (kind === 'mob') { const e = ents.get('m:' + id); pos = e.root.position; up = (e.H.height || 1) * e.scale * 0.5; } else if (kind === 'npc') { const e = ents.get('n:' + id); pos = e.root.position; } else if (kind === 'item') { const o = gItems.get(id); pos = o.position; up = 0.08; } else if (kind === 'tile') { pos = new THREE.Vector3(id[0] + 0.5, heightAt(id[0] + 0.5, id[1] + 0.5), id[1] + 0.5); up = 0; } else if (kind === 'world') { pos = new THREE.Vector3(id[0], id[1], id[2]); up = 0; } else if (kind === 'square') { const a = SCENE.chessAt && SCENE.chessAt(id[0]); if (!a) return null; const f = id[1].charCodeAt(0) - 97, r = +id[1][1] - 1; pos = new THREE.Vector3(a.x - 3.5 * 0.12 + f * 0.12, a.y, a.z + 3.5 * 0.12 - r * 0.12); up = 0.01; } else if (kind === 'me') { pos = myEnt.root.position; } else if (kind === 'remote') { const e = ents.get('r:' + id); if (!e || !e.root.visible) return null; pos = e.root.position; up = (e.H.height || 1.6) * e.scale * 0.5; } const s = toScreen(pos, up); if (!s) return null; const r = host.getBoundingClientRect(); return { x: s.x + r.left, y: s.y + r.top }; },
         give(id, n) { const p = me; for (let k = 0; k < (core.item(id).stack ? 1 : n || 1); k++) { const f = p.inv.indexOf(null); if (core.item(id).stack) { const i = p.inv.findIndex(s => s && s.id === id); if (i >= 0) { p.inv[i].n += n || 1; break; } } if (f < 0) break; p.inv[f] = { id, n: core.item(id).stack ? n || 1 : 1 }; } hud.refresh('all'); },
         setLevel(skill, L) { me.xp[skill] = core.xpFor(L) * 10; if (skill === 'hitpoints') me.hp = L; hud.refresh('all'); },
         teleport(x, y) { me.x = x; me.y = y; me.path = []; place(myEnt, x, y); cam.snap = true; streamRegions(); arriveCheck(); },
