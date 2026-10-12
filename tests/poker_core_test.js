@@ -116,6 +116,10 @@ ok(mine.length === 2 && mine.some(h => h[0] === rp.seat.s), 'both hands travel b
 rep.S.ev = []; rep.applyPoker(host.pokerRows().map(r => Object.assign({}, r, { se: [], t: r.t })));
 ok(!rp.seat && rep.S.ev.some(e => e.e === 'pstand' && e.p === 'me'), 'a row with nobody in it stands the replica up again');
 
+/* what a room is sent: the row, and no dump of the whole game beside it */
+const RROW = host.pokerRow('poker1');
+ok(Object.keys(RROW).length > 5 && !('g' in RROW) && !('mine' in RROW) && !('wt' in RROW) && !('tt' in RROW), 'the row that travels carries no game dump and no clock: ' + Object.keys(RROW).sort().join(','));
+
 /* the hand is part of the deterministic log: the same seed, replayed, reaches the same hash */
 const SV1 = { v: 1, name: 'A', x: T.seats[0][0], y: T.seats[0][1] }, SV2 = { v: 1, name: 'B', x: T.seats[3][0], y: T.seats[3][1] };
 const cs = AshCore.create(D, { seed: 'rep' }); cs.addPlayer('p1', SV1); cs.addPlayer('p2', SV2);
@@ -132,3 +136,74 @@ ok(ct.board.length + cs.pokerOf('poker1').se.length > 0 && h1 === h2, 'a replaye
 
 console.log(fails ? fails + ' FAILED' : 'all ok');
 process.exit(fails ? 1 : 0);
+
+/* [Claude 2026-10-11] BUY-INS in GOLD (the operator; "the first person to sit down should be the one who sets the stakes") */
+{
+  const c2 = AshCore.create(D, { seed: 'buyin' }), T2 = P[0];
+  const a2 = c2.addPlayer('pa', { name: 'Ada' }), b2 = c2.addPlayer('pb', { name: 'Bram' }), pp = c2.addPlayer('pp', { name: 'Pip' });
+  c2.grantItem('pa', 'coins', 2000); c2.grantItem('pb', 'coins', 500); c2.grantItem('pp', 'coins', 100);
+  const coins = (p) => p.inv.reduce((n, s) => n + (s && s.id === 'coins' ? s.n : 0), 0);
+  const ev2 = []; const run2 = (n) => { for (let i = 0; i < n; i++) for (const e of c2.tick()) ev2.push(e); };
+  a2.x = T2.seats[0][0]; a2.y = T2.seats[0][1]; b2.x = T2.seats[3][0]; b2.y = T2.seats[3][1]; pp.x = T2.seats[1][0]; pp.y = T2.seats[1][1];
+  c2.cmd('pa', { c: 'sit', table: 'poker1', seat: 0, buy: 500 }); run2(5);
+  let st2 = c2.pokerOf('poker1'), t2 = c2.pokerGame('poker1');
+  ok(a2.seat && st2.buy === 500 && st2.se[0][2] === 500 && coins(a2) === 1500, 'the first to sit sets the buy-in (500 GOLD), pays it and gets 500 chips: ' + coins(a2) + ' GOLD left');
+  ok(t2.small === 12 && t2.big === 25, 'the blinds follow the buy-in: ' + t2.small + '/' + t2.big);
+  ev2.length = 0; c2.cmd('pp', { c: 'sit', table: 'poker1', seat: 1, buy: 0 }); run2(5);
+  ok(!pp.seat && coins(pp) === 100 && ev2.some(e => e.e === 'msg' && e.p === 'pp' && /need 500 GOLD/.test(e.text)), 'Pip, with 100 GOLD, is told the buy-in and stays standing');
+  c2.cmd('pb', { c: 'sit', table: 'poker1', seat: 3, buy: 9 }); run2(5);
+  st2 = c2.pokerOf('poker1');
+  ok(b2.seat && coins(b2) === 0 && st2.o === 'playing' && st2.p === 37 && st2.b === 25, 'Bram pays the table’s 500 (not his own 9); the hand is dealt with 12/25 blinds: pot ' + st2.p);
+  ok(ev2.some(e => e.e === 'poker' && e.buy === 500), 'the row that travels says the buy-in');
+  const bramChips = st2.se.find(s => s[1] === 'pb')[2];
+  c2.cmd('pb', { c: 'stand' }); run2(3);
+  ok(!b2.seat && coins(b2) === bramChips && c2.pokerOf('poker1').co.some(x => x[0] === 'pb' && x[1] === bramChips), 'Bram stands mid-hand: his stack comes back as GOLD (' + bramChips + ') through the row’s cashout');
+  run2(5); c2.cmd('pa', { c: 'stand' }); run2(3);
+  ok(!a2.seat && coins(a2) + coins(b2) === 2500, 'Ada stands too and every GOLD is accounted for: ' + coins(a2) + ' + ' + coins(b2));
+  ok(c2.pokerOf('poker1').buy === 0, 'an empty table forgets its buy-in');
+  /* a free table moves no GOLD */
+  c2.cmd('pa', { c: 'sit', table: 'poker1', seat: 0 }); run2(5);
+  ok(a2.seat && c2.pokerOf('poker1').buy === 0 && c2.pokerOf('poker1').se[0][2] === 1000, 'without a buy-in the chips are free, a thousand as before');
+  const before = coins(a2); c2.cmd('pa', { c: 'stand' }); run2(3);
+  ok(coins(a2) === before && !c2.pokerOf('poker1').co.some(x => x[2] > 1), 'and nothing is paid out when standing');
+  /* the host’s word reaches a replica: it pays on its own copy when seated, and is cashed out once */
+  const rep2 = AshCore.create(D, { seed: 'rp' }), rp2 = rep2.addPlayer('me', { name: 'Guest' }); rep2.grantItem('me', 'coins', 700); rep2.setAuth(rep2.zoneOf(T2.x, T2.y), false);
+  rp2.x = T2.seats[2][0]; rp2.y = T2.seats[2][1];
+  const r3 = rep2.S.ev = []; rep2.applyPoker([{ t: 'poker1', o: 'open', st: 'none', se: [[2, 'me', 500, 0, 0]], v: 4, buy: 500, gid: 2, co: [], cseq: 0 }]);
+  ok(rp2.seat && coins(rp2) === 200, 'the row seats the replica’s player and its own copy takes the 500 buy-in: ' + coins(rp2));
+  rep2.applyPoker([{ t: 'poker1', o: 'open', st: 'none', se: [[2, 'me', 500, 0, 0]], v: 5, buy: 500, gid: 2, co: [], cseq: 0 }]);
+  ok(coins(rp2) === 200, 'the same game id is not charged twice');
+  rep2.applyPoker([{ t: 'poker1', o: 'open', st: 'none', se: [], v: 6, buy: 500, gid: 2, co: [['me', 640, 1]], cseq: 1 }]);
+  rep2.applyPoker([{ t: 'poker1', o: 'open', st: 'none', se: [], v: 7, buy: 0, gid: 2, co: [['me', 640, 1]], cseq: 1 }]);
+  ok(!rp2.seat && coins(rp2) === 840, 'the cashout in the row is paid once, however often the row comes: ' + coins(rp2));
+}
+
+/* [Claude 2026-10-11] IDLE at the felt (the operator): a minute sitting on your hand folds you and deals you out until you come
+   back; fifteen minutes without playing stands you up with your stack cashed out */
+{
+  const c3 = AshCore.create(D, { seed: 'idle' }), T3 = P[0];
+  const a3 = c3.addPlayer('pa', { name: 'Ada' }), b3 = c3.addPlayer('pb', { name: 'Bram' });
+  c3.grantItem('pa', 'coins', 1000); c3.grantItem('pb', 'coins', 1000);
+  const coins = (p) => p.inv.reduce((n, s) => n + (s && s.id === 'coins' ? s.n : 0), 0);
+  const run3 = (n) => { for (let i = 0; i < n; i++) c3.tick(); };
+  a3.x = T3.seats[0][0]; a3.y = T3.seats[0][1]; b3.x = T3.seats[3][0]; b3.y = T3.seats[3][1];
+  c3.cmd('pa', { c: 'sit', table: 'poker1', seat: 0, buy: 1000 }); run3(5); c3.cmd('pb', { c: 'sit', table: 'poker1', seat: 3 }); run3(5);
+  const t3 = c3.pokerGame('poker1'); let st3 = c3.pokerOf('poker1');
+  ok(st3.o === 'playing' && st3.st === 'preflop' && st3.p === 75 && t3.small === 25 && t3.big === 50, 'a 1000 buy-in: the blinds are 25/50 and the hand is dealt (pot ' + st3.p + ')');
+  const slow = st3.se.find(s => s[0] === st3.a)[1], quick = slow === 'pa' ? 'pb' : 'pa';
+  c3.S.t += 101; run3(3);
+  st3 = c3.pokerOf('poker1');
+  const seat = st3.se.find(s => s[1] === slow);
+  ok(seat && (seat[4] & 32) && !(seat[4] & 1) && st3.st === 'none', slow + ' sat on the hand for a minute: folded and dealt out (flags ' + seat[4] + '), the hand is over');
+  c3.S.t += 20; run3(5);
+  ok(c3.pokerOf('poker1').o === 'open' || c3.pokerOf('poker1').st === 'none', 'no new hand is dealt with one player dealt out');
+  c3.cmd(slow, { c: 'pact', a: 'back' }); run3(2);
+  const back = c3.pokerOf('poker1').se.find(s => s[1] === slow);
+  ok(back && !(back[4] & 32) && (back[4] & 1), 'a word from them brings them back for the next hand (flags ' + back[4] + ')');
+  run3(20);
+  ok(c3.pokerOf('poker1').st === 'preflop', 'and the table deals again');
+  const stackNow = () => c3.pokerOf('poker1').se.find(s => s[1] === quick)[2];
+  c3.S.t += 1600; run3(12);
+  ok(!c3.S.players[quick].seat && !c3.S.players[slow].seat, 'fifteen minutes without playing: both are stood up');
+  ok(coins(a3) + coins(b3) === 2000, 'and every GOLD came back as it stood: ' + coins(a3) + ' + ' + coins(b3));
+}

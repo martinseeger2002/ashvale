@@ -141,7 +141,7 @@
     T.newHand = () => {   /* move the button, post the blinds, deal two to each seat */
       const pl = seated().filter(s => s.chips > 0);
       if (pl.length < 2) { T.status = 'open'; T.street = 'none'; return { error: 'nobody to play against' }; }
-      T.hand++; T.street = 'preflop'; T.status = 'playing'; T.board = []; T.pot = 0; T.bet = 0; T.minRaise = BB;
+      T.hand++; T.street = 'preflop'; T.status = 'playing'; T.board = []; T.pot = 0; T.bet = 0; T.minRaise = T.big;   /* [Claude 2026-10-11] the table's own blinds (they follow its buy-in), not the ones it was made with */
       T.result = null; T.deck = shuffle();
       for (const s of T.seats) if (s) { s.hole = null; s.bet = 0; s.committed = 0; s.folded = false; s.allin = false;
         s.won = 0; s.out = true; s.showdown = false; s.acted = false; s.score = 0; s.rank = null; }
@@ -154,9 +154,9 @@
       T.say('Hand ' + T.hand + '. ' + (btn[0].name || 'Someone') + ' is on the button.', 'sys');
       T.sbSeat = (btn.length === 2 ? btn[0] : btn[1]).ref;
       T.bbSeat = (btn.length === 2 ? btn[1] : btn[2]).ref;
-      post(T.seats[T.sbSeat], SB, 'small blind');
-      post(T.seats[T.bbSeat], BB, 'big blind');
-      T.bet = BB; T.minRaise = BB;
+      post(T.seats[T.sbSeat], T.small, 'small blind');
+      post(T.seats[T.bbSeat], T.big, 'big blind');
+      T.bet = T.big; T.minRaise = T.big;
       for (const s of btn) s.hole = [pop(), pop()];
       for (const s of T.seats) if (s && s.id && s.in) s.out = !s.hole;
       T.toAct = nextActor() == null ? -1 : nextActor();
@@ -219,7 +219,7 @@
       }
       if (to !== upTo && to < T.bet + T.minRaise) return { error: 'The smallest raise just now is to ' + (T.bet + T.minRaise) + ' - or all-in.' };
       const n = to - s.bet;
-      T.minRaise = Math.max(BB, to - T.bet); T.bet = to;
+      T.minRaise = Math.max(T.big, to - T.bet); T.bet = to;
       for (const o of cards()) if (!o.folded) o.acted = (o === s);   /* everyone else gets another look */
       s.chips -= n; s.bet += n; s.committed += n; T.pot += n;
       if (s.chips === 0) s.allin = true;
@@ -249,7 +249,7 @@
     }
     function advance() {   /* one street finished: clear what is owed, deal, and let the seats answer again */
       for (const s of dealt()) s.bet = 0;
-      T.bet = 0; T.minRaise = BB;
+      T.bet = 0; T.minRaise = T.big;
       if (T.street === 'preflop') { T.street = 'flop'; dealStreet(3, 'Flop'); }
       else if (T.street === 'flop') { T.street = 'turn'; dealStreet(1, 'Turn'); }
       else if (T.street === 'turn') { T.street = 'river'; dealStreet(1, 'River'); }

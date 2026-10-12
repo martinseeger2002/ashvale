@@ -68,10 +68,14 @@
     }
     const MARK_GEO = new THREE.BoxGeometry(SQ * 0.96, 0.004, SQ * 0.96);
     const MARK_MAT = { sel: new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.8 }), to: new THREE.MeshBasicMaterial({ color: 0x5aa8ff, transparent: true, opacity: 0.65 }), cap: new THREE.MeshBasicMaterial({ color: 0xff5a5a, transparent: true, opacity: 0.75 }) };
-    function chessMark(id, sel, targets) {   /* the selected square lights gold, where it may go blue, a capture red: whole squares, unlit, so they read at night too */
+    function chessMark(id, sel, targets, osel, otargets) {   /* the selected square lights gold, where it may go blue, a capture red: whole squares, unlit, so they read at night too.
+                                                                 [Claude 2026-10-11] osel/otargets: the OPPONENT's pick, the same lights at half strength (the operator: "the same squares that light up on their screen should light up on your screen") */
       const set = CHESS[id]; if (!set) return;
       for (const m of set.marks || []) set.group.remove(m); set.marks = [];
+      if (!MARK_MAT.osel) { MARK_MAT.osel = MARK_MAT.sel.clone(); MARK_MAT.osel.opacity = 0.42; MARK_MAT.oto = MARK_MAT.to.clone(); MARK_MAT.oto.opacity = 0.32; MARK_MAT.ocap = MARK_MAT.cap.clone(); MARK_MAT.ocap.opacity = 0.32; }
       const put = (sq, mat) => { const m = new THREE.Mesh(MARK_GEO, mat); const [x, y, z] = sqPos(set, sq); m.position.set(x, y + 0.003, z); m.renderOrder = 2; set.group.add(m); set.marks.push(m); };
+      if (osel) put(osel, MARK_MAT.osel);
+      for (const t of otargets || []) put(t.to || t, t.capture ? MARK_MAT.ocap : MARK_MAT.oto);
       if (sel) put(sel, MARK_MAT.sel);
       for (const t of targets || []) put(t.to || t, t.capture ? MARK_MAT.cap : MARK_MAT.to);
     }
@@ -150,30 +154,31 @@
       PK_STATE[id] = m;
       const T = POKER[id]; if (!T) return;
       if (!m) { for (const k of Object.keys(T.cards)) { T.group.remove(T.cards[k].g); delete T.cards[k]; } return; }
-      const top = T.oy, want = {};
-      for (let i = 0; i < (m.board || []).length; i++) want['b' + i] = { face: m.board[i] | 0, x: T.ox + (i - 2) * 0.17, z: T.oz - 0.07, ang: 0 };
+      const top = T.oy, want = {}, TILT = 0.42;   /* a card lying flat is below your own eye line at a felt - too flat to
+                                     read: a card that is face up leans up toward the chair it belongs to, the two you hold */
+      for (let i = 0; i < (m.board || []).length; i++) want['b' + i] = { face: m.board[i] | 0, x: T.ox + (i - 2) * 0.17, z: T.oz - 0.07, ang: 0, tilt: 0 };
       for (const h of m.hands || []) {
         const s = T.spots[h.ref | 0]; if (!s) continue;
         const dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1, ux = dx / L, uz = dz / L, ang = Math.atan2(dx, dz);
-        const px = T.ox + ux * 0.60, pz = T.oz + uz * 0.60, face = h.down ? PBACK : (h.c && h.c[0] != null ? h.c[0] : PBACK);
-        want['h' + (h.ref | 0) + 0] = { face, x: px + uz * 0.048, z: pz - ux * 0.048, ang: ang + 0.11 };
-        want['h' + (h.ref | 0) + 1] = { face: h.down ? PBACK : (h.c && h.c[1] != null ? h.c[1] : PBACK), x: px - uz * 0.048, z: pz + ux * 0.048, ang: ang - 0.11 };
+        const px = T.ox + ux * 0.60, pz = T.oz + uz * 0.60, tl = h.tilt ? TILT : 0, face = h.down ? PBACK : (h.c && h.c[0] != null ? h.c[0] : PBACK);
+        want['h' + (h.ref | 0) + 0] = { face, x: px + uz * 0.048, z: pz - ux * 0.048, ang: ang + 0.11, tilt: tl };
+        want['h' + (h.ref | 0) + 1] = { face: h.down ? PBACK : (h.c && h.c[1] != null ? h.c[1] : PBACK), x: px - uz * 0.048, z: pz + ux * 0.048, ang: ang - 0.11, tilt: tl };
       }
       for (const k of Object.keys(T.cards)) if (!want[k]) { T.group.remove(T.cards[k].g); delete T.cards[k]; }
       for (const k of Object.keys(want)) {
-        const w = want[k], c = T.cards[k], cy = top + CARD_Y;
+        const w = want[k], c = T.cards[k], cy = top + CARD_Y + (w.tilt ? 0.03 : 0);
         if (c) {
           if (c.g.userData.face !== w.face) { cardFace(c.m, w.face); c.g.userData.face = w.face; }
-          c.g.rotation.y = w.ang;
+          c.g.rotation.y = w.ang; c.h.rotation.x = -Math.PI / 2 + (w.tilt || 0);
           if (Math.abs(c.g.position.x - w.x) > 0.004 || Math.abs(c.g.position.z - w.z) > 0.004) {
             TWEENS.push({ m: c.g, x0: c.g.position.x, z0: c.g.position.z, x: w.x, z: w.z, y: cy, t: 0, dur: 0.34, lift: 0.06 });
-          }
+          } else if (Math.abs(c.g.position.y - cy) > 0.004) c.g.position.y = cy;
           continue;
         }
         const g = new THREE.Group(), holder = new THREE.Group(), mesh = cardMesh(T.mat, w.face);
-        holder.rotation.x = -Math.PI / 2; g.add(holder); holder.add(mesh);
+        holder.rotation.x = -Math.PI / 2 + (w.tilt || 0); g.add(holder); holder.add(mesh);
         g.position.set(w.x, cy, w.z); g.rotation.y = w.ang; g.userData.face = w.face;
-        T.group.add(g); T.cards[k] = { g, m: mesh };
+        T.group.add(g); T.cards[k] = { g, m: mesh, h: holder };
       }
       for (const s of T.spots) {   /* the pot in front of each chair: one chip to a big blind, stacked, capped */
         const ref = s.ref, n = (m.bets && m.bets[ref]) | 0, st = T.chips[ref] = T.chips[ref] || { n: -1, g: new THREE.Group() };
@@ -1425,7 +1430,8 @@
             const fl = floorY(o, y), top = fl + 0.74, id = o.id || ('p' + o.x + ',' + o.y);
             const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 0.7, 12), lam(0x3d2b1d)); leg.position.set(x, fl + 0.36, z); group.add(leg);
             const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.40, 0.48, 0.07, 16), lam(0x33241a)); foot.position.set(x, fl + 0.04, z); group.add(foot);
-            const felt = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.07, 40), lam(new THREE.Color(o.felt || 0x1f4d38).getHex()));
+            const FELT = new THREE.Color(o.felt || 0x1f4d38).getHex();   /* a felt in a dim tavern would otherwise read as black, so it carries a little of its own light */
+            const felt = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.07, 40), lam(FELT, { emissive: FELT, emissiveIntensity: 0.4 }));
             felt.scale.set(0.95, 1, 0.70); felt.position.set(x, top - 0.035, z); group.add(felt);
             const rail = new THREE.Mesh(new THREE.TorusGeometry(1, 0.09, 8, 36), lam(0x54341f));
             rail.rotation.x = Math.PI / 2; rail.scale.set(0.95, 0.70, 1); rail.position.set(x, top + 0.01, z); group.add(rail);

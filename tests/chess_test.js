@@ -108,3 +108,94 @@ ok(cs.chessOf(t1.id).moves.join(' ') === 'Nf3 Nf6' && h1 === h2, 'a replayed log
 
 console.log(fails ? fails + ' FAILED' : 'all ok');
 process.exit(fails ? 1 : 0);
+
+/* [Claude 2026-10-11] STAKES (the operator: "players should be able to wager against their opponent on a game of chess";
+   "the first person to sit down should be the one who sets the stakes"): GOLD on the game, settled by the result */
+{
+  const c2 = AshCore.create(D, { seed: 'stakes' }), t2 = T[1];
+  const w2 = c2.addPlayer('pw', { name: 'Wren' }), b2 = c2.addPlayer('pb', { name: 'Aldric' }), pp = c2.addPlayer('pp', { name: 'Pip' });
+  c2.grantItem('pw', 'coins', 1000); c2.grantItem('pb', 'coins', 800); c2.grantItem('pp', 'coins', 100);
+  const coins = (p) => p.inv.reduce((n, s) => n + (s && s.id === 'coins' ? s.n : 0), 0);
+  const near = (p, s) => { p.x = s[0]; p.y = s[1]; p.path = []; p.act = null; };
+  const ev2 = []; const run2 = (n) => { for (let i = 0; i < n; i++) for (const e of c2.tick()) ev2.push(e); };
+  const play2 = (san) => { for (const [who, from, to] of san) { c2.cmd(who, { c: 'cmove', from, to }); run2(1); } };
+  near(w2, t2.seats[1]); c2.cmd('pw', { c: 'sit', table: t2.id, seat: 1, stake: 500 }); run2(5);
+  let st2 = c2.chessOf(t2.id);
+  ok(w2.seat && st2.stake === 500 && st2.gid === 1 && coins(w2) === 500, 'the first to sit sets the stake (500) and puts it on the game: Wren has ' + coins(w2) + ' GOLD left');
+  near(pp, t2.seats[0]); ev2.length = 0; c2.cmd('pp', { c: 'sit', table: t2.id, seat: 0, stake: 0 }); run2(5);
+  ok(!pp.seat && coins(pp) === 100 && ev2.some(e => e.e === 'msg' && e.p === 'pp' && /need 500 GOLD/.test(e.text)), 'Pip, with 100 GOLD, is told the stake and stays standing');
+  near(b2, t2.seats[0]); c2.cmd('pb', { c: 'sit', table: t2.id, seat: 0, stake: 7 }); run2(5);
+  st2 = c2.chessOf(t2.id);
+  ok(b2.seat && st2.status === 'playing' && st2.stake === 500 && coins(b2) === 300, 'Aldric sits, pays the stake the table already has (not his own 7), and the game begins');
+  play2([['pw', 'e2', 'e4'], ['pb', 'e7', 'e5'], ['pw', 'd1', 'h5'], ['pb', 'b8', 'c6'], ['pw', 'f1', 'c4'], ['pb', 'g8', 'f6'], ['pw', 'h5', 'f7']]);
+  st2 = c2.chessOf(t2.id);
+  ok(st2.status === 'over' && st2.paid && st2.paid.pw === 1000 && !st2.paid.pb, "the host's word at checkmate: White is owed both stakes " + JSON.stringify(st2.paid));
+  ok(coins(w2) === 1500 && coins(b2) === 300, 'and Wren is paid: ' + coins(w2) + ' / ' + coins(b2));
+  ok(ev2.some(e => e.e === 'chess' && e.t === t2.id && e.paid && e.paid.pw === 1000 && e.stake === 500), 'the row that travels carries the stake and the payout');
+  c2.cmd('pw', { c: 'stand' }); c2.cmd('pb', { c: 'stand' }); run2(2);
+  ok(c2.chessOf(t2.id).stake === 0 && !c2.chessOf(t2.id).paid, 'an empty table forgets its stake');
+  /* nobody came: the stake comes back */
+  near(w2, t2.seats[1]); c2.cmd('pw', { c: 'sit', table: t2.id, seat: 1, stake: 200 }); run2(5);
+  ok(coins(w2) === 1300, 'she puts 200 on a new game');
+  c2.cmd('pw', { c: 'stand' }); run2(2);
+  ok(coins(w2) === 1500 && c2.chessOf(t2.id).stake === 0, 'standing up before an opponent came returns it: ' + coins(w2));
+  /* resigning loses the stake */
+  near(w2, t2.seats[1]); c2.cmd('pw', { c: 'sit', table: t2.id, seat: 1, stake: 300 }); run2(5);
+  near(b2, t2.seats[0]); c2.cmd('pb', { c: 'sit', table: t2.id, seat: 0 }); run2(5);
+  ok(coins(w2) === 1200 && coins(b2) === 0 && c2.chessOf(t2.id).status === 'playing', 'both stakes are on the game (Aldric is down to nothing)');
+  play2([['pw', 'd2', 'd4']]); c2.cmd('pw', { c: 'stand' }); run2(2);
+  ok(c2.chessOf(t2.id).result === '0-1' && coins(b2) === 600 && coins(w2) === 1200, 'White resigns by standing: Aldric takes both stakes, ' + coins(b2));
+  c2.cmd('pb', { c: 'stand' }); run2(2);
+  /* a friendly game moves nothing */
+  near(w2, t2.seats[1]); c2.cmd('pw', { c: 'sit', table: t2.id, seat: 1 }); run2(5); near(b2, t2.seats[0]); c2.cmd('pb', { c: 'sit', table: t2.id, seat: 0, stake: 999 }); run2(5);
+  ok(c2.chessOf(t2.id).stake === 0 && coins(w2) === 1200 && coins(b2) === 600, 'a friendly game set by the first sitter stays friendly, whatever the second asks');
+  c2.cmd('pw', { c: 'stand' }); c2.cmd('pb', { c: 'stand' }); run2(2);
+  /* host and replica: the GOLD moves on each side's own copy, by the row */
+  const host2 = AshCore.create(D, { seed: 'h2' }), rep2 = AshCore.create(D, { seed: 'r2' });
+  const hp2 = host2.addPlayer('me', { name: 'Host' }), rp2 = rep2.addPlayer('me', { name: 'Guest' });
+  host2.grantItem('me', 'coins', 400); rep2.grantItem('me', 'coins', 150); rep2.setAuth(rep2.zoneOf(t2.x, t2.y), false);
+  hp2.x = t2.seats[1][0]; hp2.y = t2.seats[1][1]; rp2.x = t2.seats[0][0]; rp2.y = t2.seats[0][1];
+  host2.cmd('me', { c: 'sit', table: t2.id, seat: 1, stake: 100 }); for (let i = 0; i < 5; i++) host2.tick();
+  ok(coins(hp2) === 300 && host2.chessOf(t2.id).stake === 100, 'the host sits with a stake of 100 and pays it');
+  const xs2 = []; rep2.cmd('me', { c: 'sit', table: t2.id, seat: 0, stake: 0 }); for (let i = 0; i < 5; i++) for (const e of rep2.tick()) xs2.push(e);
+  ok(xs2.some(e => e.e === 'xsit' && e.stake === 0) && coins(rp2) === 150, 'the replica asks the host for the bench; nothing is taken until the host seats it');
+  host2.addPuppet('guest', { x: rp2.x, y: rp2.y, n: 'Guest' });
+  ok(host2.hostSit('guest', t2.id, 0, 0) && host2.chessOf(t2.id).status === 'playing', 'the host seats the guest (the table keeps its 100)');
+  const toRep = () => rep2.applyChess(host2.chessRows().map(r => Object.assign({}, r, { w: r.w === 'me' ? 'host' : r.w, b: r.b === 'guest' ? 'me' : r.b, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [k === 'guest' ? 'me' : k === 'me' ? 'host' : k, v])) : null })));
+  toRep();
+  ok(rp2.seat && coins(rp2) === 50, "the row seats the replica's player and its own copy takes the stake: " + coins(rp2));
+  for (const [who, f, t] of [['me', 'e2', 'e4'], ['guest', 'e7', 'e5'], ['me', 'd1', 'h5'], ['guest', 'b8', 'c6'], ['me', 'f1', 'c4'], ['guest', 'g8', 'f6'], ['me', 'h5', 'f7']]) host2.hostMove(who, t2.id, f, t);
+  ok(host2.chessOf(t2.id).result === '1-0' && coins(hp2) === 500, 'the host wins and credits itself: ' + coins(hp2));
+  toRep();
+  ok(coins(rp2) === 50 && rep2.chessOf(t2.id).paid && rep2.chessOf(t2.id).paid.host === 200, 'the replica sees the payout went to the host and gets nothing');
+  toRep();
+  ok(coins(rp2) === 50 && coins(hp2) === 500, 'a row applied twice pays nothing twice');
+  /* the guest is short when the seat comes back: it stands again */
+  const rep3 = AshCore.create(D, { seed: 'r3' }), rp3 = rep3.addPlayer('me', { name: 'Broke' }); rep3.grantItem('me', 'coins', 20); rep3.setAuth(rep3.zoneOf(t2.x, t2.y), false);
+  const ev3 = rep3.S.ev = []; rep3.applyChess([{ t: t2.id, w: 'host', b: 'me', wn: 'Host', bn: 'Broke', fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', status: 'playing', n: 0, v: 9, stake: 100, gid: 3, paid: null }]);
+  ok(!rp3.seat && coins(rp3) === 20 && ev3.some(e => e.e === 'msg' && /cannot cover the stake/.test(e.text)), 'a player who cannot cover the stake when the row seats them stands up again, nothing taken');
+}
+
+/* [Claude 2026-10-11] IDLE: fifteen minutes without playing stands you up (the operator); and the opponent's pick travels */
+{
+  const c3 = AshCore.create(D, { seed: 'idle' }), t3 = T[2];
+  const w3 = c3.addPlayer('pw', { name: 'Wren' }), b3 = c3.addPlayer('pb', { name: 'Aldric' });
+  const run3 = (n) => { for (let i = 0; i < n; i++) c3.tick(); };
+  w3.x = t3.seats[1][0]; w3.y = t3.seats[1][1]; b3.x = t3.seats[0][0]; b3.y = t3.seats[0][1];
+  c3.cmd('pw', { c: 'sit', table: t3.id, seat: 1 }); c3.cmd('pb', { c: 'sit', table: t3.id, seat: 0 }); run3(5);
+  ok(c3.chessOf(t3.id).status === 'playing', 'a game is on');
+  const e3 = c3.S.ev = []; c3.cmd('pw', { c: 'csel', sq: 'e2' }); run3(1);
+  ok(c3.chessOf(t3.id).sw === 'e2' && c3.chessRow(t3.id).sw === 'e2' && e3.some(e => e.e === 'chess' && e.sw === 'e2'), "White picks up e2: the table says so in its row, so Black's board lights it too");
+  c3.cmd('pw', { c: 'cmove', from: 'e2', to: 'e4' }); run3(1);
+  ok(c3.chessOf(t3.id).sw === null && c3.chessOf(t3.id).moves.length === 1, 'the move puts it down: nothing is picked up');
+  c3.cmd('pb', { c: 'csel', sq: 'e7' }); run3(1); c3.cmd('pb', { c: 'csel', sq: '' }); run3(1);
+  ok(c3.chessOf(t3.id).sb === null, 'a pick can be put back');
+  c3.S.t += 1400; run3(10);
+  ok(w3.seat && b3.seat && c3.chessOf(t3.id).status === 'playing', 'fourteen minutes in, both still sit');
+  c3.cmd('pb', { c: 'csel', sq: 'e7' }); run3(1);
+  c3.S.t += 110; run3(10);
+  const st3 = c3.chessOf(t3.id);
+  ok(!w3.seat && b3.seat && st3.status === 'over' && st3.result === '0-1' && st3.why === 'idle', 'fifteen minutes after her last play Wren is stood up and the game is hers to lose: ' + st3.result + ' (' + st3.why + '); Aldric, who moved a piece, stays');
+  c3.S.t += 1500; run3(10);
+  ok(!b3.seat && c3.chessOf(t3.id).status === 'open', 'and Aldric follows when his fifteen minutes run out');
+}

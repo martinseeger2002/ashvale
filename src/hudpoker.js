@@ -60,9 +60,9 @@
       const lo = v.bet ? v.bet * 2 : 100, hi = v.bet + (mine ? mine.chips : 0), potR = v.bet + pot;
       const amounts = [];
       if (hi > Math.max(v.bet, lo - 1)) { amounts.push(Math.min(Math.max(lo, v.bet + 1), hi)); if (potR > amounts[0] && potR < hi) amounts.push(potR); if (hi > amounts[amounts.length - 1]) amounts.push(hi); }
-      box.innerHTML = '<h3>Poker</h3>'
+      box.innerHTML = '<h3>Poker' + (v.buy ? ' <small style="font:12px system-ui,sans-serif;color:#ffd23f">buy-in ' + v.buy.toLocaleString() + ' GOLD</small>' : ' <small style="font:12px system-ui,sans-serif;color:#cbd6cd">free chips</small>') + '</h3>'   /* [Claude] the buy-in the first sitter set */
         + v.seats.map(s => '<div class="pl' + (v.turn === s.ref && !v.open ? ' turn' : '') + (((s.folded || !s.dealt) && !v.open) ? ' out' : '') + '">'
-          + '<span>' + (v.dealer === s.ref ? '<i class="d">D</i>' : '') + '<b>' + esc(s.name) + (you(s) ? ' <span style="color:#9fc3ff">(you)</span>' : '') + '</b></span>'
+          + '<span>' + (v.dealer === s.ref ? '<i class="d">D</i>' : '') + '<b>' + esc(s.name) + (you(s) ? ' <span style="color:#9fc3ff">(you)</span>' : '') + (s.away ? ' <span style="color:#9aa79c">(away)</span>' : '') + '</b></span>'
           + '<span><span class="ch">' + s.chips + '</span>' + (s.bet ? '<span class="bt">' + s.bet + '</span>' : '') + '</span></div>').join('')
         + '<div class="stt ' + (st.cls || '') + '">' + st.text + '</div>'
         + '<div class="cards">' + (v.hole ? cardTxt(v.hole[0]) + cardTxt(v.hole[1]) : (v.inHand ? cardTxt(null) + cardTxt(null) : '<span style="font-size:12px;color:#9aa79c">not in this hand</span>'))
@@ -70,7 +70,8 @@
         + '<div class="pot">pot ' + pot + (v.bet ? ' · to call ' + v.bet : ' · nobody to beat') + (mine ? ' · your chips ' + mine.chips : '') + '</div>'
         + (winTxt(v) ? '<div class="pot" style="color:#ffd23f">' + winTxt(v) + '</div>' : '')
         + '<div class="lg">' + v.log.map(esc).join('<br>') + '</div>'
-        + '<div class="btns">' + (v.myTurn ? '<button class="btn" data-a="fold">Fold</button>'
+        + (v.away ? '<div class="stt wait">You are dealt out (a minute on your hand). Tap to come back.</div>' : '')   /* [Claude] */
+        + '<div class="btns">' + (v.away ? '<button class="btn" data-a="back">I\'m back</button>' : '') + (v.myTurn ? '<button class="btn" data-a="fold">Fold</button>'
           + '<button class="btn" data-a="' + (v.call > 0 ? 'call' : 'check') + '">' + (v.call > 0 ? 'Call ' + v.call : 'Check') + '</button>'
           + (amounts.length ? '<button class="btn" data-r>Raise</button><button class="btn" data-a="allin">All-in</button>' : '') : '')
         + '<button class="btn" data-a="stand">' + (v.inHand && !v.open ? 'Fold & stand' : 'Stand up') + '</button></div>'

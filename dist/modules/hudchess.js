@@ -48,7 +48,9 @@
       box.innerHTML = '<h3>Chess</h3>'
         + '<div class="pl' + (st.status === 'playing' && view.turn === 'w' ? ' turn' : '') + '"><span><i class="w"></i>White</span><span>' + name('w') + '</span></div>'
         + '<div class="pl' + (st.status === 'playing' && view.turn === 'b' ? ' turn' : '') + '"><span><i class="b"></i>Black</span><span>' + name('b') + '</span></div>'
-        + '<div class="stt ' + cls + '">' + status + '</div><div class="sel">' + sel + '</div>'
+        + '<div class="stt ' + cls + '">' + status + '</div>'
+        + (st.stake ? '<div class="sel" style="color:#ffd23f">Stake: ' + (st.stake | 0).toLocaleString() + ' GOLD each' + (st.status === 'playing' && (st.moves || []).length ? ' — standing up forfeits it' : '') + '</div>' : '')   /* [Claude] the stake the first sitter set */
+        + '<div class="sel">' + sel + '</div>'
         + '<div class="mv">' + esc(movesText(st)) + '</div>'
         + '<div class="promo" data-promo><div style="margin-bottom:4px">Promote to</div>' + ['q', 'r', 'b', 'n'].map(p => '<button class="btn" data-p="' + p + '" title="' + PIECE[p] + '">' + PIECE[p][0] + '</button>').join('') + '</div>'
         + '<div class="btns"><button class="btn" data-a="stand">' + standTxt + '</button></div>';
