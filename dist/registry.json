@@ -111,6 +111,12 @@
    "api": 1,
    "kind": "js"
   },
+  "castle": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
   "scene": {
    "id": null,
    "v": "1",
@@ -1206,19 +1212,7 @@
     "api": 1,
     "kind": "json"
    },
-   "gear.bow_evenflight": {
-    "id": null,
-    "v": 1,
-    "api": 1,
-    "kind": "json"
-   },
    "gear.bow_snare": {
-    "id": null,
-    "v": 1,
-    "api": 1,
-    "kind": "json"
-   },
-   "gear.brambleheart_maul": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1387,12 +1381,6 @@
     "kind": "json"
    },
    "gear.staff_frost": {
-    "id": null,
-    "v": 1,
-    "api": 1,
-    "kind": "json"
-   },
-   "gear.staff_stillwind": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1693,6 +1681,12 @@
    "saltmere": {
     "id": null,
     "v": 3,
+    "api": 1,
+    "kind": "json"
+   },
+   "castle": {
+    "id": null,
+    "v": 1,
     "api": 1,
     "kind": "json"
    },

@@ -557,7 +557,8 @@ class Deliverer:
         if self.stock.get(k): return self.stock[k][0]
         ap = getattr(self, 'anyp', None) or {}; self.anyp = ap
         if k in ap and time.time() - ap[k][1] < 600: return ap[k][0]   # [Claude 2026-10-12] the 500-piece creator listing is read once per key per 10 min
-        L = json.load(urllib.request.urlopen(APP + '/r/inscriptions?creator=%s&limit=500' % ASHVALE, timeout=60))
+        try: L = json.load(urllib.request.urlopen(APP + '/r/inscriptions?creator=%s&limit=500' % ASHVALE, timeout=120))
+        except Exception as e: log('CREATOR LISTING FAILED', str(e)[:100]); L = []   # [Claude 2026-10-12] a 2 MB read that breaks (IncompleteRead) is not a reason to fail the job: the icon fallback follows
         for q in L or []:
             j = q.get('json') or {}
             if j.get('collection') == 'ASHVALE Armoury' and any(a.get('trait_type') == 'Key' and a.get('value') == k for a in j.get('attributes', [])): ap[k] = (q['id'], time.time()); return q['id']
@@ -598,6 +599,7 @@ class Deliverer:
 OUTQ = []   # [Claude 2026-10-12] words for the room from the deliverer thread (the room loop sends them): {t:'paid', to, item, units, txid}
 SENT = os.path.join(HERE, 'chain', 'bank', 'sent.jsonl')   # [Claude 2026-10-12] the journal: written and fsynced BEFORE a broadcast (handoff/bank_rpc_plan.md 7)
 RATE_CAP, BATCH_CAP = 40, 10000   # sends per minute; units one coalesced send may carry (a bigger one is held for a human)
+HOLD_S, HOLD_MAX = float(os.environ.get('BANK_HOLD_S', '45')), 180.0   # [Claude 2026-10-12] a token send waits while more of the same keeps coming (mining: one ore every few seconds) - at most HOLD_MAX
 def journal(rec):
     os.makedirs(os.path.dirname(SENT), exist_ok=True)
     with open(SENT, 'a') as f: f.write(json.dumps(rec, separators=(',', ':')) + '\n'); f.flush(); os.fsync(f.fileno())
@@ -618,7 +620,12 @@ def replay_journal(c):
     c.commit()
 def take_batch(c):
     """the oldest ready job and, for a token, every other ready job of the same address, item and kind (no want/coll): one send"""
-    job = c.execute("select * from jobs where status='queued' or (status='retry' and at<?) order by n limit 1", (time.time(),)).fetchone()
+    now = time.time(); job = None
+    for cand in c.execute("select * from jobs where status='queued' or (status='retry' and at<?) order by n limit 60", (now,)):
+        if cand['kind'] == 'token' and not cand['want'] and not cand['coll'] and HOLD_S > 0:
+            r = c.execute("select min(at) a0, max(at) a1 from jobs where (status='queued' or (status='retry' and at<?)) and addr=? and item=? and kind='token' and want is null and coll is null", (now, cand['addr'], cand['item'])).fetchone()
+            if r['a1'] is not None and now - r['a1'] < HOLD_S and now - r['a0'] < HOLD_MAX: continue   # more of the same may be on its way: let it settle
+        job = cand; break
     if not job: return None, []
     ids = [job['n']]; units = int(job['units'])
     if job['kind'] == 'token' and not job['want'] and not job['coll']:

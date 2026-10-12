@@ -940,9 +940,9 @@
             break;
           }
           case 'clear': removeStump(e.x, e.y); addGrass(e.x, e.y); break;
-          case 'plant': addSprout(e.x, e.y, e.tree); break;
+          case 'plant': addSprout(e.x, e.y); break;
           case 'unplant': removeSprout(e.x, e.y); break;
-          case 'grow': removeGrass(e.x, e.y); addGrown(e.x, e.y, e.tree); break;
+          case 'grow': removeGrass(e.x, e.y); addGrown(e.x, e.y); break;
           case 'gather': if (mine && e.ok && e.item) dirty.inv = 1; if (mine && e.ok && !e.item) dirty.inv = 1; break;
           case 'drop': break;
           case 'pfx': { const t = ents.get('p:' + e.p); if (t && e.on) { const el = hud.fxSplat(e.fx); if (el) t.splats.push({ el, t: performance.now(), k: t.splats.length }); } if (mine && e.on) sfx('freeze'); break; }
@@ -1127,8 +1127,6 @@
       const PINE_BARK = new THREE.MeshLambertMaterial({ color: 0x5a3c22, flatShading: true });
       const PINE_NEEDLE = new THREE.MeshLambertMaterial({ color: 0x2f6a3a, flatShading: true });
       const PINE_GROWN = new THREE.MeshLambertMaterial({ color: 0x3a8f4a, flatShading: true });
-      const YEW_NEEDLE = new THREE.MeshLambertMaterial({ color: 0x1f5f3b, flatShading: true });
-      const OAK_LEAF = new THREE.MeshLambertMaterial({ color: 0x68963c, flatShading: true });
       const PINE_SNOW = new THREE.Color(0xe7eef2);
       function pineSnow() {
         const w = SEASON.snowy ? 1 : 0;
@@ -1136,49 +1134,43 @@
         PINE_GROWN.color.setHex(0x3a8f4a).lerp(PINE_SNOW, w * 0.22);
       }
       function hash2(x, y) { let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
-      function grownLook(x, y, kind) {
+      function grownLook(x, y) {
         const used = [];
         for (let dy = -16; dy <= 16; dy++) for (let dx = -16; dx <= 16; dx++) {
           if (!dx && !dy) continue;
           const nd = core.nodeAt(core.idx(x + dx, y + dy));
-          if (!nd || nd.kind !== (kind || 'P')) continue;
+          if (!nd || nd.kind !== 'P') continue;
           used.push(0.85 + hash2(nd.x + 5, nd.y + 9) * 0.35);
         }
         let s = 1.48 + hash2(x + 3, y + 11) * 0.22, guard = 0;
         while (used.some(u => Math.abs(u - s) < 0.08) && guard++ < 8) s += 0.07;
         return { s, lean: (hash2(x + 9, y + 2) - 0.5) * 0.22, yaw: hash2(x + 2, y) * 6.28 };
       }
-      function addPine(x, y, young, kind) {
-        kind = kind || 'P';
+      function addPine(x, y, young) {
         const g = new THREE.Group(), gy = heightAt(x + 0.5, y + 0.5);
         const bark = new THREE.Mesh(PINE_TRUNK, PINE_BARK); bark.castShadow = true; g.add(bark);
-        if (kind === 'O') {
-          const leaf = OAK_LEAF, crowns = [[0, 1.42, 0.42], [-0.35, 1.25, 0.32], [0.34, 1.28, 0.34]];
-          for (const [dx, py, r] of crowns) { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), leaf); m.position.set(dx, py, 0); m.castShadow = true; g.add(m); }
-        } else {
-          const needles = kind === 'Y' ? YEW_NEEDLE : (young ? PINE_NEEDLE : PINE_GROWN);
-          for (const geo of PINE_CROWN) { const m = new THREE.Mesh(geo, needles); m.castShadow = true; g.add(m); }
-        }
-        const look = young ? { s: 0.5, lean: 0, yaw: hash2(x, y) * 6.28 } : grownLook(x, y, kind);
+        const needles = young ? PINE_NEEDLE : PINE_GROWN;
+        for (const geo of PINE_CROWN) { const m = new THREE.Mesh(geo, needles); m.castShadow = true; g.add(m); }
+        const look = young ? { s: 0.5, lean: 0, yaw: hash2(x, y) * 6.28 } : grownLook(x, y);
         g.scale.set(look.s, look.s, look.s); g.rotation.y = look.yaw; g.rotation.z = look.lean;
         const px = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, young ? 1.2 : 3.2, 6), proxyMat);
         px.position.y = young ? 0.7 : 1.5; px.userData.pick = young ? { kind: 'plant', x, y } : { kind: 'node', i: core.idx(x, y) };
-        g.add(px); g.userData.px = px; g.userData.pine = kind; g.userData.young = young ? 1 : 0; g.userData.scale = look.s; proxies.push(px);
+        g.add(px); g.userData.px = px; g.userData.pine = 'P'; g.userData.young = young ? 1 : 0; g.userData.scale = look.s; proxies.push(px);
         g.position.set(x + 0.5, gy, y + 0.5); scene.add(g); return g;
       }
-      function addSprout(x, y, kind) {
+      function addSprout(x, y) {
         const k = x + ',' + y; if (sprouts.has(k)) return;
-        sprouts.set(k, addPine(x, y, true, kind));
+        sprouts.set(k, addPine(x, y, true));
       }
       function removeSprout(x, y) {
         const k = x + ',' + y, g = sprouts.get(k); if (!g) return;
         scene.remove(g); const i = proxies.indexOf(g.userData.px); if (i >= 0) proxies.splice(i, 1); sprouts.delete(k);
       }
       const grownTrees = new Map();
-      function addGrown(x, y, kind) {
+      function addGrown(x, y) {
         removeSprout(x, y);
         const k = x + ',' + y; if (grownTrees.has(k)) return;
-        grownTrees.set(k, addPine(x, y, false, kind));
+        grownTrees.set(k, addPine(x, y, false));
       }
       function removeGrown(x, y) {
         const k = x + ',' + y, g = grownTrees.get(k); if (!g) return;
@@ -2192,7 +2184,7 @@
         if (e.e === 'claim' && e.p === PID) { netSend({ C: e.g }); return; }
         if (e.e === 'xfire') { if (iHostAt(e.x, e.y)) core.hostFire(e.x, e.y, e.ticks, e.log); else netSend({ XF: [e.x, e.y, e.ticks, e.log] }); return; }
         if (e.e === 'xdrop') { if (iHostAt(e.x, e.y)) core.hostDrop(e); else netSend({ X: [e.id, e.n, e.x, e.y, e.life || 300, e.from ? toNet(e.from) : 0, e.diedAt || 0] }); return; }
-        if (e.e === 'xplant') { if (iHostAt(e.x, e.y)) core.hostPlant(e.x, e.y, e.p, e.sapling); else netSend({ XP: [e.x, e.y, e.p ? toNet(e.p) : 0, e.sapling || 'sapling'] }); return; }
+        if (e.e === 'xplant') { if (iHostAt(e.x, e.y)) core.hostPlant(e.x, e.y, e.p); else netSend({ XP: [e.x, e.y, e.p ? toNet(e.p) : 0] }); return; }
         if (e.e === 'xunplant') { if (iHostAt(e.x, e.y)) core.hostUnplant(e.x, e.y); else netSend({ XU: [e.x, e.y] }); return; }
         if (e.e === 'score' && e.key === 'chain_dragon' && hosted.has('dragonkeep')) { hsSend(); return; }
         if (!hosted.size) return;
@@ -2212,9 +2204,9 @@
           case 'weather': if (iHost(e.zone)) hostQ.push(['w', e.zone, e.kind, e.intensity, e.ticks]); break;
           case 'fx': if (mobIn(e.mob)) hostQ.push(['x', e.mob, e.fx, e.ticks]); break;
           case 'fxend': if (mobIn(e.mob)) hostQ.push(['xe', e.mob, e.fx]); break;
-          case 'plant': if (iHostAt(e.x, e.y)) hostQ.push(['pl', e.x, e.y, e.sapling || 'sapling']); break;
+          case 'plant': if (iHostAt(e.x, e.y)) hostQ.push(['pl', e.x, e.y]); break;
           case 'unplant': if (iHostAt(e.x, e.y)) hostQ.push(['pu', e.x, e.y]); break;
-          case 'grow': if (iHostAt(e.x, e.y)) hostQ.push(['pg', e.x, e.y, e.sapling || 'sapling']); break;
+          case 'grow': if (iHostAt(e.x, e.y)) hostQ.push(['pg', e.x, e.y]); break;
         }
       }
       function netAct() {   /* my current attack target, so the host (and any future host) knows what I'm doing */
@@ -2329,9 +2321,9 @@
         if (Array.isArray(d.M)) { const rows = d.M.filter(w => Array.isArray(w) && fromHostOf(id, mobArea(w[0]))); if (rows.length) coreCall(() => core.applyMobs(rows)); }
         if (Array.isArray(d.W) && fromHostOf(id, d.W[0])) coreCall(() => core.setWeather(d.W[0], String(d.W[1]), d.W[2] | 0, d.W[3] | 0));
         if (Array.isArray(d.Fi)) coreCall(() => { for (const f of d.Fi) if (fromHostOf(id, areaAt(f[1], f[2]))) core.fireAdd(f[0], f[1], f[2], f[3], f[4]); });
-        if (Array.isArray(d.XP) && iHostAt(d.XP[0], d.XP[1])) coreCall(() => core.hostPlant(d.XP[0] | 0, d.XP[1] | 0, fromNet(d.XP[2]), d.XP[3]));
+        if (Array.isArray(d.XP) && iHostAt(d.XP[0], d.XP[1])) coreCall(() => core.hostPlant(d.XP[0] | 0, d.XP[1] | 0, fromNet(d.XP[2])));
         if (Array.isArray(d.XU) && iHostAt(d.XU[0], d.XU[1])) coreCall(() => core.hostUnplant(d.XU[0] | 0, d.XU[1] | 0));
-        if (Array.isArray(d.Pl)) coreCall(() => { for (const r of d.Pl) if (fromHostOf(id, areaAt(r[0], r[1]))) core.acceptPlant(r[0] | 0, r[1] | 0, r[2] | 0, r[3] | 0, r[4]); });
+        if (Array.isArray(d.Pl)) coreCall(() => { for (const r of d.Pl) if (fromHostOf(id, areaAt(r[0], r[1]))) core.acceptPlant(r[0] | 0, r[1] | 0, r[2] | 0, r[3] | 0); });
         if (Array.isArray(d.G)) coreCall(() => {
           if (d.Gr && fromHostOf(id, d.Gr)) {
             if (d.Gend == null) core.groundFull(d.Gr, d.G);   /* a host from before the pile was sent in pieces */
@@ -2378,9 +2370,9 @@
           case 'n': { const g = core.S.ground.find(q => q.uid === a[1]); if (g) g.n = a[2]; break; }
           case 'e': handle({ e: 'mobeat', mob: a[1] }, now); break;
           case 'f': core.fireAdd(a[1], a[2], a[3], a[4], a[5]); break;
-          case 'pl': core.acceptPlant(a[1] | 0, a[2] | 0, 0, 0, a[3]); break;
+          case 'pl': core.acceptPlant(a[1] | 0, a[2] | 0, 0, 0); break;
           case 'pu': core.acceptUnplant(a[1] | 0, a[2] | 0); break;
-          case 'pg': core.acceptPlant(a[1] | 0, a[2] | 0, core.plantHour, 1, a[3]); break;
+          case 'pg': core.acceptPlant(a[1] | 0, a[2] | 0, core.plantHour, 1); break;
           case 'fo': core.fireOut(a[1]); break;
           case 'w': core.setWeather(a[1], String(a[2]), a[3] | 0, a[4] | 0); break;
           case 'x': core.applyFx(a[1], a[2], a[3]); break;

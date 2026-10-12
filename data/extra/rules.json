@@ -114,26 +114,6 @@
   "resist": 100,
   "buryTicks": 2,
   "bones": "bones",
-  "altarOffers": [
-   {
-    "bones": "dragon_bones",
-    "log": "logs",
-    "sapling": "yew_sapling",
-    "xp": 240
-   },
-   {
-    "bones": "big_bones",
-    "log": "logs",
-    "sapling": "oak_sapling",
-    "xp": 50
-   },
-   {
-    "bones": "bones",
-    "log": "logs",
-    "sapling": "sapling",
-    "xp": 15
-   }
-  ],
   "list": [
    {
     "id": "protect_from_melee",
@@ -178,11 +158,6 @@
     "icon": "magic"
    }
   ]
- },
- "saplings": {
-  "sapling": "P",
-  "oak_sapling": "O",
-  "yew_sapling": "Y"
  },
  "flags": {
   "gift_of_angels": {

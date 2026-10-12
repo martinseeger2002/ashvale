@@ -82,26 +82,9 @@
    "speed": 5,
    "aggro": 0,
    "respawn": 0,
-   "drops": [
-    {
-     "item": "oak_logs",
-     "one_in": 2,
-     "n": [
-      1,
-      2
-     ]
-    },
-    {
-     "item": "sapling",
-     "one_in": 8
-    },
-    {
-     "item": "brambleheart_maul",
-     "one_in": 64
-    }
-   ],
+   "drops": [],
    "gold": 0,
-   "bones": "bones",
+   "bones": null,
    "miss": 50,
    "anim": "crush",
    "look": "bramble",
@@ -126,30 +109,9 @@
    "speed": 4,
    "aggro": 0,
    "respawn": 0,
-   "drops": [
-    {
-     "item": "arrows_t1",
-     "one_in": 2,
-     "n": [
-      10,
-      20
-     ]
-    },
-    {
-     "item": "arrows_t2",
-     "one_in": 8,
-     "n": [
-      5,
-      10
-     ]
-    },
-    {
-     "item": "bow_evenflight",
-     "one_in": 64
-    }
-   ],
+   "drops": [],
    "gold": 0,
-   "bones": "bones",
+   "bones": null,
    "miss": 0,
    "anim": "bow",
    "look": "keel",
@@ -178,22 +140,9 @@
    "speed": 5,
    "aggro": 0,
    "respawn": 0,
-   "drops": [
-    {
-     "item": "potion",
-     "one_in": 2
-    },
-    {
-     "item": "prayer_potion",
-     "one_in": 8
-    },
-    {
-     "item": "staff_stillwind",
-     "one_in": 64
-    }
-   ],
+   "drops": [],
    "gold": 0,
-   "bones": "bones",
+   "bones": null,
    "miss": 0,
    "anim": "cast",
    "look": "gale",
@@ -216,17 +165,12 @@
   "chain_dragon": {
    "drops": [
     {
-     "item": "mithril_ore",
-     "one_in": 2,
-     "n": [2, 4]
+     "item": "dragon_cape",
+     "one_in": 10
     },
     {
      "any": ["helmet_t5", "body_t5", "legs_t5", "chain_t5", "shield_t5", "sword_t5", "dagger_t5", "longsword_t5", "mace_t5"],
-     "one_in": 8
-    },
-    {
-     "item": "dragon_cape",
-     "one_in": 32
+     "one_in": 10
     }
    ]
   }
