@@ -923,10 +923,12 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
         seen.add(k); st.push(b);
       }
     }
-    /* and that ground must run out into the world, not end at the nook: reach open map at least 18 tiles off */
+    /* and that ground must run out into the world, or have a deliberate passage out (the dragon keep's two-sided
+       ladder crosses a closed wall so ranged attacks cannot use its entrance as a firing slit) */
     const far = [...seen].some(k => { const [x, y] = k.split(',').map(Number); return Math.max(Math.abs(x - sp.x), Math.abs(y - sp.y)) >= 18 && stand.every(s => Math.max(Math.abs(s[0] - x), Math.abs(s[1] - y)) >= 3); });
+    const passage = cp.M.objects.some(o => o.to && seen.has(o.x + ',' + o.y) && !cp.M.blocked(o.to[0], o.to[1]) && !seen.has(o.to[0] + ',' + o.to[1]));
     const fromWorld = stand.some(s => seen.has(s.join(',')));
-    if (!far || !fromWorld) stranded.push(z.id + ' ' + sp.m + ' (' + sp.x + ',' + sp.y + ') stands in a pocket of ' + seen.size + ' tiles' +
+    if ((!far && !passage) || !fromWorld) stranded.push(z.id + ' ' + sp.m + ' (' + sp.x + ',' + sp.y + ') stands in a pocket of ' + seen.size + ' tiles' +
       (fromWorld ? '' : ' with nowhere to swing from') + (far ? '' : ' that never reaches open ground'));
   }
   ok(!stranded.length, 'every monster post that ships can be walked to and swung at' + (stranded.length ? ': ' + stranded.join(' | ') : ' (' + D.zones.reduce((n, z) => n + (z.spawns || []).length, 0) + ' posts)'));

@@ -1,5 +1,5 @@
 """Wooden dragon-killer sign outside the ruined keep: total slain and a top 10.
-   Serves nothing itself. The page is http://127.0.0.1:8099/ashvale3d.html
+   Serves nothing itself. The page is http://127.0.0.1:8731/dist/ashvale3d.html
 """
 import os
 from playwright.sync_api import sync_playwright
@@ -7,7 +7,7 @@ from playwright.sync_api import sync_playwright
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'tests', 'shots')
 os.makedirs(OUT, exist_ok=True)
-URL = 'http://127.0.0.1:8099/ashvale3d.html?fresh&nocreator&seed=dragonsign&go=-56,-93'
+URL = 'http://127.0.0.1:8731/dist/ashvale3d.html?fresh&nocreator&seed=dragonsign&go=-56,-93'
 ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
 fails = []
 
@@ -42,8 +42,8 @@ def main():
           c.scoreKill('chain_dragon', 'Wren');
           c.scoreKill('chain_dragon', 'Aldric');
           c.mergeScores('chain_dragon', { Maren: 4, Pip: 3, Iria: 2 });
-          ASH.teleport(-54, -92);
-          ASH.setCam(-0.45, 0.22, 8);
+          ASH.teleport(-54, -91);
+          ASH.setCam(-0.18, 0.46, 13);
           if (ASH.paintScores) ASH.paintScores();
           return {
             sign: o && { x: o.x, y: o.y, k: o.k, face: o.face },

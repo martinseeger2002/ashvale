@@ -6,8 +6,26 @@
       "y": -107,
       "w": 16,
       "h": 16,
-      "door": [-54, -95],
       "pole": [-54, -99]
+    },
+    {
+      "k": "keepladder",
+      "x": -54,
+      "y": -94,
+      "to": [-54, -96],
+      "name": "Ruined keep ladder",
+      "label": "Climb into the ruined keep",
+      "say": "You climb the outside ladder, cross the wall, and climb down into the ruined keep."
+    },
+    {
+      "k": "keepladder",
+      "x": -54,
+      "y": -96,
+      "to": [-54, -94],
+      "name": "Ruined keep ladder",
+      "label": "Climb out of the ruined keep",
+      "say": "You climb the inside ladder, cross the wall, and climb down outside the ruined keep.",
+      "visual": false
     },
     {
       "k": "wsign",

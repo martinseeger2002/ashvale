@@ -34,6 +34,9 @@ Last updated 2026-10-01.
 - **World:** "an open world with caves and tunnels and buildings, you can go inside of an NPC's [house]"; it starts
   "from a village and a first mission" and "will just keep expanding ... new towns and new buildings and new caves
   and things we haven't even thought of yet."
+- **Dragon ruins entrance (2026-10-11):** "enclose the ruins and have the entrance be a ladder up both sides to get in
+  and out - that way its not possible to only long range the dragon." The ruined keep has no open firing lane through
+  its wall: an outside and inside ladder form a two-sided stile, and climbing carries the player across the closed wall.
 - **Multiplayer:** see other players in the same places. It runs over the arcade's **peer-to-peer node mesh**
   (Arcade session; "no URLs", no central server). Proximity **voice chat** with an opt-in mic comes later.
 - **Devices:** "it needs to work on my iPhone 13. Or on a desktop."

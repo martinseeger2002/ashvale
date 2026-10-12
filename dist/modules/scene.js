@@ -897,8 +897,8 @@
               B.add('box', DK, x0 + tx + 0.55, yb + th + 0.28, z0 + tz - 0.2, 1.15, 0.55, 0.9);
               B.add('box', 0x6e6a62, x0 + tx, yb + th * 0.62, z0 + tz + 1.05, 0.55, 0.7, 0.12);
             }
-            const gap = o.door || [x0 + Math.floor(w / 2), z0 + h - 4];
-            const wall = (x, z, ww, dd, hh) => { if (Math.abs(x - gap[0]) < 1.2 && Math.abs(z - gap[1]) < 1.2) return; B.add('box', ST, x, yb + hh / 2, z, ww, hh, dd); };
+            const gap = o.door || null;
+            const wall = (x, z, ww, dd, hh) => { if (gap && Math.abs(x - gap[0]) < 1.2 && Math.abs(z - gap[1]) < 1.2) return; B.add('box', ST, x, yb + hh / 2, z, ww, hh, dd); };
             for (let i = 4; i < w - 4; i += 2) { wall(x0 + i + 0.5, z0 + 3.15, 1.7, 0.55, 2.2 + (i % 4)); wall(x0 + i + 0.5, z0 + h - 3.15, 1.7, 0.55, 1.6 + ((i + 2) % 5)); }
             for (let i = 4; i < h - 4; i += 2) { wall(x0 + 3.15, z0 + i + 0.5, 0.55, 1.7, 2.4 + (i % 3)); wall(x0 + w - 3.15, z0 + i + 0.5, 0.55, 1.7, 1.8 + ((i + 1) % 4)); }
             B.add('box', DK, x0 + 6.2, yb + 0.22, z0 + 6.4, 1.3, 0.36, 0.8);
@@ -906,6 +906,22 @@
             const px = (o.pole ? o.pole[0] : x0 + w / 2) + 0.5, pz = (o.pole ? o.pole[1] : z0 + h / 2) + 0.5, py = heightAt(px, pz);
             B.add('cyl', 0x2c2e32, px, py + 1.85, pz, 0.11, 3.7, 0.11);
             B.add('cyl', 0xc8ccd0, px, py + 3.55, pz, 0.28, 0.06, 0.28);
+            break;
+          }
+          case 'keepladder': {   /* a two-sided stile over the keep's closed wall: access without an arrow slit (the operator, 2026-10-11) */
+            if (o.visual !== false) {
+              const WOOD = 0x6b4528, DARK = 0x3f2a1b, top = y + 2.55;
+              for (const side of [-1, 1]) {
+                const z0 = z + side * 0.82;
+                for (const dx of [-0.34, 0.34]) B.add('box', WOOD, x + dx, y + 1.25, z0, 0.11, 2.7, 0.11, side * 0.31);
+                for (let k = 0; k < 7; k++) B.add('box', DARK, x, y + 0.34 + k * 0.34, z0 - side * k * 0.1, 0.82, 0.09, 0.12);
+              }
+              B.add('box', WOOD, x, top, z, 1.0, 0.16, 0.72);
+              B.add('box', DARK, x - 0.47, top + 0.42, z, 0.1, 0.85, 0.72);
+              B.add('box', DARK, x + 0.47, top + 0.42, z, 0.1, 0.85, 0.72);
+            }
+            const pk = new THREE.Mesh(new THREE.BoxGeometry(1.3, 2.8, 1.3), new THREE.MeshBasicMaterial({ visible: false }));
+            pk.position.set(x, y + 1.35, z); pk.userData.pick = { kind: 'passage', x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
             break;
           }
           case 'wsign': {   /* a wooden board nailed to posts on a wall (the ruined keep's dragon killers) */
