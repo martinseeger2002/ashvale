@@ -58,5 +58,23 @@ const bi = B.idx(open[0], open[1]);
 ok(B.S.plants[bi] && B.S.plants[bi].grown === 1 && !B.plantYoung(open[0], open[1]), 'the friend receives the grown pine and it does not come back up');
 B.acceptUnplant(open[0], open[1]);
 ok(B.S.plants[bi] && B.S.plants[bi].grown === 1, 'a grown pine is not pulled up');
+function growsAs(item, kind) {
+  const C = AshCore.create(D, { seed: 'sapling-' + item }), q = C.addPlayer('p', {});
+  C.grantItem('p', item, 1);
+  let at = null;
+  for (let y = -67; y <= -35 && !at; y++) for (let x = 181; x <= 213; x++) if (C.M.tileAt(x, y) === '.' && C.canPlant(q, x, y)) { at = [x, y]; break; }
+  if (!at) return false;
+  for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [-1, -1], [1, -1], [-1, 1]]) if (!C.M.blocked(at[0] + dx, at[1] + dy)) { q.x = at[0] + dx; q.y = at[1] + dy; break; }
+  q.path = []; q.act = null;
+  C.cmd('p', { c: 'plant', x: at[0], y: at[1] });
+  for (let i = 0; i < 8; i++) C.tick();
+  const rec = C.S.plants[C.idx(at[0], at[1])], snap = C.plantSnap(C.zoneOf(at[0], at[1]));
+  if (!rec || rec.sapling !== item || rec.tree !== kind || !snap.some(r => r[0] === at[0] && r[1] === at[1] && r[4] === item)) return false;
+  C.S.t += C.plantHour; C.tick();
+  const node = C.nodeAt(C.idx(at[0], at[1]));
+  return !!(node && node.kind === kind);
+}
+ok(growsAs('oak_sapling', 'O'), 'an oak sapling is preserved across the plant snapshot and grows into an oak');
+ok(growsAs('yew_sapling', 'Y'), 'a yew sapling is preserved across the plant snapshot and grows into a yew');
 console.log(fails ? fails + ' FAILED' : 'all passed');
 process.exit(fails ? 1 : 0);

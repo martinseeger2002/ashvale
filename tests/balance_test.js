@@ -144,6 +144,18 @@ p.x = 198; p.y = 12; p.path = []; p.act = null;
 core.cmd('p1', { c: 'offer', x: 198, y: 11 });
 ticks(1);
 ok(core.invCount(p, 'logs') === logs0 && core.invCount(p, 'bones') === bones0 && core.invCount(p, 'sapling') === sap0 + 1 && p.xp.prayer === xpAltar + 150, 'the altar trades one log and bones for a sapling and 15 Prayer XP');
+let altarXp = p.xp.prayer, oak0 = core.invCount(p, 'oak_sapling');
+core.grantItem('p1', 'logs', 1);
+core.grantItem('p1', 'big_bones', 1);
+core.cmd('p1', { c: 'offer', x: 198, y: 11 });
+ticks(1);
+ok(core.invCount(p, 'big_bones') === 0 && core.invCount(p, 'oak_sapling') === oak0 + 1 && p.xp.prayer === altarXp + 500, 'big bones become an oak sapling and award 50 Prayer XP');
+altarXp = p.xp.prayer; const yew0 = core.invCount(p, 'yew_sapling');
+core.grantItem('p1', 'logs', 1);
+core.grantItem('p1', 'dragon_bones', 1);
+core.cmd('p1', { c: 'offer', x: 198, y: 11 });
+ticks(1);
+ok(core.invCount(p, 'dragon_bones') === 0 && core.invCount(p, 'yew_sapling') === yew0 + 1 && p.xp.prayer === altarXp + 2400, 'dragon bones become a yew sapling and award 240 Prayer XP');
 
 dlg = talk('vael');
 ok(dlg && /Red Pyre/.test(dlg.lines.join(' ')) && !p.quests.even_guard, 'without the Red Pyre he will not call the three');

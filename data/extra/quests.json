@@ -499,7 +499,8 @@
       {
        "m": "gale",
        "x": 200,
-       "y": -49
+       "y": -49,
+       "loot": true
       },
       {
        "m": "keel",
@@ -507,12 +508,14 @@
        "y": -49,
        "carry": {
         "arrows_t1": 400
-       }
+       },
+       "loot": true
       },
       {
        "m": "bramble",
        "x": 199,
-       "y": -54
+       "y": -54,
+       "loot": true
       }
      ],
      "pray": 15,

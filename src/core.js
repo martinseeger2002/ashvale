@@ -100,6 +100,10 @@
     /* items arrive in ASHVALE ITEM SCHEMA v1 (the inscription JSON); everything the rules need is derived here from
        category/subcategory + attributes through the tables in rules.json "items" (no per-item code anywhere) */
     const IT = {}; for (const k in D.items) IT[k] = normItem(k, D.items[k], RU.items);
+    const SAPLINGS = RU.saplings || { sapling: 'P' };
+    const ALTAR_OFFERS = (RU.prayer && RU.prayer.altarOffers) || [{ bones: 'bones', log: 'logs', sapling: 'sapling', xp: 15 }];
+    const isSapling = id => !!(id && SAPLINGS[id]);
+    const saplingKind = id => SAPLINGS[id] || 'P';
     /* town portals (2026-10-04): rules.portals, one standing-stone ring per town; use one to travel to another */
     const PORTALS = (RU.portals || []).filter(P => P && P.id && Array.isArray(P.to));
     const portalOf = id => PORTALS.find(P => P.id === id) || null;
@@ -820,12 +824,14 @@
           if (!n || n.kind !== 'altar' || n.chapel !== 'ancient') { msg(p, 'There is no altar here.'); break; }
           if (!inReach(p.x, p.y, x, y, 1)) { msg(p, "I can't reach that!", 'warn'); break; }
           if (!questFinished(p, 'even_grove')) { msg(p, 'The altar will not trade until the grove is planted.', 'warn'); break; }
-          if (invCount(p, 'logs') < 1 || invCount(p, 'bones') < 1) { msg(p, 'The altar wants one log and some bones.', 'warn'); break; }
-          removeItem(p, 'logs', 1); removeItem(p, 'bones', 1);
-          if (addItem(p, 'sapling', 1)) dropGround('sapling', 1, p.x, p.y, p.id, 600);
-          addXp(p, 'prayer', 150);
-          msg(p, 'The altar takes the log and the bones. You receive a sapling.', 'quest');
-          msg(p, 'You gain 15 Prayer XP.', 'quest');
+          const offer = ALTAR_OFFERS.find(o => o && IT[o.bones] && IT[o.sapling] && invCount(p, o.bones) > 0 && invCount(p, o.log || 'logs') > 0);
+          if (!offer) { msg(p, 'The altar wants one log and some bones.', 'warn'); break; }
+          const log = offer.log || 'logs';
+          removeItem(p, log, 1); removeItem(p, offer.bones, 1);
+          if (addItem(p, offer.sapling, 1)) dropGround(offer.sapling, 1, p.x, p.y, p.id, 600);
+          addXp(p, 'prayer', Math.round((offer.xp || 0) * 10));
+          msg(p, 'The altar takes the log and the bones. You receive ' + (/^[aeiou]/i.test(IT[offer.sapling].name) ? 'an ' : 'a ') + IT[offer.sapling].name.toLowerCase() + '.', 'quest');
+          msg(p, 'You gain ' + (offer.xp || 0) + ' Prayer XP.', 'quest');
           ev({ e: 'inv', p: p.id });
           break;
         }
@@ -833,7 +839,7 @@
           const u = p.using, it = u && p.inv[u.slot];
           if (!u || !it || it.id !== u.id) { clearUsing(p); break; }
           const d = IT[it.id];
-          if (it.id === 'sapling') { p.act = { k: 'plant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); clearUsing(p); break; }
+          if (isSapling(it.id)) { p.act = { k: 'plant', x: c.x | 0, y: c.y | 0 }; p.skilling = null; p.path = []; closeShop(p); clearUsing(p); break; }
           if (d.tool) { msg(p, 'Use it on a ' + (d.tool === 'woodcutting' ? 'tree' : d.tool === 'mining' ? 'rock' : 'fishing spot') + '.'); clearUsing(p); break; }
           msg(p, 'Nothing interesting happens.'); clearUsing(p); break;
         }
@@ -909,7 +915,7 @@
         p.using = null; msg(p, 'You put the ' + d.name.toLowerCase() + ' away.'); ev({ e: 'using', p: p.id }); return;
       }
       p.using = { slot, id: s.id }; ev({ e: 'using', p: p.id });
-      if (s.id === 'sapling') msg(p, 'The sapling is outlined. Click grass to plant it. You can pick it up for one hour; after that, grass grows a tree that stays. Not on a path, not inside a town, and not within ten tiles of a person or an entrance.');
+      if (isSapling(s.id)) msg(p, 'The ' + d.name.toLowerCase() + ' is outlined. Click grass to plant it. You can pick it up for one hour; after that, it grows into a permanent ' + (RU.nodes[saplingKind(s.id)] || { name: 'tree' }).name.toLowerCase() + '. Not on a path, not inside a town, and not within ten tiles of a person or an entrance.');
       else if (d.tool) msg(p, 'The ' + d.name.toLowerCase() + ' is outlined. Click a ' + (d.tool === 'woodcutting' ? 'tree' : d.tool === 'mining' ? 'rock' : 'fishing spot') + ' to use it.');
       else msg(p, 'The ' + d.name.toLowerCase() + ' is outlined. Click what you want to use it on.');
     }
@@ -1181,12 +1187,12 @@
       for (const pid of S.order) { const o = S.players[pid]; if (o.act && o.act.k === 'attack' && o.act.uid === m.uid) o.act = null; }
     }
     function mobDrops(m) {
-      if (m.summon) return;   /* a summoned fight leaves nothing on the ground */
       const md = MON[m.key], owner = m.killer;
+      if (m.summon && !m.summonLoot) return;   /* called fighters only leave configured loot when their bout opts in */
       if (md.gold) dropGround('coins', md.gold, m.x, m.y, owner, 300);
       const bn = md.bones === undefined ? PRAY.bones : md.bones; if (bn && IT[bn]) dropGround(bn, 1, m.x, m.y, owner, 300);   /* every monster leaves bones (2026-10-07) */
-      for (const k in m.carry || {}) if (m.carry[k] > 0 && IT[k]) dropGround(k, m.carry[k], m.x, m.y, owner, 300);
-      for (const d of md.drops) if (!(m.carry0 && d.item && (d.item in m.carry0)) && R.int(d.one_in) === 0) {
+      if (!m.summon) for (const k in m.carry || {}) if (m.carry[k] > 0 && IT[k]) dropGround(k, m.carry[k], m.x, m.y, owner, 300);   /* a summoned archer's combat supply is not loot */
+      for (const d of md.drops) if (!(m.carry0 && !m.summon && d.item && (d.item in m.carry0)) && R.int(d.one_in) === 0) {
         const id = d.any && d.any.length ? d.any[R.int(d.any.length)] : d.item;
         if (!id || !IT[id]) continue;
         const n = d.n ? d.n[0] + R.int(d.n[1] - d.n[0] + 1) : 1; dropGround(id, n, m.x, m.y, owner, 300);
@@ -1826,7 +1832,7 @@
         const md = MON[sp.m]; if (!md) continue;
         const uid = S.uid++;
         const mob = { uid, key: sp.m, x: sp.x, y: sp.y, sx: sp.x, sy: sp.y, hp: md.hp, tgt: p.id, atk: 0, dead: 0, back: 0, face: 2, step: 0, zone: M.zoneAt(sp.x, sp.y),
-          carry0: sp.carry || null, carry: sp.carry ? Object.assign({}, sp.carry) : null, summon: 1, owner: p.id, home: home };
+          carry0: sp.carry || null, carry: sp.carry ? Object.assign({}, sp.carry) : null, summon: 1, summonLoot: !!sp.loot, owner: p.id, home: home };
         S.mobs.push(mob); ev({ e: 'mobadd', mob: uid }); n++;
       }
       if (n) msg(p, 'They step out of the wind. Stay within fifty tiles of the rope, and do not fall.', 'warn');
@@ -1918,7 +1924,7 @@
       return null;
     }
     function canPlant(p, x, y) {
-      if (invCount(p, 'sapling') < 1) return false;
+      if (saplingSlot(p) < 0) return false;
       const i = idx(x, y);
       if (S.plants[i]) return false;
       if (isWood(x, y) && !S.dep[i]) return false;
@@ -1926,13 +1932,17 @@
       if (plantWhy(x, y)) return false;
       return true;
     }
+    function saplingSlot(p) {
+      let slot = p.using && p.inv[p.using.slot] && isSapling(p.inv[p.using.slot].id) ? p.using.slot : -1;
+      if (slot < 0) for (let k = 0; k < p.inv.length; k++) if (p.inv[k] && isSapling(p.inv[k].id)) { slot = k; break; }
+      return slot;
+    }
     function takeSapling(p) {
-      let slot = p.using && p.inv[p.using.slot] && p.inv[p.using.slot].id === 'sapling' ? p.using.slot : -1;
-      if (slot < 0) for (let k = 0; k < p.inv.length; k++) if (p.inv[k] && p.inv[k].id === 'sapling') { slot = k; break; }
-      if (slot < 0) return false;
-      const s = p.inv[slot]; if (s.n > 1) s.n--; else p.inv[slot] = null;
+      const slot = saplingSlot(p);
+      if (slot < 0) return null;
+      const s = p.inv[slot], id = s.id; if (s.n > 1) s.n--; else p.inv[slot] = null;
       if (p.using && p.using.slot === slot && !p.inv[slot]) { p.using = null; ev({ e: 'using', p: p.id }); }
-      return true;
+      return id;
     }
     function plantAt(p, x, y) {
       if (!canPlant(p, x, y)) { msg(p, (isWood(x, y) && !canReplant(p) ? 'You have not learned to set a shoot in a stump.' : null) || stumpWhy(p, x, y) || plantWhy(x, y) || 'That ground will not take a shoot.', 'warn'); return; }
@@ -1949,12 +1959,12 @@
       const near = job && job.st.near;
       const inGrove = !near || cheb(x, y, near[0], near[1]) <= (near[2] == null ? 16 : near[2]);
       const count = !!(job && ((job.st.goal.plant === 'stump' && onStump) || (job.st.goal.plant === 'open' && !onStump && inGrove)));
-      if (!takeSapling(p)) return;
-      const rec = { x, y, at: S.t, tile: M.tileAt(x, y), stump: 0, owner: p.id, grown: 0 };
+      const sapling = takeSapling(p); if (!sapling) return;
+      const rec = { x, y, at: S.t, tile: M.tileAt(x, y), stump: 0, owner: p.id, grown: 0, sapling, tree: saplingKind(sapling) };
       if (count) { rec.qid = job.qid; rec.step = job.q.step; rec.counted = 1; }
       S.plants[i] = rec;
-      ev({ e: 'plant', x, y, p: p.id });
-      if (!isAuth(zoneOf(x, y))) ev({ e: 'xplant', x, y, p: p.id });
+      ev({ e: 'plant', x, y, p: p.id, sapling, tree: rec.tree });
+      if (!isAuth(zoneOf(x, y))) ev({ e: 'xplant', x, y, p: p.id, sapling });
       if (cleared) msg(p, 'You plant the sapling in the new grass. You can pick it up for one hour. After that, it grows into a tree and stays.');
       else msg(p, 'You plant the sapling in the grass. You can pick it up for one hour. After that, it grows into a tree and stays.');
       if (job && rec.counted) {
@@ -1967,7 +1977,7 @@
       const i = idx(x, y), pl = S.plants[i];
       if (!pl || pl.grown || S.t - pl.at >= 6000) { msg(p, 'The roots have taken. It will not come back up.', 'warn'); return; }
       delete S.plants[i];
-      addItem(p, 'sapling', 1);
+      addItem(p, pl.sapling || 'sapling', 1);
       if (pl.qid && p.quests[pl.qid]) {
         const q = p.quests[pl.qid], Q = D.quests.quests[pl.qid], st = Q && Q.steps[q.step - 1];
         if (pl.counted && q.step === pl.step && st && st.goal && st.goal.plant && (q.n | 0) > 0) q.n--;
@@ -1977,13 +1987,14 @@
       if (!isAuth(zoneOf(x, y))) ev({ e: 'xunplant', x, y, p: p.id });
       msg(p, 'You pick the sapling back up.');
     }
-    function hostPlant(x, y, pid) {
+    function hostPlant(x, y, pid, sapling) {
       if (!inMap(x, y) || !isAuth(zoneOf(x, y))) return;
       const i = idx(x, y);
       if (S.plants[i] || plantWhy(x, y)) return;
       if (isWood(x, y) && !S.dep[i]) return;
-      S.plants[i] = { x, y, at: S.t, tile: M.tileAt(x, y), stump: 0, owner: pid || 0, grown: 0 };
-      ev({ e: 'plant', x, y, p: pid || 0 });
+      sapling = isSapling(sapling) ? sapling : 'sapling';
+      S.plants[i] = { x, y, at: S.t, tile: M.tileAt(x, y), stump: 0, owner: pid || 0, grown: 0, sapling, tree: saplingKind(sapling) };
+      ev({ e: 'plant', x, y, p: pid || 0, sapling, tree: saplingKind(sapling) });
     }
     function hostUnplant(x, y) {
       if (!inMap(x, y) || !isAuth(zoneOf(x, y))) return;
@@ -1997,23 +2008,23 @@
       for (const k in S.plants) {
         const pl = S.plants[k];
         if (!pl || (area && zoneOf(pl.x, pl.y) !== area)) continue;
-        rows.push([pl.x, pl.y, Math.max(0, S.t - pl.at), pl.grown ? 1 : 0]);
+        rows.push([pl.x, pl.y, Math.max(0, S.t - pl.at), pl.grown ? 1 : 0, pl.sapling || 'sapling']);
       }
       return rows;
     }
-    function acceptPlant(x, y, age, grown) {
+    function acceptPlant(x, y, age, grown, sapling) {
       if (!inMap(x, y) || isAuth(zoneOf(x, y))) return;
-      const i = idx(x, y);
+      const i = idx(x, y); sapling = isSapling(sapling) ? sapling : 'sapling'; const tree = saplingKind(sapling);
       if (grown) {
         if (S.plants[i] && S.plants[i].grown) return;
-        if (M.growTree) M.growTree(x, y);
-        S.plants[i] = { x, y, at: S.t - (age | 0), tile: '.', stump: 0, owner: 0, grown: 1 };
-        ev({ e: 'grow', x, y, node: i });
+        if (M.growTree) M.growTree(x, y, tree);
+        S.plants[i] = { x, y, at: S.t - (age | 0), tile: '.', stump: 0, owner: 0, grown: 1, sapling, tree };
+        ev({ e: 'grow', x, y, node: i, sapling, tree });
         return;
       }
       if (S.plants[i]) return;
-      S.plants[i] = { x, y, at: S.t - (age | 0), tile: M.tileAt(x, y), stump: 0, owner: 0, grown: 0 };
-      ev({ e: 'plant', x, y });
+      S.plants[i] = { x, y, at: S.t - (age | 0), tile: M.tileAt(x, y), stump: 0, owner: 0, grown: 0, sapling, tree };
+      ev({ e: 'plant', x, y, sapling, tree });
     }
     function acceptUnplant(x, y) {
       if (!inMap(x, y) || isAuth(zoneOf(x, y))) return;
@@ -3334,7 +3345,7 @@
         const own = S.players[m.owner], home = m.home || [m.sx, m.sy, 50];
         const left = !own || !!own.dead || cheb(own.x, own.y, home[0], home[1]) > (home[2] || 50);
         if (left || m.gone) { if (!m.gone) dismissSummon(m); return; }
-        if (m.dead) return;
+        if (m.dead) { if (m.summonLoot && m.dropAt && S.t >= m.dropAt) { m.dropAt = 0; mobDrops(m); } return; }
         m.tgt = own.id; m.back = 0;
       }
       if (!isAuth(m.zone)) return;
@@ -3471,9 +3482,9 @@
           if (owner) msg(owner, 'The stump has grown back into a tree.', 'info');
         } else if (pl.tile === '.') {
           if (S.cleared[k] && M.growTree) { delete S.cleared[k]; }
-          if (M.growTree) M.growTree(pl.x, pl.y);
+          if (M.growTree) M.growTree(pl.x, pl.y, pl.tree || saplingKind(pl.sapling));
           pl.grown = 1;
-          ev({ e: 'grow', x: pl.x, y: pl.y, node: +k });
+          ev({ e: 'grow', x: pl.x, y: pl.y, node: +k, sapling: pl.sapling || 'sapling', tree: pl.tree || 'P' });
           if (owner) msg(owner, 'The sapling has grown into a tree. It stands there for good.', 'info');
         } else { pl.grown = 1; if (owner) msg(owner, 'The shoot has rooted. It will not come back out of the ground.', 'info'); }
       }

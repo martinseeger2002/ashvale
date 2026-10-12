@@ -200,7 +200,7 @@
       /* deposits happen by themselves (the operator: "remove that 'put in my wallet' option ... they could cause duplications"):
          whatever you carry that the wallet does not hold yet goes to the Bank within seconds; a kind the Bank refused waits ten minutes */
       let depT = 0;
-      function depositSoon() { if (!WAL || depT) return; depT = setTimeout(() => { depT = 0; if (bank.busy || !walletState.data || !walletState.address) return; const C = chestState(); if (Object.keys(C.loose).length) chestDeposit(); }, 2000); }
+      function depositSoon() { if (!WAL || depT) return; depT = setTimeout(() => { depT = 0; if (bank.busy || !walletState.data || !walletState.address) return; const C = chestState(); if (Object.keys(C.loose).length) chestDeposit(); }, 15000); }   /* [Claude 2026-10-12] 15 s, not 2: a mining run deposits once, not once per ore (the operator: 722 pending items) */
       setInterval(() => {
         if (!WAL || bank.busy || !walletState.data || !walletState.address) return;
         const C = chestState(); if (Object.keys(C.loose).length) chestDeposit();

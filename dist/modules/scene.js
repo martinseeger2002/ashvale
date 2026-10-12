@@ -1519,17 +1519,18 @@
             /* [Claude 2026-10-11] a candle wheel over the felt (the operator: the light should flicker like candles): an iron ring on
                three chains, six tallow candles, their flames one group so the torch loop makes them gutter; at the front of
                `torches` so it takes one of the region's two warm lights, whose intensity flickers like a candle below */
-            const wheel = new THREE.Group(); wheel.position.set(x, top + 1.05, z); into.add(wheel);
+            /* [Claude 2026-10-12] a storey is 1.8 m: the wheel hangs at 1.3 m over the floor (felt top + 0.55) and its chains end under the
+               ceiling - it had reached up through the third floor (the operator: "the chandeliers ... are visible on the third story floor") */
+            const wheel = new THREE.Group(); wheel.position.set(x, top + 0.55, z); into.add(wheel);
             wheel.add(mesh(new THREE.TorusGeometry(0.42, 0.022, 6, 20), 0x2a2622, 0, 0, 0)); wheel.children[0].rotation.x = Math.PI / 2;
-            for (let k = 0; k < 3; k++) { const a = k * Math.PI * 2 / 3, ch = mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.9, 4), 0x3a3632, Math.cos(a) * 0.21, 0.45, Math.sin(a) * 0.21); ch.rotation.z = -Math.cos(a) * 0.46; ch.rotation.x = Math.sin(a) * 0.46; wheel.add(ch); }
-            wheel.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.5, 4), 0x3a3632, 0, 1.12, 0));
+            for (let k = 0; k < 3; k++) { const a = k * Math.PI * 2 / 3, ch = mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.46, 4), 0x3a3632, Math.cos(a) * 0.21, 0.23, Math.sin(a) * 0.21); ch.rotation.z = -Math.cos(a) * 0.9; ch.rotation.x = Math.sin(a) * 0.9; wheel.add(ch); }
             const flames = new THREE.Group(); wheel.add(flames);
             for (let k = 0; k < 6; k++) {
               const a = k * Math.PI / 3 + 0.3, cx = Math.cos(a) * 0.42, cz = Math.sin(a) * 0.42, h = 0.09 + hash2(o.x + k, o.y) * 0.06;
               wheel.add(mesh(new THREE.CylinderGeometry(0.018, 0.02, h, 6), 0xf1e6c4, cx, h / 2 + 0.01, cz));
               const f = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.055, 5), new THREE.MeshBasicMaterial({ color: 0xffd060 })); f.position.set(cx, h + 0.035, cz); flames.add(f);
             }
-            torches.unshift({ f: flames, ph: hash2(o.x, o.y) * 10, x, y: top - 0.35, z, night: false, tend: false, tx: o.x, ty: o.y, candle: true });
+            torches.unshift({ f: flames, ph: hash2(o.x, o.y) * 10, x, y: top - 0.8, z, night: false, tend: false, tx: o.x, ty: o.y, candle: true });   /* the light sits at the flames (y + 1.5) */
             const mat = new THREE.MeshBasicMaterial({ map: cardKit(), side: THREE.DoubleSide });
             mat.userData.shared = true;   /* the atlas is one for the whole game - dispose() must not take it with this region */
             const gg = new THREE.Group(); into.add(gg);
