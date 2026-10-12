@@ -80,10 +80,10 @@
   /* ---- a table -------------------------------------------------------------------------------------------- */
   function table(opts) {
     const O = opts || {}, rnd = O.int || ((n) => Math.floor(Math.random() * n));
-    const SB = O.small || 10, BB = O.big || SB * 2;
+    const SB = O.small || 10, BB = O.big || SB * 2, RAKE = Math.max(0, Math.min(0.5, +O.rake || 0));   /* [Claude 2026-10-11] the house's cut of every pot (the operator: 10%, to the @ashvale bank) */
     const T = {
       id: O.id || 'poker', seats: [], board: [], deck: [], street: 'none', pot: 0, bet: 0, minRaise: BB,
-      dealer: -1, hand: 0, toAct: -1, status: 'open', result: null, log: [], small: SB, big: BB, sbSeat: -1, bbSeat: -1
+      dealer: -1, hand: 0, toAct: -1, status: 'open', result: null, log: [], small: SB, big: BB, sbSeat: -1, bbSeat: -1, rake: RAKE, raked: 0
     };
     T.say = (text, by) => { T.log.push({ t: text, by: by || '' }); if (O.tell) O.tell(text, by || ''); return T; };
 
@@ -126,7 +126,7 @@
         T.say((name || 'A player') + ' gets up - their hand is folded.', 'sys');
         s.folded = true; afterAction();
       }
-      s.in = false; s.id = null; s.name = null; s.hole = null; s.bet = 0; s.folded = false; s.allin = false; s.out = false;
+      s.in = false; s.id = null; s.name = null; s.hole = null; s.bet = 0; s.folded = false; s.allin = false; s.out = false; s.pk = null;
       return T;
     };
 
@@ -276,7 +276,7 @@
       const pots = [];
       if (left.length <= 1) {   /* nobody to show down against - the pot, uncalled money included, goes across */
         const w = left[0] || who.find(s => !s.folded);
-        if (w && T.pot > 0) { w.chips += T.pot; w.won += T.pot; pots.push({ amount: T.pot, win: [w.ref], who: [w.name], note: 'uncontested' }); }
+        if (w && T.pot > 0) { const cut = Math.floor(T.pot * (T.rake || 0)), paid = T.pot - cut; T.raked = (T.raked | 0) + cut; w.chips += paid; w.won += paid; pots.push({ amount: paid, rake: cut, win: [w.ref], who: [w.name], note: 'uncontested' }); }
       } else {
         const lv = []; for (const s of who) if (s.committed > 0 && lv.indexOf(s.committed) < 0) lv.push(s.committed);
         lv.sort((a, b) => a - b);
@@ -289,6 +289,7 @@
         let sum = 0; for (const p of pots) sum += p.amount;
         if (sum !== T.pot && pots.length) pots[pots.length - 1].amount += T.pot - sum;   /* never lose a chip to rounding */
         for (const p of pots) {
+          const cut = Math.floor(p.amount * (T.rake || 0)); p.rake = cut; p.amount -= cut; T.raked = (T.raked | 0) + cut;   /* [Claude] the house's cut, before the pot is shared */
           const e = p.elig && p.elig.length ? p.elig : left.slice(0, 1);
           let top = -1; for (const s of e) if (s.score > top) top = s.score;
           const w = e.filter(s => s.score === top);
@@ -301,12 +302,13 @@
         for (const s of left.slice().sort((a, b) => b.score - a.score))
           T.say((s.name || 'A player') + ': ' + s.hole.map(cname).join(' ') + ' - ' + describe(s.rank) + '.', 'sys');
       }
-      const total = pots.reduce((a, p) => a + p.amount, 0);
+      const total = pots.reduce((a, p) => a + p.amount, 0), raked = pots.reduce((a, p) => a + (p.rake | 0), 0);
       T.say(pots.map((p, i) => (pots.length > 1 ? 'Pot ' + (i + 1) + ' of ' + p.amount + ' to ' : 'The pot (' + p.amount + ') to ') +
-        (p.who || []).join(' and ') + (p.note ? ' - ' + p.note : (p.who || []).length > 1 ? ' (split)' : '')).join('. '), 'sys');
+        (p.who || []).join(' and ') + (p.note ? ' - ' + p.note : (p.who || []).length > 1 ? ' (split)' : '')).join('. ') + (raked > 0 ? ' The house takes ' + raked + '.' : ''), 'sys');
       T.pot = 0;
       for (const s of dealt()) s.bet = 0;   /* what was in front of a seat is in the pot, and the pot is paid out */
-      T.result = { hand: T.hand, pots, total, contested: left.length > 1 };
+      T.result = { hand: T.hand, pots, total, raked, contested: left.length > 1,
+        shown: left.length > 1 ? left.slice().sort((a, b) => b.score - a.score).map(s => [s.ref | 0, s.hole[0] | 0, s.hole[1] | 0, s.rank ? s.rank.name : 'no hand']) : [] };   /* [Claude 2026-10-11] face up at the showdown (the operator) */
       T.status = seated().length >= 2 ? 'playing' : 'open';
       for (const s of seated()) if (s.chips <= 0) T.say((s.name || 'A player') + ' has nothing left to play with.', 'sys');
       return { ok: true, end: true, result: T.result };

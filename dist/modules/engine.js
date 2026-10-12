@@ -265,9 +265,48 @@
          preview ?home=ziibiing does the same */
       if (HOME && core.setNewHome) core.setNewHome(HOME);
       const me = core.addPlayer(PID, save);
+      /* [Claude 2026-10-12] PRIVATE HOLE CARDS (the operator). The mesh is broadcast-only, so secrecy is made here: every game holds an
+         ECDH P-256 key for the session; a sitter's public key rides with the sit (cmd pk -> PS) and lives on the dealer's seat;
+         the dealer seals each seat's two cards with AES-GCM under ECDH(dealer, seat) and puts only the sealed blobs in the row
+         (hk = the dealer's public key); a replica opens its own and hands the two numbers to its core (pokerOpen). A seat without
+         a key (no WebCrypto) gets its cards plain, as before - only that seat's. The showdown is public (r.sd), as it should be. */
+      const CRY = (typeof globalThis !== 'undefined' && globalThis.crypto) || null, SUBTLE = CRY && CRY.subtle ? CRY.subtle : null;
+      const B64 = { enc: b => btoa(String.fromCharCode.apply(null, new Uint8Array(b))), dec: s => Uint8Array.from(atob(s), c => c.charCodeAt(0)) };
+      let MYKEY = null, MYPK = '';
+      /* P-256 points travel compressed (33 bytes, 44 chars): the room's messages are 512 B, a dealer's row cannot carry 65-byte keys */
+      const P256 = { p: (1n << 256n) - (1n << 224n) + (1n << 192n) + (1n << 96n) - 1n, b: 0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604bn };
+      const bnOf = u8 => { let n = 0n; for (const b of u8) n = (n << 8n) | BigInt(b); return n; }, u8Of = (n, len) => { const o = new Uint8Array(len); for (let i = len - 1; i >= 0; i--) { o[i] = Number(n & 255n); n >>= 8n; } return o; };
+      const modPow = (b, e, m) => { let r = 1n; b %= m; while (e > 0n) { if (e & 1n) r = r * b % m; b = b * b % m; e >>= 1n; } return r; };
+      const compress = raw => { const u = new Uint8Array(raw); const o = new Uint8Array(33); o[0] = 2 + (u[64] & 1); o.set(u.slice(1, 33), 1); return B64.enc(o); };
+      const decompress = s => { const c = B64.dec(s); if (c.length === 65) return c; const x = bnOf(c.slice(1)), p = P256.p; let y = modPow((x * x * x - 3n * x + P256.b) % p, (p + 1n) / 4n, p); if ((y & 1n) !== BigInt(c[0] & 1)) y = p - y; const o = new Uint8Array(65); o[0] = 4; o.set(u8Of(x, 32), 1); o.set(u8Of(y, 32), 33); return o; };
+      if (SUBTLE) SUBTLE.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']).then(async k => { MYKEY = k; MYPK = compress(await SUBTLE.exportKey('raw', k.publicKey)); }).catch(() => { MYKEY = null; MYPK = ''; });
+      const AESK = new Map(), SEALED = new Map(), OPENED = new Map(), SEALING = new Set();
+      async function aesFor(peerPk) {
+        if (AESK.has(peerPk)) return AESK.get(peerPk);
+        const pub = await SUBTLE.importKey('raw', decompress(peerPk), { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+        const bits = await SUBTLE.deriveBits({ name: 'ECDH', public: pub }, MYKEY.privateKey, 256);
+        const key = await SUBTLE.importKey('raw', await SUBTLE.digest('SHA-256', bits), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+        AESK.set(peerPk, key); return key;
+      }
+      const sealTag = (t, h, ref) => new TextEncoder().encode(String(t) + '|' + (h | 0) + '|' + (ref | 0));
+      /* the nonce is the tag's hash: one (table, hand, seat) is sealed once under one pair key, so it never repeats; 18-byte blobs */
+      const ivOf = async (t, h, ref) => new Uint8Array(await SUBTLE.digest('SHA-256', sealTag(t, h, ref))).slice(0, 12);
+      async function sealCards(t, h, ref, c1, c2, peerPk) {
+        const key = await aesFor(peerPk), iv = await ivOf(t, h, ref);
+        return B64.enc(new Uint8Array(await SUBTLE.encrypt({ name: 'AES-GCM', iv, additionalData: sealTag(t, h, ref) }, key, new Uint8Array([c1 & 255, c2 & 255]))));
+      }
+      async function openCards(t, h, ref, blob, hostPk) {
+        const key = await aesFor(hostPk), iv = await ivOf(t, h, ref);
+        const pt = new Uint8Array(await SUBTLE.decrypt({ name: 'AES-GCM', iv, additionalData: sealTag(t, h, ref) }, key, B64.dec(blob)));
+        return [pt[0], pt[1]];
+      }
+      const PH = {}, PH_SENT = {};   /* the dealer's sealed set per table: {h, items: [[ref, blob]...]} - sent on its own small message (Ph) */
+      function phSend(t, force) { const P = PH[t]; if (!P || !P.done) return; const now = performance.now(); if (!force && now - (PH_SENT[t] || 0) < 3000) return; PH_SENT[t] = now; netSend({ Ph: [t, P.h, MYPK, P.items] }); }
+      const bounded = (m, n) => { while (m.size > n) m.delete(m.keys().next().value); };
       const SCORE_KEY = 'ashvale3d.scores.v1';
-      try { const j = JSON.parse(store.get(SCORE_KEY) || '{}'); if (j && j.chain_dragon) core.mergeScores('chain_dragon', j.chain_dragon); } catch (e) { /* a bad local board */ }
-      if (me.kills && me.kills.chain_dragon && me.name && me.name !== 'Adventurer') core.mergeScores('chain_dragon', { [me.name]: me.kills.chain_dragon });
+      const SCORE_KEYS = ['chain_dragon', 'chess_wins'], SCORE_BOARD = { chain_dragon: 'dragon', chess_wins: 'chess' };   /* [Claude 2026-10-11] score key -> the sign it paints */
+      try { const j = JSON.parse(store.get(SCORE_KEY) || '{}'); for (const k of SCORE_KEYS) if (j && j[k]) core.mergeScores(k, j[k]); } catch (e) { /* a bad local board */ }
+      for (const k of SCORE_KEYS) if (me.kills && me.kills[k] && me.name && me.name !== 'Adventurer') core.mergeScores(k, { [me.name]: me.kills[k] });
       function syncMounts() {   /* wall-hung quest rewards (Aldric's sword) stay on the wall until they're given */
         for (const r of regions) if (r.built && r.built.mounts) for (const m of r.built.mounts) { const q = me.quests && me.quests[m.quest]; m.obj.visible = !(q && q.step >= m.untilStep); }
       }
@@ -312,8 +351,8 @@
       const heightAt = SCENE.heights ? SCENE.heights(core.M) : (x, z) => 0;
       const chunkRegs = new Map();
       function regionDist(r, x, y) { const dx = Math.max(r.rect[0] - x, 0, x - (r.rect[0] + r.rect[2])), dy = Math.max(r.rect[1] - y, 0, y - (r.rect[1] + r.rect[3])); return Math.max(dx, dy); }
-      function paintScores() { if (SCENE.boardPaint) SCENE.boardPaint('dragon', core.scoreBoard('chain_dragon')); }
-      function hsSave() { try { store.set(SCORE_KEY, JSON.stringify({ chain_dragon: core.scoresOf('chain_dragon').names })); } catch (e) { /* private mode */ } }
+      function paintScores() { if (SCENE.boardPaint) for (const k of SCORE_KEYS) SCENE.boardPaint(SCORE_BOARD[k], core.scoreBoard(k)); }
+      function hsSave() { try { const j = {}; for (const k of SCORE_KEYS) j[k] = core.scoresOf(k).names; store.set(SCORE_KEY, JSON.stringify(j)); } catch (e) { /* private mode */ } }
       let scoreTell = () => {}, scoresAsk = () => {};
       function addBuilt(r, opt) { r.built = SCENE.build(core.M, opt); scene.add(r.built.group); for (const k in core.S.dep) r.built.setDepleted(+k, true); paintScores(); }
       function streamRegions(force) {
@@ -441,6 +480,10 @@
         const c = e.key.charAt(0);
         let up = 0;
         if (c === 'p') { const p = core.S.players[e.key.slice(2)]; if (p && p.lv) { const B = p.bld >= 0 && core.M.buildings ? core.M.buildings[p.bld] : null; up = p.lv * (B && B.lh ? B.lh : 1.8); } }
+        else if (c === 'r') {   /* [Claude 2026-10-11] another player on a storey: their last row says which (l), the building under them says how tall */
+          const r = remotes.get(e.key.slice(2)), b = r && r.buf.length ? r.buf[r.buf.length - 1] : null;
+          if (b && b.l > 0) { const bi = core.M.buildingAt ? core.M.buildingAt(Math.floor(e.to.x), Math.floor(e.to.z)) : -1, B = bi >= 0 && core.M.buildings ? core.M.buildings[bi] : null; up = b.l * (B && B.lh ? B.lh : 1.8); }
+        }
         /* raised ground (a castle's stairs and wall walk): the height of the tiles you walk between, blended as you go - so you walk up the steps */
         if (core.M.lifts && (c === 'p' || c === 'n' || c === 'r' || c === 'm')) {
           const L = (v) => core.M.liftAt(Math.floor(v.x), Math.floor(v.z)), l0 = L(e.from), l1 = L(e.to), t = a == null ? 1 : Math.max(0, Math.min(1, a));
@@ -808,7 +851,7 @@
             const T = core.pokerTableById(e.t); if (T && iHostAt(T.x, T.y)) netSend({ Pk: [pkNet(core.pokerRow(e.t))] });
             break;
           }
-          case 'xpsit': netSend({ PS: [e.t, e.s | 0, e.stake | 0] }); break;   /* [Claude] the buy-in the first sitter sets rides along */
+          case 'xpsit': netSend({ PS: [e.t, e.s | 0, e.stake | 0, e.pk || ''] }); break;   /* [Claude] the buy-in the first sitter sets rides along */
           case 'xpstand': netSend({ PT: [e.t] }); break;
           case 'xpact': netSend({ PA: [e.t, e.a, e.to | 0] }); break;
           case 'respawn': { const t = ents.get('p:' + e.p); if (!t) break; t.dead = false; t.oneShot = false; t.loco = null; t.H.setOpacity && t.H.setOpacity(1); t.root.visible = true; const p = core.S.players[e.p]; place(t, p.x, p.y); t.H.play('idle', { loop: true }); if (e.p === PID) { hud.death(false); cam.snap = true; arriveCheck(); } break; }
@@ -1143,31 +1186,21 @@
         const n = ents.get('n:' + id); if (n) { n.tyaw = Math.atan2(myEnt.to.x - n.to.x, myEnt.to.z - n.to.z); n.facing = 1; } }
       function npcsTurnBack() { for (const n of core.M.npcs) { const e = ents.get('n:' + n.id); if (e && e.facing && e.homeYaw != null && !n.patrol && !n.guard && Math.max(Math.abs(n.x - me.x), Math.abs(n.y - me.y)) > 6) { e.facing = 0; e.tyaw = e.homeYaw; } } }   /* back to their own spot once you walk off */
       let insideRoof = false;
-      /* the floor bar (the operator: "hard to find how to get back down"): while you are in a building with storeys, which floor
-         you are on and a button each way; PageUp / PageDown do the same */
-      const floorBar = document.createElement('div');
-      floorBar.style.cssText = 'position:absolute;left:50%;top:12px;transform:translateX(-50%);display:none;gap:6px;align-items:center;padding:6px 8px;background:rgba(30,22,14,.88);border:1px solid #8a6a3a;border-radius:8px;color:#f0e2c0;font:600 13px system-ui,sans-serif;z-index:20';
-      floorBar.innerHTML = '<span data-f></span><button data-d="-1" style="font:inherit;padding:4px 9px;border-radius:6px;border:1px solid #c08a3a;background:#5a3a1c;color:#ffe2a8;cursor:pointer">&#9660; Downstairs</button><button data-d="1" style="font:inherit;padding:4px 9px;border-radius:6px;border:1px solid #6a5a3a;background:#3a2c1c;color:#f0e2c0;cursor:pointer">&#9650; Upstairs</button>';
-      host.appendChild(floorBar);
+      /* [Claude 2026-10-11] the floor bar (Downstairs / Upstairs buttons) is gone (the operator: "Remove the upstairs downstairs
+         hud buttons completely the stairs work fine"): you climb by tapping the stairs. PageUp / PageDown still climb, for keyboards. */
       let floorKey = '';
-      function climbFromBar(dir) { const bi = core.M.buildingAt ? core.M.buildingAt(me.x, me.y) : -1; if (bi < 0) return; const B = core.M.buildings[bi], lv = me.lv || 0; if ((dir < 0 && lv <= 0) || (dir > 0 && lv >= B.floors - 1)) return; send({ c: 'climb', dir, x: B.stairs[0], y: B.stairs[1] }); }
-      floorBar.querySelectorAll('[data-d]').forEach(b => { b.onclick = (e) => { e.stopPropagation(); climbFromBar(+b.dataset.d); }; b.onpointerdown = (e) => e.stopPropagation(); });
-      window.addEventListener('keydown', e => { if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return; if (e.key === 'Escape' && me.using) { send({ c: 'unuse' }); e.preventDefault(); } else if (e.key === 'PageDown') { climbFromBar(-1); e.preventDefault(); } else if (e.key === 'PageUp') { climbFromBar(1); e.preventDefault(); } });
-      function floorBarCheck() {
+      function climbKey(dir) { const bi = core.M.buildingAt ? core.M.buildingAt(me.x, me.y) : -1; if (bi < 0) return; const B = core.M.buildings[bi], lv = me.lv || 0; if ((dir < 0 && lv <= 0) || (dir > 0 && lv >= B.floors - 1)) return; send({ c: 'climb', dir, x: B.stairs[0], y: B.stairs[1] }); }
+      window.addEventListener('keydown', e => { if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return; if (e.key === 'Escape' && me.using) { send({ c: 'unuse' }); e.preventDefault(); } else if (e.key === 'PageDown') { climbKey(-1); e.preventDefault(); } else if (e.key === 'PageUp') { climbKey(1); e.preventDefault(); } });
+      function floorBarCheck() {   /* only the castle-wall hint is left of it */
         const bi = core.M.buildingAt ? core.M.buildingAt(me.x, me.y) : -1, B = bi >= 0 ? core.M.buildings[bi] : null, lv = me.lv || 0;
         const key = B ? bi + ':' + lv : '';
         if (key === floorKey) return; floorKey = key;
-        if (!B) { floorBar.style.display = 'none'; return; }
-        floorBar.style.display = 'flex';
-        if (B.deck && !deckHint) { deckHint = true; hud.chat('The castle walls can be walked: tap any flight of stone steps inside the walls (two are beside the gate) to climb up, or press Up. On the wall, tap where to go; tap the top of the steps to come down.', 'info'); }
-        floorBar.querySelector('[data-f]').textContent = B.deck ? (lv === 0 ? 'Castle yard' : 'On the wall') : lv === 0 ? 'Ground floor (' + B.floors + ' floors)' : 'Floor ' + (lv + 1) + ' of ' + B.floors;
-        floorBar.querySelector('[data-d="-1"]').style.display = lv > 0 ? '' : 'none';
-        floorBar.querySelector('[data-d="1"]').style.display = lv < B.floors - 1 ? '' : 'none';
+        if (B && B.deck && !deckHint) { deckHint = true; hud.chat('The castle walls can be walked: tap any flight of stone steps inside the walls (two are beside the gate) to climb up. On the wall, tap where to go; tap the top of the steps to come down.', 'info'); }
       }
       let stairHint = false, deckHint = false;
       function roofCheck() {
         floorBarCheck();
-        if (!stairHint && (me.lv || 0) > 0 && !(me.bld >= 0 && core.M.buildings[me.bld] && core.M.buildings[me.bld].deck)) { stairHint = true; hud.chat('Upstairs. The way down is the opening in the floor with the amber arrow - click it, or press Downstairs / Page Down.', 'info'); }
+        if (!stairHint && (me.lv || 0) > 0 && !(me.bld >= 0 && core.M.buildings[me.bld] && core.M.buildings[me.bld].deck)) { stairHint = true; hud.chat('Upstairs. The way down is the opening in the floor with the amber arrow - tap it.', 'info'); }
         let inside = false;
         let inRf = null;
         for (const r of regions) if (r.built) for (const rf of r.built.roofs) if (me.x >= rf.x0 && me.x <= rf.x1 && me.y >= rf.y0 && me.y <= rf.y1) { inside = true; inRf = rf; }
@@ -1407,9 +1440,9 @@
                   { html: 'Examine ' + nm, fn: () => hud.chat('A canoe of birch bark over cedar ribs, sewn with spruce root and sealed with pitch. It floats light as a leaf.', 'sys') }]; }
         if (t.kind === 'sign') {
           const o = core.signAt(t.x, t.y); if (!o) return [];
-          const nm = '<span class="c">Wooden sign</span>';
-          return [{ html: 'Read ' + nm, fn: () => { scoresAsk(true); core.scoreRead('chain_dragon').forEach(l => hud.chat(l, 'sys')); }, red: 1 },
-                  { html: 'Examine ' + nm, fn: () => hud.chat('A weathered oak board nailed to the ruin wall. Names of those who have slain the chained dragon are carved into it.', 'sys') }];
+          const nm = '<span class="c">' + (o.board === 'chess' ? 'Champions board' : 'Wooden sign') + '</span>', sk = o.board === 'chess' ? 'chess_wins' : 'chain_dragon';
+          return [{ html: 'Read ' + nm, fn: () => { scoresAsk(true); core.scoreRead(sk).forEach(l => hud.chat(l, 'sys')); }, red: 1 },
+                  { html: 'Examine ' + nm, fn: () => hud.chat(o.board === 'chess' ? 'An oak board on two posts by the tables. The names of those who have won games here are chalked on it, most wins first.' : 'A weathered oak board nailed to the ruin wall. Names of those who have slain the chained dragon are carved into it.', 'sys') }];
         }
         if (t.kind === 'chesstable' || t.kind === 'square') {   /* THE CHESS PARK (2026-10-10): a bench each side; seated, the board itself takes the taps */
           const T = core.tableById(t.id); if (!T) return [];
@@ -1430,6 +1463,7 @@
         }
         if (t.kind === 'pokertable') {   /* THE POKER TABLE: six chairs round one felt in the Saltmere tap room; once you are sitting, the panel in front of you does the talking */
           const T = core.pokerTableById(t.id); if (!T) return [];
+          if ((T.lv | 0) !== (me.lv | 0)) return [{ html: 'Card table <span class="c">(' + ((T.lv | 0) > (me.lv | 0) ? 'up the stairs' : 'downstairs') + ')</span>', fn: () => hud.chat('The poker table is ' + ((T.lv | 0) > (me.lv | 0) ? 'up the tavern stairs.' : 'downstairs.'), 'sys') }];   /* [Claude] */
           const st = core.pokerOf(t.id), out = [], taken = [], at = {};
           for (const s of st.se || []) at[s[0] | 0] = s[1];
           const pkEmpty = !(st.se || []).length, buy = st.buy | 0;   /* [Claude 2026-10-11] BUY-INS in GOLD: the first to sit sets the buy-in (the operator) */
@@ -1440,8 +1474,8 @@
             if (who && who !== PID) taken.push({ html: 'Chair ' + (i + 1) + ': <span class="y">' + pokerWho(who) + '</span>', fn: () => hud.chat(pokerWho(who) + ' is sitting there.', 'sys') });
             else out.push({ html: 'Sit down <span class="c">(chair ' + (i + 1) + ')</span>' + pkNote, act: { c: 'sit', table: t.id, seat: i, buy: 0 }, red: out.length ? 0 : 1 });
           });
-          if (pkEmpty && !(me.seat && me.seat.t === t.id)) { const free = (T.seats || []).findIndex((s, i) => !at[i]); if (free >= 0) for (const n of [500, 1000, 5000]) out.push({ html: 'Buy in for <span class="y">' + n.toLocaleString() + ' GOLD</span> <span class="c">(chair ' + (free + 1) + ', sets the table\'s stakes)</span>', act: { c: 'sit', table: t.id, seat: free, buy: n } }); }
-          out.push(...taken, { html: 'Examine <span class="c">Poker table</span>', fn: () => hud.chat(pokerExamine(st), 'sys') });
+          if (pkEmpty && !(me.seat && me.seat.t === t.id)) { const free = (T.seats || []).findIndex((s, i) => !at[i]); if (free >= 0) for (const n of [100, 1000, 10000]) out.push({ html: 'Buy in for <span class="y">' + n.toLocaleString() + ' GOLD</span> <span class="c">(chair ' + (free + 1) + ', sets the table\'s stakes)</span>', act: { c: 'sit', table: t.id, seat: free, buy: n } }); }
+          out.push(...taken, { html: 'Examine <span class="c">Card table</span>', fn: () => hud.chat(pokerExamine(st), 'sys') });
           return out;
         }
         if (t.kind === 'crate') {
@@ -1568,7 +1602,7 @@
         const b = r.buf[r.buf.length - 1], tx = Math.floor(b.x), ty = Math.floor(b.z), d = Math.max(Math.abs(me.x - tx), Math.abs(me.y - ty));
         if (d > 2 && (!follow.at || follow.at[0] !== tx || follow.at[1] !== ty || !me.path.length)) { core.cmd(PID, { c: 'walk', x: tx, y: ty, run: d > 6 }); follow.at = [tx, ty]; }
       }
-      function send(c) { if (follow) { follow = null; hud.chat('You stop following.', 'sys'); } core.cmd(PID, c); if (c.c === 'walk' || c.c === 'attack' || c.c === 'npc' || c.c === 'take' || c.c === 'gather') { hud.closeShop(); if (hud.closeChest) hud.closeChest(); } sfx('click'); }
+      function send(c) { if (c && c.c === 'sit' && MYPK) c.pk = MYPK; if (follow) { follow = null; hud.chat('You stop following.', 'sys'); } core.cmd(PID, c); if (c.c === 'walk' || c.c === 'attack' || c.c === 'npc' || c.c === 'take' || c.c === 'gather') { hud.closeShop(); if (hud.closeChest) hud.closeChest(); } sfx('click'); }
 
       /* ---------- input: touch (tap / drag / pinch / long-press), mouse, wheel, keys */
       const ptrs = new Map(); let pinch = null, suppressTap = false, lpTimer = null, lpFired = false;
@@ -1917,9 +1951,8 @@
       function seedDragonBoard() {
         const who = boardWho();
         if (who && who.charAt(0) === '@') me.tag = who.slice(1);
-        if (!(me.kills && me.kills.chain_dragon && who)) return;
-        core.mergeScores('chain_dragon', { [who]: me.kills.chain_dragon });
-        scoreTell({ key: 'chain_dragon', name: who, n: me.kills.chain_dragon });
+        if (!who) return;
+        for (const k of SCORE_KEYS) { if (!(me.kills && me.kills[k])) continue; core.mergeScores(k, { [who]: me.kills[k] }); scoreTell({ key: k, name: who, n: me.kills[k] }); }
         paintScores();
       }
       seedDragonBoard();
@@ -1998,6 +2031,7 @@
         const p = myEnt.root.position;
         const m = { s: Math.round(now), p: [Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100], f: Math.round(myEnt.yaw * 100) / 100, a: myEnt.oneShot ? myEnt.lastOne || 'idle' : myEnt.loco || 'idle', j: myJoin, hp: me.hp, d: me.dead ? 1 : 0, k: myEnt.toolId || 0 };
         if (HOME) m.h = HOME;   /* where I was born: until my outfit message arrives others draw me in my home's defaults */
+        if (me.lv > 0) m.l = me.lv | 0;   /* [Claude 2026-10-11] the storey I stand on: others draw me up there (they drew the Tap's upstairs on the ground floor) */
         if (myEnt.hl) m.hl = Math.round(myEnt.hl * 100) / 100;   /* where your head is looking, up or down (first person) */
         if (me.boat) { m.bt = me.boat; if (me.boat === 2) m.rd = me.ride; if (me.boat === 1 && me.inv.some(sl => sl && sl.id === 'push_pole')) m.pl = 1; if (me.boat === 2 && me.knock) m.kn = 1; }   /* pl: a push pole aboard; kn: knocking rice in the bow */   /* in a canoe: 1 poling it, 2 riding in someone's bow (rd: whose) */
         const oh = core.overhead(me) || 0; if (oh || lastPr) { m.pr = oh; lastPr = oh; }   /* the overhead prayer, so hosts' monsters respect it and others see it */
@@ -2037,10 +2071,10 @@
         if (!r.viewOnly) shared(id, r, d);
         if (Array.isArray(d.p) && d.p.length === 2 && isFinite(d.p[0]) && isFinite(d.p[1])) {
           if (typeof d.s === 'number') { if (d.s <= r.lastS && d.s > r.lastS - 60000) return; r.lastS = d.s; }   /* unordered delivery: drop older states */
-          if (core.S.players[id]) core.setPuppet(id, Object.assign({ x: Math.floor(+d.p[0]), y: Math.floor(+d.p[1]) }, typeof d.a === 'string' ? { bt: d.bt | 0, rd: d.rd || null, pl: d.pl ? 1 : 0, kn: d.kn ? 1 : 0 } : {}));   /* only a full state says whether they are in a canoe */
+          if (core.S.players[id]) core.setPuppet(id, Object.assign({ x: Math.floor(+d.p[0]), y: Math.floor(+d.p[1]), lv: d.l | 0 }, typeof d.a === 'string' ? { bt: d.bt | 0, rd: d.rd || null, pl: d.pl ? 1 : 0, kn: d.kn ? 1 : 0 } : {}));   /* only a full state says whether they are in a canoe */
           r.area = core.areaOf(Math.floor(+d.p[0]), Math.floor(+d.p[1])); r.carea = typeof d.c === 'string' ? d.c.slice(0, 40) : null;
           if (r.buf.length) { const lb = r.buf[r.buf.length - 1]; if (Math.abs(lb.x - +d.p[0]) + Math.abs(lb.z - +d.p[1]) > 60) r.buf.length = 0; }   /* they crossed a cut edge of the net (or a portal): no sliding across the map */
-          r.e.root.visible = true; r.buf.push({ t: performance.now(), x: +d.p[0], z: +d.p[1], f: +d.f || 0, a: typeof d.a === 'string' ? d.a.slice(0, 12) : 'idle' }); if (r.buf.length > 20) r.buf.shift();
+          r.e.root.visible = true; r.buf.push({ t: performance.now(), x: +d.p[0], z: +d.p[1], f: +d.f || 0, a: typeof d.a === 'string' ? d.a.slice(0, 12) : 'idle', l: d.l | 0 }); if (r.buf.length > 20) r.buf.shift();
         }
       }
       /* ---------- SHARED WORLD: a host per AREA simulates that area's monsters and loot; everyone else follows it.
@@ -2059,15 +2093,38 @@
       const netRow = r => Object.assign({}, r, { w: r.w ? toNet(r.w) : null, b: r.b ? toNet(r.b) : null, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [toNet(k), v])) : null });   /* a chess row with the room's ids for the players (and who is owed the stake [Claude]) */
       /* A poker row names its players in one place, the seat rows [ref, id, chips, bet, flags]. The cards beside them
          (hc) are references into those rows, not ids, so they need nothing. */
-      const pkNet = r => Object.assign({}, r, { se: (r.se || []).map(s => [s[0], toNet(s[1]), s[2], s[3], s[4]]), co: (r.co || []).map(c => [toNet(c[0]), c[1], c[2]]) });   /* [Claude] cashouts too */
+      const pkNet = r => {   /* the dealer's row for the wire: ids as the room knows them; a keyed seat's cards are NOT here (they go sealed, by Ph) */
+        const keys = core.pokerSeatKeys ? core.pokerSeatKeys(r.t) : {}, hc = [], want = [];
+        for (const h of r.hc || []) {
+          const ref = h[0] | 0, pk = keys[ref];
+          if (!pk || !SUBTLE || !MYKEY || typeof h[1] !== 'number') { hc.push(h); continue; }   /* no key: plain, as before, this seat only */
+          hc.push([ref, null, null]); want.push([ref, h[1], h[2], pk]);
+        }
+        if (want.length) {   /* the sealed set for this hand, built once; when every seat is in, Ph goes out */
+          const P = PH[r.t] && PH[r.t].h === (r.h | 0) && PH[r.t].sig === want.map(w => w[0] + ':' + w[3].slice(0, 8)).join(',') ? PH[r.t] : (PH[r.t] = { h: r.h | 0, sig: want.map(w => w[0] + ':' + w[3].slice(0, 8)).join(','), items: [], done: false });
+          for (const [ref, c1, c2, pk] of want) {
+            if (P.items.some(i => i[0] === ref)) continue;
+            const k = r.t + '|' + (r.h | 0) + '|' + ref;
+            if (!SEALING.has(k)) { SEALING.add(k); sealCards(r.t, r.h | 0, ref, c1, c2, pk).then(b => { if (PH[r.t] === P && !P.items.some(i => i[0] === ref)) { P.items.push([ref, b]); if (P.items.length >= want.length) { P.done = true; phSend(r.t, true); } } }).catch(e => console.warn('seal', e)).finally(() => SEALING.delete(k)); }
+          }
+        } else delete PH[r.t];
+        return Object.assign({}, r, { se: (r.se || []).map(s => [s[0], toNet(s[1]), s[2], s[3], s[4]]), co: (r.co || []).map(c => [toNet(c[0]), c[1], c[2]]), hc: r.hc ? hc : r.hc });
+      };
+      const OPENED2 = new Map();   /* my own two, opened, by table|hand|seat */
+      function openOwn(r, h) { const ref = h[0] | 0; if (typeof h[1] === 'number') return h; const o = OPENED2.get(r.t + '|' + (r.h | 0) + '|' + ref); return o ? [ref, o[0], o[1]] : [ref, null, null]; }
+      function phHeard(t, h, hk, items) {   /* the dealer's sealed set: open mine, hand it to the core */
+        if (!SUBTLE || !MYKEY || !(me.seat && me.seat.k === 'pk' && me.seat.t === t)) return;
+        const ref = me.seat.s | 0, it = (items || []).find(i => (i[0] | 0) === ref); if (!it || typeof it[1] !== 'string') return;
+        const k = t + '|' + (h | 0) + '|' + ref; if (OPENED2.has(k) || SEALING.has(k)) return;
+        SEALING.add(k); openCards(t, h | 0, ref, it[1], String(hk)).then(c => { OPENED2.set(k, c); bounded(OPENED2, 64); if (core.pokerOpen) coreCall(() => core.pokerOpen(t, ref, c[0], c[1])); }).catch(e => console.warn('open', e)).finally(() => SEALING.delete(k));
+      }
       const pkLocal = r => {   /* the room hears everything, so a hole card is dropped here, on the way in: a replica
                                   keeps faces only for its own seat, and a shown-down hand is public anyway. It says
                                   nothing about the wire - see handoff/poker_plan.md decision 4. */
         const se = (r.se || []).map(s => [s[0], fromNet(s[1]), s[2], s[3], s[4]]), co = (r.co || []).map(c => [fromNet(c[0]), c[1], c[2]]);   /* [Claude] the cashouts name players as this page knows them */
-        if (r.o === 'playing' && r.st === 'none') return Object.assign({}, r, { se, co });
         const mine = {};   /* my chair at that table, as the row names it - a room can hold two players both called "me" */
         for (const s of se) if (s[1] === PID || (me.seat && me.seat.k === 'pk' && me.seat.t === r.t && (s[0] | 0) === (me.seat.s | 0))) mine[s[0] | 0] = 1;
-        return Object.assign({}, r, { se, co, hc: (r.hc || []).map(h => mine[h[0] | 0] ? h : [h[0] | 0, null, null]) });
+        return Object.assign({}, r, { se, co, hc: r.hc ? r.hc.map(h => mine[h[0] | 0] ? openOwn(r, h) : [h[0] | 0, null, null]) : r.hc });   /* [Claude 2026-10-12] mine opened, the rest were never readable */
       };
       const CLS = { m: 'melee', r: 'ranged', g: 'magic' };
       const areaAt = (x, y) => core.areaOf(x | 0, y | 0);
@@ -2202,6 +2259,7 @@
         if (Fi.length) packSend({ F: seq }, 'Fi', Fi);
         const Ch = core.chessRows((x, y) => iHostAt(x, y)).map(netRow); if (Ch.length) packSend({ F: seq }, 'Ch', Ch);   /* the chess park's tables this game hosts */
         const Pk = core.pokerRows((x, y) => iHostAt(x, y)).map(pkNet); if (Pk.length) packSend({ F: seq }, 'Pk', Pk);   /* and the felt in the tap room */
+        for (const r of Pk) phSend(r.t, false);   /* [Claude 2026-10-12] the sealed hole cards again, every few seconds, for whoever just joined */
         const Pl = [];
         for (const a of hosted) for (const r of core.plantSnap(a)) Pl.push(r);
         if (Pl.length) packSend({ F: seq }, 'Pl', Pl);
@@ -2253,9 +2311,10 @@
         if (Array.isArray(d.Ch)) { const rows = d.Ch.filter(r => r && r.t).filter(r => { const T = core.tableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).map(r => Object.assign({}, r, { w: r.w ? fromNet(r.w) : null, b: r.b ? fromNet(r.b) : null, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [fromNet(k), v])) : null })); if (rows.length) coreCall(() => core.applyChess(rows)); }   /* [Claude] who is owed the stake, named as this page knows them */
         /* the felt: a chair asked for, a player getting up, an action, or the host's word on a table. Same rules as the
            chess park: only the host of the area the table stands in answers, and a row only counts from that host. */
-        if (Array.isArray(d.PS)) { const T = core.pokerTableById(String(d.PS[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerSit(id, T.id, d.PS[1] | 0, d.PS[2] | 0)); }
+        if (Array.isArray(d.PS)) { const T = core.pokerTableById(String(d.PS[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerSit(id, T.id, d.PS[1] | 0, d.PS[2] | 0, typeof d.PS[3] === 'string' ? d.PS[3].slice(0, 160) : '')); }
         if (Array.isArray(d.PT)) { const T = core.pokerTableById(String(d.PT[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerStand(id, T.id)); }
         if (Array.isArray(d.PA)) { const T = core.pokerTableById(String(d.PA[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerAct(id, T.id, String(d.PA[1] || ''), d.PA[2] | 0)); }
+        if (Array.isArray(d.Ph) && d.Ph.length === 4) { const T = core.pokerTableById(String(d.Ph[0])); if (T && fromHostOf(id, areaAt(T.x, T.y))) phHeard(T.id, d.Ph[1] | 0, d.Ph[2], d.Ph[3]); }   /* [Claude 2026-10-12] the sealed hole cards */
         if (Array.isArray(d.Pk)) { const rows = d.Pk.filter(r => r && r.t).filter(r => { const T = core.pokerTableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).map(pkLocal); if (rows.length) coreCall(() => core.applyPoker(rows)); }
         if (Array.isArray(d.X)) { const x = d.X; if (core.item(x[0]) && iHostAt(x[2], x[3])) coreCall(() => core.hostDrop({ id: x[0], n: Math.max(1, x[1] | 0), x: x[2] | 0, y: x[3] | 0, life: x[4] | 0, from: x[5] ? fromNet(x[5]) : null, diedAt: x[6] | 0 })); }
         /* below: only the word of the host of the area concerned counts */
@@ -2343,7 +2402,8 @@
           if (core.M.netNear && Math.abs(x - me.x) + Math.abs(z - me.y) > 400) { const q = core.M.netNear(x, z, me.x + 0.5, me.y + 0.5); if (q && Math.abs(q[0] - me.x) + Math.abs(q[1] - me.y) < 400) { x = q[0]; z = q[1]; turnS = q[2]; } }   /* across a seam: at their true place beside us */
           boatLook(r.e, r.boat === 1);
           r.e.root.position.set(x, 0, z); smoothPos(r.e, dt, false); x = r.e.root.position.x; z = r.e.root.position.z;   /* fluid travel: other players glide too */
-          r.e.root.position.set(x, (r.e.canoe ? waterY(x, z) + (r.anim === 'pole' || r.anim === 'idle' ? 0.14 : 0) : heightAt(x, z) + seatLift(r.e)) + (r.e.alt || 0), z); r.e.tyaw = Bs.f + turnS;   /* a chess player sits on the bench */
+          const lvR = Bs.l | 0, bR = lvR > 0 && core.M.buildingAt ? core.M.buildingAt(Math.floor(x), Math.floor(z)) : -1, upR = bR >= 0 ? lvR * (core.M.buildings[bR] && core.M.buildings[bR].lh ? core.M.buildings[bR].lh : 1.8) : 0;   /* [Claude 2026-10-11] on the storey their row names (the Tap's card tables upstairs) */
+          r.e.root.position.set(x, (r.e.canoe ? waterY(x, z) + (r.anim === 'pole' || r.anim === 'idle' ? 0.14 : 0) : heightAt(x, z) + seatLift(r.e) + upR) + (r.e.alt || 0), z); r.e.tyaw = Bs.f + turnS;   /* a chess player sits on the bench */
           const an = Bs.a; if (an !== r.anim) { r.anim = an; r.e.H.play(an, { loop: /idle|walk|run|chop|mine|fish|cook|sit|paddle|pole|knock|crosslegged/.test(an) }); }
           r.e.yaw += (((r.e.tyaw - r.e.yaw + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI) * Math.min(1, dt * 10); r.e.root.rotation.y = r.e.yaw;
           if (r.boat === 2) { const T = r.ride === myNetId ? myEnt : (remotes.get(r.ride) || {}).e; if (T) { bowSeat(r.e, T, r.anim === 'knock'); } }
@@ -2712,7 +2772,11 @@
       const PK_FX = {};   /* per table, what the felt last looked like to you - so a card going out is one sound, not five */
       const PKF = core.pokerSeatFlags ? core.pokerSeatFlags() : [1, 2, 4, 8, 16];   /* in the hand, folded, all-in, dealt in, has answered */
       const pkEsc = s => String(s == null ? '' : s).replace(/</g, '&lt;');   /* the names in the panel and the log; esc() below is only ever local to the tap menu */
-      function pokerWho(pid) { const p = core.S.players[pid]; return p && p.name ? pkEsc(p.name) : 'someone'; }
+      function pokerWho(pid) {   /* [Claude 2026-10-11] the operator: the player list goes by arcade @tag, the game name only for a guest without one */
+        if (pid === PID) { const w = boardWho(); if (w && w.charAt(0) === '@') return w; }
+        else { const r = remotes.get(pid); if (r && r.from && r.from.tag) return '@' + String(r.from.tag).replace(/^@/, '').slice(0, 16); }
+        const p = core.S.players[pid]; return p && p.name ? pkEsc(p.name) : 'someone';
+      }
       function pokerSeatOf(st, ref) { return (st.se || []).find(s => (s[0] | 0) === (ref | 0)) || null; }
       function pokerModel(t) {   /* what lies on the felt: the board, each chair's two cards - face down unless they are yours, or the hand has been shown - the bets, the button, whose turn */
         const st = core.pokerOf(t), show = st.o === 'playing' && st.st === 'none', hands = [], bets = {};
@@ -2721,11 +2785,12 @@
           const ref = s[0] | 0, f = s[4] | 0, h = (st.hc || []).find(x => (x[0] | 0) === ref);
           if (!h) continue;   /* nothing in front of that chair - sitting it out, or the hand is folded and mucked */
           if ((f & PKF[1]) && !show) continue;
-          const up = h[1] != null && (show || ref === ms);
-          hands.push({ ref, c: h && up ? [h[1] | 0, h[2] | 0] : null, down: up ? 0 : 1, tilt: up ? 1 : 0 });
+          const sd = show && st.r && st.r.sd ? st.r.sd.find(x => (x[0] | 0) === ref) : null;   /* [Claude 2026-10-11] at the showdown every shown hand lies face up, on every copy */
+          const c = sd ? [sd[1] | 0, sd[2] | 0] : typeof h[1] === 'number' ? [h[1] | 0, h[2] | 0] : null, up = !!c && (show || ref === ms);
+          hands.push({ ref, c: up ? c : null, down: up ? 0 : 1, tilt: up ? 1 : 0 });
           bets[ref] = s[3] | 0;
         }
-        return { board: (st.bo || []).slice(), hands, bets, dealer: st.d >= 0 ? st.d : null, turn: st.a >= 0 && st.o === 'playing' && st.st !== 'none' ? st.a : null };
+        return { board: (st.bo || []).slice(), hands, bets, pot: st.p | 0, big: st.bg | 0, dealer: st.d >= 0 ? st.d : null, turn: st.a >= 0 && st.o === 'playing' && st.st !== 'none' ? st.a : null };
       }
       function pokerView(t) {   /* the panel's view of the table, all of it out of the row it was sent */
         const st = core.pokerOf(t), s = me.seat && me.seat.t === t ? me.seat.s | 0 : -1, mine = pokerSeatOf(st, s);
@@ -2735,9 +2800,11 @@
           t, seat: s, me: PID, hand: st.h | 0, street: st.st, open: !live, pot: st.p | 0, bet: st.b | 0, dealer: st.d, turn: st.a, buy: st.buy | 0,   /* [Claude] the buy-in, for the panel */
           seats: (st.se || []).map(x => ({ ref: x[0] | 0, id: x[1], name: pokerWho(x[1]), chips: x[2] | 0, bet: x[3] | 0, folded: !!((x[4] | 0) & PKF[1]), allin: !!((x[4] | 0) & PKF[2]), dealt: !!((x[4] | 0) & PKF[3]), away: !!((x[4] | 0) & (PKF[5] || 32)) })),
           away: !!(mine && ((mine[4] | 0) & (PKF[5] || 32))),   /* [Claude] dealt out for sitting on a hand: the panel offers the way back */
-          board: (st.bo || []).slice(), hole: hh && hh[1] != null ? [hh[1] | 0, hh[2] | 0] : null,
+          board: (st.bo || []).slice(), hole: hh && typeof hh[1] === 'number' ? [hh[1] | 0, hh[2] | 0] : null,
           log: (st.lg || []).slice(), result: st.r, inHand: dealt, myTurn: live && dealt && (st.a | 0) === s, call, stack: (mine && mine[2]) | 0,
-          winners: st.r ? st.r.p.map(q => q[1]).reduce((a, b) => a.concat(b), []) : []
+          winners: st.r ? st.r.p.map(q => q[1]).reduce((a, b) => a.concat(b), []) : [],
+          shown: st.r && st.r.sd ? st.r.sd.map(x => ({ ref: x[0] | 0, c: [x[1] | 0, x[2] | 0], name: String(x[3] || '') })) : [],   /* [Claude 2026-10-11] the showdown */
+          min: Math.min((st.b | 0) + (st.mr | 0 || st.bg | 0 || 50), (st.b | 0) + ((mine && mine[2]) | 0)), big: st.bg | 0
         };
       }
       function pokerFx(t, row) {   /* the small sound of the felt changing under your hands: a card going out, a new street */
@@ -2749,12 +2816,12 @@
         if (at && T && T.seats[s]) {   /* from your own eyes at the felt: leaning a little over your own side of it, the whole table in front of you */
           if (cam.mode !== 'poker') cam.save = { yaw: cam.tyaw, pitch: cam.tpitch, dist: cam.tdist };
           const seat = T.seats[s], dx = seat[0] + 0.5 - at.x, dz = seat[1] + 0.5 - at.z, L = Math.hypot(dx, dz) || 1;
-          POKERV = { x: at.x, y: at.y + 0.55, z: at.z, yaw: Math.atan2(-dx, -dz), eye: { x: at.x + dx / L * 1.30, y: at.y + 0.92, z: at.z + dz / L * 1.30 }, look: { x: at.x - dx / L * 0.45, y: at.y - 0.08, z: at.z - dz / L * 0.45 } };   /* your own cards lie 0.60 out from the centre and the chair back is 1.0, so sit just behind your own chair: an eye over the cards themselves leaves them under your nose, out of the frame */
+          POKERV = { x: at.x, y: at.y + 0.55, z: at.z, yaw: Math.atan2(-dx, -dz), eye: { x: at.x + dx / L * (L + 0.45), y: at.y + 0.92, z: at.z + dz / L * (L + 0.45) }, look: { x: at.x - dx / L * 0.55, y: at.y - 0.02, z: at.z - dz / L * 0.55 } };   /* your own cards lie 0.60 out and lean up; at 1.30 they sat against the bottom edge of the frame, so an eye a little further back and a look a little higher - they sit just inside it now, with the far chair and the room over the rail */
           cam.mode = 'poker';
         }
         myEnt.restPose = 'sit';
         const askStand = () => { const st = core.pokerOf(t), inHand = (st.se || []).some(x => x[1] === PID && ((x[4] | 0) & PKF[3]) && !((x[4] | 0) & PKF[1])) && st.st !== 'none';
-          hud.confirm(inHand ? 'Fold and stand up?' : 'Stand up?', inHand ? 'You are in a hand: standing up now folds it and leaves the chips already in the pot.' : 'Leave the poker table?', inHand ? 'Fold and stand' : 'Stand up', 'Stay', () => send({ c: 'stand' })); };
+          hud.confirm(inHand ? 'Fold and stand up?' : 'Stand up?', inHand ? 'You are in a hand: standing up now folds it and leaves the chips already in the pot.' : 'Leave the card table?', inHand ? 'Fold and stand' : 'Stand up', 'Stay', () => send({ c: 'stand' })); };
         POKER_ASK = askStand;
         if (hud.pokerOpen) hud.pokerOpen(pokerView(t), { act: (a, to) => pokerAct(t, a, to), stand: askStand });
       }
@@ -2776,8 +2843,8 @@
       function pokerExamine(st) {
         const inhand = (st.se || []).filter(s => (s[4] | 0) & PKF[3]).map(s => pokerWho(s[1]));
         if (st.o === 'playing' && st.st !== 'none') return 'A hand is on the felt: ' + (st.p | 0) + ' in the pot, ' + inhand.length + ' in it' + (st.bo.length ? ', ' + st.bo.length + ' cards on the board.' : ', nothing on the board yet.') + ' Sit in a free chair and it will deal you in.';
-        if ((st.se || []).length) return 'A felt table for six, with ' + (st.se || []).map(s => pokerWho(s[1])).join(', ') + ' sitting. ' + (st.o === 'playing' ? 'They are between hands.' : 'Waiting for players.');
-        return 'A felt table for six under the lamps, brass rail turned dark, a chip tray in the middle. Sit in a chair to play: the table deals itself.';
+        if ((st.se || []).length) return 'A round felt table for eight, with ' + (st.se || []).map(s => pokerWho(s[1])).join(', ') + ' sitting. ' + (st.o === 'playing' ? 'They are between hands.' : 'Waiting for players.');
+        return 'A round felt table for eight under a wheel of candles, its rail turned dark. Sit in a chair to play: the table deals itself.';
       }
       function openWardrobe(first, who) {
         if (!myEnt.H.setOutfit || !MOD.outfitStyles) return;
@@ -2810,7 +2877,7 @@
       /* ---------- debug / test handle */
       const game = {
         core, pid: PID, me, camera, cam, scene, ents, hud, regions, settings,
-        screenOf(kind, id) { let pos, up = 0.8; if (kind === 'mob') { const e = ents.get('m:' + id); pos = e.root.position; up = (e.H.height || 1) * e.scale * 0.5; } else if (kind === 'npc') { const e = ents.get('n:' + id); pos = e.root.position; } else if (kind === 'item') { const o = gItems.get(id); pos = o.position; up = 0.08; } else if (kind === 'tile') { pos = new THREE.Vector3(id[0] + 0.5, heightAt(id[0] + 0.5, id[1] + 0.5), id[1] + 0.5); up = 0; } else if (kind === 'world') { pos = new THREE.Vector3(id[0], id[1], id[2]); up = 0; } else if (kind === 'square') { const a = SCENE.chessAt && SCENE.chessAt(id[0]); if (!a) return null; const f = id[1].charCodeAt(0) - 97, r = +id[1][1] - 1; pos = new THREE.Vector3(a.x - 3.5 * 0.12 + f * 0.12, a.y, a.z + 3.5 * 0.12 - r * 0.12); up = 0.01; } else if (kind === 'me') { pos = myEnt.root.position; } else if (kind === 'remote') { const e = ents.get('r:' + id); if (!e || !e.root.visible) return null; pos = e.root.position; up = (e.H.height || 1.6) * e.scale * 0.5; } const s = toScreen(pos, up); if (!s) return null; const r = host.getBoundingClientRect(); return { x: s.x + r.left, y: s.y + r.top }; },
+        screenOf(kind, id) { let pos, up = 0.8; if (kind === 'mob') { const e = ents.get('m:' + id); pos = e.root.position; up = (e.H.height || 1) * e.scale * 0.5; } else if (kind === 'npc') { const e = ents.get('n:' + id); pos = e.root.position; } else if (kind === 'item') { const o = gItems.get(id); pos = o.position; up = 0.08; } else if (kind === 'tile') { pos = new THREE.Vector3(id[0] + 0.5, heightAt(id[0] + 0.5, id[1] + 0.5) + 1.8 * (me.lv | 0), id[1] + 0.5); up = 0; }   /* [Claude 2026-10-11] on an upper storey the tile is the floor you stand on, not the ground under the house */ else if (kind === 'world') { pos = new THREE.Vector3(id[0], id[1], id[2]); up = 0; } else if (kind === 'square') { const a = SCENE.chessAt && SCENE.chessAt(id[0]); if (!a) return null; const f = id[1].charCodeAt(0) - 97, r = +id[1][1] - 1; pos = new THREE.Vector3(a.x - 3.5 * 0.12 + f * 0.12, a.y, a.z + 3.5 * 0.12 - r * 0.12); up = 0.01; } else if (kind === 'me') { pos = myEnt.root.position; } else if (kind === 'remote') { const e = ents.get('r:' + id); if (!e || !e.root.visible) return null; pos = e.root.position; up = (e.H.height || 1.6) * e.scale * 0.5; } const s = toScreen(pos, up); if (!s) return null; const r = host.getBoundingClientRect(); return { x: s.x + r.left, y: s.y + r.top }; },
         give(id, n) { const p = me; for (let k = 0; k < (core.item(id).stack ? 1 : n || 1); k++) { const f = p.inv.indexOf(null); if (core.item(id).stack) { const i = p.inv.findIndex(s => s && s.id === id); if (i >= 0) { p.inv[i].n += n || 1; break; } } if (f < 0) break; p.inv[f] = { id, n: core.item(id).stack ? n || 1 : 1 }; } hud.refresh('all'); },
         setLevel(skill, L) { me.xp[skill] = core.xpFor(L) * 10; if (skill === 'hitpoints') me.hp = L; hud.refresh('all'); },
         teleport(x, y) { me.x = x; me.y = y; me.path = []; place(myEnt, x, y); cam.snap = true; streamRegions(); arriveCheck(); },
@@ -2826,7 +2893,8 @@
         skyDirs: () => ({ north: trueNorth(me.x, me.y), season: SEASON.name, sun: SUNL.sv, moon: SUNL.mv, info: { eclipse: +(SUNL.eclipse || 0).toFixed(3), lunar: +(SUNL.lunar || 0).toFixed(3) } }),   /* a test aims the camera at the sun or the moon */
         wx: () => Object.assign({ season: SEASON.name, snowy: SEASON.snowy }, wxMod && wxMod.state ? wxMod.state() : {}),
         progInfo: () => { const P = renderer.info.programs || [], I = renderer.info; return { n: P.length, calls: I.render.calls, tris: I.render.triangles, geos: I.memory.geometries, tex: I.memory.textures, applyMs: SEASON.applyMs, applies: SEASON.applies }; },
-        tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },   /* a test taps a thing as a player would (first option) */
+        tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },
+        pokerNetRow: t => pkNet(core.pokerRow(t)), pokerKey: () => MYPK, pokerSealed: t => PH[t] || null,   /* [Claude 2026-10-12] tests: the row as it leaves this dealer */   /* a test taps a thing as a player would (first option) */
         travelShown: () => { const el = host.querySelector('.travel'); return el && el.style.display !== 'none' ? el.className + ' | ' + el.querySelector('.tt').textContent : null; },
         say, store, models: MOD, allowedAsset, wallet: walletApi(DATA.items.items), walletState: () => walletState, walletRefresh,
         chestEventForTest: chestEvent,

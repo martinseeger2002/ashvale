@@ -15,7 +15,12 @@
 - Saves from the old one-page playtest builds (before the launcher) do not carry over.
 - Fixes are small: one or two module inscriptions, not a whole new game.
 
-## In the current release (v0.8.4)
+## In the current release (v0.8.87)
+- 0.8.87 (2026-10-11): the Saltmere Tap's upper floor is open - climb the stairs behind the bar. The Chess Park has a
+  champions board kept by the Bank (every win chalked up by name). Tables and boards are solid, stairs are climbed by
+  tapping them, tavern lights gutter like real flames. Ziibiing (0.8.86) stands on the far continent in maple country.
+
+## Earlier (v0.8.4)
 - Skills: Attack, Strength, Defence, Hitpoints, Ranged, Magic, Woodcutting, Mining, Fishing, Cooking, Firemaking,
   Dexterity, Speechcraft. Spend starting points on attributes.
 - The valley: the village (shops, smith, lake) and Whisperwood, with a mine. Trees from plain to yew, ores from copper

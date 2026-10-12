@@ -426,16 +426,17 @@
       setInterval(() => marksAsk(false), 15000); setTimeout(() => marksAsk(true), 9000);
       /* the ruined keep's dragon-killer board (2026-10-10): the Bank holds every character's count, so the sign is the same
          for anyone who reads it. A game reports its own name's total; 'scores?' answers the whole board. */
+      const SCORE_KEYS = ['chain_dragon', 'chess_wins'];
       function scoreTell(e) {
-        if (!e || e.key !== 'chain_dragon' || !e.name) return;
+        if (!e || SCORE_KEYS.indexOf(e.key) < 0 || !e.name) return;   /* [Claude 2026-10-11] the chess park's games-won board rides the same channel */
         const p = e.n | 0; if (p < 1) return;
-        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'score', v: 1, k: 'chain_dragon', n: String(e.name).slice(0, 20), p }); });
+        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'score', v: 1, k: e.key, n: String(e.name).slice(0, 20), p }); });
       }
       let scoreT = 0; const scoreGot = {};
       function scoresAsk(force) {
         if (!force && performance.now() - scoreT < 20000) return;
         scoreT = performance.now();
-        bankRoom().then(R => { if (R && R.me) R.send({ t: 'scores?', v: 1, k: 'chain_dragon' }); });
+        bankRoom().then(R => { if (R && R.me) for (const k of SCORE_KEYS) R.send({ t: 'scores?', v: 1, k }); });
       }
       function scoresHeard(d) {
         const k = String(d.k || 'chain_dragon'), q = k + ':' + (d.of | 0), G = scoreGot[q] = scoreGot[q] || { top: [], n: 0, total: 0 };

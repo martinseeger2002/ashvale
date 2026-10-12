@@ -426,16 +426,17 @@
       setInterval(() => marksAsk(false), 15000); setTimeout(() => marksAsk(true), 9000);
       /* the ruined keep's dragon-killer board (2026-10-10): the Bank holds every character's count, so the sign is the same
          for anyone who reads it. A game reports its own name's total; 'scores?' answers the whole board. */
+      const SCORE_KEYS = ['chain_dragon', 'chess_wins'];
       function scoreTell(e) {
-        if (!e || e.key !== 'chain_dragon' || !e.name) return;
+        if (!e || SCORE_KEYS.indexOf(e.key) < 0 || !e.name) return;   /* [Claude 2026-10-11] the chess park's games-won board rides the same channel */
         const p = e.n | 0; if (p < 1) return;
-        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'score', v: 1, k: 'chain_dragon', n: String(e.name).slice(0, 20), p }); });
+        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'score', v: 1, k: e.key, n: String(e.name).slice(0, 20), p }); });
       }
       let scoreT = 0; const scoreGot = {};
       function scoresAsk(force) {
         if (!force && performance.now() - scoreT < 20000) return;
         scoreT = performance.now();
-        bankRoom().then(R => { if (R && R.me) R.send({ t: 'scores?', v: 1, k: 'chain_dragon' }); });
+        bankRoom().then(R => { if (R && R.me) for (const k of SCORE_KEYS) R.send({ t: 'scores?', v: 1, k }); });
       }
       function scoresHeard(d) {
         const k = String(d.k || 'chain_dragon'), q = k + ':' + (d.of | 0), G = scoreGot[q] = scoreGot[q] || { top: [], n: 0, total: 0 };
@@ -492,6 +493,7 @@
             if (data && data.t === 'scores' && bankFrom && R.me && data.to === R.me.address) { scoresHeard(data); return; }   /* the ruined keep's global dragon-killer board */
             if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }   /* persisted drops near me */
             if (data && data.t === 'pals' && bankFrom && R.me && data.to === R.me.address) { palsHeard(data); return; }   /* the friends list */
+            if (data && data.t === 'paid' && bankFrom && R.me && data.to === R.me.address) { const it = DATA.items && DATA.items.items && DATA.items.items[data.item]; hud.chat('The bank sent ' + (data.units | 0) + ' ' + (it && it.name ? it.name : String(data.item || '')) + ' to your wallet.', 'sys'); return; }   /* [Claude 2026-10-12] the Bank's word that a delivery went out (handoff/bank_rpc_plan.md 3b.4) */
             if (!data || data.t !== 'dep' || !bankFrom || !R.me || data.to !== R.me.address) return;   /* only @ashvale or @yourfirstname answers, only to me */
             const q = bank.sent[data.id]; if (!q) return; delete bank.sent[data.id]; clearTimeout(q.timer);
             if (data.ok) {

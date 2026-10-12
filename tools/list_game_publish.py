@@ -15,7 +15,9 @@ card = os.path.join(os.path.dirname(gj), 'card.html')
 open(card, 'w').write('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
     '<title>' + html.escape(g['name']) + '</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0a16;'
     'font:16px system-ui,sans-serif;color:#eee}a{color:#ffd23f;font-size:20px}</style>'
-    '<p><a href="/content/' + g['play'] + '">Play ' + html.escape(g['name']) + '</a></p>')
+    '<p><a href="/content/' + g['play'] + '">Play ' + html.escape(g['name']) + '</a></p><!-- ' + html.escape(g['version']) + ' -->')
+# [Claude 2026-10-11] the version is in the page bytes: arcade-publish journals by the CONTENT's sha256 alone, so a card whose
+# HTML matched the last one came back as the old inscription (0.8.87's card "tx" was 0.8.86's id) - never inscribed.
 J = json.dumps(G)
 url = os.environ.get('ASH_RPC_URL', 'http://127.0.0.1:44873'); host, _, port = url.rpartition('://')[2].rstrip('/').partition(':')
 user, _, pw = open(os.environ['ASH_RPC_COOKIE']).read().strip().partition(':')

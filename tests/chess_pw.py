@@ -80,6 +80,11 @@ with sync_playwright() as p:
     check(move(pa, 'Ann', 'h5', 'f7', 7), '4. Qxf7#')
     check(wait(pa, 'ASH.core.chessOf(%s).status === "over"' % json.dumps(TABLE), 10) and ev(pa, 'ASH.core.chessOf(%s).result' % json.dumps(TABLE)) == '1-0', "checkmate: 1-0 on Ann's screen")
     check(wait(pb, 'ASH.core.chessOf(%s).status === "over"' % json.dumps(TABLE), 10) and ev(pb, 'ASH.core.chessOf(%s).result' % json.dumps(TABLE)) == '1-0', "and on Ben's")
+    # [Claude 2026-10-11] the park's champions board: a decided game counts once for its winner, on the winner's own copy
+    #    (the board carries the arcade @tag when the game has one, as the dragon board does - a fresh dev page has a dev tag)
+    WHO = "(ASH.me.tag ? '@' + String(ASH.me.tag).replace(/^@/, '') : ASH.me.name)"
+    check(wait(pa, "ASH.core.scoresOf('chess_wins').top.some(r => r[0] === %s && r[1] === 1)" % WHO, 10), "Ann's win is chalked on the champions board (as %s)" % ev(pa, WHO))
+    check(not ev(pb, "ASH.core.scoresOf('chess_wins').top.some(r => r[0] === %s)" % WHO), 'and Ben, who lost, is not')
     check('Game over' in (ev(pa, 'document.querySelector(".chessp") && document.querySelector(".chessp").textContent') or ''), 'the panel says so')
     time.sleep(1); shot(pa, 'chess_06_mate_white'); shot(pb, 'chess_07_mate_black')
     # 5. standing up restores the view
