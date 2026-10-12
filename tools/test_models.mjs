@@ -60,7 +60,7 @@ if (!(ht('goblin_shaman') < ht('wraith') && ht('wraith') < ht('goblin_chief') &&
 if (cols(M.monster('goblin_chief').object) === cols(M.monster('bandit').object)) throw new Error('the goblin chief is a recoloured bandit');
 if (cols(M.monster('ash_knight').object) === cols(M.monster('bandit_leader').object)) throw new Error('the ash knight is a recoloured bandit leader');
 if (!cols(M.monster('goblin_chief').object).includes('+') || !cols(M.monster('lich').object).includes('+')) throw new Error('the ashen crown does not glow on chief or lich');
-const SLOT = { staff_verdant: 'weapon', ghostlight: 'head', hat_bonewrap: 'head', hat_ashshard: 'head', hat_ashcrown: 'head' };
+const SLOT = { staff_verdant: 'weapon', brambleheart_maul: 'weapon', bow_evenflight: 'weapon', staff_stillwind: 'weapon', ghostlight: 'head', hat_bonewrap: 'head', hat_ashshard: 'head', hat_ashcrown: 'head' };
 for (const id of Object.keys(SLOT)) {
   const o = M.item(id); if (meshes(o) < 3) throw new Error('empty ' + id);
   if (cols(o).includes('ff00ff')) throw new Error(id + ' has an unresolved colour token');

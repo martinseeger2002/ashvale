@@ -516,6 +516,49 @@ part('gear.bow_snare', 'gear', slot='weapon', items={"bow_snare": "#4d6b3a"}, at
              box(0.028, 0.028, 0.028, "#c8b98a", 0, -0.01, -0.42), box(0.028, 0.028, 0.028, "#c8b98a", 0, -0.01, 0.42),
              cone(0.016, 0.07, "#8a8f96", 0, 0.09, -0.52, seg=4, r=[0.6, 0, 0]), cone(0.016, 0.07, "#8a8f96", 0, 0.09, 0.52, seg=4, r=[-0.6, 0, 0]),
              {"t": "group", "p": [0, 0.05, 0], "name": "tip"}])
+
+# The Even Guard's rare weapons (2026-10-11): each fighter leaves a weapon that reads as their fighting lesson at a glance.
+# Brambleheart is a river-stone maul trapped in living roots, with amber sap showing through the knots.
+part('gear.brambleheart_maul', 'gear', slot='weapon', items={"brambleheart_maul": "#7fa34a"}, attack='crush',
+     mount={"j": "handR", "r": [2.1, 0, 0]}, ground={"p": [0, 0.09, 0], "r": [-PI / 2, 0, 0]},
+     shapes=[cyl(0.032, 0.038, 0.48, "#3a2c1d", 0, 0.13, 0, seg=7),
+             cyl(0.046, 0.04, 0.12, "#536b32", 0, -0.05, 0, seg=7),
+             S('torus', [0.048, 0.012], "#7d9a43", [0, 0.16, 0], seg=[5, 10], r=[PI / 2, 0, 0]),
+             S('torus', [0.05, 0.012], "#7d9a43", [0, 0.25, 0], seg=[5, 10], r=[PI / 2, 0, 0]),
+             ico(0.13, "#68645d", 0, 0.43, 0, 1, name="tip"),
+             box(0.045, 0.24, 0.05, "#4a5f2d", 0, 0.42, 0.055, r=[0.18, 0, 0]),
+             cone(0.032, 0.11, "#526936", 0.14, 0.43, 0, seg=5, r=[0, 0, -PI / 2]),
+             cone(0.032, 0.11, "#526936", -0.14, 0.43, 0, seg=5, r=[0, 0, PI / 2]),
+             cone(0.03, 0.1, "#526936", 0, 0.43, 0.14, seg=5, r=[PI / 2, 0, 0]),
+             cone(0.03, 0.1, "#526936", 0, 0.43, -0.14, seg=5, r=[-PI / 2, 0, 0]),
+             box(0.018, 0.11, 0.02, "#ffbd4a", 0.035, 0.43, 0.12, r=[0, 0, 0.35], glow=True, shadow=False),
+             sph(0.018, "#ffc85c", -0.045, 0.47, 0.11, 6, 5, glow=True, shadow=False)])
+
+# Evenflight is deliberately ordinary magic-free craft: exact symmetry, an ivory grip and brass balance weights make it true.
+part('gear.bow_evenflight', 'gear', slot='weapon', items={"bow_evenflight": "#32633c"}, attack='bow', twoHanded=True,
+     mount={"j": "handL"}, carry={"elL": [-1.25], "shL": [-0.15, 0, 0.05]}, ground={"p": [0, 0.06, 0], "r": [0, 0, PI / 2]},
+     shapes=[S('tube', [0.024], C, pts=[[0, 0.06, -0.58], [0, -0.02, -0.35], [0, -0.25, 0]]),
+             S('tube', [0.024], C, pts=[[0, -0.25, 0], [0, -0.02, 0.35], [0, 0.06, 0.58]]),
+             box(0.055, 0.055, 0.15, "#ddd2b5", 0, -0.205, 0),
+             box(0.008, 0.008, 1.16, "#f0eadb", 0, 0.06, 0, shadow=False),
+             cyl(0.038, 0.038, 0.045, "#c6a33a", 0, -0.02, -0.34, seg=8, r=[PI / 2, 0, 0]),
+             cyl(0.038, 0.038, 0.045, "#c6a33a", 0, -0.02, 0.34, seg=8, r=[PI / 2, 0, 0]),
+             box(0.035, 0.035, 0.05, "#d8b44a", 0, 0.055, -0.56),
+             box(0.035, 0.035, 0.05, "#d8b44a", 0, 0.055, 0.56),
+             {"t": "group", "p": [0, 0.06, 0], "name": "tip"}])
+
+# Stillwind is slower than a plain staff: two silver gyres hold a bright, motionless core that can briefly stun a target.
+part('gear.staff_stillwind', 'gear', slot='weapon', items={"staff_stillwind": "#8edff2"}, attack='cast',
+     mount={"j": "handR"}, ground={"p": [0, 0.05, 0], "r": [-PI / 2, 0, 0]},
+     shapes=[cyl(0.024, 0.031, 1.5, "#8a9ba5", 0, 0.12, 0, seg=7),
+             cyl(0.05, 0.032, 0.12, "#c7d0d6", 0, 0.81, 0, seg=8),
+             S('torus', [0.105, 0.012], "#dce5e9", [0, 0.98, 0], seg=[6, 14], r=[PI / 2, 0, 0]),
+             S('torus', [0.105, 0.012], "#aebbc4", [0, 0.98, 0], seg=[6, 14], r=[0, 0, PI / 2]),
+             ico(0.062, C, 0, 0.98, 0, 1, name="tip", glow=True),
+             cone(0.018, 0.09, "#dce5e9", 0.12, 0.98, 0, seg=4, r=[0, 0, -PI / 2]),
+             cone(0.018, 0.09, "#dce5e9", -0.12, 0.98, 0, seg=4, r=[0, 0, PI / 2]),
+             cone(0.018, 0.09, "#aebbc4", 0, 1.1, 0, seg=4),
+             cone(0.018, 0.09, "#aebbc4", 0, 0.86, 0, seg=4, r=[0, 0, PI])])
 # Tinderbox (firemaking): a small tin box with a lid line and a flint on top.
 part('gear.tinderbox', 'gear', slot='tool', items=["tinderbox"], tool=True, mount={"j": "handR", "r": [1.6, 0, 0]}, ground={"p": [0, 0.03, 0], "r": [0, 0.4, 0]},
      shapes=[box(0.12, 0.05, 0.08, "#8a8f96", 0, 0.025, 0), box(0.124, 0.012, 0.084, "#5d6168", 0, 0.052, 0),

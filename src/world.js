@@ -195,12 +195,12 @@
     /* ---- the chunk store */
     const chunks = new Map(), fillFns = [], grown = new Map();
     function stampGrown(c) {
-      for (const k of grown.keys()) {
+      for (const [k, planted] of grown) {
         const x = kx(k), y = ky(k);
         if ((x >> SH) !== c.cx || (y >> SH) !== c.cy) continue;
-        const i = ci(x, y);
-        c.fl[i] |= 1 | (SEE['P'.charCodeAt(0)] << 1);
-        if (!nodes.has(k)) { const nd = NODE['P'.charCodeAt(0)]; if (nd) nodes.set(k, { kind: 'P', x, y, item: nd.item }); }
+        const kind = NODE[String(planted || 'P').charCodeAt(0)] ? String(planted || 'P') : 'P', i = ci(x, y);
+        c.fl[i] |= 1 | (SEE[kind.charCodeAt(0)] << 1);
+        if (!nodes.has(k)) { const nd = NODE[kind.charCodeAt(0)]; if (nd) nodes.set(k, { kind, x, y, item: nd.item }); }
       }
     }
     fillFns.push(stampGrown);
@@ -370,8 +370,8 @@
       onFill(fn) { fillFns.push(fn); for (const c of chunks.values()) fn(c); },
       /* a sapling that rooted in grass: the tile letter stays grass (so a rebuilt region does not also instance a tree)
          but the tile blocks walking and carries a pine node. Re-applied whenever the chunk fills again. */
-      growTree(x, y) {
-        const k = key(x, y); cleared.delete(k); grown.set(k, 1); stampGrown(chunkAt(x, y)); return true;
+      growTree(x, y, kind) {
+        const k = key(x, y); cleared.delete(k); grown.set(k, kind || 'P'); stampGrown(chunkAt(x, y)); return true;
       },
       /* a stump that has stood an hour: the tree is gone, the tile is open grass, and a sapling can go there */
       clearTree(x, y) {
