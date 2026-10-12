@@ -50,3 +50,5 @@ machine; the tests use Playwright Chromium with SwiftShader.
 ## Contributing
 
 This repository is a public copy of the game. Changes pushed here are brought into the game by an hourly sync; plain data changes are released automatically after the tests pass, everything else is reviewed first.
+
+To design an item, NPC or building in the browser and open it as a reviewable suggestion: `python3 studio/server.py`, then http://127.0.0.1:8760/ — see `studio/README.md`. Drafts stay local; **Suggest to GitHub** opens a PR against `main` and nothing is inscribed until that PR is merged.
