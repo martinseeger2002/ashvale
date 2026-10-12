@@ -16,6 +16,7 @@
 # runtime state, logs and internal notes
 chain/
 handoff/
+studio/drafts/
 *.log
 *.out
 nohup.out

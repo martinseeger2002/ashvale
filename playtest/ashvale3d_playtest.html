@@ -9251,10 +9251,10 @@ POSSIBILITY OF SUCH DAMAGE. */
   /* ---- a table -------------------------------------------------------------------------------------------- */
   function table(opts) {
     const O = opts || {}, rnd = O.int || ((n) => Math.floor(Math.random() * n));
-    const SB = O.small || 10, BB = O.big || SB * 2;
+    const SB = O.small || 10, BB = O.big || SB * 2, RAKE = Math.max(0, Math.min(0.5, +O.rake || 0));   /* [Claude 2026-10-11] the house's cut of every pot (the operator: 10%, to the @ashvale bank) */
     const T = {
       id: O.id || 'poker', seats: [], board: [], deck: [], street: 'none', pot: 0, bet: 0, minRaise: BB,
-      dealer: -1, hand: 0, toAct: -1, status: 'open', result: null, log: [], small: SB, big: BB, sbSeat: -1, bbSeat: -1
+      dealer: -1, hand: 0, toAct: -1, status: 'open', result: null, log: [], small: SB, big: BB, sbSeat: -1, bbSeat: -1, rake: RAKE, raked: 0
     };
     T.say = (text, by) => { T.log.push({ t: text, by: by || '' }); if (O.tell) O.tell(text, by || ''); return T; };
 
@@ -9297,7 +9297,7 @@ POSSIBILITY OF SUCH DAMAGE. */
         T.say((name || 'A player') + ' gets up - their hand is folded.', 'sys');
         s.folded = true; afterAction();
       }
-      s.in = false; s.id = null; s.name = null; s.hole = null; s.bet = 0; s.folded = false; s.allin = false; s.out = false;
+      s.in = false; s.id = null; s.name = null; s.hole = null; s.bet = 0; s.folded = false; s.allin = false; s.out = false; s.pk = null;
       return T;
     };
 
@@ -9447,7 +9447,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       const pots = [];
       if (left.length <= 1) {   /* nobody to show down against - the pot, uncalled money included, goes across */
         const w = left[0] || who.find(s => !s.folded);
-        if (w && T.pot > 0) { w.chips += T.pot; w.won += T.pot; pots.push({ amount: T.pot, win: [w.ref], who: [w.name], note: 'uncontested' }); }
+        if (w && T.pot > 0) { const cut = Math.floor(T.pot * (T.rake || 0)), paid = T.pot - cut; T.raked = (T.raked | 0) + cut; w.chips += paid; w.won += paid; pots.push({ amount: paid, rake: cut, win: [w.ref], who: [w.name], note: 'uncontested' }); }
       } else {
         const lv = []; for (const s of who) if (s.committed > 0 && lv.indexOf(s.committed) < 0) lv.push(s.committed);
         lv.sort((a, b) => a - b);
@@ -9460,6 +9460,7 @@ POSSIBILITY OF SUCH DAMAGE. */
         let sum = 0; for (const p of pots) sum += p.amount;
         if (sum !== T.pot && pots.length) pots[pots.length - 1].amount += T.pot - sum;   /* never lose a chip to rounding */
         for (const p of pots) {
+          const cut = Math.floor(p.amount * (T.rake || 0)); p.rake = cut; p.amount -= cut; T.raked = (T.raked | 0) + cut;   /* [Claude] the house's cut, before the pot is shared */
           const e = p.elig && p.elig.length ? p.elig : left.slice(0, 1);
           let top = -1; for (const s of e) if (s.score > top) top = s.score;
           const w = e.filter(s => s.score === top);
@@ -9472,12 +9473,13 @@ POSSIBILITY OF SUCH DAMAGE. */
         for (const s of left.slice().sort((a, b) => b.score - a.score))
           T.say((s.name || 'A player') + ': ' + s.hole.map(cname).join(' ') + ' - ' + describe(s.rank) + '.', 'sys');
       }
-      const total = pots.reduce((a, p) => a + p.amount, 0);
+      const total = pots.reduce((a, p) => a + p.amount, 0), raked = pots.reduce((a, p) => a + (p.rake | 0), 0);
       T.say(pots.map((p, i) => (pots.length > 1 ? 'Pot ' + (i + 1) + ' of ' + p.amount + ' to ' : 'The pot (' + p.amount + ') to ') +
-        (p.who || []).join(' and ') + (p.note ? ' - ' + p.note : (p.who || []).length > 1 ? ' (split)' : '')).join('. '), 'sys');
+        (p.who || []).join(' and ') + (p.note ? ' - ' + p.note : (p.who || []).length > 1 ? ' (split)' : '')).join('. ') + (raked > 0 ? ' The house takes ' + raked + '.' : ''), 'sys');
       T.pot = 0;
       for (const s of dealt()) s.bet = 0;   /* what was in front of a seat is in the pot, and the pot is paid out */
-      T.result = { hand: T.hand, pots, total, contested: left.length > 1 };
+      T.result = { hand: T.hand, pots, total, raked, contested: left.length > 1,
+        shown: left.length > 1 ? left.slice().sort((a, b) => b.score - a.score).map(s => [s.ref | 0, s.hole[0] | 0, s.hole[1] | 0, s.rank ? s.rank.name : 'no hand']) : [] };   /* [Claude 2026-10-11] face up at the showdown (the operator) */
       T.status = seated().length >= 2 ? 'playing' : 'open';
       for (const s of seated()) if (s.chips <= 0) T.say((s.name || 'A player') + ' has nothing left to play with.', 'sys');
       return { ok: true, end: true, result: T.result };
@@ -10073,6 +10075,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       }
       if (!inMap(nx, ny) || (M.blocked(nx, ny) && !gateOpen(nx, ny))) return false;
       if (LV_LIMIT >= 0 && M.buildingAt(nx, ny) !== LV_LIMIT) return false;
+      if (furnitureAt(nx, ny, GATE_P ? GATE_P.lv | 0 : 0)) return false;   /* [Claude 2026-10-11] a poker table or a chess board is solid (the operator: "Add collision to tables and chessboards") */
       return stepClear(x, y, dx, dy);
     }
     /* goal(x,y) -> true when standing there satisfies the action. If nothing satisfies it, walk to the reachable tile
@@ -10201,7 +10204,7 @@ POSSIBILITY OF SUCH DAMAGE. */
     const SEATED_BLOCK = new Set(['walk', 'attack', 'attackn', 'npc', 'take', 'gather', 'board', 'ride', 'climb', 'enter', 'crate', 'sign', 'follow', 'perch', 'sit']);
     function apply0(p, c) {
       if (p.dead && c.c !== 'style' && c.c !== 'run' && c.c !== 'retal' && c.c !== 'look') return;
-      if (p.seat && SEATED_BLOCK.has(c.c)) { msg(p, 'You are at the ' + (p.seat.k === 'pk' ? 'poker table' : 'chess table') + ' - use Stand up to leave it.', 'warn'); return; }   /* 2026-10-10: no walking off a wagered game by accident */
+      if (p.seat && SEATED_BLOCK.has(c.c)) { msg(p, 'You are at the ' + (p.seat.k === 'pk' ? 'card table' : 'chess table') + ' - use Stand up to leave it.', 'warn'); return; }   /* 2026-10-10: no walking off a wagered game by accident */
       if (isHawk(p) && ['npc', 'light', 'climb', 'buy', 'sell', 'trade', 'eat', 'use'].indexOf(c.c) >= 0 && !(c.c === 'use' && p.inv[c.slot | 0] && IT[p.inv[c.slot | 0].id].teleport)) { msg(p, 'A hawk can only fly, strike, fish and carry. Take off the ring over open ground to land.', 'warn'); return; }
       if (isHawk(p) && c.c === 'gather') { const n = nodeAt(idx(c.x | 0, c.y | 0)); if (n && nodeDef(n).skill !== 'fishing') { msg(p, 'A hawk catches fish; it cannot chop or mine.', 'warn'); return; } }
       if (c.c !== 'perch') p.perch = null;
@@ -10263,14 +10266,15 @@ POSSIBILITY OF SUCH DAMAGE. */
         case 'sit': {   /* a chair at a chess table or a poker table: walk there, sit; the host of the area seats you */
           const T = tableById(String(c.table || '')) || pokerTableById(String(c.table || '')), n = T && T.seats ? T.seats.length : 0;
           if (!T || !n || p.dead || p.boat || isHawk(p)) { msg(p, 'There is no seat there.', 'warn'); break; }
+          if ((T.lv | 0) !== (p.lv | 0)) { msg(p, 'The ' + (T.k === 'pokertable' ? 'card table' : 'chess table') + ' is ' + ((T.lv | 0) > (p.lv | 0) ? 'up the stairs.' : 'downstairs.'), 'warn'); break; }   /* [Claude] a table on another storey */
           const si = Math.max(0, Math.min(n - 1, c.seat | 0));
           if (p.seat && p.seat.t === T.id && p.seat.s === si) break;
           /* [Claude 2026-10-11] STAKES: the first to sit sets them (the operator) - `stake` GOLD each at chess, `buy` GOLD at
              poker (0 = friendly / free chips). A table with people at it already has its stake: that is what you pay. */
-          const pk = T.k === 'pokertable', ask = Math.max(0, Math.min(1000000, (pk ? c.buy : c.stake) | 0));
+          const pk = T.k === 'pokertable', ask0 = Math.max(0, Math.min(1000000, (pk ? c.buy : c.stake) | 0)), ask = pk && PK_TIERS.indexOf(ask0) < 0 ? 0 : ask0;   /* [Claude] a card table's buy-in is one of the tiers, else free chips */
           const stake = pk ? (pokerSeated(T.id) ? pokerOf(T.id).buy | 0 : ask) : (chessOf(T.id).w || chessOf(T.id).b ? chessOf(T.id).stake | 0 : ask);
           if (stake > 0 && !p.puppet && invCount(p, 'coins') < stake) { msg(p, 'You need ' + stake + ' GOLD to sit at this table' + (pk ? ' (the buy-in).' : ' (the stake).'), 'warn'); break; }
-          p.act = { k: 'sit', t: T.id, s: si, stake }; p.skilling = null; closeShop(p); break;
+          p.act = { k: 'sit', t: T.id, s: si, stake, pk: typeof c.pk === 'string' ? c.pk.slice(0, 160) : '' }; p.skilling = null; closeShop(p); break;   /* pk [Claude 2026-10-12]: the sitter's key, so the dealer can seal their cards for them alone */
         }
         case 'stand': { if (p.seat) { if (isAuth(zoneOf(p.x, p.y))) standUp(p); else { const t = p.seat.t, pk = p.seat.k === 'pk'; p.seat = null; ev({ e: pk ? 'pstand' : 'stand', p: p.id, t }); ev({ e: pk ? 'xpstand' : 'xstand', p: p.id, t }); } } p.seatWait = null; break; }
         case 'pact': {   /* fold / check / call / raise to N / all-in: the host of the area deals, as with a chess move */
@@ -10641,16 +10645,21 @@ POSSIBILITY OF SUCH DAMAGE. */
       top.sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
       return { total: Math.max(SCORE_N[key] | 0, sum), top: top.slice(0, 10), names: m };
     }
+    /* [Claude 2026-10-11] two boards share the Bank's score channel: the keep's dragon killers and the Chess Park's games won
+       (the operator: "quick fix the leaderboard at chess" - the park's board was painting the dragon text). Wins, not Elo: the
+       Bank keeps one number per name, the highest a game reports; Elo and the match ledger stay in chess_park_plan phase 2. */
+    const SCORE_TXT = { chain_dragon: { title: 'DRAGON KILLERS', sub: n => 'Slain ' + n + (n === 1 ? ' time' : ' times'), read: n => 'The chained dragon has been slain ' + n + ' time' + (n === 1 ? '' : 's') + '.', list: 'The names of its slayers, by how many times:' },
+                        chess_wins: { title: 'CHESS CHAMPIONS', sub: n => n + (n === 1 ? ' game won' : ' games won'), read: n => n + ' game' + (n === 1 ? ' has' : 's have') + ' been won at the Chess Park tables.', list: 'The standings, by games won:' } };
     function scoreBoard(key) {
-      const s = scoresOf(key), L = ['DRAGON KILLERS', 'Slain ' + s.total + (s.total === 1 ? ' time' : ' times')];
+      const s = scoresOf(key), T = SCORE_TXT[key] || SCORE_TXT.chain_dragon, L = [T.title, T.sub(s.total)];
       if (!s.top.length) L.push('', 'None yet.');
       else s.top.forEach((r, i) => L.push((i + 1) + '. ' + r[0] + '  ' + r[1]));
       return L;
     }
     function scoreRead(key) {
-      const s = scoresOf(key), L = ['The chained dragon has been slain ' + s.total + ' time' + (s.total === 1 ? '' : 's') + '.'];
+      const s = scoresOf(key), T = SCORE_TXT[key] || SCORE_TXT.chain_dragon, L = [T.read(s.total)];
       if (!s.top.length) L.push('No names are carved here yet.');
-      else { L.push('The names of its slayers, by how many times:'); s.top.forEach((r, i) => L.push((i + 1) + '. ' + r[0] + ' — ' + r[1])); }
+      else { L.push(T.list); s.top.forEach((r, i) => L.push((i + 1) + '. ' + r[0] + ' — ' + r[1])); }
       return L;
     }
     function signAt(x, y) { return (M.objects || []).find(o => o.k === 'wsign' && o.x === (x | 0) && o.y === (y | 0)) || null; }
@@ -11768,6 +11777,11 @@ POSSIBILITY OF SUCH DAMAGE. */
           const n = st.paid[p.id] | 0; p.chPaid.got = n; if (addItem(p, 'coins', n)) dropGround('coins', n, p.x, p.y, p.id, 600);
           msg(p, (st.result === '1/2-1/2' || !st.result ? 'Your stake of ' + n + ' GOLD comes back to you.' : 'You take the stakes: ' + n + ' GOLD.'), 'trade'); ev({ e: 'inv', p: p.id });
         }
+        /* [Claude 2026-10-11] a decided game counts once for its winner on the winner's own copy: the park's standings board */
+        if (col && st.status === 'over' && (st.result === '1-0' || st.result === '0-1') && p.chWon !== key) {
+          p.chWon = key;
+          if ((st.result === '1-0') === (col === 'w')) { p.kills = p.kills || {}; p.kills.chess_wins = (p.kills.chess_wins | 0) + 1; scoreKill('chess_wins', p.tag ? '@' + String(p.tag).replace(/^@/, '') : p.name); }
+        }
       }
     }
     function chessGame(id) {   /* the chess.js position for a table, kept in step with its FEN */
@@ -11868,8 +11882,12 @@ POSSIBILITY OF SUCH DAMAGE. */
     /* [Claude 2026-10-11] IDLE (the operator): 15 minutes without playing stands you up at either table; at poker a minute sitting on
        your turn folds you AND deals you out (PK_AWAY) until you come back - a button, any action - or the 15 minutes run out.
        One tick is 0.6 s (engine TICK), so PK_CLOCK 100 = a minute and SEAT_IDLE 1500 = fifteen. */
-    const SEAT_IDLE = 1500, PK_AWAY = 32;
+    const SEAT_IDLE = 1500, PK_AWAY = 32, PK_RAKE = 0.10;   /* [Claude] the house's cut of every pot (2026-10-11: 10%, to the @ashvale bank). GOLD is @ashvale's token #26 held in players' bags: what no player is paid stays with @ashvale, so the rake needs no Bank call - it is simply never paid out. st.rk counts it. */
     const PK_BUY = 1000, PK_SB = 25, PK_BB = 50, PK_WAIT = 12, PK_CLOCK = 100, PK_IN = 1, PK_FOLD = 2, PK_ALLIN = 4, PK_CARD = 8, PK_ACTED = 16;
+    /* [Claude 2026-10-11] the operator: a table is started at a buy-in of 100, 1,000 or 10,000 GOLD - what every sitter pays each time
+       they sit - and the blinds go with it: 1/2, 5/10, 50/100. A free-chips table (0) keeps 1000 chips and 25/50. */
+    const PK_TIERS = [100, 1000, 10000];
+    function pkBlinds(buy) { return buy > 0 ? [Math.max(1, Math.floor(buy / 100)), Math.max(2, Math.floor(buy / 50))] : [PK_SB, PK_BB]; }
     let HOLDEM = null;
     function holdemLib() {
       if (HOLDEM) return HOLDEM;
@@ -11881,11 +11899,31 @@ POSSIBILITY OF SUCH DAMAGE. */
     function pokerTableAt(x, y) { return (M.objects || []).find(o => o.k === 'pokertable' && o.x === (x | 0) && o.y === (y | 0)) || null; }
     function pokerTableById(id) { return (M.objects || []).find(o => o.k === 'pokertable' && o.id === id) || null; }
     function pokerTables() { return (M.objects || []).filter(o => o.k === 'pokertable'); }
+    /* [Claude 2026-10-12] PRIVATE HOLE CARDS (the operator: "implement private hole cards"): the room has one voice, so the dealer's
+       engine seals each seat's two cards for that seat's key alone before the row leaves (engine pkNet); a replica opens its
+       own on the way in (engine pkLocal) and tells its core here. The dealer's own copy keeps the cards plain and local. */
+    function pokerSeatKeys(id) { const t = PKG[id], out = {}; if (t) for (const s of t.seats) if (s && s.id != null && s.pk) out[s.ref | 0] = s.pk; return out; }
+    function pokerOpen(id, ref, c1, c2) {   /* a replica's own two, opened: into its row, and the felt and the panel hear of it */
+      const st = pokerOf(id); if (st.mine || !st.hc) return false;
+      const h = st.hc.find(x => (x[0] | 0) === (ref | 0)); if (!h || (h[1] === (c1 | 0) && h[2] === (c2 | 0))) return false;
+      h[1] = c1 | 0; h[2] = c2 | 0; ev(Object.assign({ e: 'poker', t: id }, pokerRow(id), { opened: 1 })); return true;
+    }
+    /* [Claude 2026-10-11] the tiles under a poker table (w x h, two by two upstairs in the Tap) and a chess board, by storey:
+       nobody walks across them (the operator). Rebuilt when the object list grows (a zone loading); the seats beside them stay open. */
+    let FURN = null, FURN_N = -1;
+    function furnitureAt(x, y, lv) {
+      const objs = M.objects || [];
+      if (FURN_N !== objs.length) {
+        FURN = new Map(); FURN_N = objs.length;
+        for (const o of objs) if (o.k === 'chesstable' || o.k === 'pokertable') { const w = o.w || 1, h = o.h || 1; for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) FURN.set((o.x + i) + ',' + (o.y + j), o.lv | 0); }
+      }
+      const l = FURN.get(x + ',' + y); return l != null && l === (lv | 0);
+    }
     function pokerGame(id) {   /* the hand a table this game deals is running; from the stored word when it is new here */
       if (PKG[id]) return PKG[id];
       const L = holdemLib(); if (!L) return null;
       if (!pokerTableById(id)) return null;
-      const st = pokerOf(id), t = L.table({ id: String(id), small: PK_SB, big: PK_BB, int: (n) => R.int(n), tell: (text, by) => { for (const pid of S.order) { const p = S.players[pid]; if (p.x != null && zoneOf(p.x, p.y) === zoneOf(pokerTableById(id).x, pokerTableById(id).y)) msg(p, text, by || 'info'); } } });
+      const st = pokerOf(id), t = L.table({ id: String(id), small: PK_SB, big: PK_BB, rake: PK_RAKE, int: (n) => R.int(n), tell: (text, by) => { for (const pid of S.order) { const p = S.players[pid]; if (p.x != null && zoneOf(p.x, p.y) === zoneOf(pokerTableById(id).x, pokerTableById(id).y)) msg(p, text, by || 'info'); } } });
       if (st.g) { try { Object.assign(t, JSON.parse(st.g)); } catch (e) { return null; } }
       else if (st.se.length) return null;   /* taken over from another game mid-hand: there is no deck to carry, so it is dealt out below */
       PKG[id] = t; return t;
@@ -11895,7 +11933,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       st.o = 'open'; st.st = 'none'; st.a = -1; st.b = 0; st.p = 0; st.r = null; st.g = null; st.wt = S.t + PK_WAIT; st.mine = 1;
       for (const s of st.se || []) if (s && s[1] != null) pokerCashout(st, s[1], s[2] | 0);   /* [Claude] everyone takes their stack with them */
       st.se = []; st.hc = null; st.v = (st.v | 0) + 1; st.buy = 0;
-      for (const p of Object.values(S.players)) if (p.seat && p.seat.t === id && p.seat.k === 'pk') { p.seat = null; ev({ e: 'pstand', p: p.id, t: id }); msg(p, 'The poker table is dealt out again - take a chair.', 'info'); }
+      for (const p of Object.values(S.players)) if (p.seat && p.seat.t === id && p.seat.k === 'pk') { p.seat = null; ev({ e: 'pstand', p: p.id, t: id }); msg(p, 'The card table is dealt out again - take a chair.', 'info'); }
       emitPoker(id, { again: 1 });
     }
     function pokerSync(id, t) {   /* the dealer's copy into the row that travels: one shape, host and replica alike */
@@ -11906,7 +11944,9 @@ POSSIBILITY OF SUCH DAMAGE. */
       st.se = t.seats.filter(s => s && s.id != null).map(s => [s.ref | 0, s.id, s.chips | 0, s.bet | 0,
         (s.in ? PK_IN : 0) | (s.folded ? PK_FOLD : 0) | (s.allin ? PK_ALLIN : 0) | ((s.hole && !s.out) ? PK_CARD : 0) | (s.acted ? PK_ACTED : 0) | (s.away ? PK_AWAY : 0)]);
       st.lg = t.log.slice(-2).map(l => String(l.t || '').slice(0, 90));
-      st.r = t.result ? { p: t.result.pots.map(q => [q.amount | 0, (q.win || []).map(x => x | 0)]), c: t.result.contested ? 1 : 0 } : null;
+      st.r = t.result ? { p: t.result.pots.map(q => [q.amount | 0, (q.win || []).map(x => x | 0)]), c: t.result.contested ? 1 : 0, rk: t.result.raked | 0, sd: (t.result.shown || []).slice(0, 8) } : null;   /* sd [Claude]: the showdown, every hand shown face up with its name */
+      st.mr = t.minRaise | 0; st.bg = t.big | 0;   /* [Claude] the least a raise can be, and the big blind: the panel's slider runs from the one to all-in */
+      st.rk = t.raked | 0;   /* [Claude] what the house has taken at this table so far */
       st.hc = null;
       for (const s of t.seats) if (s && s.id != null && s.hole && !s.out) { (st.hc = st.hc || []).push([s.ref | 0, s.hole[0] | 0, s.hole[1] | 0]); }
       st.g = JSON.stringify(t);
@@ -11943,12 +11983,12 @@ POSSIBILITY OF SUCH DAMAGE. */
       }
     }
     function pokerCashout(st, pid, chips) { if (!(st.buy > 0)) return; st.cseq = (st.cseq | 0) + 1; st.co = (st.co || []).concat([[pid, chips | 0, st.cseq]]).slice(-12); }
-    function pokerSitAt(p, T, si, buy) {   /* p has walked onto the chair: take it. Two who can play and the hand is dealt */
+    function pokerSitAt(p, T, si, buy, pk) {   /* p has walked onto the chair: take it. Two who can play and the hand is dealt */
       si = si | 0;
       const t = pokerGame(T.id);
       if (t && !pokerSeated(T.id) && !t.seats.some(s => s && s.id != null)) {   /* [Claude] the first to sit sets the buy-in and the blinds */
         const st0 = pokerOf(T.id); st0.buy = Math.max(0, Math.min(1000000, buy | 0)); st0.gid = (st0.gid | 0) + 1;
-        t.small = st0.buy > 0 ? Math.max(1, Math.floor(st0.buy / 40)) : PK_SB; t.big = st0.buy > 0 ? Math.max(2, Math.floor(st0.buy / 20)) : PK_BB;
+        const bl = pkBlinds(st0.buy | 0); t.small = bl[0]; t.big = bl[1];
       }
       if (!t) { msg(p, 'This table is being dealt out and will take players again in a moment.', 'warn'); return false; }
       if (!T.seats || !T.seats[si]) return false;
@@ -11960,7 +12000,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       const buyIn = pokerOf(T.id).buy > 0 ? pokerOf(T.id).buy | 0 : PK_BUY;   /* [Claude] a stack of as many chips as the buy-in */
       let chips = same ? here.chips : buyIn;
       if (chips <= 0) chips = buyIn;
-      t.addSeat(si, { id: p.id, name: pokerSeatName(p), chips }); p.seatAct = S.t;
+      t.addSeat(si, { id: p.id, name: pokerSeatName(p), chips }).pk = typeof pk === 'string' ? pk.slice(0, 160) : ''; p.seatAct = S.t;   /* [Claude 2026-10-12] their sealing key, kept with the dealer's seat */
       const seat = T.seats[si];
       p.x = seat[0]; p.y = seat[1]; p.path = []; p.act = null; p.skilling = null; p.seat = { t: T.id, s: si, k: 'pk' }; p.seatWait = null;
       p.face = faceTo(p.x, p.y, T.x, T.y); closeShop(p);
@@ -11968,7 +12008,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       if (t.street === 'none' && t.playable() >= 2) t.newHand();
       pokerSync(T.id, t);
       ev({ e: 'psit', p: p.id, t: T.id, s: si }); emitPoker(T.id);
-      msg(p, 'You sit down at the poker table with ' + chips + ' chips. They are chips, not coins - you can get up whenever you like.', 'info');
+      msg(p, 'You sit down at the card table with ' + chips + ' chips. They are chips, not coins - you can get up whenever you like.', 'info');
       return true;
     }
     function pokerUnseat(t, ref) {   /* a chair given up: cards in the air means the hand is folded */
@@ -11983,7 +12023,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       else { const st = pokerOf(id); st.se = (st.se || []).filter(s => s[1] !== p.id); st.v = (st.v | 0) + 1; }
       ev({ e: 'pstand', p: p.id, t: id }); emitPoker(id);
       if (why === 'left') return;
-      msg(p, 'You get up from the poker table.', 'info');
+      msg(p, 'You get up from the card table.', 'info');
     }
     function pokerAct(p, id, a, to) {   /* the one way a hand moves: fold, check, call, raise to N, or all-in */
       const t = pokerGame(id);
@@ -12006,7 +12046,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       emitPoker(id, {});
       return true;
     }
-    function hostPokerSit(pid, id, si, buy) { const p = S.players[pid], T = pokerTableById(id); if (!p || !T || !T.seats[si]) return false; const seat = T.seats[si]; if (cheb(p.x, p.y, seat[0], seat[1]) > 8) return false; return pokerSitAt(p, T, si | 0, buy | 0); }
+    function hostPokerSit(pid, id, si, buy, pk) { const p = S.players[pid], T = pokerTableById(id); if (!p || !T || !T.seats[si]) return false; const seat = T.seats[si]; if (cheb(p.x, p.y, seat[0], seat[1]) > 8) return false; return pokerSitAt(p, T, si | 0, buy | 0, pk); }
     function hostPokerStand(pid, id) { const p = S.players[pid]; if (p && p.seat && p.seat.t === id) pokerLeave(p); }
     function hostPokerAct(pid, id, a, to) { const p = S.players[pid]; return !!p && pokerAct(p, id, String(a || ''), to | 0); }
     function applyPoker(rows) {   /* the dealer's word on its tables: the row, and our own seat follows it, as in chess */
@@ -12559,7 +12599,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       } else if (a && a.k === 'sit') {   /* walk onto the bench, then sit (a replica asks the area's host, which seats it through Ch or Pk rows) */
         const T = tableById(a.t) || pokerTableById(a.t), pk = !!(T && T.k === 'pokertable'), seat = T && T.seats[a.s];
         if (!seat) p.act = null;
-        else if (p.x === seat[0] && p.y === seat[1]) { if (isAuth(zoneOf(p.x, p.y))) (pk ? pokerSitAt : sitAt)(p, T, a.s, a.stake | 0); else { p.seatWait = { t: T.id, s: a.s }; p.act = null; p.path = []; p.face = faceTo(p.x, p.y, T.x, T.y); ev({ e: pk ? 'xpsit' : 'xsit', p: p.id, t: T.id, s: a.s, stake: a.stake | 0 }); } }
+        else if (p.x === seat[0] && p.y === seat[1]) { if (isAuth(zoneOf(p.x, p.y))) { if (pk) pokerSitAt(p, T, a.s, a.stake | 0, a.pk || ''); else sitAt(p, T, a.s, a.stake | 0); } else { p.seatWait = { t: T.id, s: a.s }; p.act = null; p.path = []; p.face = faceTo(p.x, p.y, T.x, T.y); ev({ e: pk ? 'xpsit' : 'xsit', p: p.id, t: T.id, s: a.s, stake: a.stake | 0, pk: a.pk || '' }); } }
         else { p.path = findPath(p.x, p.y, (x, y) => x === seat[0] && y === seat[1], seat[0], seat[1]); stepPath(p); if (!p.path.length && !(p.x === seat[0] && p.y === seat[1])) { msg(p, "I can't reach that bench!", 'warn'); p.act = null; } }
       } else if (a && a.k === 'board') {   /* walk to the canoe, sit down in it: it floats where it lay */
         if (inReach(p.x, p.y, a.x, a.y, 1)) { const lb = BOATS.get(a.x + ',' + a.y); if (!lb && dockFull(a.x, a.y)) { msg(p, 'There is no canoe at the landing: three are already left at the banks nearby. Take one of those.', 'warn'); p.act = null; return; } if (lb) { p.face = lb.face; takeBoat(a.x, a.y, p.id); } p.act = null; p.path = []; p.boat = 1; p.x = a.x; p.y = a.y; p.land = null; ev({ e: 'boat', p: p.id, on: 1 }); msg(p, 'You sit down in the canoe and take up the paddle. Point at the water to paddle there, or at the shore to land.'); }
@@ -13003,6 +13043,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       const p = S.players[id]; if (!p || !p.puppet) return;
       if (Number.isInteger(st.x) && Number.isInteger(st.y) && inMap(st.x, st.y)) {
         p.x = st.x; p.y = st.y;
+        if (st.lv != null) { const lv = Math.max(0, st.lv | 0), bi = lv > 0 && M.buildingAt ? M.buildingAt(p.x, p.y) : -1; p.lv = bi >= 0 ? lv : 0; p.bld = bi >= 0 && lv > 0 ? bi : -1; }   /* [Claude 2026-10-11] the storey they say they are on (the Tap's card tables are upstairs) */
         for (const q of Object.values(S.players)) if (q.boat === 2 && q.ride === id && !q.puppet) { q.x = p.x; q.y = p.y; }   /* whoever rides in this canoe moves with it at once - even on the last word before it crosses into the next region */
       }
       if (Number.isInteger(st.hp)) p.hp = st.hp;
@@ -13124,7 +13165,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       setNewHome: h => { if (HOMES[h]) NEWHOME = h; }, markGift: (pid, id, n) => markGift(S.players[pid], id, n), homeOf: p => (p && p.home) || 'ashvale', npcFor, lineFor, questForHome, questMarks,
       API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, trapOf, offerOf, isBlessed: (pid, x, y) => !!(S.players[pid] && blessed(S.players[pid], x, y)), setNature, natureHours, setNatureTell, seasonOn, dayHour, fireLit, steamFor, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       tableAt, tableById, tables, chessOf, chessRow, chessRows, chessGame, chessTurn, chessMoves, applyChess, hostSit, hostStand, hostMove, hostSel, standUp,
-      pokerTableAt, pokerTableById, pokerTables, pokerOf, pokerRow, pokerRows, pokerGame, applyPoker, hostPokerSit, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED, PK_AWAY], hostPokerStand, hostPokerAct, pokerLeave, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED],
+      pokerTableAt, pokerTableById, pokerTables, pokerSeatKeys, pokerOpen, pokerOf, pokerRow, pokerRows, pokerGame, applyPoker, hostPokerSit, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED, PK_AWAY], hostPokerStand, hostPokerAct, pokerLeave, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED],
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
@@ -13360,8 +13401,17 @@ POSSIBILITY OF SUCH DAMAGE. */
     const POKER = Object.create(null), PK_STATE = Object.create(null);
     const CARD_W = 0.15, CARD_H = 0.212, PW = 96, PH = 144, PBACK = 63, CARD_Y = 0.007;
     const PRANKS = '23456789TJQKA', PINK = ['#20202a', '#b23a30', '#b23a30', '#20202a'];
-    const CHIP_GEO = new THREE.CylinderGeometry(0.075, 0.075, 0.028, 12);
-    const CHIP_MAT = [0xa8302a, 0x2f5f9a, 0x2f7a44, 0xe8e2d0].map(c => new THREE.MeshLambertMaterial({ color: c, flatShading: true }));
+    /* [Claude 2026-10-11] the operator: "It shouldn't be chips. It should be gold coins" - a bet is a pile of coins toward the middle
+       of the felt, the pot a bigger pile in the centre, so bystanders can see the action */
+    const CHIP_GEO = new THREE.CylinderGeometry(0.034, 0.034, 0.007, 10);
+    const CHIP_MAT = [0xd8a92a, 0xc99a22, 0xe3b63a].map(c => new THREE.MeshLambertMaterial({ color: c, emissive: c, emissiveIntensity: 0.18, flatShading: true }));
+    function coinPile(into, n, unit, x, y, z, seed) {   /* n in coins of `unit` each: stacks of up to 8, laid out round the spot */
+      const coins = Math.max(0, Math.min(60, Math.ceil(n / Math.max(1, unit)))), stacks = Math.ceil(coins / 8);
+      for (let i = 0; i < coins; i++) {
+        const s = i % stacks, h = (i / stacks) | 0, a = seed + s * 2.4, r = stacks > 1 ? 0.045 + 0.012 * s : 0;
+        const c = new THREE.Mesh(CHIP_GEO, CHIP_MAT[(i + s) % 3]); c.position.set(x + Math.cos(a) * r, y + 0.0035 + h * 0.0075, z + Math.sin(a) * r); c.rotation.y = a; into.add(c);
+      }
+    }
     const BTN_GEO = new THREE.CylinderGeometry(0.065, 0.065, 0.022, 14), BTN_MAT = new THREE.MeshLambertMaterial({ color: 0xf2eee0 });
     const TURN_GEO = new THREE.TorusGeometry(0.15, 0.014, 6, 22), TURN_MAT = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.85 });
     let CARD_TEX = null;
@@ -13397,20 +13447,53 @@ POSSIBILITY OF SUCH DAMAGE. */
       for (let i = 0; i < 64; i++) {
         const px = (i % 8) * PW, py = ((i / 8) | 0) * PH;
         roundedRect(g, px + 4, py + 4, PW - 8, PH - 8, 9);
-        if (i === PBACK) {
-          g.fillStyle = '#2f4f86'; g.fill(); g.strokeStyle = '#d8e0ee'; g.lineWidth = 3; g.stroke();
-          g.save(); roundedRect(g, px + 11, py + 11, PW - 22, PH - 22, 6); g.clip();
-          g.strokeStyle = 'rgba(216,224,238,0.5)'; g.lineWidth = 2;
-          for (let k = -PH; k < PW + PH; k += 11) { g.beginPath(); g.moveTo(px + k, py); g.lineTo(px + k + PH, py + PH); g.stroke(); }
-          g.restore(); continue;
+        if (i === PBACK) {   /* [Claude 2026-10-11] the back, medieval (the operator): burgundy, a double gold border, a gold lattice, a shield with a cross */
+          g.fillStyle = '#5a1c1c'; g.fill(); g.strokeStyle = '#c8a040'; g.lineWidth = 3; g.stroke();
+          g.strokeStyle = '#c8a040'; g.lineWidth = 1.5; roundedRect(g, px + 10, py + 10, PW - 20, PH - 20, 6); g.stroke();
+          g.save(); roundedRect(g, px + 13, py + 13, PW - 26, PH - 26, 5); g.clip();
+          g.strokeStyle = 'rgba(200,160,64,0.45)'; g.lineWidth = 1;
+          for (let k = -PH; k < PW + PH; k += 14) { g.beginPath(); g.moveTo(px + k, py); g.lineTo(px + k + PH, py + PH); g.stroke(); g.beginPath(); g.moveTo(px + k + PH, py); g.lineTo(px + k, py + PH); g.stroke(); }
+          g.restore();
+          const cx = px + PW / 2, cy = py + PH / 2;   /* the shield */
+          g.fillStyle = '#c8a040'; g.beginPath(); g.moveTo(cx - 19, cy - 24); g.lineTo(cx + 19, cy - 24); g.lineTo(cx + 19, cy + 2); g.quadraticCurveTo(cx + 19, cy + 20, cx, cy + 28); g.quadraticCurveTo(cx - 19, cy + 20, cx - 19, cy + 2); g.closePath(); g.fill();
+          g.fillStyle = '#5a1c1c'; g.beginPath(); g.moveTo(cx - 16, cy - 21); g.lineTo(cx + 16, cy - 21); g.lineTo(cx + 16, cy + 1); g.quadraticCurveTo(cx + 16, cy + 17, cx, cy + 24); g.quadraticCurveTo(cx - 16, cy + 17, cx - 16, cy + 1); g.closePath(); g.fill();
+          g.fillStyle = '#c8a040'; g.fillRect(cx - 2.5, cy - 17, 5, 36); g.fillRect(cx - 12, cy - 9, 24, 5);
+          continue;
         }
         g.fillStyle = '#f8f5ec'; g.fill(); g.strokeStyle = '#bdb49d'; g.lineWidth = 2; g.stroke();
         const rank = PRANKS[i >> 2], suit = i & 3;
         g.fillStyle = PINK[suit]; g.textAlign = 'left'; g.textBaseline = 'top';
         g.font = 'bold ' + (rank === 'T' ? 19 : 24) + 'px "DejaVu Sans", sans-serif';
         g.fillText(rank === 'T' ? '10' : rank, px + 10, py + 8);
-        pip(g, suit, px + PW / 2, py + PH / 2, PW * 0.40);
         pip(g, suit, px + PW - 26, py + PH - 32, PW * 0.17);
+        /* [Claude 2026-10-11] the operator: the pips in their places; the ace alone a single pip; simple artwork on the court cards */
+        const n = PRANKS.indexOf(rank) + 2, L = px + PW * 0.33, Rr = px + PW * 0.67, C = px + PW / 2, S = PW * 0.14;
+        const Y = (f) => py + PH * f, pp = (x, y) => pip(g, suit, x, y, S);
+        if (rank === 'A') pip(g, suit, C, Y(0.5), PW * 0.34);
+        else if (n <= 10) {
+          const col3 = [0.26, 0.5, 0.74], col4 = [0.24, 0.41, 0.59, 0.76];
+          if (n === 2) { pp(C, Y(0.26)); pp(C, Y(0.74)); }
+          else if (n === 3) col3.forEach(f => pp(C, Y(f)));
+          else if (n === 4) [0.26, 0.74].forEach(f => { pp(L, Y(f)); pp(Rr, Y(f)); });
+          else if (n === 5) { [0.26, 0.74].forEach(f => { pp(L, Y(f)); pp(Rr, Y(f)); }); pp(C, Y(0.5)); }
+          else if (n === 6) col3.forEach(f => { pp(L, Y(f)); pp(Rr, Y(f)); });
+          else if (n === 7) { col3.forEach(f => { pp(L, Y(f)); pp(Rr, Y(f)); }); pp(C, Y(0.38)); }
+          else if (n === 8) { col3.forEach(f => { pp(L, Y(f)); pp(Rr, Y(f)); }); pp(C, Y(0.38)); pp(C, Y(0.62)); }
+          else if (n === 9) { col4.forEach(f => { pp(L, Y(f)); pp(Rr, Y(f)); }); pp(C, Y(0.5)); }
+          else { col4.forEach(f => { pp(L, Y(f)); pp(Rr, Y(f)); }); pp(C, Y(0.325)); pp(C, Y(0.675)); }
+        } else {   /* J, Q, K: a framed figure in the suit's colour - a crown (K), a crown and a veil (Q), a cap with a feather (J) */
+          const fx = C, fy = Y(0.5), col = PINK[suit], gold = '#c8a040';
+          g.strokeStyle = col; g.lineWidth = 1.5; g.strokeRect(px + 22, py + 34, PW - 44, PH - 68);
+          g.fillStyle = '#f0e6c8'; g.beginPath(); g.arc(fx, fy - 6, 11, 0, Math.PI * 2); g.fill();   /* the face */
+          g.fillStyle = col; g.fillRect(fx - 16, fy + 6, 32, 24);   /* the robe */
+          g.fillStyle = gold; g.fillRect(fx - 3, fy + 8, 6, 20);
+          if (rank === 'K') { g.fillStyle = gold; g.beginPath(); g.moveTo(fx - 13, fy - 15); g.lineTo(fx - 13, fy - 27); g.lineTo(fx - 6, fy - 20); g.lineTo(fx, fy - 30); g.lineTo(fx + 6, fy - 20); g.lineTo(fx + 13, fy - 27); g.lineTo(fx + 13, fy - 15); g.closePath(); g.fill();
+            g.fillStyle = col; g.beginPath(); g.arc(fx, fy + 2, 9, 0, Math.PI); g.fill(); }   /* the beard */
+          else if (rank === 'Q') { g.fillStyle = gold; g.beginPath(); g.moveTo(fx - 11, fy - 15); g.lineTo(fx - 9, fy - 25); g.lineTo(fx, fy - 20); g.lineTo(fx + 9, fy - 25); g.lineTo(fx + 11, fy - 15); g.closePath(); g.fill();
+            g.fillStyle = col; g.fillRect(fx - 15, fy - 12, 4, 20); g.fillRect(fx + 11, fy - 12, 4, 20); }   /* the veil */
+          else { g.fillStyle = col; g.beginPath(); g.moveTo(fx - 13, fy - 15); g.quadraticCurveTo(fx, fy - 30, fx + 13, fy - 15); g.closePath(); g.fill();   /* the cap */
+            g.strokeStyle = gold; g.lineWidth = 2; g.beginPath(); g.moveTo(fx + 8, fy - 22); g.quadraticCurveTo(fx + 20, fy - 34, fx + 26, fy - 24); g.stroke(); }   /* the feather */
+        }
       }
       CARD_TEX = new THREE.CanvasTexture(cv); CARD_TEX.colorSpace = THREE.SRGBColorSpace; CARD_TEX.anisotropy = 4;
       return CARD_TEX;
@@ -13426,16 +13509,18 @@ POSSIBILITY OF SUCH DAMAGE. */
                                      the bets in front of each chair, who has the button, whose turn it is */
       PK_STATE[id] = m;
       const T = POKER[id]; if (!T) return;
-      if (!m) { for (const k of Object.keys(T.cards)) { T.group.remove(T.cards[k].g); delete T.cards[k]; } return; }
-      const top = T.oy, want = {}, TILT = 0.42;   /* a card lying flat is below your own eye line at a felt - too flat to
+      if (!m) { for (const k of Object.keys(T.cards)) { T.group.remove(T.cards[k].g); delete T.cards[k]; } for (const k of Object.keys(T.chips)) { T.group.remove(T.chips[k].g); delete T.chips[k]; } if (T.potG) { T.group.remove(T.potG); T.potG = null; T.potN = 0; } return; }
+      const top = T.oy, want = {}, TILT = 0.42, R = T.r || 0.95;   /* [Claude] everything on the felt is placed by its radius */   /* a card lying flat is below your own eye line at a felt - too flat to
                                      read: a card that is face up leans up toward the chair it belongs to, the two you hold */
-      for (let i = 0; i < (m.board || []).length; i++) want['b' + i] = { face: m.board[i] | 0, x: T.ox + (i - 2) * 0.17, z: T.oz - 0.07, ang: 0, tilt: 0 };
+      for (let i = 0; i < (m.board || []).length; i++) want['b' + i] = { face: m.board[i] | 0, x: T.ox + (i - 2) * 0.17 * Math.max(1, R / 0.95), z: T.oz - 0.07, ang: 0, tilt: 0 };
       for (const h of m.hands || []) {
         const s = T.spots[h.ref | 0]; if (!s) continue;
         const dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1, ux = dx / L, uz = dz / L, ang = Math.atan2(dx, dz);
-        const px = T.ox + ux * 0.60, pz = T.oz + uz * 0.60, tl = h.tilt ? TILT : 0, face = h.down ? PBACK : (h.c && h.c[0] != null ? h.c[0] : PBACK);
-        want['h' + (h.ref | 0) + 0] = { face, x: px + uz * 0.048, z: pz - ux * 0.048, ang: ang + 0.11, tilt: tl };
-        want['h' + (h.ref | 0) + 1] = { face: h.down ? PBACK : (h.c && h.c[1] != null ? h.c[1] : PBACK), x: px - uz * 0.048, z: pz + ux * 0.048, ang: ang - 0.11, tilt: tl };
+        const px = T.ox + ux * 0.66 * R, pz = T.oz + uz * 0.66 * R, tl = h.tilt ? TILT : 0, face = h.down ? PBACK : (h.c && h.c[0] != null ? h.c[0] : PBACK);
+        /* [Claude 2026-10-11] the operator: "Fix the way the player cards are displayed" - the two lay on top of each other (0.048 apart,
+           a card is 0.15 wide); now side by side with a finger's gap, barely fanned */
+        want['h' + (h.ref | 0) + 0] = { face, x: px + uz * 0.085, z: pz - ux * 0.085, ang: ang + 0.05, tilt: tl };
+        want['h' + (h.ref | 0) + 1] = { face: h.down ? PBACK : (h.c && h.c[1] != null ? h.c[1] : PBACK), x: px - uz * 0.085, z: pz + ux * 0.085, ang: ang - 0.05, tilt: tl };
       }
       for (const k of Object.keys(T.cards)) if (!want[k]) { T.group.remove(T.cards[k].g); delete T.cards[k]; }
       for (const k of Object.keys(want)) {
@@ -13458,23 +13543,24 @@ POSSIBILITY OF SUCH DAMAGE. */
         if (st.n === n) continue;
         st.n = n; for (const c of st.g.children.slice()) st.g.remove(c);
         const dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1;
-        const px = T.ox + dx / L * 0.80, pz = T.oz + dz / L * 0.80;
-        const k = Math.max(0, Math.min(9, Math.round(n / 25)));
-        for (let i = 0; i < k; i++) {
-          const c = new THREE.Mesh(CHIP_GEO, CHIP_MAT[i % 4]); c.position.set(px, top + 0.016 + i * 0.03, pz); st.g.add(c);
-        }
+        const px = T.ox + dx / L * 0.42 * R, pz = T.oz + dz / L * 0.42 * R;   /* toward the middle, in front of the cards */
+        coinPile(st.g, n, m.big || 25, px, top + 0.014, pz, ref * 1.7);
         if (!st.g.parent) T.group.add(st.g);
+      }
+      if (T.potN !== (m.pot | 0)) {   /* the pot: a pile in the centre of the felt */
+        T.potN = m.pot | 0; if (T.potG) { T.group.remove(T.potG); T.potG = null; }
+        if (T.potN > 0) { T.potG = new THREE.Group(); coinPile(T.potG, T.potN, m.big || 25, T.ox, top + 0.014, T.oz + 0.16, 0.6); T.group.add(T.potG); }
       }
       if (T.btn) { T.group.remove(T.btn); T.btn = null; }
       if (m.dealer != null && T.spots[m.dealer | 0]) {
         const s = T.spots[m.dealer | 0], dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1;
-        const b = new THREE.Mesh(BTN_GEO, BTN_MAT); b.position.set(T.ox + dx / L * 0.86, top + 0.02, T.oz + dz / L * 0.86); T.group.add(b); T.btn = b;
+        const b = new THREE.Mesh(BTN_GEO, BTN_MAT); b.position.set(T.ox + dx / L * 0.92 * R, top + 0.02, T.oz + dz / L * 0.92 * R); T.group.add(b); T.btn = b;
       }
       if (T.turn) { T.group.remove(T.turn); T.turn = null; }
       if (m.turn != null && T.spots[m.turn | 0]) {
         const s = T.spots[m.turn | 0], dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1;
         const r = new THREE.Mesh(TURN_GEO, TURN_MAT); r.rotation.x = Math.PI / 2;
-        r.position.set(T.ox + dx / L * 0.60, top + 0.05, T.oz + dz / L * 0.60); T.group.add(r); T.turn = r;
+        r.position.set(T.ox + dx / L * 0.66 * R, top + 0.05, T.oz + dz / L * 0.66 * R); T.group.add(r); T.turn = r;
       }
     }
     const SNOWC = new THREE.Color(0xf2f1ec);
@@ -13794,8 +13880,11 @@ POSSIBILITY OF SUCH DAMAGE. */
       }
       if (mesh.material && mesh.material.map) mesh.material.map.needsUpdate = true;
     }
+    function boardDefault(id, title) {   /* [Claude 2026-10-11] what a board says before the Bank has answered: its own title, not the keep's */
+      return id === 'chess' ? ['CHESS CHAMPIONS', '0 games won', '', 'None yet.'] : [title || 'DRAGON KILLERS', 'Slain 0 times', '', 'None yet.'];
+    }
     function boardPaint(id, lines) {
-      const B = BOARDS[id] = BOARDS[id] || { lines: ['DRAGON KILLERS', 'Slain 0 times', '', 'None yet.'], faces: [] };
+      const B = BOARDS[id] = BOARDS[id] || { lines: boardDefault(id), faces: [] };
       if (lines) B.lines = lines;
       for (const f of B.faces) drawBoardFace(f, B.lines);
     }
@@ -14339,6 +14428,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       const floorY = (o, y) => { const f = floor[o.y * W + o.x]; return isNaN(f) ? y : f; };
       const siteObjs = chunk ? [].concat(...map.sitesIn(X0, Y0, X1 - 1, Y1 - 1).map(st => st.objects), ...(map.roadTorchesIn ? map.roadTorchesIn(X0, Y0, X1 - 1, Y1 - 1) : [])) : [];   /* tents, campfires, and lit posts along the town roads */
       const objs = (chunk ? siteObjs : map.objects.filter(o => inR(o.x, o.y))).sort((a, b) => (b.enter ? 1 : 0) - (a.enter ? 1 : 0));
+      const pkSeats = new Set(); for (const o of objs) if (o.k === 'pokertable') for (const sq of o.seats || []) pkSeats.add(sq[0] + ',' + sq[1]);   /* [Claude] the seats a poker table furnishes itself */
       for (const o of objs) {
         const x = o.x + (o.w || 1) / 2, z = o.y + (o.h || 1) / 2; let y = heightAt(x, z);
         switch (o.k) {
@@ -14391,7 +14481,7 @@ POSSIBILITY OF SUCH DAMAGE. */
             B.add('box', WOOD, px + (nz ? 0.48 : 0), py + 0.85, pz + (nx ? 0.48 : 0), 0.12, 1.7, 0.12);
             B.add('box', PLANK, px, py + 1.05, pz, nz ? BW + 0.08 : 0.08, BH + 0.08, nz ? 0.08 : BW + 0.08);
             for (const [ox, oy] of [[-0.46, 0.42], [0.46, 0.42], [-0.46, -0.42], [0.46, -0.42]]) B.add('box', IRON, px + nz * ox, py + 1.05 + oy, pz + nx * ox, 0.06, 0.06, 0.06);
-            const B0 = BOARDS[id] = BOARDS[id] || { lines: ['DRAGON KILLERS', 'Slain 0 times', '', 'None yet.'], faces: [] };
+            const B0 = BOARDS[id] = BOARDS[id] || { lines: boardDefault(id, o.title), faces: [] };
             const cv = document.createElement('canvas'); cv.width = 256; cv.height = 384;
             const along = nz !== 0;
             for (const side of [1, -1]) {
@@ -14714,26 +14804,57 @@ POSSIBILITY OF SUCH DAMAGE. */
             const bd = new THREE.Mesh(new THREE.BoxGeometry(8 * SQ, 0.06, 8 * SQ), new THREE.MeshBasicMaterial({ visible: false })); bd.position.set(x, top + 0.03, z); bd.userData.pick = { kind: 'square', id, x: o.x, y: o.y }; group.add(bd); pickables.push(bd);
             break;
           }
-          case 'pokertable': {   /* the felt, the rail and the six chairs' places; pokerShow (called by the engine, and again
-               here after a rebuild) lays the cards, the bets and the button on it. Seats are tile pairs beside the table. */
-            const fl = floorY(o, y), top = fl + 0.74, id = o.id || ('p' + o.x + ',' + o.y);
-            const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 0.7, 12), lam(0x3d2b1d)); leg.position.set(x, fl + 0.36, z); group.add(leg);
-            const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.40, 0.48, 0.07, 16), lam(0x33241a)); foot.position.set(x, fl + 0.04, z); group.add(foot);
+          case 'pokertable': {   /* the felt, the rail and the eight chairs; pokerShow (called by the engine, and again
+               here after a rebuild) lays the cards, the bets and the button on it. Seats are tile pairs beside the table.
+               [Claude 2026-10-11] `lv`: the storey the table stands on (the operator: "on the second story where there's plenty of
+               room") - its height is the storey's, and everything of it goes into that storey's group, so it is hidden with
+               the floor when you are below it (engine: storeys above you are see-through). The chairs are the table's own,
+               each turned to face the felt (the operator: "the chairs need to be aligned better"). */
+            const lv = o.lv | 0, rfUp = lv > 0 ? roofs.find(r => o.x >= r.x0 && o.x <= r.x1 && o.y >= r.y0 && o.y <= r.y1) : null;
+            const into = rfUp && rfUp.storeys && rfUp.storeys[lv - 1] ? rfUp.storeys[lv - 1] : group;
+            const fl = floorY(o, y) + 1.8 * lv, top = fl + 0.74, id = o.id || ('p' + o.x + ',' + o.y);
+            /* [Claude 2026-10-11, the operator's two-table room] the felt is round and sized by the table's footprint: on two by two
+               tiles it is r 1.10, and the eight chairs stand two to a side on the tiles round it, each 0.17 m off the rail,
+               none under it (the top-down diagram, handoff/poker_plan.md 6c) */
+            const R = (o.w || 1) >= 2 ? 1.10 : 0.69;
+            for (const s of o.seats || []) {   /* a chair on each seat tile, its back to the room */
+              const cg = new THREE.Group(), cx = s[0] + 0.5, cz = s[1] + 0.5; cg.position.set(cx, fl, cz); cg.rotation.y = Math.atan2(cx - x, cz - z);
+              cg.add(mesh(new THREE.BoxGeometry(0.44, 0.06, 0.44), 0x7a4a26, 0, 0.36, 0), mesh(new THREE.BoxGeometry(0.44, 0.55, 0.05), 0x7a4a26, 0, 0.65, 0.2));
+              for (const sx of [-1, 1]) for (const sz of [-1, 1]) cg.add(mesh(new THREE.BoxGeometry(0.05, 0.36, 0.05), 0x5a3a1e, sx * 0.18, 0.18, sz * 0.18));
+              into.add(cg);
+            }
+            const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 0.7, 12), lam(0x3d2b1d)); leg.position.set(x, fl + 0.36, z); into.add(leg);
+            const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.40, 0.48, 0.07, 16), lam(0x33241a)); foot.position.set(x, fl + 0.04, z); into.add(foot);
             const FELT = new THREE.Color(o.felt || 0x1f4d38).getHex();   /* a felt in a dim tavern would otherwise read as black, so it carries a little of its own light */
             const felt = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.07, 40), lam(FELT, { emissive: FELT, emissiveIntensity: 0.4 }));
-            felt.scale.set(0.95, 1, 0.70); felt.position.set(x, top - 0.035, z); group.add(felt);
+            felt.scale.set(R, 1, R); felt.position.set(x, top - 0.035, z); into.add(felt);
             const rail = new THREE.Mesh(new THREE.TorusGeometry(1, 0.09, 8, 36), lam(0x54341f));
-            rail.rotation.x = Math.PI / 2; rail.scale.set(0.95, 0.70, 1); rail.position.set(x, top + 0.01, z); group.add(rail);
+            rail.rotation.x = Math.PI / 2; rail.scale.set(R, R, 1); rail.position.set(x, top + 0.01, z); into.add(rail);
+            /* [Claude 2026-10-11] a candle wheel over the felt (the operator: the light should flicker like candles): an iron ring on
+               three chains, six tallow candles, their flames one group so the torch loop makes them gutter; at the front of
+               `torches` so it takes one of the region's two warm lights, whose intensity flickers like a candle below */
+            const wheel = new THREE.Group(); wheel.position.set(x, top + 1.05, z); into.add(wheel);
+            wheel.add(mesh(new THREE.TorusGeometry(0.42, 0.022, 6, 20), 0x2a2622, 0, 0, 0)); wheel.children[0].rotation.x = Math.PI / 2;
+            for (let k = 0; k < 3; k++) { const a = k * Math.PI * 2 / 3, ch = mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.9, 4), 0x3a3632, Math.cos(a) * 0.21, 0.45, Math.sin(a) * 0.21); ch.rotation.z = -Math.cos(a) * 0.46; ch.rotation.x = Math.sin(a) * 0.46; wheel.add(ch); }
+            wheel.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.5, 4), 0x3a3632, 0, 1.12, 0));
+            const flames = new THREE.Group(); wheel.add(flames);
+            for (let k = 0; k < 6; k++) {
+              const a = k * Math.PI / 3 + 0.3, cx = Math.cos(a) * 0.42, cz = Math.sin(a) * 0.42, h = 0.09 + hash2(o.x + k, o.y) * 0.06;
+              wheel.add(mesh(new THREE.CylinderGeometry(0.018, 0.02, h, 6), 0xf1e6c4, cx, h / 2 + 0.01, cz));
+              const f = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.055, 5), new THREE.MeshBasicMaterial({ color: 0xffd060 })); f.position.set(cx, h + 0.035, cz); flames.add(f);
+            }
+            torches.unshift({ f: flames, ph: hash2(o.x, o.y) * 10, x, y: top - 0.35, z, night: false, tend: false, tx: o.x, ty: o.y, candle: true });
             const mat = new THREE.MeshBasicMaterial({ map: cardKit(), side: THREE.DoubleSide });
             mat.userData.shared = true;   /* the atlas is one for the whole game - dispose() must not take it with this region */
-            const gg = new THREE.Group(); group.add(gg);
-            POKER[id] = { ox: x, oy: top, oz: z, spots: (o.seats || []).map((s, i) => ({ x: s[0] + 0.5, z: s[1] + 0.5, ref: i })), cards: {}, chips: {}, group: gg, mat };
-            const pk = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.9, 1.8), new THREE.MeshBasicMaterial({ visible: false }));
-            pk.position.set(x, fl + 0.4, z); pk.userData.pick = { kind: 'pokertable', id, x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
+            const gg = new THREE.Group(); into.add(gg);
+            POKER[id] = { ox: x, oy: top, oz: z, r: R, spots: (o.seats || []).map((s, i) => ({ x: s[0] + 0.5, z: s[1] + 0.5, ref: i })), cards: {}, chips: {}, group: gg, mat };
+            const pk = new THREE.Mesh(new THREE.BoxGeometry(2 * R + 0.2, 0.9, 2 * R + 0.2), new THREE.MeshBasicMaterial({ visible: false }));
+            pk.position.set(x, fl + 0.4, z); pk.userData.pick = { kind: 'pokertable', id, x: o.x, y: o.y, lv }; into.add(pk); pickables.push(pk);
             pokerShow(id, PK_STATE[id]);
             break;
           }
-          case 'chair': { const fl = floorY(o, y); B.add('box', 0x7a4a26, x, fl + 0.36, z, 0.42, 0.06, 0.42); B.add('box', 0x7a4a26, x, fl + 0.65, z - 0.19, 0.42, 0.55, 0.05); for (const sx of [-1, 1]) for (const sz of [-1, 1]) B.add('box', 0x5a3a1e, x + sx * 0.17, fl + 0.18, z + sz * 0.17, 0.05, 0.36, 0.05); break; }
+          case 'chair': { if (pkSeats.has(o.x + ',' + o.y)) break;   /* [Claude] a poker table draws its own, turned to the felt */
+            const fl = floorY(o, y); B.add('box', 0x7a4a26, x, fl + 0.36, z, 0.42, 0.06, 0.42); B.add('box', 0x7a4a26, x, fl + 0.65, z - 0.19, 0.42, 0.55, 0.05); for (const sx of [-1, 1]) for (const sz of [-1, 1]) B.add('box', 0x5a3a1e, x + sx * 0.17, fl + 0.18, z + sz * 0.17, 0.05, 0.36, 0.05); break; }
           case 'bed': { const fl = floorY(o, y), w = (o.w || 1) - 0.15, d = (o.h || 1) - 0.15; B.add('box', 0x6a4426, x, fl + 0.2, z, w, 0.4, d); B.add('box', [0xa03a3a, 0x3a6aa0, 0x6a8a3a][(o.x + o.y) % 3], x, fl + 0.43, z + 0.12, w - 0.06, 0.1, d - 0.4); B.add('box', 0xf0ead8, x, fl + 0.46, z - d / 2 + 0.25, w - 0.25, 0.12, 0.3); B.add('box', 0x5a3a1e, x, fl + 0.55, z - d / 2 + 0.04, w, 0.7, 0.08); break; }
           case 'fireplace': case 'furnace': {
             const fl = floorY(o, y), w = (o.w || 1), d = (o.h || 1), hgt = o.k === 'furnace' ? 1.4 : 1.1;
@@ -14908,7 +15029,10 @@ POSSIBILITY OF SUCH DAMAGE. */
             t.f.scale.set(1, s, 1); if (t.f2) t.f2.scale.set(1, s, 1);
           }
           for (const L of street) { const on = LAMPQ ? !!LAMPQ(L.x, L.y) : NIGHTK > 0.04; L.mat.color.copy(LAMP_OFF).lerp(LAMP_ON, on ? 1 : 0); }
-          for (const L of lights) L.intensity = 2.6 + Math.sin(time * 11 + L.position.x) * 0.4;
+          for (const L of lights) {   /* [Claude 2026-10-11] a flame's light gutters: three unrelated rhythms and a dip now and then, not one smooth wave */
+            const p = L.position.x * 1.7 + L.position.z * 0.3, g = Math.sin(time * 9.1 + p) * 0.22 + Math.sin(time * 23.7 + p * 1.9) * 0.11 + Math.sin(time * 41.3 + p * 3.1) * 0.07, dip = Math.sin(time * 1.3 + p) > 0.93 ? -0.45 : 0;
+            L.intensity = 2.5 + g + dip;
+          }
           for (const s of spots) { const ice = !!(map.iceAt && map.iceAt(s.x, s.y)); s.rings.forEach(r => { r.visible = !ice; }); }   /* a frozen pond does not ripple: you fish through the ice */
           for (const s of spots) if (s.rings[0].visible) s.rings.forEach((r, k) => { const p = ((time * 0.6 + s.ph + k / 3) % 1); r.scale.setScalar(0.6 + p * 2.2); r.material.opacity = 0.75 * (1 - p); });
           if (waterMesh) waterMesh.material.emissive.setHSL(0.58, 0.6, 0.08 + 0.02 * Math.sin(time * 1.5));
@@ -15855,14 +15979,24 @@ POSSIBILITY OF SUCH DAMAGE. */
 .ash .pokerp .btn{margin:0;padding:6px 9px}
 .ash .pokerp .rz{display:none;margin-top:6px;padding:6px;background:#0005;border-radius:4px}
 .ash .pokerp .rz.on{display:block}
-@media (max-width:600px){.ash .pokerp{right:6px;top:6px;width:180px;font-size:12px}.ash .pokerp .lg{max-height:20px}}`;
+.ash .pokerp .win{margin:6px 0;padding:7px 9px;border-radius:5px;background:#ffd23f22;border:1px solid #ffd23f88;color:#ffe9a0;font:bold 14px Georgia,serif;line-height:1.3}
+.ash .pokerp .sd{margin:4px 0;padding:4px 6px;border-radius:4px;background:#0004;font-size:12px;color:#d9d3c2}
+.ash .pokerp .sd .cd{font-size:13px;min-width:18px}
+.ash .pokerp .sd b{color:#ffd23f;font-weight:normal}
+.ash .pokerp .rz .amt{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-family:ui-monospace,Menlo,Consolas,monospace;color:#ffd23f}
+.ash .pokerp .rz input[type=range]{width:100%;margin:4px 0;accent-color:#ffd23f}
+.ash .pokerp .rz .qk{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.ash .pokerp .rz .qk .btn{padding:4px 7px;font-size:12px}
+@media (max-width:600px){.ash .pokerp{left:6px;right:6px;top:6px;width:auto;max-width:none;max-height:50vh;overflow:auto;font-size:15px;padding:10px 12px}.ash .pokerp h3{font-size:18px}.ash .pokerp .lg{max-height:40px;font-size:13px}.ash .pokerp .cd{font-size:20px;min-width:30px;padding:3px 6px}.ash .pokerp .btn{padding:10px 14px;font-size:15px}.ash .pokerp .win{font-size:17px}.ash .pokerp .sd{font-size:14px}}`;
+/* [Claude 2026-10-11] the operator: on a phone the panel fills the top half of the screen; a slider from the least raise to all-in;
+   the showdown shows every hand face up with its name and says plainly who won what with which hand */
   const RANK = '23456789TJQKA', SUIT = ['♣', '♦', '♥', '♠'], RED = [0, 1, 1, 0];
   const STREET = { none: 'between hands', preflop: 'the first round', flop: 'the flop', turn: 'the turn', river: 'the river' };
   function cardTxt(id) { return id == null ? '<span class="cd b">•</span>' : '<span class="cd' + (RED[id & 3] ? ' r' : '') + '">' + RANK[(id >> 2) % 13] + SUIT[id & 3] + '</span>'; }
   function install(K) {
     const { api, el, ui, A } = K, esc = A.esc;
     if (!document.getElementById('ash-poker-css')) { const st = document.createElement('style'); st.id = 'ash-poker-css'; st.textContent = CSS; document.head.appendChild(st); }
-    let box = null, cb = null, view = null, raise = false;
+    let box = null, cb = null, view = null, raise = false, raiseTo = null;
     function statusOf(v) {
       if (v.open) return { cls: 'wait', text: v.seats.length > 1 ? 'The table is dealing the next hand' : 'Waiting for players to take chairs' };
       const t = v.seats.find(s => s.ref === v.turn);
@@ -15871,20 +16005,30 @@ POSSIBILITY OF SUCH DAMAGE. */
       if (t) return { cls: 'wait', text: esc(t.name) + ' to act' };
       return { cls: 'wait', text: (STREET[v.street] || v.street || '') + (v.hand ? ' — hand ' + v.hand : '') };
     }
+    function handName(v, ref) { const h = (v.shown || []).find(x => x.ref === ref); return h ? h.name : ''; }
     function winTxt(v) {
       if (!v.result || !(v.result.p || []).length) return '';
       const bits = [];
-      for (const q of v.result.p) { const ns = v.seats.filter(s => (q[1] || []).indexOf(s.ref) >= 0).map(s => s.name); if (ns.length) bits.push(ns.join(' & ') + ' take' + (ns.length > 1 ? '' : 's') + ' ' + q[0]); }
-      return bits.join('; ');
+      for (const q of v.result.p) {
+        const ws = v.seats.filter(s => (q[1] || []).indexOf(s.ref) >= 0), ns = ws.map(s => esc(s.name)); if (!ns.length) continue;
+        const hn = ws.length ? handName(v, ws[0].ref) : '';
+        bits.push(ns.join(' & ') + (ns.length > 1 ? ' split ' : ' win' + (ns.length > 1 ? '' : 's') + ' ') + q[0] + ' GOLD' + (hn ? ' with ' + esc(hn) : v.result.c ? '' : ' — everyone else folded'));
+      }
+      return bits.join('. ');
+    }
+    function showdownHtml(v) {
+      if (!v.shown || !v.shown.length) return '';
+      const wins = v.winners || [];
+      return v.shown.map(h => { const s = v.seats.find(x => x.ref === h.ref); return '<div class="sd">' + (wins.indexOf(h.ref) >= 0 ? '&#9733; ' : '') + esc(s ? s.name : 'seat ' + (h.ref + 1)) + ': ' + cardTxt(h.c[0]) + cardTxt(h.c[1]) + ' <b>' + esc(h.name) + '</b></div>'; }).join('');
     }
     function draw() {
       if (!box || !view) return;
       const v = view, you = (s) => s.id === v.me, pot = v.pot, st = statusOf(v);
       const mine = v.seats.filter(s => you(s))[0] || null;
-      const lo = v.bet ? v.bet * 2 : 100, hi = v.bet + (mine ? mine.chips : 0), potR = v.bet + pot;
-      const amounts = [];
-      if (hi > Math.max(v.bet, lo - 1)) { amounts.push(Math.min(Math.max(lo, v.bet + 1), hi)); if (potR > amounts[0] && potR < hi) amounts.push(potR); if (hi > amounts[amounts.length - 1]) amounts.push(hi); }
-      box.innerHTML = '<h3>Poker' + (v.buy ? ' <small style="font:12px system-ui,sans-serif;color:#ffd23f">buy-in ' + v.buy.toLocaleString() + ' GOLD</small>' : ' <small style="font:12px system-ui,sans-serif;color:#cbd6cd">free chips</small>') + '</h3>'   /* [Claude] the buy-in the first sitter set */
+      const hi = v.bet + (mine ? mine.chips : 0), lo = Math.min(Math.max(v.min || (v.bet ? v.bet * 2 : 100), v.bet + 1), hi), potR = Math.min(hi, Math.max(lo, v.bet + pot));
+      const canRaise = hi > v.bet && lo <= hi, amounts = canRaise ? [lo] : [];
+      if (raiseTo == null || raiseTo < lo || raiseTo > hi) raiseTo = lo;
+      box.innerHTML = '<h3>Card table' + (v.buy ? ' <small style="font:12px system-ui,sans-serif;color:#ffd23f">buy-in ' + v.buy.toLocaleString() + ' GOLD</small>' : ' <small style="font:12px system-ui,sans-serif;color:#cbd6cd">free chips</small>') + '</h3>'   /* [Claude] the buy-in the first sitter set */
         + v.seats.map(s => '<div class="pl' + (v.turn === s.ref && !v.open ? ' turn' : '') + (((s.folded || !s.dealt) && !v.open) ? ' out' : '') + '">'
           + '<span>' + (v.dealer === s.ref ? '<i class="d">D</i>' : '') + '<b>' + esc(s.name) + (you(s) ? ' <span style="color:#9fc3ff">(you)</span>' : '') + (s.away ? ' <span style="color:#9aa79c">(away)</span>' : '') + '</b></span>'
           + '<span><span class="ch">' + s.chips + '</span>' + (s.bet ? '<span class="bt">' + s.bet + '</span>' : '') + '</span></div>').join('')
@@ -15892,17 +16036,23 @@ POSSIBILITY OF SUCH DAMAGE. */
         + '<div class="cards">' + (v.hole ? cardTxt(v.hole[0]) + cardTxt(v.hole[1]) : (v.inHand ? cardTxt(null) + cardTxt(null) : '<span style="font-size:12px;color:#9aa79c">not in this hand</span>'))
         + (v.board.length ? '<span style="margin:0 4px;color:#8fa08c">|</span>' + v.board.map(cardTxt).join('') : '') + '</div>'
         + '<div class="pot">pot ' + pot + (v.bet ? ' · to call ' + v.bet : ' · nobody to beat') + (mine ? ' · your chips ' + mine.chips : '') + '</div>'
-        + (winTxt(v) ? '<div class="pot" style="color:#ffd23f">' + winTxt(v) + '</div>' : '')
-        + '<div class="lg">' + v.log.map(esc).join('<br>') + '</div>'
+        + (winTxt(v) ? '<div class="win">' + winTxt(v) + '</div>' + showdownHtml(v) : '')
+        + (raise && amounts.length ? '' : '<div class="lg">' + v.log.map(esc).join('<br>') + '</div>')
         + (v.away ? '<div class="stt wait">You are dealt out (a minute on your hand). Tap to come back.</div>' : '')   /* [Claude] */
+        + '<div class="rz' + (raise && amounts.length ? ' on' : '') + '" data-rz><div class="amt"><span>raise to</span><span data-amt>' + raiseTo + '</span></div>'
+        + '<input type="range" min="' + lo + '" max="' + hi + '" step="1" value="' + raiseTo + '" data-sl>'
+        + '<div class="qk"><button class="btn" data-q="' + lo + '">min ' + lo + '</button>' + (potR > lo && potR < hi ? '<button class="btn" data-q="' + potR + '">pot ' + potR + '</button>' : '') + '<button class="btn" data-q="' + hi + '">all-in ' + hi + '</button>'
+        + '<button class="btn" data-to style="margin-left:auto;background:#5a4a1c;color:#ffe2a8">Raise to <span data-amt2>' + raiseTo + '</span></button></div></div>'
         + '<div class="btns">' + (v.away ? '<button class="btn" data-a="back">I\'m back</button>' : '') + (v.myTurn ? '<button class="btn" data-a="fold">Fold</button>'
           + '<button class="btn" data-a="' + (v.call > 0 ? 'call' : 'check') + '">' + (v.call > 0 ? 'Call ' + v.call : 'Check') + '</button>'
           + (amounts.length ? '<button class="btn" data-r>Raise</button><button class="btn" data-a="allin">All-in</button>' : '') : '')
         + '<button class="btn" data-a="stand">' + (v.inHand && !v.open ? 'Fold & stand' : 'Stand up') + '</button></div>'
-        + '<div class="rz' + (raise ? ' on' : '') + '" data-rz>' + amounts.map(n => '<button class="btn" data-to="' + n + '">' + n + '</button>').join(' ') + '</div>';
       for (const b of box.querySelectorAll('[data-a]')) b.onclick = () => { const a = b.dataset.a; raise = false; if (a === 'stand') { if (cb && cb.stand) cb.stand(); } else if (cb && cb.act) cb.act(a); api.sfx && api.sfx('click'); };
       const r = box.querySelector('[data-r]'); if (r) r.onclick = () => { raise = !raise; draw(); };
-      for (const b of box.querySelectorAll('[data-to]')) b.onclick = () => { raise = false; if (cb && cb.act) cb.act('raise', b.dataset.to | 0); api.sfx && api.sfx('click'); };
+      const sl = box.querySelector('[data-sl]'), amt = box.querySelector('[data-amt]'), amt2 = box.querySelector('[data-amt2]');
+      if (sl) { sl.oninput = () => { raiseTo = sl.value | 0; if (amt) amt.textContent = raiseTo; if (amt2) amt2.textContent = raiseTo; }; sl.onpointerdown = (e) => e.stopPropagation(); }
+      for (const b of box.querySelectorAll('[data-q]')) b.onclick = () => { raiseTo = b.dataset.q | 0; if (sl) sl.value = raiseTo; if (amt) amt.textContent = raiseTo; if (amt2) amt2.textContent = raiseTo; };
+      const go = box.querySelector('[data-to]'); if (go) go.onclick = () => { raise = false; if (cb && cb.act) cb.act('raise', raiseTo | 0); api.sfx && api.sfx('click'); };
     }
     function pokerOpen(v, callbacks) { cb = callbacks || null; view = v; raise = false; if (!box) box = el('pokerp felt ui', ui); ui.classList.add('poker'); draw(); }
     function pokerUpdate(v) { if (!box) return; view = v; draw(); }
@@ -19934,16 +20084,17 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       setInterval(() => marksAsk(false), 15000); setTimeout(() => marksAsk(true), 9000);
       /* the ruined keep's dragon-killer board (2026-10-10): the Bank holds every character's count, so the sign is the same
          for anyone who reads it. A game reports its own name's total; 'scores?' answers the whole board. */
+      const SCORE_KEYS = ['chain_dragon', 'chess_wins'];
       function scoreTell(e) {
-        if (!e || e.key !== 'chain_dragon' || !e.name) return;
+        if (!e || SCORE_KEYS.indexOf(e.key) < 0 || !e.name) return;   /* [Claude 2026-10-11] the chess park's games-won board rides the same channel */
         const p = e.n | 0; if (p < 1) return;
-        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'score', v: 1, k: 'chain_dragon', n: String(e.name).slice(0, 20), p }); });
+        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'score', v: 1, k: e.key, n: String(e.name).slice(0, 20), p }); });
       }
       let scoreT = 0; const scoreGot = {};
       function scoresAsk(force) {
         if (!force && performance.now() - scoreT < 20000) return;
         scoreT = performance.now();
-        bankRoom().then(R => { if (R && R.me) R.send({ t: 'scores?', v: 1, k: 'chain_dragon' }); });
+        bankRoom().then(R => { if (R && R.me) for (const k of SCORE_KEYS) R.send({ t: 'scores?', v: 1, k }); });
       }
       function scoresHeard(d) {
         const k = String(d.k || 'chain_dragon'), q = k + ':' + (d.of | 0), G = scoreGot[q] = scoreGot[q] || { top: [], n: 0, total: 0 };
@@ -20731,9 +20882,48 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
          preview ?home=ziibiing does the same */
       if (HOME && core.setNewHome) core.setNewHome(HOME);
       const me = core.addPlayer(PID, save);
+      /* [Claude 2026-10-12] PRIVATE HOLE CARDS (the operator). The mesh is broadcast-only, so secrecy is made here: every game holds an
+         ECDH P-256 key for the session; a sitter's public key rides with the sit (cmd pk -> PS) and lives on the dealer's seat;
+         the dealer seals each seat's two cards with AES-GCM under ECDH(dealer, seat) and puts only the sealed blobs in the row
+         (hk = the dealer's public key); a replica opens its own and hands the two numbers to its core (pokerOpen). A seat without
+         a key (no WebCrypto) gets its cards plain, as before - only that seat's. The showdown is public (r.sd), as it should be. */
+      const CRY = (typeof globalThis !== 'undefined' && globalThis.crypto) || null, SUBTLE = CRY && CRY.subtle ? CRY.subtle : null;
+      const B64 = { enc: b => btoa(String.fromCharCode.apply(null, new Uint8Array(b))), dec: s => Uint8Array.from(atob(s), c => c.charCodeAt(0)) };
+      let MYKEY = null, MYPK = '';
+      /* P-256 points travel compressed (33 bytes, 44 chars): the room's messages are 512 B, a dealer's row cannot carry 65-byte keys */
+      const P256 = { p: (1n << 256n) - (1n << 224n) + (1n << 192n) + (1n << 96n) - 1n, b: 0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604bn };
+      const bnOf = u8 => { let n = 0n; for (const b of u8) n = (n << 8n) | BigInt(b); return n; }, u8Of = (n, len) => { const o = new Uint8Array(len); for (let i = len - 1; i >= 0; i--) { o[i] = Number(n & 255n); n >>= 8n; } return o; };
+      const modPow = (b, e, m) => { let r = 1n; b %= m; while (e > 0n) { if (e & 1n) r = r * b % m; b = b * b % m; e >>= 1n; } return r; };
+      const compress = raw => { const u = new Uint8Array(raw); const o = new Uint8Array(33); o[0] = 2 + (u[64] & 1); o.set(u.slice(1, 33), 1); return B64.enc(o); };
+      const decompress = s => { const c = B64.dec(s); if (c.length === 65) return c; const x = bnOf(c.slice(1)), p = P256.p; let y = modPow((x * x * x - 3n * x + P256.b) % p, (p + 1n) / 4n, p); if ((y & 1n) !== BigInt(c[0] & 1)) y = p - y; const o = new Uint8Array(65); o[0] = 4; o.set(u8Of(x, 32), 1); o.set(u8Of(y, 32), 33); return o; };
+      if (SUBTLE) SUBTLE.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']).then(async k => { MYKEY = k; MYPK = compress(await SUBTLE.exportKey('raw', k.publicKey)); }).catch(() => { MYKEY = null; MYPK = ''; });
+      const AESK = new Map(), SEALED = new Map(), OPENED = new Map(), SEALING = new Set();
+      async function aesFor(peerPk) {
+        if (AESK.has(peerPk)) return AESK.get(peerPk);
+        const pub = await SUBTLE.importKey('raw', decompress(peerPk), { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+        const bits = await SUBTLE.deriveBits({ name: 'ECDH', public: pub }, MYKEY.privateKey, 256);
+        const key = await SUBTLE.importKey('raw', await SUBTLE.digest('SHA-256', bits), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+        AESK.set(peerPk, key); return key;
+      }
+      const sealTag = (t, h, ref) => new TextEncoder().encode(String(t) + '|' + (h | 0) + '|' + (ref | 0));
+      /* the nonce is the tag's hash: one (table, hand, seat) is sealed once under one pair key, so it never repeats; 18-byte blobs */
+      const ivOf = async (t, h, ref) => new Uint8Array(await SUBTLE.digest('SHA-256', sealTag(t, h, ref))).slice(0, 12);
+      async function sealCards(t, h, ref, c1, c2, peerPk) {
+        const key = await aesFor(peerPk), iv = await ivOf(t, h, ref);
+        return B64.enc(new Uint8Array(await SUBTLE.encrypt({ name: 'AES-GCM', iv, additionalData: sealTag(t, h, ref) }, key, new Uint8Array([c1 & 255, c2 & 255]))));
+      }
+      async function openCards(t, h, ref, blob, hostPk) {
+        const key = await aesFor(hostPk), iv = await ivOf(t, h, ref);
+        const pt = new Uint8Array(await SUBTLE.decrypt({ name: 'AES-GCM', iv, additionalData: sealTag(t, h, ref) }, key, B64.dec(blob)));
+        return [pt[0], pt[1]];
+      }
+      const PH = {}, PH_SENT = {};   /* the dealer's sealed set per table: {h, items: [[ref, blob]...]} - sent on its own small message (Ph) */
+      function phSend(t, force) { const P = PH[t]; if (!P || !P.done) return; const now = performance.now(); if (!force && now - (PH_SENT[t] || 0) < 3000) return; PH_SENT[t] = now; netSend({ Ph: [t, P.h, MYPK, P.items] }); }
+      const bounded = (m, n) => { while (m.size > n) m.delete(m.keys().next().value); };
       const SCORE_KEY = 'ashvale3d.scores.v1';
-      try { const j = JSON.parse(store.get(SCORE_KEY) || '{}'); if (j && j.chain_dragon) core.mergeScores('chain_dragon', j.chain_dragon); } catch (e) { /* a bad local board */ }
-      if (me.kills && me.kills.chain_dragon && me.name && me.name !== 'Adventurer') core.mergeScores('chain_dragon', { [me.name]: me.kills.chain_dragon });
+      const SCORE_KEYS = ['chain_dragon', 'chess_wins'], SCORE_BOARD = { chain_dragon: 'dragon', chess_wins: 'chess' };   /* [Claude 2026-10-11] score key -> the sign it paints */
+      try { const j = JSON.parse(store.get(SCORE_KEY) || '{}'); for (const k of SCORE_KEYS) if (j && j[k]) core.mergeScores(k, j[k]); } catch (e) { /* a bad local board */ }
+      for (const k of SCORE_KEYS) if (me.kills && me.kills[k] && me.name && me.name !== 'Adventurer') core.mergeScores(k, { [me.name]: me.kills[k] });
       function syncMounts() {   /* wall-hung quest rewards (Aldric's sword) stay on the wall until they're given */
         for (const r of regions) if (r.built && r.built.mounts) for (const m of r.built.mounts) { const q = me.quests && me.quests[m.quest]; m.obj.visible = !(q && q.step >= m.untilStep); }
       }
@@ -20778,8 +20968,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       const heightAt = SCENE.heights ? SCENE.heights(core.M) : (x, z) => 0;
       const chunkRegs = new Map();
       function regionDist(r, x, y) { const dx = Math.max(r.rect[0] - x, 0, x - (r.rect[0] + r.rect[2])), dy = Math.max(r.rect[1] - y, 0, y - (r.rect[1] + r.rect[3])); return Math.max(dx, dy); }
-      function paintScores() { if (SCENE.boardPaint) SCENE.boardPaint('dragon', core.scoreBoard('chain_dragon')); }
-      function hsSave() { try { store.set(SCORE_KEY, JSON.stringify({ chain_dragon: core.scoresOf('chain_dragon').names })); } catch (e) { /* private mode */ } }
+      function paintScores() { if (SCENE.boardPaint) for (const k of SCORE_KEYS) SCENE.boardPaint(SCORE_BOARD[k], core.scoreBoard(k)); }
+      function hsSave() { try { const j = {}; for (const k of SCORE_KEYS) j[k] = core.scoresOf(k).names; store.set(SCORE_KEY, JSON.stringify(j)); } catch (e) { /* private mode */ } }
       let scoreTell = () => {}, scoresAsk = () => {};
       function addBuilt(r, opt) { r.built = SCENE.build(core.M, opt); scene.add(r.built.group); for (const k in core.S.dep) r.built.setDepleted(+k, true); paintScores(); }
       function streamRegions(force) {
@@ -20907,6 +21097,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         const c = e.key.charAt(0);
         let up = 0;
         if (c === 'p') { const p = core.S.players[e.key.slice(2)]; if (p && p.lv) { const B = p.bld >= 0 && core.M.buildings ? core.M.buildings[p.bld] : null; up = p.lv * (B && B.lh ? B.lh : 1.8); } }
+        else if (c === 'r') {   /* [Claude 2026-10-11] another player on a storey: their last row says which (l), the building under them says how tall */
+          const r = remotes.get(e.key.slice(2)), b = r && r.buf.length ? r.buf[r.buf.length - 1] : null;
+          if (b && b.l > 0) { const bi = core.M.buildingAt ? core.M.buildingAt(Math.floor(e.to.x), Math.floor(e.to.z)) : -1, B = bi >= 0 && core.M.buildings ? core.M.buildings[bi] : null; up = b.l * (B && B.lh ? B.lh : 1.8); }
+        }
         /* raised ground (a castle's stairs and wall walk): the height of the tiles you walk between, blended as you go - so you walk up the steps */
         if (core.M.lifts && (c === 'p' || c === 'n' || c === 'r' || c === 'm')) {
           const L = (v) => core.M.liftAt(Math.floor(v.x), Math.floor(v.z)), l0 = L(e.from), l1 = L(e.to), t = a == null ? 1 : Math.max(0, Math.min(1, a));
@@ -21274,7 +21468,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             const T = core.pokerTableById(e.t); if (T && iHostAt(T.x, T.y)) netSend({ Pk: [pkNet(core.pokerRow(e.t))] });
             break;
           }
-          case 'xpsit': netSend({ PS: [e.t, e.s | 0, e.stake | 0] }); break;   /* [Claude] the buy-in the first sitter sets rides along */
+          case 'xpsit': netSend({ PS: [e.t, e.s | 0, e.stake | 0, e.pk || ''] }); break;   /* [Claude] the buy-in the first sitter sets rides along */
           case 'xpstand': netSend({ PT: [e.t] }); break;
           case 'xpact': netSend({ PA: [e.t, e.a, e.to | 0] }); break;
           case 'respawn': { const t = ents.get('p:' + e.p); if (!t) break; t.dead = false; t.oneShot = false; t.loco = null; t.H.setOpacity && t.H.setOpacity(1); t.root.visible = true; const p = core.S.players[e.p]; place(t, p.x, p.y); t.H.play('idle', { loop: true }); if (e.p === PID) { hud.death(false); cam.snap = true; arriveCheck(); } break; }
@@ -21617,31 +21811,21 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         const n = ents.get('n:' + id); if (n) { n.tyaw = Math.atan2(myEnt.to.x - n.to.x, myEnt.to.z - n.to.z); n.facing = 1; } }
       function npcsTurnBack() { for (const n of core.M.npcs) { const e = ents.get('n:' + n.id); if (e && e.facing && e.homeYaw != null && !n.patrol && !n.guard && Math.max(Math.abs(n.x - me.x), Math.abs(n.y - me.y)) > 6) { e.facing = 0; e.tyaw = e.homeYaw; } } }   /* back to their own spot once you walk off */
       let insideRoof = false;
-      /* the floor bar (the operator: "hard to find how to get back down"): while you are in a building with storeys, which floor
-         you are on and a button each way; PageUp / PageDown do the same */
-      const floorBar = document.createElement('div');
-      floorBar.style.cssText = 'position:absolute;left:50%;top:12px;transform:translateX(-50%);display:none;gap:6px;align-items:center;padding:6px 8px;background:rgba(30,22,14,.88);border:1px solid #8a6a3a;border-radius:8px;color:#f0e2c0;font:600 13px system-ui,sans-serif;z-index:20';
-      floorBar.innerHTML = '<span data-f></span><button data-d="-1" style="font:inherit;padding:4px 9px;border-radius:6px;border:1px solid #c08a3a;background:#5a3a1c;color:#ffe2a8;cursor:pointer">&#9660; Downstairs</button><button data-d="1" style="font:inherit;padding:4px 9px;border-radius:6px;border:1px solid #6a5a3a;background:#3a2c1c;color:#f0e2c0;cursor:pointer">&#9650; Upstairs</button>';
-      host.appendChild(floorBar);
+      /* [Claude 2026-10-11] the floor bar (Downstairs / Upstairs buttons) is gone (the operator: "Remove the upstairs downstairs
+         hud buttons completely the stairs work fine"): you climb by tapping the stairs. PageUp / PageDown still climb, for keyboards. */
       let floorKey = '';
-      function climbFromBar(dir) { const bi = core.M.buildingAt ? core.M.buildingAt(me.x, me.y) : -1; if (bi < 0) return; const B = core.M.buildings[bi], lv = me.lv || 0; if ((dir < 0 && lv <= 0) || (dir > 0 && lv >= B.floors - 1)) return; send({ c: 'climb', dir, x: B.stairs[0], y: B.stairs[1] }); }
-      floorBar.querySelectorAll('[data-d]').forEach(b => { b.onclick = (e) => { e.stopPropagation(); climbFromBar(+b.dataset.d); }; b.onpointerdown = (e) => e.stopPropagation(); });
-      window.addEventListener('keydown', e => { if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return; if (e.key === 'Escape' && me.using) { send({ c: 'unuse' }); e.preventDefault(); } else if (e.key === 'PageDown') { climbFromBar(-1); e.preventDefault(); } else if (e.key === 'PageUp') { climbFromBar(1); e.preventDefault(); } });
-      function floorBarCheck() {
+      function climbKey(dir) { const bi = core.M.buildingAt ? core.M.buildingAt(me.x, me.y) : -1; if (bi < 0) return; const B = core.M.buildings[bi], lv = me.lv || 0; if ((dir < 0 && lv <= 0) || (dir > 0 && lv >= B.floors - 1)) return; send({ c: 'climb', dir, x: B.stairs[0], y: B.stairs[1] }); }
+      window.addEventListener('keydown', e => { if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return; if (e.key === 'Escape' && me.using) { send({ c: 'unuse' }); e.preventDefault(); } else if (e.key === 'PageDown') { climbKey(-1); e.preventDefault(); } else if (e.key === 'PageUp') { climbKey(1); e.preventDefault(); } });
+      function floorBarCheck() {   /* only the castle-wall hint is left of it */
         const bi = core.M.buildingAt ? core.M.buildingAt(me.x, me.y) : -1, B = bi >= 0 ? core.M.buildings[bi] : null, lv = me.lv || 0;
         const key = B ? bi + ':' + lv : '';
         if (key === floorKey) return; floorKey = key;
-        if (!B) { floorBar.style.display = 'none'; return; }
-        floorBar.style.display = 'flex';
-        if (B.deck && !deckHint) { deckHint = true; hud.chat('The castle walls can be walked: tap any flight of stone steps inside the walls (two are beside the gate) to climb up, or press Up. On the wall, tap where to go; tap the top of the steps to come down.', 'info'); }
-        floorBar.querySelector('[data-f]').textContent = B.deck ? (lv === 0 ? 'Castle yard' : 'On the wall') : lv === 0 ? 'Ground floor (' + B.floors + ' floors)' : 'Floor ' + (lv + 1) + ' of ' + B.floors;
-        floorBar.querySelector('[data-d="-1"]').style.display = lv > 0 ? '' : 'none';
-        floorBar.querySelector('[data-d="1"]').style.display = lv < B.floors - 1 ? '' : 'none';
+        if (B && B.deck && !deckHint) { deckHint = true; hud.chat('The castle walls can be walked: tap any flight of stone steps inside the walls (two are beside the gate) to climb up. On the wall, tap where to go; tap the top of the steps to come down.', 'info'); }
       }
       let stairHint = false, deckHint = false;
       function roofCheck() {
         floorBarCheck();
-        if (!stairHint && (me.lv || 0) > 0 && !(me.bld >= 0 && core.M.buildings[me.bld] && core.M.buildings[me.bld].deck)) { stairHint = true; hud.chat('Upstairs. The way down is the opening in the floor with the amber arrow - click it, or press Downstairs / Page Down.', 'info'); }
+        if (!stairHint && (me.lv || 0) > 0 && !(me.bld >= 0 && core.M.buildings[me.bld] && core.M.buildings[me.bld].deck)) { stairHint = true; hud.chat('Upstairs. The way down is the opening in the floor with the amber arrow - tap it.', 'info'); }
         let inside = false;
         let inRf = null;
         for (const r of regions) if (r.built) for (const rf of r.built.roofs) if (me.x >= rf.x0 && me.x <= rf.x1 && me.y >= rf.y0 && me.y <= rf.y1) { inside = true; inRf = rf; }
@@ -21881,9 +22065,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
                   { html: 'Examine ' + nm, fn: () => hud.chat('A canoe of birch bark over cedar ribs, sewn with spruce root and sealed with pitch. It floats light as a leaf.', 'sys') }]; }
         if (t.kind === 'sign') {
           const o = core.signAt(t.x, t.y); if (!o) return [];
-          const nm = '<span class="c">Wooden sign</span>';
-          return [{ html: 'Read ' + nm, fn: () => { scoresAsk(true); core.scoreRead('chain_dragon').forEach(l => hud.chat(l, 'sys')); }, red: 1 },
-                  { html: 'Examine ' + nm, fn: () => hud.chat('A weathered oak board nailed to the ruin wall. Names of those who have slain the chained dragon are carved into it.', 'sys') }];
+          const nm = '<span class="c">' + (o.board === 'chess' ? 'Champions board' : 'Wooden sign') + '</span>', sk = o.board === 'chess' ? 'chess_wins' : 'chain_dragon';
+          return [{ html: 'Read ' + nm, fn: () => { scoresAsk(true); core.scoreRead(sk).forEach(l => hud.chat(l, 'sys')); }, red: 1 },
+                  { html: 'Examine ' + nm, fn: () => hud.chat(o.board === 'chess' ? 'An oak board on two posts by the tables. The names of those who have won games here are chalked on it, most wins first.' : 'A weathered oak board nailed to the ruin wall. Names of those who have slain the chained dragon are carved into it.', 'sys') }];
         }
         if (t.kind === 'chesstable' || t.kind === 'square') {   /* THE CHESS PARK (2026-10-10): a bench each side; seated, the board itself takes the taps */
           const T = core.tableById(t.id); if (!T) return [];
@@ -21904,6 +22088,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         }
         if (t.kind === 'pokertable') {   /* THE POKER TABLE: six chairs round one felt in the Saltmere tap room; once you are sitting, the panel in front of you does the talking */
           const T = core.pokerTableById(t.id); if (!T) return [];
+          if ((T.lv | 0) !== (me.lv | 0)) return [{ html: 'Card table <span class="c">(' + ((T.lv | 0) > (me.lv | 0) ? 'up the stairs' : 'downstairs') + ')</span>', fn: () => hud.chat('The poker table is ' + ((T.lv | 0) > (me.lv | 0) ? 'up the tavern stairs.' : 'downstairs.'), 'sys') }];   /* [Claude] */
           const st = core.pokerOf(t.id), out = [], taken = [], at = {};
           for (const s of st.se || []) at[s[0] | 0] = s[1];
           const pkEmpty = !(st.se || []).length, buy = st.buy | 0;   /* [Claude 2026-10-11] BUY-INS in GOLD: the first to sit sets the buy-in (the operator) */
@@ -21914,8 +22099,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             if (who && who !== PID) taken.push({ html: 'Chair ' + (i + 1) + ': <span class="y">' + pokerWho(who) + '</span>', fn: () => hud.chat(pokerWho(who) + ' is sitting there.', 'sys') });
             else out.push({ html: 'Sit down <span class="c">(chair ' + (i + 1) + ')</span>' + pkNote, act: { c: 'sit', table: t.id, seat: i, buy: 0 }, red: out.length ? 0 : 1 });
           });
-          if (pkEmpty && !(me.seat && me.seat.t === t.id)) { const free = (T.seats || []).findIndex((s, i) => !at[i]); if (free >= 0) for (const n of [500, 1000, 5000]) out.push({ html: 'Buy in for <span class="y">' + n.toLocaleString() + ' GOLD</span> <span class="c">(chair ' + (free + 1) + ', sets the table\'s stakes)</span>', act: { c: 'sit', table: t.id, seat: free, buy: n } }); }
-          out.push(...taken, { html: 'Examine <span class="c">Poker table</span>', fn: () => hud.chat(pokerExamine(st), 'sys') });
+          if (pkEmpty && !(me.seat && me.seat.t === t.id)) { const free = (T.seats || []).findIndex((s, i) => !at[i]); if (free >= 0) for (const n of [100, 1000, 10000]) out.push({ html: 'Buy in for <span class="y">' + n.toLocaleString() + ' GOLD</span> <span class="c">(chair ' + (free + 1) + ', sets the table\'s stakes)</span>', act: { c: 'sit', table: t.id, seat: free, buy: n } }); }
+          out.push(...taken, { html: 'Examine <span class="c">Card table</span>', fn: () => hud.chat(pokerExamine(st), 'sys') });
           return out;
         }
         if (t.kind === 'crate') {
@@ -22042,7 +22227,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         const b = r.buf[r.buf.length - 1], tx = Math.floor(b.x), ty = Math.floor(b.z), d = Math.max(Math.abs(me.x - tx), Math.abs(me.y - ty));
         if (d > 2 && (!follow.at || follow.at[0] !== tx || follow.at[1] !== ty || !me.path.length)) { core.cmd(PID, { c: 'walk', x: tx, y: ty, run: d > 6 }); follow.at = [tx, ty]; }
       }
-      function send(c) { if (follow) { follow = null; hud.chat('You stop following.', 'sys'); } core.cmd(PID, c); if (c.c === 'walk' || c.c === 'attack' || c.c === 'npc' || c.c === 'take' || c.c === 'gather') { hud.closeShop(); if (hud.closeChest) hud.closeChest(); } sfx('click'); }
+      function send(c) { if (c && c.c === 'sit' && MYPK) c.pk = MYPK; if (follow) { follow = null; hud.chat('You stop following.', 'sys'); } core.cmd(PID, c); if (c.c === 'walk' || c.c === 'attack' || c.c === 'npc' || c.c === 'take' || c.c === 'gather') { hud.closeShop(); if (hud.closeChest) hud.closeChest(); } sfx('click'); }
 
       /* ---------- input: touch (tap / drag / pinch / long-press), mouse, wheel, keys */
       const ptrs = new Map(); let pinch = null, suppressTap = false, lpTimer = null, lpFired = false;
@@ -22391,9 +22576,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       function seedDragonBoard() {
         const who = boardWho();
         if (who && who.charAt(0) === '@') me.tag = who.slice(1);
-        if (!(me.kills && me.kills.chain_dragon && who)) return;
-        core.mergeScores('chain_dragon', { [who]: me.kills.chain_dragon });
-        scoreTell({ key: 'chain_dragon', name: who, n: me.kills.chain_dragon });
+        if (!who) return;
+        for (const k of SCORE_KEYS) { if (!(me.kills && me.kills[k])) continue; core.mergeScores(k, { [who]: me.kills[k] }); scoreTell({ key: k, name: who, n: me.kills[k] }); }
         paintScores();
       }
       seedDragonBoard();
@@ -22472,6 +22656,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         const p = myEnt.root.position;
         const m = { s: Math.round(now), p: [Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100], f: Math.round(myEnt.yaw * 100) / 100, a: myEnt.oneShot ? myEnt.lastOne || 'idle' : myEnt.loco || 'idle', j: myJoin, hp: me.hp, d: me.dead ? 1 : 0, k: myEnt.toolId || 0 };
         if (HOME) m.h = HOME;   /* where I was born: until my outfit message arrives others draw me in my home's defaults */
+        if (me.lv > 0) m.l = me.lv | 0;   /* [Claude 2026-10-11] the storey I stand on: others draw me up there (they drew the Tap's upstairs on the ground floor) */
         if (myEnt.hl) m.hl = Math.round(myEnt.hl * 100) / 100;   /* where your head is looking, up or down (first person) */
         if (me.boat) { m.bt = me.boat; if (me.boat === 2) m.rd = me.ride; if (me.boat === 1 && me.inv.some(sl => sl && sl.id === 'push_pole')) m.pl = 1; if (me.boat === 2 && me.knock) m.kn = 1; }   /* pl: a push pole aboard; kn: knocking rice in the bow */   /* in a canoe: 1 poling it, 2 riding in someone's bow (rd: whose) */
         const oh = core.overhead(me) || 0; if (oh || lastPr) { m.pr = oh; lastPr = oh; }   /* the overhead prayer, so hosts' monsters respect it and others see it */
@@ -22511,10 +22696,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (!r.viewOnly) shared(id, r, d);
         if (Array.isArray(d.p) && d.p.length === 2 && isFinite(d.p[0]) && isFinite(d.p[1])) {
           if (typeof d.s === 'number') { if (d.s <= r.lastS && d.s > r.lastS - 60000) return; r.lastS = d.s; }   /* unordered delivery: drop older states */
-          if (core.S.players[id]) core.setPuppet(id, Object.assign({ x: Math.floor(+d.p[0]), y: Math.floor(+d.p[1]) }, typeof d.a === 'string' ? { bt: d.bt | 0, rd: d.rd || null, pl: d.pl ? 1 : 0, kn: d.kn ? 1 : 0 } : {}));   /* only a full state says whether they are in a canoe */
+          if (core.S.players[id]) core.setPuppet(id, Object.assign({ x: Math.floor(+d.p[0]), y: Math.floor(+d.p[1]), lv: d.l | 0 }, typeof d.a === 'string' ? { bt: d.bt | 0, rd: d.rd || null, pl: d.pl ? 1 : 0, kn: d.kn ? 1 : 0 } : {}));   /* only a full state says whether they are in a canoe */
           r.area = core.areaOf(Math.floor(+d.p[0]), Math.floor(+d.p[1])); r.carea = typeof d.c === 'string' ? d.c.slice(0, 40) : null;
           if (r.buf.length) { const lb = r.buf[r.buf.length - 1]; if (Math.abs(lb.x - +d.p[0]) + Math.abs(lb.z - +d.p[1]) > 60) r.buf.length = 0; }   /* they crossed a cut edge of the net (or a portal): no sliding across the map */
-          r.e.root.visible = true; r.buf.push({ t: performance.now(), x: +d.p[0], z: +d.p[1], f: +d.f || 0, a: typeof d.a === 'string' ? d.a.slice(0, 12) : 'idle' }); if (r.buf.length > 20) r.buf.shift();
+          r.e.root.visible = true; r.buf.push({ t: performance.now(), x: +d.p[0], z: +d.p[1], f: +d.f || 0, a: typeof d.a === 'string' ? d.a.slice(0, 12) : 'idle', l: d.l | 0 }); if (r.buf.length > 20) r.buf.shift();
         }
       }
       /* ---------- SHARED WORLD: a host per AREA simulates that area's monsters and loot; everyone else follows it.
@@ -22533,15 +22718,38 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       const netRow = r => Object.assign({}, r, { w: r.w ? toNet(r.w) : null, b: r.b ? toNet(r.b) : null, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [toNet(k), v])) : null });   /* a chess row with the room's ids for the players (and who is owed the stake [Claude]) */
       /* A poker row names its players in one place, the seat rows [ref, id, chips, bet, flags]. The cards beside them
          (hc) are references into those rows, not ids, so they need nothing. */
-      const pkNet = r => Object.assign({}, r, { se: (r.se || []).map(s => [s[0], toNet(s[1]), s[2], s[3], s[4]]), co: (r.co || []).map(c => [toNet(c[0]), c[1], c[2]]) });   /* [Claude] cashouts too */
+      const pkNet = r => {   /* the dealer's row for the wire: ids as the room knows them; a keyed seat's cards are NOT here (they go sealed, by Ph) */
+        const keys = core.pokerSeatKeys ? core.pokerSeatKeys(r.t) : {}, hc = [], want = [];
+        for (const h of r.hc || []) {
+          const ref = h[0] | 0, pk = keys[ref];
+          if (!pk || !SUBTLE || !MYKEY || typeof h[1] !== 'number') { hc.push(h); continue; }   /* no key: plain, as before, this seat only */
+          hc.push([ref, null, null]); want.push([ref, h[1], h[2], pk]);
+        }
+        if (want.length) {   /* the sealed set for this hand, built once; when every seat is in, Ph goes out */
+          const P = PH[r.t] && PH[r.t].h === (r.h | 0) && PH[r.t].sig === want.map(w => w[0] + ':' + w[3].slice(0, 8)).join(',') ? PH[r.t] : (PH[r.t] = { h: r.h | 0, sig: want.map(w => w[0] + ':' + w[3].slice(0, 8)).join(','), items: [], done: false });
+          for (const [ref, c1, c2, pk] of want) {
+            if (P.items.some(i => i[0] === ref)) continue;
+            const k = r.t + '|' + (r.h | 0) + '|' + ref;
+            if (!SEALING.has(k)) { SEALING.add(k); sealCards(r.t, r.h | 0, ref, c1, c2, pk).then(b => { if (PH[r.t] === P && !P.items.some(i => i[0] === ref)) { P.items.push([ref, b]); if (P.items.length >= want.length) { P.done = true; phSend(r.t, true); } } }).catch(e => console.warn('seal', e)).finally(() => SEALING.delete(k)); }
+          }
+        } else delete PH[r.t];
+        return Object.assign({}, r, { se: (r.se || []).map(s => [s[0], toNet(s[1]), s[2], s[3], s[4]]), co: (r.co || []).map(c => [toNet(c[0]), c[1], c[2]]), hc: r.hc ? hc : r.hc });
+      };
+      const OPENED2 = new Map();   /* my own two, opened, by table|hand|seat */
+      function openOwn(r, h) { const ref = h[0] | 0; if (typeof h[1] === 'number') return h; const o = OPENED2.get(r.t + '|' + (r.h | 0) + '|' + ref); return o ? [ref, o[0], o[1]] : [ref, null, null]; }
+      function phHeard(t, h, hk, items) {   /* the dealer's sealed set: open mine, hand it to the core */
+        if (!SUBTLE || !MYKEY || !(me.seat && me.seat.k === 'pk' && me.seat.t === t)) return;
+        const ref = me.seat.s | 0, it = (items || []).find(i => (i[0] | 0) === ref); if (!it || typeof it[1] !== 'string') return;
+        const k = t + '|' + (h | 0) + '|' + ref; if (OPENED2.has(k) || SEALING.has(k)) return;
+        SEALING.add(k); openCards(t, h | 0, ref, it[1], String(hk)).then(c => { OPENED2.set(k, c); bounded(OPENED2, 64); if (core.pokerOpen) coreCall(() => core.pokerOpen(t, ref, c[0], c[1])); }).catch(e => console.warn('open', e)).finally(() => SEALING.delete(k));
+      }
       const pkLocal = r => {   /* the room hears everything, so a hole card is dropped here, on the way in: a replica
                                   keeps faces only for its own seat, and a shown-down hand is public anyway. It says
                                   nothing about the wire - see handoff/poker_plan.md decision 4. */
         const se = (r.se || []).map(s => [s[0], fromNet(s[1]), s[2], s[3], s[4]]), co = (r.co || []).map(c => [fromNet(c[0]), c[1], c[2]]);   /* [Claude] the cashouts name players as this page knows them */
-        if (r.o === 'playing' && r.st === 'none') return Object.assign({}, r, { se, co });
         const mine = {};   /* my chair at that table, as the row names it - a room can hold two players both called "me" */
         for (const s of se) if (s[1] === PID || (me.seat && me.seat.k === 'pk' && me.seat.t === r.t && (s[0] | 0) === (me.seat.s | 0))) mine[s[0] | 0] = 1;
-        return Object.assign({}, r, { se, co, hc: (r.hc || []).map(h => mine[h[0] | 0] ? h : [h[0] | 0, null, null]) });
+        return Object.assign({}, r, { se, co, hc: r.hc ? r.hc.map(h => mine[h[0] | 0] ? openOwn(r, h) : [h[0] | 0, null, null]) : r.hc });   /* [Claude 2026-10-12] mine opened, the rest were never readable */
       };
       const CLS = { m: 'melee', r: 'ranged', g: 'magic' };
       const areaAt = (x, y) => core.areaOf(x | 0, y | 0);
@@ -22676,6 +22884,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (Fi.length) packSend({ F: seq }, 'Fi', Fi);
         const Ch = core.chessRows((x, y) => iHostAt(x, y)).map(netRow); if (Ch.length) packSend({ F: seq }, 'Ch', Ch);   /* the chess park's tables this game hosts */
         const Pk = core.pokerRows((x, y) => iHostAt(x, y)).map(pkNet); if (Pk.length) packSend({ F: seq }, 'Pk', Pk);   /* and the felt in the tap room */
+        for (const r of Pk) phSend(r.t, false);   /* [Claude 2026-10-12] the sealed hole cards again, every few seconds, for whoever just joined */
         const Pl = [];
         for (const a of hosted) for (const r of core.plantSnap(a)) Pl.push(r);
         if (Pl.length) packSend({ F: seq }, 'Pl', Pl);
@@ -22727,9 +22936,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (Array.isArray(d.Ch)) { const rows = d.Ch.filter(r => r && r.t).filter(r => { const T = core.tableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).map(r => Object.assign({}, r, { w: r.w ? fromNet(r.w) : null, b: r.b ? fromNet(r.b) : null, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [fromNet(k), v])) : null })); if (rows.length) coreCall(() => core.applyChess(rows)); }   /* [Claude] who is owed the stake, named as this page knows them */
         /* the felt: a chair asked for, a player getting up, an action, or the host's word on a table. Same rules as the
            chess park: only the host of the area the table stands in answers, and a row only counts from that host. */
-        if (Array.isArray(d.PS)) { const T = core.pokerTableById(String(d.PS[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerSit(id, T.id, d.PS[1] | 0, d.PS[2] | 0)); }
+        if (Array.isArray(d.PS)) { const T = core.pokerTableById(String(d.PS[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerSit(id, T.id, d.PS[1] | 0, d.PS[2] | 0, typeof d.PS[3] === 'string' ? d.PS[3].slice(0, 160) : '')); }
         if (Array.isArray(d.PT)) { const T = core.pokerTableById(String(d.PT[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerStand(id, T.id)); }
         if (Array.isArray(d.PA)) { const T = core.pokerTableById(String(d.PA[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerAct(id, T.id, String(d.PA[1] || ''), d.PA[2] | 0)); }
+        if (Array.isArray(d.Ph) && d.Ph.length === 4) { const T = core.pokerTableById(String(d.Ph[0])); if (T && fromHostOf(id, areaAt(T.x, T.y))) phHeard(T.id, d.Ph[1] | 0, d.Ph[2], d.Ph[3]); }   /* [Claude 2026-10-12] the sealed hole cards */
         if (Array.isArray(d.Pk)) { const rows = d.Pk.filter(r => r && r.t).filter(r => { const T = core.pokerTableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).map(pkLocal); if (rows.length) coreCall(() => core.applyPoker(rows)); }
         if (Array.isArray(d.X)) { const x = d.X; if (core.item(x[0]) && iHostAt(x[2], x[3])) coreCall(() => core.hostDrop({ id: x[0], n: Math.max(1, x[1] | 0), x: x[2] | 0, y: x[3] | 0, life: x[4] | 0, from: x[5] ? fromNet(x[5]) : null, diedAt: x[6] | 0 })); }
         /* below: only the word of the host of the area concerned counts */
@@ -22817,7 +23027,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           if (core.M.netNear && Math.abs(x - me.x) + Math.abs(z - me.y) > 400) { const q = core.M.netNear(x, z, me.x + 0.5, me.y + 0.5); if (q && Math.abs(q[0] - me.x) + Math.abs(q[1] - me.y) < 400) { x = q[0]; z = q[1]; turnS = q[2]; } }   /* across a seam: at their true place beside us */
           boatLook(r.e, r.boat === 1);
           r.e.root.position.set(x, 0, z); smoothPos(r.e, dt, false); x = r.e.root.position.x; z = r.e.root.position.z;   /* fluid travel: other players glide too */
-          r.e.root.position.set(x, (r.e.canoe ? waterY(x, z) + (r.anim === 'pole' || r.anim === 'idle' ? 0.14 : 0) : heightAt(x, z) + seatLift(r.e)) + (r.e.alt || 0), z); r.e.tyaw = Bs.f + turnS;   /* a chess player sits on the bench */
+          const lvR = Bs.l | 0, bR = lvR > 0 && core.M.buildingAt ? core.M.buildingAt(Math.floor(x), Math.floor(z)) : -1, upR = bR >= 0 ? lvR * (core.M.buildings[bR] && core.M.buildings[bR].lh ? core.M.buildings[bR].lh : 1.8) : 0;   /* [Claude 2026-10-11] on the storey their row names (the Tap's card tables upstairs) */
+          r.e.root.position.set(x, (r.e.canoe ? waterY(x, z) + (r.anim === 'pole' || r.anim === 'idle' ? 0.14 : 0) : heightAt(x, z) + seatLift(r.e) + upR) + (r.e.alt || 0), z); r.e.tyaw = Bs.f + turnS;   /* a chess player sits on the bench */
           const an = Bs.a; if (an !== r.anim) { r.anim = an; r.e.H.play(an, { loop: /idle|walk|run|chop|mine|fish|cook|sit|paddle|pole|knock|crosslegged/.test(an) }); }
           r.e.yaw += (((r.e.tyaw - r.e.yaw + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI) * Math.min(1, dt * 10); r.e.root.rotation.y = r.e.yaw;
           if (r.boat === 2) { const T = r.ride === myNetId ? myEnt : (remotes.get(r.ride) || {}).e; if (T) { bowSeat(r.e, T, r.anim === 'knock'); } }
@@ -23186,7 +23397,11 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       const PK_FX = {};   /* per table, what the felt last looked like to you - so a card going out is one sound, not five */
       const PKF = core.pokerSeatFlags ? core.pokerSeatFlags() : [1, 2, 4, 8, 16];   /* in the hand, folded, all-in, dealt in, has answered */
       const pkEsc = s => String(s == null ? '' : s).replace(/</g, '&lt;');   /* the names in the panel and the log; esc() below is only ever local to the tap menu */
-      function pokerWho(pid) { const p = core.S.players[pid]; return p && p.name ? pkEsc(p.name) : 'someone'; }
+      function pokerWho(pid) {   /* [Claude 2026-10-11] the operator: the player list goes by arcade @tag, the game name only for a guest without one */
+        if (pid === PID) { const w = boardWho(); if (w && w.charAt(0) === '@') return w; }
+        else { const r = remotes.get(pid); if (r && r.from && r.from.tag) return '@' + String(r.from.tag).replace(/^@/, '').slice(0, 16); }
+        const p = core.S.players[pid]; return p && p.name ? pkEsc(p.name) : 'someone';
+      }
       function pokerSeatOf(st, ref) { return (st.se || []).find(s => (s[0] | 0) === (ref | 0)) || null; }
       function pokerModel(t) {   /* what lies on the felt: the board, each chair's two cards - face down unless they are yours, or the hand has been shown - the bets, the button, whose turn */
         const st = core.pokerOf(t), show = st.o === 'playing' && st.st === 'none', hands = [], bets = {};
@@ -23195,11 +23410,12 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           const ref = s[0] | 0, f = s[4] | 0, h = (st.hc || []).find(x => (x[0] | 0) === ref);
           if (!h) continue;   /* nothing in front of that chair - sitting it out, or the hand is folded and mucked */
           if ((f & PKF[1]) && !show) continue;
-          const up = h[1] != null && (show || ref === ms);
-          hands.push({ ref, c: h && up ? [h[1] | 0, h[2] | 0] : null, down: up ? 0 : 1, tilt: up ? 1 : 0 });
+          const sd = show && st.r && st.r.sd ? st.r.sd.find(x => (x[0] | 0) === ref) : null;   /* [Claude 2026-10-11] at the showdown every shown hand lies face up, on every copy */
+          const c = sd ? [sd[1] | 0, sd[2] | 0] : typeof h[1] === 'number' ? [h[1] | 0, h[2] | 0] : null, up = !!c && (show || ref === ms);
+          hands.push({ ref, c: up ? c : null, down: up ? 0 : 1, tilt: up ? 1 : 0 });
           bets[ref] = s[3] | 0;
         }
-        return { board: (st.bo || []).slice(), hands, bets, dealer: st.d >= 0 ? st.d : null, turn: st.a >= 0 && st.o === 'playing' && st.st !== 'none' ? st.a : null };
+        return { board: (st.bo || []).slice(), hands, bets, pot: st.p | 0, big: st.bg | 0, dealer: st.d >= 0 ? st.d : null, turn: st.a >= 0 && st.o === 'playing' && st.st !== 'none' ? st.a : null };
       }
       function pokerView(t) {   /* the panel's view of the table, all of it out of the row it was sent */
         const st = core.pokerOf(t), s = me.seat && me.seat.t === t ? me.seat.s | 0 : -1, mine = pokerSeatOf(st, s);
@@ -23209,9 +23425,11 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           t, seat: s, me: PID, hand: st.h | 0, street: st.st, open: !live, pot: st.p | 0, bet: st.b | 0, dealer: st.d, turn: st.a, buy: st.buy | 0,   /* [Claude] the buy-in, for the panel */
           seats: (st.se || []).map(x => ({ ref: x[0] | 0, id: x[1], name: pokerWho(x[1]), chips: x[2] | 0, bet: x[3] | 0, folded: !!((x[4] | 0) & PKF[1]), allin: !!((x[4] | 0) & PKF[2]), dealt: !!((x[4] | 0) & PKF[3]), away: !!((x[4] | 0) & (PKF[5] || 32)) })),
           away: !!(mine && ((mine[4] | 0) & (PKF[5] || 32))),   /* [Claude] dealt out for sitting on a hand: the panel offers the way back */
-          board: (st.bo || []).slice(), hole: hh && hh[1] != null ? [hh[1] | 0, hh[2] | 0] : null,
+          board: (st.bo || []).slice(), hole: hh && typeof hh[1] === 'number' ? [hh[1] | 0, hh[2] | 0] : null,
           log: (st.lg || []).slice(), result: st.r, inHand: dealt, myTurn: live && dealt && (st.a | 0) === s, call, stack: (mine && mine[2]) | 0,
-          winners: st.r ? st.r.p.map(q => q[1]).reduce((a, b) => a.concat(b), []) : []
+          winners: st.r ? st.r.p.map(q => q[1]).reduce((a, b) => a.concat(b), []) : [],
+          shown: st.r && st.r.sd ? st.r.sd.map(x => ({ ref: x[0] | 0, c: [x[1] | 0, x[2] | 0], name: String(x[3] || '') })) : [],   /* [Claude 2026-10-11] the showdown */
+          min: Math.min((st.b | 0) + (st.mr | 0 || st.bg | 0 || 50), (st.b | 0) + ((mine && mine[2]) | 0)), big: st.bg | 0
         };
       }
       function pokerFx(t, row) {   /* the small sound of the felt changing under your hands: a card going out, a new street */
@@ -23223,12 +23441,12 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (at && T && T.seats[s]) {   /* from your own eyes at the felt: leaning a little over your own side of it, the whole table in front of you */
           if (cam.mode !== 'poker') cam.save = { yaw: cam.tyaw, pitch: cam.tpitch, dist: cam.tdist };
           const seat = T.seats[s], dx = seat[0] + 0.5 - at.x, dz = seat[1] + 0.5 - at.z, L = Math.hypot(dx, dz) || 1;
-          POKERV = { x: at.x, y: at.y + 0.55, z: at.z, yaw: Math.atan2(-dx, -dz), eye: { x: at.x + dx / L * 1.30, y: at.y + 0.92, z: at.z + dz / L * 1.30 }, look: { x: at.x - dx / L * 0.45, y: at.y - 0.08, z: at.z - dz / L * 0.45 } };   /* your own cards lie 0.60 out from the centre and the chair back is 1.0, so sit just behind your own chair: an eye over the cards themselves leaves them under your nose, out of the frame */
+          POKERV = { x: at.x, y: at.y + 0.55, z: at.z, yaw: Math.atan2(-dx, -dz), eye: { x: at.x + dx / L * (L + 0.45), y: at.y + 0.92, z: at.z + dz / L * (L + 0.45) }, look: { x: at.x - dx / L * 0.55, y: at.y - 0.02, z: at.z - dz / L * 0.55 } };   /* your own cards lie 0.60 out and lean up; at 1.30 they sat against the bottom edge of the frame, so an eye a little further back and a look a little higher - they sit just inside it now, with the far chair and the room over the rail */
           cam.mode = 'poker';
         }
         myEnt.restPose = 'sit';
         const askStand = () => { const st = core.pokerOf(t), inHand = (st.se || []).some(x => x[1] === PID && ((x[4] | 0) & PKF[3]) && !((x[4] | 0) & PKF[1])) && st.st !== 'none';
-          hud.confirm(inHand ? 'Fold and stand up?' : 'Stand up?', inHand ? 'You are in a hand: standing up now folds it and leaves the chips already in the pot.' : 'Leave the poker table?', inHand ? 'Fold and stand' : 'Stand up', 'Stay', () => send({ c: 'stand' })); };
+          hud.confirm(inHand ? 'Fold and stand up?' : 'Stand up?', inHand ? 'You are in a hand: standing up now folds it and leaves the chips already in the pot.' : 'Leave the card table?', inHand ? 'Fold and stand' : 'Stand up', 'Stay', () => send({ c: 'stand' })); };
         POKER_ASK = askStand;
         if (hud.pokerOpen) hud.pokerOpen(pokerView(t), { act: (a, to) => pokerAct(t, a, to), stand: askStand });
       }
@@ -23250,8 +23468,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       function pokerExamine(st) {
         const inhand = (st.se || []).filter(s => (s[4] | 0) & PKF[3]).map(s => pokerWho(s[1]));
         if (st.o === 'playing' && st.st !== 'none') return 'A hand is on the felt: ' + (st.p | 0) + ' in the pot, ' + inhand.length + ' in it' + (st.bo.length ? ', ' + st.bo.length + ' cards on the board.' : ', nothing on the board yet.') + ' Sit in a free chair and it will deal you in.';
-        if ((st.se || []).length) return 'A felt table for six, with ' + (st.se || []).map(s => pokerWho(s[1])).join(', ') + ' sitting. ' + (st.o === 'playing' ? 'They are between hands.' : 'Waiting for players.');
-        return 'A felt table for six under the lamps, brass rail turned dark, a chip tray in the middle. Sit in a chair to play: the table deals itself.';
+        if ((st.se || []).length) return 'A round felt table for eight, with ' + (st.se || []).map(s => pokerWho(s[1])).join(', ') + ' sitting. ' + (st.o === 'playing' ? 'They are between hands.' : 'Waiting for players.');
+        return 'A round felt table for eight under a wheel of candles, its rail turned dark. Sit in a chair to play: the table deals itself.';
       }
       function openWardrobe(first, who) {
         if (!myEnt.H.setOutfit || !MOD.outfitStyles) return;
@@ -23284,7 +23502,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       /* ---------- debug / test handle */
       const game = {
         core, pid: PID, me, camera, cam, scene, ents, hud, regions, settings,
-        screenOf(kind, id) { let pos, up = 0.8; if (kind === 'mob') { const e = ents.get('m:' + id); pos = e.root.position; up = (e.H.height || 1) * e.scale * 0.5; } else if (kind === 'npc') { const e = ents.get('n:' + id); pos = e.root.position; } else if (kind === 'item') { const o = gItems.get(id); pos = o.position; up = 0.08; } else if (kind === 'tile') { pos = new THREE.Vector3(id[0] + 0.5, heightAt(id[0] + 0.5, id[1] + 0.5), id[1] + 0.5); up = 0; } else if (kind === 'world') { pos = new THREE.Vector3(id[0], id[1], id[2]); up = 0; } else if (kind === 'square') { const a = SCENE.chessAt && SCENE.chessAt(id[0]); if (!a) return null; const f = id[1].charCodeAt(0) - 97, r = +id[1][1] - 1; pos = new THREE.Vector3(a.x - 3.5 * 0.12 + f * 0.12, a.y, a.z + 3.5 * 0.12 - r * 0.12); up = 0.01; } else if (kind === 'me') { pos = myEnt.root.position; } else if (kind === 'remote') { const e = ents.get('r:' + id); if (!e || !e.root.visible) return null; pos = e.root.position; up = (e.H.height || 1.6) * e.scale * 0.5; } const s = toScreen(pos, up); if (!s) return null; const r = host.getBoundingClientRect(); return { x: s.x + r.left, y: s.y + r.top }; },
+        screenOf(kind, id) { let pos, up = 0.8; if (kind === 'mob') { const e = ents.get('m:' + id); pos = e.root.position; up = (e.H.height || 1) * e.scale * 0.5; } else if (kind === 'npc') { const e = ents.get('n:' + id); pos = e.root.position; } else if (kind === 'item') { const o = gItems.get(id); pos = o.position; up = 0.08; } else if (kind === 'tile') { pos = new THREE.Vector3(id[0] + 0.5, heightAt(id[0] + 0.5, id[1] + 0.5) + 1.8 * (me.lv | 0), id[1] + 0.5); up = 0; }   /* [Claude 2026-10-11] on an upper storey the tile is the floor you stand on, not the ground under the house */ else if (kind === 'world') { pos = new THREE.Vector3(id[0], id[1], id[2]); up = 0; } else if (kind === 'square') { const a = SCENE.chessAt && SCENE.chessAt(id[0]); if (!a) return null; const f = id[1].charCodeAt(0) - 97, r = +id[1][1] - 1; pos = new THREE.Vector3(a.x - 3.5 * 0.12 + f * 0.12, a.y, a.z + 3.5 * 0.12 - r * 0.12); up = 0.01; } else if (kind === 'me') { pos = myEnt.root.position; } else if (kind === 'remote') { const e = ents.get('r:' + id); if (!e || !e.root.visible) return null; pos = e.root.position; up = (e.H.height || 1.6) * e.scale * 0.5; } const s = toScreen(pos, up); if (!s) return null; const r = host.getBoundingClientRect(); return { x: s.x + r.left, y: s.y + r.top }; },
         give(id, n) { const p = me; for (let k = 0; k < (core.item(id).stack ? 1 : n || 1); k++) { const f = p.inv.indexOf(null); if (core.item(id).stack) { const i = p.inv.findIndex(s => s && s.id === id); if (i >= 0) { p.inv[i].n += n || 1; break; } } if (f < 0) break; p.inv[f] = { id, n: core.item(id).stack ? n || 1 : 1 }; } hud.refresh('all'); },
         setLevel(skill, L) { me.xp[skill] = core.xpFor(L) * 10; if (skill === 'hitpoints') me.hp = L; hud.refresh('all'); },
         teleport(x, y) { me.x = x; me.y = y; me.path = []; place(myEnt, x, y); cam.snap = true; streamRegions(); arriveCheck(); },
@@ -23300,7 +23518,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         skyDirs: () => ({ north: trueNorth(me.x, me.y), season: SEASON.name, sun: SUNL.sv, moon: SUNL.mv, info: { eclipse: +(SUNL.eclipse || 0).toFixed(3), lunar: +(SUNL.lunar || 0).toFixed(3) } }),   /* a test aims the camera at the sun or the moon */
         wx: () => Object.assign({ season: SEASON.name, snowy: SEASON.snowy }, wxMod && wxMod.state ? wxMod.state() : {}),
         progInfo: () => { const P = renderer.info.programs || [], I = renderer.info; return { n: P.length, calls: I.render.calls, tris: I.render.triangles, geos: I.memory.geometries, tex: I.memory.textures, applyMs: SEASON.applyMs, applies: SEASON.applies }; },
-        tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },   /* a test taps a thing as a player would (first option) */
+        tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },
+        pokerNetRow: t => pkNet(core.pokerRow(t)), pokerKey: () => MYPK, pokerSealed: t => PH[t] || null,   /* [Claude 2026-10-12] tests: the row as it leaves this dealer */   /* a test taps a thing as a player would (first option) */
         travelShown: () => { const el = host.querySelector('.travel'); return el && el.style.display !== 'none' ? el.className + ' | ' + el.querySelector('.tt').textContent : null; },
         say, store, models: MOD, allowedAsset, wallet: walletApi(DATA.items.items), walletState: () => walletState, walletRefresh,
         chestEventForTest: chestEvent,
@@ -23383,7 +23602,7 @@ ASH3D.defineData({"ashvale3d":"module","name":"zoneindex","api":1,"v":1,"data":{
 
 </script>
 <script>
-(window.ASH3D_LAZY = window.ASH3D_LAZY || {})["zone.saltmere"] = {"ashvale3d":"module","name":"zone.saltmere","api":1,"v":3,"data":{"name":"Saltmere","level":"safe","origin":[377,-24],"size":[160,112],"ground":"coast","tiles":["TTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTT","T.......................................................................................iiiiiiiiiii...............................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~","P...............................W.......f...............f...............................iiiiiiiiiii..............................ssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...........................T.................T............T............................iiiiiiiiiii............................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................................f...............f...............iiiiiiiiiii.....f.f................W..ssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T............f.........................................f............W.......f...........iiiiiiiiiii........f.....f...........sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..............f.........f.......................................T............................T.............................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..f................................T.........T........................T...................................................sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.....W........................................T..................................T.................pp...................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.f.iiiii................................................................T.....f....................pp.................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii...........................................................................................pp................sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.f.iiiii.....................T.................................................................T...pp..............ssss~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiii..................f................iiiii...........................f.......................pp.............ssss~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiii...........f..........f............iiiii.........................................f.........pp.............sss~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","P................T.....................f....iiiii...................................................ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~","T...........................................iiiii............................T......................ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~","T.......................................pp..iiiii...................................................pp............sss~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T............W..........................pp..........................................................pp............sss~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T............................f.........fpp.......f......................pppppppppppppppppppppppppppppp...........ssss~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T.......................................pp..........................................................pp..........ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.........W.............................pp............................pp............................pp.........sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp............................pp............................pp.........sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................iiiii....f........pp....................iiiii...pp............iiiiiii.........pp.......sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................iiiii...........f.pp....................iiiii...pp............iiiiiii.........pp......sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T................TT...iiiii.............pp....................iiiii...pp............iiiiiii.........pp.....sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T................ff...iiiii.........f...pp..............f.....iiiii...pp............iiiiiii.........pp....ssssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.....................iiiii.............pp....................iiiii...pp............iiiiiii.........pp...ssssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....f......T....T.....................pp.....................f.W....pp............................pp...sssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiiii.......f......................pp............................pp............................pp..sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiiii..............f...............pp............................pp.......W....................pp..srsss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiiii......................T.......pp............................pp............................pp..srss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiiii..............................pp............................pp............................pp..srss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P...iiiiii.................ff...........pp....W.......................ppf...........................pp..sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..T....................................pp............................pp.....f......................pp..sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........f...............iiiiii........pp............iiiiii..........pp..................pppppppppppp.ssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..........f..............iiiiii........pp............iiiiii..........pp...........f................pp.rsss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........................iiiiii........pp............iiiiii..........pp............................ppsssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T.........................iiiiii........pp............iiiiii..........pp............................ppssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","P.........................iiiiii........pp............iiiiii......f...pp............................ppssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T...iiiiiiiiiiiiiiiiiiii........iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp...........W................pprssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T...iiiiiiiiiiiiiiiiiiiif.......iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp........f...................ccBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~","T...iXXXiiiiiiiiiiXXXiii........iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp......f.....................ccBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~","T...iiiiiiiiiiiiiiiiiiii........iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp.T..........................ccsss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T...iiiiiiiiiiiiiiiiiiii........iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp..........W.................ccss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","P..............f...........f..........f.pp............................pp............................ccsr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T................f......................pp............................pp...........................sccss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp............................pp............................ppss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........iiiiii.iiiiii.........iiiiii..pp............................pp....iiiiiiii................pps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.........iiiiii.iiiiii.........iiiiii..pp.......T....................pp....iiiiiiii................pps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........iiiiii.iiiiii.........iiiiii..pp..............f.............pp....iiiiiiii...............spp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........iiiiii.iiiiii.........iiiiii..pp..T.........................pp....iiiiiiii...............spp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........W.........W...................pp...f........................pp....iiiiiiii..............sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii.........................T.....pp............................pp....iiiiiiii..............sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii...............................pp............................pp..........................sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P...XXiXX.............T.................pp........T...................pp..........................sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii...............................pp............................pp...f......................sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiXii...............................pp........iiiii...............pp..W........................spp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp.......fiiiii..............Tpp...........................spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp........iiiii...............pp...........................spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T....................f....T.............pp........iiiii..........f....pp...........................spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.......................................pp........iiiii.............T.pp...........................spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp....f.......................pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T....................f..................pp..............T.............pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp.............f..............pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T............T..........................pp............Tf..............pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................................T.pp........f...................pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.....................iiiii.............pp...T....f...................pp................iiiiiiiiiisspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T....................fiiiii.............pp............................pp................iiiiiiiiiisspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..ff.................iiiii.............pp............................pp................iiiiiiiiii.spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.............T.......iiiii.............pp............................pp................iiiiiiiiii.spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T.....................iiiii.............pp............................pp..........f.....iiiiiiiiii..ppr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T.......................................pp............................pp................iiiiiiiiii..ppss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","P...iiiiii..............................pp..............iiiii.........pp................W...........ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~","T.T.iiiiii................f.............pp..............iiiii.........pp............................ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~","T...iiiiii..T...........................pp..............iiiii.f.......pp............................pp..ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiiii..............................pp..............iiiii.f.......pp................f...........pp...sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiiii..............................pp..............iiiii.f.......pp..........f.................pp....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiiii.W............................pp................T........f..pp............................pp....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P...........................iiiii.......pp............................pp..........T.................pp.....sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...........................iiiii.......pp.....W.f....................pp............................pp.T...ssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................T...iiiii.......pp............................pp............................pp.....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................T.....iiiii.......pp............................pp......f.....................pp......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...........................iiiii.......pp............................pp............................pp......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................f.................pp.........f..................pp............................pp......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.......................................pp....T.........f.............pp............................pp......sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...........T...........................pp............................pp................f...........pp......ssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................ppf..f.......................Wpp................f...f.......pp.....ssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T....................f..................pp...................W........pp....ff..........W...........pp.....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp....iiiii...................ppppppppppppppppppppppppppppppppf....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.............................................iiiii........W....................................f...pp......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.........................W...................iiiii.......................f.......T.................pp.......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.............................................iiiii...W............................................Tpp........ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii..............f..........iiiii.......iiiii...........................iiiiiii...............pp.........ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii.........................iiiii...................................f...iiiiiii...............pp.....f....sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii............f............iiiii.................iiiiiiiT..............iiiiiii...............pp..........sssss~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~~~~~","T.W.iiiii.........................iiiii.................iiiiiii...............iiiiiii...............pp...........ssrss~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~~~~~","P...iiiii.......f.................iiiii.................iiiiiii...............iiiiiii...............ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~~~~~","T..............................................f........iiiiiiif............f..............T........ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~~~~~","T.............................f................f.W......iiiiiii.....................T.Wf............pp...............srss~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~~~~~","T...................f.................W.............................................................pp................ssss~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~~~~~","T.........................f.............................f...........T...................iiiiiiiiiii.pp...T...........f.sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..T.........................................................................f..........iiiiiiiiiii.pp..................sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P..................f....................................................................iiiiiiiiiii.pp.f.................ssrss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.............................................................f...f..............f......iiiiiiiiiii.....T...f..............srss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.................................................f.....................................iiiiiiiiiii.........................sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T........................................W..T......................f.......................T.........W...........T............ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T............................f..........................................................................................f.......ssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T............f......................f................................f............f...............Tf.........f..................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P................................................................................................................................rsss~~~~~~~~~~~~~~~~~~~~~~~~~~~","T................................................................................................................................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~"],"objects":[{"k":"stall","x":473,"y":8,"w":1,"h":1},{"k":"stall","x":473,"y":12,"w":1,"h":1},{"k":"stall","x":473,"y":16,"w":1,"h":1},{"k":"table","x":471,"y":10,"w":1,"h":1},{"k":"crate","x":476,"y":-8,"w":1,"h":1},{"k":"barrel","x":476,"y":-2,"w":1,"h":1},{"k":"crate","x":476,"y":4,"w":1,"h":1},{"k":"barrel","x":476,"y":14,"w":1,"h":1},{"k":"crate","x":476,"y":28,"w":1,"h":1},{"k":"barrel","x":476,"y":36,"w":1,"h":1},{"k":"crate","x":476,"y":56,"w":1,"h":1},{"k":"barrel","x":476,"y":62,"w":1,"h":1},{"k":"crate","x":476,"y":70,"w":1,"h":1},{"k":"rack","x":495,"y":-10,"w":1,"h":1},{"k":"rack","x":495,"y":50,"w":1,"h":1},{"k":"range","x":463,"y":47,"w":1,"h":1},{"k":"torch","x":476,"y":-12,"w":1,"h":1},{"k":"torch","x":476,"y":4,"w":1,"h":1},{"k":"torch","x":476,"y":20,"w":1,"h":1},{"k":"torch","x":476,"y":36,"w":1,"h":1},{"k":"torch","x":476,"y":52,"w":1,"h":1},{"k":"torch","x":476,"y":68,"w":1,"h":1},{"k":"torch","x":416,"y":34,"w":1,"h":1},{"k":"torch","x":446,"y":44,"w":1,"h":1},{"k":"counter","x":455,"y":27,"w":2,"h":1},{"k":"table","x":460,"y":27,"w":1,"h":1},{"k":"chair","x":460,"y":28,"w":1,"h":1},{"k":"barrel","x":459,"y":26,"w":1,"h":1},{"k":"fireplace","x":453,"y":30,"face":"n","w":1,"h":1},{"k":"crate","x":467,"y":46,"w":1,"h":1},{"k":"crate","x":468,"y":46,"w":1,"h":1},{"k":"barrel","x":472,"y":48,"w":1,"h":1},{"k":"shelf","x":466,"y":44,"w":3,"h":1},{"k":"bed","x":400,"y":0,"w":1,"h":2},{"k":"table","x":402,"y":1,"w":1,"h":1},{"k":"bed","x":400,"y":46,"w":1,"h":2},{"k":"table","x":402,"y":47,"w":1,"h":1},{"k":"bed","x":422,"y":-10,"w":1,"h":2},{"k":"bed","x":424,"y":68,"w":1,"h":2},{"k":"bed","x":440,"y":0,"w":1,"h":2},{"k":"bed","x":428,"y":36,"w":1,"h":2},{"k":"chair","x":430,"y":37,"w":1,"h":1},{"k":"barrel","x":491,"y":-10,"w":1,"h":1},{"k":"crate","x":503,"y":-9,"w":1,"h":1},{"k":"torch","x":517,"y":-13,"w":1,"h":1},{"k":"barrel","x":515,"y":-7,"w":1,"h":1},{"k":"crate","x":487,"y":17,"w":1,"h":1},{"k":"barrel","x":499,"y":16,"w":1,"h":1},{"k":"rack","x":509,"y":17,"w":1,"h":1},{"k":"torch","x":523,"y":12,"w":1,"h":1},{"k":"crate","x":522,"y":20,"w":1,"h":1},{"k":"barrel","x":493,"y":51,"w":1,"h":1},{"k":"crate","x":505,"y":50,"w":1,"h":1},{"k":"torch","x":517,"y":47,"w":1,"h":1},{"k":"barrel","x":514,"y":53,"w":1,"h":1},{"k":"crate","x":489,"y":75,"w":1,"h":1},{"k":"torch","x":513,"y":72,"w":1,"h":1},{"k":"stall","x":425,"y":25,"w":1,"h":1},{"k":"stall","x":431,"y":25,"w":1,"h":1},{"k":"stall","x":437,"y":25,"w":1,"h":1},{"k":"stall","x":403,"y":25,"w":1,"h":1},{"k":"counter","x":463,"y":0,"w":2,"h":1},{"k":"shelf","x":462,"y":-2,"w":3,"h":1},{"k":"anvil","x":436,"y":74,"w":1,"h":1},{"k":"furnace","x":438,"y":75,"w":1,"h":1},{"k":"crate","x":467,"y":-21,"w":1,"h":1},{"k":"crate","x":469,"y":-21,"w":1,"h":1},{"k":"barrel","x":473,"y":-20,"w":1,"h":1},{"k":"crate","x":467,"y":80,"w":1,"h":1},{"k":"barrel","x":471,"y":80,"w":1,"h":1},{"k":"crate","x":473,"y":81,"w":1,"h":1},{"k":"shop","x":453,"y":25,"w":8,"h":6,"door":[456,25],"sign":"The Saltmere Tap","roof":"#4a3324","wall":"#e2d7bd","enter":true,"floors":3},{"k":"house","x":465,"y":44,"w":10,"h":6,"door":[469,44],"sign":"Fish Store","roof":"#4d5560","wall":"#cbc3b0","enter":true,"floors":3},{"k":"house","x":455,"y":70,"w":7,"h":5,"door":[457,70],"sign":"Shipwright","roof":"#6a4a2a","wall":"#d5cab2","enter":true,"floors":3},{"k":"house","x":399,"y":-2,"w":5,"h":5,"door":[401,-2],"roof":"#5b4a8a","wall":"#e0d6c0","enter":true,"floors":2},{"k":"shop","x":399,"y":44,"w":5,"h":5,"door":[401,44],"sign":"Saltmere General Store","roof":"#3f6a4a","wall":"#ddd2bb","enter":true,"floors":2},{"k":"house","x":421,"y":-12,"w":5,"h":5,"door":[423,-12],"roof":"#7a5a2a","wall":"#d6cbb2","enter":true,"floors":2},{"k":"house","x":423,"y":66,"w":5,"h":5,"door":[425,66],"roof":"#7a3b2a","wall":"#d8c9a3","enter":true,"floors":3},{"k":"house","x":439,"y":-2,"w":5,"h":5,"door":[441,-2],"roof":"#4a6a7a","wall":"#ded4bf","enter":true,"floors":2},{"k":"house","x":427,"y":34,"w":5,"h":5,"door":[429,34],"roof":"#6a5a3a","wall":"#dbd1ba","enter":true,"floors":2},{"k":"shop","x":461,"y":-2,"w":7,"h":5,"door":[464,2],"sign":"Harbour Master","roof":"#2f4a6a","wall":"#e4dccb","enter":true,"floors":3},{"k":"house","x":465,"y":-23,"w":11,"h":5,"door":[470,-19],"sign":"South Warehouse","roof":"#5a4a3a","wall":"#b9ad95","floors":2,"enter":true},{"k":"house","x":465,"y":78,"w":11,"h":5,"door":[470,78],"sign":"North Warehouse","roof":"#5a4a3a","wall":"#b9ad95","floors":2,"enter":true},{"k":"smithy","x":433,"y":72,"w":7,"h":5,"door":[436,72],"sign":"Saltmere Armoury","roof":"#3a3a3a","wall":"#a59a88","floors":1},{"k":"shop","x":411,"y":70,"w":5,"h":5,"door":[413,70],"sign":"Saltmere Enchantery","roof":"#4a2f6a","wall":"#ddd6e2","enter":true,"floors":2},{"k":"house","x":381,"y":-15,"w":5,"h":5,"door":[383,-11],"roof":"#7a4a2a","wall":"#ddd2bb","floors":3,"enter":true},{"k":"house","x":381,"y":4,"w":6,"h":5,"door":[383,4],"roof":"#4a5a7a","wall":"#e0d6c0","floors":2,"enter":true},{"k":"church","x":381,"y":30,"w":5,"h":5,"door":[383,30],"roof":"#3e4a5a","wall":"#dcd4c2","enter":true,"sign":"Saltmere Chapel"},{"k":"house","x":381,"y":50,"w":6,"h":6,"door":[383,50],"roof":"#3f5a3a","wall":"#ded4bf","enter":true,"floors":2},{"k":"house","x":381,"y":70,"w":5,"h":5,"door":[383,70],"roof":"#7a5a2a","wall":"#d8c9a3","floors":2,"enter":true},{"k":"house","x":403,"y":10,"w":6,"h":5,"door":[405,14],"roof":"#5a3a5a","wall":"#dbd1ba","floors":3,"enter":true},{"k":"house","x":405,"y":56,"w":5,"h":5,"door":[407,56],"roof":"#3a5a6a","wall":"#e2d7bd","floors":2,"enter":true},{"k":"house","x":431,"y":10,"w":6,"h":5,"door":[433,14],"roof":"#6a4a3a","wall":"#cbc3b0","floors":2,"enter":true},{"k":"house","x":433,"y":50,"w":5,"h":5,"door":[435,50],"roof":"#4d5560","wall":"#d5cab2","floors":2,"enter":true},{"k":"house","x":409,"y":15,"w":6,"h":5,"door":[411,19],"roof":"#6a4a3a","wall":"#ded4bf","floors":2,"enter":true},{"k":"house","x":420,"y":15,"w":6,"h":5,"door":[422,19],"roof":"#3f4a5a","wall":"#cbc3b0","floors":2,"enter":true},{"k":"house","x":427,"y":15,"w":6,"h":5,"door":[429,19],"roof":"#5a3a2a","wall":"#e2d7bd","floors":2,"enter":true},{"k":"house","x":434,"y":15,"w":6,"h":5,"door":[436,19],"roof":"#4a3a4a","wall":"#d6cbb2","floors":3,"enter":true},{"k":"house","x":441,"y":15,"w":5,"h":5,"door":[443,19],"roof":"#6a4a3a","wall":"#ded4bf","floors":2,"enter":true},{"k":"house","x":387,"y":25,"w":6,"h":4,"door":[389,25],"roof":"#5a4a3a","wall":"#e0d6c0","floors":2,"enter":true},{"k":"house","x":394,"y":25,"w":6,"h":4,"door":[396,25],"roof":"#4a3a3a","wall":"#d8c9a3","floors":2,"enter":true},{"k":"house","x":409,"y":25,"w":6,"h":4,"door":[411,25],"roof":"#4a3a3a","wall":"#d8c9a3","floors":2,"enter":true},{"k":"altar","x":383,"y":34,"w":1,"h":1},{"k":"pew","x":381,"y":32,"w":2,"h":1},{"k":"pew","x":384,"y":32,"w":2,"h":1},{"k":"lamp","x":379,"y":21,"w":1,"h":1},{"k":"lamp","x":387,"y":24,"w":1,"h":1},{"k":"lamp","x":395,"y":21,"w":1,"h":1},{"k":"lamp","x":403,"y":24,"w":1,"h":1},{"k":"lamp","x":411,"y":21,"w":1,"h":1},{"k":"lamp","x":419,"y":24,"w":1,"h":1},{"k":"lamp","x":427,"y":21,"w":1,"h":1},{"k":"lamp","x":435,"y":24,"w":1,"h":1},{"k":"lamp","x":443,"y":21,"w":1,"h":1},{"k":"house","x":381,"y":15,"w":20,"h":5,"door":[390,19],"sign":"Town Hall","roof":"#2a3a52","wall":"#e8e0d0","enter":true,"floors":2,"stairsAt":[390,16]},{"k":"iwall","x":387,"y":15,"w":1,"h":5,"door":[387,17],"face":"w"},{"k":"iwall","x":394,"y":15,"w":1,"h":5,"door":[394,17],"face":"w"},{"k":"counter","x":382,"y":17,"w":3,"h":1},{"k":"shelf","x":381,"y":15,"w":2,"h":1},{"k":"counter","x":395,"y":17,"w":3,"h":1},{"k":"chair","x":397,"y":18},{"k":"table","x":390,"y":17,"w":1,"h":1},{"k":"sconce","x":457,"y":25,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":470,"y":44,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":458,"y":70,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":402,"y":44,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":437,"y":72,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":414,"y":70,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":384,"y":30,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":391,"y":19,"w":1,"h":1,"face":"s","night":true},{"k":"chesstable","id":"salt1","x":465,"y":35,"seats":[[465,34],[465,36]],"board":"driftwood","w":1,"h":1},{"k":"bench","x":465,"y":34,"face":"s","w":1,"h":1},{"k":"bench","x":465,"y":36,"face":"n","w":1,"h":1},{"k":"chesstable","id":"salt2","x":471,"y":35,"seats":[[471,34],[471,36]],"board":"driftwood","w":1,"h":1},{"k":"bench","x":471,"y":34,"face":"s","w":1,"h":1},{"k":"bench","x":471,"y":36,"face":"n","w":1,"h":1},{"k":"chesstable","id":"salt3","x":465,"y":41,"seats":[[465,40],[465,42]],"board":"driftwood","w":1,"h":1},{"k":"bench","x":465,"y":40,"face":"s","w":1,"h":1},{"k":"bench","x":465,"y":42,"face":"n","w":1,"h":1},{"k":"chesstable","id":"salt4","x":471,"y":41,"seats":[[471,40],[471,42]],"board":"driftwood","w":1,"h":1},{"k":"bench","x":471,"y":40,"face":"s","w":1,"h":1},{"k":"bench","x":471,"y":42,"face":"n","w":1,"h":1},{"k":"lamp","x":463,"y":38,"w":1,"h":1},{"k":"lamp","x":473,"y":38,"w":1,"h":1},{"k":"wsign","x":468,"y":32,"face":"n","board":"chess","title":"CHESS PARK","w":1,"h":1},{"k":"chair","x":456,"y":28,"w":1,"h":1},{"k":"chair","x":458,"y":28,"w":1,"h":1},{"k":"chair","x":458,"y":29,"w":1,"h":1},{"k":"chair","x":458,"y":30,"w":1,"h":1},{"k":"chair","x":456,"y":30,"w":1,"h":1},{"k":"chair","x":456,"y":29,"w":1,"h":1},{"k":"pokertable","id":"poker1","x":457,"y":29,"seats":[[456,28],[458,28],[458,29],[458,30],[456,30],[456,29]],"felt":"#1f4d38","w":1,"h":1}],"npcs":[{"id":"hollis","name":"Hollis the taverner","look":"hollis","x":456,"y":24,"shop":"tavern"},{"id":"nettie","name":"Nettie the fishmonger","look":"nettie","x":474,"y":12,"shop":"fish"},{"id":"sela","name":"Sela the chandler","look":"sela","x":470,"y":50,"shop":"chandler"},{"id":"cobb","name":"Cobb the town elder","look":"cobb","x":464,"y":27,"talk":"quest","quest":"salt_road","gift":"saltmere_stone","giftAfter":{"quest":"salt_road","step":4},"giftLine":"Hold it at the harbour wall and think of the tide running, {name}. It will put you back on this stone every half hour, and it is the only entry in my accounts I ever wanted to write.","examine":"Cobb the town elder, salt in his beard and the harbour accounts in his head."},{"id":"bela","name":"Bela the storekeeper","look":"bela","x":401,"y":43,"shop":"salt_general"},{"id":"orin","name":"Orin the armourer","look":"orin","x":436,"y":71,"shop":"salt_armoury"},{"id":"mabb","name":"Mabb the sailmaker","look":"mabb","x":457,"y":62,"talk":"quest","quest":"sail_loft","examine":"Mabb the sailmaker, mending something white and enormous with more needle than is strictly necessary."},{"id":"tolly","name":"Tolly the dockhand","look":"tolly","x":475,"y":40,"examine":"Tolly the dockhand, on his fourth crate of the morning and no worse for it.","lines":["Everything in this town came off a boat or goes off one. I move both ends of that.","Mind the third pier, the third plank. Nobody has fixed it and nobody will, so long as it holds a rope."]},{"id":"perla","name":"Perla the net-mender","look":"perla","x":471,"y":60,"talk":"quest","quest":"empty_water","examine":"Perla the net-mender, knots going so fast they are almost a kind of speech."},{"id":"salt_chest","name":"Saltmere chest","look":"chest","x":466,"y":30,"chest":true,"examine":"The Saltmere chest, tarred against the damp. Everything you own from Ashvale is kept in your arcade wallet; this is where you see it."},{"id":"bryce","name":"Bryce the shipwright","look":"bryce","x":453,"y":68,"quest":"rudder","examine":"Bryce the shipwright, half a lifetime of Saltmere hulls behind him and one rudder in front of him."},{"id":"nessa","name":"Nessa the enchanter","look":"nessa","x":413,"y":69,"shop":"salt_magic","examine":"Nessa the enchanter, who learned her trade off the wreck of a wizard's chest that the sea gave back."},{"id":"wenna","name":"Mother Wenna","look":"wenna","x":384,"y":34,"examine":"Mother Wenna, keeper of the Saltmere chapel, a broom never far from her hand.","lines":["Eleven years I've swept this floor and nobody's knelt on it. Still, the dust doesn't know that.","Ashvale has a priest, they tell me. Father Aldous. He writes a fair letter but never comes himself."],"quests":["red_pyre"]},{"id":"hall_bank","name":"Town Hall bank","look":"chest","x":383,"y":16,"chest":true,"examine":"The Town Hall bank. Same arcade wallet as the chest by the stones; this counter is just nearer the ledgers."},{"id":"calder","name":"Mayor Calder","look":"calder","x":396,"y":16,"examine":"Mayor Calder of Saltmere, chain of office and a stack of plans that are not yet a desk.","lines":["Welcome to Saltmere's town hall. I am Mayor Calder. The southeast counter is the bank. This one is talk.","Ashvale is a living world on Dogecoin. You gather, fight, cook, bury bones for Prayer, and keep what you earn. Tam sells bread, Garrick smiths, Wren stitches hats and capes as tokens. The chest in each town is your arcade wallet - bag and bank are the same holdings.","Day and night here run on a two-hour wheel, not a real day. Follow the lamps after dark. Portals between towns remember you once you have touched the stones.","The tokens you hold are Omni assets. The Omni protocol writes them on Dogecoin itself, the same chain that carries the coin. They are not a costume the game invented. They are entries the chain can prove.","We mean to let those assets travel. Other chains, other protocols, markets outside this valley - wrap, bridge, list, swap. You will be able to trade an Ashvale piece where Ashvale is not running.","Whatever leaves can come home. Every ported token stays an Ashvale Omni game asset at heart, and it can always be reintegrated - brought back into this world with the same rights it had when it left. We will not mint a copy that strands the original.","None of that desk is built yet. When the bridges exist, you will hear it from this hall first."]},{"id":"guard_salt_1","name":"Town guard","look":"town_guard","x":390,"y":22,"watch":"saltmere","examine":"A town guard. Combat level 33. He keeps the peace, and the lamps.","lines":["We keep the peace. When the day goes we light the lamps and the torches. When it comes back we put the lamps out.","Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."]},{"id":"guard_salt_2","name":"Town guard","look":"town_guard","x":410,"y":23,"watch":"saltmere","examine":"A town guard. Combat level 33. He keeps the peace, and the lamps.","lines":["Strike one of us and the whole watch answers.","Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."]},{"id":"guard_salt_3","name":"Town guard","look":"town_guard","x":430,"y":22,"watch":"saltmere","examine":"A town guard. Combat level 33. He keeps the peace, and the lamps.","lines":["Saltmere's lamps are ours to light.","Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."]},{"id":"guard_salt_4","name":"Town guard","look":"town_guard","x":450,"y":23,"watch":"saltmere","examine":"A town guard. Combat level 33. He keeps the peace, and the lamps.","lines":["The road guard has the cobbles. The town is ours.","Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."]}],"fishing":[{"x":520,"y":-11,"fish":"shrimp_raw"},{"x":518,"y":-5,"fish":"shrimp_raw"},{"x":526,"y":15,"fish":"salmon_raw","req":30,"xp":350,"tool":"fishing_rod"},{"x":521,"y":22,"fish":"salmon_raw","req":30,"xp":350,"tool":"fishing_rod"},{"x":520,"y":49,"fish":"lobster_raw","req":40,"xp":500,"tool":"lobster_pot"},{"x":516,"y":73,"fish":"shrimp_raw"},{"x":480,"y":35,"fish":"shrimp_raw"}],"spawns":[],"weather":{"kinds":{"clear":48,"rain":32,"fog":20},"min":240,"max":720}}};
+(window.ASH3D_LAZY = window.ASH3D_LAZY || {})["zone.saltmere"] = {"ashvale3d":"module","name":"zone.saltmere","api":1,"v":3,"data":{"name":"Saltmere","level":"safe","origin":[377,-24],"size":[160,112],"ground":"coast","tiles":["TTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTTTTTTPTT","T.......................................................................................iiiiiiiiiii...............................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~","P...............................W.......f...............f...............................iiiiiiiiiii..............................ssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...........................T.................T............T............................iiiiiiiiiii............................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................................f...............f...............iiiiiiiiiii.....f.f................W..ssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T............f.........................................f............W.......f...........iiiiiiiiiii........f.....f...........sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..............f.........f.......................................T............................T.............................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..f................................T.........T........................T...................................................sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.....W........................................T..................................T.................pp...................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.f.iiiii................................................................T.....f....................pp.................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii...........................................................................................pp................sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.f.iiiii.....................T.................................................................T...pp..............ssss~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiii..................f................iiiii...........................f.......................pp.............ssss~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiii...........f..........f............iiiii.........................................f.........pp.............sss~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","P................T.....................f....iiiii...................................................ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~","T...........................................iiiii............................T......................ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~","T.......................................pp..iiiii...................................................pp............sss~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T............W..........................pp..........................................................pp............sss~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T............................f.........fpp.......f......................pppppppppppppppppppppppppppppp...........ssss~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T.......................................pp..........................................................pp..........ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.........W.............................pp............................pp............................pp.........sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp............................pp............................pp.........sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................iiiii....f........pp....................iiiii...pp............iiiiiii.........pp.......sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................iiiii...........f.pp....................iiiii...pp............iiiiiii.........pp......sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T................TT...iiiii.............pp....................iiiii...pp............iiiiiii.........pp.....sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T................ff...iiiii.........f...pp..............f.....iiiii...pp............iiiiiii.........pp....ssssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.....................iiiii.............pp....................iiiii...pp............iiiiiii.........pp...ssssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....f......T....T.....................pp.....................f.W....pp............................pp...sssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiiii.......f......................pp............................pp............................pp..sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiiii..............f...............pp............................pp.......W....................pp..srsss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiiii......................T.......pp............................pp............................pp..srss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiiii..............................pp............................pp............................pp..srss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P...iiiiii.................ff...........pp....W.......................ppf...........................pp..sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..T....................................pp............................pp.....f......................pp..sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........f...............iiiiii........pp............iiiiii..........pp..................pppppppppppp.ssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..........f..............iiiiii........pp............iiiiii..........pp...........f................pp.rsss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........................iiiiii........pp............iiiiii..........pp............................ppsssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T.........................iiiiii........pp............iiiiii..........pp............................ppssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","P.........................iiiiii........pp............iiiiii......f...pp............................ppssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T...iiiiiiiiiiiiiiiiiiii........iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp...........W................pprssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T...iiiiiiiiiiiiiiiiiiiif.......iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp........f...................ccBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~","T...iXXXiiiiiiiiiiXXXiii........iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp......f.....................ccBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~","T...iiiiiiiiiiiiiiiiiiii........iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp.T..........................ccsss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T...iiiiiiiiiiiiiiiiiiii........iiiiii..pp.iiiiii.iiiiii.iiiiii.iiiii.pp..........W.................ccss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","P..............f...........f..........f.pp............................pp............................ccsr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","T................f......................pp............................pp...........................sccss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~","ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp............................pp............................ppss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........iiiiii.iiiiii.........iiiiii..pp............................pp....iiiiiiii................pps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.........iiiiii.iiiiii.........iiiiii..pp.......T....................pp....iiiiiiii................pps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........iiiiii.iiiiii.........iiiiii..pp..............f.............pp....iiiiiiii...............spp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........iiiiii.iiiiii.........iiiiii..pp..T.........................pp....iiiiiiii...............spp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.........W.........W...................pp...f........................pp....iiiiiiii..............sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii.........................T.....pp............................pp....iiiiiiii..............sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii...............................pp............................pp..........................sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P...XXiXX.............T.................pp........T...................pp..........................sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii...............................pp............................pp...f......................sspp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiXii...............................pp........iiiii...............pp..W........................spp~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp.......fiiiii..............Tpp...........................spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp........iiiii...............pp...........................spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T....................f....T.............pp........iiiii..........f....pp...........................spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.......................................pp........iiiii.............T.pp...........................spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp....f.......................pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T....................f..................pp..............T.............pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp.............f..............pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T............T..........................pp............Tf..............pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................................T.pp........f...................pp..........................sspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.....................iiiii.............pp...T....f...................pp................iiiiiiiiiisspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T....................fiiiii.............pp............................pp................iiiiiiiiiisspps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..ff.................iiiii.............pp............................pp................iiiiiiiiii.spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.............T.......iiiii.............pp............................pp................iiiiiiiiii.spps~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T.....................iiiii.............pp............................pp..........f.....iiiiiiiiii..ppr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T.......................................pp............................pp................iiiiiiiiii..ppss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","P...iiiiii..............................pp..............iiiii.........pp................W...........ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~","T.T.iiiiii................f.............pp..............iiiii.........pp............................ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~","T...iiiiii..T...........................pp..............iiiii.f.......pp............................pp..ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiiii..............................pp..............iiiii.f.......pp................f...........pp...sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiiii..............................pp..............iiiii.f.......pp..........f.................pp....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~","T...iiiiii.W............................pp................T........f..pp............................pp....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P...........................iiiii.......pp............................pp..........T.................pp.....sss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...........................iiiii.......pp.....W.f....................pp............................pp.T...ssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................T...iiiii.......pp............................pp............................pp.....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................T.....iiiii.......pp............................pp......f.....................pp......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...........................iiiii.......pp............................pp............................pp......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.....................f.................pp.........f..................pp............................pp......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.......................................pp....T.........f.............pp............................pp......sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...........T...........................pp............................pp................f...........pp......ssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................ppf..f.......................Wpp................f...f.......pp.....ssrs~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T....................f..................pp...................W........pp....ff..........W...........pp.....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.......................................pp....iiiii...................ppppppppppppppppppppppppppppppppf....ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.............................................iiiii........W....................................f...pp......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P.........................W...................iiiii.......................f.......T.................pp.......ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.............................................iiiii...W............................................Tpp........ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii..............f..........iiiii.......iiiii...........................iiiiiii...............pp.........ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii.........................iiiii...................................f...iiiiiii...............pp.....f....sssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T...iiiii............f............iiiii.................iiiiiiiT..............iiiiiii...............pp..........sssss~~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~~~~~","T.W.iiiii.........................iiiii.................iiiiiii...............iiiiiii...............pp...........ssrss~~~~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~~~~~","P...iiiii.......f.................iiiii.................iiiiiii...............iiiiiii...............ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~~~~~","T..............................................f........iiiiiiif............f..............T........ppBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB~~~~~~~~~~~~~~~~~~~~~","T.............................f................f.W......iiiiiii.....................T.Wf............pp...............srss~~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~~~~~","T...................f.................W.............................................................pp................ssss~~~~~~~~~~~~BBBBB~~~~~~~~~~~~~~~~~~~~~","T.........................f.............................f...........T...................iiiiiiiiiii.pp...T...........f.sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T..T.........................................................................f..........iiiiiiiiiii.pp..................sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P..................f....................................................................iiiiiiiiiii.pp.f.................ssrss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.............................................................f...f..............f......iiiiiiiiiii.....T...f..............srss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T.................................................f.....................................iiiiiiiiiii.........................sssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T........................................W..T......................f.......................T.........W...........T............ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T............................f..........................................................................................f.......ssr~~~~~~~~~~~~~~~~~~~~~~~~~~~~~","T............f......................f................................f............f...............Tf.........f..................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~~","P................................................................................................................................rsss~~~~~~~~~~~~~~~~~~~~~~~~~~~","T................................................................................................................................ssss~~~~~~~~~~~~~~~~~~~~~~~~~~~"],"objects":[{"k":"stall","x":473,"y":8,"w":1,"h":1},{"k":"stall","x":473,"y":12,"w":1,"h":1},{"k":"stall","x":473,"y":16,"w":1,"h":1},{"k":"table","x":471,"y":10,"w":1,"h":1},{"k":"crate","x":476,"y":-8,"w":1,"h":1},{"k":"barrel","x":476,"y":-2,"w":1,"h":1},{"k":"crate","x":476,"y":4,"w":1,"h":1},{"k":"barrel","x":476,"y":14,"w":1,"h":1},{"k":"crate","x":476,"y":28,"w":1,"h":1},{"k":"barrel","x":476,"y":36,"w":1,"h":1},{"k":"crate","x":476,"y":56,"w":1,"h":1},{"k":"barrel","x":476,"y":62,"w":1,"h":1},{"k":"crate","x":476,"y":70,"w":1,"h":1},{"k":"rack","x":495,"y":-10,"w":1,"h":1},{"k":"rack","x":495,"y":50,"w":1,"h":1},{"k":"range","x":463,"y":47,"w":1,"h":1},{"k":"torch","x":476,"y":-12,"w":1,"h":1},{"k":"torch","x":476,"y":4,"w":1,"h":1},{"k":"torch","x":476,"y":20,"w":1,"h":1},{"k":"torch","x":476,"y":36,"w":1,"h":1},{"k":"torch","x":476,"y":52,"w":1,"h":1},{"k":"torch","x":476,"y":68,"w":1,"h":1},{"k":"torch","x":416,"y":34,"w":1,"h":1},{"k":"torch","x":446,"y":44,"w":1,"h":1},{"k":"counter","x":455,"y":27,"w":2,"h":1},{"k":"table","x":460,"y":27,"w":1,"h":1},{"k":"chair","x":460,"y":28,"w":1,"h":1},{"k":"barrel","x":459,"y":26,"w":1,"h":1},{"k":"fireplace","x":453,"y":30,"face":"n","w":1,"h":1},{"k":"crate","x":467,"y":46,"w":1,"h":1},{"k":"crate","x":468,"y":46,"w":1,"h":1},{"k":"barrel","x":472,"y":48,"w":1,"h":1},{"k":"shelf","x":466,"y":44,"w":3,"h":1},{"k":"bed","x":400,"y":0,"w":1,"h":2},{"k":"table","x":402,"y":1,"w":1,"h":1},{"k":"bed","x":400,"y":46,"w":1,"h":2},{"k":"table","x":402,"y":47,"w":1,"h":1},{"k":"bed","x":422,"y":-10,"w":1,"h":2},{"k":"bed","x":424,"y":68,"w":1,"h":2},{"k":"bed","x":440,"y":0,"w":1,"h":2},{"k":"bed","x":428,"y":36,"w":1,"h":2},{"k":"chair","x":430,"y":37,"w":1,"h":1},{"k":"barrel","x":491,"y":-10,"w":1,"h":1},{"k":"crate","x":503,"y":-9,"w":1,"h":1},{"k":"torch","x":517,"y":-13,"w":1,"h":1},{"k":"barrel","x":515,"y":-7,"w":1,"h":1},{"k":"crate","x":487,"y":17,"w":1,"h":1},{"k":"barrel","x":499,"y":16,"w":1,"h":1},{"k":"rack","x":509,"y":17,"w":1,"h":1},{"k":"torch","x":523,"y":12,"w":1,"h":1},{"k":"crate","x":522,"y":20,"w":1,"h":1},{"k":"barrel","x":493,"y":51,"w":1,"h":1},{"k":"crate","x":505,"y":50,"w":1,"h":1},{"k":"torch","x":517,"y":47,"w":1,"h":1},{"k":"barrel","x":514,"y":53,"w":1,"h":1},{"k":"crate","x":489,"y":75,"w":1,"h":1},{"k":"torch","x":513,"y":72,"w":1,"h":1},{"k":"stall","x":425,"y":25,"w":1,"h":1},{"k":"stall","x":431,"y":25,"w":1,"h":1},{"k":"stall","x":437,"y":25,"w":1,"h":1},{"k":"stall","x":403,"y":25,"w":1,"h":1},{"k":"counter","x":463,"y":0,"w":2,"h":1},{"k":"shelf","x":462,"y":-2,"w":3,"h":1},{"k":"anvil","x":436,"y":74,"w":1,"h":1},{"k":"furnace","x":438,"y":75,"w":1,"h":1},{"k":"crate","x":467,"y":-21,"w":1,"h":1},{"k":"crate","x":469,"y":-21,"w":1,"h":1},{"k":"barrel","x":473,"y":-20,"w":1,"h":1},{"k":"crate","x":467,"y":80,"w":1,"h":1},{"k":"barrel","x":471,"y":80,"w":1,"h":1},{"k":"crate","x":473,"y":81,"w":1,"h":1},{"k":"shop","x":453,"y":25,"w":8,"h":6,"door":[456,25],"sign":"The Saltmere Tap","roof":"#4a3324","wall":"#e2d7bd","enter":true,"floors":3},{"k":"house","x":465,"y":44,"w":10,"h":6,"door":[469,44],"sign":"Fish Store","roof":"#4d5560","wall":"#cbc3b0","enter":true,"floors":3},{"k":"house","x":455,"y":70,"w":7,"h":5,"door":[457,70],"sign":"Shipwright","roof":"#6a4a2a","wall":"#d5cab2","enter":true,"floors":3},{"k":"house","x":399,"y":-2,"w":5,"h":5,"door":[401,-2],"roof":"#5b4a8a","wall":"#e0d6c0","enter":true,"floors":2},{"k":"shop","x":399,"y":44,"w":5,"h":5,"door":[401,44],"sign":"Saltmere General Store","roof":"#3f6a4a","wall":"#ddd2bb","enter":true,"floors":2},{"k":"house","x":421,"y":-12,"w":5,"h":5,"door":[423,-12],"roof":"#7a5a2a","wall":"#d6cbb2","enter":true,"floors":2},{"k":"house","x":423,"y":66,"w":5,"h":5,"door":[425,66],"roof":"#7a3b2a","wall":"#d8c9a3","enter":true,"floors":3},{"k":"house","x":439,"y":-2,"w":5,"h":5,"door":[441,-2],"roof":"#4a6a7a","wall":"#ded4bf","enter":true,"floors":2},{"k":"house","x":427,"y":34,"w":5,"h":5,"door":[429,34],"roof":"#6a5a3a","wall":"#dbd1ba","enter":true,"floors":2},{"k":"shop","x":461,"y":-2,"w":7,"h":5,"door":[464,2],"sign":"Harbour Master","roof":"#2f4a6a","wall":"#e4dccb","enter":true,"floors":3},{"k":"house","x":465,"y":-23,"w":11,"h":5,"door":[470,-19],"sign":"South Warehouse","roof":"#5a4a3a","wall":"#b9ad95","floors":2,"enter":true},{"k":"house","x":465,"y":78,"w":11,"h":5,"door":[470,78],"sign":"North Warehouse","roof":"#5a4a3a","wall":"#b9ad95","floors":2,"enter":true},{"k":"smithy","x":433,"y":72,"w":7,"h":5,"door":[436,72],"sign":"Saltmere Armoury","roof":"#3a3a3a","wall":"#a59a88","floors":1},{"k":"shop","x":411,"y":70,"w":5,"h":5,"door":[413,70],"sign":"Saltmere Enchantery","roof":"#4a2f6a","wall":"#ddd6e2","enter":true,"floors":2},{"k":"house","x":381,"y":-15,"w":5,"h":5,"door":[383,-11],"roof":"#7a4a2a","wall":"#ddd2bb","floors":3,"enter":true},{"k":"house","x":381,"y":4,"w":6,"h":5,"door":[383,4],"roof":"#4a5a7a","wall":"#e0d6c0","floors":2,"enter":true},{"k":"church","x":381,"y":30,"w":5,"h":5,"door":[383,30],"roof":"#3e4a5a","wall":"#dcd4c2","enter":true,"sign":"Saltmere Chapel"},{"k":"house","x":381,"y":50,"w":6,"h":6,"door":[383,50],"roof":"#3f5a3a","wall":"#ded4bf","enter":true,"floors":2},{"k":"house","x":381,"y":70,"w":5,"h":5,"door":[383,70],"roof":"#7a5a2a","wall":"#d8c9a3","floors":2,"enter":true},{"k":"house","x":403,"y":10,"w":6,"h":5,"door":[405,14],"roof":"#5a3a5a","wall":"#dbd1ba","floors":3,"enter":true},{"k":"house","x":405,"y":56,"w":5,"h":5,"door":[407,56],"roof":"#3a5a6a","wall":"#e2d7bd","floors":2,"enter":true},{"k":"house","x":431,"y":10,"w":6,"h":5,"door":[433,14],"roof":"#6a4a3a","wall":"#cbc3b0","floors":2,"enter":true},{"k":"house","x":433,"y":50,"w":5,"h":5,"door":[435,50],"roof":"#4d5560","wall":"#d5cab2","floors":2,"enter":true},{"k":"house","x":409,"y":15,"w":6,"h":5,"door":[411,19],"roof":"#6a4a3a","wall":"#ded4bf","floors":2,"enter":true},{"k":"house","x":420,"y":15,"w":6,"h":5,"door":[422,19],"roof":"#3f4a5a","wall":"#cbc3b0","floors":2,"enter":true},{"k":"house","x":427,"y":15,"w":6,"h":5,"door":[429,19],"roof":"#5a3a2a","wall":"#e2d7bd","floors":2,"enter":true},{"k":"house","x":434,"y":15,"w":6,"h":5,"door":[436,19],"roof":"#4a3a4a","wall":"#d6cbb2","floors":3,"enter":true},{"k":"house","x":441,"y":15,"w":5,"h":5,"door":[443,19],"roof":"#6a4a3a","wall":"#ded4bf","floors":2,"enter":true},{"k":"house","x":387,"y":25,"w":6,"h":4,"door":[389,25],"roof":"#5a4a3a","wall":"#e0d6c0","floors":2,"enter":true},{"k":"house","x":394,"y":25,"w":6,"h":4,"door":[396,25],"roof":"#4a3a3a","wall":"#d8c9a3","floors":2,"enter":true},{"k":"house","x":409,"y":25,"w":6,"h":4,"door":[411,25],"roof":"#4a3a3a","wall":"#d8c9a3","floors":2,"enter":true},{"k":"altar","x":383,"y":34,"w":1,"h":1},{"k":"pew","x":381,"y":32,"w":2,"h":1},{"k":"pew","x":384,"y":32,"w":2,"h":1},{"k":"lamp","x":379,"y":21,"w":1,"h":1},{"k":"lamp","x":387,"y":24,"w":1,"h":1},{"k":"lamp","x":395,"y":21,"w":1,"h":1},{"k":"lamp","x":403,"y":24,"w":1,"h":1},{"k":"lamp","x":411,"y":21,"w":1,"h":1},{"k":"lamp","x":419,"y":24,"w":1,"h":1},{"k":"lamp","x":427,"y":21,"w":1,"h":1},{"k":"lamp","x":435,"y":24,"w":1,"h":1},{"k":"lamp","x":443,"y":21,"w":1,"h":1},{"k":"house","x":381,"y":15,"w":20,"h":5,"door":[390,19],"sign":"Town Hall","roof":"#2a3a52","wall":"#e8e0d0","enter":true,"floors":2,"stairsAt":[390,16]},{"k":"iwall","x":387,"y":15,"w":1,"h":5,"door":[387,17],"face":"w"},{"k":"iwall","x":394,"y":15,"w":1,"h":5,"door":[394,17],"face":"w"},{"k":"counter","x":382,"y":17,"w":3,"h":1},{"k":"shelf","x":381,"y":15,"w":2,"h":1},{"k":"counter","x":395,"y":17,"w":3,"h":1},{"k":"chair","x":397,"y":18},{"k":"table","x":390,"y":17,"w":1,"h":1},{"k":"sconce","x":457,"y":25,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":470,"y":44,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":458,"y":70,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":402,"y":44,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":437,"y":72,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":414,"y":70,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":384,"y":30,"w":1,"h":1,"face":"n","night":true},{"k":"sconce","x":391,"y":19,"w":1,"h":1,"face":"s","night":true},{"k":"chesstable","id":"salt1","x":465,"y":35,"seats":[[465,34],[465,36]],"board":"driftwood","w":1,"h":1},{"k":"bench","x":465,"y":34,"face":"s","w":1,"h":1},{"k":"bench","x":465,"y":36,"face":"n","w":1,"h":1},{"k":"chesstable","id":"salt2","x":471,"y":35,"seats":[[471,34],[471,36]],"board":"driftwood","w":1,"h":1},{"k":"bench","x":471,"y":34,"face":"s","w":1,"h":1},{"k":"bench","x":471,"y":36,"face":"n","w":1,"h":1},{"k":"chesstable","id":"salt3","x":465,"y":41,"seats":[[465,40],[465,42]],"board":"driftwood","w":1,"h":1},{"k":"bench","x":465,"y":40,"face":"s","w":1,"h":1},{"k":"bench","x":465,"y":42,"face":"n","w":1,"h":1},{"k":"chesstable","id":"salt4","x":471,"y":41,"seats":[[471,40],[471,42]],"board":"driftwood","w":1,"h":1},{"k":"bench","x":471,"y":40,"face":"s","w":1,"h":1},{"k":"bench","x":471,"y":42,"face":"n","w":1,"h":1},{"k":"lamp","x":463,"y":38,"w":1,"h":1},{"k":"lamp","x":473,"y":38,"w":1,"h":1},{"k":"wsign","x":468,"y":32,"face":"n","board":"chess","title":"CHESS PARK","w":1,"h":1},{"k":"pokertable","id":"poker1","x":454,"y":28,"seats":[[454,27],[455,27],[456,28],[456,29],[455,30],[454,30],[453,29],[453,28]],"felt":"#1f4d38","w":2,"h":2,"lv":1},{"k":"chair","x":454,"y":27,"w":1,"h":1,"lv":1},{"k":"chair","x":455,"y":27,"w":1,"h":1,"lv":1},{"k":"chair","x":456,"y":28,"w":1,"h":1,"lv":1},{"k":"chair","x":456,"y":29,"w":1,"h":1,"lv":1},{"k":"chair","x":455,"y":30,"w":1,"h":1,"lv":1},{"k":"chair","x":454,"y":30,"w":1,"h":1,"lv":1},{"k":"chair","x":453,"y":29,"w":1,"h":1,"lv":1},{"k":"chair","x":453,"y":28,"w":1,"h":1,"lv":1},{"k":"pokertable","id":"poker2","x":458,"y":28,"seats":[[458,27],[459,27],[460,28],[460,29],[459,30],[458,30],[457,29],[457,28]],"felt":"#1f4d38","w":2,"h":2,"lv":1},{"k":"chair","x":458,"y":27,"w":1,"h":1,"lv":1},{"k":"chair","x":459,"y":27,"w":1,"h":1,"lv":1},{"k":"chair","x":460,"y":28,"w":1,"h":1,"lv":1},{"k":"chair","x":460,"y":29,"w":1,"h":1,"lv":1},{"k":"chair","x":459,"y":30,"w":1,"h":1,"lv":1},{"k":"chair","x":458,"y":30,"w":1,"h":1,"lv":1},{"k":"chair","x":457,"y":29,"w":1,"h":1,"lv":1},{"k":"chair","x":457,"y":28,"w":1,"h":1,"lv":1}],"npcs":[{"id":"hollis","name":"Hollis the taverner","look":"hollis","x":456,"y":24,"shop":"tavern"},{"id":"nettie","name":"Nettie the fishmonger","look":"nettie","x":474,"y":12,"shop":"fish"},{"id":"sela","name":"Sela the chandler","look":"sela","x":470,"y":50,"shop":"chandler"},{"id":"cobb","name":"Cobb the town elder","look":"cobb","x":464,"y":27,"talk":"quest","quest":"salt_road","gift":"saltmere_stone","giftAfter":{"quest":"salt_road","step":4},"giftLine":"Hold it at the harbour wall and think of the tide running, {name}. It will put you back on this stone every half hour, and it is the only entry in my accounts I ever wanted to write.","examine":"Cobb the town elder, salt in his beard and the harbour accounts in his head."},{"id":"bela","name":"Bela the storekeeper","look":"bela","x":401,"y":43,"shop":"salt_general"},{"id":"orin","name":"Orin the armourer","look":"orin","x":436,"y":71,"shop":"salt_armoury"},{"id":"mabb","name":"Mabb the sailmaker","look":"mabb","x":457,"y":62,"talk":"quest","quest":"sail_loft","examine":"Mabb the sailmaker, mending something white and enormous with more needle than is strictly necessary."},{"id":"tolly","name":"Tolly the dockhand","look":"tolly","x":475,"y":40,"examine":"Tolly the dockhand, on his fourth crate of the morning and no worse for it.","lines":["Everything in this town came off a boat or goes off one. I move both ends of that.","Mind the third pier, the third plank. Nobody has fixed it and nobody will, so long as it holds a rope."]},{"id":"perla","name":"Perla the net-mender","look":"perla","x":471,"y":60,"talk":"quest","quest":"empty_water","examine":"Perla the net-mender, knots going so fast they are almost a kind of speech."},{"id":"salt_chest","name":"Saltmere chest","look":"chest","x":466,"y":30,"chest":true,"examine":"The Saltmere chest, tarred against the damp. Everything you own from Ashvale is kept in your arcade wallet; this is where you see it."},{"id":"bryce","name":"Bryce the shipwright","look":"bryce","x":453,"y":68,"quest":"rudder","examine":"Bryce the shipwright, half a lifetime of Saltmere hulls behind him and one rudder in front of him."},{"id":"nessa","name":"Nessa the enchanter","look":"nessa","x":413,"y":69,"shop":"salt_magic","examine":"Nessa the enchanter, who learned her trade off the wreck of a wizard's chest that the sea gave back."},{"id":"wenna","name":"Mother Wenna","look":"wenna","x":384,"y":34,"examine":"Mother Wenna, keeper of the Saltmere chapel, a broom never far from her hand.","lines":["Eleven years I've swept this floor and nobody's knelt on it. Still, the dust doesn't know that.","Ashvale has a priest, they tell me. Father Aldous. He writes a fair letter but never comes himself."],"quests":["red_pyre"]},{"id":"hall_bank","name":"Town Hall bank","look":"chest","x":383,"y":16,"chest":true,"examine":"The Town Hall bank. Same arcade wallet as the chest by the stones; this counter is just nearer the ledgers."},{"id":"calder","name":"Mayor Calder","look":"calder","x":396,"y":16,"examine":"Mayor Calder of Saltmere, chain of office and a stack of plans that are not yet a desk.","lines":["Welcome to Saltmere's town hall. I am Mayor Calder. The southeast counter is the bank. This one is talk.","Ashvale is a living world on Dogecoin. You gather, fight, cook, bury bones for Prayer, and keep what you earn. Tam sells bread, Garrick smiths, Wren stitches hats and capes as tokens. The chest in each town is your arcade wallet - bag and bank are the same holdings.","Day and night here run on a two-hour wheel, not a real day. Follow the lamps after dark. Portals between towns remember you once you have touched the stones.","The tokens you hold are Omni assets. The Omni protocol writes them on Dogecoin itself, the same chain that carries the coin. They are not a costume the game invented. They are entries the chain can prove.","We mean to let those assets travel. Other chains, other protocols, markets outside this valley - wrap, bridge, list, swap. You will be able to trade an Ashvale piece where Ashvale is not running.","Whatever leaves can come home. Every ported token stays an Ashvale Omni game asset at heart, and it can always be reintegrated - brought back into this world with the same rights it had when it left. We will not mint a copy that strands the original.","None of that desk is built yet. When the bridges exist, you will hear it from this hall first."]},{"id":"guard_salt_1","name":"Town guard","look":"town_guard","x":390,"y":22,"watch":"saltmere","examine":"A town guard. Combat level 33. He keeps the peace, and the lamps.","lines":["We keep the peace. When the day goes we light the lamps and the torches. When it comes back we put the lamps out.","Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."]},{"id":"guard_salt_2","name":"Town guard","look":"town_guard","x":410,"y":23,"watch":"saltmere","examine":"A town guard. Combat level 33. He keeps the peace, and the lamps.","lines":["Strike one of us and the whole watch answers.","Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."]},{"id":"guard_salt_3","name":"Town guard","look":"town_guard","x":430,"y":22,"watch":"saltmere","examine":"A town guard. Combat level 33. He keeps the peace, and the lamps.","lines":["Saltmere's lamps are ours to light.","Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."]},{"id":"guard_salt_4","name":"Town guard","look":"town_guard","x":450,"y":23,"watch":"saltmere","examine":"A town guard. Combat level 33. He keeps the peace, and the lamps.","lines":["The road guard has the cobbles. The town is ours.","Walk easy after dark, traveller. The lamps are ours to tend, and we will not have them knocked over."]}],"fishing":[{"x":520,"y":-11,"fish":"shrimp_raw"},{"x":518,"y":-5,"fish":"shrimp_raw"},{"x":526,"y":15,"fish":"salmon_raw","req":30,"xp":350,"tool":"fishing_rod"},{"x":521,"y":22,"fish":"salmon_raw","req":30,"xp":350,"tool":"fishing_rod"},{"x":520,"y":49,"fish":"lobster_raw","req":40,"xp":500,"tool":"lobster_pot"},{"x":516,"y":73,"fish":"shrimp_raw"},{"x":480,"y":35,"fish":"shrimp_raw"}],"spawns":[],"weather":{"kinds":{"clear":48,"rain":32,"fog":20},"min":240,"max":720}}};
 
 </script>
 <script>

@@ -14,8 +14,8 @@ const BLOCK = new Set(D.rules.tiles.block);
 
 const salt = zones.find(z => z.id === 'saltmere'), P = salt.objects.filter(o => o.k === 'pokertable'), chairs = salt.objects.filter(o => o.k === 'chair');
 const tileOf = (x, y) => (salt.tiles[y - salt.origin[1]] || '')[x - salt.origin[0]];
-ok(P.length === 1 && P[0].id === 'poker1' && P[0].seats.length === 6, 'one poker table stands in Saltmere: ' + P.map(t => t.id + '@' + t.x + ',' + t.y).join(' '));
-ok(P[0].seats.length === 6 && P[0].seats.every(s => Math.max(Math.abs(s[0] - P[0].x), Math.abs(s[1] - P[0].y)) === 1), 'six chairs, each on a tile beside the felt');
+ok(P.length === 2 && P[0].id === 'poker1' && P[1].id === 'poker2' && P.every(t => t.seats.length === 8 && t.w === 2 && t.h === 2 && t.lv === 1), 'two poker tables stand upstairs in the Tap, two by two tiles each: ' + P.map(t => t.id + '@' + t.x + ',' + t.y).join(' '));
+ok(P.every(t => t.seats.every(s => s[0] >= t.x - 1 && s[0] <= t.x + t.w && s[1] >= t.y - 1 && s[1] <= t.y + t.h && !(s[0] >= t.x && s[0] < t.x + t.w && s[1] >= t.y && s[1] < t.y + t.h))), 'eight chairs a table, each on a tile beside the felt, none on it');
 ok(P[0].seats.every(s => !BLOCK.has(tileOf(s[0], s[1])) && tileOf(s[0], s[1]) === 'i'), 'every chair stands on the tavern floor a player can walk onto');
 ok(P[0].seats.every(s => chairs.some(o => o.x === s[0] && o.y === s[1])), 'and a chair on every one of them');
 ok(!salt.objects.some(o => o.k === 'table' && o.x === 458 && o.y === 28) && salt.objects.some(o => o.k === 'table' && o.x === 460 && o.y === 27), 'the tap room table that stood there was moved aside, not deleted');
@@ -23,10 +23,10 @@ ok(salt.objects.filter(o => o.k === 'chesstable').length === 4, 'the chess park 
 
 const c = AshCore.create(D, { seed: 'poker' }), T = P[0];
 const a = c.addPlayer('pa', { name: 'Ada' }), b = c.addPlayer('pb', { name: 'Bram' });
-a.x = T.seats[0][0]; a.y = T.seats[0][1]; b.x = T.seats[3][0]; b.y = T.seats[3][1];
+a.x = T.seats[0][0]; a.y = T.seats[0][1]; a.lv = 1; b.x = T.seats[3][0]; b.y = T.seats[3][1]; b.lv = 1;
 const evs = [];
 const run = (n) => { for (let i = 0; i < n; i++) for (const e of c.tick()) evs.push(e); };
-ok(c.pokerTableAt(T.x, T.y) && c.pokerTableAt(T.x, T.y).id === 'poker1' && c.pokerTableById('poker1').seats.length === 6, 'the engine finds the table by tile and by id');
+ok(c.pokerTableAt(T.x, T.y) && c.pokerTableAt(T.x, T.y).id === 'poker1' && c.pokerTableById('poker1').seats.length === 8, 'the engine finds the table by tile and by id');
 c.cmd('pa', { c: 'sit', table: 'poker1', seat: 0 }); run(40);
 ok(a.seat && a.seat.k === 'pk' && a.seat.s === 0 && a.x === T.seats[0][0] && a.y === T.seats[0][1], 'Ada takes a chair at the felt');
 let st = c.pokerOf('poker1');
@@ -59,7 +59,7 @@ while (guard++ < 80 && t.status === 'playing') {
 st = c.pokerOf('poker1');
 ok(st.st === 'none' && st.r, 'the hand ran to the end: ' + st.lg[st.lg.length - 1]);
 const chips = st.se.reduce((n, s) => n + s[2], 0);
-ok(st.o === 'playing' && chips === 2000, 'every chip is still on the table, nobody printed: ' + chips);
+ok(st.o === 'playing' && chips + (st.rk | 0) === 2000 && (st.rk | 0) > 0 && (st.r.rk | 0) === Math.floor((st.r.p.reduce((a, q) => a + q[0], 0) + (st.r.rk | 0)) * 0.10), 'every chip is accounted for: ' + chips + ' on the table, the house took its tenth of each pot (' + st.rk + ' so far, ' + st.r.rk + ' of this one)');   /* [Claude] the rake */
 ok(st.bo.length === 5 || st.se.some(s => s[3] === 0), 'the board was run out or the hand ended early: ' + st.bo.length + ' cards');
 ok(evs.filter(e => e.e === 'poker').length > 0 && st.v > 3, 'and every step of it came out in a row the page can draw (v ' + st.v + ')');
 
@@ -87,7 +87,7 @@ ok(c.pokerRows().length === 0, 'an empty table has nothing to broadcast');
 const host = AshCore.create(D, { seed: 'h' }), rep = AshCore.create(D, { seed: 'r' });
 const hp = host.addPlayer('me', { name: 'Host' }), rp = rep.addPlayer('me', { name: 'Guest' });
 rep.setAuth(rep.zoneOf(T.x, T.y), false);
-hp.x = T.seats[0][0]; hp.y = T.seats[0][1]; rp.x = T.seats[2][0]; rp.y = T.seats[2][1];
+hp.x = T.seats[0][0]; hp.y = T.seats[0][1]; hp.lv = 1; rp.x = T.seats[2][0]; rp.y = T.seats[2][1]; rp.lv = 1;
 host.cmd('me', { c: 'sit', table: 'poker1', seat: 0 }); for (let i = 0; i < 20; i++) host.tick();
 let xs = []; rep.cmd('me', { c: 'sit', table: 'poker1', seat: 2 }); for (let i = 0; i < 20; i++) for (const e of rep.tick()) xs.push(e);
 const ask = xs.find(e => e.e === 'xpsit');
@@ -121,7 +121,7 @@ const RROW = host.pokerRow('poker1');
 ok(Object.keys(RROW).length > 5 && !('g' in RROW) && !('mine' in RROW) && !('wt' in RROW) && !('tt' in RROW), 'the row that travels carries no game dump and no clock: ' + Object.keys(RROW).sort().join(','));
 
 /* the hand is part of the deterministic log: the same seed, replayed, reaches the same hash */
-const SV1 = { v: 1, name: 'A', x: T.seats[0][0], y: T.seats[0][1] }, SV2 = { v: 1, name: 'B', x: T.seats[3][0], y: T.seats[3][1] };
+const SV1 = { v: 1, name: 'A', x: T.seats[0][0], y: T.seats[0][1], lv: 1 }, SV2 = { v: 1, name: 'B', x: T.seats[3][0], y: T.seats[3][1], lv: 1 };   /* [Claude] the table is upstairs: saved there */
 const cs = AshCore.create(D, { seed: 'rep' }); cs.addPlayer('p1', SV1); cs.addPlayer('p2', SV2);
 cs.cmd('p1', { c: 'sit', table: 'poker1', seat: 0 }); cs.cmd('p2', { c: 'sit', table: 'poker1', seat: 3 });
 for (let i = 0; i < 6; i++) cs.tick();
@@ -144,7 +144,7 @@ process.exit(fails ? 1 : 0);
   c2.grantItem('pa', 'coins', 2000); c2.grantItem('pb', 'coins', 500); c2.grantItem('pp', 'coins', 100);
   const coins = (p) => p.inv.reduce((n, s) => n + (s && s.id === 'coins' ? s.n : 0), 0);
   const ev2 = []; const run2 = (n) => { for (let i = 0; i < n; i++) for (const e of c2.tick()) ev2.push(e); };
-  a2.x = T2.seats[0][0]; a2.y = T2.seats[0][1]; b2.x = T2.seats[3][0]; b2.y = T2.seats[3][1]; pp.x = T2.seats[1][0]; pp.y = T2.seats[1][1];
+  a2.x = T2.seats[0][0]; a2.y = T2.seats[0][1]; a2.lv = 1; b2.x = T2.seats[3][0]; b2.y = T2.seats[3][1]; b2.lv = 1; pp.x = T2.seats[1][0]; pp.y = T2.seats[1][1]; pp.lv = 1;
   c2.cmd('pa', { c: 'sit', table: 'poker1', seat: 0, buy: 500 }); run2(5);
   let st2 = c2.pokerOf('poker1'), t2 = c2.pokerGame('poker1');
   ok(a2.seat && st2.buy === 500 && st2.se[0][2] === 500 && coins(a2) === 1500, 'the first to sit sets the buy-in (500 GOLD), pays it and gets 500 chips: ' + coins(a2) + ' GOLD left');
@@ -159,7 +159,7 @@ process.exit(fails ? 1 : 0);
   c2.cmd('pb', { c: 'stand' }); run2(3);
   ok(!b2.seat && coins(b2) === bramChips && c2.pokerOf('poker1').co.some(x => x[0] === 'pb' && x[1] === bramChips), 'Bram stands mid-hand: his stack comes back as GOLD (' + bramChips + ') through the row’s cashout');
   run2(5); c2.cmd('pa', { c: 'stand' }); run2(3);
-  ok(!a2.seat && coins(a2) + coins(b2) === 2500, 'Ada stands too and every GOLD is accounted for: ' + coins(a2) + ' + ' + coins(b2));
+  ok(!a2.seat && coins(a2) + coins(b2) + (c2.pokerOf('poker1').rk | 0) === 2500, 'Ada stands too and every GOLD is accounted for, the house\'s rake included: ' + coins(a2) + ' + ' + coins(b2) + ' + rake ' + c2.pokerOf('poker1').rk);
   ok(c2.pokerOf('poker1').buy === 0, 'an empty table forgets its buy-in');
   /* a free table moves no GOLD */
   c2.cmd('pa', { c: 'sit', table: 'poker1', seat: 0 }); run2(5);
@@ -168,7 +168,7 @@ process.exit(fails ? 1 : 0);
   ok(coins(a2) === before && !c2.pokerOf('poker1').co.some(x => x[2] > 1), 'and nothing is paid out when standing');
   /* the host’s word reaches a replica: it pays on its own copy when seated, and is cashed out once */
   const rep2 = AshCore.create(D, { seed: 'rp' }), rp2 = rep2.addPlayer('me', { name: 'Guest' }); rep2.grantItem('me', 'coins', 700); rep2.setAuth(rep2.zoneOf(T2.x, T2.y), false);
-  rp2.x = T2.seats[2][0]; rp2.y = T2.seats[2][1];
+  rp2.x = T2.seats[2][0]; rp2.y = T2.seats[2][1]; rp2.lv = 1;
   const r3 = rep2.S.ev = []; rep2.applyPoker([{ t: 'poker1', o: 'open', st: 'none', se: [[2, 'me', 500, 0, 0]], v: 4, buy: 500, gid: 2, co: [], cseq: 0 }]);
   ok(rp2.seat && coins(rp2) === 200, 'the row seats the replica’s player and its own copy takes the 500 buy-in: ' + coins(rp2));
   rep2.applyPoker([{ t: 'poker1', o: 'open', st: 'none', se: [[2, 'me', 500, 0, 0]], v: 5, buy: 500, gid: 2, co: [], cseq: 0 }]);
@@ -186,7 +186,7 @@ process.exit(fails ? 1 : 0);
   c3.grantItem('pa', 'coins', 1000); c3.grantItem('pb', 'coins', 1000);
   const coins = (p) => p.inv.reduce((n, s) => n + (s && s.id === 'coins' ? s.n : 0), 0);
   const run3 = (n) => { for (let i = 0; i < n; i++) c3.tick(); };
-  a3.x = T3.seats[0][0]; a3.y = T3.seats[0][1]; b3.x = T3.seats[3][0]; b3.y = T3.seats[3][1];
+  a3.x = T3.seats[0][0]; a3.y = T3.seats[0][1]; a3.lv = 1; b3.x = T3.seats[3][0]; b3.y = T3.seats[3][1]; b3.lv = 1;
   c3.cmd('pa', { c: 'sit', table: 'poker1', seat: 0, buy: 1000 }); run3(5); c3.cmd('pb', { c: 'sit', table: 'poker1', seat: 3 }); run3(5);
   const t3 = c3.pokerGame('poker1'); let st3 = c3.pokerOf('poker1');
   ok(st3.o === 'playing' && st3.st === 'preflop' && st3.p === 75 && t3.small === 25 && t3.big === 50, 'a 1000 buy-in: the blinds are 25/50 and the hand is dealt (pot ' + st3.p + ')');
@@ -205,5 +205,5 @@ process.exit(fails ? 1 : 0);
   const stackNow = () => c3.pokerOf('poker1').se.find(s => s[1] === quick)[2];
   c3.S.t += 1600; run3(12);
   ok(!c3.S.players[quick].seat && !c3.S.players[slow].seat, 'fifteen minutes without playing: both are stood up');
-  ok(coins(a3) + coins(b3) === 2000, 'and every GOLD came back as it stood: ' + coins(a3) + ' + ' + coins(b3));
+  ok(coins(a3) + coins(b3) + (c3.pokerOf('poker1').rk | 0) === 2000, 'and every GOLD came back as it stood, the rake aside: ' + coins(a3) + ' + ' + coins(b3) + ' + rake ' + c3.pokerOf('poker1').rk);
 }

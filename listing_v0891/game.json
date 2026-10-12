@@ -1,0 +1,13 @@
+{
+ "game": {
+  "name": "ASHVALE",
+  "description": "New in 0.8.91: the Saltmere Tap's upper floor is open - take the stairs and see what the regulars are up to under the candles. The Chess Park has a champions board now, kept by the Bank, so every win at the four tables is chalked up for all to see. The ruined keep is closed by its wall now, with a ladder stile over it (SadFrogLTC). Tables and boards are solid, stairs are climbed by tapping them, and the Ojibwe village of Ziibiing stands on the far continent in maple country.",
+  "version": "0.8.91",
+  "players": "Solo or online",
+  "multiplayer": true,
+  "family": "ashvale",
+  "genre": "rpg",
+  "play": "c879bc1f5f3cfc1300b9f24252a47ce395028dc65fc78a0ab3004a9f272649f5",
+  "cover": "28d1007491d413d4c07cce95d43eff4c54600cffd78661ff3456606a15493210"
+ }
+}

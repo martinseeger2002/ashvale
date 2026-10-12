@@ -227,7 +227,7 @@ def handle_scores(c, addr, msg):
     """'score': {k: 'chain_dragon', n: name, p: count} - this character's own kill count; the Bank keeps the highest
     reported for each name, and the total slain is the sum. 'scores?': the whole board, in chunks (a room message is 512 B)."""
     k = str(msg.get('k') or '')
-    if k != 'chain_dragon': return None
+    if k not in ('chain_dragon', 'chess_wins'): return None   # [Claude 2026-10-11] the Chess Park's games-won board uses the same channel
     if msg.get('t') == 'score':
         name = str(msg.get('n') or '').strip()[:20]
         if re.match(r'^@[\w]{2,16}$', name):
@@ -507,6 +507,13 @@ class Deliverer:
     def __init__(self):
         from ashvale_wallet import Wallet
         self.W = Wallet(); self.stock, self.stock_t = {}, 0
+    def custody(self, pid):   # units of a token @ashvale holds on chain, refreshed every 60 s and decremented as it pays
+        if time.time() - getattr(self, 'cust_t', 0) > 60:
+            self.cust, self.cust_t = {}, time.time()
+            try:
+                for b in json.load(urllib.request.urlopen(APP + '/r/balances/' + ASHVALE, timeout=60)) or []: self.cust[b.get('propertyid')] = int(b.get('units') or 0)
+            except Exception as e: log('CUSTODY READ FAILED', str(e)[:120]); self.cust_t = 0
+        return int(getattr(self, 'cust', {}).get(pid, 0))
     def stock_for(self, c, k):
         if time.time() - self.stock_t > 300: self.stock, self.stock_t = held_pieces(), time.time()
         busy = {r['piece'] for r in c.execute('select piece from given where item=? and at>?', (k, time.time() - 900))}   # sent in the last 15 min (still listed as ours)
@@ -548,20 +555,29 @@ class Deliverer:
     def any_piece(self, k):
         self.stock, self.stock_t = held_pieces(), time.time()
         if self.stock.get(k): return self.stock[k][0]
+        ap = getattr(self, 'anyp', None) or {}; self.anyp = ap
+        if k in ap and time.time() - ap[k][1] < 600: return ap[k][0]   # [Claude 2026-10-12] the 500-piece creator listing is read once per key per 10 min
         L = json.load(urllib.request.urlopen(APP + '/r/inscriptions?creator=%s&limit=500' % ASHVALE, timeout=60))
         for q in L or []:
             j = q.get('json') or {}
-            if j.get('collection') == 'ASHVALE Armoury' and any(a.get('trait_type') == 'Key' and a.get('value') == k for a in j.get('attributes', [])): return q['id']
-        return None
+            if j.get('collection') == 'ASHVALE Armoury' and any(a.get('trait_type') == 'Key' and a.get('value') == k for a in j.get('attributes', [])): ap[k] = (q['id'], time.time()); return q['id']
+        ap[k] = (None, time.time()); return None
     def run_one(self, c, job):
         k, addr = job['item'], job['addr']
         if job['kind'] == 'token':
             pid = token_ids().get(k)
             if not pid: raise RuntimeError('no token for ' + k)
-            try: r = self.W.token_grant(pid, job['units'], addr)
-            except RuntimeError as e:
-                if 'issuer' in str(e).lower() or 'managed' in str(e).lower() or 'grant' in str(e).lower(): r = self.W.token_send(pid, job['units'], addr)   # a fixed-supply token (GOLD): from @ashvale's balance
-                else: raise
+            # [Claude 2026-10-12] the operator: "it should only issue new Gold if there's not any gold in its custody" - what @ashvale
+            # holds of a token is paid out of custody first (a send); a grant (new issue) only when custody cannot cover it
+            have = self.custody(pid)
+            if have >= int(job['units']):
+                r = self.W.token_send(pid, job['units'], addr); self.cust[pid] = have - int(job['units'])
+                log('SEND', addr, k, job['units'], 'from custody', have)
+            else:
+                try: r = self.W.token_grant(pid, job['units'], addr); log('GRANT', addr, k, job['units'], 'custody had only', have)
+                except RuntimeError as e:
+                    if 'issuer' in str(e).lower() or 'managed' in str(e).lower() or 'grant' in str(e).lower(): r = self.W.token_send(pid, job['units'], addr)   # a fixed-supply token: from @ashvale's balance
+                    else: raise
             return (r or {}).get('txid'), None
         if job['want']:   # a pickup: that exact piece, once it is back with @ashvale
             # that exact inscription's owner, whatever its collection (2026-10-08: a dropped Lake Castle stone, of the Portal
@@ -579,21 +595,69 @@ class Deliverer:
         c.execute('insert or replace into given values(?,?,?,?)', (piece, addr, k, time.time())); c.commit()
         r = self.W.nft_send(piece, addr)
         return (r or {}).get('txid'), piece
+OUTQ = []   # [Claude 2026-10-12] words for the room from the deliverer thread (the room loop sends them): {t:'paid', to, item, units, txid}
+SENT = os.path.join(HERE, 'chain', 'bank', 'sent.jsonl')   # [Claude 2026-10-12] the journal: written and fsynced BEFORE a broadcast (handoff/bank_rpc_plan.md 7)
+RATE_CAP, BATCH_CAP = 40, 10000   # sends per minute; units one coalesced send may carry (a bigger one is held for a human)
+def journal(rec):
+    os.makedirs(os.path.dirname(SENT), exist_ok=True)
+    with open(SENT, 'a') as f: f.write(json.dumps(rec, separators=(',', ':')) + '\n'); f.flush(); os.fsync(f.fileno())
+def replay_journal(c):
+    """on start: a send that was journaled but never marked - 'sending' with no 'sent' after it - is HELD, never resent by itself;
+    a 'sent' whose jobs are not done is marked done with its txid (the crash came between broadcast and the row update)"""
+    if not os.path.exists(SENT): return
+    open_sends = {}
+    for line in open(SENT):
+        try: r = json.loads(line)
+        except ValueError: continue
+        if r.get('st') == 'sending': open_sends[r['k']] = r
+        elif r.get('st') == 'sent': open_sends.pop(r['k'], None); c.execute("update jobs set status='done', txid=?, done_at=? where n in (%s) and status<>'done'" % ','.join('?' * len(r['ids'])), [r.get('txid'), r.get('at')] + list(r['ids']))
+        elif r.get('st') == 'notsent': open_sends.pop(r['k'], None)
+    for r in open_sends.values():
+        n = c.execute("update jobs set status='held', err=? where n in (%s) and status<>'done'" % ','.join('?' * len(r['ids'])), ['journaled as sending at %s but never confirmed: check the wallet by hand, then --retry' % time.strftime('%F %T', time.localtime(r.get('at') or 0))] + list(r['ids'])).rowcount
+        if n: log('HELD', n, 'job(s) from an unconfirmed send', r['k'])
+    c.commit()
+def take_batch(c):
+    """the oldest ready job and, for a token, every other ready job of the same address, item and kind (no want/coll): one send"""
+    job = c.execute("select * from jobs where status='queued' or (status='retry' and at<?) order by n limit 1", (time.time(),)).fetchone()
+    if not job: return None, []
+    ids = [job['n']]; units = int(job['units'])
+    if job['kind'] == 'token' and not job['want'] and not job['coll']:
+        for r in c.execute("select n, units from jobs where (status='queued' or (status='retry' and at<?)) and addr=? and item=? and kind='token' and want is null and coll is null and n<>? order by n limit 200", (time.time(), job['addr'], job['item'], job['n'])):
+            if units + int(r['units']) > BATCH_CAP: break
+            ids.append(r['n']); units += int(r['units'])
+    j = dict(job); j['units'] = units
+    return j, ids
 def deliver_loop(stop):
-    c = db(); D = Deliverer()
+    c = db(); D = Deliverer(); replay_journal(c); recent = []
     while not stop.is_set():
-        job = c.execute("select * from jobs where status='queued' or (status='retry' and at<?) order by n limit 1", (time.time(),)).fetchone()
+        recent = [t for t in recent if t > time.time() - 60]
+        if len(recent) >= RATE_CAP: stop.wait(5); continue
+        job, ids = take_batch(c)
         if not job: stop.wait(5); continue
+        if int(job['units']) > BATCH_CAP or int(job['units']) <= 0:
+            c.execute("update jobs set status='held', err=? where n in (%s)" % ','.join('?' * len(ids)), ['%d units in one send is over the cap (%d): a human looks first' % (job['units'], BATCH_CAP)] + ids); c.commit()
+            log('HELD', job['addr'], job['item'], job['units'], 'over the batch cap'); continue
+        key = '%s:%s:%s:%d' % (job['addr'], job['item'], ','.join(map(str, ids)), int(time.time()))
+        journal({'st': 'sending', 'k': key, 'ids': ids, 'addr': job['addr'], 'item': job['item'], 'units': job['units'], 'at': time.time()})
         try:
             txid, piece = D.run_one(c, job)
-            c.execute("update jobs set status='done', txid=?, piece=?, done_at=? where n=?", (txid, piece, time.time(), job['n'])); c.commit()
-            log('PAID', job['addr'], job['item'], job['units'], txid)
+            journal({'st': 'sent', 'k': key, 'ids': ids, 'txid': txid, 'piece': piece, 'at': time.time()})
+            c.execute("update jobs set status='done', txid=?, piece=?, done_at=? where n in (%s)" % ','.join('?' * len(ids)), [txid, piece, time.time()] + ids); c.commit()
+            recent.append(time.time())
+            log('PAID', job['addr'], job['item'], job['units'], txid, ('(%d jobs in one)' % len(ids)) if len(ids) > 1 else '')
+            OUTQ.append({'t': 'paid', 'v': 1, 'to': job['addr'], 'item': job['item'], 'units': int(job['units']), 'txid': txid, 'n': len(ids)})
         except Exception as e:
-            t = job['tries'] + 1; msg = str(e)[:300]
+            msg = str(e)[:300]; aborted = ('aborted' in msg.lower() or 'closed connection' in msg.lower() or 'timed out' in msg.lower())
+            if aborted:   # the arcade may or may not have broadcast: HELD, a human checks the wallet, then --retry
+                journal({'st': 'sending', 'k': key, 'ids': ids, 'note': 'connection lost mid-send: ' + msg, 'at': time.time()})
+                c.execute("update jobs set status='held', err=? where n in (%s)" % ','.join('?' * len(ids)), ['connection lost mid-send (did it go out? check the wallet, then --retry): ' + msg] + ids); c.commit()
+                log('HELD', job['addr'], job['item'], job['units'], msg); continue
+            journal({'st': 'notsent', 'k': key, 'ids': ids, 'err': msg, 'at': time.time()})
+            t = job['tries'] + 1
             wait = 90 if ('mempool' in msg or 'too-long' in msg or 'enough' in msg.lower()) else 60 * min(30, 2 ** t)
-            c.execute("update jobs set status=?, tries=?, err=?, at=? where n=?", ('failed' if t >= 12 else 'retry', t, msg, time.time() + wait, job['n'])); c.commit()
+            c.execute("update jobs set status=?, tries=?, err=?, at=? where n in (%s)" % ','.join('?' * len(ids)), ['failed' if t >= 12 else 'retry', t, msg, time.time() + wait] + ids); c.commit()
             log('RETRY' if t < 12 else 'FAILED', job['addr'], job['item'], job['units'], msg)
-        stop.wait(2)
+        stop.wait(1)
 
 # ---------------------------------------------------------------- the room (Chromium as @ashvale)
 JOIN = """async () => {
@@ -626,6 +690,9 @@ def room_loop(stop):
                         try: rep = handle(c, f['address'], d)
                         except Exception: log('HANDLE ERROR', traceback.format_exc()[-400:]); rep = {'t': 'dep', 'id': d.get('id'), 'to': f['address'], 'ok': False, 'note': 'The bank hit an error; try again later.'}
                         for r1 in (rep if isinstance(rep, list) else [rep] if rep else []): fr.evaluate("o => window.__bank.send(o)", r1)
+                    while OUTQ:   # [Claude 2026-10-12] 'paid' words from the deliverer
+                        try: fr.evaluate("o => window.__bank.send(o)", OUTQ.pop(0))
+                        except Exception as e: log('PAID WORD FAILED', str(e)[:120]); break
                     if time.time() - t_rejoin > 6 * 3600: raise RuntimeError('periodic reopen')   # keep the sign-in and cert fresh
                     stop.wait(1)
         except Exception as e:
@@ -636,10 +703,26 @@ def room_loop(stop):
 
 if __name__ == '__main__':
     if '--status' in sys.argv:
-        c = db()
+        c = db(); now = time.time()
         for r in c.execute('select status, kind, count(*) n, sum(units) u from jobs group by status, kind'): print(dict(r))
-        for r in c.execute("select addr, item, units, err from jobs where status in ('retry','failed') order by n desc limit 10"): print(dict(r))
+        q = c.execute("select count(*) n, min(at) oldest from jobs where status in ('queued','retry')").fetchone()
+        print('queue depth %d, oldest %.0f s; paid in the last minute %d, last hour %d; held %d' % (q['n'], now - q['oldest'] if q['oldest'] else 0,
+              c.execute("select count(*) from jobs where status='done' and done_at>?", (now - 60,)).fetchone()[0], c.execute("select count(*) from jobs where status='done' and done_at>?", (now - 3600,)).fetchone()[0],
+              c.execute("select count(*) from jobs where status='held'").fetchone()[0]))
+        for r in c.execute("select err, count(*) n from jobs where status in ('retry','failed','held') group by err order by n desc limit 8"): print(' %3d x %s' % (r['n'], (r['err'] or '')[:110]))
+        for r in c.execute("select n, addr, item, units, status, err from jobs where status in ('held','failed') order by n desc limit 12"): print(dict(r))
         sys.exit()
+    if '--retry' in sys.argv:   # --retry N [N...]: a held or failed job back in the queue (after a human checked the wallet)
+        c = db(); ns = [int(a) for a in sys.argv[sys.argv.index('--retry') + 1:] if a.isdigit()]
+        for n in ns: print(n, c.execute("update jobs set status='queued', err=null, at=? where n=? and status in ('held','failed')", (time.time(), n)).rowcount and 'queued' or 'not held/failed')
+        c.commit(); sys.exit()
+    if '--audit' in sys.argv:   # every send of the last day against the chain, through the public index: a done job the chain does not know is printed
+        c = db(); bad = 0
+        for r in c.execute("select n, addr, item, units, txid, done_at from jobs where status='done' and done_at>? and txid is not null order by n", (time.time() - 86400,)):
+            try: tx = json.load(urllib.request.urlopen(APP + '/r/tx/' + r['txid'], timeout=20)) or {}
+            except Exception as e: tx = {'error': str(e)[:80]}
+            if tx.get('error') or (tx.get('confirmations') is None and not tx.get('txid')): bad += 1; print('BANK AUDIT: job', r['n'], r['addr'], r['item'], r['units'], 'txid', r['txid'], '->', tx.get('error') or 'unknown to the index')
+        print('audit: %d problem(s)' % bad); sys.exit(1 if bad else 0)
     stop = threading.Event()
     t = threading.Thread(target=deliver_loop, args=(stop,), daemon=True); t.start()
     try: room_loop(stop)
