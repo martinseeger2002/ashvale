@@ -41,7 +41,7 @@ def main():
           c.scoreKill('chain_dragon', 'Wren');
           c.scoreKill('chain_dragon', 'Wren');
           c.scoreKill('chain_dragon', 'Aldric');
-          c.mergeScores('chain_dragon', { Maren: 4, Pip: 3, Iria: 2 });
+          c.setScores('chain_dragon', { Wren: 2, Aldric: 1, Maren: 4, Pip: 3, Iria: 2 });   /* what the Bank answers is the board (2026-10-12) */
           ASH.teleport(-54, -91);
           ASH.setCam(-0.18, 0.46, 13);
           if (ASH.paintScores) ASH.paintScores();

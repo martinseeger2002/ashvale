@@ -424,13 +424,14 @@
         bankRoom().then(R => { if (R && R.me) for (const kind of ['sap', 'bark']) R.send({ t: 'marks?', v: 1, k: kind, x0: me.x - 80, y0: me.y - 80, x1: me.x + 80, y1: me.y + 80 }); });
       }
       setInterval(() => marksAsk(false), 15000); setTimeout(() => marksAsk(true), 9000);
-      /* the ruined keep's dragon-killer board (2026-10-10): the Bank holds every character's count, so the sign is the same
-         for anyone who reads it. A game reports its own name's total; 'scores?' answers the whole board. */
+      /* the ruined keep's dragon-killer board: the Bank is the ONLY place it is kept (2026-10-12: "the bank is the
+         only thing that stores the high score and it doesn't get the high score from the clients"). A game reports ONE kill
+         - only WHO, never a count of its own - and asks with 'scores?' for the board, which is all a sign paints from. */
       const SCORE_KEYS = ['chain_dragon', 'chess_wins'];
       function scoreTell(e) {
         if (!e || SCORE_KEYS.indexOf(e.key) < 0 || !e.name) return;   /* [Claude 2026-10-11] the chess park's games-won board rides the same channel */
-        const p = e.n | 0; if (p < 1) return;
-        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'score', v: 1, k: e.key, n: String(e.name).slice(0, 20), p }); });
+        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'score', v: 2, k: e.key, n: String(e.name).slice(0, 20), d: 1 }); });
+        setTimeout(() => scoresAsk(true), 800);   /* then put the Bank's new number on the sign */
       }
       let scoreT = 0; const scoreGot = {};
       function scoresAsk(force) {
@@ -438,15 +439,13 @@
         scoreT = performance.now();
         bankRoom().then(R => { if (R && R.me) for (const k of SCORE_KEYS) R.send({ t: 'scores?', v: 1, k }); });
       }
-      function scoresHeard(d) {
-        const k = String(d.k || 'chain_dragon'), q = k + ':' + (d.of | 0), G = scoreGot[q] = scoreGot[q] || { top: [], n: 0, total: 0 };
-        G.top.push.apply(G.top, d.top || []); G.n++; G.total = Math.max(G.total, d.n | 0);
+      function scoresHeard(d) {   /* every chunk of the Bank's board, then one replace */
+        const k = String(d.k || 'chain_dragon'), q = k + ':' + (d.of | 0), G = scoreGot[q] = scoreGot[q] || { top: [], n: 0 };
+        G.top.push.apply(G.top, d.top || []); G.n++;
         if (G.n < (d.of | 0)) return;
         delete scoreGot[q];
         const names = {}; for (const r of G.top) if (Array.isArray(r) && typeof r[0] === 'string') names[r[0]] = r[1] | 0;
-        if (core.mergeScores) core.mergeScores(k, names);
-        if (core.setScoreTotal) core.setScoreTotal(k, G.total);
-        if (K.hsSave) K.hsSave();
+        core.setScores(k, names);
         if (K.paintScores) K.paintScores();
       }
       setInterval(() => scoresAsk(false), 20000); setTimeout(() => scoresAsk(true), 7000);

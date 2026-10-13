@@ -58,7 +58,7 @@ def db():
         create table if not exists drops(n integer primary key, addr text, item text, piece text, x integer, y integer, at real, taken_by text, taken_at real);
         create table if not exists ghosts(n integer primary key, addr text, item text, units integer, x integer, y integer, at real, left integer);   -- picked-up copies of drops somebody else already took (2026-10-06)
         create table if not exists offers(addr text, piece text, item text, at real, primary key(addr, piece));   -- a live arcade offer: that piece is not new loot
-        create table if not exists scores(k text, name text, n integer, by text, at real, primary key(k, name));   -- dragon-killer board: global count per character name (2026-10-10)""")
+        create table if not exists scores(k text, name text, n integer, by text, at real, primary key(k, name));   -- the kill boards: the ONLY copy - the sum of the kills games report, per name (2026-10-12)""")
     for col in ('want', 'coll'):   # want: the exact piece (a pickup of a drop); coll: a quest reward's own collection
         try: c.execute('alter table jobs add column %s text' % col)
         except sqlite3.OperationalError: pass
@@ -224,8 +224,10 @@ def handle_marks(c, addr, msg):
     cells = [[r['x'], r['y'], r['p']] for r in c.execute('select x, y, p from marks where k=? and x between ? and ? and y between ? and ?', (k, x0, x1, y0, y1))]
     return [{'t': 'marks', 'to': addr, 'k': k, 'cells': cells[i:i + 30]} for i in range(0, len(cells), 30)]
 def handle_scores(c, addr, msg):
-    """'score': {k: 'chain_dragon', n: name, p: count} - this character's own kill count; the Bank keeps the highest
-    reported for each name, and the total slain is the sum. 'scores?': the whole board, in chunks (a room message is 512 B)."""
+    """'score': {k, n: name, d: 1} - ONE kill a game has just seen. The Bank adds it up and is the ONLY place a board is
+    kept (2026-10-12: "the bank is the only thing that stores the high score and it doesn't get the high score from
+    the clients"): a game declaring its own lifetime count is ignored, since that is what rebuilt a board from players'
+    saves and made a cleared board fill itself back in. 'scores?': the whole board, in chunks (a room message is 512 B)."""
     k = str(msg.get('k') or '')
     if k not in ('chain_dragon', 'chess_wins'): return None   # [Claude 2026-10-11] the Chess Park's games-won board uses the same channel
     if msg.get('t') == 'score':
@@ -236,12 +238,14 @@ def handle_scores(c, addr, msg):
             pass
         else:
             return None
-        try: p = int(msg.get('p') or 0)
-        except (TypeError, ValueError): return None
-        if p < 1 or p > 1000000000: return None
-        c.execute('insert into scores(k,name,n,by,at) values(?,?,?,?,?) on conflict(k, name) do update set n=max(n, excluded.n), by=excluded.by, at=excluded.at',
-                  (k, name, p, addr, time.time())); c.commit()
-        log('SCORE', addr, k, name, p)
+        try: d = int(msg.get('d'))
+        except (TypeError, ValueError):
+            log('SCORE REFUSED', addr, k, name, 'declares a count of', msg.get('p'), '(an older game page: only kills count)')
+            return None
+        if d < 1 or d > 20: return None
+        c.execute('insert into scores(k,name,n,by,at) values(?,?,?,?,?) on conflict(k,name) do update set n=min(n+excluded.n,1000000000), by=excluded.by, at=excluded.at',
+                  (k, name, d, addr, time.time())); c.commit()
+        log('SCORE', addr, k, name, '+' + str(d))
         return None
     rows = list(c.execute('select name, n from scores where k=? order by n desc, name', (k,)))
     total = sum(int(r['n'] or 0) for r in rows)

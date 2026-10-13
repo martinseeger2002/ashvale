@@ -303,10 +303,10 @@
       const PH = {}, PH_SENT = {};   /* the dealer's sealed set per table: {h, items: [[ref, blob]...]} - sent on its own small message (Ph) */
       function phSend(t, force) { const P = PH[t]; if (!P || !P.done) return; const now = performance.now(); if (!force && now - (PH_SENT[t] || 0) < 3000) return; PH_SENT[t] = now; netSend({ Ph: [t, P.h, MYPK, P.items] }); }
       const bounded = (m, n) => { while (m.size > n) m.delete(m.keys().next().value); };
-      const SCORE_KEY = 'ashvale3d.scores.v1';
       const SCORE_KEYS = ['chain_dragon', 'chess_wins'], SCORE_BOARD = { chain_dragon: 'dragon', chess_wins: 'chess' };   /* [Claude 2026-10-11] score key -> the sign it paints */
-      try { const j = JSON.parse(store.get(SCORE_KEY) || '{}'); for (const k of SCORE_KEYS) if (j && j[k]) core.mergeScores(k, j[k]); } catch (e) { /* a bad local board */ }
-      for (const k of SCORE_KEYS) if (me.kills && me.kills[k] && me.name && me.name !== 'Adventurer') core.mergeScores(k, { [me.name]: me.kills[k] });
+      /* 2026-10-12 (the operator: "the bank is the only thing that stores the high score and it doesn't get the high score from
+         the clients"): what a sign shows comes only from the Bank's answer. Nothing is read from this device's storage and
+         nothing from the character's own kill counts - either would repaint a board the Bank has cleared. */
       function syncMounts() {   /* wall-hung quest rewards (Aldric's sword) stay on the wall until they're given */
         for (const r of regions) if (r.built && r.built.mounts) for (const m of r.built.mounts) { const q = me.quests && me.quests[m.quest]; m.obj.visible = !(q && q.step >= m.untilStep); }
       }
@@ -352,7 +352,6 @@
       const chunkRegs = new Map();
       function regionDist(r, x, y) { const dx = Math.max(r.rect[0] - x, 0, x - (r.rect[0] + r.rect[2])), dy = Math.max(r.rect[1] - y, 0, y - (r.rect[1] + r.rect[3])); return Math.max(dx, dy); }
       function paintScores() { if (SCENE.boardPaint) for (const k of SCORE_KEYS) SCENE.boardPaint(SCORE_BOARD[k], core.scoreBoard(k)); }
-      function hsSave() { try { const j = {}; for (const k of SCORE_KEYS) j[k] = core.scoresOf(k).names; store.set(SCORE_KEY, JSON.stringify(j)); } catch (e) { /* private mode */ } }
       let scoreTell = () => {}, scoresAsk = () => {};
       function addBuilt(r, opt) { r.built = SCENE.build(core.M, opt); scene.add(r.built.group); for (const k in core.S.dep) r.built.setDepleted(+k, true); paintScores(); }
       function streamRegions(force) {
@@ -921,7 +920,7 @@
           case 'fireout': removeFire(e.fire); break;
           case 'fx': { const t = ents.get('m:' + e.mob); if (!t) break; t.fx = t.fx || {}; t.fx[e.fx] = 1; applyTint(t); const el = hud.fxSplat(e.fx); if (el) t.splats.push({ el, t: performance.now(), k: t.splats.length }); if (e.fx === 'freeze') sfx('freeze', t); break; }
           case 'fxend': { const t = ents.get('m:' + e.mob); if (!t || !t.fx) break; delete t.fx[e.fx]; applyTint(t); break; }
-          case 'score': hsSave(); paintScores(); scoreTell(e); setTimeout(() => scoresAsk(true), 800); break;   /* the Bank keeps the global dragon-killer board */
+          case 'score': if (e.p === PID || (e.key === 'chain_dragon' && hosted.has('dragonkeep'))) scoreTell(e); break;   /* the Bank keeps the board: one game tells it per kill - the page that owns the player who did it, or the keep's host - and its answer repaints the sign */
           case 'mark': if (e.p === PID) markTell(e); break;   /* a maple tapped or a birch peeled: the Bank keeps it for everyone */
           case 'deplete': {
             for (const r of regions) if (r.built) r.built.setDepleted(e.node, true);
@@ -1810,7 +1809,7 @@
           else if (NW.was && (NW.lost || NW.quietTry)) { NW.quietTry = false; NW.tries++; if (!NW.lost) NW.lost = true; hud.netLost && hud.netLost(true, 'net', 'the arcade is not answering' + (NW.tries > 2 ? ': reload the page' : ', still trying')); }
           if (res && res.online && core.regionOf(me.x, me.y) === z) {
             const R = res.room; room = R; myNetId = R.me.id; core.setOnline(true); oneDevice(R.me); netStatus = res.backend + ' as ' + (R.me.tag ? '@' + R.me.tag : 'guest');
-            seedDragonBoard();
+            boardTag();
             { let h = 2166136261; for (let i = 0; i < myNetId.length; i++) h = Math.imul(h ^ myNetId.charCodeAt(i), 16777619) >>> 0; core.uidSpace(1 + h % 4095); }   /* my own uid space for things I create as a host */
             R.on('message', ev => { if (room === R) onNet(ev); });
             R.on('message', () => { if (room === R) NW.heard = performance.now(); }); R.on('join', () => { if (room === R) NW.heard = performance.now(); }); R.on('leave', () => { if (room === R) NW.heard = performance.now(); });
@@ -1948,7 +1947,7 @@
       /* ASHVALE 3D engine part: THE TOWN CHEST AND THE @ashvale BANK (split out of engine.js, 2026-10-08). The chest ledger, returns, - in its own module (src/engbank.js, 2026-10-08) */
       const ENGBANK = deps.engbank.install({ get BANK_LOAD_ROOM() { return BANK_LOAD_ROOM; }, set BANK_LOAD_ROOM(v) { BANK_LOAD_ROOM = v; }, DATA, SCENE, THREE, YOURFIRST_ADDR, net, netGear, palsHeard, D, DAY_S, MOD, PID, SEASON, SEASONS, SKYM, SUNL, SUN_EPOCH, TL, WAL, carriedHeard, core, coreCall, evicted, hud, me, proxies, proxyMat, q, scene, skyNow, sunTime, walletRefresh, walletState, waterY,
         get CLOUD() { return CLOUD; }, HOME, withHome, homeIs, get trade() { return trade; },
-        get save() { return save; }, paintScores, hsSave });
+        get save() { return save; }, paintScores });
       const { CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer } = ENGBANK;
       scoreTell = ENGBANK.scoreTell; scoresAsk = ENGBANK.scoresAsk;
       function boardWho() {   /* the keep board is the arcade @tag, not the default Adventurer (2026-10-10) */
@@ -1957,14 +1956,12 @@
         const n = String(me.name || '').replace(/[^\w -]/g, '').trim().slice(0, 12);
         return n.length >= 2 && n !== 'Adventurer' ? n : null;
       }
-      function seedDragonBoard() {
+      function boardTag() {   /* the boards name a player by their arcade @tag (2026-10-10). The counts are the Bank's, so
+         a game that loads tells the Bank nothing about itself (2026-10-12): a cleared board stays cleared. */
         const who = boardWho();
         if (who && who.charAt(0) === '@') me.tag = who.slice(1);
-        if (!who) return;
-        for (const k of SCORE_KEYS) { if (!(me.kills && me.kills[k])) continue; core.mergeScores(k, { [who]: me.kills[k] }); scoreTell({ key: k, name: who, n: me.kills[k] }); }
-        paintScores();
       }
-      seedDragonBoard();
+      boardTag();
       const netStats = { sent: 0, dropped: 0, t0: performance.now(), times: [], max1s: 0, max2s: 0 };
       window.addEventListener('pagehide', () => { if (nb) nb.close(); if (room) { const r = room; room = null; r.leave(); } });
       let lastSend = 0;
@@ -2182,7 +2179,6 @@
         for (const [a, h] of next) if (h === myNetId && !hosted.has(a)) {   /* I just took this area over */
           hosted.add(a); fullT = 0; for (const m of core.S.mobs) if (m.zone === a) mobSig.delete(m.uid);
           const was = hosts.get(a); if (was && was !== myNetId && a === here && !mem.some(m => m.id === was)) hud.chat('You are now keeping this area in sync for everyone (the previous player left).', 'sys');
-          if (a === 'dragonkeep') hsSend();
         }
         for (const a of Array.from(hosted)) if (next.get(a) !== myNetId) hosted.delete(a);
         hosts.clear(); for (const [a, h] of next) hosts.set(a, h);
@@ -2195,7 +2191,6 @@
         if (e.e === 'xdrop') { if (iHostAt(e.x, e.y)) core.hostDrop(e); else netSend({ X: [e.id, e.n, e.x, e.y, e.life || 300, e.from ? toNet(e.from) : 0, e.diedAt || 0] }); return; }
         if (e.e === 'xplant') { if (iHostAt(e.x, e.y)) core.hostPlant(e.x, e.y, e.p, e.sapling); else netSend({ XP: [e.x, e.y, e.p ? toNet(e.p) : 0, e.sapling || 'sapling'] }); return; }
         if (e.e === 'xunplant') { if (iHostAt(e.x, e.y)) core.hostUnplant(e.x, e.y); else netSend({ XU: [e.x, e.y] }); return; }
-        if (e.e === 'score' && e.key === 'chain_dragon' && hosted.has('dragonkeep')) { hsSend(); return; }
         if (!hosted.size) return;
         const mobIn = u => iHost(mobArea(u)), fight = () => typeof e.src === 'number' ? mobIn(e.src) : typeof e.dst === 'number' ? mobIn(e.dst) : false;
         switch (e.e) {
@@ -2272,24 +2267,10 @@
         const Pl = [];
         for (const a of hosted) for (const r of core.plantSnap(a)) Pl.push(r);
         if (Pl.length) packSend({ F: seq }, 'Pl', Pl);
-        if (hosted.has('dragonkeep')) hsSend();
       }
-      const hsSnap = new Map();
-      function hsSend() {
-        if (!room || !hosted.has('dragonkeep')) return;
-        const s = core.scoresOf('chain_dragon'), rows = Object.keys(s.names).sort().map(n => [n, s.names[n] | 0]);
-        packSend({ HS: 'chain_dragon' }, 'Hn', rows, 470, 'Hend');
-      }
-      function hsHeard(id, d) {
-        if (d.HS !== 'chain_dragon' || !Array.isArray(d.Hn) || !fromHostOf(id, 'dragonkeep')) return;
-        const key = id + '|HS|' + (d.F || 0), buf = hsSnap.get(key) || [];
-        buf.push.apply(buf, d.Hn);
-        if (d.Hend == null || d.Hend === 1) {
-          hsSnap.delete(key);
-          const names = {}; for (const r of buf) if (Array.isArray(r) && typeof r[0] === 'string') names[r[0]] = r[1] | 0;
-          if (core.mergeScores('chain_dragon', names)) { hsSave(); paintScores(); }
-        } else hsSnap.set(key, buf);
-      }
+      /* The keep's board used to be relayed by whoever hosted dragonkeep (HS/Hn messages), which kept a second copy of
+         the board on that player's device and painted it long after the Bank's board was cleared. Gone (2026-10-12):
+         the Bank answers 'scores?' to everyone in its room, guests included. */
       function coreCall(fn) {   /* run a core change outside the tick and present its events */
         const keep = core.S.ev; core.S.ev = []; fn(); const evs = core.S.ev; core.S.ev = keep;
         const now = performance.now(); for (const e of evs) { handle(e, now); netEvent(e); }
@@ -2362,7 +2343,6 @@
           } else if (!d.Gr) for (const g of d.G) if (fromHostOf(id, areaAt(g[3], g[4]))) core.groundAdd(g[0], g[1], g[2], g[3], g[4], g[5] ? fromNet(g[5]) : null, g[6] || 0);
         });
         if (Array.isArray(d.E)) coreCall(() => { for (const a of d.E) if (Array.isArray(a) && eventFromHost(id, a)) applyEvent(a); });
-        if (d.HS) hsHeard(id, d);
       }
       function eventFromHost(id, a) {   /* is the sender the host of the area this event is about? */
         switch (a[0]) {

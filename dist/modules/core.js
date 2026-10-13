@@ -1099,10 +1099,11 @@
         if (dex) addXp(p, 'dexterity', (DEX.xpPerDamage || 10) * dmg);
       }
     }
-    /* public kill boards (the ruined keep's wooden sign): a G-counter per character name. The @ashvale Bank holds the
-       global counts; two games merging take the higher count for each name and the painted total is the Bank's (or the
-       sum of names, if that is higher). */
-    const SCORES = {}, SCORE_N = {};
+    /* public kill boards (the ruined keep's wooden sign): a counter per character name. The @ashvale Bank is the ONLY
+       place a board is kept (2026-10-12: "make it so that the bank is the only thing that stores the high score
+       and it doesn't get the high score from the clients"): SCORES holds exactly what the Bank last answered and nothing
+       else - never a character's own kill counts, never another game's copy, so clearing the Bank's board clears it. */
+    const SCORES = {};
     function scoreName(n) {   /* the keep board uses the arcade @tag, never the default Adventurer (2026-10-10) */
       n = String(n || '').trim();
       if (n.charAt(0) === '@') {
@@ -1112,35 +1113,28 @@
       const c = cleanName(n);
       return c && !/^adventurer$/i.test(c) ? c : null;
     }
-    function mergeScores(key, names) {
+    function setScores(key, names) {   /* the Bank's answer: these rows ARE the board, so they replace what is shown */
       if (!/^[a-z_]{1,32}$/.test(String(key)) || !names || typeof names !== 'object') return 0;
-      const m = SCORES[key] = SCORES[key] || {}; let n = 0;
-      for (const raw in names) { const nm = scoreName(raw), v = names[raw] | 0; if (!nm || v <= 0 || v >= 1e9 || (m[nm] | 0) >= v) continue; m[nm] = v; n++; }
-      return n;
+      const m = {}; let n = 0;
+      for (const raw in names) { const nm = scoreName(raw), v = names[raw] | 0; if (!nm || v <= 0 || v >= 1e9) continue; m[nm] = v; n++; }
+      SCORES[key] = m; return n;
     }
-    function setScoreTotal(key, n) {
-      if (!/^[a-z_]{1,32}$/.test(String(key))) return 0;
-      n = n | 0; if (n < 0 || n >= 1e9) return 0;
-      SCORE_N[key] = Math.max(SCORE_N[key] | 0, n); return SCORE_N[key];
-    }
-    function scoreKill(key, name) {
+    function scoreKill(key, name, pid) {   /* one kill happened here: say WHO - and WHICH player, so the game that owns
+                                             that player's side of it is the one that tells the Bank (2026-10-12) */
       if (!/^[a-z_]{1,32}$/.test(String(key))) return 0;
       const nm = scoreName(name); if (!nm) return 0;
-      const m = SCORES[key] = SCORES[key] || {};
-      m[nm] = (m[nm] | 0) + 1;
-      SCORE_N[key] = Math.max(SCORE_N[key] | 0, 0) + 1;
-      ev({ e: 'score', key, name: nm, n: m[nm], names: Object.assign({}, m) });
-      return m[nm];
+      ev({ e: 'score', key, name: nm, p: pid });
+      return 1;
     }
     function scoresOf(key) {
       const m = SCORES[key] || {}; let sum = 0; const top = [];
       for (const nm in m) { if (!scoreName(nm)) continue; sum += m[nm] | 0; top.push([nm, m[nm] | 0]); }
       top.sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-      return { total: Math.max(SCORE_N[key] | 0, sum), top: top.slice(0, 10), names: m };
+      return { total: sum, top: top.slice(0, 10), names: m };
     }
     /* [Claude 2026-10-11] two boards share the Bank's score channel: the keep's dragon killers and the Chess Park's games won
        (the operator: "quick fix the leaderboard at chess" - the park's board was painting the dragon text). Wins, not Elo: the
-       Bank keeps one number per name, the highest a game reports; Elo and the match ledger stay in chess_park_plan phase 2. */
+       Bank adds up the wins games report, one per name; Elo and the match ledger stay in chess_park_plan phase 2. */
     const SCORE_TXT = { chain_dragon: { title: 'DRAGON KILLERS', sub: n => 'Slain ' + n + (n === 1 ? ' time' : ' times'), read: n => 'The chained dragon has been slain ' + n + ' time' + (n === 1 ? '' : 's') + '.', list: 'The names of its slayers, by how many times:' },
                         chess_wins: { title: 'CHESS CHAMPIONS', sub: n => n + (n === 1 ? ' game won' : ' games won'), read: n => n + ' game' + (n === 1 ? ' has' : 's have') + ' been won at the Chess Park tables.', list: 'The standings, by games won:' } };
     function scoreBoard(key) {
@@ -1186,7 +1180,7 @@
       m.dead = S.t; m.tgt = 0; m.dropAt = S.t + 2; m.killer = p ? p.id : null;
       ev({ e: 'die', mob: m.uid, killer: p ? p.id : null }); void md;
       if (p && !p.puppet) creditKill(p, m.key);
-      if (p && m.key === 'chain_dragon') scoreKill(m.key, p.tag ? '@' + String(p.tag).replace(/^@/, '') : p.name);
+      if (p && m.key === 'chain_dragon') scoreKill(m.key, p.tag ? '@' + String(p.tag).replace(/^@/, '') : p.name, p.id);
       for (const pid of S.order) { const o = S.players[pid]; if (o.act && o.act.k === 'attack' && o.act.uid === m.uid) o.act = null; }
     }
     function mobDrops(m) {
@@ -2299,7 +2293,7 @@
         /* [Claude 2026-10-11] a decided game counts once for its winner on the winner's own copy: the park's standings board */
         if (col && st.status === 'over' && (st.result === '1-0' || st.result === '0-1') && p.chWon !== key) {
           p.chWon = key;
-          if ((st.result === '1-0') === (col === 'w')) { p.kills = p.kills || {}; p.kills.chess_wins = (p.kills.chess_wins | 0) + 1; scoreKill('chess_wins', p.tag ? '@' + String(p.tag).replace(/^@/, '') : p.name); }
+          if ((st.result === '1-0') === (col === 'w')) { p.kills = p.kills || {}; p.kills.chess_wins = (p.kills.chess_wins | 0) + 1; scoreKill('chess_wins', p.tag ? '@' + String(p.tag).replace(/^@/, '') : p.name, p.id); }
         }
       }
     }
@@ -3800,7 +3794,7 @@
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
       prayTicks(p, pts, drain) { let d = drain; if (d == null) { d = 0; for (const id in p.pray || {}) d += (PRAYERS[id] && PRAYERS[id].drain) || 0; } if (!d) return null; const n = pts == null ? (p.pp | 0) : pts, rs = resist(p, d); return n <= 0 ? 0 : Math.ceil(((n - 1) * rs + rs + 1 - (pts == null ? (p.pd | 0) : 0)) / d); },
-      isHawk, passageAt, crateAt, signAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, searchOpen, coverBlocks, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf, storyPoints, storyMax, scoreKill, mergeScores, setScoreTotal, scoresOf, scoreBoard, scoreRead,
+      isHawk, passageAt, crateAt, signAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, searchOpen, coverBlocks, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf, storyPoints, storyMax, scoreKill, setScores, scoresOf, scoreBoard, scoreRead,
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
