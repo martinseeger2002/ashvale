@@ -278,6 +278,35 @@ ok(cs.chessOf(t1.id).moves.join(' ') === 'Nf3 Nf6' && h1 === h2, 'a replayed log
     rep.cmd('me', { c: 'stand' }); rep.tick();
     ok(!rp.ch && coins(rp) === 0 && rep.chessReclaim('me') === 0, 'standing up from a begun game is resigning: nothing left to reclaim after a reload') }
 
+  /* 8. The operator, stuck: the opponent's connection dropped; the host (that opponent's page, back online) made his puppet anew
+     without a seat, so his Stand up was ignored and every row sat him down again. Now the table is the word, and standing
+     up after the other has gone wins the wager */
+  { const { host, rep, hp, rp } = setup('stuck', 'g1');
+    host.hostMove('me', tt.id, 'e2', 'e4'); send(host, rep, 'g1'); rep.chessNetId('me', 'g1');
+    host.setOnline(false); host.chessLimbo('me'); host.removePlayer('g1', true); host.setOnline(true);
+    host.addPuppet('g1', { x: rp.x, y: rp.y, n: 'Guest' });
+    ok(!host.S.players.g1.seat && host.chessOf(tt.id).b === 'g1', 'the host made the guest anew without a seat flag, its table still seats him');
+    rep.removePlayer('host');   /* his page saw the opponent leave the room */
+    rep.cmd('me', { c: 'stand' }); rep.tick();
+    ok(rp.ch, 'the guest’s own copy does not count it a resignation while its opponent is gone from view... ' + (rp.ch ? 'kept' : 'closed'));
+    host.hostStand('g1', tt.id); host.tick();
+    const st = host.chessOf(tt.id);
+    ok(st.co.some(c => c[0] === 'g1' && c[1] === 200) && st.co.some(c => c[0] === 'me' && c[1] === 0) && !st.w && !st.b, 'the host takes his Stand up: the one who left was the host’s own player, so the guest wins');
+    send(host, rep, 'g1'); rep.tick();
+    ok(!rp.seat && coins(rp) === 200 && !rp.ch, 'and the row no longer sits him down: he is up, with both stakes, ' + coins(rp));
+    ok(coins(hp) === 0, 'the host, who dropped, gets nothing') }
+  /* 9. on the host itself: the opponent left the room, the host's player stands up at once (before the 30 s sweep) - it wins */
+  { const { host, rep, hp, rp } = setup('hoststand', 'g1');
+    host.hostMove('me', tt.id, 'e2', 'e4');
+    host.setOnline(true); host.removePlayer('g1', true);
+    host.cmd('me', { c: 'stand' }); host.tick();
+    ok(!hp.seat && coins(hp) === 200, 'standing up after the opponent has gone wins the wager: ' + coins(hp)) }
+  /* 10. both still there: standing up is still resigning */
+  { const { host, rep, hp, rp } = setup('stillthere', 'g1');
+    host.hostMove('me', tt.id, 'e2', 'e4');
+    host.cmd('me', { c: 'stand' }); host.tick();
+    ok(coins(hp) === 0 && host.chessOf(tt.id).result === '0-1', 'with the opponent still at the table, standing up resigns') }
+
   /* 7. a new game at the same table is a new wager */
   { const { host, rep, hp, rp } = setup('again', 'g1');
     for (const [who, f, t] of [['me', 'e2', 'e4'], ['g1', 'e7', 'e5'], ['me', 'd1', 'h5'], ['g1', 'b8', 'c6'], ['me', 'f1', 'c4'], ['g1', 'g8', 'f6'], ['me', 'h5', 'f7']]) host.hostMove(who, tt.id, f, t);

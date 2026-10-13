@@ -10279,7 +10279,7 @@ POSSIBILITY OF SUCH DAMAGE. */
           if (!(p.seat && p.seat.t === T.id)) { if (pk) { p.pkDone = null; p.pkPaid = null; } else { p.chDone = null; p.chPaid = null; } }   /* [Claude 2026-10-12] a sit asked for now is a new seat: never one already paid back (an open seat is still kept by p.pk) */
           p.act = { k: 'sit', t: T.id, s: si, stake, pk: typeof c.pk === 'string' ? c.pk.slice(0, 160) : '' }; p.skilling = null; closeShop(p); break;   /* pk [Claude 2026-10-12]: the sitter's key, so the dealer can seal their cards for them alone */
         }
-        case 'stand': { if (p.seat) { if (isAuth(zoneOf(p.x, p.y))) standUp(p); else { const t = p.seat.t, pk = p.seat.k === 'pk'; if (!pk && chOpen(p, t)) { const cst = chessOf(t); if (cst.status === 'playing' && cst.moves.length && cst.w && cst.b) chClose(p, 0, 'resign'); } p.seat = null; ev({ e: pk ? 'pstand' : 'stand', p: p.id, t }); ev({ e: pk ? 'xpstand' : 'xstand', p: p.id, t }); } } p.seatWait = null; break; }
+        case 'stand': { if (p.seat) { if (isAuth(zoneOf(p.x, p.y))) standUp(p); else { const t = p.seat.t, pk = p.seat.k === 'pk'; if (!pk && chOpen(p, t)) { const cst = chessOf(t), oth = cst.w === p.id ? cst.b : cst.w; if (cst.status === 'playing' && cst.moves.length && cst.w && cst.b && S.players[oth]) chClose(p, 0, 'resign'); }   /* opponent gone from my view: the host's word decides (I may have won) */ p.seat = null; ev({ e: pk ? 'pstand' : 'stand', p: p.id, t }); ev({ e: pk ? 'xpstand' : 'xstand', p: p.id, t }); } } p.seatWait = null; break; }
         case 'pact': {   /* fold / check / call / raise to N / all-in: the host of the area deals, as with a chess move */
           if (!p.seat || p.seat.k !== 'pk') break;
           const id = p.seat.t, a = String(c.a || '').slice(0, 6), to = c.to == null ? 0 : Math.max(0, Math.min(999999, c.to | 0));   /* 'back' [Claude]: come back after being dealt out */
@@ -11898,7 +11898,13 @@ POSSIBILITY OF SUCH DAMAGE. */
       if (T && !isAuth(zoneOf(T.x, T.y))) { p.seat = null; p.seatWait = null; ev({ e: 'stand', p: p.id, t: id }); return; }   /* [Claude 2026-10-12] not this game's table to decide: the host's row will say */
       p.seat = null; p.seatWait = null; p.chLimbo = null;
       if (col) {
-        if (st.status === 'playing') {
+        const oc = col === 'w' ? 'b' : 'w', oid = st[oc], oq = oid != null ? S.players[oid] : null;
+        const otherGone = oid != null && why !== 'left' && (!oq || oq.chLimbo === id);   /* [Claude 2026-10-12] the opponent's connection is gone */
+        if (st.status === 'playing' && st.moves.length && otherGone && why !== 'short') {   /* standing up after the other has left: the one who stayed wins (the operator: "the winner should automatically win if the other person leaves") */
+          st.status = 'over'; st.result = col === 'w' ? '1-0' : '0-1'; st.why = 'left'; chessPayout(st);
+          if (oq) { oq.chLimbo = null; if (oq.seat && oq.seat.t === id) { oq.seat = null; ev({ e: 'stand', p: oq.id, t: id }); } }
+          st[oc] = null; st[oc + 'n'] = '';
+        } else if (st.status === 'playing') {
           if (st.moves.length && why !== 'short') { st.status = 'over'; st.result = col === 'w' ? '0-1' : '1-0'; st.why = why === 'left' ? 'left' : why || 'resigned'; chessPayout(st); }   /* leaving a begun game loses the wager (the operator) */
           else { st.status = 'open'; if (why !== 'short') chessCash(st, p.id, st.stake); }   /* not begun: the stake comes back */
         } else if (st.status === 'open' && why !== 'short') chessCash(st, p.id, st.stake);   /* [Claude] nobody came: the stake comes back */
@@ -11926,7 +11932,14 @@ POSSIBILITY OF SUCH DAMAGE. */
       return true;
     }
     function hostSit(pid, id, si, stake) { const p = S.players[pid], T = tableById(id); if (!p || !T || !T.seats[si]) return false; const seat = T.seats[si]; if (cheb(p.x, p.y, seat[0], seat[1]) > 8) return false; return sitAt(p, T, si | 0, stake | 0); }   /* the puppet's spot lags the walker by a message or two */
-    function hostStand(pid, id) { const p = S.players[pid]; if (p && p.seat && p.seat.t === id) standUp(p); }
+    function hostStand(pid, id) {
+      const p = S.players[pid]; if (!p) return;
+      /* [Claude 2026-10-12] the table is the word, not the puppet's seat flag: a host whose room dropped and came back makes its
+         puppets anew, seatless, while its table still seats them - their Stand up was ignored and the next row sat them down
+         again (the operator, stuck at a chess table after his opponent's connection dropped) */
+      if (!p.seat) { const st = S.chess[id], col = st ? seatColour(st, pid) : null; if (col) p.seat = { t: id, s: col === 'w' ? 1 : 0 }; }
+      if (p.seat && p.seat.t === id) standUp(p);
+    }
     function hostMove(pid, id, from, to, promo) { const p = S.players[pid]; return !!p && chessMove(p, id, String(from), String(to), promo ? String(promo) : null); }
     function applyChess(rows) {   /* the host's word on its tables: fen, seats, result; our own seat follows it */
       for (const r of rows || []) {
@@ -23956,7 +23969,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         paintScores,
         netHealth: () => ({ online: !!room, lost: NW.lost, heardAgo: NW.heard ? Math.round(performance.now() - NW.heard) : null, fails: NW.fails, saveFails }), _netBreak: () => { if (room) { const R = room; R.send = () => Promise.resolve(false); } },
         zones: () => ({ loaded: (core.D.zones || []).map(z => z.id), index: ZINDEX ? ZINDEX.map(z => z.id) : null, waiting: Object.keys(LZ_WAIT), travelling }),
-        _ent: k => ents.get(k), _traps: () => [...gTraps.keys()],   /* tests: an entity by key ('n:<npc id>', 'm:<uid>') */
+        _ent: k => ents.get(k), _traps: () => [...gTraps.keys()],
+        _inject: (id, data) => onNet({ from: { id: String(id) }, data }),   /* [Claude 2026-10-12] tests and films: a room message from a scripted player, as if heard */   /* tests: an entity by key ('n:<npc id>', 'm:<uid>') */
         tap: tapAt, menuAt, targetsAt, pad: () => PAD && PAD.state(), fps: () => frames, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries }), setCam(y, p, d) { if (y != null) cam.tyaw = cam.yaw = y; if (p != null) cam.tpitch = cam.pitch = p; if (d != null) cam.tdist = cam.dist = d; },
         myPos: () => [myEnt.root.position.x, myEnt.root.position.z, myEnt.yaw],   /* tests: where I am drawn (fluid travel) */
         remotesInfo: () => Array.from(remotes).map(([id, r]) => ({ id, boat: r.boat, ride: r.ride, offline: !!r.offline, name: r.name, via: r.via || null, at: [Math.round(r.e.root.position.x), Math.round(r.e.root.position.z)] })),   /* tests: who rides with whom, and who is a dropped-out partner */
