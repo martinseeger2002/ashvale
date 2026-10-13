@@ -9,7 +9,7 @@
   const CSS = `
 .ash .lay.poker > .ui:not(.pokerp):not(.chatw):not(.help){display:none !important}
 .ash .lay.poker .hover{display:none !important}
-.ash .lay.poker .chatw .chat{max-height:54px}
+.ash .lay.poker .chatw .chat:not(.big){max-height:54px}
 .ash .pokerp{position:absolute;right:8px;top:8px;width:216px;opacity:.94;max-width:calc(100vw - 20px);padding:8px 10px;font-size:13px;line-height:1.35;color:#eee;background:linear-gradient(#2b3a33,#1b241f);border:2px solid #12181a;border-radius:6px;box-shadow:0 4px 14px #0008;pointer-events:auto}
 .ash .pokerp h3{margin:0 0 6px;font:bold 15px Georgia,serif;color:#e9e2cf;letter-spacing:.5px}
 .ash .pokerp .pl{display:flex;justify-content:space-between;align-items:center;padding:3px 6px;border-radius:4px;margin:2px 0;background:#0003}
@@ -90,6 +90,7 @@
         + (v.board.length ? '<span style="margin:0 4px;color:#8fa08c">|</span>' + v.board.map(cardTxt).join('') : '') + '</div>'
         + '<div class="pot">pot ' + pot + (v.inHand && v.call > 0 ? ' · you owe ' + Math.min(v.call, v.stack) : v.bet ? ' · bet ' + v.bet : ' · nobody to beat') + (mine ? ' · your chips ' + mine.chips : '') + '</div>'
         + (winTxt(v) ? '<div class="win">' + winTxt(v) + '</div>' + showdownHtml(v) : '')
+        + (!winTxt(v) && v.last ? (() => { const L = Object.assign({}, v, v.last); const w = winTxt(L); return w ? '<div class="win" style="opacity:.8">Last hand: ' + w + '</div>' + showdownHtml(L) : ''; })() : '')   /* [Claude 2026-10-13] */
         + (raise && amounts.length ? '' : '<div class="lg">' + v.log.map(esc).join('<br>') + '</div>')
         + (v.away ? '<div class="stt wait">You are dealt out (a minute on your hand). Tap to come back.</div>' : '')   /* [Claude] */
         + '<div class="rz' + (raise && amounts.length ? ' on' : '') + '" data-rz><div class="amt"><span>raise to</span><span data-amt>' + raiseTo + '</span></div>'

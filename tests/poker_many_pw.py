@@ -39,6 +39,7 @@ with sync_playwright() as p:
         ev(pg, '(function(){var bi=ASH.core.M.buildingAt(ASH.me.x,ASH.me.y),B=ASH.core.M.buildings[bi];ASH.core.cmd("me",{c:"climb",dir:1,x:B.stairs[0],y:B.stairs[1]})})()')
         P.append(pg)
     check(all(wait(pg, 'ASH.me.lv === 1', 60) for pg in P), 'four players climb to the card room')
+    for pg in P: ev(pg, "window.__seen = {}; setInterval(function(){ var s = ASH.core.pokerOf('poker1'); if (s.st === 'none' && s.r) window.__seen[s.h] = (s.r.sd || []).length; }, 100)")   # what each screen saw, when it saw it
     seats = [0, 2, 4, 6]
     for pg, si in zip(P, seats):
         ev(pg, 'ASH.core.cmd("me", %s)' % json.dumps({'c': 'sit', 'table': T, 'seat': si, 'buy': 100})); time.sleep(1.5)
@@ -70,10 +71,10 @@ with sync_playwright() as p:
         check(play_out(), 'hand %d is played to the showdown' % ev(dealer, S('.h')))
         big = ev(dealer, 'JSON.stringify({Pk: [ASH.pokerNetRow(%s)]}).length' % json.dumps(T))
         print('     the result row on the wire: %d characters' % big)
-        check(all(wait(pg, S('.st') + " === 'none' && " + S('.r') + ' && (' + S('.r.sd') + ' || []).length >= 2', 15) for pg in P),
-              '  every screen gets the result, the called hands shown (%s)' % [ev(pg, '(' + S('.r && ') + S('.r.sd') + ' || []).length') for pg in P])
-        check(all(wait(pg, '!document.querySelector(".pokerp [data-a=fold]")', 8) for pg in P), '  and no panel is left on Call / Fold / Raise')
         H = ev(dealer, S('.h'))
+        check(all(wait(pg, 'window.__seen[%d] != null' % H, 15) for pg in P), '  every screen got the result of hand %d (hands shown: %s)' % (H, [ev(pg, 'window.__seen[%d]' % H) for pg in P]))
+        check(all(wait(pg, '!document.querySelector(".pokerp [data-a=fold]") || ASH._pokerView(%s).myTurn' % json.dumps(T), 8) for pg in P), '  no panel offers Call / Fold / Raise unless it really is that player\'s turn')
+        check(all(wait(pg, '!!document.querySelector(".pokerp .win")', 10) for pg in P), '  every panel shows the result (or, once the next hand is dealt, the last hand\'s)')
         check(all(wait(pg, S('.h') + ' > %d' % H, 60) for pg in P), '  the next hand comes to every screen')
     if big <= 500: print('     NOTE the row was small enough not to need splitting')
     # a player stands up mid-hand: removed, the hand goes on, and he waits for the next one to sit back in
@@ -85,6 +86,12 @@ with sync_playwright() as p:
     ev(leaver, 'ASH.core.cmd("me", {c: "stand"})')
     check(wait(leaver, '!ASH.me.seat', 10), 'Theodric stands up in the middle of a hand')
     check(all(wait(pg, S('.se') + '.length === 3', 15) for pg in P[:3]), '  every other screen shows him gone')
+    # chat at the table is for the table (2026-10-13)
+    ev(P[1], 'ASH.say("only the table hears this")'); time.sleep(2)
+    heard = lambda pg, w: ev(pg, 'Array.from(document.querySelectorAll(".chat div")).some(d => d.textContent.indexOf(%s) >= 0)' % json.dumps(w))
+    check(heard(P[0], 'only the table hears this') and not heard(leaver, 'only the table hears this'), "a word said at the table: Brannoc at the table hears it, Theodric (up) does not")
+    ev(leaver, 'ASH.say("the town is talking")'); time.sleep(2)
+    check(not heard(P[0], 'the town is talking') and not heard(P[1], 'the town is talking'), '  and the players at the table do not hear the room')
     check(play_out(skip=leaver), '  the hand goes on without him to its end')
     check(all(wait(pg, S('.r'), 15) for pg in P[:3]), '  and the three who played see its result')
     wait(dealer, S('.st') + " === 'preflop'", 40)
@@ -97,6 +104,14 @@ with sync_playwright() as p:
     else: print('     (the hand had just ended when he sat: the waiting check needs a running hand)')
     H = ev(dealer, S('.h')); play_out()
     check(wait(leaver, S('.h') + ' > %d && ' % H + '(function(){var s=%s,m=(s.se||[]).find(x=>x[1]===ASH.pid);return !!m && (m[4] & 8)})()' % S(''), 60), '  the next hand deals him in')
+    # the table's play in every player's chat, and a chat box that opens up (2026-10-13)
+    n_tbl = [ev(pg, 'document.querySelectorAll(".chat .table").length') for pg in P[1:]]
+    check(all(n > 5 for n in n_tbl), "the table's play is written into the followers' chat (%s lines)" % n_tbl)
+    P[1].click('.chat'); time.sleep(0.3)
+    check(ev(P[1], 'document.querySelector(".chat").classList.contains("big") && document.querySelector(".chat").getBoundingClientRect().height > 120'), '  it opens the chat up, the history scrollable')
+    P[1].screenshot(path='tests/shots/pk_chat_open.png')
+    ov = ev(P[2], '(function(){var ds=Array.from(document.querySelectorAll(".chat:not(.big) > div")).filter(d=>d.offsetHeight>0),bad=0;for(var i=1;i<ds.length;i++){if(ds[i].getBoundingClientRect().top < ds[i-1].getBoundingClientRect().bottom-1)bad++;}return bad})()')
+    check(ov == 0, 'the small chat view: no line drawn over another (%s overlaps)' % ov)
     check(not errs, 'no console errors (%d)%s' % (len(errs), (': ' + errs[0][:200]) if errs else ''))
     b.close()
 print('ALL OK' if not fails else '%d FAILED' % len(fails)); sys.exit(1 if fails else 0)

@@ -8346,12 +8346,12 @@ POSSIBILITY OF SUCH DAMAGE. */
     }
     function pokerSync(id, t) {   /* the dealer's copy into the row that travels: one shape, host and replica alike */
       const st = pokerOf(id);
-      if (t.log.length > 40) t.log.splice(0, t.log.length - 40);
+      if (t.log.length > 40) { t.logBase = (t.logBase | 0) + (t.log.length - 40); t.log.splice(0, t.log.length - 40); }
       st.v = (st.v | 0) + 1; st.mine = 1; st.o = t.status; st.st = t.street; st.d = t.dealer; st.sb = t.sbSeat; st.bb = t.bbSeat;
       st.p = t.pot | 0; st.b = t.bet | 0; st.a = t.toAct; st.h = t.hand | 0; st.bo = t.board.slice();
       st.se = t.seats.filter(s => s && s.id != null).map(s => [s.ref | 0, s.id, s.chips | 0, s.bet | 0,
         (s.in ? PK_IN : 0) | (s.folded ? PK_FOLD : 0) | (s.allin ? PK_ALLIN : 0) | ((s.hole && !s.out) ? PK_CARD : 0) | (s.acted ? PK_ACTED : 0) | (s.away ? PK_AWAY : 0)]);
-      st.lg = t.log.slice(-2).map(l => String(l.t || '').slice(0, 90));
+      st.lg = t.log.slice(-6).map(l => String(l.t || '').slice(0, 90)); st.lc = (t.logBase | 0) + t.log.length;   /* [Claude 2026-10-13] the last six lines and how many there have been: every copy writes the table's play into its chat (the operator) */
       st.r = t.result ? { p: t.result.pots.map(q => [q.amount | 0, (q.win || []).map(x => x | 0)]), c: t.result.contested ? 1 : 0, rk: t.result.raked | 0, sd: (t.result.shown || []).slice(0, 8) } : null;   /* sd [Claude]: the showdown, every hand shown face up with its name */
       st.mr = t.minRaise | 0; st.bg = t.big | 0;   /* [Claude] the least a raise can be, and the big blind: the panel's slider runs from the one to all-in */
       st.rk = t.raked | 0;   /* [Claude] what the house has taken at this table so far */
@@ -8514,7 +8514,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       for (const r of rows || []) {
         if (!r || !r.t) continue;
         const st = pokerOf(r.t), was = st.v;
-        for (const k of ['o', 'st', 'd', 'sb', 'bb', 'p', 'b', 'a', 'h', 'bo', 'se', 'lg', 'r', 'hc', 'buy', 'gid', 'co', 'cseq', 'mr', 'bg', 'rk']) if (r[k] !== undefined) st[k] = r[k];   /* mr, bg [Claude 2026-10-12]: the smallest raise and the big blind - without them every guest's panel said 'min 50' at a 1/2 table (the operator) */
+        for (const k of ['o', 'st', 'd', 'sb', 'bb', 'p', 'b', 'a', 'h', 'bo', 'se', 'lg', 'r', 'hc', 'buy', 'gid', 'co', 'cseq', 'mr', 'bg', 'rk', 'lc']) if (r[k] !== undefined) st[k] = r[k];   /* mr, bg [Claude 2026-10-12]: the smallest raise and the big blind - without them every guest's panel said 'min 50' at a 1/2 table (the operator) */
         if (r.v != null) st.v = r.v | 0;
         st.mine = 0;
         const T = pokerTableById(r.t);
@@ -11938,7 +11938,11 @@ POSSIBILITY OF SUCH DAMAGE. */
 .ash .chat .player{color:#7cf}
 .ash .bub{position:absolute;transform:translate(-50%,-100%);max-width:200px;padding:2px 7px;border-radius:7px;background:#0008;color:#ff0;font-size:12px;text-align:center;text-shadow:1px 1px 0 #000;pointer-events:none}
 .ash .chat{max-height:calc(5*1.3em + 12px);padding:5px 8px;background:#0007;border-radius:6px;font-size:12px;color:#fff;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer}
-.ash .chat.big{max-height:min(60%,260px);background:#000b;overflow:auto;justify-content:flex-start}
+.ash .chat > div{flex-shrink:0}   /* [Claude 2026-10-13] a wrapped line keeps its height: squeezed lines were drawn over each other (the operator) */
+.ash .chat.big{max-height:min(62vh,520px);background:#000c;overflow:auto;justify-content:flex-start}
+.ash .chatw.big{width:min(94vw,560px);z-index:25}
+.ash .chatw .chatx{position:absolute;left:0;top:-24px;padding:2px 10px;border-radius:6px 6px 0 0;background:#000a;color:#ffd23f;font:600 12px system-ui,sans-serif;cursor:pointer;pointer-events:auto}
+.ash .chat .table{color:#b8e6c4}
 @media (max-height:520px){.ash .inv{gap:2px}.ash .panel{padding:5px 6px}.ash .panel h4{margin-bottom:3px}.ash .chat{max-height:calc(3*1.3em + 10px);font-size:11px}.ash .chatw{width:min(40vw,360px)}}
 .ash .chat div{margin:1px 0;text-shadow:1px 1px 0 #000}
 .ash .chat .warn{color:#ff6a5a}.ash .chat .level{color:#7fd0ff}.ash .chat .trade{color:#ffd77a}.ash .chat .quest{color:#d9a0ff}.ash .chat .npc{color:#9cf}.ash .chat .sys{color:#ffcf3f}.ash .chat .dm{color:#ff9ce0}
@@ -12737,7 +12741,7 @@ POSSIBILITY OF SUCH DAMAGE. */
   const CSS = `
 .ash .lay.poker > .ui:not(.pokerp):not(.chatw):not(.help){display:none !important}
 .ash .lay.poker .hover{display:none !important}
-.ash .lay.poker .chatw .chat{max-height:54px}
+.ash .lay.poker .chatw .chat:not(.big){max-height:54px}
 .ash .pokerp{position:absolute;right:8px;top:8px;width:216px;opacity:.94;max-width:calc(100vw - 20px);padding:8px 10px;font-size:13px;line-height:1.35;color:#eee;background:linear-gradient(#2b3a33,#1b241f);border:2px solid #12181a;border-radius:6px;box-shadow:0 4px 14px #0008;pointer-events:auto}
 .ash .pokerp h3{margin:0 0 6px;font:bold 15px Georgia,serif;color:#e9e2cf;letter-spacing:.5px}
 .ash .pokerp .pl{display:flex;justify-content:space-between;align-items:center;padding:3px 6px;border-radius:4px;margin:2px 0;background:#0003}
@@ -12818,6 +12822,7 @@ POSSIBILITY OF SUCH DAMAGE. */
         + (v.board.length ? '<span style="margin:0 4px;color:#8fa08c">|</span>' + v.board.map(cardTxt).join('') : '') + '</div>'
         + '<div class="pot">pot ' + pot + (v.inHand && v.call > 0 ? ' · you owe ' + Math.min(v.call, v.stack) : v.bet ? ' · bet ' + v.bet : ' · nobody to beat') + (mine ? ' · your chips ' + mine.chips : '') + '</div>'
         + (winTxt(v) ? '<div class="win">' + winTxt(v) + '</div>' + showdownHtml(v) : '')
+        + (!winTxt(v) && v.last ? (() => { const L = Object.assign({}, v, v.last); const w = winTxt(L); return w ? '<div class="win" style="opacity:.8">Last hand: ' + w + '</div>' + showdownHtml(L) : ''; })() : '')   /* [Claude 2026-10-13] */
         + (raise && amounts.length ? '' : '<div class="lg">' + v.log.map(esc).join('<br>') + '</div>')
         + (v.away ? '<div class="stt wait">You are dealt out (a minute on your hand). Tap to come back.</div>' : '')   /* [Claude] */
         + '<div class="rz' + (raise && amounts.length ? ' on' : '') + '" data-rz><div class="amt"><span>raise to</span><span data-amt>' + raiseTo + '</span></div>'
@@ -13069,7 +13074,9 @@ POSSIBILITY OF SUCH DAMAGE. */
       while (chat.children.length > 60) chat.removeChild(chat.firstChild);
       if (chat.classList.contains('big')) chat.scrollTop = chat.scrollHeight;
     }
-    chat.onclick = () => { chat.classList.toggle('big'); chat.scrollTop = chat.scrollHeight; };
+    /* [Claude 2026-10-13] tapping the chat opens it up (a separate button was dropped: the operator, "clicking the chat display does the same thing") */
+    const chatBig = (on) => { chat.classList.toggle('big', on); chatw.classList.toggle('big', on); chat.scrollTop = chat.scrollHeight; };
+    chat.onclick = () => chatBig(!chat.classList.contains('big'));
 
     /* ---------- options menu */
     function menu(x, y, opts) {
@@ -18353,6 +18360,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           case 'pstand': if (mine) pokerLeave(e.t); break;
           case 'poker': {
             if (SCENE.pokerShow) SCENE.pokerShow(e.t, pokerModel(e.t));
+            pokerChat(e.t);
             if (me.seat && me.seat.t === e.t && me.seat.k === 'pk') { pokerFx(e.t, e); if (hud.pokerUpdate) hud.pokerUpdate(pokerView(e.t)); }
             const T = core.pokerTableById(e.t); if (T && iHostAt(T.x, T.y)) netSendBig({ Pk: [pkNet(core.pokerRow(e.t))] });
             break;
@@ -19542,7 +19550,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (dmTo) { sendDm(dmTo[1], dmTo[2]); return; }
         if (text.startsWith('/@')) { hud.chat('To send a direct message: /@name your message', 'sys'); return; }
         hud.chat(me.name + ': ' + text, 'player'); speak(myEnt, text);
-        if (!room) hud.chat('(Nobody else can hear you: you are playing solo.)', 'sys'); else netSend({ t: text });
+        if (!room) hud.chat('(Nobody else can hear you: you are playing solo.)', 'sys'); else netSend(Object.assign({ t: text }, me.seat && me.seat.k === 'pk' ? { tb: me.seat.t } : {}));   /* tb [Claude 2026-10-13]: said at a card table - for that table only */
       }
       /* DIRECT MESSAGES (2026-10-07: "If you /@<tag> a direct message should be sent to them in game chat no distance
          limit"): into the recipient's own room 'one.<address>' - every signed-in game sits in it (the one-device rule) - so
@@ -19620,7 +19628,13 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if ('k' in d) { const tl = typeof d.k === 'string' && /^[a-z0-9_]{1,24}$/.test(d.k) ? d.k : null; if (tl !== r.tool) { r.tool = tl; r.e.H.setTool && r.e.H.setTool(tl); } }
         if (d.T != null) r.total = Math.max(0, Math.min(9999, d.T | 0));
         if (d.n || d.T != null) { if (d.n) { r.name = cleanName(d.n); if (core.S.players[id]) core.setPuppet(id, { n: r.name }); } if (r.e.tag) setTag(r.e.tag, r.name, from, r.total); }
-        if (typeof d.t === 'string' && d.t.trim()) {
+        /* [Claude 2026-10-13] the operator: "when sitting at a poker table chat should be visible between those players at the table
+           only. Not the whole town or next table": a word said at a card table reaches that table only, and a player sitting
+           at one hears only it. The speaker's table is its own word (tb), or else where this game's rows seat it. */
+        const tbOf = () => { if (typeof d.tb === 'string') return d.tb; for (const T of core.pokerTables()) { const st = core.S.poker[T.id]; if (st && (st.se || []).some(x => x[1] === id)) return T.id; } return null; };
+        const myTb = me.seat && me.seat.k === 'pk' ? me.seat.t : null;
+        if (typeof d.t === 'string' && d.t.trim() && (myTb || typeof d.tb === 'string' || tbOf()) && tbOf() !== myTb) { /* not for this table: unheard */ }
+        else if (typeof d.t === 'string' && d.t.trim()) {
           /* chat is heard only near the speaker (2026-10-06: "only visible to players within a certain radius of each
              other ... doesn't reach all the way from Saltmere to Ashvale"): rules.chat.radius tiles, default 40 */
           const lp = Array.isArray(d.p) && isFinite(d.p[0]) ? { x: +d.p[0], z: +d.p[1] } : r.buf[r.buf.length - 1], CR = (DATA.rules && DATA.rules.chat && DATA.rules.chat.radius) || 40;
@@ -20356,11 +20370,24 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         }
         return { board: (st.bo || []).slice(), hands, bets, pot: st.p | 0, big: st.bg | 0, dealer: st.d >= 0 ? st.d : null, turn: st.a >= 0 && st.o === 'playing' && st.st !== 'none' ? st.a : null };
       }
+      const PK_LAST = {};
+      /* [Claude 2026-10-13] the operator: "Add the poker game history to the chat box". The dealer's own game already hears the table
+         (its core tells the players in the room); every other copy reads the row's last lines (lg) and their running count
+         (lc) and writes the ones it has not written yet - for a player at that table, or anyone standing on its floor. */
+      const PK_LC = {};
+      function pokerChat(t) {
+        const st = core.pokerOf(t), lc = st.lc | 0, lg = st.lg || [];
+        if (st.mine === 1 || !lc) { PK_LC[t] = lc; return; }
+        const T = core.pokerTableById(t), near = (me.seat && me.seat.t === t) || (T && (T.lv | 0) === (me.lv | 0) && Math.max(Math.abs(T.x - me.x), Math.abs(T.y - me.y)) < 12);
+        const seen = PK_LC[t]; PK_LC[t] = lc;
+        if (!near || seen == null || lc <= seen) return;
+        for (const line of lg.slice(Math.max(0, lg.length - Math.min(lg.length, lc - seen)))) hud.chat(line, 'table');
+      }
       function pokerView(t) {   /* the panel's view of the table, all of it out of the row it was sent */
         const st = core.pokerOf(t), s = me.seat && me.seat.t === t ? me.seat.s | 0 : -1, mine = pokerSeatOf(st, s);
         const f = mine ? mine[4] | 0 : 0, dealt = !!((f & PKF[3]) && !(f & PKF[1])), call = Math.max(0, (st.b | 0) - ((mine && mine[3]) | 0));
         const live = st.o === 'playing' && st.st !== 'none', hh = (st.hc || []).find(x => (x[0] | 0) === s);
-        return {
+        const v = {
           t, seat: s, me: PID, hand: st.h | 0, street: st.st, open: !live, pot: st.p | 0, bet: st.b | 0, dealer: st.d, turn: st.a, buy: st.buy | 0,   /* [Claude] the buy-in, for the panel */
           seats: (st.se || []).map(x => ({ ref: x[0] | 0, id: x[1], name: pokerWho(x[1]), chips: x[2] | 0, bet: x[3] | 0, folded: !!((x[4] | 0) & PKF[1]), allin: !!((x[4] | 0) & PKF[2]), dealt: !!((x[4] | 0) & PKF[3]), away: !!((x[4] | 0) & (PKF[5] || 32)) })),
           away: !!(mine && ((mine[4] | 0) & (PKF[5] || 32))),   /* [Claude] dealt out for sitting on a hand: the panel offers the way back */
@@ -20370,6 +20397,11 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           shown: st.r && st.r.sd ? st.r.sd.map(x => ({ ref: x[0] | 0, c: [x[1] | 0, x[2] | 0], name: String(x[3] || '') })) : [],   /* [Claude 2026-10-11] the showdown */
           min: Math.min((st.b | 0) + (st.mr | 0 || st.bg | 0 || 50), (st.b | 0) + ((mine && mine[2]) | 0)), big: st.bg | 0
         };
+        /* [Claude 2026-10-13] the last hand's result stays in the panel through the next hand (between hands it is up only
+           ~7 s, easy to miss on a phone - the operator: "not showing the results of the hand to all the players") */
+        if (st.r && st.st === 'none') PK_LAST[t] = { h: st.h | 0, result: v.result, shown: v.shown, winners: v.winners, seats: v.seats };
+        else if (PK_LAST[t] && PK_LAST[t].h === (st.h | 0) - 1) v.last = PK_LAST[t];
+        return v;
       }
       function pokerFx(t, row) {   /* the small sound of the felt changing under your hands: a card going out, a new street */
         const sig = ((row.bo || []).length) + ':' + row.st;

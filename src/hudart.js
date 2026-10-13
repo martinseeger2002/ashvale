@@ -86,7 +86,11 @@
 .ash .chat .player{color:#7cf}
 .ash .bub{position:absolute;transform:translate(-50%,-100%);max-width:200px;padding:2px 7px;border-radius:7px;background:#0008;color:#ff0;font-size:12px;text-align:center;text-shadow:1px 1px 0 #000;pointer-events:none}
 .ash .chat{max-height:calc(5*1.3em + 12px);padding:5px 8px;background:#0007;border-radius:6px;font-size:12px;color:#fff;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer}
-.ash .chat.big{max-height:min(60%,260px);background:#000b;overflow:auto;justify-content:flex-start}
+.ash .chat > div{flex-shrink:0}   /* [Claude 2026-10-13] a wrapped line keeps its height: squeezed lines were drawn over each other (the operator) */
+.ash .chat.big{max-height:min(62vh,520px);background:#000c;overflow:auto;justify-content:flex-start}
+.ash .chatw.big{width:min(94vw,560px);z-index:25}
+.ash .chatw .chatx{position:absolute;left:0;top:-24px;padding:2px 10px;border-radius:6px 6px 0 0;background:#000a;color:#ffd23f;font:600 12px system-ui,sans-serif;cursor:pointer;pointer-events:auto}
+.ash .chat .table{color:#b8e6c4}
 @media (max-height:520px){.ash .inv{gap:2px}.ash .panel{padding:5px 6px}.ash .panel h4{margin-bottom:3px}.ash .chat{max-height:calc(3*1.3em + 10px);font-size:11px}.ash .chatw{width:min(40vw,360px)}}
 .ash .chat div{margin:1px 0;text-shadow:1px 1px 0 #000}
 .ash .chat .warn{color:#ff6a5a}.ash .chat .level{color:#7fd0ff}.ash .chat .trade{color:#ffd77a}.ash .chat .quest{color:#d9a0ff}.ash .chat .npc{color:#9cf}.ash .chat .sys{color:#ffcf3f}.ash .chat .dm{color:#ff9ce0}

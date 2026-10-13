@@ -2515,12 +2515,12 @@
     }
     function pokerSync(id, t) {   /* the dealer's copy into the row that travels: one shape, host and replica alike */
       const st = pokerOf(id);
-      if (t.log.length > 40) t.log.splice(0, t.log.length - 40);
+      if (t.log.length > 40) { t.logBase = (t.logBase | 0) + (t.log.length - 40); t.log.splice(0, t.log.length - 40); }
       st.v = (st.v | 0) + 1; st.mine = 1; st.o = t.status; st.st = t.street; st.d = t.dealer; st.sb = t.sbSeat; st.bb = t.bbSeat;
       st.p = t.pot | 0; st.b = t.bet | 0; st.a = t.toAct; st.h = t.hand | 0; st.bo = t.board.slice();
       st.se = t.seats.filter(s => s && s.id != null).map(s => [s.ref | 0, s.id, s.chips | 0, s.bet | 0,
         (s.in ? PK_IN : 0) | (s.folded ? PK_FOLD : 0) | (s.allin ? PK_ALLIN : 0) | ((s.hole && !s.out) ? PK_CARD : 0) | (s.acted ? PK_ACTED : 0) | (s.away ? PK_AWAY : 0)]);
-      st.lg = t.log.slice(-2).map(l => String(l.t || '').slice(0, 90));
+      st.lg = t.log.slice(-6).map(l => String(l.t || '').slice(0, 90)); st.lc = (t.logBase | 0) + t.log.length;   /* [Claude 2026-10-13] the last six lines and how many there have been: every copy writes the table's play into its chat (the operator) */
       st.r = t.result ? { p: t.result.pots.map(q => [q.amount | 0, (q.win || []).map(x => x | 0)]), c: t.result.contested ? 1 : 0, rk: t.result.raked | 0, sd: (t.result.shown || []).slice(0, 8) } : null;   /* sd [Claude]: the showdown, every hand shown face up with its name */
       st.mr = t.minRaise | 0; st.bg = t.big | 0;   /* [Claude] the least a raise can be, and the big blind: the panel's slider runs from the one to all-in */
       st.rk = t.raked | 0;   /* [Claude] what the house has taken at this table so far */
@@ -2683,7 +2683,7 @@
       for (const r of rows || []) {
         if (!r || !r.t) continue;
         const st = pokerOf(r.t), was = st.v;
-        for (const k of ['o', 'st', 'd', 'sb', 'bb', 'p', 'b', 'a', 'h', 'bo', 'se', 'lg', 'r', 'hc', 'buy', 'gid', 'co', 'cseq', 'mr', 'bg', 'rk']) if (r[k] !== undefined) st[k] = r[k];   /* mr, bg [Claude 2026-10-12]: the smallest raise and the big blind - without them every guest's panel said 'min 50' at a 1/2 table (the operator) */
+        for (const k of ['o', 'st', 'd', 'sb', 'bb', 'p', 'b', 'a', 'h', 'bo', 'se', 'lg', 'r', 'hc', 'buy', 'gid', 'co', 'cseq', 'mr', 'bg', 'rk', 'lc']) if (r[k] !== undefined) st[k] = r[k];   /* mr, bg [Claude 2026-10-12]: the smallest raise and the big blind - without them every guest's panel said 'min 50' at a 1/2 table (the operator) */
         if (r.v != null) st.v = r.v | 0;
         st.mine = 0;
         const T = pokerTableById(r.t);

@@ -138,7 +138,9 @@
       while (chat.children.length > 60) chat.removeChild(chat.firstChild);
       if (chat.classList.contains('big')) chat.scrollTop = chat.scrollHeight;
     }
-    chat.onclick = () => { chat.classList.toggle('big'); chat.scrollTop = chat.scrollHeight; };
+    /* [Claude 2026-10-13] tapping the chat opens it up (a separate button was dropped: the operator, "clicking the chat display does the same thing") */
+    const chatBig = (on) => { chat.classList.toggle('big', on); chatw.classList.toggle('big', on); chat.scrollTop = chat.scrollHeight; };
+    chat.onclick = () => chatBig(!chat.classList.contains('big'));
 
     /* ---------- options menu */
     function menu(x, y, opts) {

@@ -850,6 +850,7 @@
           case 'pstand': if (mine) pokerLeave(e.t); break;
           case 'poker': {
             if (SCENE.pokerShow) SCENE.pokerShow(e.t, pokerModel(e.t));
+            pokerChat(e.t);
             if (me.seat && me.seat.t === e.t && me.seat.k === 'pk') { pokerFx(e.t, e); if (hud.pokerUpdate) hud.pokerUpdate(pokerView(e.t)); }
             const T = core.pokerTableById(e.t); if (T && iHostAt(T.x, T.y)) netSendBig({ Pk: [pkNet(core.pokerRow(e.t))] });
             break;
@@ -2039,7 +2040,7 @@
         if (dmTo) { sendDm(dmTo[1], dmTo[2]); return; }
         if (text.startsWith('/@')) { hud.chat('To send a direct message: /@name your message', 'sys'); return; }
         hud.chat(me.name + ': ' + text, 'player'); speak(myEnt, text);
-        if (!room) hud.chat('(Nobody else can hear you: you are playing solo.)', 'sys'); else netSend({ t: text });
+        if (!room) hud.chat('(Nobody else can hear you: you are playing solo.)', 'sys'); else netSend(Object.assign({ t: text }, me.seat && me.seat.k === 'pk' ? { tb: me.seat.t } : {}));   /* tb [Claude 2026-10-13]: said at a card table - for that table only */
       }
       /* DIRECT MESSAGES (2026-10-07: "If you /@<tag> a direct message should be sent to them in game chat no distance
          limit"): into the recipient's own room 'one.<address>' - every signed-in game sits in it (the one-device rule) - so
@@ -2117,7 +2118,13 @@
         if ('k' in d) { const tl = typeof d.k === 'string' && /^[a-z0-9_]{1,24}$/.test(d.k) ? d.k : null; if (tl !== r.tool) { r.tool = tl; r.e.H.setTool && r.e.H.setTool(tl); } }
         if (d.T != null) r.total = Math.max(0, Math.min(9999, d.T | 0));
         if (d.n || d.T != null) { if (d.n) { r.name = cleanName(d.n); if (core.S.players[id]) core.setPuppet(id, { n: r.name }); } if (r.e.tag) setTag(r.e.tag, r.name, from, r.total); }
-        if (typeof d.t === 'string' && d.t.trim()) {
+        /* [Claude 2026-10-13] the operator: "when sitting at a poker table chat should be visible between those players at the table
+           only. Not the whole town or next table": a word said at a card table reaches that table only, and a player sitting
+           at one hears only it. The speaker's table is its own word (tb), or else where this game's rows seat it. */
+        const tbOf = () => { if (typeof d.tb === 'string') return d.tb; for (const T of core.pokerTables()) { const st = core.S.poker[T.id]; if (st && (st.se || []).some(x => x[1] === id)) return T.id; } return null; };
+        const myTb = me.seat && me.seat.k === 'pk' ? me.seat.t : null;
+        if (typeof d.t === 'string' && d.t.trim() && (myTb || typeof d.tb === 'string' || tbOf()) && tbOf() !== myTb) { /* not for this table: unheard */ }
+        else if (typeof d.t === 'string' && d.t.trim()) {
           /* chat is heard only near the speaker (2026-10-06: "only visible to players within a certain radius of each
              other ... doesn't reach all the way from Saltmere to Ashvale"): rules.chat.radius tiles, default 40 */
           const lp = Array.isArray(d.p) && isFinite(d.p[0]) ? { x: +d.p[0], z: +d.p[1] } : r.buf[r.buf.length - 1], CR = (DATA.rules && DATA.rules.chat && DATA.rules.chat.radius) || 40;
@@ -2853,11 +2860,24 @@
         }
         return { board: (st.bo || []).slice(), hands, bets, pot: st.p | 0, big: st.bg | 0, dealer: st.d >= 0 ? st.d : null, turn: st.a >= 0 && st.o === 'playing' && st.st !== 'none' ? st.a : null };
       }
+      const PK_LAST = {};
+      /* [Claude 2026-10-13] the operator: "Add the poker game history to the chat box". The dealer's own game already hears the table
+         (its core tells the players in the room); every other copy reads the row's last lines (lg) and their running count
+         (lc) and writes the ones it has not written yet - for a player at that table, or anyone standing on its floor. */
+      const PK_LC = {};
+      function pokerChat(t) {
+        const st = core.pokerOf(t), lc = st.lc | 0, lg = st.lg || [];
+        if (st.mine === 1 || !lc) { PK_LC[t] = lc; return; }
+        const T = core.pokerTableById(t), near = (me.seat && me.seat.t === t) || (T && (T.lv | 0) === (me.lv | 0) && Math.max(Math.abs(T.x - me.x), Math.abs(T.y - me.y)) < 12);
+        const seen = PK_LC[t]; PK_LC[t] = lc;
+        if (!near || seen == null || lc <= seen) return;
+        for (const line of lg.slice(Math.max(0, lg.length - Math.min(lg.length, lc - seen)))) hud.chat(line, 'table');
+      }
       function pokerView(t) {   /* the panel's view of the table, all of it out of the row it was sent */
         const st = core.pokerOf(t), s = me.seat && me.seat.t === t ? me.seat.s | 0 : -1, mine = pokerSeatOf(st, s);
         const f = mine ? mine[4] | 0 : 0, dealt = !!((f & PKF[3]) && !(f & PKF[1])), call = Math.max(0, (st.b | 0) - ((mine && mine[3]) | 0));
         const live = st.o === 'playing' && st.st !== 'none', hh = (st.hc || []).find(x => (x[0] | 0) === s);
-        return {
+        const v = {
           t, seat: s, me: PID, hand: st.h | 0, street: st.st, open: !live, pot: st.p | 0, bet: st.b | 0, dealer: st.d, turn: st.a, buy: st.buy | 0,   /* [Claude] the buy-in, for the panel */
           seats: (st.se || []).map(x => ({ ref: x[0] | 0, id: x[1], name: pokerWho(x[1]), chips: x[2] | 0, bet: x[3] | 0, folded: !!((x[4] | 0) & PKF[1]), allin: !!((x[4] | 0) & PKF[2]), dealt: !!((x[4] | 0) & PKF[3]), away: !!((x[4] | 0) & (PKF[5] || 32)) })),
           away: !!(mine && ((mine[4] | 0) & (PKF[5] || 32))),   /* [Claude] dealt out for sitting on a hand: the panel offers the way back */
@@ -2867,6 +2887,11 @@
           shown: st.r && st.r.sd ? st.r.sd.map(x => ({ ref: x[0] | 0, c: [x[1] | 0, x[2] | 0], name: String(x[3] || '') })) : [],   /* [Claude 2026-10-11] the showdown */
           min: Math.min((st.b | 0) + (st.mr | 0 || st.bg | 0 || 50), (st.b | 0) + ((mine && mine[2]) | 0)), big: st.bg | 0
         };
+        /* [Claude 2026-10-13] the last hand's result stays in the panel through the next hand (between hands it is up only
+           ~7 s, easy to miss on a phone - the operator: "not showing the results of the hand to all the players") */
+        if (st.r && st.st === 'none') PK_LAST[t] = { h: st.h | 0, result: v.result, shown: v.shown, winners: v.winners, seats: v.seats };
+        else if (PK_LAST[t] && PK_LAST[t].h === (st.h | 0) - 1) v.last = PK_LAST[t];
+        return v;
       }
       function pokerFx(t, row) {   /* the small sound of the felt changing under your hands: a card going out, a new street */
         const sig = ((row.bo || []).length) + ':' + row.st;

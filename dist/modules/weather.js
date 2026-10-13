@@ -10,10 +10,6 @@
                                          and sky that come with it - not as translucent particles
      W.update(dt)                        once a frame, after the camera has settled: moves the particles, fades, re-anchors
      W.focus(vector3)                    the player's feet, every frame: the fog sheets lie at heights above it
-     W.indoor(true|false)               under a roof or out from under one: the drops and the drifting sheets are put
-                                        out while it is true, so weather does not fall on your head indoors. The sky
-                                        colour, the fog distance and the bank ahead are untouched - the street outside
-                                        is still what the windows and the door look at
      W.state() / W.dispose()             what it is showing now / take back every object the module added
    The KIND table is plain data: everything a kind looks like (sky colour, fog distance, how many particles, how fast
    they fall, the wind, the bank of weather ahead of the player) sits in its own lines, so a new kind (sandstorm, ash
@@ -68,12 +64,6 @@
     if (!scene.fog) { scene.fog = new THREE.Fog(baseSky.getHex(), base.near, base.far); madeFog = true; }
 
     let kind = 'clear', intensity = 0, p = 1;               /* what was asked for, and how far the fade has got (1 = there) */
-    /* Shelter, from W.indoor(true/false) - engine.js says it the moment you cross a doorway. shelter eases towards what
-       was asked so walking in thins the weather over about a second instead of emptying the sheet in one frame; dry is
-       what the drops in the air and the fog sheets are multiplied by. The sky colour, the fog distance and the bank of
-       weather on the horizon are NOT dried - through the door and the windows you are still looking at that weather, and
-       the room must not sit in a different world from the street. */
-    let shelter = 0, shelterWant = 0, dry = 1;
     const cur = sample('clear', 0), from = sample('clear', 0), tgt = sample('clear', 0);
 
     /* one frame of numbers for "this kind at this strength", always measured from the clear day the scene started with */
@@ -238,7 +228,6 @@
       if (p < 1) p = Math.min(1, p + Math.min(raw, FADE) / FADE);
       const s = p * p * (3 - 2 * p);                        /* smoothstep, so it eases in and settles */
       for (let k = 0; k < FIELDS.length; k++) { const f = FIELDS[k]; cur[f] = from[f] + (tgt[f] - from[f]) * s; }
-      shelter += (shelterWant - shelter) * (1 - Math.exp(-d / 0.4)); dry = 1 - shelter;
 
       /* the box that carries the particles hangs on the camera: its floor is under the ground in front of the
          player, its roof a little over their head, so they are always inside the weather. It is centred a little way
@@ -255,8 +244,8 @@
       if (rain && rain.visible) stepRain(d, H, rad);
       if (snow && snow.visible) stepSnow(d, H, rad);
       if (!feetSet) feet.set(camera.position.x, camera.position.y - 9, camera.position.z);
-      sheets.visible = cur.sheets * dry > 0.02;
-      if (sheets.visible) { sheetMat.uniforms.alpha.value = 0.62 * cur.sheets * dry; sheetMat.uniforms.t.value = t; sheetMat.uniforms.tint.value.setRGB(cur.sr, cur.sg, cur.sb); stepSheets(d); }
+      sheets.visible = cur.sheets > 0.02;
+      if (sheets.visible) { sheetMat.uniforms.alpha.value = 0.62 * cur.sheets; sheetMat.uniforms.t.value = t; sheetMat.uniforms.tint.value.setRGB(cur.sr, cur.sg, cur.sb); stepSheets(d); }
 
       skyNow.setRGB(cur.sr, cur.sg, cur.sb);
       if (scene.fog) { scene.fog.color.copy(skyNow); scene.fog.near = cur.near; scene.fog.far = cur.far; }
@@ -279,10 +268,9 @@
 
     function stepRain(d, H, R) {
       const K = KIND.rain, wx = K.wind[0], wz = K.wind[1], sx = wx / K.fall, sz = wz / K.fall;   /* sx/sz: the slant */
-      const live = Math.min(RK, Math.round(RK * cur.rain * dry));    /* how much of the sheet is in the air. Strength is the
+      const live = Math.min(RK, Math.round(RK * cur.rain));    /* how much of the sheet is in the air. Strength is the
          fraction of drops falling, not how faint they are: half rain is half as many streaks at full brightness, which
-         reads as a lighter shower, whereas dimming the whole sheet reads as a screen filter and vanishes on a phone.
-         dry is the shelter from W.indoor: under a roof none of them are in the air, and they wait under the floor. */
+         reads as a lighter shower, whereas dimming the whole sheet reads as a screen filter and vanishes on a phone. */
       const pos = rain.geometry.attributes.position.array;
       for (let k = 0; k < RK; k++) {
         const o = k * 6, st = k * 4;
@@ -306,9 +294,8 @@
 
     function stepSnow(d, H, R) {
       const K = KIND.snow, wx = K.wind[0], wz = K.wind[1];
-      const live = Math.min(SK, Math.round(SK * cur.snow * dry));    /* the same rule as the rain: strength is how much of the
-         sheet is falling, so half snow is half as many flakes in the air, not the same flakes drawn fainter - and none
-         at all under a roof, for the same reason. */
+      const live = Math.min(SK, Math.round(SK * cur.snow));    /* the same rule as the rain: strength is how much of the
+         sheet is falling, so half snow is half as many flakes in the air, not the same flakes drawn fainter. */
       const pos = snow.geometry.attributes.position.array;
       for (let k = 0; k < SK; k++) {
         const o = k * 3, st = k * 4, ph = snowFlake[st + 2] + t * (0.5 + snowFlake[st + 1] * 0.35);
@@ -346,20 +333,14 @@
       kind = name; intensity = n; p = 0;
     }
 
-    /* Under a roof, or back out of one. engine.js's roofCheck says it the frame you cross a doorway. Only what falls
-       and what drifts through the air is put out - the sky colour, the fog distance and the bank of weather ahead stay,
-       because the weather outside is still what you are looking at through the door. */
-    function indoor(on) { if (!gone) shelterWant = on ? 1 : 0; }
-
     function state() {
       return {
         kind: kind, intensity: intensity, fade: p, gone: gone,
         fog: { near: cur.near, far: cur.far, sky: '#' + skyNow.getHexString() },
         amounts: { rain: cur.rain, snow: cur.snow, bank: cur.balpha },
         /* in the air, which below full strength is fewer than the cloud holds - the rest wait under the ground */
-        parts: { rain: rain && rain.visible ? Math.min(RK, Math.round(RK * cur.rain * dry)) : 0,
-                 snow: snow && snow.visible ? Math.min(SK, Math.round(SK * cur.snow * dry)) : 0 },
-        indoor: shelter,                                   /* how far under a roof W.indoor has put the player, 0..1 */
+        parts: { rain: rain && rain.visible ? Math.min(RK, Math.round(RK * cur.rain)) : 0,
+                 snow: snow && snow.visible ? Math.min(SK, Math.round(SK * cur.snow)) : 0 },
         draws: (rain && rain.visible ? 1 : 0) + (snow && snow.visible ? 1 : 0) + (bank.visible ? 1 : 0) + (sheets.visible ? 1 : 0),
         sheets: sheets.visible ? SHN : 0
       };
@@ -385,7 +366,7 @@
     }
 
     set('clear', 0, { instant: true });
-    return { api: 1, KIND: KIND, set: set, update: update, state: state, indoor: indoor, dispose: dispose, focus: focus };
+    return { api: 1, KIND: KIND, set: set, update: update, state: state, dispose: dispose, focus: focus };
   }
 
 
