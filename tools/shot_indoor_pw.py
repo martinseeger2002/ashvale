@@ -6,16 +6,18 @@ must not fall on your head.
 The sun half is proved by comparison, not by eye. The camera never draws the roof while you are inside it, so the room
 in the photograph is the same room either way; what has to differ is the LIGHT. The fix moves the hidden roof to the
 SHADOWED layer, which the sun's shadow camera sees and no camera draws; the bug it replaces set visible=false, which
-took the pieces out of the shadow map as well. So this photographs the room both ways, in both orders, and measures the
-middle of the picture: with the roof still blocking the sun the room must be clearly darker. That control is the old
-code itself - rf.g.visible = false, which the module no longer touches anywhere, so writing it from here is exactly the
-state the bug was.
+took the pieces out of the shadow map as well. So this photographs the room both ways, three times over, and measures the
+brightest tenth of the middle of the picture: taking the roof out of the shadow map must light up a patch of it. That
+control is the old code itself - rf.g.visible = false, which the module no longer touches anywhere, so writing it from
+here is exactly the state the bug was.
 
-The sky is driven with ?timelapse (the game's own knob, as tests/watch_dragon_keep_pw.py uses it) and the test waits for
-the middle of the day, because at night the sun is not the thing lighting the room and a low sun sends the light in
-through the door. The weather half is a second page at normal speed: the game's rule side puts the weather away in a
-time-lapse (engine.js: TL.n > 1), and the weather half needs the real thing. It reads the module: under a roof no drops
-are in the air and no fog sheets are up (shelter 1), out in the street they are (shelter 0).
+The sky is parked in the middle of a day with ?skyday (the game's own knob, src/engsky.js), which moves the sun without
+speeding the clock up - a time-lapse would move the light between the two halves of a pair and, worse, the rule side
+puts the weather away when TL.n > 1 (engine.js), and the weather half needs the real thing. Sunlight matters because at
+night the sun is not what lights the room, and a low sun sends the light in through the door.
+
+The weather half is a second page: under a roof no drops are in the air and no fog sheets are up (shelter 1), out in the
+street they are (shelter 0), with the shelter eased and waited for - see settle().
 
 Usage: tools/shot_indoor_pw.py  (server: python3 -m http.server 8731 in ~/ashvale3d)
 Shots in tests/shots/indoor_*.png"""
@@ -23,6 +25,8 @@ import json
 import os
 import time
 from io import BytesIO
+from PIL import Image
+import numpy as np
 from playwright.sync_api import sync_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); OUT = os.path.join(ROOT, 'tests', 'shots')
@@ -32,7 +36,6 @@ ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshade
         '--disable-dev-shm-usage']
 SHOP = (10, 44, 3.1416, 0.42, 9.0)        # the General Store's floor, looking north along the room
 DOOR = (10, 48, 3.1416, 0.30, 13.0)       # opposite pavement, the whole shop front and the ground beside it
-DARK = 0.94                              # how much darker the room must be with the roof still blocking the sun
 SUN_UP = 1.6                             # sun.intensity is 0.5 + 1.8 x the day factor while the sun is up: 1.6 is well up
 
 # What the scene graph says about the roof over our head: is it still a shadow caster, does the main camera draw any of
@@ -72,14 +75,18 @@ def free_gb():
 
 
 def grey(pg, name):
-    """Mean brightness of the middle of the picture - the room, not the frame around it. Both halves of a pair are the
-    same geometry from the same pixel, so the only thing that moves this number is the light."""
+    """The picture as a luminance array, saved as the shot. Kept as pixels, not one number: the sunbeam is a patch of
+    light in a dim room, and a patch shows in the bright tail of the picture long before it shows in the average."""
     png = pg.screenshot(path=os.path.join(OUT, 'indoor_%s.png' % name))
-    from PIL import Image
-    import numpy as np
     a = np.asarray(Image.open(BytesIO(png)).convert('L'), dtype=float)
     h, w = a.shape
-    return float(a[int(h * 0.3):int(h * 0.7), int(w * 0.3):int(w * 0.7)].mean())
+    return a[int(h * 0.28):int(h * 0.72), int(w * 0.26):int(w * 0.74)]
+
+
+def lit(a):
+    """Mean of the brightest tenth of the room. A sunbeam landing on the floor and the furniture is exactly that: the
+    top of the histogram. The average of the whole middle hides it under the walls the sun never touched."""
+    return float(np.sort(a.ravel())[int(a.size * 0.9):].mean())
 
 
 def open_page(b, extra=''):
@@ -106,25 +113,33 @@ def place(pg, spot, weather=None):
         pg.wait_for_timeout(250)
 
 
-def wait_day(pg, upto=280):
-    """Wait for the middle of the day: sun.intensity is 0.5 + 1.8 x the day factor while the sun is up and <= 0.26 at
-    night, so reading it is reading the light that is actually falling on the room, not a clock."""
-    for _ in range(upto):
+def day_page(b, upto=9):
+    """A page whose sky is standing in the middle of a day. ?skyday=D moves only this viewer's sun along a game day
+    (7200 s, src/engsky.js) and leaves the clock at normal speed, so nothing moves between two photographs of a pair.
+    Which offset lands in daylight depends on the real time of day the machine happens to be in, so try them in turn and
+    keep the first that is bright. The light is judged by sun.intensity - 0.5 + 1.8 x the day factor while the sun is up,
+    at most 0.26 at night - and not by ASH.sky().up, because up is read from the unshifted clock (sunAt(Date.now()) in
+    src/engsky.js) and says "night" while the sky overhead is noon."""
+    for k in range(1, 10 * upto + 1, 10):
+        pg = open_page(b, '&skyday=%g' % (k / 10.0))
         st = ev(pg, 'ASH.sky()') or {}
+        print('     skyday +%g: sun %.2f hemi %.2f %s' % (k / 10.0, st.get('sun', -9), st.get('hemi', -9),
+                                                          'daytime' if st.get('sun', 0) >= SUN_UP else 'dark'), flush=True)
         if st.get('sun', 0) >= SUN_UP:
-            return st
-        pg.wait_for_timeout(1000)
+            return pg
+        pg.close()
     return None
 
 
-def wait_wx(pg, upto=40000):
-    """Wait for the module's own cross-fade, not for a wall clock: the fade counts the dt it is handed and a frame under
-    SwiftShader is long. Under a roof the drops are put out, so the fade arriving means the weather is up outside and we
-    are simply out of it."""
+def settle(pg, want, upto=90):
+    """Wait for the shelter to actually arrive, not for a wall clock. The module eases it over about half a second of
+    update() time and SwiftShader hands it few frames, so the first reading after a doorway is often mid-fade - 0.9 of
+    the way in, which still leaves a hundred flakes over your head. want is the state the page should end up in."""
     st = ev(pg, 'ASH.wx()')
-    for _ in range(upto // 200):
+    for _ in range(upto * 5):
         st = ev(pg, 'ASH.wx()')
-        if st.get('fade', 1) >= 1:
+        got = st.get('indoor', -9)
+        if st.get('fade', 1) >= 1 and (got >= 0.999 if want else got <= 0.01):
             return st
         pg.wait_for_timeout(200)
     return st
@@ -151,20 +166,18 @@ with sync_playwright() as p:
         time.sleep(20)
     b = p.chromium.launch(args=ARGS)
 
-    # ---- 1. the sun, in the middle of a day driven 20 times fast (a game day is 20 s of wall clock, so between two
-    # photographs of a pair the light barely moves)
-    pg = open_page(b, '&timelapse=20')
-    st = wait_day(pg)
-    if not st:
-        print('FAILED: never got daytime with the sky driven at 20x', flush=True)
+    # ---- 1. the sun, at midday. ?skyday moves this viewer's sky along and the clock then runs at normal speed, so the
+    # light stands still while the photographs are taken (a time-lapse would also put the weather away: engine.js, TL.n>1)
+    pg = day_page(b)
+    if pg is None:
+        print('FAILED: no skyday offset landed in daytime', flush=True)
         b.close(); raise SystemExit(1)
-    print('     daytime: sun %.2f hemi %.2f, shadow camera layer mask %s' % (
-        st['sun'], st['hemi'], (ev(pg, DIAG) or {}).get('sh')), flush=True)
+    print('     shadow camera layer mask %s' % (ev(pg, DIAG) or {}).get('sh'), flush=True)
     place(pg, DOOR)
     d = ev(pg, DIAG)
     g = grey(pg, 'outside_clear')
     good = bool(d['roofs']) and d['roofs'][0]['drawn'] == d['roofs'][0]['n'] and d['roofs'][0]['shaded'] == d['roofs'][0]['n']
-    line('outside clear', d, 'PASS' if good else 'FAIL', 'mid grey %.1f' % g)
+    line('outside clear', d, 'PASS' if good else 'FAIL', 'brightest tenth %.1f' % lit(g))
     if not good:
         fails.append('outside: a roof the sun should block with is not drawn and in the shadow map as it was')
 
@@ -177,58 +190,51 @@ with sync_playwright() as p:
     if not good:
         fails.append('inside: the hidden roof is not (group on, drawn by no camera, a shadow caster, in the shadow map)')
 
-    pairs = []
-    for order in (0, 1):                                   # both orders: if only one way round shows it, it is the clock
-        if order == 0:
-            fixed = grey(pg, 'inside_fixed_a'); ev(pg, BUG % 'false'); pg.wait_for_timeout(700)
-            bug = grey(pg, 'inside_roof_dropped_a')
+    deltas = []
+    for k in range(3):                                     # three pairs: the machine is busy, so one pair proves little
+        a = grey(pg, 'inside_fixed%d' % k)
+        ev(pg, BUG % 'false'); pg.wait_for_timeout(700)    # the old hiding: out of the shadow map as well
+        c = grey(pg, 'inside_roof_dropped%d' % k)
+        ev(pg, BUG % 'true'); pg.wait_for_timeout(700)
+        more = int(np.count_nonzero(c - a > 30))
+        less = int(np.count_nonzero(a - c > 30))
+        deltas.append((lit(c) - lit(a), more))
+        print('     pair %d: brightest tenth %.1f with the roof keeping the sun out, %.1f with it out of the shadow map; '
+              '%d pixels lit up by taking the roof away, %d by putting it back' % (k, lit(a), lit(c), more, less), flush=True)
+    if deltas:
+        gain = sorted(d for d, _ in deltas)[len(deltas) // 2]
+        pixels = sorted(m for _, m in deltas)[len(deltas) // 2]
+        print('     median: taking the roof out of the shadow map brightens %d pixels by %.1f levels - the room is '
+              'being shaded by a roof you cannot see' % (pixels, gain), flush=True)
+        if gain < 3 or pixels < 300:
+            fails.append('the hidden roof is barely shading the room (%d pixels, %.1f levels) - either the fix is off '
+                         'or the comparison does not bite here' % (pixels, gain))
         else:
-            ev(pg, BUG % 'true'); pg.wait_for_timeout(700); fixed = grey(pg, 'inside_fixed_b')
-            ev(pg, BUG % 'false'); pg.wait_for_timeout(700); bug = grey(pg, 'inside_roof_dropped_b')
-            ev(pg, BUG % 'true')
-        pairs.append((fixed, bug))
-        print('     %s: room %.1f with the roof blocking the sun, %.1f with it out of the shadow map - %.0f%% darker'
-              % ('fixed first' if order == 0 else 'bug first', fixed, bug, (1 - fixed / bug) * 100), flush=True)
-    for fixed, bug in pairs:
-        if fixed > bug * DARK:
-            fails.append('the hidden roof still lets the sun in (%.1f vs %.1f)' % (fixed, bug))
-    if pairs and all(f <= g * DARK for f, g in pairs):
-        print('     the sunbeam through the taken-away roof is gone: PASS', flush=True)
+            print('     the sun is stopped by the roof that is not drawn: PASS', flush=True)
     ev(pg, BUG % 'true')
     pg.close()
 
-    # ---- 2. the weather, at normal speed
+    # ---- 2. the weather. The game's rule side turns rain into snow in the cold months (engine.js seasonal()), so what
+    # is asserted is the number of drops in the air, whichever kind the season chose.
     pg = open_page(b)
-    place(pg, SHOP, 'rain')
-    wait_wx(pg); pg.wait_for_timeout(1500)
-    d = ev(pg, DIAG)
-    wx = d['wx']
-    good = d['inside'] and wx['parts']['rain'] == 0 and wx['sheets'] == 0 and wx.get('indoor', 0) > 0.9
-    line('inside rain', d, 'PASS' if good else 'FAIL')
-    if not good:
-        fails.append('indoors in rain: %d rain drops, %d sheets, shelter %.2f'
-                     % (wx['parts']['rain'], wx['sheets'], wx.get('indoor', -9)))
-    grey(pg, 'inside_rain')
-
-    place(pg, DOOR, 'rain')
-    wait_wx(pg); pg.wait_for_timeout(1500)
-    d = ev(pg, DIAG)
-    wx = d['wx']
-    good = not d['inside'] and wx['parts']['rain'] > 0 and wx.get('indoor', 1) < 0.1
-    line('outside rain', d, 'PASS' if good else 'FAIL')
-    if not good:
-        fails.append('outside in rain: %d rain drops, shelter %.2f' % (wx['parts']['rain'], wx.get('indoor', -9)))
-    grey(pg, 'outside_rain')
-
-    place(pg, SHOP, 'snow')
-    wait_wx(pg); pg.wait_for_timeout(1500)
-    d = ev(pg, DIAG)
-    wx = d['wx']
-    good = d['inside'] and wx['parts']['snow'] == 0 and wx['parts']['rain'] == 0
-    line('inside snow', d, 'PASS' if good else 'FAIL')
-    if not good:
-        fails.append('indoors in snow: %d flakes' % wx['parts']['snow'])
-    grey(pg, 'inside_snow')
+    for spot, kind, inb in ((SHOP, 'rain', True), (DOOR, 'rain', False), (SHOP, 'snow', True), (DOOR, 'snow', False)):
+        place(pg, spot, kind)
+        wx = settle(pg, 1 if inb else 0)
+        d = ev(pg, DIAG)
+        wx = d['wx']
+        drops = wx['parts']['rain'] + wx['parts']['snow']
+        if inb:
+            good = d['inside'] and drops == 0 and wx['sheets'] == 0 and wx.get('indoor', 0) > 0.999
+            note = 'shelter %.4f' % wx.get('indoor', -9)
+        else:
+            good = not d['inside'] and drops > 0 and wx.get('indoor', 1) < 0.01
+            note = 'shelter %.4f' % wx.get('indoor', -9)
+        line('%s %s%s' % ('inside' if inb else 'outside', wx.get('kind', kind), ' (asked ' + kind + ')' if wx.get('kind') != kind else ''),
+             d, 'PASS' if good else 'FAIL', note)
+        if not good:
+            fails.append('%s under %s: %d drops, %d sheets, shelter %.4f'
+                         % ('indoors' if inb else 'outside', wx.get('kind', kind), drops, wx['sheets'], wx.get('indoor', -9)))
+        grey(pg, '%s_%s' % ('inside' if inb else 'outside', wx.get('kind', kind)))
 
     print('     fps %s' % json.dumps(ev(pg, 'ASH.fps()')), flush=True)
     errs = pg.errs

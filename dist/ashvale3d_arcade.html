@@ -17804,7 +17804,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         return [pt[0], pt[1]];
       }
       const PH = {}, PH_SENT = {};   /* the dealer's sealed set per table: {h, items: [[ref, blob]...]} - sent on its own small message (Ph) */
-      function phSend(t, force) { const P = PH[t]; if (!P || !P.done) return; const now = performance.now(); if (!force && now - (PH_SENT[t] || 0) < 3000) return; PH_SENT[t] = now; netSend({ Ph: [t, P.h, MYPK, P.items] }); }
+      function phSend(t, force) { const P = PH[t]; if (!P || !P.done) return; const now = performance.now(); if (!force && now - (PH_SENT[t] || 0) < 3000) return; PH_SENT[t] = now; netSendBig({ Ph: [t, P.h, MYPK, P.items] }); }
       const bounded = (m, n) => { while (m.size > n) m.delete(m.keys().next().value); };
       const SCORE_KEYS = ['chain_dragon', 'chess_wins'], SCORE_BOARD = { chain_dragon: 'dragon', chess_wins: 'chess' };   /* [Claude 2026-10-11] score key -> the sign it paints */
       /* 2026-10-12 (the operator: "the bank is the only thing that stores the high score and it doesn't get the high score from
@@ -18339,7 +18339,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           case 'chess': {   /* a table changed: lay the pieces out for everyone near, tell the seated player's board, and (as host) tell the room */
             if (SCENE.chessApply) SCENE.chessApply(e.t, e.fen, e.move || null);
             if (me.seat && me.seat.t === e.t) { if (e.move) sfx('click'); if (e.move) CHESS_SEL = null; markBoard(e.t); if (hud.chessUpdate) hud.chessUpdate(chessView(e.t)); }   /* [Claude] the opponent's pick lights here too */
-            const T = core.tableById(e.t); if (T && iHostAt(T.x, T.y)) netSend({ Ch: [netRow(core.chessRow(e.t))] });
+            const T = core.tableById(e.t); if (T && iHostAt(T.x, T.y)) netSendBig({ Ch: [netRow(core.chessRow(e.t))] });
             break;
           }
           case 'xsit': netSend({ CS: [e.t, e.s | 0, e.stake | 0] }); break;   /* [Claude] the stake the first sitter sets rides along */
@@ -18354,7 +18354,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           case 'poker': {
             if (SCENE.pokerShow) SCENE.pokerShow(e.t, pokerModel(e.t));
             if (me.seat && me.seat.t === e.t && me.seat.k === 'pk') { pokerFx(e.t, e); if (hud.pokerUpdate) hud.pokerUpdate(pokerView(e.t)); }
-            const T = core.pokerTableById(e.t); if (T && iHostAt(T.x, T.y)) netSend({ Pk: [pkNet(core.pokerRow(e.t))] });
+            const T = core.pokerTableById(e.t); if (T && iHostAt(T.x, T.y)) netSendBig({ Pk: [pkNet(core.pokerRow(e.t))] });
             break;
           }
           case 'xpsit': netSend({ PS: [e.t, e.s | 0, e.stake | 0, e.pk || ''] }); break;   /* [Claude] the buy-in the first sitter sets rides along */
@@ -19490,6 +19490,25 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       const outQ = [];
       const pureState = o => o.p && !o.M && !o.E && !o.F && !o.G && o.A === undefined && o.C === undefined && !o.X && !o.g && !o.o && !o.t;
       let DROP_NEXT = null;   /* tests: lose the next message carrying this key (a lost packet) */
+      /* [Claude 2026-10-13] A ROOM MESSAGE IS AT MOST 500 BYTES and netSend drops a bigger one without a word. A card table's
+         row grows with its players (4 players: 553, 8: 808 - the result of a hand the biggest of all) and the sealed hole
+         cards with every seat, so at a full table the result never reached anyone but the dealer (the operator: "it is still
+         sometimes freezing up and not showing the results of the hand to all the players"). netSendBig sends a message that
+         fits as it is, and a bigger one as numbered pieces {BIG: [id, i, n, text]} that onNet puts back together. */
+      let bigSeq = Math.floor(Math.random() * 1e6);
+      const utf8 = s => { try { return new TextEncoder().encode(s).length; } catch (e) { return s.length * 3; } };
+      function netSendBig(o, R) {
+        let s; try { s = JSON.stringify(o); } catch (e) { return false; }
+        if (utf8(s) <= 490) return netSend(o, R);
+        const id = bigSeq = (bigSeq + 1) % 1e9, parts = [];
+        for (let i = 0; i < s.length;) {
+          let n = Math.min(360, s.length - i);
+          while (n > 20 && utf8(JSON.stringify({ BIG: [id, 999, 999, s.slice(i, i + n)] })) > 490) n -= 30;
+          parts.push(s.slice(i, i + n)); i += n;
+        }
+        for (let i = 0; i < parts.length; i++) netSend({ BIG: [id, i, parts.length, parts[i]] }, R);
+        return true;
+      }
       function netSend(o, R) {   /* R: a neighbour room (viewer presence); default the main room. One budget for both */
         if (DROP_NEXT && o && o[DROP_NEXT] !== undefined) { DROP_NEXT = null; return; }
         if (!room) return false; R = R || null;
@@ -19569,8 +19588,19 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       }
       const setKey = o => JSON.stringify(Object.keys(o || {}).filter(k => o[k] != null && o[k] !== '').sort().map(k => [k, o[k]]));
       const sameSet = (a, b) => setKey(a) === setKey(b);
+      const BIGIN = new Map();
       function onNet(ev, via) {   /* via: the neighbour room it came through, if any */
         const from = ev.from, id = from.id, d = ev.data && typeof ev.data === 'object' ? ev.data : {}; let r = remotes.get(id);
+        if (Array.isArray(d.BIG) && d.BIG.length === 4) {   /* [Claude 2026-10-13] a piece of a big message (netSendBig): whole, it is heard as itself */
+          const [bid, bi, bn, bc] = d.BIG, k = id + ':' + bid, now = performance.now();
+          if (!(bn > 0 && bn <= 64 && bi >= 0 && bi < bn && typeof bc === 'string')) return;
+          for (const [kk, B] of BIGIN) if (now - B.t > 30000) BIGIN.delete(kk);
+          const B = BIGIN.get(k) || { n: bn, parts: {}, t: now }; B.parts[bi] = bc; BIGIN.set(k, B);
+          if (Object.keys(B.parts).length < B.n) return;
+          BIGIN.delete(k); let o; try { o = JSON.parse(Array.from({ length: B.n }, (_, j) => B.parts[j]).join('')); } catch (e) { return; }
+          if (o && typeof o === 'object' && !o.BIG) onNet({ from, data: o }, via);
+          return;
+        }
         if (id === myNetId) return;   /* ourselves, heard through another room */
         if (d.tr) { if (d.to === myNetId && trade && !via) trade.onMessage(from, d.tr); return; }   /* a trade window message, for us only */
         if (!r && !d.p && !d.g && !d.n && !d.M && !d.E && !d.F) { /* first contact carries state soon */ }
@@ -19783,8 +19813,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         }
         const Fi = core.S.fires.filter(f => iHostAt(f.x, f.y)).map(f => [f.uid, f.x, f.y, f.until - core.S.t, f.log]);
         if (Fi.length) packSend({ F: seq }, 'Fi', Fi);
-        const Ch = core.chessRows((x, y) => iHostAt(x, y)).map(netRow); if (Ch.length) packSend({ F: seq }, 'Ch', Ch);   /* the chess park's tables this game hosts */
-        const Pk = core.pokerRows((x, y) => iHostAt(x, y)).map(pkNet); if (Pk.length) packSend({ F: seq }, 'Pk', Pk);   /* and the felt in the tap room */
+        const Ch = core.chessRows((x, y) => iHostAt(x, y)).map(netRow); for (const r of Ch) netSendBig({ F: seq, Ch: [r] });   /* the chess park's tables this game hosts */
+        const Pk = core.pokerRows((x, y) => iHostAt(x, y)).map(pkNet); for (const r of Pk) netSendBig({ F: seq, Pk: [r] });   /* one row a message, split if it is big (packSend could not split one row) */   /* and the felt in the tap room */
         for (const r of Pk) phSend(r.t, false);   /* [Claude 2026-10-12] the sealed hole cards again, every few seconds, for whoever just joined */
         const Pl = [];
         for (const a of hosted) for (const r of core.plantSnap(a)) Pl.push(r);
