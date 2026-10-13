@@ -54,6 +54,20 @@ def chips(pg): return ev(pg, '(function(){var s=%s,m=(s.se||[]).find(x=>x[1]===A
 def act(pg, a, to=None): ev(pg, 'ASH.core.cmd("me", %s)' % json.dumps({'c': 'pact', 'a': a, **({'to': to} if to is not None else {})}))
 def sit(pg, seat, buy): ev(pg, 'ASH.core.cmd("me", %s)' % json.dumps({'c': 'sit', 'table': T, 'seat': seat, 'buy': buy}))
 def stand(pg): ev(pg, 'ASH.core.cmd("me", {c: "stand"})')
+def bens_turn(pa, pb, t=90):
+    """a live hand with Ben to act: whatever else is in the way is checked/called (Ann) or folded out"""
+    t0 = time.time()
+    while time.time() - t0 < t:
+        if ev(pb, S('.st') + " !== 'none' && " + S('.a') + ' === ASH.me.seat.s'): return True
+        if ev(pa, S('.st') + " !== 'none'") and turn(pa): act(pa, 'call' if row(pa, 'b') > ev(pa, '(function(){var s=%s,m=(s.se||[]).find(x=>x[1]===ASH.pid);return m?m[3]:0})()' % S('')) else 'check')
+        time.sleep(0.6)
+    return False
+def finish_hand(pa, pb, t=60):
+    t0 = time.time()
+    while time.time() - t0 < t and ev(pa, S('.st') + " !== 'none'"):
+        for pg in (pa, pb):
+            if turn(pg): act(pg, 'fold'); break
+        time.sleep(0.6)
 BTNS = '!!document.querySelector(".pokerp [data-a=fold]")'
 def new_hand(pa, pb, H):
     return wait(pa, S('.h') + ' > %d && ' % H + S('.st') + " === 'preflop'", 60) and wait(pb, S('.h') + ' > %d && ' % H + S('.st') + " === 'preflop'", 30)
@@ -104,8 +118,34 @@ with sync_playwright() as p:
         sd = row(pb, 'r')['sd'] if row(pb, 'r') else []
         check(len(sd) == 2, '  a called river: both hands are shown (%d)' % len(sd))
         if n < 2: check(new_hand(pa, pb, H), '  the table deals the next hand')
+    # [2026-10-13] the operator, stuck on Call / Raise / Fold after an all-in: the table must never freeze on a lost message,
+    # a dealer that forgot a guest's seat flag, or a dealer page that stopped running
+    H = row(pa, 'h'); check(new_hand(pa, pb, H), 'a fresh hand for the freeze checks')
+    wait(pb, S('.a') + ' === ASH.me.seat.s', 30) or (act(pa, 'call' if row(pa, 'b') else 'check'), wait(pb, S('.a') + ' === ASH.me.seat.s', 20))
+    k0 = ev(pb, 'JSON.stringify(%s)' % S('.v'))
+    ev(pb, 'ASH._dropNext("PA")'); ev(pb, 'ASH._pokerView && 0'); ev(pb, 'document.querySelector(".pokerp [data-a=call], .pokerp [data-a=check]").click()')
+    check(wait(pb, 'ASH._pokerView(%s).pending' % json.dumps(T), 3), "  Ben's action is lost on the way: his panel waits instead of offering the same buttons")
+    check(wait(pb, '!ASH._pokerView(%s).pending' % json.dumps(T), 15) and ev(pb, 'JSON.stringify(%s)' % S('.v')) != k0, '  it is sent again and the table moves on')
+    # the dealer made Ben anew, with no seat flag: his actions still count
+    if not ev(pa, S('.st') + " === 'none'"):
+        wait(pb, S('.a') + ' === ASH.me.seat.s', 20) or (act(pa, 'call' if row(pa, 'b') else 'check'), wait(pb, S('.a') + ' === ASH.me.seat.s', 20))
+        bid = ev(pb, 'ASH.net().myId'); ev(pa, 'ASH.core.S.players[%s].seat = null' % json.dumps(bid)); v1 = row(pa, 'v')
+        act(pb, 'call' if row(pb, 'b') else 'check')
+        check(wait(pa, S('.v') + ' !== %s' % v1, 10), '  a guest without a seat flag on the dealer: the action still counts')
+    # the dealer's page stops running (a phone locked, a tab in the background): Ben's table must not stay frozen
+    check(bens_turn(pa, pb), 'a live hand with Ben to act, for the frozen-dealer check')
+    cdp = ctx.new_cdp_session(pa); cdp.send('Page.setWebLifecycleState', {'state': 'frozen'})
+    check(wait(pb, '!(ASH._pokerView(%s).myTurn) || !ASH.me.seat || %s' % (json.dumps(T), S(".st === 'none'")), 75), "  Ann's page freezes: within the minute Ben's table is not stuck on its buttons")
+    check(wait(pb, '!ASH.me.seat || ' + S(".o") + " !== 'playing' || " + S('.mine') + ' === 1', 30), '  Ben takes over the table or is cashed out of it')
+    cdp.send('Page.setWebLifecycleState', {'state': 'active'}); time.sleep(8)
+    for pg in (pa, pb):
+        if ev(pg, '!!(ASH.me.seat && ASH.me.seat.k === "pk")'): stand(pg)
+    check(wait(pa, '!ASH.me.seat', 20) and wait(pb, '!ASH.me.seat', 20), '  both can stand up afterwards')
+    sit(pa, 0, 100); sit(pb, 1, 100)
+    check(wait(pa, 'ASH.me.seat && ASH.me.seat.k === "pk"', 40) and wait(pb, 'ASH.me.seat && ASH.me.seat.k === "pk"', 40), '  and sit down again')
+    check(wait(pa, S('.st') + " === 'preflop'", 40) and wait(pb, S('.st') + " === 'preflop'", 40), '  and the table deals again')
     # a river bet that is folded to: nobody shows
-    H = row(pa, 'h'); check(new_hand(pa, pb, H), 'the next hand')
+    finish_hand(pa, pb); H = row(pa, 'h'); check(new_hand(pa, pb, H), 'the next hand')
     check(play_hand(pa, pb, 'fold'), 'hand %d: a river bet, folded to' % row(pa, 'h'))
     check(wait(pb, S('.st') + " === 'none' && " + S('.r'), 10) and not (row(pb, 'r') or {}).get('sd'), '  uncalled: no hand is shown')
     for pg, nm in ((pa, 'Ann'), (pb, 'Ben')):

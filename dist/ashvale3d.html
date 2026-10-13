@@ -9450,20 +9450,21 @@ POSSIBILITY OF SUCH DAMAGE. */
       const pots = [];
       if (left.length <= 1) {   /* nobody to show down against - the pot, uncalled money included, goes across */
         const w = left[0] || who.find(s => !s.folded);
-        if (w && T.pot > 0) { const cut = Math.floor(T.pot * (T.rake || 0)), paid = T.pot - cut; T.raked = (T.raked | 0) + cut; w.chips += paid; w.won += paid; pots.push({ amount: paid, rake: cut, win: [w.ref], who: [w.name], note: 'uncontested' }); }
+        if (w && T.pot > 0) { const others = who.filter(s => s !== w).reduce((m, s) => Math.max(m, s.committed | 0), 0), back = Math.max(0, (w.committed | 0) - others), cut = Math.floor((T.pot - back) * (T.rake || 0)), paid = T.pot - cut;   /* [Claude 2026-10-13] the house cuts only what was called, never your own bet coming back */ T.raked = (T.raked | 0) + cut; w.chips += paid; w.won += paid; pots.push({ amount: paid, rake: cut, win: [w.ref], who: [w.name], note: 'uncontested' }); }
       } else {
         const lv = []; for (const s of who) if (s.committed > 0 && lv.indexOf(s.committed) < 0) lv.push(s.committed);
         lv.sort((a, b) => a - b);
         let prev = 0;
         for (const L of lv) {
           let amt = 0; for (const s of who) amt += Math.max(0, Math.min(s.committed, L) - prev);
-          if (amt > 0) pots.push({ amount: amt, elig: who.filter(s => !s.folded && s.committed >= L) });
+          if (amt > 0) pots.push({ amount: amt, elig: who.filter(s => !s.folded && s.committed >= L), from: who.filter(s => s.committed > prev).length });
           prev = L;
         }
         let sum = 0; for (const p of pots) sum += p.amount;
         if (sum !== T.pot && pots.length) pots[pots.length - 1].amount += T.pot - sum;   /* never lose a chip to rounding */
         for (const p of pots) {
-          const cut = Math.floor(p.amount * (T.rake || 0)); p.rake = cut; p.amount -= cut; T.raked = (T.raked | 0) + cut;   /* [Claude] the house's cut, before the pot is shared */
+          const back = p.elig && p.elig.length === 1 && p.from === 1;   /* [Claude 2026-10-13] a layer only its own owner put money in: an uncalled all-in coming back, uncut */
+          const cut = back ? 0 : Math.floor(p.amount * (T.rake || 0)); p.rake = cut; p.amount -= cut; T.raked = (T.raked | 0) + cut;   /* [Claude] the house's cut, before the pot is shared */
           const e = p.elig && p.elig.length ? p.elig : left.slice(0, 1);
           let top = -1; for (const s of e) if (s.score > top) top = s.score;
           const w = e.filter(s => s.score === top);
@@ -9471,7 +9472,7 @@ POSSIBILITY OF SUCH DAMAGE. */
           for (const x of w) { x.chips += share; x.won += share; }
           let odd = p.amount - share * w.length;
           if (odd > 0) { const first = w.slice().sort(byBtn)[0]; first.chips += odd; first.won += odd; }
-          p.win = w.map(x => x.ref); p.who = w.map(x => x.name); p.score = top; delete p.elig;
+          p.win = w.map(x => x.ref); p.who = w.map(x => x.name); p.score = top; if (back) p.note = 'uncalled, returned'; delete p.elig; delete p.from;
         }
         for (const s of left.slice().sort((a, b) => b.score - a.score))
           T.say((s.name || 'A player') + ': ' + s.hole.map(cname).join(' ') + ' - ' + describe(s.rank) + '.', 'sys');
@@ -12185,7 +12186,13 @@ POSSIBILITY OF SUCH DAMAGE. */
       if (!p.seat) { const m = (pokerOf(id).se || []).find(x => x && x[1] === pid); if (m) p.seat = { t: id, s: m[0] | 0, k: 'pk' }; }
       if (p.seat && p.seat.t === id) pokerLeave(p);
     }
-    function hostPokerAct(pid, id, a, to) { const p = S.players[pid]; return !!p && pokerAct(p, id, String(a || ''), to | 0); }
+    function hostPokerAct(pid, id, a, to) {
+      const p = S.players[pid]; if (!p) return false;
+      /* [Claude 2026-10-13] the table is the word (as hostPokerStand): a dealer that made this guest anew after a room hiccup
+         has no seat flag on it, and every call/fold/raise it sent was refused - the hand froze on its turn (the operator) */
+      if (!p.seat || p.seat.t !== id) { const m = (pokerOf(id).se || []).find(x => x && x[1] === pid); if (m) p.seat = { t: id, s: m[0] | 0, k: 'pk' }; }
+      return pokerAct(p, id, String(a || ''), to | 0);
+    }
     function applyPoker(rows) {   /* the dealer's word on its tables: the row, and our own seat follows it, as in chess */
       for (const r of rows || []) {
         if (!r || !r.t) continue;
@@ -16456,7 +16463,8 @@ POSSIBILITY OF SUCH DAMAGE. */
     function statusOf(v) {
       if (v.open) return { cls: 'wait', text: v.seats.length > 1 ? 'The table is dealing the next hand' : 'Waiting for players to take chairs' };
       const t = v.seats.find(s => s.ref === v.turn);
-      if (v.myTurn) return { text: 'Your turn' + (v.call > 0 ? ' — call ' + v.call : ' — check') };
+      if (v.myTurn && v.pending) return { cls: 'wait', text: 'Sent - waiting for the table…' };   /* [Claude 2026-10-13] */
+      if (v.myTurn) return { text: 'Your turn' + (v.call > 0 ? ' — call ' + Math.min(v.call, v.stack) + (v.call > v.stack ? ' (all-in)' : '') : ' — check') };
       if (v.inHand && v.call > 0 && t) return { cls: 'wait', text: esc(t.name) + (t.allin ? ' is all-in' : ' bets ' + v.bet) };
       if (t) return { cls: 'wait', text: esc(t.name) + ' to act' };
       return { cls: 'wait', text: (STREET[v.street] || v.street || '') + (v.hand ? ' — hand ' + v.hand : '') };
@@ -16491,7 +16499,7 @@ POSSIBILITY OF SUCH DAMAGE. */
         + '<div class="stt ' + (st.cls || '') + '">' + st.text + '</div>'
         + '<div class="cards">' + (v.hole ? cardTxt(v.hole[0]) + cardTxt(v.hole[1]) : (v.inHand ? cardTxt(null) + cardTxt(null) : '<span style="font-size:12px;color:#9aa79c">not in this hand</span>'))
         + (v.board.length ? '<span style="margin:0 4px;color:#8fa08c">|</span>' + v.board.map(cardTxt).join('') : '') + '</div>'
-        + '<div class="pot">pot ' + pot + (v.bet ? ' · to call ' + v.bet : ' · nobody to beat') + (mine ? ' · your chips ' + mine.chips : '') + '</div>'
+        + '<div class="pot">pot ' + pot + (v.inHand && v.call > 0 ? ' · you owe ' + Math.min(v.call, v.stack) : v.bet ? ' · bet ' + v.bet : ' · nobody to beat') + (mine ? ' · your chips ' + mine.chips : '') + '</div>'
         + (winTxt(v) ? '<div class="win">' + winTxt(v) + '</div>' + showdownHtml(v) : '')
         + (raise && amounts.length ? '' : '<div class="lg">' + v.log.map(esc).join('<br>') + '</div>')
         + (v.away ? '<div class="stt wait">You are dealt out (a minute on your hand). Tap to come back.</div>' : '')   /* [Claude] */
@@ -16499,8 +16507,8 @@ POSSIBILITY OF SUCH DAMAGE. */
         + '<input type="range" min="' + lo + '" max="' + hi + '" step="1" value="' + raiseTo + '" data-sl>'
         + '<div class="qk"><button class="btn" data-q="' + lo + '">min ' + lo + '</button>' + (potR > lo && potR < hi ? '<button class="btn" data-q="' + potR + '">pot ' + potR + '</button>' : '') + '<button class="btn" data-q="' + hi + '">all-in ' + hi + '</button>'
         + '<button class="btn" data-to style="margin-left:auto;background:#5a4a1c;color:#ffe2a8">Raise to <span data-amt2>' + raiseTo + '</span></button></div></div>'
-        + '<div class="btns">' + (v.away ? '<button class="btn" data-a="back">I\'m back</button>' : '') + (v.myTurn ? '<button class="btn" data-a="fold">Fold</button>'
-          + '<button class="btn" data-a="' + (v.call > 0 ? 'call' : 'check') + '">' + (v.call > 0 ? 'Call ' + v.call : 'Check') + '</button>'
+        + '<div class="btns">' + (v.away ? '<button class="btn" data-a="back">I\'m back</button>' : '') + (v.myTurn && !v.pending ? '<button class="btn" data-a="fold">Fold</button>'
+          + '<button class="btn" data-a="' + (v.call > 0 ? 'call' : 'check') + '">' + (v.call > 0 ? (v.call >= v.stack ? 'Call all-in ' + v.stack : 'Call ' + v.call) : 'Check') + '</button>'
           + (amounts.length ? '<button class="btn" data-r>Raise</button><button class="btn" data-a="allin">All-in</button>' : '') : '')
         + '<button class="btn" data-a="stand">' + (v.inHand && !v.open ? 'Fold & stand' : 'Stand up') + '</button></div>'
       for (const b of box.querySelectorAll('[data-a]')) b.onclick = () => { const a = b.dataset.a; raise = false; if (a === 'stand') { if (cb && cb.stand) cb.stand(); } else if (cb && cb.act) cb.act(a); api.sfx && api.sfx('click'); };
@@ -18069,6 +18077,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
                                          and sky that come with it - not as translucent particles
      W.update(dt)                        once a frame, after the camera has settled: moves the particles, fades, re-anchors
      W.focus(vector3)                    the player's feet, every frame: the fog sheets lie at heights above it
+     W.indoor(true|false)               under a roof or out from under one: the drops and the drifting sheets are put
+                                        out while it is true, so weather does not fall on your head indoors. The sky
+                                        colour, the fog distance and the bank ahead are untouched - the street outside
+                                        is still what the windows and the door look at
      W.state() / W.dispose()             what it is showing now / take back every object the module added
    The KIND table is plain data: everything a kind looks like (sky colour, fog distance, how many particles, how fast
    they fall, the wind, the bank of weather ahead of the player) sits in its own lines, so a new kind (sandstorm, ash
@@ -18123,6 +18135,12 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
     if (!scene.fog) { scene.fog = new THREE.Fog(baseSky.getHex(), base.near, base.far); madeFog = true; }
 
     let kind = 'clear', intensity = 0, p = 1;               /* what was asked for, and how far the fade has got (1 = there) */
+    /* Shelter, from W.indoor(true/false) - engine.js says it the moment you cross a doorway. shelter eases towards what
+       was asked so walking in thins the weather over about a second instead of emptying the sheet in one frame; dry is
+       what the drops in the air and the fog sheets are multiplied by. The sky colour, the fog distance and the bank of
+       weather on the horizon are NOT dried - through the door and the windows you are still looking at that weather, and
+       the room must not sit in a different world from the street. */
+    let shelter = 0, shelterWant = 0, dry = 1;
     const cur = sample('clear', 0), from = sample('clear', 0), tgt = sample('clear', 0);
 
     /* one frame of numbers for "this kind at this strength", always measured from the clear day the scene started with */
@@ -18287,6 +18305,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       if (p < 1) p = Math.min(1, p + Math.min(raw, FADE) / FADE);
       const s = p * p * (3 - 2 * p);                        /* smoothstep, so it eases in and settles */
       for (let k = 0; k < FIELDS.length; k++) { const f = FIELDS[k]; cur[f] = from[f] + (tgt[f] - from[f]) * s; }
+      shelter += (shelterWant - shelter) * (1 - Math.exp(-d / 0.4)); dry = 1 - shelter;
 
       /* the box that carries the particles hangs on the camera: its floor is under the ground in front of the
          player, its roof a little over their head, so they are always inside the weather. It is centred a little way
@@ -18303,8 +18322,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       if (rain && rain.visible) stepRain(d, H, rad);
       if (snow && snow.visible) stepSnow(d, H, rad);
       if (!feetSet) feet.set(camera.position.x, camera.position.y - 9, camera.position.z);
-      sheets.visible = cur.sheets > 0.02;
-      if (sheets.visible) { sheetMat.uniforms.alpha.value = 0.62 * cur.sheets; sheetMat.uniforms.t.value = t; sheetMat.uniforms.tint.value.setRGB(cur.sr, cur.sg, cur.sb); stepSheets(d); }
+      sheets.visible = cur.sheets * dry > 0.02;
+      if (sheets.visible) { sheetMat.uniforms.alpha.value = 0.62 * cur.sheets * dry; sheetMat.uniforms.t.value = t; sheetMat.uniforms.tint.value.setRGB(cur.sr, cur.sg, cur.sb); stepSheets(d); }
 
       skyNow.setRGB(cur.sr, cur.sg, cur.sb);
       if (scene.fog) { scene.fog.color.copy(skyNow); scene.fog.near = cur.near; scene.fog.far = cur.far; }
@@ -18327,9 +18346,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
 
     function stepRain(d, H, R) {
       const K = KIND.rain, wx = K.wind[0], wz = K.wind[1], sx = wx / K.fall, sz = wz / K.fall;   /* sx/sz: the slant */
-      const live = Math.min(RK, Math.round(RK * cur.rain));    /* how much of the sheet is in the air. Strength is the
+      const live = Math.min(RK, Math.round(RK * cur.rain * dry));    /* how much of the sheet is in the air. Strength is the
          fraction of drops falling, not how faint they are: half rain is half as many streaks at full brightness, which
-         reads as a lighter shower, whereas dimming the whole sheet reads as a screen filter and vanishes on a phone. */
+         reads as a lighter shower, whereas dimming the whole sheet reads as a screen filter and vanishes on a phone.
+         dry is the shelter from W.indoor: under a roof none of them are in the air, and they wait under the floor. */
       const pos = rain.geometry.attributes.position.array;
       for (let k = 0; k < RK; k++) {
         const o = k * 6, st = k * 4;
@@ -18353,8 +18373,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
 
     function stepSnow(d, H, R) {
       const K = KIND.snow, wx = K.wind[0], wz = K.wind[1];
-      const live = Math.min(SK, Math.round(SK * cur.snow));    /* the same rule as the rain: strength is how much of the
-         sheet is falling, so half snow is half as many flakes in the air, not the same flakes drawn fainter. */
+      const live = Math.min(SK, Math.round(SK * cur.snow * dry));    /* the same rule as the rain: strength is how much of the
+         sheet is falling, so half snow is half as many flakes in the air, not the same flakes drawn fainter - and none
+         at all under a roof, for the same reason. */
       const pos = snow.geometry.attributes.position.array;
       for (let k = 0; k < SK; k++) {
         const o = k * 3, st = k * 4, ph = snowFlake[st + 2] + t * (0.5 + snowFlake[st + 1] * 0.35);
@@ -18392,14 +18413,20 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       kind = name; intensity = n; p = 0;
     }
 
+    /* Under a roof, or back out of one. engine.js's roofCheck says it the frame you cross a doorway. Only what falls
+       and what drifts through the air is put out - the sky colour, the fog distance and the bank of weather ahead stay,
+       because the weather outside is still what you are looking at through the door. */
+    function indoor(on) { if (!gone) shelterWant = on ? 1 : 0; }
+
     function state() {
       return {
         kind: kind, intensity: intensity, fade: p, gone: gone,
         fog: { near: cur.near, far: cur.far, sky: '#' + skyNow.getHexString() },
         amounts: { rain: cur.rain, snow: cur.snow, bank: cur.balpha },
         /* in the air, which below full strength is fewer than the cloud holds - the rest wait under the ground */
-        parts: { rain: rain && rain.visible ? Math.min(RK, Math.round(RK * cur.rain)) : 0,
-                 snow: snow && snow.visible ? Math.min(SK, Math.round(SK * cur.snow)) : 0 },
+        parts: { rain: rain && rain.visible ? Math.min(RK, Math.round(RK * cur.rain * dry)) : 0,
+                 snow: snow && snow.visible ? Math.min(SK, Math.round(SK * cur.snow * dry)) : 0 },
+        indoor: shelter,                                   /* how far under a roof W.indoor has put the player, 0..1 */
         draws: (rain && rain.visible ? 1 : 0) + (snow && snow.visible ? 1 : 0) + (bank.visible ? 1 : 0) + (sheets.visible ? 1 : 0),
         sheets: sheets.visible ? SHN : 0
       };
@@ -18425,7 +18452,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
     }
 
     set('clear', 0, { instant: true });
-    return { api: 1, KIND: KIND, set: set, update: update, state: state, dispose: dispose, focus: focus };
+    return { api: 1, KIND: KIND, set: set, update: update, state: state, indoor: indoor, dispose: dispose, focus: focus };
   }
 
 
@@ -21492,6 +21519,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       const sun = new THREE.DirectionalLight(0xfff0d6, 2.3);
       sun.castShadow = settings.shadows; sun.shadow.mapSize.set(isPhone ? 1024 : 2048, isPhone ? 1024 : 2048);
       const sc = sun.shadow.camera; sc.left = -15; sc.right = 15; sc.top = 15; sc.bottom = -15; sc.near = 1; sc.far = 60; sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.03;
+      /* SHADOWED is the layer of what the player must not see but the sun must still be blocked by - the roof that is
+         taken away while you are inside (roofCheck). No camera is given this layer, the sun's shadow camera is, so the
+         pieces draw nowhere and fall into the shadow map exactly as if they were on screen. */
+      const SHADOWED = 1; sc.layers.enable(SHADOWED);
       scene.add(sun, sun.target);
 
       /* ---------- world regions (one per zone module), streamed in/out by distance; with seeded land also the 64 m
@@ -22351,7 +22382,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       function faceNpc(id) { const nd = NPCN[id]; if (nd && nd.still) return;   /* a wreck or a body does not turn to look at you (2026-10-07) */
         const n = ents.get('n:' + id); if (n) { n.tyaw = Math.atan2(myEnt.to.x - n.to.x, myEnt.to.z - n.to.z); n.facing = 1; } }
       function npcsTurnBack() { for (const n of core.M.npcs) { const e = ents.get('n:' + n.id); if (e && e.facing && e.homeYaw != null && !n.patrol && !n.guard && Math.max(Math.abs(n.x - me.x), Math.abs(n.y - me.y)) > 6) { e.facing = 0; e.tyaw = e.homeYaw; } } }   /* back to their own spot once you walk off */
-      let insideRoof = false;
+      let indoors = false;
       /* [Claude 2026-10-11] the floor bar (Downstairs / Upstairs buttons) is gone (the operator: "Remove the upstairs downstairs
          hud buttons completely the stairs work fine"): you climb by tapping the stairs. PageUp / PageDown still climb, for keyboards. */
       let floorKey = '';
@@ -22364,22 +22395,34 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (B && B.deck && !deckHint) { deckHint = true; hud.chat('The castle walls can be walked: tap any flight of stone steps inside the walls (two are beside the gate) to climb up. On the wall, tap where to go; tap the top of the steps to come down.', 'info'); }
       }
       let stairHint = false, deckHint = false;
+      /* A roof taken away while you are inside must still keep the sun out (2026-10-13: "when the roof is removed
+         because the player walks in then the sun shines through the opening where the roof was"). visible = false would
+         also take it out of the shadow map, so the hidden pieces go to the SHADOWED layer instead: no camera draws that
+         layer, the sun's shadow camera does. The room keeps the shade it has with the roof on, and the strip of roof
+         shadow beside the house stops appearing and vanishing as you walk in and out. Nothing extra is drawn and no
+         material is touched, so scene.js's shared materials still compile once. */
+      function shadeGroup(g, hide) {
+        if (!g || !!g.userData.shut === hide) return;
+        g.userData.shut = hide;
+        g.traverse(o => o.layers.set(hide ? SHADOWED : 0));
+      }
       function roofCheck() {
         floorBarCheck();
         if (!stairHint && (me.lv || 0) > 0 && !(me.bld >= 0 && core.M.buildings[me.bld] && core.M.buildings[me.bld].deck)) { stairHint = true; hud.chat('Upstairs. The way down is the opening in the floor with the amber arrow - tap it.', 'info'); }
         let inside = false;
         let inRf = null;
         for (const r of regions) if (r.built) for (const rf of r.built.roofs) if (me.x >= rf.x0 && me.x <= rf.x1 && me.y >= rf.y0 && me.y <= rf.y1) { inside = true; inRf = rf; }
-        /* inside a building: the roof and every storey above your floor are see-through; your floor and those below stay */
-        const lvNow = me.lv || 0, key = inside ? (inRf.x0 + ',' + inRf.y0 + ':' + lvNow) : '';
-        if (key !== insideRoof) {
-          insideRoof = key;
-          for (const r of regions) if (r.built) for (const rf of r.built.roofs) {
-            const here = rf === inRf;
-            rf.g.visible = !here;
-            if (rf.storeys) rf.storeys.forEach((sg, i) => { sg.visible = !here || i + 1 <= lvNow; });
-          }
+        /* inside a building: the roof and every storey above your floor are see-through; your floor and those below stay.
+           shadeGroup is self-healing - if a chunk is rebuilt under a building we are standing in, its fresh groups carry
+           no shut flag, so this same call puts them back on the SHADOWED layer a frame later. */
+        const lvNow = me.lv || 0;
+        for (const r of regions) if (r.built) for (const rf of r.built.roofs) {
+          const here = rf === inRf;
+          shadeGroup(rf.g, here);
+          const ss = rf.storeys;
+          for (let i = 0; ss && i < ss.length; i++) shadeGroup(ss[i], here && i + 1 > lvNow);
         }
+        if (inside !== indoors) { indoors = inside; if (wxMod && wxMod.indoor) wxMod.indoor(inside); }   /* no rain on your head indoors */
       }
 
       /* ---------- little particle bursts (level up, respawn) */
@@ -23129,7 +23172,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
          a newer pure position state replaces a queued older one */
       const outQ = [];
       const pureState = o => o.p && !o.M && !o.E && !o.F && !o.G && o.A === undefined && o.C === undefined && !o.X && !o.g && !o.o && !o.t;
+      let DROP_NEXT = null;   /* tests: lose the next message carrying this key (a lost packet) */
       function netSend(o, R) {   /* R: a neighbour room (viewer presence); default the main room. One budget for both */
+        if (DROP_NEXT && o && o[DROP_NEXT] !== undefined) { DROP_NEXT = null; return; }
         if (!room) return false; R = R || null;
         try { if (new TextEncoder().encode(JSON.stringify(o)).length > 500) return false; } catch (e) { return false; }
         if (pureState(o)) { const i = outQ.findIndex(w => w.R === R && pureState(w.o)); if (i >= 0) { outQ[i].o = o; return true; } }
@@ -23973,7 +24018,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           seats: (st.se || []).map(x => ({ ref: x[0] | 0, id: x[1], name: pokerWho(x[1]), chips: x[2] | 0, bet: x[3] | 0, folded: !!((x[4] | 0) & PKF[1]), allin: !!((x[4] | 0) & PKF[2]), dealt: !!((x[4] | 0) & PKF[3]), away: !!((x[4] | 0) & (PKF[5] || 32)) })),
           away: !!(mine && ((mine[4] | 0) & (PKF[5] || 32))),   /* [Claude] dealt out for sitting on a hand: the panel offers the way back */
           board: (st.bo || []).slice(), hole: hh && typeof hh[1] === 'number' ? [hh[1] | 0, hh[2] | 0] : null,
-          log: (st.lg || []).slice(), result: st.r, inHand: dealt, myTurn: live && dealt && (st.a | 0) === s, call, stack: (mine && mine[2]) | 0,
+          log: (st.lg || []).slice(), result: st.r, inHand: dealt, myTurn: live && dealt && (st.a | 0) === s, call, stack: (mine && mine[2]) | 0, pending: !!PK_PEND[t],
           winners: st.r ? st.r.p.map(q => q[1]).reduce((a, b) => a.concat(b), []) : [],
           shown: st.r && st.r.sd ? st.r.sd.map(x => ({ ref: x[0] | 0, c: [x[1] | 0, x[2] | 0], name: String(x[3] || '') })) : [],   /* [Claude 2026-10-11] the showdown */
           min: Math.min((st.b | 0) + (st.mr | 0 || st.bg | 0 || 50), (st.b | 0) + ((mine && mine[2]) | 0)), big: st.bg | 0
@@ -24010,6 +24055,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (st.o !== 'playing' || st.st === 'none') { hud.chat('Nothing is on the felt at the moment.', 'sys'); return; }
         if ((st.a | 0) !== (me.seat.s | 0)) { hud.chat('It is not your turn yet.', 'sys'); return; }
         send({ c: 'pact', a: String(a), to: to == null ? undefined : to | 0 });
+        if (a !== 'back') { const now = performance.now(); PK_PEND[t] = { a: String(a), to: to == null ? undefined : to | 0, key: pkKey(st), at: now, first: now, tries: 0 }; }
         if (hud.pokerUpdate) hud.pokerUpdate(pokerView(t));
       }
       /* [Claude 2026-10-12] the operator: the turn ring "should also be a visual timer for that player's turn to act ... like a clock
@@ -24017,15 +24063,34 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
          to the player whose turn it is". Each copy times the turn from the moment it sees it change (the dealer folds a seat
          after the table's clock, PK_CLOCK ticks); the beep is a local sound, once a second, for the one whose turn it is. */
       const PKT = {}, PK_SECS = ((core.pokerClockTicks ? core.pokerClockTicks() : 100) * 600) / 1000;
+      /* [Claude 2026-10-13] the operator: "it stayed on the call raise fold menu and never switched over to showing the results ...
+         even when the timer ran out it still stayed stuck". After you act the panel waits ("waiting for the table") instead
+         of offering the same buttons; the action is sent again if the table has not moved in 6 s (a lost message), and if
+         the table stays silent - your action unanswered for 20 s, or nobody's turn moving for the table's whole clock and
+         20 s more - this page reconnects to the room, which hands it the table as it really is (or, if the dealer is gone,
+         a fresh table with your stack cashed out). */
+      const PK_PEND = {}, PK_STALE = {};
+      const pkKey = st => (st.h | 0) + ':' + st.st + ':' + st.a + ':' + (st.b | 0) + ':' + (st.p | 0) + ':' + (st.se || []).map(x => x[0] + '.' + x[2] + '.' + x[3]).join(',');
+      function pkRescue(t, why) {
+        delete PK_PEND[t]; PK_STALE[t] = 1;
+        hud.chat('The card table stopped answering (' + why + ') - reconnecting to the room.', 'sys');
+        if (room) netDrop('the card table stopped answering', false);
+      }
       function pokerClock(now) {
         if (!SCENE.pokerTimer) return;
         for (const T of core.pokerTables()) {
           const st = core.S.poker[T.id];
+          const pend = PK_PEND[T.id];
+          if (pend && st && pkKey(st) !== pend.key) { delete PK_PEND[T.id]; if (hud.pokerUpdate && me.seat && me.seat.t === T.id) hud.pokerUpdate(pokerView(T.id)); }
+          else if (pend && now - pend.first > 20000) pkRescue(T.id, 'your ' + pend.a + ' was never answered');
+          else if (pend && now - pend.at > 6000 && pend.tries < 2) { pend.tries++; pend.at = now; send({ c: 'pact', a: pend.a, to: pend.to }); }
           if (!st || st.o !== 'playing' || st.st === 'none' || !(st.a >= 0)) { delete PKT[T.id]; continue; }
           const key = (st.h | 0) + ':' + st.st + ':' + st.a + ':' + (st.b | 0) + ':' + (st.p | 0);
           let k = PKT[T.id]; if (!k || k.key !== key) k = PKT[T.id] = { key, t0: now, beeped: 99 };
           const left = Math.max(0, PK_SECS - (now - k.t0) / 1000);
           SCENE.pokerTimer(T.id, left / PK_SECS);
+          const seatedHere = me.seat && me.seat.k === 'pk' && me.seat.t === T.id;
+          if (seatedHere && st.mine !== 1 && !PK_STALE[T.id + ':' + k.key] && now - k.t0 > (PK_SECS + 20) * 1000) { PK_STALE[T.id + ':' + k.key] = 1; pkRescue(T.id, 'the turn never moved'); }
           const mine = me.seat && me.seat.k === 'pk' && me.seat.t === T.id && (st.a | 0) === (me.seat.s | 0);
           if (mine && left > 0 && left <= 10) { const sec = Math.ceil(left); if (sec < k.beeped) { k.beeped = sec; sfx('beep'); } }
         }
@@ -24087,7 +24152,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         wx: () => Object.assign({ season: SEASON.name, snowy: SEASON.snowy }, wxMod && wxMod.state ? wxMod.state() : {}),
         progInfo: () => { const P = renderer.info.programs || [], I = renderer.info; return { n: P.length, calls: I.render.calls, tris: I.render.triangles, geos: I.memory.geometries, tex: I.memory.textures, applyMs: SEASON.applyMs, applies: SEASON.applies }; },
         tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },
-        pokerNetRow: t => pkNet(core.pokerRow(t)), _pokerModel: t => pokerModel(t), _pokerView: t => pokerView(t), _pokerClock: () => JSON.parse(JSON.stringify(PKT)), solitaire: () => openSolitaire(), pokerKey: () => MYPK, pokerSealed: t => PH[t] || null,   /* [Claude 2026-10-12] tests: the row as it leaves this dealer */   /* a test taps a thing as a player would (first option) */
+        pokerNetRow: t => pkNet(core.pokerRow(t)), _pokerModel: t => pokerModel(t), _pokerView: t => pokerView(t), _pokerClock: () => JSON.parse(JSON.stringify(PKT)), solitaire: () => openSolitaire(), _dropNext: k => { DROP_NEXT = k; }, pokerKey: () => MYPK, pokerSealed: t => PH[t] || null,   /* [Claude 2026-10-12] tests: the row as it leaves this dealer */   /* a test taps a thing as a player would (first option) */
         travelShown: () => { const el = host.querySelector('.travel'); return el && el.style.display !== 'none' ? el.className + ' | ' + el.querySelector('.tt').textContent : null; },
         say, store, models: MOD, allowedAsset, wallet: walletApi(DATA.items.items), walletState: () => walletState, walletRefresh,
         chestEventForTest: chestEvent,

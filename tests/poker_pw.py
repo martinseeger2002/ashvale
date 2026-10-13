@@ -110,9 +110,9 @@ with sync_playwright() as p:
     check(first is not None, '%s is first to act' % (fw if first else 'nobody'))
     check(click(first, '.pokerp [data-a=fold]'), '%s folds' % fw)
     check(wait(first, S('.st') + ' === "none" && ' + S('.r'), 20) and wait(second, S('.st') + ' === "none" && ' + S('.r'), 20), 'the hand is over on both screens')
-    check(chips(second) == 1018 and chips(first) == 975, 'the other takes the blinds less the 10%% rake: 1018 against 975 (got %s / %s)' % (chips(second), chips(first)))   # [Claude] 75 in the pot, 7 to the house
+    check(chips(second) == 1020 and chips(first) == 975, 'the other takes the blinds less the 10%% rake on the called part (25 back uncut): 1020 against 975 (got %s / %s)' % (chips(second), chips(first)))   # [Claude 2026-10-13] the house cuts only called money   # [Claude] 75 in the pot, 7 to the house
     check(row(first, 'p') == 0 and row(second, 'p') == 0, 'the pot has been paid out')
-    check(('wins 68' in (ev(second, 'document.querySelector(".pokerp").textContent') or '')), 'the panel says who won it (68 after the rake)')
+    check(('wins 70' in (ev(second, 'document.querySelector(".pokerp").textContent') or '')), 'the panel says who won it (70 after the rake)')
     time.sleep(1); shot(first, 'pk_06_folded'); shot(second, 'pk_07_folded_other')
     # 5. the table's own clock deals the next hand. The two screenshots above take up to a minute under SwiftShader, which
     #    is the table's whole clock (PK_CLOCK): a hand dealt meanwhile may be half-way to folding whoever is to act, or

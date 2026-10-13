@@ -333,6 +333,10 @@
       const sun = new THREE.DirectionalLight(0xfff0d6, 2.3);
       sun.castShadow = settings.shadows; sun.shadow.mapSize.set(isPhone ? 1024 : 2048, isPhone ? 1024 : 2048);
       const sc = sun.shadow.camera; sc.left = -15; sc.right = 15; sc.top = 15; sc.bottom = -15; sc.near = 1; sc.far = 60; sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.03;
+      /* SHADOWED is the layer of what the player must not see but the sun must still be blocked by - the roof that is
+         taken away while you are inside (roofCheck). No camera is given this layer, the sun's shadow camera is, so the
+         pieces draw nowhere and fall into the shadow map exactly as if they were on screen. */
+      const SHADOWED = 1; sc.layers.enable(SHADOWED);
       scene.add(sun, sun.target);
 
       /* ---------- world regions (one per zone module), streamed in/out by distance; with seeded land also the 64 m
@@ -1192,7 +1196,7 @@
       function faceNpc(id) { const nd = NPCN[id]; if (nd && nd.still) return;   /* a wreck or a body does not turn to look at you (2026-10-07) */
         const n = ents.get('n:' + id); if (n) { n.tyaw = Math.atan2(myEnt.to.x - n.to.x, myEnt.to.z - n.to.z); n.facing = 1; } }
       function npcsTurnBack() { for (const n of core.M.npcs) { const e = ents.get('n:' + n.id); if (e && e.facing && e.homeYaw != null && !n.patrol && !n.guard && Math.max(Math.abs(n.x - me.x), Math.abs(n.y - me.y)) > 6) { e.facing = 0; e.tyaw = e.homeYaw; } } }   /* back to their own spot once you walk off */
-      let insideRoof = false;
+      let indoors = false;
       /* [Claude 2026-10-11] the floor bar (Downstairs / Upstairs buttons) is gone (the operator: "Remove the upstairs downstairs
          hud buttons completely the stairs work fine"): you climb by tapping the stairs. PageUp / PageDown still climb, for keyboards. */
       let floorKey = '';
@@ -1205,22 +1209,34 @@
         if (B && B.deck && !deckHint) { deckHint = true; hud.chat('The castle walls can be walked: tap any flight of stone steps inside the walls (two are beside the gate) to climb up. On the wall, tap where to go; tap the top of the steps to come down.', 'info'); }
       }
       let stairHint = false, deckHint = false;
+      /* A roof taken away while you are inside must still keep the sun out (2026-10-13: "when the roof is removed
+         because the player walks in then the sun shines through the opening where the roof was"). visible = false would
+         also take it out of the shadow map, so the hidden pieces go to the SHADOWED layer instead: no camera draws that
+         layer, the sun's shadow camera does. The room keeps the shade it has with the roof on, and the strip of roof
+         shadow beside the house stops appearing and vanishing as you walk in and out. Nothing extra is drawn and no
+         material is touched, so scene.js's shared materials still compile once. */
+      function shadeGroup(g, hide) {
+        if (!g || !!g.userData.shut === hide) return;
+        g.userData.shut = hide;
+        g.traverse(o => o.layers.set(hide ? SHADOWED : 0));
+      }
       function roofCheck() {
         floorBarCheck();
         if (!stairHint && (me.lv || 0) > 0 && !(me.bld >= 0 && core.M.buildings[me.bld] && core.M.buildings[me.bld].deck)) { stairHint = true; hud.chat('Upstairs. The way down is the opening in the floor with the amber arrow - tap it.', 'info'); }
         let inside = false;
         let inRf = null;
         for (const r of regions) if (r.built) for (const rf of r.built.roofs) if (me.x >= rf.x0 && me.x <= rf.x1 && me.y >= rf.y0 && me.y <= rf.y1) { inside = true; inRf = rf; }
-        /* inside a building: the roof and every storey above your floor are see-through; your floor and those below stay */
-        const lvNow = me.lv || 0, key = inside ? (inRf.x0 + ',' + inRf.y0 + ':' + lvNow) : '';
-        if (key !== insideRoof) {
-          insideRoof = key;
-          for (const r of regions) if (r.built) for (const rf of r.built.roofs) {
-            const here = rf === inRf;
-            rf.g.visible = !here;
-            if (rf.storeys) rf.storeys.forEach((sg, i) => { sg.visible = !here || i + 1 <= lvNow; });
-          }
+        /* inside a building: the roof and every storey above your floor are see-through; your floor and those below stay.
+           shadeGroup is self-healing - if a chunk is rebuilt under a building we are standing in, its fresh groups carry
+           no shut flag, so this same call puts them back on the SHADOWED layer a frame later. */
+        const lvNow = me.lv || 0;
+        for (const r of regions) if (r.built) for (const rf of r.built.roofs) {
+          const here = rf === inRf;
+          shadeGroup(rf.g, here);
+          const ss = rf.storeys;
+          for (let i = 0; ss && i < ss.length; i++) shadeGroup(ss[i], here && i + 1 > lvNow);
         }
+        if (inside !== indoors) { indoors = inside; if (wxMod && wxMod.indoor) wxMod.indoor(inside); }   /* no rain on your head indoors */
       }
 
       /* ---------- little particle bursts (level up, respawn) */
@@ -1970,7 +1986,9 @@
          a newer pure position state replaces a queued older one */
       const outQ = [];
       const pureState = o => o.p && !o.M && !o.E && !o.F && !o.G && o.A === undefined && o.C === undefined && !o.X && !o.g && !o.o && !o.t;
+      let DROP_NEXT = null;   /* tests: lose the next message carrying this key (a lost packet) */
       function netSend(o, R) {   /* R: a neighbour room (viewer presence); default the main room. One budget for both */
+        if (DROP_NEXT && o && o[DROP_NEXT] !== undefined) { DROP_NEXT = null; return; }
         if (!room) return false; R = R || null;
         try { if (new TextEncoder().encode(JSON.stringify(o)).length > 500) return false; } catch (e) { return false; }
         if (pureState(o)) { const i = outQ.findIndex(w => w.R === R && pureState(w.o)); if (i >= 0) { outQ[i].o = o; return true; } }
@@ -2814,7 +2832,7 @@
           seats: (st.se || []).map(x => ({ ref: x[0] | 0, id: x[1], name: pokerWho(x[1]), chips: x[2] | 0, bet: x[3] | 0, folded: !!((x[4] | 0) & PKF[1]), allin: !!((x[4] | 0) & PKF[2]), dealt: !!((x[4] | 0) & PKF[3]), away: !!((x[4] | 0) & (PKF[5] || 32)) })),
           away: !!(mine && ((mine[4] | 0) & (PKF[5] || 32))),   /* [Claude] dealt out for sitting on a hand: the panel offers the way back */
           board: (st.bo || []).slice(), hole: hh && typeof hh[1] === 'number' ? [hh[1] | 0, hh[2] | 0] : null,
-          log: (st.lg || []).slice(), result: st.r, inHand: dealt, myTurn: live && dealt && (st.a | 0) === s, call, stack: (mine && mine[2]) | 0,
+          log: (st.lg || []).slice(), result: st.r, inHand: dealt, myTurn: live && dealt && (st.a | 0) === s, call, stack: (mine && mine[2]) | 0, pending: !!PK_PEND[t],
           winners: st.r ? st.r.p.map(q => q[1]).reduce((a, b) => a.concat(b), []) : [],
           shown: st.r && st.r.sd ? st.r.sd.map(x => ({ ref: x[0] | 0, c: [x[1] | 0, x[2] | 0], name: String(x[3] || '') })) : [],   /* [Claude 2026-10-11] the showdown */
           min: Math.min((st.b | 0) + (st.mr | 0 || st.bg | 0 || 50), (st.b | 0) + ((mine && mine[2]) | 0)), big: st.bg | 0
@@ -2851,6 +2869,7 @@
         if (st.o !== 'playing' || st.st === 'none') { hud.chat('Nothing is on the felt at the moment.', 'sys'); return; }
         if ((st.a | 0) !== (me.seat.s | 0)) { hud.chat('It is not your turn yet.', 'sys'); return; }
         send({ c: 'pact', a: String(a), to: to == null ? undefined : to | 0 });
+        if (a !== 'back') { const now = performance.now(); PK_PEND[t] = { a: String(a), to: to == null ? undefined : to | 0, key: pkKey(st), at: now, first: now, tries: 0 }; }
         if (hud.pokerUpdate) hud.pokerUpdate(pokerView(t));
       }
       /* [Claude 2026-10-12] the operator: the turn ring "should also be a visual timer for that player's turn to act ... like a clock
@@ -2858,15 +2877,34 @@
          to the player whose turn it is". Each copy times the turn from the moment it sees it change (the dealer folds a seat
          after the table's clock, PK_CLOCK ticks); the beep is a local sound, once a second, for the one whose turn it is. */
       const PKT = {}, PK_SECS = ((core.pokerClockTicks ? core.pokerClockTicks() : 100) * 600) / 1000;
+      /* [Claude 2026-10-13] the operator: "it stayed on the call raise fold menu and never switched over to showing the results ...
+         even when the timer ran out it still stayed stuck". After you act the panel waits ("waiting for the table") instead
+         of offering the same buttons; the action is sent again if the table has not moved in 6 s (a lost message), and if
+         the table stays silent - your action unanswered for 20 s, or nobody's turn moving for the table's whole clock and
+         20 s more - this page reconnects to the room, which hands it the table as it really is (or, if the dealer is gone,
+         a fresh table with your stack cashed out). */
+      const PK_PEND = {}, PK_STALE = {};
+      const pkKey = st => (st.h | 0) + ':' + st.st + ':' + st.a + ':' + (st.b | 0) + ':' + (st.p | 0) + ':' + (st.se || []).map(x => x[0] + '.' + x[2] + '.' + x[3]).join(',');
+      function pkRescue(t, why) {
+        delete PK_PEND[t]; PK_STALE[t] = 1;
+        hud.chat('The card table stopped answering (' + why + ') - reconnecting to the room.', 'sys');
+        if (room) netDrop('the card table stopped answering', false);
+      }
       function pokerClock(now) {
         if (!SCENE.pokerTimer) return;
         for (const T of core.pokerTables()) {
           const st = core.S.poker[T.id];
+          const pend = PK_PEND[T.id];
+          if (pend && st && pkKey(st) !== pend.key) { delete PK_PEND[T.id]; if (hud.pokerUpdate && me.seat && me.seat.t === T.id) hud.pokerUpdate(pokerView(T.id)); }
+          else if (pend && now - pend.first > 20000) pkRescue(T.id, 'your ' + pend.a + ' was never answered');
+          else if (pend && now - pend.at > 6000 && pend.tries < 2) { pend.tries++; pend.at = now; send({ c: 'pact', a: pend.a, to: pend.to }); }
           if (!st || st.o !== 'playing' || st.st === 'none' || !(st.a >= 0)) { delete PKT[T.id]; continue; }
           const key = (st.h | 0) + ':' + st.st + ':' + st.a + ':' + (st.b | 0) + ':' + (st.p | 0);
           let k = PKT[T.id]; if (!k || k.key !== key) k = PKT[T.id] = { key, t0: now, beeped: 99 };
           const left = Math.max(0, PK_SECS - (now - k.t0) / 1000);
           SCENE.pokerTimer(T.id, left / PK_SECS);
+          const seatedHere = me.seat && me.seat.k === 'pk' && me.seat.t === T.id;
+          if (seatedHere && st.mine !== 1 && !PK_STALE[T.id + ':' + k.key] && now - k.t0 > (PK_SECS + 20) * 1000) { PK_STALE[T.id + ':' + k.key] = 1; pkRescue(T.id, 'the turn never moved'); }
           const mine = me.seat && me.seat.k === 'pk' && me.seat.t === T.id && (st.a | 0) === (me.seat.s | 0);
           if (mine && left > 0 && left <= 10) { const sec = Math.ceil(left); if (sec < k.beeped) { k.beeped = sec; sfx('beep'); } }
         }
@@ -2928,7 +2966,7 @@
         wx: () => Object.assign({ season: SEASON.name, snowy: SEASON.snowy }, wxMod && wxMod.state ? wxMod.state() : {}),
         progInfo: () => { const P = renderer.info.programs || [], I = renderer.info; return { n: P.length, calls: I.render.calls, tris: I.render.triangles, geos: I.memory.geometries, tex: I.memory.textures, applyMs: SEASON.applyMs, applies: SEASON.applies }; },
         tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },
-        pokerNetRow: t => pkNet(core.pokerRow(t)), _pokerModel: t => pokerModel(t), _pokerView: t => pokerView(t), _pokerClock: () => JSON.parse(JSON.stringify(PKT)), solitaire: () => openSolitaire(), pokerKey: () => MYPK, pokerSealed: t => PH[t] || null,   /* [Claude 2026-10-12] tests: the row as it leaves this dealer */   /* a test taps a thing as a player would (first option) */
+        pokerNetRow: t => pkNet(core.pokerRow(t)), _pokerModel: t => pokerModel(t), _pokerView: t => pokerView(t), _pokerClock: () => JSON.parse(JSON.stringify(PKT)), solitaire: () => openSolitaire(), _dropNext: k => { DROP_NEXT = k; }, pokerKey: () => MYPK, pokerSealed: t => PH[t] || null,   /* [Claude 2026-10-12] tests: the row as it leaves this dealer */   /* a test taps a thing as a player would (first option) */
         travelShown: () => { const el = host.querySelector('.travel'); return el && el.style.display !== 'none' ? el.className + ' | ' + el.querySelector('.tt').textContent : null; },
         say, store, models: MOD, allowedAsset, wallet: walletApi(DATA.items.items), walletState: () => walletState, walletRefresh,
         chestEventForTest: chestEvent,

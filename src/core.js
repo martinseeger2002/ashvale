@@ -2672,7 +2672,13 @@
       if (!p.seat) { const m = (pokerOf(id).se || []).find(x => x && x[1] === pid); if (m) p.seat = { t: id, s: m[0] | 0, k: 'pk' }; }
       if (p.seat && p.seat.t === id) pokerLeave(p);
     }
-    function hostPokerAct(pid, id, a, to) { const p = S.players[pid]; return !!p && pokerAct(p, id, String(a || ''), to | 0); }
+    function hostPokerAct(pid, id, a, to) {
+      const p = S.players[pid]; if (!p) return false;
+      /* [Claude 2026-10-13] the table is the word (as hostPokerStand): a dealer that made this guest anew after a room hiccup
+         has no seat flag on it, and every call/fold/raise it sent was refused - the hand froze on its turn (the operator) */
+      if (!p.seat || p.seat.t !== id) { const m = (pokerOf(id).se || []).find(x => x && x[1] === pid); if (m) p.seat = { t: id, s: m[0] | 0, k: 'pk' }; }
+      return pokerAct(p, id, String(a || ''), to | 0);
+    }
     function applyPoker(rows) {   /* the dealer's word on its tables: the row, and our own seat follows it, as in chess */
       for (const r of rows || []) {
         if (!r || !r.t) continue;
