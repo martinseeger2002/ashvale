@@ -91,24 +91,30 @@
       '#ashload .fill{height:100%;width:0;background:linear-gradient(90deg,#b8862d,#f3d08a);transition:width .3s}' +
       '#ashload .say{font-size:13px;color:#cbb791;min-height:18px;text-align:center;padding:0 16px}#boot{visibility:hidden}';
     const root = D.createElement('div'); root.id = 'ashload';
-    root.innerHTML = '<h1>' + title + '</h1><div class="bar"><div class="fill"></div></div><div class="say">Loading ' + title + '…</div>';
+    root.innerHTML = '<h1>' + title + '</h1><div class="bar"><div class="fill"></div></div><div class="say">Loading ' + title + '\u2026</div>';
     const put = () => { if (!D.body) return setTimeout(put, 20); D.head.appendChild(css); D.body.appendChild(root); };
     put();
     const fill = root.querySelector('.fill'), say = root.querySelector('.say');
-    let frac = 0.03, gone = false;
+    let frac = 0, gone = false;
     const L = G.ASH_LOAD = {
       set(f, text) { if (gone) return; if (typeof f === 'number' && f > frac) { frac = Math.min(1, f); fill.style.width = (frac * 100).toFixed(1) + '%'; } if (text) say.textContent = text; },
-      done() { if (gone) return; L.set(1, 'Welcome to ' + title + '.'); gone = true; setTimeout(() => { root.style.opacity = '0'; setTimeout(() => root.remove(), 600); }, 250); },
+      done() { if (gone) return; L.set(1, 'Welcome to ' + title + '.'); gone = true; root.style.pointerEvents = 'none'; setTimeout(() => { root.style.opacity = '0'; setTimeout(() => root.remove(), 600); }, 250); },
       shown: () => !gone
     };
     L.set(0.03);
+    /* a page that loads these modules but is not the game (the Atlas) never starts it: if nothing claims the screen
+       (engine.start sets ASH_LOAD.claimed) within 3 s of the modules being in, it goes */
+    let inAt = 0; const lone = setInterval(() => {
+      if (gone || L.claimed) { clearInterval(lone); return; }
+      if (G.ASH3D && G.ASH3D._values) { if (!inAt) inAt = Date.now(); else if (Date.now() - inAt > 3000) { clearInterval(lone); L.done(); } }
+    }, 250);
     /* the download: count /content/ answers against the modules the registry still has to bring */
     let want = 0, got = 0;
     const cnt = G.fetch;
     if (cnt) {
       const counting = function (url, opts) {
         const p = cnt(url, opts);
-        if (typeof url === 'string' && url.indexOf('/content/') >= 0) p.then(() => { got++; if (want) L.set(0.05 + 0.65 * Math.min(1, got / want), 'Loading ' + title + '… ' + Math.min(got, want) + ' of ' + want); }, () => {});
+        if (typeof url === 'string' && url.indexOf('/content/') >= 0) p.then(() => { got++; if (want) L.set(0.05 + 0.65 * Math.min(1, got / want), 'Loading ' + title + '\u2026 ' + Math.min(got, want) + ' of ' + want); }, () => {});
         return p;
       };
       for (const k of ['__ashRetry', '__ashEarly']) if (cnt[k]) counting[k] = cnt[k];

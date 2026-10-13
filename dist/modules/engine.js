@@ -143,6 +143,7 @@
       await Promise.race([Promise.all(near), new Promise(r => setTimeout(r, 15000))]);
     }
     async function openStore() {
+      if (G.ASH_LOAD) { G.ASH_LOAD.claimed = true; G.ASH_LOAD.set(0.71, 'Opening your character…'); }   /* [Claude 2026-10-13] the launcher opens the save before it starts the game: the screen is the game's from here */
       /* while the wallet opens the save (that can take seconds), the zones around the spawn are already on their way: most
          characters stand there, and for the rest it is a few KB that warm the cache */
       if (ZINDEX && !G.ASH3D_LAZY_DELAY) { const r0 = (ZINDEX.find(z => z.respawn) || {}).respawn; if (r0) for (const id of zonesNear(r0[0], r0[1])) fetchZone(id).catch(() => {}); }   /* (not on a playtest page that shows a slow arrival) */
@@ -240,6 +241,7 @@
     }
 
     function start(host, opts) {
+      if (G.ASH_LOAD) G.ASH_LOAD.claimed = true;   /* [Claude 2026-10-13] the game holds the loading screen until its first frame */
       opts = opts || {};
       const q = new URLSearchParams(location.search);
       const isTouch = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
@@ -1218,10 +1220,29 @@
          layer, the sun's shadow camera does. The room keeps the shade it has with the roof on, and the strip of roof
          shadow beside the house stops appearing and vanishing as you walk in and out. Nothing extra is drawn and no
          material is touched, so scene.js's shared materials still compile once. */
+      /* [Claude 2026-10-13] The SHADOWED layer did not work (the operator, still: "continue the roof fix to block sunlight. It's
+         annoying"): this three.js tests an object's layers against the MAIN camera in its shadow pass too
+         (WebGLShadowMap renderObject: object.layers.test(camera.layers)), so a roof moved off layer 0 left the shadow map
+         exactly as visible = false had. So the hidden pieces stay on layer 0 and borrow HIDE_MAT instead: it writes no
+         colour and no depth - nothing of it on screen, nothing hidden behind it - while the shadow pass draws its shape
+         from the geometry (DoubleSide, so a one-sided roof plane still blocks the sun from above). The own material is
+         kept on the piece and put back when you walk out. A piece that casts no shadow (glass) is simply not drawn. */
+      const HIDE_MAT = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, side: THREE.DoubleSide });
       function shadeGroup(g, hide) {
         if (!g || !!g.userData.shut === hide) return;
         g.userData.shut = hide;
-        g.traverse(o => o.layers.set(hide ? SHADOWED : 0));
+        g.traverse(o => {
+          if (o.layers.mask !== 1) o.layers.set(0);   /* pieces the old fix left on SHADOWED come back */
+          if (!o.isMesh) return;
+          const u = o.userData;
+          if (hide) {
+            if (!o.castShadow) { if (u.vis0 === undefined) { u.vis0 = o.visible; o.visible = false; } return; }
+            if (u.mat0 === undefined) { u.mat0 = o.material; o.material = Array.isArray(o.material) ? o.material.map(() => HIDE_MAT) : HIDE_MAT; }
+          } else {
+            if (u.mat0 !== undefined) { o.material = u.mat0; delete u.mat0; }
+            if (u.vis0 !== undefined) { o.visible = u.vis0; delete u.vis0; }
+          }
+        });
       }
       function roofCheck() {
         floorBarCheck();
