@@ -263,5 +263,51 @@ ok(ct.board.length + cs.pokerOf('poker1').se.length > 0 && h1 === h2, 'a replaye
   ok(!b.seat && !b.pk && coins(a) + coins(b) + (h.pokerOf('poker1').rk | 0) === 2000, 'the timeout cashes out the other: every GOLD back, the rake aside: ' + coins(a) + ' + ' + coins(b));
 }
 
+/* [Claude 2026-10-12] the operator: "if somebody leaves a poker game, they can't sit back down ... once all the players leave a
+   table then that game should be restarted, to whatever stakes the new first player chooses" */
+{
+  const coins = (p) => p.inv.reduce((n, s) => n + (s && s.id === 'coins' ? s.n : 0), 0);
+  const T5 = P[0];
+  const row = (v, se, extra) => Object.assign({ t: 'poker1', o: 'open', st: 'none', se, v, buy: 1000, gid: 3, co: [], cseq: 0 }, extra || {});
+  /* 1. the dealer left between hands: this game now deals the area, holding only the old dealer's row */
+  { const g = AshCore.create(D, { seed: 'stuck1' }), q = noCoins(g.addPlayer('me', { name: 'Late' })); g.grantItem('me', 'coins', 500);
+    q.x = T5.seats[2][0]; q.y = T5.seats[2][1]; q.lv = 1;
+    g.setAuth(g.zoneOf(T5.x, T5.y), false);
+    g.applyPoker([row(9, [[0, 'gone1', 800, 0, 1], [4, 'gone2', 1200, 0, 1]])]);
+    g.setAuth(g.zoneOf(T5.x, T5.y), true);   /* the old dealer is gone: this page deals now */
+    for (let i = 0; i < 3; i++) g.tick();
+    const st = g.pokerOf('poker1');
+    ok(!st.se.length && st.buy === 0 && st.co.some(c => c[0] === 'gone1' && c[1] === 800) && st.co.some(c => c[0] === 'gone2' && c[1] === 1200), 'a table left over between hands is opened again, every stack cashed out: ' + JSON.stringify(st.co));
+    g.cmd('me', { c: 'sit', table: 'poker1', seat: 2, buy: 100 }); for (let i = 0; i < 3; i++) g.tick();
+    ok(q.seat && g.pokerOf('poker1').buy === 100 && coins(q) === 400, 'and the next to sit sets new stakes (100) and plays: ' + coins(q)) }
+  /* 2. sitting at such a table before its clock came round: it is opened on the spot */
+  { const g = AshCore.create(D, { seed: 'stuck2' }), q = noCoins(g.addPlayer('me', { name: 'Quick' })); g.grantItem('me', 'coins', 2000);
+    q.x = T5.seats[2][0]; q.y = T5.seats[2][1]; q.lv = 1;
+    g.setAuth(g.zoneOf(T5.x, T5.y), false); g.applyPoker([row(9, [[0, 'gone1', 800, 0, 1]])]); g.setAuth(g.zoneOf(T5.x, T5.y), true);
+    g.cmd('me', { c: 'sit', table: 'poker1', seat: 2, buy: 1000 }); g.tick();
+    ok(q.seat && g.pokerOf('poker1').se.length === 1 && g.pokerOf('poker1').se[0][1] === 'me' && coins(q) === 1000, 'a sit at a left-over table opens it and takes the chair at once (no "being dealt out")') }
+  /* 3. stand, then sit straight back down - the dealer's own player and a guest */
+  { const h = AshCore.create(D, { seed: 'again1' }), a = noCoins(h.addPlayer('pa', { name: 'Ada' })), b = noCoins(h.addPlayer('pb', { name: 'Bram' }));
+    h.grantItem('pa', 'coins', 3000); h.grantItem('pb', 'coins', 3000);
+    a.x = T5.seats[0][0]; a.y = T5.seats[0][1]; a.lv = 1; b.x = T5.seats[3][0]; b.y = T5.seats[3][1]; b.lv = 1;
+    h.cmd('pa', { c: 'sit', table: 'poker1', seat: 0, buy: 1000 }); h.tick(); h.cmd('pb', { c: 'sit', table: 'poker1', seat: 3 }); for (let i = 0; i < 3; i++) h.tick();
+    h.cmd('pb', { c: 'stand' }); for (let i = 0; i < 3; i++) h.tick();
+    const back = coins(b);
+    h.cmd('pb', { c: 'sit', table: 'poker1', seat: 3 }); for (let i = 0; i < 3; i++) h.tick();
+    ok(b.seat && b.pk && coins(b) === back - 1000, 'Bram stands up and sits straight back down, buying in again: ' + coins(b));
+    h.cmd('pa', { c: 'stand' }); h.cmd('pb', { c: 'stand' }); for (let i = 0; i < 3; i++) h.tick();
+    ok(!h.pokerOf('poker1').se.length && h.pokerOf('poker1').buy === 0, 'both up: the table is empty and forgets its stakes');
+    h.cmd('pb', { c: 'sit', table: 'poker1', seat: 3, buy: 10000 }); for (let i = 0; i < 3; i++) h.tick();
+    ok(b.seat && h.pokerOf('poker1').buy === 10000 || !b.seat && coins(b) < 10000, 'the next first sitter sets new stakes (10000, or is told the price): buy ' + h.pokerOf('poker1').buy) }
+  /* 4. a dealer whose room dropped made its guest anew without a seat flag: the guest's Stand up still counts */
+  { const h = AshCore.create(D, { seed: 'standx' }), hp = noCoins(h.addPlayer('me', { name: 'Host' })); h.grantItem('me', 'coins', 2000);
+    hp.x = T5.seats[0][0]; hp.y = T5.seats[0][1]; hp.lv = 1;
+    h.cmd('me', { c: 'sit', table: 'poker1', seat: 0, buy: 1000 }); h.tick();
+    h.addPuppet('g1', { x: T5.seats[3][0], y: T5.seats[3][1], n: 'Guest' }); h.hostPokerSit('g1', 'poker1', 3, 0, '');
+    h.S.players.g1.seat = null;   /* as after removePlayer + a fresh puppet */
+    h.hostPokerStand('g1', 'poker1');
+    ok(!h.pokerOf('poker1').se.some(x => x[1] === 'g1') && h.pokerOf('poker1').co.some(c => c[0] === 'g1'), 'the guest is stood up and cashed out though its puppet had no seat flag') }
+}
+
 console.log(fails ? fails + ' FAILED' : 'all ok');
 process.exit(fails ? 1 : 0);

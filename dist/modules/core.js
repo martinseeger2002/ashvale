@@ -2614,6 +2614,7 @@
         const st0 = pokerOf(T.id); st0.buy = Math.max(0, Math.min(1000000, buy | 0)); st0.gid = (st0.gid | 0) + 1;
         const bl = pkBlinds(st0.buy | 0); t.small = bl[0]; t.big = bl[1];
       }
+      if (!t && isAuth(zoneOf(T.x, T.y)) && pokerOf(T.id).mine === 0) { pokerAbandon(T.id); return pokerSitAt(p, T, si, buy, pk); }   /* [Claude 2026-10-12] a table left over from another dealer: open it now, then sit */
       if (!t) { msg(p, 'This table is being dealt out and will take players again in a moment.', 'warn'); return false; }
       if (!T.seats || !T.seats[si]) return false;
       const here = t.seats[si];
@@ -2671,7 +2672,12 @@
       return true;
     }
     function hostPokerSit(pid, id, si, buy, pk) { const p = S.players[pid], T = pokerTableById(id); if (!p || !T || !T.seats[si]) return false; const seat = T.seats[si]; if (cheb(p.x, p.y, seat[0], seat[1]) > 8) return false; return pokerSitAt(p, T, si | 0, buy | 0, pk); }
-    function hostPokerStand(pid, id) { const p = S.players[pid]; if (p && p.seat && p.seat.t === id) pokerLeave(p); }
+    function hostPokerStand(pid, id) {
+      const p = S.players[pid]; if (!p) return;
+      /* [Claude 2026-10-12] the table is the word, not the puppet's seat flag (a dealer whose room dropped makes its puppets anew, seatless) */
+      if (!p.seat) { const m = (pokerOf(id).se || []).find(x => x && x[1] === pid); if (m) p.seat = { t: id, s: m[0] | 0, k: 'pk' }; }
+      if (p.seat && p.seat.t === id) pokerLeave(p);
+    }
     function hostPokerAct(pid, id, a, to) { const p = S.players[pid]; return !!p && pokerAct(p, id, String(a || ''), to | 0); }
     function applyPoker(rows) {   /* the dealer's word on its tables: the row, and our own seat follows it, as in chess */
       for (const r of rows || []) {
@@ -2706,7 +2712,7 @@
       for (const T of pokerTables()) {
         if (!isAuth(zoneOf(T.x, T.y))) continue;
         const st = pokerOf(T.id);
-        if (st.mine === 0 && st.se && st.se.length) { if (st.o === 'playing') pokerAbandon(T.id); continue; }
+        if (st.mine === 0 && st.se && st.se.length) { pokerAbandon(T.id); continue; }   /* [Claude 2026-10-12] another dealer's table, between hands too: it cannot be run here (no deck, no seat keys), so everyone is cashed out and the table is open again - it used to sit stuck forever (the operator: nobody could sit back down) */
         const t = pokerGame(T.id); if (!t) continue;
         if (t.street === 'none') {
           if (st.wt == null) { pokerSync(T.id, t); continue; }
