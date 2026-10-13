@@ -1,0 +1,13 @@
+{
+ "game": {
+  "name": "ASHVALE",
+  "description": "New in 0.8.98: GOLD on a table always comes home. Drop out of a game at the card tables or the Chess Park - a closed tab, a dead phone, a lost connection - and your GOLD comes back by itself; at chess, a player who walks out of a begun game loses the wager, and if the whole room drops, both players get their stake back. The Saltmere Tap's upper floor is open under the candles, the Chess Park's champions board is kept by the Bank, and the Ojibwe village of Ziibiing stands on the far continent in maple country.",
+  "version": "0.8.98",
+  "players": "Solo or online",
+  "multiplayer": true,
+  "family": "ashvale",
+  "genre": "rpg",
+  "play": "c879bc1f5f3cfc1300b9f24252a47ce395028dc65fc78a0ab3004a9f272649f5",
+  "cover": "28d1007491d413d4c07cce95d43eff4c54600cffd78661ff3456606a15493210"
+ }
+}
