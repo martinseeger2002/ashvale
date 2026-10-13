@@ -110,6 +110,90 @@
     function pokerUpdate(v) { if (!box) return; view = v; draw(); }
     function pokerClose() { ui.classList.remove('poker'); if (box) { box.remove(); box = null; } view = null; cb = null; raise = false; }
     K.pokerOpen = pokerOpen; K.pokerUpdate = pokerUpdate; K.pokerClose = pokerClose;
+    /* [Claude 2026-10-13] SOLITAIRE at the card table (the operator: "if you right click or long tap on the table you should also have
+       the option to play Solitaire"). Klondike, draw one, as many passes through the stock as you like; the cards are the
+       felt's own (the scene's card atlas). One tap plays a card where it fits best - up to its foundation if it can go,
+       else onto the first column that takes it (with the cards on top of it) - so it plays well on a phone; tap the stock to
+       turn a card, tap an empty stock to turn the waste back over. Undo, a new deal, and Finish once every card is face up.
+       Pure fun: no GOLD, nothing sent anywhere. */
+    const SOL_CSS = `
+.ash .solp{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,96vw);max-height:94vh;overflow:auto;z-index:30;padding:10px;border-radius:12px;background:radial-gradient(ellipse at center,#2f6a3f,#1c4128);box-shadow:0 0 0 3px #5b3a1e,0 10px 40px #000c;color:#f2ead2;font:13px system-ui,sans-serif;touch-action:manipulation;user-select:none}
+.ash .solp .top{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.ash .solp .top h3{margin:0;font:bold 16px Georgia,serif;flex:1;color:#f4e5b8}
+.ash .solp .top .btn{padding:4px 10px;width:auto;margin:0}
+.ash .solp .row{position:relative}
+.ash .solp .cardx{position:absolute;border-radius:5px;box-shadow:0 1px 3px #0009;background-repeat:no-repeat;cursor:pointer}
+.ash .solp .slot{position:absolute;border-radius:5px;border:2px dashed #ffffff40;box-sizing:border-box}
+.ash .solp .sel{box-shadow:0 0 0 3px #ffd23f,0 1px 3px #0009}
+.ash .solp .msg{text-align:center;margin-top:6px;color:#ffe9a8;min-height:18px}
+`;
+    if (!document.getElementById('ash-sol-css')) { const st = document.createElement('style'); st.id = 'ash-sol-css'; st.textContent = SOL_CSS; document.head.appendChild(st); }
+    const SV = c => { const r = c >> 2; return r === 12 ? 1 : r + 2; }, RD = c => RED[c & 3] === 1;
+    let sbox = null, S = null, undo = [], atlas = null, sfx = null, selK = null;
+    function solDeal() {
+      const d = []; for (let i = 0; i < 52; i++) d.push(i);
+      for (let i = 51; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [d[i], d[j]] = [d[j], d[i]]; }
+      S = { stock: [], waste: [], found: [[], [], [], []], tab: [], moves: 0, t0: Date.now(), won: false };
+      for (let i = 0; i < 7; i++) { S.tab.push([]); for (let k = 0; k <= i; k++) S.tab[i].push({ c: d.pop(), up: k === i }); }
+      S.stock = d.map(c => ({ c, up: false })); undo = []; selK = null;
+    }
+    const snap = () => JSON.stringify(S);
+    function push() { undo.push(snap()); if (undo.length > 200) undo.shift(); }
+    function canFound(c, f) { const t = f[f.length - 1]; return t ? ((t.c & 3) === (c & 3) && SV(c) === SV(t.c) + 1) : SV(c) === 1; }
+    function canTab(c, col) { const t = col[col.length - 1]; return t ? (t.up && RD(t.c) !== RD(c) && SV(c) === SV(t.c) - 1) : SV(c) === 13; }
+    function moveCards(from, n, to) { const cs = from.splice(from.length - n, n); to.push(...cs); const f = from[from.length - 1]; if (f && !f.up && from !== S.waste) f.up = true; S.moves++; }
+    function play(src, idx) {   /* the one-tap rule: foundation first (a top card), else the first column that takes the run */
+      const pile = src === 'w' ? S.waste : src[0] === 't' ? S.tab[+src.slice(1)] : S.found[+src.slice(1)];
+      const n = pile.length - idx; if (n <= 0) return false; const c = pile[idx].c;
+      if (!pile[idx].up) return false;
+      if (n === 1 && src[0] !== 'f') for (const f of S.found) if (canFound(c, f)) { push(); moveCards(pile, 1, f); return true; }
+      for (let i = 0; i < 7; i++) { const col = S.tab[i]; if (col === pile) continue; if (canTab(c, col) && !(SV(c) === 13 && idx === 0 && src[0] === 't')) { push(); moveCards(pile, n, col); return true; } }
+      return false;
+    }
+    function finishable() { return !S.stock.length && !S.waste.length && S.tab.every(col => col.every(x => x.up)); }
+    function autoFinish() { let go = true; while (go) { go = false; for (const src of ['w', 't0', 't1', 't2', 't3', 't4', 't5', 't6']) { const p = src === 'w' ? S.waste : S.tab[+src.slice(1)]; if (p.length) { const c = p[p.length - 1].c; for (const f of S.found) if (canFound(c, f)) { moveCards(p, 1, f); go = true; break; } } } } }
+    function checkWin() { if (!S.won && S.found.every(f => f.length === 13)) { S.won = true; sfx && sfx('level'); } }
+    function drawSol() {
+      if (!sbox) return;
+      const W = Math.min(560, window.innerWidth * 0.96) - 20, gap = Math.max(4, W * 0.012), cw = Math.floor((W - gap * 6) / 7), ch = Math.round(cw * 1.5), fan = Math.round(ch * 0.26), fanD = Math.round(ch * 0.12);
+      const bg = c => 'background-image:url(' + atlas + ');background-size:' + (cw * 8) + 'px ' + (ch * 8) + 'px;background-position:-' + ((c % 8) * cw) + 'px -' + (((c / 8) | 0) * ch) + 'px;';
+      const card = (c, up, x, y, key, sel) => '<div class="cardx' + (sel ? ' sel' : '') + '" data-k="' + key + '" style="left:' + x + 'px;top:' + y + 'px;width:' + cw + 'px;height:' + ch + 'px;' + bg(up ? c : 63) + '"></div>';
+      const slot = (x, y, key, lab) => '<div class="slot" data-k="' + key + '" style="left:' + x + 'px;top:' + y + 'px;width:' + cw + 'px;height:' + ch + 'px;display:flex;align-items:center;justify-content:center;color:#ffffff60;font-size:' + Math.round(cw * 0.35) + 'px">' + (lab || '') + '</div>';
+      let h = '', X = i => i * (cw + gap);
+      h += S.stock.length ? card(0, false, X(0), 0, 's') : slot(X(0), 0, 's', '&#8635;');
+      h += S.waste.length ? card(S.waste[S.waste.length - 1].c, true, X(1), 0, 'w:' + (S.waste.length - 1), selK === 'w:' + (S.waste.length - 1)) : slot(X(1), 0, 'w');
+      for (let f = 0; f < 4; f++) { const F = S.found[f]; h += F.length ? card(F[F.length - 1].c, true, X(3 + f), 0, 'f' + f + ':' + (F.length - 1)) : slot(X(3 + f), 0, 'f' + f, SUIT[f]); }
+      let maxY = ch;
+      for (let i = 0; i < 7; i++) {
+        const col = S.tab[i], y0 = ch + gap * 2; let y = y0;
+        if (!col.length) h += slot(X(i), y0, 't' + i, 'K');
+        col.forEach((x, k) => { h += card(x.c, x.up, X(i), y, 't' + i + ':' + k, selK === 't' + i + ':' + k); y += x.up ? fan : fanD; });
+        maxY = Math.max(maxY, y + ch);
+      }
+      const secs = ((Date.now() - S.t0) / 1000) | 0;
+      sbox.innerHTML = '<div class="top"><h3>Solitaire</h3><button class="btn" data-u>Undo</button><button class="btn" data-n>New deal</button>' + (finishable() && !S.won ? '<button class="btn" data-f>Finish</button>' : '') + '<button class="btn" data-x>Close</button></div>'
+        + '<div class="row" style="height:' + (maxY + 4) + 'px">' + h + '</div>'
+        + '<div class="msg">' + (S.won ? 'You win! ' + S.moves + ' moves in ' + Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0') + '. Deal again?' : 'Tap a card to play it where it fits. Tap the deck to turn a card.') + '</div>';
+      sbox.querySelector('[data-u]').onclick = () => { if (undo.length) { S = JSON.parse(undo.pop()); selK = null; drawSol(); } };
+      sbox.querySelector('[data-n]').onclick = () => { solDeal(); drawSol(); };
+      sbox.querySelector('[data-x]').onclick = () => solitaireClose();
+      const fb = sbox.querySelector('[data-f]'); if (fb) fb.onclick = () => { push(); autoFinish(); checkWin(); drawSol(); };
+      for (const e of sbox.querySelectorAll('[data-k]')) e.onclick = (ev) => { ev.stopPropagation(); tapSol(e.dataset.k); };
+    }
+    function tapSol(k) {
+      if (S.won) return;
+      if (k === 's') { push(); if (S.stock.length) { const x = S.stock.pop(); x.up = true; S.waste.push(x); } else { S.stock = S.waste.reverse().map(x => ({ c: x.c, up: false })); S.waste = []; } S.moves++; sfx && sfx('click'); drawSol(); return; }
+      const [src, ix] = k.split(':'); if (ix == null) return;
+      const pile = src === 'w' ? S.waste : src[0] === 't' ? S.tab[+src.slice(1)] : S.found[+src.slice(1)];
+      const i = +ix, x = pile[i];
+      if (src[0] === 't' && !x.up && i === pile.length - 1) { push(); x.up = true; drawSol(); return; }
+      if (play(src, i)) { sfx && sfx('click'); checkWin(); } else sfx && sfx('miss');
+      drawSol();
+    }
+    function solitaireOpen(o) { atlas = (o && o.atlas) || atlas; sfx = (o && o.sfx) || null; if (!S || S.won) solDeal(); if (!sbox) sbox = el('solp ui', ui); drawSol(); }
+    function solitaireClose() { if (sbox) { sbox.remove(); sbox = null; } }
+    K.solitaireOpen = solitaireOpen; K.solitaireClose = solitaireClose; K.solitaireOpenNow = () => !!sbox; K._sol = () => S;
+
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('hudpoker', { api: 1, v: 1 }, () => ({ api: 1, install }));
 })(typeof globalThis !== 'undefined' ? globalThis : this);

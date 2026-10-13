@@ -2677,7 +2677,7 @@
       for (const r of rows || []) {
         if (!r || !r.t) continue;
         const st = pokerOf(r.t), was = st.v;
-        for (const k of ['o', 'st', 'd', 'sb', 'bb', 'p', 'b', 'a', 'h', 'bo', 'se', 'lg', 'r', 'hc', 'buy', 'gid', 'co', 'cseq']) if (r[k] !== undefined) st[k] = r[k];
+        for (const k of ['o', 'st', 'd', 'sb', 'bb', 'p', 'b', 'a', 'h', 'bo', 'se', 'lg', 'r', 'hc', 'buy', 'gid', 'co', 'cseq', 'mr', 'bg', 'rk']) if (r[k] !== undefined) st[k] = r[k];   /* mr, bg [Claude 2026-10-12]: the smallest raise and the big blind - without them every guest's panel said 'min 50' at a 1/2 table (the operator) */
         if (r.v != null) st.v = r.v | 0;
         st.mine = 0;
         const T = pokerTableById(r.t);
@@ -3789,7 +3789,7 @@
       setNewHome: h => { if (HOMES[h]) NEWHOME = h; }, markGift: (pid, id, n) => markGift(S.players[pid], id, n), homeOf: p => (p && p.home) || 'ashvale', npcFor, lineFor, questForHome, questMarks,
       API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, trapOf, offerOf, isBlessed: (pid, x, y) => !!(S.players[pid] && blessed(S.players[pid], x, y)), setNature, natureHours, setNatureTell, seasonOn, dayHour, fireLit, steamFor, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       tableAt, tableById, tables, chessOf, chessRow, chessRows, chessGame, chessTurn, chessMoves, applyChess, hostSit, hostStand, hostMove, hostSel, standUp,
-      pokerTableAt, pokerTableById, pokerTables, pokerSeatKeys, pokerOpen, pokerOf, pokerRow, pokerRows, pokerGame, applyPoker, pokerReclaim, pokerNetId, chessReclaim, chessNetId, chessLimbo, seatHeld, setOnline: (b) => { S.online = !!b; }, hostPokerSit, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED, PK_AWAY], hostPokerStand, hostPokerAct, pokerLeave, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED],
+      pokerTableAt, pokerTableById, pokerTables, pokerSeatKeys, pokerOpen, pokerOf, pokerRow, pokerRows, pokerGame, applyPoker, pokerClockTicks: () => PK_CLOCK, pokerReclaim, pokerNetId, chessReclaim, chessNetId, chessLimbo, seatHeld, setOnline: (b) => { S.online = !!b; }, hostPokerSit, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED, PK_AWAY], hostPokerStand, hostPokerAct, pokerLeave, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED],
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */

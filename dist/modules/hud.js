@@ -335,7 +335,7 @@
       layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab(api.isPhone ? null : 'inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       chessOpen: (v, cb) => K.chessOpen(v, cb), chessUpdate: v => K.chessUpdate(v), chessClose: () => K.chessClose(), get chessPromo() { return K.chessPromo; },
-      pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(),
+      pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(), solitaireOpen: o => K.solitaireOpen && K.solitaireOpen(o), solitaireClose: () => K.solitaireClose && K.solitaireClose(), _sol: () => K._sol && K._sol(),
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };
   }

@@ -99,7 +99,7 @@
       }
     }
     const BTN_GEO = new THREE.CylinderGeometry(0.065, 0.065, 0.022, 14), BTN_MAT = new THREE.MeshLambertMaterial({ color: 0xf2eee0 });
-    const TURN_GEO = new THREE.TorusGeometry(0.15, 0.014, 6, 22), TURN_MAT = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.85 });
+    const TURN_GEO = new THREE.TorusGeometry(0.255, 0.012, 6, 40), TURN_MAT = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.85 }), TURN_DIM = new THREE.MeshBasicMaterial({ color: 0x2a2a22, transparent: true, opacity: 0.55 });
     let CARD_TEX = null;
     function roundedRect(g, x, y, w, h, r) {
       g.beginPath(); g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
@@ -146,14 +146,21 @@
           g.fillStyle = '#c8a040'; g.fillRect(cx - 2.5, cy - 17, 5, 36); g.fillRect(cx - 12, cy - 9, 24, 5);
           continue;
         }
+        if (i >= 52) continue;   /* cells past the deck (only the back, 63, is used) */
         g.fillStyle = '#f8f5ec'; g.fill(); g.strokeStyle = '#bdb49d'; g.lineWidth = 2; g.stroke();
         const rank = PRANKS[i >> 2], suit = i & 3;
-        g.fillStyle = PINK[suit]; g.textAlign = 'left'; g.textBaseline = 'top';
-        g.font = 'bold ' + (rank === 'T' ? 19 : 24) + 'px "DejaVu Sans", sans-serif';
-        g.fillText(rank === 'T' ? '10' : rank, px + 10, py + 8);
-        pip(g, suit, px + PW - 26, py + PH - 32, PW * 0.17);
+        /* [Claude 2026-10-13] the operator (a picture of a standard deck): "each card has the number and the suit in the two opposite
+           corners" - the rank with its suit under it, top left, and the same turned upside down bottom right */
+        const index = () => {
+          g.fillStyle = PINK[suit]; g.textAlign = 'center'; g.textBaseline = 'top';
+          g.font = 'bold ' + (rank === 'T' ? 16 : 21) + 'px "DejaVu Sans", sans-serif';
+          g.fillText(rank === 'T' ? '10' : rank, 15, 6); pip(g, suit, 15, 39, PW * 0.085);
+        };
+        g.save(); g.translate(px + 4, py + 4); index(); g.restore();
+        g.save(); g.translate(px + PW - 4, py + PH - 4); g.rotate(Math.PI); index(); g.restore();
+        g.fillStyle = PINK[suit];   /* the pips below paint in the suit's colour (restore() took it back to the card's cream) */
         /* [Claude 2026-10-11] the operator: the pips in their places; the ace alone a single pip; simple artwork on the court cards */
-        const n = PRANKS.indexOf(rank) + 2, L = px + PW * 0.33, Rr = px + PW * 0.67, C = px + PW / 2, S = PW * 0.14;
+        const n = PRANKS.indexOf(rank) + 2, L = px + PW * 0.37, Rr = px + PW * 0.63, C = px + PW / 2, S = PW * 0.13;   /* columns kept clear of the corner indices */
         const Y = (f) => py + PH * f, pp = (x, y) => pip(g, suit, x, y, S);
         if (rank === 'A') pip(g, suit, C, Y(0.5), PW * 0.34);
         else if (n <= 10) {
@@ -169,7 +176,7 @@
           else { col4.forEach(f => { pp(L, Y(f)); pp(Rr, Y(f)); }); pp(C, Y(0.325)); pp(C, Y(0.675)); }
         } else {   /* J, Q, K: a framed figure in the suit's colour - a crown (K), a crown and a veil (Q), a cap with a feather (J) */
           const fx = C, fy = Y(0.5), col = PINK[suit], gold = '#c8a040';
-          g.strokeStyle = col; g.lineWidth = 1.5; g.strokeRect(px + 22, py + 34, PW - 44, PH - 68);
+          g.strokeStyle = col; g.lineWidth = 1.5; g.strokeRect(px + 29, py + 30, PW - 58, PH - 60);   /* [Claude 2026-10-13] kept inside the corner indices (the operator: the art covered the suit pip) */
           g.fillStyle = '#f0e6c8'; g.beginPath(); g.arc(fx, fy - 6, 11, 0, Math.PI * 2); g.fill();   /* the face */
           g.fillStyle = col; g.fillRect(fx - 16, fy + 6, 32, 24);   /* the robe */
           g.fillStyle = gold; g.fillRect(fx - 3, fy + 8, 6, 20);
@@ -191,6 +198,14 @@
       a.needsUpdate = true; mesh.userData.card = id;
     }
     function cardMesh(mat, id) { const m = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W, CARD_H), mat); cardFace(m, id); return m; }
+    function pokerTimer(id, frac) {   /* [Claude 2026-10-12] the turn ring as a clock: frac = the share of the turn's time still left */
+      const T = POKER[id], r = T && T.turn; if (!r || !r.userData.arc) return;
+      frac = Math.max(0, Math.min(1, +frac || 0)); if (Math.abs(frac - r.userData.frac) < 0.004) return;
+      r.userData.frac = frac; const arc = r.userData.arc;
+      arc.geometry.dispose(); arc.geometry = new THREE.RingGeometry(0.232, 0.278, 64, 1, Math.PI / 2, Math.max(0.0001, Math.PI * 2 * frac));
+      const c = frac > 0.5 ? new THREE.Color(0x3fd25a).lerp(new THREE.Color(0xffd23f), (1 - frac) * 2) : new THREE.Color(0xffd23f).lerp(new THREE.Color(0xe8382c), (0.5 - frac) * 2);
+      arc.material.color.copy(c);
+    }
     function pokerShow(id, m) {   /* the engine's model of a table: board, each seat's two cards (down for the ones it keeps),
                                      the bets in front of each chair, who has the button, whose turn it is */
       PK_STATE[id] = m;
@@ -245,7 +260,12 @@
       if (T.turn) { T.group.remove(T.turn); T.turn = null; }
       if (m.turn != null && T.spots[m.turn | 0]) {
         const s = T.spots[m.turn | 0], dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1;
-        const r = new THREE.Mesh(TURN_GEO, TURN_MAT); r.rotation.x = Math.PI / 2;
+        /* [Claude 2026-10-12] the operator: "The ring that is the indicator for whose turn it is should also be a visual timer ... like a
+           clock changing colors around the ring": a dim full ring, and over it the time left as an arc that runs down
+           clockwise, green to yellow to red (pokerTimer sets it every frame) */
+        const r = new THREE.Group(), base = new THREE.Mesh(TURN_GEO, TURN_DIM); base.rotation.x = Math.PI / 2; r.add(base);
+        const arc = new THREE.Mesh(new THREE.RingGeometry(0.232, 0.278, 64, 1, Math.PI / 2, Math.PI * 2), new THREE.MeshBasicMaterial({ color: 0x3fd25a, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false }));
+        arc.rotation.x = -Math.PI / 2; arc.position.y = 0.004; r.add(arc); r.userData.arc = arc; r.userData.frac = 1;
         r.position.set(T.ox + dx / L * 0.66 * R, top + 0.05, T.oz + dz / L * 0.66 * R); T.group.add(r); T.turn = r;
       }
     }
@@ -1748,7 +1768,7 @@
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerTimer, cardAtlas: () => { const t = cardKit(); return t && t.image && t.image.toDataURL ? t.image.toDataURL('image/png') : null; }, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

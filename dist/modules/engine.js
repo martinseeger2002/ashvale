@@ -1275,6 +1275,7 @@
           case 'mobdie': tone(200, 0.4, 'square', 0.15, 70); break;
           case 'click': tone(1200, 0.03, 'square', 0.06); break;
           case 'freeze': tone(1800, 0.25, 'sine', 0.2, 2600); noise(0.3, 6000, 0.15, 3); break;
+          case 'beep': tone(1250, 0.09, 'square', 0.11, 1250); break;   /* [Claude 2026-10-12] the card table's last ten seconds, your turn only */
           case 'pray': tone(660, 0.35, 'sine', 0.25, 990); tone(990, 0.3, 'sine', 0.12, 0, 0.08); break;
           case 'prayoff': tone(700, 0.25, 'sine', 0.2, 350); break;
           case 'altar': [392, 523, 659, 784].forEach((f, i) => tone(f, 0.6, 'sine', 0.22, 0, i * 0.1)); break;
@@ -1291,8 +1292,8 @@
         const k = cam.keys;
         if (k.ArrowLeft) cam.tyaw -= 2.2 * dt; if (k.ArrowRight) cam.tyaw += 2.2 * dt; if (k.ArrowUp) cam.tpitch += 1.2 * dt; if (k.ArrowDown) cam.tpitch -= 1.2 * dt;
         const hawkEye = !!myEnt.hawk && !((me.burden || 0) > 0);   /* flying or perched: the hawk's own eyes (2026-10-07); grounded under a load: behind it as usual */
-        cam.tpitch = Math.max(hawkEye || !myEnt.hawk ? -1.3 : 0.3, Math.min(1.42, cam.tpitch)); cam.tdist = Math.max(4.5, Math.min(hawkEye ? 11 : 24, cam.tdist));   /* below 0.3 a walker's camera goes into the eyes and looks up; zoom by distance */
-        const s = cam.snap ? 1 : Math.min(1, dt * 10);
+        if (!cam.film) { cam.tpitch = Math.max(hawkEye || !myEnt.hawk ? -1.3 : 0.3, Math.min(1.42, cam.tpitch)); cam.tdist = Math.max(4.5, Math.min(hawkEye ? 11 : 24, cam.tdist)); }   /* cam.film [Claude 2026-10-13]: a film sets the camera exactly, every frame (the clamp and the easing made close shots jitter) */   /* below 0.3 a walker's camera goes into the eyes and looks up; zoom by distance */
+        const s = cam.snap || cam.film ? 1 : Math.min(1, dt * 10);
         cam.yaw += (cam.tyaw - cam.yaw) * s; cam.pitch += (cam.tpitch - cam.pitch) * s; cam.dist += (cam.tdist - cam.dist) * s;
         const p = myEnt.root.position; const tg = new THREE.Vector3(p.x, p.y + 1.0, p.z);
         if (cam.mode === 'creator') {   /* close-up, the character turned to face the camera, a little right of centre */
@@ -1301,7 +1302,7 @@
         }
         if (cam.mode === 'chess' && CHESSV) { tg.set(CHESSV.x, CHESSV.y, CHESSV.z); cam.tyaw = CHESSV.yaw + CHESS_TURN; cam.tpitch = isPhone ? 1.32 : 1.22; cam.tdist = isPhone ? 1.9 : 1.55; }   /* seated at a chess table: close over the board, your side nearest */
         if (cam.mode === 'poker' && POKERV) { tg.set(POKERV.x, POKERV.y, POKERV.z); cam.tyaw = POKERV.yaw; cam.tpitch = 1.2; cam.tdist = 1.4; }   /* seated at the felt: the light centre is the middle of the table */
-        if (cam.snap) camT.copy(tg); else camT.lerp(tg, Math.min(1, dt * 12));
+        if (cam.snap || cam.film) camT.copy(tg); else camT.lerp(tg, Math.min(1, dt * 12));
         cam.snap = false;
         const cp = Math.max(0.3, cam.pitch);
         camera.position.set(camT.x + Math.sin(cam.yaw) * Math.cos(cp) * cam.dist, camT.y + Math.sin(cp) * cam.dist, camT.z + Math.cos(cam.yaw) * Math.cos(cp) * cam.dist);
@@ -1483,7 +1484,7 @@
             else out.push({ html: 'Sit down <span class="c">(chair ' + (i + 1) + ')</span>' + pkNote, act: { c: 'sit', table: t.id, seat: i, buy: 0 }, red: out.length ? 0 : 1 });
           });
           if (pkEmpty && !(me.seat && me.seat.t === t.id)) { const free = (T.seats || []).findIndex((s, i) => !at[i]); if (free >= 0) for (const n of [100, 1000, 10000]) out.push({ html: 'Buy in for <span class="y">' + n.toLocaleString() + ' GOLD</span> <span class="c">(chair ' + (free + 1) + ', sets the table\'s stakes)</span>', act: { c: 'sit', table: t.id, seat: free, buy: n } }); }
-          out.push(...taken, { html: 'Examine <span class="c">Card table</span>', fn: () => hud.chat(pokerExamine(st), 'sys') });
+          out.push(...taken, { html: 'Play <span class="y">Solitaire</span>', fn: openSolitaire }, { html: 'Examine <span class="c">Card table</span>', fn: () => hud.chat(pokerExamine(st), 'sys') });   /* Solitaire [Claude 2026-10-13]: the operator */
           return out;
         }
         if (t.kind === 'crate') {
@@ -2470,7 +2471,7 @@
         for (const g of fires.values()) { const u = g.userData, sc = 0.8 + 0.25 * Math.sin(now / 70 + u.ph) + 0.1 * Math.sin(now / 23 + u.ph); u.f1.scale.set(1, sc, 1); u.f2.scale.set(1, 1.1 * sc, 1); }
         if (wxMod && wxMod.update && !CAVE.on) wxMod.update(elapsed);
         if (!CAVE.on) dayTick(); else { if (STARS.pts) STARS.pts.visible = false; underSeason(); }   /* day and night on top of the weather's sky */   /* underground the cave sets the fog and the sky */
-        updateRemotes(now, dt);
+        updateRemotes(now, dt); pokerClock(now);
         for (let i = projs.length - 1; i >= 0; i--) {
           const p = projs[i]; p.t += dt; const k = Math.min(1, p.t / p.dur);
           const to = p.tgt.root.position.clone(); to.y += p.tgt.hawk ? 0.25 : (p.tgt.H.height || 1.2) * p.tgt.scale * 0.55;   /* up at the hawk itself in the sky */
@@ -2796,9 +2797,9 @@
         for (const s of st.se || []) {
           const ref = s[0] | 0, f = s[4] | 0, h = (st.hc || []).find(x => (x[0] | 0) === ref);
           if (!h) continue;   /* nothing in front of that chair - sitting it out, or the hand is folded and mucked */
-          if ((f & PKF[1]) && !show) continue;
+          if (f & PKF[1]) continue;   /* [Claude 2026-10-12] a folded hand is mucked, face down and gone - never shown (the operator: "it shows the cards of people who folded") */
           const sd = show && st.r && st.r.sd ? st.r.sd.find(x => (x[0] | 0) === ref) : null;   /* [Claude 2026-10-11] at the showdown every shown hand lies face up, on every copy */
-          const c = sd ? [sd[1] | 0, sd[2] | 0] : typeof h[1] === 'number' ? [h[1] | 0, h[2] | 0] : null, up = !!c && (show || ref === ms);
+          const c = sd ? [sd[1] | 0, sd[2] | 0] : typeof h[1] === 'number' ? [h[1] | 0, h[2] | 0] : null, up = !!c && (!!sd || ref === ms);   /* face up: a hand called to the showdown, or your own - not every hand this copy happens to know (the dealer knows them all) */
           hands.push({ ref, c: up ? c : null, down: up ? 0 : 1, tilt: up ? 1 : 0 });
           bets[ref] = s[3] | 0;
         }
@@ -2852,6 +2853,26 @@
         send({ c: 'pact', a: String(a), to: to == null ? undefined : to | 0 });
         if (hud.pokerUpdate) hud.pokerUpdate(pokerView(t));
       }
+      /* [Claude 2026-10-12] the operator: the turn ring "should also be a visual timer for that player's turn to act ... like a clock
+         changing colors around the ring, and it should start beeping when the player only has 10 seconds, but only audible
+         to the player whose turn it is". Each copy times the turn from the moment it sees it change (the dealer folds a seat
+         after the table's clock, PK_CLOCK ticks); the beep is a local sound, once a second, for the one whose turn it is. */
+      const PKT = {}, PK_SECS = ((core.pokerClockTicks ? core.pokerClockTicks() : 100) * 600) / 1000;
+      function pokerClock(now) {
+        if (!SCENE.pokerTimer) return;
+        for (const T of core.pokerTables()) {
+          const st = core.S.poker[T.id];
+          if (!st || st.o !== 'playing' || st.st === 'none' || !(st.a >= 0)) { delete PKT[T.id]; continue; }
+          const key = (st.h | 0) + ':' + st.st + ':' + st.a + ':' + (st.b | 0) + ':' + (st.p | 0);
+          let k = PKT[T.id]; if (!k || k.key !== key) k = PKT[T.id] = { key, t0: now, beeped: 99 };
+          const left = Math.max(0, PK_SECS - (now - k.t0) / 1000);
+          SCENE.pokerTimer(T.id, left / PK_SECS);
+          const mine = me.seat && me.seat.k === 'pk' && me.seat.t === T.id && (st.a | 0) === (me.seat.s | 0);
+          if (mine && left > 0 && left <= 10) { const sec = Math.ceil(left); if (sec < k.beeped) { k.beeped = sec; sfx('beep'); } }
+        }
+      }
+      let SOL_ATLAS = null;
+      function openSolitaire() { if (!SOL_ATLAS && SCENE.cardAtlas) SOL_ATLAS = SCENE.cardAtlas(); if (hud.solitaireOpen) hud.solitaireOpen({ atlas: SOL_ATLAS, sfx }); }
       function pokerExamine(st) {
         const inhand = (st.se || []).filter(s => (s[4] | 0) & PKF[3]).map(s => pokerWho(s[1]));
         if (st.o === 'playing' && st.st !== 'none') return 'A hand is on the felt: ' + (st.p | 0) + ' in the pot, ' + inhand.length + ' in it' + (st.bo.length ? ', ' + st.bo.length + ' cards on the board.' : ', nothing on the board yet.') + ' Sit in a free chair and it will deal you in.';
@@ -2907,7 +2928,7 @@
         wx: () => Object.assign({ season: SEASON.name, snowy: SEASON.snowy }, wxMod && wxMod.state ? wxMod.state() : {}),
         progInfo: () => { const P = renderer.info.programs || [], I = renderer.info; return { n: P.length, calls: I.render.calls, tris: I.render.triangles, geos: I.memory.geometries, tex: I.memory.textures, applyMs: SEASON.applyMs, applies: SEASON.applies }; },
         tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },
-        pokerNetRow: t => pkNet(core.pokerRow(t)), pokerKey: () => MYPK, pokerSealed: t => PH[t] || null,   /* [Claude 2026-10-12] tests: the row as it leaves this dealer */   /* a test taps a thing as a player would (first option) */
+        pokerNetRow: t => pkNet(core.pokerRow(t)), _pokerModel: t => pokerModel(t), _pokerView: t => pokerView(t), _pokerClock: () => JSON.parse(JSON.stringify(PKT)), solitaire: () => openSolitaire(), pokerKey: () => MYPK, pokerSealed: t => PH[t] || null,   /* [Claude 2026-10-12] tests: the row as it leaves this dealer */   /* a test taps a thing as a player would (first option) */
         travelShown: () => { const el = host.querySelector('.travel'); return el && el.style.display !== 'none' ? el.className + ' | ' + el.querySelector('.tt').textContent : null; },
         say, store, models: MOD, allowedAsset, wallet: walletApi(DATA.items.items), walletState: () => walletState, walletRefresh,
         chestEventForTest: chestEvent,

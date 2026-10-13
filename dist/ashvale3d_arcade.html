@@ -8507,7 +8507,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       for (const r of rows || []) {
         if (!r || !r.t) continue;
         const st = pokerOf(r.t), was = st.v;
-        for (const k of ['o', 'st', 'd', 'sb', 'bb', 'p', 'b', 'a', 'h', 'bo', 'se', 'lg', 'r', 'hc', 'buy', 'gid', 'co', 'cseq']) if (r[k] !== undefined) st[k] = r[k];
+        for (const k of ['o', 'st', 'd', 'sb', 'bb', 'p', 'b', 'a', 'h', 'bo', 'se', 'lg', 'r', 'hc', 'buy', 'gid', 'co', 'cseq', 'mr', 'bg', 'rk']) if (r[k] !== undefined) st[k] = r[k];   /* mr, bg [Claude 2026-10-12]: the smallest raise and the big blind - without them every guest's panel said 'min 50' at a 1/2 table (the operator) */
         if (r.v != null) st.v = r.v | 0;
         st.mine = 0;
         const T = pokerTableById(r.t);
@@ -9619,7 +9619,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       setNewHome: h => { if (HOMES[h]) NEWHOME = h; }, markGift: (pid, id, n) => markGift(S.players[pid], id, n), homeOf: p => (p && p.home) || 'ashvale', npcFor, lineFor, questForHome, questMarks,
       API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, trapOf, offerOf, isBlessed: (pid, x, y) => !!(S.players[pid] && blessed(S.players[pid], x, y)), setNature, natureHours, setNatureTell, seasonOn, dayHour, fireLit, steamFor, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       tableAt, tableById, tables, chessOf, chessRow, chessRows, chessGame, chessTurn, chessMoves, applyChess, hostSit, hostStand, hostMove, hostSel, standUp,
-      pokerTableAt, pokerTableById, pokerTables, pokerSeatKeys, pokerOpen, pokerOf, pokerRow, pokerRows, pokerGame, applyPoker, pokerReclaim, pokerNetId, chessReclaim, chessNetId, chessLimbo, seatHeld, setOnline: (b) => { S.online = !!b; }, hostPokerSit, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED, PK_AWAY], hostPokerStand, hostPokerAct, pokerLeave, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED],
+      pokerTableAt, pokerTableById, pokerTables, pokerSeatKeys, pokerOpen, pokerOf, pokerRow, pokerRows, pokerGame, applyPoker, pokerClockTicks: () => PK_CLOCK, pokerReclaim, pokerNetId, chessReclaim, chessNetId, chessLimbo, seatHeld, setOnline: (b) => { S.online = !!b; }, hostPokerSit, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED, PK_AWAY], hostPokerStand, hostPokerAct, pokerLeave, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED],
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
@@ -10167,7 +10167,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       }
     }
     const BTN_GEO = new THREE.CylinderGeometry(0.065, 0.065, 0.022, 14), BTN_MAT = new THREE.MeshLambertMaterial({ color: 0xf2eee0 });
-    const TURN_GEO = new THREE.TorusGeometry(0.15, 0.014, 6, 22), TURN_MAT = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.85 });
+    const TURN_GEO = new THREE.TorusGeometry(0.255, 0.012, 6, 40), TURN_MAT = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.85 }), TURN_DIM = new THREE.MeshBasicMaterial({ color: 0x2a2a22, transparent: true, opacity: 0.55 });
     let CARD_TEX = null;
     function roundedRect(g, x, y, w, h, r) {
       g.beginPath(); g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
@@ -10214,14 +10214,21 @@ POSSIBILITY OF SUCH DAMAGE. */
           g.fillStyle = '#c8a040'; g.fillRect(cx - 2.5, cy - 17, 5, 36); g.fillRect(cx - 12, cy - 9, 24, 5);
           continue;
         }
+        if (i >= 52) continue;   /* cells past the deck (only the back, 63, is used) */
         g.fillStyle = '#f8f5ec'; g.fill(); g.strokeStyle = '#bdb49d'; g.lineWidth = 2; g.stroke();
         const rank = PRANKS[i >> 2], suit = i & 3;
-        g.fillStyle = PINK[suit]; g.textAlign = 'left'; g.textBaseline = 'top';
-        g.font = 'bold ' + (rank === 'T' ? 19 : 24) + 'px "DejaVu Sans", sans-serif';
-        g.fillText(rank === 'T' ? '10' : rank, px + 10, py + 8);
-        pip(g, suit, px + PW - 26, py + PH - 32, PW * 0.17);
+        /* [Claude 2026-10-13] the operator (a picture of a standard deck): "each card has the number and the suit in the two opposite
+           corners" - the rank with its suit under it, top left, and the same turned upside down bottom right */
+        const index = () => {
+          g.fillStyle = PINK[suit]; g.textAlign = 'center'; g.textBaseline = 'top';
+          g.font = 'bold ' + (rank === 'T' ? 16 : 21) + 'px "DejaVu Sans", sans-serif';
+          g.fillText(rank === 'T' ? '10' : rank, 15, 6); pip(g, suit, 15, 39, PW * 0.085);
+        };
+        g.save(); g.translate(px + 4, py + 4); index(); g.restore();
+        g.save(); g.translate(px + PW - 4, py + PH - 4); g.rotate(Math.PI); index(); g.restore();
+        g.fillStyle = PINK[suit];   /* the pips below paint in the suit's colour (restore() took it back to the card's cream) */
         /* [Claude 2026-10-11] the operator: the pips in their places; the ace alone a single pip; simple artwork on the court cards */
-        const n = PRANKS.indexOf(rank) + 2, L = px + PW * 0.33, Rr = px + PW * 0.67, C = px + PW / 2, S = PW * 0.14;
+        const n = PRANKS.indexOf(rank) + 2, L = px + PW * 0.37, Rr = px + PW * 0.63, C = px + PW / 2, S = PW * 0.13;   /* columns kept clear of the corner indices */
         const Y = (f) => py + PH * f, pp = (x, y) => pip(g, suit, x, y, S);
         if (rank === 'A') pip(g, suit, C, Y(0.5), PW * 0.34);
         else if (n <= 10) {
@@ -10237,7 +10244,7 @@ POSSIBILITY OF SUCH DAMAGE. */
           else { col4.forEach(f => { pp(L, Y(f)); pp(Rr, Y(f)); }); pp(C, Y(0.325)); pp(C, Y(0.675)); }
         } else {   /* J, Q, K: a framed figure in the suit's colour - a crown (K), a crown and a veil (Q), a cap with a feather (J) */
           const fx = C, fy = Y(0.5), col = PINK[suit], gold = '#c8a040';
-          g.strokeStyle = col; g.lineWidth = 1.5; g.strokeRect(px + 22, py + 34, PW - 44, PH - 68);
+          g.strokeStyle = col; g.lineWidth = 1.5; g.strokeRect(px + 29, py + 30, PW - 58, PH - 60);   /* [Claude 2026-10-13] kept inside the corner indices (the operator: the art covered the suit pip) */
           g.fillStyle = '#f0e6c8'; g.beginPath(); g.arc(fx, fy - 6, 11, 0, Math.PI * 2); g.fill();   /* the face */
           g.fillStyle = col; g.fillRect(fx - 16, fy + 6, 32, 24);   /* the robe */
           g.fillStyle = gold; g.fillRect(fx - 3, fy + 8, 6, 20);
@@ -10259,6 +10266,14 @@ POSSIBILITY OF SUCH DAMAGE. */
       a.needsUpdate = true; mesh.userData.card = id;
     }
     function cardMesh(mat, id) { const m = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W, CARD_H), mat); cardFace(m, id); return m; }
+    function pokerTimer(id, frac) {   /* [Claude 2026-10-12] the turn ring as a clock: frac = the share of the turn's time still left */
+      const T = POKER[id], r = T && T.turn; if (!r || !r.userData.arc) return;
+      frac = Math.max(0, Math.min(1, +frac || 0)); if (Math.abs(frac - r.userData.frac) < 0.004) return;
+      r.userData.frac = frac; const arc = r.userData.arc;
+      arc.geometry.dispose(); arc.geometry = new THREE.RingGeometry(0.232, 0.278, 64, 1, Math.PI / 2, Math.max(0.0001, Math.PI * 2 * frac));
+      const c = frac > 0.5 ? new THREE.Color(0x3fd25a).lerp(new THREE.Color(0xffd23f), (1 - frac) * 2) : new THREE.Color(0xffd23f).lerp(new THREE.Color(0xe8382c), (0.5 - frac) * 2);
+      arc.material.color.copy(c);
+    }
     function pokerShow(id, m) {   /* the engine's model of a table: board, each seat's two cards (down for the ones it keeps),
                                      the bets in front of each chair, who has the button, whose turn it is */
       PK_STATE[id] = m;
@@ -10313,7 +10328,12 @@ POSSIBILITY OF SUCH DAMAGE. */
       if (T.turn) { T.group.remove(T.turn); T.turn = null; }
       if (m.turn != null && T.spots[m.turn | 0]) {
         const s = T.spots[m.turn | 0], dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1;
-        const r = new THREE.Mesh(TURN_GEO, TURN_MAT); r.rotation.x = Math.PI / 2;
+        /* [Claude 2026-10-12] the operator: "The ring that is the indicator for whose turn it is should also be a visual timer ... like a
+           clock changing colors around the ring": a dim full ring, and over it the time left as an arc that runs down
+           clockwise, green to yellow to red (pokerTimer sets it every frame) */
+        const r = new THREE.Group(), base = new THREE.Mesh(TURN_GEO, TURN_DIM); base.rotation.x = Math.PI / 2; r.add(base);
+        const arc = new THREE.Mesh(new THREE.RingGeometry(0.232, 0.278, 64, 1, Math.PI / 2, Math.PI * 2), new THREE.MeshBasicMaterial({ color: 0x3fd25a, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false }));
+        arc.rotation.x = -Math.PI / 2; arc.position.y = 0.004; r.add(arc); r.userData.arc = arc; r.userData.frac = 1;
         r.position.set(T.ox + dx / L * 0.66 * R, top + 0.05, T.oz + dz / L * 0.66 * R); T.group.add(r); T.turn = r;
       }
     }
@@ -11816,7 +11836,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerTimer, cardAtlas: () => { const t = cardKit(); return t && t.image && t.image.toDataURL ? t.image.toDataURL('image/png') : null; }, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -12811,6 +12831,90 @@ POSSIBILITY OF SUCH DAMAGE. */
     function pokerUpdate(v) { if (!box) return; view = v; draw(); }
     function pokerClose() { ui.classList.remove('poker'); if (box) { box.remove(); box = null; } view = null; cb = null; raise = false; }
     K.pokerOpen = pokerOpen; K.pokerUpdate = pokerUpdate; K.pokerClose = pokerClose;
+    /* [Claude 2026-10-13] SOLITAIRE at the card table (the operator: "if you right click or long tap on the table you should also have
+       the option to play Solitaire"). Klondike, draw one, as many passes through the stock as you like; the cards are the
+       felt's own (the scene's card atlas). One tap plays a card where it fits best - up to its foundation if it can go,
+       else onto the first column that takes it (with the cards on top of it) - so it plays well on a phone; tap the stock to
+       turn a card, tap an empty stock to turn the waste back over. Undo, a new deal, and Finish once every card is face up.
+       Pure fun: no GOLD, nothing sent anywhere. */
+    const SOL_CSS = `
+.ash .solp{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,96vw);max-height:94vh;overflow:auto;z-index:30;padding:10px;border-radius:12px;background:radial-gradient(ellipse at center,#2f6a3f,#1c4128);box-shadow:0 0 0 3px #5b3a1e,0 10px 40px #000c;color:#f2ead2;font:13px system-ui,sans-serif;touch-action:manipulation;user-select:none}
+.ash .solp .top{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.ash .solp .top h3{margin:0;font:bold 16px Georgia,serif;flex:1;color:#f4e5b8}
+.ash .solp .top .btn{padding:4px 10px;width:auto;margin:0}
+.ash .solp .row{position:relative}
+.ash .solp .cardx{position:absolute;border-radius:5px;box-shadow:0 1px 3px #0009;background-repeat:no-repeat;cursor:pointer}
+.ash .solp .slot{position:absolute;border-radius:5px;border:2px dashed #ffffff40;box-sizing:border-box}
+.ash .solp .sel{box-shadow:0 0 0 3px #ffd23f,0 1px 3px #0009}
+.ash .solp .msg{text-align:center;margin-top:6px;color:#ffe9a8;min-height:18px}
+`;
+    if (!document.getElementById('ash-sol-css')) { const st = document.createElement('style'); st.id = 'ash-sol-css'; st.textContent = SOL_CSS; document.head.appendChild(st); }
+    const SV = c => { const r = c >> 2; return r === 12 ? 1 : r + 2; }, RD = c => RED[c & 3] === 1;
+    let sbox = null, S = null, undo = [], atlas = null, sfx = null, selK = null;
+    function solDeal() {
+      const d = []; for (let i = 0; i < 52; i++) d.push(i);
+      for (let i = 51; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [d[i], d[j]] = [d[j], d[i]]; }
+      S = { stock: [], waste: [], found: [[], [], [], []], tab: [], moves: 0, t0: Date.now(), won: false };
+      for (let i = 0; i < 7; i++) { S.tab.push([]); for (let k = 0; k <= i; k++) S.tab[i].push({ c: d.pop(), up: k === i }); }
+      S.stock = d.map(c => ({ c, up: false })); undo = []; selK = null;
+    }
+    const snap = () => JSON.stringify(S);
+    function push() { undo.push(snap()); if (undo.length > 200) undo.shift(); }
+    function canFound(c, f) { const t = f[f.length - 1]; return t ? ((t.c & 3) === (c & 3) && SV(c) === SV(t.c) + 1) : SV(c) === 1; }
+    function canTab(c, col) { const t = col[col.length - 1]; return t ? (t.up && RD(t.c) !== RD(c) && SV(c) === SV(t.c) - 1) : SV(c) === 13; }
+    function moveCards(from, n, to) { const cs = from.splice(from.length - n, n); to.push(...cs); const f = from[from.length - 1]; if (f && !f.up && from !== S.waste) f.up = true; S.moves++; }
+    function play(src, idx) {   /* the one-tap rule: foundation first (a top card), else the first column that takes the run */
+      const pile = src === 'w' ? S.waste : src[0] === 't' ? S.tab[+src.slice(1)] : S.found[+src.slice(1)];
+      const n = pile.length - idx; if (n <= 0) return false; const c = pile[idx].c;
+      if (!pile[idx].up) return false;
+      if (n === 1 && src[0] !== 'f') for (const f of S.found) if (canFound(c, f)) { push(); moveCards(pile, 1, f); return true; }
+      for (let i = 0; i < 7; i++) { const col = S.tab[i]; if (col === pile) continue; if (canTab(c, col) && !(SV(c) === 13 && idx === 0 && src[0] === 't')) { push(); moveCards(pile, n, col); return true; } }
+      return false;
+    }
+    function finishable() { return !S.stock.length && !S.waste.length && S.tab.every(col => col.every(x => x.up)); }
+    function autoFinish() { let go = true; while (go) { go = false; for (const src of ['w', 't0', 't1', 't2', 't3', 't4', 't5', 't6']) { const p = src === 'w' ? S.waste : S.tab[+src.slice(1)]; if (p.length) { const c = p[p.length - 1].c; for (const f of S.found) if (canFound(c, f)) { moveCards(p, 1, f); go = true; break; } } } } }
+    function checkWin() { if (!S.won && S.found.every(f => f.length === 13)) { S.won = true; sfx && sfx('level'); } }
+    function drawSol() {
+      if (!sbox) return;
+      const W = Math.min(560, window.innerWidth * 0.96) - 20, gap = Math.max(4, W * 0.012), cw = Math.floor((W - gap * 6) / 7), ch = Math.round(cw * 1.5), fan = Math.round(ch * 0.26), fanD = Math.round(ch * 0.12);
+      const bg = c => 'background-image:url(' + atlas + ');background-size:' + (cw * 8) + 'px ' + (ch * 8) + 'px;background-position:-' + ((c % 8) * cw) + 'px -' + (((c / 8) | 0) * ch) + 'px;';
+      const card = (c, up, x, y, key, sel) => '<div class="cardx' + (sel ? ' sel' : '') + '" data-k="' + key + '" style="left:' + x + 'px;top:' + y + 'px;width:' + cw + 'px;height:' + ch + 'px;' + bg(up ? c : 63) + '"></div>';
+      const slot = (x, y, key, lab) => '<div class="slot" data-k="' + key + '" style="left:' + x + 'px;top:' + y + 'px;width:' + cw + 'px;height:' + ch + 'px;display:flex;align-items:center;justify-content:center;color:#ffffff60;font-size:' + Math.round(cw * 0.35) + 'px">' + (lab || '') + '</div>';
+      let h = '', X = i => i * (cw + gap);
+      h += S.stock.length ? card(0, false, X(0), 0, 's') : slot(X(0), 0, 's', '&#8635;');
+      h += S.waste.length ? card(S.waste[S.waste.length - 1].c, true, X(1), 0, 'w:' + (S.waste.length - 1), selK === 'w:' + (S.waste.length - 1)) : slot(X(1), 0, 'w');
+      for (let f = 0; f < 4; f++) { const F = S.found[f]; h += F.length ? card(F[F.length - 1].c, true, X(3 + f), 0, 'f' + f + ':' + (F.length - 1)) : slot(X(3 + f), 0, 'f' + f, SUIT[f]); }
+      let maxY = ch;
+      for (let i = 0; i < 7; i++) {
+        const col = S.tab[i], y0 = ch + gap * 2; let y = y0;
+        if (!col.length) h += slot(X(i), y0, 't' + i, 'K');
+        col.forEach((x, k) => { h += card(x.c, x.up, X(i), y, 't' + i + ':' + k, selK === 't' + i + ':' + k); y += x.up ? fan : fanD; });
+        maxY = Math.max(maxY, y + ch);
+      }
+      const secs = ((Date.now() - S.t0) / 1000) | 0;
+      sbox.innerHTML = '<div class="top"><h3>Solitaire</h3><button class="btn" data-u>Undo</button><button class="btn" data-n>New deal</button>' + (finishable() && !S.won ? '<button class="btn" data-f>Finish</button>' : '') + '<button class="btn" data-x>Close</button></div>'
+        + '<div class="row" style="height:' + (maxY + 4) + 'px">' + h + '</div>'
+        + '<div class="msg">' + (S.won ? 'You win! ' + S.moves + ' moves in ' + Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0') + '. Deal again?' : 'Tap a card to play it where it fits. Tap the deck to turn a card.') + '</div>';
+      sbox.querySelector('[data-u]').onclick = () => { if (undo.length) { S = JSON.parse(undo.pop()); selK = null; drawSol(); } };
+      sbox.querySelector('[data-n]').onclick = () => { solDeal(); drawSol(); };
+      sbox.querySelector('[data-x]').onclick = () => solitaireClose();
+      const fb = sbox.querySelector('[data-f]'); if (fb) fb.onclick = () => { push(); autoFinish(); checkWin(); drawSol(); };
+      for (const e of sbox.querySelectorAll('[data-k]')) e.onclick = (ev) => { ev.stopPropagation(); tapSol(e.dataset.k); };
+    }
+    function tapSol(k) {
+      if (S.won) return;
+      if (k === 's') { push(); if (S.stock.length) { const x = S.stock.pop(); x.up = true; S.waste.push(x); } else { S.stock = S.waste.reverse().map(x => ({ c: x.c, up: false })); S.waste = []; } S.moves++; sfx && sfx('click'); drawSol(); return; }
+      const [src, ix] = k.split(':'); if (ix == null) return;
+      const pile = src === 'w' ? S.waste : src[0] === 't' ? S.tab[+src.slice(1)] : S.found[+src.slice(1)];
+      const i = +ix, x = pile[i];
+      if (src[0] === 't' && !x.up && i === pile.length - 1) { push(); x.up = true; drawSol(); return; }
+      if (play(src, i)) { sfx && sfx('click'); checkWin(); } else sfx && sfx('miss');
+      drawSol();
+    }
+    function solitaireOpen(o) { atlas = (o && o.atlas) || atlas; sfx = (o && o.sfx) || null; if (!S || S.won) solDeal(); if (!sbox) sbox = el('solp ui', ui); drawSol(); }
+    function solitaireClose() { if (sbox) { sbox.remove(); sbox = null; } }
+    K.solitaireOpen = solitaireOpen; K.solitaireClose = solitaireClose; K.solitaireOpenNow = () => !!sbox; K._sol = () => S;
+
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('hudpoker', { api: 1, v: 1 }, () => ({ api: 1, install }));
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -13154,7 +13258,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab(api.isPhone ? null : 'inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       chessOpen: (v, cb) => K.chessOpen(v, cb), chessUpdate: v => K.chessUpdate(v), chessClose: () => K.chessClose(), get chessPromo() { return K.chessPromo; },
-      pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(),
+      pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(), solitaireOpen: o => K.solitaireOpen && K.solitaireOpen(o), solitaireClose: () => K.solitaireClose && K.solitaireClose(), _sol: () => K._sol && K._sol(),
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };
   }
@@ -18647,6 +18751,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           case 'mobdie': tone(200, 0.4, 'square', 0.15, 70); break;
           case 'click': tone(1200, 0.03, 'square', 0.06); break;
           case 'freeze': tone(1800, 0.25, 'sine', 0.2, 2600); noise(0.3, 6000, 0.15, 3); break;
+          case 'beep': tone(1250, 0.09, 'square', 0.11, 1250); break;   /* [Claude 2026-10-12] the card table's last ten seconds, your turn only */
           case 'pray': tone(660, 0.35, 'sine', 0.25, 990); tone(990, 0.3, 'sine', 0.12, 0, 0.08); break;
           case 'prayoff': tone(700, 0.25, 'sine', 0.2, 350); break;
           case 'altar': [392, 523, 659, 784].forEach((f, i) => tone(f, 0.6, 'sine', 0.22, 0, i * 0.1)); break;
@@ -18663,8 +18768,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         const k = cam.keys;
         if (k.ArrowLeft) cam.tyaw -= 2.2 * dt; if (k.ArrowRight) cam.tyaw += 2.2 * dt; if (k.ArrowUp) cam.tpitch += 1.2 * dt; if (k.ArrowDown) cam.tpitch -= 1.2 * dt;
         const hawkEye = !!myEnt.hawk && !((me.burden || 0) > 0);   /* flying or perched: the hawk's own eyes (2026-10-07); grounded under a load: behind it as usual */
-        cam.tpitch = Math.max(hawkEye || !myEnt.hawk ? -1.3 : 0.3, Math.min(1.42, cam.tpitch)); cam.tdist = Math.max(4.5, Math.min(hawkEye ? 11 : 24, cam.tdist));   /* below 0.3 a walker's camera goes into the eyes and looks up; zoom by distance */
-        const s = cam.snap ? 1 : Math.min(1, dt * 10);
+        if (!cam.film) { cam.tpitch = Math.max(hawkEye || !myEnt.hawk ? -1.3 : 0.3, Math.min(1.42, cam.tpitch)); cam.tdist = Math.max(4.5, Math.min(hawkEye ? 11 : 24, cam.tdist)); }   /* cam.film [Claude 2026-10-13]: a film sets the camera exactly, every frame (the clamp and the easing made close shots jitter) */   /* below 0.3 a walker's camera goes into the eyes and looks up; zoom by distance */
+        const s = cam.snap || cam.film ? 1 : Math.min(1, dt * 10);
         cam.yaw += (cam.tyaw - cam.yaw) * s; cam.pitch += (cam.tpitch - cam.pitch) * s; cam.dist += (cam.tdist - cam.dist) * s;
         const p = myEnt.root.position; const tg = new THREE.Vector3(p.x, p.y + 1.0, p.z);
         if (cam.mode === 'creator') {   /* close-up, the character turned to face the camera, a little right of centre */
@@ -18673,7 +18778,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         }
         if (cam.mode === 'chess' && CHESSV) { tg.set(CHESSV.x, CHESSV.y, CHESSV.z); cam.tyaw = CHESSV.yaw + CHESS_TURN; cam.tpitch = isPhone ? 1.32 : 1.22; cam.tdist = isPhone ? 1.9 : 1.55; }   /* seated at a chess table: close over the board, your side nearest */
         if (cam.mode === 'poker' && POKERV) { tg.set(POKERV.x, POKERV.y, POKERV.z); cam.tyaw = POKERV.yaw; cam.tpitch = 1.2; cam.tdist = 1.4; }   /* seated at the felt: the light centre is the middle of the table */
-        if (cam.snap) camT.copy(tg); else camT.lerp(tg, Math.min(1, dt * 12));
+        if (cam.snap || cam.film) camT.copy(tg); else camT.lerp(tg, Math.min(1, dt * 12));
         cam.snap = false;
         const cp = Math.max(0.3, cam.pitch);
         camera.position.set(camT.x + Math.sin(cam.yaw) * Math.cos(cp) * cam.dist, camT.y + Math.sin(cp) * cam.dist, camT.z + Math.cos(cam.yaw) * Math.cos(cp) * cam.dist);
@@ -18855,7 +18960,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             else out.push({ html: 'Sit down <span class="c">(chair ' + (i + 1) + ')</span>' + pkNote, act: { c: 'sit', table: t.id, seat: i, buy: 0 }, red: out.length ? 0 : 1 });
           });
           if (pkEmpty && !(me.seat && me.seat.t === t.id)) { const free = (T.seats || []).findIndex((s, i) => !at[i]); if (free >= 0) for (const n of [100, 1000, 10000]) out.push({ html: 'Buy in for <span class="y">' + n.toLocaleString() + ' GOLD</span> <span class="c">(chair ' + (free + 1) + ', sets the table\'s stakes)</span>', act: { c: 'sit', table: t.id, seat: free, buy: n } }); }
-          out.push(...taken, { html: 'Examine <span class="c">Card table</span>', fn: () => hud.chat(pokerExamine(st), 'sys') });
+          out.push(...taken, { html: 'Play <span class="y">Solitaire</span>', fn: openSolitaire }, { html: 'Examine <span class="c">Card table</span>', fn: () => hud.chat(pokerExamine(st), 'sys') });   /* Solitaire [Claude 2026-10-13]: the operator */
           return out;
         }
         if (t.kind === 'crate') {
@@ -19842,7 +19947,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         for (const g of fires.values()) { const u = g.userData, sc = 0.8 + 0.25 * Math.sin(now / 70 + u.ph) + 0.1 * Math.sin(now / 23 + u.ph); u.f1.scale.set(1, sc, 1); u.f2.scale.set(1, 1.1 * sc, 1); }
         if (wxMod && wxMod.update && !CAVE.on) wxMod.update(elapsed);
         if (!CAVE.on) dayTick(); else { if (STARS.pts) STARS.pts.visible = false; underSeason(); }   /* day and night on top of the weather's sky */   /* underground the cave sets the fog and the sky */
-        updateRemotes(now, dt);
+        updateRemotes(now, dt); pokerClock(now);
         for (let i = projs.length - 1; i >= 0; i--) {
           const p = projs[i]; p.t += dt; const k = Math.min(1, p.t / p.dur);
           const to = p.tgt.root.position.clone(); to.y += p.tgt.hawk ? 0.25 : (p.tgt.H.height || 1.2) * p.tgt.scale * 0.55;   /* up at the hawk itself in the sky */
@@ -20168,9 +20273,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         for (const s of st.se || []) {
           const ref = s[0] | 0, f = s[4] | 0, h = (st.hc || []).find(x => (x[0] | 0) === ref);
           if (!h) continue;   /* nothing in front of that chair - sitting it out, or the hand is folded and mucked */
-          if ((f & PKF[1]) && !show) continue;
+          if (f & PKF[1]) continue;   /* [Claude 2026-10-12] a folded hand is mucked, face down and gone - never shown (the operator: "it shows the cards of people who folded") */
           const sd = show && st.r && st.r.sd ? st.r.sd.find(x => (x[0] | 0) === ref) : null;   /* [Claude 2026-10-11] at the showdown every shown hand lies face up, on every copy */
-          const c = sd ? [sd[1] | 0, sd[2] | 0] : typeof h[1] === 'number' ? [h[1] | 0, h[2] | 0] : null, up = !!c && (show || ref === ms);
+          const c = sd ? [sd[1] | 0, sd[2] | 0] : typeof h[1] === 'number' ? [h[1] | 0, h[2] | 0] : null, up = !!c && (!!sd || ref === ms);   /* face up: a hand called to the showdown, or your own - not every hand this copy happens to know (the dealer knows them all) */
           hands.push({ ref, c: up ? c : null, down: up ? 0 : 1, tilt: up ? 1 : 0 });
           bets[ref] = s[3] | 0;
         }
@@ -20224,6 +20329,26 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         send({ c: 'pact', a: String(a), to: to == null ? undefined : to | 0 });
         if (hud.pokerUpdate) hud.pokerUpdate(pokerView(t));
       }
+      /* [Claude 2026-10-12] the operator: the turn ring "should also be a visual timer for that player's turn to act ... like a clock
+         changing colors around the ring, and it should start beeping when the player only has 10 seconds, but only audible
+         to the player whose turn it is". Each copy times the turn from the moment it sees it change (the dealer folds a seat
+         after the table's clock, PK_CLOCK ticks); the beep is a local sound, once a second, for the one whose turn it is. */
+      const PKT = {}, PK_SECS = ((core.pokerClockTicks ? core.pokerClockTicks() : 100) * 600) / 1000;
+      function pokerClock(now) {
+        if (!SCENE.pokerTimer) return;
+        for (const T of core.pokerTables()) {
+          const st = core.S.poker[T.id];
+          if (!st || st.o !== 'playing' || st.st === 'none' || !(st.a >= 0)) { delete PKT[T.id]; continue; }
+          const key = (st.h | 0) + ':' + st.st + ':' + st.a + ':' + (st.b | 0) + ':' + (st.p | 0);
+          let k = PKT[T.id]; if (!k || k.key !== key) k = PKT[T.id] = { key, t0: now, beeped: 99 };
+          const left = Math.max(0, PK_SECS - (now - k.t0) / 1000);
+          SCENE.pokerTimer(T.id, left / PK_SECS);
+          const mine = me.seat && me.seat.k === 'pk' && me.seat.t === T.id && (st.a | 0) === (me.seat.s | 0);
+          if (mine && left > 0 && left <= 10) { const sec = Math.ceil(left); if (sec < k.beeped) { k.beeped = sec; sfx('beep'); } }
+        }
+      }
+      let SOL_ATLAS = null;
+      function openSolitaire() { if (!SOL_ATLAS && SCENE.cardAtlas) SOL_ATLAS = SCENE.cardAtlas(); if (hud.solitaireOpen) hud.solitaireOpen({ atlas: SOL_ATLAS, sfx }); }
       function pokerExamine(st) {
         const inhand = (st.se || []).filter(s => (s[4] | 0) & PKF[3]).map(s => pokerWho(s[1]));
         if (st.o === 'playing' && st.st !== 'none') return 'A hand is on the felt: ' + (st.p | 0) + ' in the pot, ' + inhand.length + ' in it' + (st.bo.length ? ', ' + st.bo.length + ' cards on the board.' : ', nothing on the board yet.') + ' Sit in a free chair and it will deal you in.';
@@ -20279,7 +20404,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         wx: () => Object.assign({ season: SEASON.name, snowy: SEASON.snowy }, wxMod && wxMod.state ? wxMod.state() : {}),
         progInfo: () => { const P = renderer.info.programs || [], I = renderer.info; return { n: P.length, calls: I.render.calls, tris: I.render.triangles, geos: I.memory.geometries, tex: I.memory.textures, applyMs: SEASON.applyMs, applies: SEASON.applies }; },
         tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },
-        pokerNetRow: t => pkNet(core.pokerRow(t)), pokerKey: () => MYPK, pokerSealed: t => PH[t] || null,   /* [Claude 2026-10-12] tests: the row as it leaves this dealer */   /* a test taps a thing as a player would (first option) */
+        pokerNetRow: t => pkNet(core.pokerRow(t)), _pokerModel: t => pokerModel(t), _pokerView: t => pokerView(t), _pokerClock: () => JSON.parse(JSON.stringify(PKT)), solitaire: () => openSolitaire(), pokerKey: () => MYPK, pokerSealed: t => PH[t] || null,   /* [Claude 2026-10-12] tests: the row as it leaves this dealer */   /* a test taps a thing as a player would (first option) */
         travelShown: () => { const el = host.querySelector('.travel'); return el && el.style.display !== 'none' ? el.className + ' | ' + el.querySelector('.tt').textContent : null; },
         say, store, models: MOD, allowedAsset, wallet: walletApi(DATA.items.items), walletState: () => walletState, walletRefresh,
         chestEventForTest: chestEvent,
