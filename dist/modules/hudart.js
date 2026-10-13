@@ -162,9 +162,7 @@
 .ash .dragicon img{width:100%;height:100%}.ash .dragicon .n{position:absolute;left:2px;top:0;font-size:10px;color:#ff0;text-shadow:1px 1px 0 #000}
 .ash .slot.dragsrc{opacity:.35}
 .ash .splat.fx{width:30px;height:30px;font-size:10px;color:#003;text-shadow:none}
-.ash .netlost{position:absolute;left:50%;top:max(8px,env(safe-area-inset-top));transform:translateX(-50%);width:min(560px,calc(100vw - 24px));z-index:18;display:none;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:10px;background:#5a1414f0;box-shadow:0 0 0 2px #e05a4a,0 6px 20px #000a;color:#fde9e4;font:14px/1.35 system-ui,sans-serif}
-.ash .netlost b{color:#fff}
-.ash .netlost>div{flex:1 1 auto;min-width:0}.ash .netlost .btn{flex:none;width:auto;margin:0;padding:8px 14px}
+.ash .netlost{position:absolute;right:max(2px,env(safe-area-inset-right));top:max(1px,env(safe-area-inset-top));z-index:18;display:none;max-width:40vw;padding:1px 5px;border-radius:3px;background:#0009;color:#ff6a5a;font:600 11px/1.3 system-ui,sans-serif;text-align:right;text-shadow:0 1px 2px #000;pointer-events:auto;cursor:pointer}   /* [Claude 2026-10-12] a small red note top right (the operator: the big banner usually goes away within a second or two) */
 .ash .newver{position:absolute;left:50%;top:max(8px,env(safe-area-inset-top));transform:translateX(-50%);width:min(560px,calc(100vw - 24px));z-index:17;display:none;padding:10px 14px;border-radius:10px;background:#3b2c08f2;box-shadow:0 0 0 2px #e8b33a,0 6px 20px #000a;color:#fbefcf;font:14px/1.35 system-ui,sans-serif}
 .ash .newver b{color:#ffd76a}
 .ash .elsewhere{position:absolute;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:#0b0907e8;padding:16px}

@@ -1681,7 +1681,7 @@
          background goes quiet too. A loud loss shows the HUD's connection banner (Reload) until the room is back. */
       const NW = { heard: 0, fails: 0, lost: false, was: false, quiet: 0, quietTry: false, tries: 0 };
       function netDrop(why, loud) {
-        const old = room; room = null; dropRemotes(); hosts.clear(); passive = false; applyAuth(); hud.setOnline(false);
+        const old = room; room = null; core.setOnline(false); coreCall(() => core.chessLimbo(PID)); dropRemotes(true); hosts.clear(); passive = false; applyAuth(); hud.setOnline(false);
         if (old) { try { old.leave(); } catch (e) { /* gone already */ } }
         retryAt = 0; NW.fails = 0;
         if (loud) { NW.lost = true; NW.tries = 0; hud.netLost && hud.netLost(true, 'net', why); } else NW.quietTry = true;
@@ -1732,9 +1732,9 @@
         if (me.boat !== 1) { carryTell(r, 0); hud.chat((r.name || 'Your partner') + ' is left on the bank here until they come back.', 'sys'); dropRemote(id, true); return; }   /* ashore: they wait on the bank */
         if (now - r.offline.told > 15000) { r.offline.told = now; carryTell(r, 1); }
       }
-      function dropRemote(id, hard) { const r = remotes.get(id);
-        if (!hard && r && !r.offline && ghostable(r, id)) { makeGhost(id, r); return; } if (r) { if (r.name && r.name !== 'Adventurer') knewName.set(id, r.name); removeEnt(r.e); remotes.delete(id); } if (core.S.players[id] && core.S.players[id].puppet) core.removePlayer(id); }
-      function dropRemotes() { for (const id of Array.from(remotes.keys())) dropRemote(id); }
+      function dropRemote(id, hard, keep) { const r = remotes.get(id);
+        if (!hard && r && !r.offline && ghostable(r, id)) { makeGhost(id, r); return; } if (r) { if (r.name && r.name !== 'Adventurer') knewName.set(id, r.name); removeEnt(r.e); remotes.delete(id); } if (core.S.players[id] && core.S.players[id].puppet) core.removePlayer(id, keep); }
+      function dropRemotes(keep) { for (const id of Array.from(remotes.keys())) dropRemote(id, false, keep); }   /* keep [Claude 2026-10-12]: OUR room dropped - their chess seats wait for the host's word */
       /* fighting a monster of another area (the operator: attackers can be attacked back across borders): we tell the room which
          area we are fighting in, so that area gets a host even when nobody stands in it; 6 s after the last blow it ends */
       let lastCombat = null;
@@ -1758,7 +1758,7 @@
       function evicted() {
         if (stopped) return;
         stopped = true; hud.showHelp && hud.showHelp(false); hud.hideMenu && hud.hideMenu(); hud.elsewhere && hud.elsewhere();
-        const R = room; room = null; dropRemotes(); hud.setOnline(false); if (R) R.leave();
+        const R = room; room = null; core.setOnline(false); coreCall(() => core.chessLimbo(PID)); dropRemotes(true); hud.setOnline(false); if (R) R.leave();
         if (nb) nb.update([], []);
         if (bank.room) { try { bank.room.leave(); } catch (e) { /* gone */ } bank.room = null; }
         if (ONE.room) { ONE.room.leave(); ONE.room = null; } clearInterval(ONE.t);
@@ -1802,21 +1802,21 @@
         joining = true; roomZone = z;
         if (nb) { const ids = nb.rooms().map(R => R.id).filter(i => i !== z); nb.update([], ids); }   /* never in one room twice: the region we walk into stops being a neighbour */
         try {
-          if (room) { const old = room; room = null; try { const st = stateMsg(performance.now()); st.p = [me.x + 0.5, me.y + 0.5]; old.send(st); } catch (e) { /* gone */ } dropRemotes(); hosts.clear(); applyAuth(); await old.leave(); }   /* a last word where I am now: whoever rides in my canoe follows me across
+          if (room) { const old = room; room = null; try { const st = stateMsg(performance.now()); st.p = [me.x + 0.5, me.y + 0.5]; old.send(st); } catch (e) { /* gone */ } dropRemotes(true); hosts.clear(); applyAuth(); await old.leave(); }   /* a last word where I am now: whoever rides in my canoe follows me across
           hosts.clear(); electedOnce = false; myJoin = Date.now(); joinedAt = performance.now(); passive = true; applyAuth();   /* passive until the hosts are known */
           const res = await net.join(z, { game: 'ashvale', loopback: q.has('loopback') });
           hud.setOnline(!!(res && res.online));
           if (res && res.online) { NW.heard = performance.now(); NW.fails = 0; NW.was = true; NW.quietTry = false; if (NW.lost) { NW.lost = false; hud.netLost && hud.netLost(false); hud.chat('Back in touch with other players.', 'sys'); } }
           else if (NW.was && (NW.lost || NW.quietTry)) { NW.quietTry = false; NW.tries++; if (!NW.lost) NW.lost = true; hud.netLost && hud.netLost(true, 'net', 'the arcade is not answering' + (NW.tries > 2 ? ': reload the page' : ', still trying')); }
           if (res && res.online && core.regionOf(me.x, me.y) === z) {
-            const R = res.room; room = R; myNetId = R.me.id; oneDevice(R.me); netStatus = res.backend + ' as ' + (R.me.tag ? '@' + R.me.tag : 'guest');
+            const R = res.room; room = R; myNetId = R.me.id; core.setOnline(true); oneDevice(R.me); netStatus = res.backend + ' as ' + (R.me.tag ? '@' + R.me.tag : 'guest');
             seedDragonBoard();
             { let h = 2166136261; for (let i = 0; i < myNetId.length; i++) h = Math.imul(h ^ myNetId.charCodeAt(i), 16777619) >>> 0; core.uidSpace(1 + h % 4095); }   /* my own uid space for things I create as a host */
             R.on('message', ev => { if (room === R) onNet(ev); });
             R.on('message', () => { if (room === R) NW.heard = performance.now(); }); R.on('join', () => { if (room === R) NW.heard = performance.now(); }); R.on('leave', () => { if (room === R) NW.heard = performance.now(); });
             R.on('leave', ev => { if (room !== R) return; dropRemote(ev.from.id); elect(); });
             R.on('join', () => { if (room !== R) return; clearTimeout(gearT); gearT = setTimeout(() => { netGear(); if (hosted.size) fullSnap(); }, 600); });   /* newcomers missed our gear/outfit/name: send it again (one resend for a burst of joins) */
-            R.on('closed', why => { if (room !== R) return; room = null; dropRemotes(); hosts.clear(); passive = false; applyAuth(); hud.setOnline(false); NW.lost = true; NW.tries = 0; hud.netLost && hud.netLost(true, 'net', why || ''); hud.chat('Lost contact with other players' + (why ? ' (' + why + ')' : '') + '. Retrying soon.', 'sys'); retryAt = performance.now() + 15000; });
+            R.on('closed', why => { if (room !== R) return; room = null; core.setOnline(false); coreCall(() => core.chessLimbo(PID)); dropRemotes(true); hosts.clear(); passive = false; applyAuth(); hud.setOnline(false); NW.lost = true; NW.tries = 0; hud.netLost && hud.netLost(true, 'net', why || ''); hud.chat('Lost contact with other players' + (why ? ' (' + why + ')' : '') + '. Retrying soon.', 'sys'); retryAt = performance.now() + 15000; });
             netGear();
             if (R.me && !R.me.guest && R.me.address && R.me.address !== walletState.address) { walletState.address = R.me.address; walletRefresh(); }
             if (!trade && deps.trade) trade = deps.trade.create({ host, toast: (t, k) => hud.chat(t, k || 'trade'), send: (to, obj) => netSend({ tr: obj, to }), offerable: tradeOfferable, onSettled: tradeSettled, onUndone: tradeUndone, onOffer: tellOffer, itemOf: p => { const j = p && p.json; if (!j || !allowedAsset(p)) return null; const k = j.key || ((j.attributes || []).find(a => a && a.trait_type === 'Key') || {}).value; const d = k && core.item(k); return d ? { key: k, name: d.name, icon: (() => { try { return MOD.icon(k, 64); } catch (e) { return null; } })() } : null; }, nameOf: id => { const r = remotes.get(id); return r ? label(r.name, r.from) : 'another player'; } });
@@ -2083,7 +2083,7 @@
           if (core.S.players[id]) core.setPuppet(id, Object.assign({ x: Math.floor(+d.p[0]), y: Math.floor(+d.p[1]), lv: d.l | 0 }, typeof d.a === 'string' ? { bt: d.bt | 0, rd: d.rd || null, pl: d.pl ? 1 : 0, kn: d.kn ? 1 : 0 } : {}));   /* only a full state says whether they are in a canoe */
           r.area = core.areaOf(Math.floor(+d.p[0]), Math.floor(+d.p[1])); r.carea = typeof d.c === 'string' ? d.c.slice(0, 40) : null;
           if (r.buf.length) { const lb = r.buf[r.buf.length - 1]; if (Math.abs(lb.x - +d.p[0]) + Math.abs(lb.z - +d.p[1]) > 60) r.buf.length = 0; }   /* they crossed a cut edge of the net (or a portal): no sliding across the map */
-          r.e.root.visible = true; r.buf.push({ t: performance.now(), x: +d.p[0], z: +d.p[1], f: +d.f || 0, a: typeof d.a === 'string' ? d.a.slice(0, 12) : 'idle', l: d.l | 0 }); if (r.buf.length > 20) r.buf.shift();
+          if (!r.floorHid) r.e.root.visible = true; r.buf.push({ t: performance.now(), x: +d.p[0], z: +d.p[1], f: +d.f || 0, a: typeof d.a === 'string' ? d.a.slice(0, 12) : 'idle', l: d.l | 0 }); if (r.buf.length > 20) r.buf.shift();
         }
       }
       /* ---------- SHARED WORLD: a host per AREA simulates that area's monsters and loot; everyone else follows it.
@@ -2099,7 +2099,7 @@
       const myNetIdOf = () => room && room.me ? room.me.id : PID;
       let myNetId = PID;
       const toNet = x => x === PID ? myNetId : x, fromNet = x => x === myNetId ? PID : x;
-      const netRow = r => Object.assign({}, r, { w: r.w ? toNet(r.w) : null, b: r.b ? toNet(r.b) : null, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [toNet(k), v])) : null });   /* a chess row with the room's ids for the players (and who is owed the stake [Claude]) */
+      const netRow = r => Object.assign({}, r, { w: r.w ? toNet(r.w) : null, b: r.b ? toNet(r.b) : null, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [toNet(k), v])) : null, co: (r.co || []).map(c => [toNet(c[0]), c[1], c[2]]) });   /* a chess row with the room's ids for the players (and who is owed the stake [Claude]) */
       /* A poker row names its players in one place, the seat rows [ref, id, chips, bet, flags]. The cards beside them
          (hc) are references into those rows, not ids, so they need nothing. */
       const pkNet = r => {   /* the dealer's row for the wire: ids as the room knows them; a keyed seat's cards are NOT here (they go sealed, by Ph) */
@@ -2295,6 +2295,24 @@
         const now = performance.now(); for (const e of evs) { handle(e, now); netEvent(e); }
         syncGround(); syncTraps(); if (dirty.inv || dirty.eq) { hud.refresh('all'); dirty = {}; } else hud.refresh('orbs');
       }
+      /* [Claude 2026-10-12] THE CHIPS ALWAYS COME HOME (core pokerSettle/pokerReclaim): an open card-table seat this game paid a
+         buy-in for is watched. Seated: nothing to do. Not seated and the dealer's cashout has not come: when this game deals the
+         table itself, 5 s; otherwise 20 s while the room is plainly alive (heard in the last 5 s) - then the last stack the dealer
+         showed comes back. Offline time never counts: the dealer may still be holding the seat. The room id is handed to the core
+         so a cashout written under it is still collected after a reload or a new connection. */
+      let pkAway = 0;
+      setInterval(() => {
+        const P = core.S.players[PID]; if (!P || (!P.pk && !P.ch)) { pkAway = 0; return; }
+        if (room && myNetId) { core.pokerNetId(PID, myNetId); core.chessNetId(PID, myNetId); }   /* the chess stake too (the operator: "make sure we don't have the same problem with the chess game") */
+        const K = P.pk ? { t: P.pk.t, pk: true } : { t: P.ch.t, pk: false };
+        if (P.seat && P.seat.t === K.t && (P.seat.k === 'pk') === K.pk) { pkAway = 0; return; }
+        if (!room || core.seatHeld(PID)) { pkAway = 0; return; }   /* a row still seats us under an old id: the host decides first */
+        const now = performance.now(), T = K.pk ? core.pokerTableById(K.t) : core.tableById(K.t), mineToDeal = !!(T && iHostAt(T.x, T.y));
+        if (!mineToDeal && now - NW.heard > 5000) { pkAway = 0; return; }
+        if (!pkAway) { pkAway = now; return; }
+        if (now - pkAway < (mineToDeal ? 5000 : 20000)) return;
+        pkAway = 0; let n = 0; coreCall(() => { n = K.pk ? core.pokerReclaim(PID) : core.chessReclaim(PID); }); persist('now');   /* saved at once: a page that died before saving would pay the same chips back twice */
+      }, 2000);
       function shared(id, r, d) {
         if (d.j != null) { const nj = +d.j; if (r.j !== nj) { r.j = nj; elect(); } }
         if (!core.S.players[id]) core.addPuppet(id, {});
@@ -2317,7 +2335,7 @@
         if (Array.isArray(d.CT)) { const T = core.tableById(String(d.CT[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostStand(id, T.id)); }
         if (Array.isArray(d.CX)) { const T = core.tableById(String(d.CX[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostSel(id, T.id, String(d.CX[1] || ''))); }   /* [Claude] */
         if (Array.isArray(d.CM)) { const T = core.tableById(String(d.CM[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostMove(id, T.id, String(d.CM[1] || ''), String(d.CM[2] || ''), d.CM[3] ? String(d.CM[3]) : null)); }
-        if (Array.isArray(d.Ch)) { const rows = d.Ch.filter(r => r && r.t).filter(r => { const T = core.tableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).map(r => Object.assign({}, r, { w: r.w ? fromNet(r.w) : null, b: r.b ? fromNet(r.b) : null, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [fromNet(k), v])) : null })); if (rows.length) coreCall(() => core.applyChess(rows)); }   /* [Claude] who is owed the stake, named as this page knows them */
+        if (Array.isArray(d.Ch)) { const rows = d.Ch.filter(r => r && r.t).filter(r => { const T = core.tableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).map(r => Object.assign({}, r, { w: r.w ? fromNet(r.w) : null, b: r.b ? fromNet(r.b) : null, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [fromNet(k), v])) : null, co: Array.isArray(r.co) ? r.co.map(c => [fromNet(c[0]), c[1], c[2]]) : [] })); if (rows.length) coreCall(() => core.applyChess(rows)); }   /* [Claude] who is owed the stake, named as this page knows them */
         /* the felt: a chair asked for, a player getting up, an action, or the host's word on a table. Same rules as the
            chess park: only the host of the area the table stands in answers, and a row only counts from that host. */
         if (Array.isArray(d.PS)) { const T = core.pokerTableById(String(d.PS[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerSit(id, T.id, d.PS[1] | 0, d.PS[2] | 0, typeof d.PS[3] === 'string' ? d.PS[3].slice(0, 160) : '')); }
@@ -2412,6 +2430,11 @@
           boatLook(r.e, r.boat === 1);
           r.e.root.position.set(x, 0, z); smoothPos(r.e, dt, false); x = r.e.root.position.x; z = r.e.root.position.z;   /* fluid travel: other players glide too */
           const lvR = Bs.l | 0, bR = lvR > 0 && core.M.buildingAt ? core.M.buildingAt(Math.floor(x), Math.floor(z)) : -1, upR = bR >= 0 ? lvR * (core.M.buildings[bR] && core.M.buildings[bR].lh ? core.M.buildings[bR].lh : 1.8) : 0;   /* [Claude 2026-10-11] on the storey their row names (the Tap's card tables upstairs) */
+          /* [Claude 2026-10-12] the operator: "When someone is on one of the upper floors of one of the buildings, they should only be
+             visible to people on the same floor" - from below, the storeys above are see-through and they stood in the air. */
+          const offFloor = lvR > 0 && lvR !== (me.lv | 0);
+          if (offFloor) { if (r.e.root.visible) { r.e.root.visible = false; r.floorHid = true; } }
+          else if (r.floorHid) { r.e.root.visible = true; r.floorHid = false; }
           r.e.root.position.set(x, (r.e.canoe ? waterY(x, z) + (r.anim === 'pole' || r.anim === 'idle' ? 0.14 : 0) : heightAt(x, z) + seatLift(r.e) + upR) + (r.e.alt || 0), z); r.e.tyaw = Bs.f + turnS;   /* a chess player sits on the bench */
           const an = Bs.a; if (an !== r.anim) { r.anim = an; r.e.H.play(an, { loop: /idle|walk|run|chop|mine|fish|cook|sit|paddle|pole|knock|crosslegged/.test(an) }); }
           r.e.yaw += (((r.e.tyaw - r.e.yaw + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI) * Math.min(1, dt * 10); r.e.root.rotation.y = r.e.yaw;
@@ -2512,7 +2535,7 @@
           }
           const ok = e.proxy && e.proxy.userData.pick, opl = ok && ok.kind === 'self' ? me : ok && ok.kind === 'remote' ? core.S.players[ok.id] : null, oid = opl && !opl.dead && e.root.visible ? core.overhead(opl) : null;   /* the overhead prayer icon (2026-10-07) */
           if (oid !== (e.ohId || null)) { if (e.ohd) { e.ohd.remove(); e.ohd = null; } e.ohId = oid; if (oid) e.ohd = hud.overhead(core.prayer(oid)); }
-          if (e.ohd) { const s = toScreen(e.root.position, top + (e.tag ? 0.75 : 0.62)); e.ohd.style.display = s ? 'block' : 'none'; if (s) { e.ohd.style.left = s.x + 'px'; e.ohd.style.top = (e.tag ? Math.min(s.y, parseFloat(e.tag.style.top) - 12) : s.y) + 'px'; } }
+          if (e.ohd) { const s = e.root.visible ? toScreen(e.root.position, top + (e.tag ? 0.75 : 0.62)) : null; e.ohd.style.display = s ? 'block' : 'none'; if (s) { e.ohd.style.left = s.x + 'px'; e.ohd.style.top = (e.tag ? Math.min(s.y, parseFloat(e.tag.style.top) - 12) : s.y) + 'px'; } }
           if (e.bub) { const s = now - e.bub.t < 4000 && e.root.visible ? toScreen(e.root.position, top + (e.tag ? 0.85 : 0.5)) : null; if (now - e.bub.t >= 4000) { e.bub.el.remove(); e.bub = null; } else { e.bub.el.style.display = s ? 'block' : 'none'; if (s) { e.bub.el.style.left = s.x + 'px'; e.bub.el.style.top = s.y + 'px'; } } }
         }
         /* opponent box */
@@ -2669,7 +2692,7 @@
         try { tellHere(leaving === true); } catch (e) { /* the Bank is out of reach: the next save */ }
         const P = core.exportPlayer(PID), LS = ledgerSnap(); if (P && LS) P.chestLedger = LS;   /* the chest ledger saves with the bag it describes */
         const json = JSON.stringify(P); if (json !== CLOUD.last) { CLOUD.at = Date.now(); CLOUD.last = json; } if (P) { P.at = CLOUD.at; if (CLOUD.base != null) P.base = CLOUD.base; if (CLOUD.mine != null) P.mine = CLOUD.mine; }
-        cloudPush(json, leaving === true);
+        cloudPush(json, leaving === true || leaving === 'now');   /* 'now' [Claude 2026-10-12]: straight to the Bank, not after the 20 s wait */
         Promise.resolve(store.set(SAVE, JSON.stringify(P))).then(ok => {   /* false: the arcade did not take it */
           if (ok === false) { if (++saveFails === 2) hud.netLost && hud.netLost(true, 'save'); }
           else { if (saveFails >= 2) { hud.netLost && hud.netLost(false, 'save'); hud.chat('Your progress is saving again.', 'sys'); } saveFails = 0; }

@@ -74,14 +74,19 @@ with sync_playwright() as p:
     pb = open_page(ctx, URL % 2, errs, 'B'); ev(pb, 'ASH.core.cmd("me", {c: "look", name: "Ben"}); ASH.teleport(460, 30)'); time.sleep(4)
     check(wait(pb, 'ASH.net().host && ASH.me.x === 460', 30), 'Ben is in the same room (%s hosts it)' % str(ev(pb, 'ASH.net().amHost')))
     REM = '[...ASH.ents.values()].filter(e => e.key && e.key.startsWith("r:") && e.root.visible)'
-    check(wait(pb, REM + '.length === 1', 25), 'Ben sees Ann at the table')
-    # [Claude 2026-10-11] the operator: "players are not sitting on the second story" - Ben, still downstairs, must see Ann a storey up
-    check(wait(pb, '(function(){var r=' + REM + '[0], m=ASH.ents.get("p:" + ASH.pid); return !!(r && m) && r.root.position.y - m.root.position.y > 1.2})()', 15),
-          'and he sees her a storey above him (%s m up)' % ev(pb, '(function(){var r=' + REM + '[0], m=ASH.ents.get("p:" + ASH.pid); return r && m ? (r.root.position.y - m.root.position.y).toFixed(2) : null})()'))
+    ALL = '[...ASH.ents.values()].filter(e => e.key && e.key.startsWith("r:"))'
+    check(wait(pb, ALL + '.length === 1', 25), "Ben's game knows Ann is in the room")
+    # [Claude 2026-10-12] the operator: "When someone is on the upper floors of one of the buildings, they should only be visible to people
+    # on the same floor" - from the ground floor the storeys above are see-through, and Ann stood in the air
+    time.sleep(2)
+    check(ev(pb, REM + '.length') == 0, 'Ben, downstairs, does not see Ann a storey up')
+    check(wait(pb, '(function(){var r=' + ALL + '[0], m=ASH.ents.get("p:" + ASH.pid); return !!(r && m) && r.root.position.y - m.root.position.y > 1.2})()', 15),
+          'though his game keeps her on the right storey (%s m up)' % ev(pb, '(function(){var r=' + ALL + '[0], m=ASH.ents.get("p:" + ASH.pid); return r && m ? (r.root.position.y - m.root.position.y).toFixed(2) : null})()'))
     check(wait(pb, S('.se') + '.length === 1 && ' + S('.o') + ' === "open"', 15), "Ben's game knows a chair is taken and the table waits (the host's rows arrived)")
     time.sleep(1.5); shot(pb, 'pk_03_bystander')
     # 3. Ben takes the next free chair; the table deals - up the stairs first [Claude]
     upstairs(pb); check(wait(pb, 'ASH.me.lv === 1', 40), 'Ben goes up the stairs too'); time.sleep(2)
+    check(wait(pb, REM + '.length === 1', 15), 'upstairs too, Ben sees Ann at the table')
     check(tap(pb, 'tile', [TX, TY]), 'Ben taps the felt: the first free chair is the first line now')
     check(wait(pb, 'ASH.me.seat && ASH.me.seat.s === 1', 25), 'Ben takes the second chair')
     check(wait(pa, S('.o') + ' === "playing"', 40) and wait(pb, S('.o') + ' === "playing"', 40), 'the table deals a hand on both screens')

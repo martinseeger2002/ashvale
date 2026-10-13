@@ -15,7 +15,10 @@
 - Saves from the old one-page playtest builds (before the launcher) do not carry over.
 - Fixes are small: one or two module inscriptions, not a whole new game.
 
-## In the current release (v0.8.87)
+## In the current release (v0.8.95)
+- 0.8.95 (2026-10-12): GOLD on a table always comes home. A closed tab, a dead phone or a lost connection at the card
+  tables or the Chess Park gives your GOLD back by itself. Chess: walking out of a begun game loses the wager; if the
+  whole room drops, both players get their stake back.
 - 0.8.87 (2026-10-11): the Saltmere Tap's upper floor is open - climb the stairs behind the bar. The Chess Park has a
   champions board kept by the Bank (every win chalked up by name). Tables and boards are solid, stairs are climbed by
   tapping them, tavern lights gutter like real flames. Ziibiing (0.8.86) stands on the far continent in maple country.
