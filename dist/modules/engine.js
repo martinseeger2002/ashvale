@@ -90,7 +90,7 @@
         const ask = () => {
           if (done) return;
           if (Date.now() - t0 > ms) { done = true; G.removeEventListener('message', on); clearInterval(iv); resolve(null); return; }
-          if (bootEl) bootEl.textContent = 'Waiting for your arcade wallet to open your character…';
+          if (G.ASH_LOAD) G.ASH_LOAD.set(0.72, 'Waiting for your arcade wallet to open your character…'); else if (bootEl) bootEl.textContent = 'Waiting for your arcade wallet to open your character…';
           try { G.parent.postMessage({ arcade: 'storage', op: 'load', seq }, '*'); } catch (e) { /* no parent */ }
         };
         const iv = setInterval(ask, 3000); ask();
@@ -130,13 +130,15 @@
         else if (sv && Number.isInteger(sv.x) && Number.isInteger(sv.y)) at = [sv.x, sv.y];
         for (const r of [[-200, 16100, -80, 16184, 24200, 7900], [40, 16300, 253, 16313, 23960, 8100]]) if (at[0] >= r[0] && at[0] < r[2] && at[1] >= r[1] && at[1] < r[3]) { at = [at[0] + r[4], at[1] + r[5]]; break; }   /* the underground moved (core.underMove) */
       } catch (e) { /* a new character */ }
-      const bootEl = G.document && G.document.getElementById('boot'); if (bootEl) bootEl.textContent = 'Loading the land around you…';
+      const bootEl = G.document && G.document.getElementById('boot'); if (G.ASH_LOAD) G.ASH_LOAD.set(0.75, 'Loading the land around you…'); else if (bootEl) bootEl.textContent = 'Loading the land around you…';
       /* the zone you stand IN must be here before the core places you (on land without its town you could be "blocked" and put
          back at the spawn): that one is waited for, retried for as long as it takes; the rest of the ring may come later */
       const zin = (ZINDEX.find(z => at[0] >= z.origin[0] && at[1] >= z.origin[1] && at[0] < z.origin[0] + z.size[0] && at[1] < z.origin[1] + z.size[1]) || {}).id;
-      const near = zonesNear(at[0], at[1]).filter(id => id !== zin).map(id => fetchZone(id).catch(e => console.warn('ASHVALE: ' + e.message)));
+      const nearIds = zonesNear(at[0], at[1]).filter(id => id !== zin); let landGot = 0;
+      const landStep = () => { landGot++; if (G.ASH_LOAD) G.ASH_LOAD.set(0.75 + 0.2 * landGot / (nearIds.length + 1), 'Loading the land around you… ' + landGot + ' of ' + (nearIds.length + 1)); };   /* [Claude 2026-10-13] the bar follows the land */
+      const near = nearIds.map(id => fetchZone(id).then(z => { landStep(); return z; }).catch(e => console.warn('ASHVALE: ' + e.message)));
       for (let k = 0; zin && !LZ[zin]; k++) {
-        try { await fetchZone(zin); } catch (e) { console.warn('ASHVALE: ' + e.message + ', trying again'); if (bootEl) bootEl.textContent = 'Still loading the land around you…'; await new Promise(r => setTimeout(r, Math.min(10000, 1000 * (k + 1)))); }
+        try { await fetchZone(zin); landStep(); } catch (e) { console.warn('ASHVALE: ' + e.message + ', trying again'); if (G.ASH_LOAD) G.ASH_LOAD.set(0, 'Still loading the land around you…'); else if (bootEl) bootEl.textContent = 'Still loading the land around you…'; await new Promise(r => setTimeout(r, Math.min(10000, 1000 * (k + 1)))); }
       }
       await Promise.race([Promise.all(near), new Promise(r => setTimeout(r, 15000))]);
     }
@@ -2484,6 +2486,7 @@
       const tmpV = new THREE.Vector3();
       function toScreen(pos, up) { tmpV.set(pos.x, pos.y + (up || 0), pos.z).project(camera); if (tmpV.z > 1) return null; const w = host.clientWidth, h = host.clientHeight; return { x: (tmpV.x + 1) / 2 * w, y: (1 - tmpV.y) / 2 * h }; }
       let last = performance.now(), frames = 0, mmT = 0;
+      let FIRST_DRAWN = false;
       function frame(rafNow) {
         if (stopped) return;
         requestAnimationFrame(frame);
@@ -2601,6 +2604,7 @@
             renderer.render(scene, camera);
             scene.background = bg; renderer.autoClear = true;
           } else renderer.render(scene, camera);
+          if (!FIRST_DRAWN) { FIRST_DRAWN = true; if (G.ASH_LOAD) setTimeout(() => G.ASH_LOAD.done(), 120); }   /* [Claude 2026-10-13] the world is on screen: the loading screen goes */
         }   /* behind a loading screen nothing is drawn: the frame time goes to building the place you are going to */
         scene.fog.near = fn0; scene.fog.far = ff0;
       }

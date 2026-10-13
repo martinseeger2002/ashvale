@@ -11,7 +11,7 @@
   },
   "netretry": {
    "id": null,
-   "v": "3",
+   "v": "4",
    "api": 1,
    "kind": "js"
   },
@@ -190,7 +190,7 @@
    "kind": "js"
   },
   "weather": {
-   "id": "b685e2c640a41310bd05316dc2a6225788916b035e60fdc29a02d1fe153ac7a1",
+   "id": null,
    "v": "1",
    "api": 1,
    "kind": "js"
