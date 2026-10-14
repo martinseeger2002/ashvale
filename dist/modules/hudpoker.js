@@ -9,39 +9,53 @@
   const CSS = `
 .ash .lay.poker > .ui:not(.pokerp):not(.chatw):not(.help){display:none !important}
 .ash .lay.poker .hover{display:none !important}
-.ash .lay.poker .chatw .chat:not(.big){max-height:54px}
-.ash .pokerp{position:absolute;right:8px;top:8px;width:216px;opacity:.94;max-width:calc(100vw - 20px);padding:8px 10px;font-size:13px;line-height:1.35;color:#eee;background:linear-gradient(#2b3a33,#1b241f);border:2px solid #12181a;border-radius:6px;box-shadow:0 4px 14px #0008;pointer-events:auto}
-.ash .pokerp h3{margin:0 0 6px;font:bold 15px Georgia,serif;color:#e9e2cf;letter-spacing:.5px}
-.ash .pokerp .pl{display:flex;justify-content:space-between;align-items:center;padding:3px 6px;border-radius:4px;margin:2px 0;background:#0003}
+.ash .lay.poker .chatw{top:calc(6px + env(safe-area-inset-top,0px));bottom:auto;left:8px;right:8px;width:auto;max-width:560px}
+.ash .lay.poker .chatw .chat:not(.big){max-height:calc(3*1.3em + 10px)}
+.ash .lay.poker .chatw .chatx{top:auto;bottom:-24px;border-radius:0 0 6px 6px}
+.ash .pokerp{position:absolute;color:#eee;font-size:13px;line-height:1.35;background:linear-gradient(#2b3a33f0,#1b241ff0);border:2px solid #12181a;border-radius:8px;box-shadow:0 4px 14px #0008;pointer-events:auto;box-sizing:border-box}
+.ash .pokerp.bar{display:flex;flex-direction:column;left:50%;transform:translateX(-50%);bottom:0;width:min(100vw,680px);border-radius:10px 10px 0 0;border-bottom:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));max-height:62vh;overflow-y:auto;touch-action:pan-y}
+.ash .pokerp.hole,.ash .pokerp.board{transform:translate(-50%,-50%);padding:5px 7px;white-space:nowrap;text-align:center;opacity:.97}
+.ash .pokerp.board{white-space:normal;max-width:min(92vw,420px)}
+.ash .pokerp .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.ash .pokerp .stt{color:#ffd23f;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ash .pokerp .stt.wait{color:#9fc3ff}
+.ash .pokerp .pot{color:#c8c3b4;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;white-space:nowrap}
+.ash .pokerp .pls{display:flex;flex-shrink:0;gap:4px;overflow-x:auto;margin:4px 0 0;scrollbar-width:none}
+.ash .pokerp .pl{flex:0 0 auto;display:flex;gap:5px;align-items:center;padding:2px 7px;border-radius:12px;background:#0004;font-size:12px}
 .ash .pokerp .pl.turn{background:#ffd23f22;box-shadow:inset 0 0 0 1px #ffd23f88}
 .ash .pokerp .pl.out{opacity:.45}
 .ash .pokerp .pl b{font-weight:normal;color:#cbd6cd}
 .ash .pokerp .pl .ch{font-family:ui-monospace,Menlo,Consolas,monospace;color:#e8e2d0}
-.ash .pokerp .pl .bt{color:#ffd23f;margin-left:6px}
-.ash .pokerp .pl .d{display:inline-block;width:13px;height:13px;border-radius:50%;background:#f2eee0;color:#26302a;font-size:9px;font-weight:bold;text-align:center;line-height:13px;margin-right:5px;vertical-align:-1px}
-.ash .pokerp .stt{margin:7px 0 3px;color:#ffd23f;font-weight:bold}
-.ash .pokerp .stt.wait{color:#9fc3ff}
-.ash .pokerp .cards{margin:2px 0 5px;font-size:17px;letter-spacing:1px;min-height:20px}
-.ash .pokerp .cd{display:inline-block;min-width:20px;padding:1px 3px;margin-right:3px;background:#f4f1e8;color:#20202a;border-radius:3px;box-shadow:0 1px 2px #0007;font-size:14px;text-align:center}
+.ash .pokerp .pl .bt{color:#ffd23f}
+.ash .pokerp .pl .d{display:inline-block;width:13px;height:13px;border-radius:50%;background:#f2eee0;color:#26302a;font-size:9px;font-weight:bold;text-align:center;line-height:13px}
+.ash .pokerp .cd{display:inline-block;min-width:22px;padding:2px 4px;margin:0 2px;background:#f4f1e8;color:#20202a;border-radius:4px;box-shadow:0 1px 2px #0007;font-size:16px;font-weight:bold;text-align:center}
 .ash .pokerp .cd.r{color:#b23a30}
 .ash .pokerp .cd.b{background:repeating-linear-gradient(45deg,#3a5f86,#3a5f86 3px,#2b4a6b 3px,#2b4a6b 6px);color:transparent}
-.ash .pokerp .pot{color:#c8c3b4;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
-.ash .pokerp .lg{font-size:11px;color:#a9b3a6;max-height:30px;overflow:hidden;margin:4px 0}
-.ash .pokerp .btns{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
-.ash .pokerp .btn{margin:0;padding:6px 9px}
-.ash .pokerp .rz{display:none;margin-top:6px;padding:6px;background:#0005;border-radius:4px}
+.ash .pokerp.hole .cd{font-size:22px;min-width:30px;padding:4px 6px}
+.ash .pokerp .lab{font-size:10px;color:#9aa79c;letter-spacing:.5px}
+.ash .pokerp .btns{display:flex;gap:6px;margin-bottom:4px}
+.ash .pokerp.bar > .rz{order:0}.ash .pokerp.bar > .btns{order:1}.ash .pokerp.bar > .top{order:2}.ash .pokerp.bar > .pls{order:3}.ash .pokerp.bar > .away{order:4}   /* [Claude 2026-10-14] the operator: the buttons on top, the reading of the table under them */
+.ash .pokerp .btns .btn{flex:1 1 0;width:auto;margin:0;padding:9px 4px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ash .pokerp .btns .btn.sm{flex:0 0 auto;padding:9px 10px;opacity:.85}
+.ash .pokerp .rz{display:none;margin-bottom:4px;padding:6px;background:#0005;border-radius:6px}
 .ash .pokerp .rz.on{display:block}
-.ash .pokerp .win{margin:6px 0;padding:7px 9px;border-radius:5px;background:#ffd23f22;border:1px solid #ffd23f88;color:#ffe9a0;font:bold 14px Georgia,serif;line-height:1.3}
-.ash .pokerp .sd{margin:4px 0;padding:4px 6px;border-radius:4px;background:#0004;font-size:12px;color:#d9d3c2}
+.ash .pokerp .win{margin:2px 0;color:#ffe9a0;font:bold 14px Georgia,serif;line-height:1.3}
+.ash .pokerp .sd{margin:3px 0;font-size:12px;color:#d9d3c2}
 .ash .pokerp .sd .cd{font-size:13px;min-width:18px}
 .ash .pokerp .sd b{color:#ffd23f;font-weight:normal}
-.ash .pokerp .rz .amt{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-family:ui-monospace,Menlo,Consolas,monospace;color:#ffd23f}
+.ash .pokerp .away{color:#9fc3ff;font-size:12px;margin-top:3px}
+.ash .pokerp .rz .amt{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;font-family:ui-monospace,Menlo,Consolas,monospace;color:#ffd23f}
 .ash .pokerp .rz input[type=range]{width:100%;margin:4px 0;accent-color:#ffd23f}
-.ash .pokerp .rz .qk{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
-.ash .pokerp .rz .qk .btn{padding:4px 7px;font-size:12px}
-@media (max-width:600px){.ash .pokerp{left:6px;right:6px;top:6px;width:auto;max-width:none;max-height:50vh;overflow:auto;font-size:15px;padding:10px 12px}.ash .pokerp h3{font-size:18px}.ash .pokerp .lg{max-height:40px;font-size:13px}.ash .pokerp .cd{font-size:20px;min-width:30px;padding:3px 6px}.ash .pokerp .btn{padding:10px 14px;font-size:15px}.ash .pokerp .win{font-size:17px}.ash .pokerp .sd{font-size:14px}}`;
-/* [Claude 2026-10-11] the operator: on a phone the panel fills the top half of the screen; a slider from the least raise to all-in;
-   the showdown shows every hand face up with its name and says plainly who won what with which hand */
+.ash .pokerp .rz .qk{display:flex;gap:4px;flex-wrap:wrap}
+.ash .pokerp .rz .qk .btn{width:auto;padding:6px 8px;font-size:13px;margin:0}
+@media (pointer:coarse),(max-width:600px){.ash .pokerp{font-size:14px}.ash .pokerp .btns .btn{padding:12px 4px;font-size:15px}.ash .pokerp .btns .btn.sm{padding:12px 10px}.ash .pokerp .pl{font-size:13px}}
+@media (max-height:520px){.ash .pokerp .rz.on{display:flex;align-items:center;gap:8px;padding:4px 6px}.ash .pokerp .rz .amt{margin:0;gap:6px;white-space:nowrap}.ash .pokerp .rz input[type=range]{flex:1;min-width:80px;margin:0}.ash .pokerp .rz .qk{flex-wrap:nowrap}.ash .pokerp .rz .qk .btn[data-to]{margin-left:4px !important}.ash .pokerp.bar{padding-top:4px;max-height:70vh}.ash .pokerp .pls{margin:2px 0}.ash .pokerp .btns .btn{padding:8px 4px}.ash .pokerp.hole .cd{font-size:18px;min-width:24px;padding:2px 4px}.ash .lay.poker .chatw{right:auto;width:min(46vw,420px)}.ash .lay.poker .chatw .chat:not(.big){max-height:calc(2*1.3em + 10px)}}`;
+/* [Claude 2026-10-11] a slider from the least raise to all-in; the showdown shows every hand face up with its name and says
+   plainly who won what with which hand.
+   [Claude 2026-10-14] the operator, on a phone: "I have to scroll down to use [the controls]", and in landscape they could not be
+   reached at all. Now three pieces: the betting bar along the bottom (status, players, buttons - never scrolled to), your two
+   cards in a small box over where they lie on the felt (on the felt they stay face down), and the board in a box over the
+   middle of the felt; the chat moves to the top. The engine hands the felt's screen spots every frame (pokerAnchor). */
   const RANK = '23456789TJQKA', SUIT = ['♣', '♦', '♥', '♠'], RED = [0, 1, 1, 0];
   const STREET = { none: 'between hands', preflop: 'the first round', flop: 'the flop', turn: 'the turn', river: 'the river' };
   function cardTxt(id) { return id == null ? '<span class="cd b">•</span>' : '<span class="cd' + (RED[id & 3] ? ' r' : '') + '">' + RANK[(id >> 2) % 13] + SUIT[id & 3] + '</span>'; }
@@ -74,6 +88,7 @@
       const wins = v.winners || [];
       return v.shown.map(h => { const s = v.seats.find(x => x.ref === h.ref); return '<div class="sd">' + (wins.indexOf(h.ref) >= 0 ? '&#9733; ' : '') + esc(s ? s.name : 'seat ' + (h.ref + 1)) + ': ' + cardTxt(h.c[0]) + cardTxt(h.c[1]) + ' <b>' + esc(h.name) + '</b></div>'; }).join('');
     }
+    let hbox = null, bbox = null, anchor = null;
     function draw() {
       if (!box || !view) return;
       const v = view, you = (s) => s.id === v.me, pot = v.pot, st = statusOf(v);
@@ -81,37 +96,63 @@
       const hi = v.bet + (mine ? mine.chips : 0), lo = Math.min(Math.max(v.min || (v.bet ? v.bet * 2 : 100), v.bet + 1), hi), potR = Math.min(hi, Math.max(lo, v.bet + pot));
       const canRaise = hi > v.bet && lo <= hi, amounts = canRaise ? [lo] : [];
       if (raiseTo == null || raiseTo < lo || raiseTo > hi) raiseTo = lo;
-      box.innerHTML = '<h3>Card table' + (v.buy ? ' <small style="font:12px system-ui,sans-serif;color:#ffd23f">buy-in ' + v.buy.toLocaleString() + ' GOLD</small>' : ' <small style="font:12px system-ui,sans-serif;color:#cbd6cd">free chips</small>') + '</h3>'   /* [Claude] the buy-in the first sitter set */
-        + v.seats.map(s => '<div class="pl' + (v.turn === s.ref && !v.open ? ' turn' : '') + (((s.folded || !s.dealt) && !v.open) ? ' out' : '') + '">'
-          + '<span>' + (v.dealer === s.ref ? '<i class="d">D</i>' : '') + '<b>' + esc(s.name) + (you(s) ? ' <span style="color:#9fc3ff">(you)</span>' : '') + (s.away ? ' <span style="color:#9aa79c">(away)</span>' : '') + '</b></span>'
-          + '<span><span class="ch">' + s.chips + '</span>' + (s.bet ? '<span class="bt">' + s.bet + '</span>' : '') + '</span></div>').join('')
-        + '<div class="stt ' + (st.cls || '') + '">' + st.text + '</div>'
-        + '<div class="cards">' + (v.hole ? cardTxt(v.hole[0]) + cardTxt(v.hole[1]) : (v.inHand ? cardTxt(null) + cardTxt(null) : '<span style="font-size:12px;color:#9aa79c">not in this hand</span>'))
-        + (v.board.length ? '<span style="margin:0 4px;color:#8fa08c">|</span>' + v.board.map(cardTxt).join('') : '') + '</div>'
-        + '<div class="pot">pot ' + pot + (v.inHand && v.call > 0 ? ' · you owe ' + Math.min(v.call, v.stack) : v.bet ? ' · bet ' + v.bet : ' · nobody to beat') + (mine ? ' · your chips ' + mine.chips : '') + '</div>'
-        + (winTxt(v) ? '<div class="win">' + winTxt(v) + '</div>' + showdownHtml(v) : '')
-        + (!winTxt(v) && v.last ? (() => { const L = Object.assign({}, v, v.last); const w = winTxt(L); return w ? '<div class="win" style="opacity:.8">Last hand: ' + w + '</div>' + showdownHtml(L) : ''; })() : '')   /* [Claude 2026-10-13] */
-        + (raise && amounts.length ? '' : '<div class="lg">' + v.log.map(esc).join('<br>') + '</div>')
-        + (v.away ? '<div class="stt wait">You are dealt out (a minute on your hand). Tap to come back.</div>' : '')   /* [Claude] */
+      const act = v.myTurn && !v.pending;
+      if (!act) raise = false;
+      box.innerHTML = '<div class="top"><span class="stt ' + (st.cls || '') + '">' + st.text + '</span>'
+        + '<span class="pot">' + (v.buy ? v.buy.toLocaleString() + ' buy-in · ' : 'free chips · ') + 'pot ' + pot + (v.inHand && v.call > 0 ? ' · owe ' + Math.min(v.call, v.stack) : '') + '</span></div>'
+        + '<div class="pls">' + v.seats.map(s => '<div class="pl' + (v.turn === s.ref && !v.open ? ' turn' : '') + (((s.folded || !s.dealt) && !v.open) ? ' out' : '') + '">'
+          + (v.dealer === s.ref ? '<i class="d">D</i>' : '') + '<b>' + esc(s.name) + (you(s) ? ' <span style="color:#9fc3ff">(you)</span>' : '') + (s.away ? ' <span style="color:#9aa79c">(away)</span>' : '') + '</b>'
+          + '<span class="ch">' + s.chips + '</span>' + (s.bet ? '<span class="bt">' + s.bet + '</span>' : '') + '</div>').join('') + '</div>'
+        + (v.away ? '<div class="away">You are dealt out (a minute on your hand). Tap I\'m back.</div>' : '')
         + '<div class="rz' + (raise && amounts.length ? ' on' : '') + '" data-rz><div class="amt"><span>raise to</span><span data-amt>' + raiseTo + '</span></div>'
         + '<input type="range" min="' + lo + '" max="' + hi + '" step="1" value="' + raiseTo + '" data-sl>'
         + '<div class="qk"><button class="btn" data-q="' + lo + '">min ' + lo + '</button>' + (potR > lo && potR < hi ? '<button class="btn" data-q="' + potR + '">pot ' + potR + '</button>' : '') + '<button class="btn" data-q="' + hi + '">all-in ' + hi + '</button>'
         + '<button class="btn" data-to style="margin-left:auto;background:#5a4a1c;color:#ffe2a8">Raise to <span data-amt2>' + raiseTo + '</span></button></div></div>'
-        + '<div class="btns">' + (v.away ? '<button class="btn" data-a="back">I\'m back</button>' : '') + (v.myTurn && !v.pending ? '<button class="btn" data-a="fold">Fold</button>'
+        + '<div class="btns">' + (v.away ? '<button class="btn" data-a="back">I\'m back</button>' : '') + (act ? '<button class="btn" data-a="fold">Fold</button>'
           + '<button class="btn" data-a="' + (v.call > 0 ? 'call' : 'check') + '">' + (v.call > 0 ? (v.call >= v.stack ? 'Call all-in ' + v.stack : 'Call ' + v.call) : 'Check') + '</button>'
-          + (amounts.length ? '<button class="btn" data-r>Raise</button><button class="btn" data-a="allin">All-in</button>' : '') : '')
-        + '<button class="btn" data-a="stand">' + (v.inHand && !v.open ? 'Fold & stand' : 'Stand up') + '</button></div>'
+          + (amounts.length ? '<button class="btn" data-r>' + (raise ? 'Cancel' : 'Raise') + '</button>' : '') : '')   /* [Claude 2026-10-14] no All-in here (the operator): slide to all-in, or its quick button, then the raise button */
+        + '<button class="btn' + (act || v.away ? ' sm' : '') + '" data-a="stand">' + (act || v.away ? 'Stand' : v.inHand && !v.open ? 'Fold & stand up' : 'Stand up') + '</button></div>';
       for (const b of box.querySelectorAll('[data-a]')) b.onclick = () => { const a = b.dataset.a; raise = false; if (a === 'stand') { if (cb && cb.stand) cb.stand(); } else if (cb && cb.act) cb.act(a); api.sfx && api.sfx('click'); };
       const r = box.querySelector('[data-r]'); if (r) r.onclick = () => { raise = !raise; draw(); };
       const sl = box.querySelector('[data-sl]'), amt = box.querySelector('[data-amt]'), amt2 = box.querySelector('[data-amt2]');
       if (sl) { sl.oninput = () => { raiseTo = sl.value | 0; if (amt) amt.textContent = raiseTo; if (amt2) amt2.textContent = raiseTo; }; sl.onpointerdown = (e) => e.stopPropagation(); }
       for (const b of box.querySelectorAll('[data-q]')) b.onclick = () => { raiseTo = b.dataset.q | 0; if (sl) sl.value = raiseTo; if (amt) amt.textContent = raiseTo; if (amt2) amt2.textContent = raiseTo; };
-      const go = box.querySelector('[data-to]'); if (go) go.onclick = () => { raise = false; if (cb && cb.act) cb.act('raise', raiseTo | 0); api.sfx && api.sfx('click'); };
+      const goTxt = () => (raiseTo | 0) >= hi ? 'All-in ' + hi : 'Raise to ' + raiseTo, go = box.querySelector('[data-to]');
+      const syncGo = () => { if (go) go.textContent = goTxt(); };
+      if (sl) sl.addEventListener('input', syncGo); for (const b of box.querySelectorAll('[data-q]')) b.addEventListener('click', syncGo); syncGo();
+      if (go) go.onclick = () => { raise = false; const all = (raiseTo | 0) >= hi; if (cb && cb.act) { if (all) cb.act('allin'); else cb.act('raise', raiseTo | 0); } api.sfx && api.sfx('click'); };   /* the slider at its end is all-in */
+      /* your two cards, over where they lie on the felt; the board (and between hands, who won) over the middle */
+      const holeHtml = v.hole ? '<div class="cards">' + cardTxt(v.hole[0]) + cardTxt(v.hole[1]) + '</div>' : '';
+      if (holeHtml) { if (!hbox) hbox = el('pokerp hole ui', ui); if (hbox.innerHTML !== holeHtml) hbox.innerHTML = holeHtml; } else if (hbox) { hbox.remove(); hbox = null; }
+      const w = v.open ? winTxt(v) : '';   /* a result only between hands: once the next hand is dealt it is gone (2026-10-14) */
+      const boardHtml = (v.board.length ? '<div class="brd">' + v.board.map(cardTxt).join('') + '</div>' : '') + (w ? '<div class="win">' + w + '</div>' + showdownHtml(v) : '');
+      if (boardHtml) { if (!bbox) bbox = el('pokerp board ui', ui); if (bbox.innerHTML !== boardHtml) bbox.innerHTML = boardHtml; } else if (bbox) { bbox.remove(); bbox = null; }
+      place();
     }
-    function pokerOpen(v, callbacks) { cb = callbacks || null; view = v; raise = false; if (!box) box = el('pokerp felt ui', ui); ui.classList.add('poker'); draw(); }
+    /* keep a floating box at its felt spot, inside the screen and clear of the chat (top) and the bar (bottom) */
+    function put(b, at, fx, fy) {
+      if (!b) return;
+      const W = ui.clientWidth || innerWidth, H = ui.clientHeight || innerHeight, bw = b.offsetWidth, bh = b.offsetHeight;
+      const ch = document.querySelector('.ash .lay.poker .chatw'), topMin = ch ? ch.getBoundingClientRect().bottom - ui.getBoundingClientRect().top + 4 : 0;
+      const botMax = box ? H - box.offsetHeight - 4 : H;
+      let x = at ? at.x : W * fx, y = at ? at.y : H * fy;
+      x = Math.max(bw / 2 + 4, Math.min(W - bw / 2 - 4, x));
+      y = Math.max(topMin + bh / 2, Math.min(botMax - bh / 2, y));
+      const L = Math.round(x) + 'px', T = Math.round(y) + 'px';
+      if (b.style.left !== L) b.style.left = L; if (b.style.top !== T) b.style.top = T;
+    }
+    function place() {
+      put(hbox, anchor && anchor.hole, 0.5, 0.7); put(bbox, anchor && anchor.board, 0.5, 0.45);
+      if (hbox && bbox) {   /* a low screen (landscape) squeezes the two together: the board goes up off your cards */
+        const ht = hbox.offsetTop - hbox.offsetHeight / 2, bb = bbox.offsetTop + bbox.offsetHeight / 2;
+        if (bb > ht - 4 && Math.abs(hbox.offsetLeft - bbox.offsetLeft) < (hbox.offsetWidth + bbox.offsetWidth) / 2) put(bbox, { x: bbox.offsetLeft, y: ht - 4 - bbox.offsetHeight / 2 }, 0.5, 0.45);
+      }
+    }
+    function pokerAnchor(a) { anchor = a || null; if (box) place(); }
+    function pokerOpen(v, callbacks) { cb = callbacks || null; view = v; raise = false; if (!box) box = el('pokerp bar ui', ui); ui.classList.add('poker'); draw(); }
     function pokerUpdate(v) { if (!box) return; view = v; draw(); }
-    function pokerClose() { ui.classList.remove('poker'); if (box) { box.remove(); box = null; } view = null; cb = null; raise = false; }
-    K.pokerOpen = pokerOpen; K.pokerUpdate = pokerUpdate; K.pokerClose = pokerClose;
+    function pokerClose() { ui.classList.remove('poker'); for (const b of [box, hbox, bbox]) if (b) b.remove(); box = hbox = bbox = null; view = null; cb = null; raise = false; anchor = null; }
+    K.pokerOpen = pokerOpen; K.pokerUpdate = pokerUpdate; K.pokerClose = pokerClose; K.pokerAnchor = pokerAnchor;
     /* [Claude 2026-10-13] SOLITAIRE at the card table (the operator: "if you right click or long tap on the table you should also have
        the option to play Solitaire"). Klondike, draw one, as many passes through the stock as you like; the cards are the
        felt's own (the scene's card atlas). One tap plays a card where it fits best - up to its foundation if it can go,

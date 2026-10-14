@@ -852,6 +852,8 @@
              the button, whose turn. The row itself carries everything the page draws. */
           case 'psit': if (mine) pokerEnter(e.t); break;
           case 'pstand': if (mine) pokerLeave(e.t); break;
+          case 'pkbuy': case 'pkout': case 'pkcash': if (Array.isArray(G.__pkEv)) G.__pkEv.push(Object.assign({}, e));   /* a test watches these */
+            ENGBANK.pkEvent(e, pid => pid === PID ? (walletState.address || null) : (((remotes.get(pid) || {}).from || {}).address || PK_ADDR.get(pid) || null)); break;   /* [Claude 2026-10-14] the card table's GOLD through @ashvale */
           case 'poker': {
             if (SCENE.pokerShow) SCENE.pokerShow(e.t, pokerModel(e.t));
             pokerChat(e.t);
@@ -1712,7 +1714,7 @@
          zone borders. Inside the room each AREA (a zone, or a 128 m square of seeded land) has its own host, elected among
          the members standing in it; monsters, loot, fires and weather of an area come only from its host. Players near a
          region border also VIEW the neighbour region's room (net.neighbours, below). Avatars are drawn 150 ms behind, interpolated. */
-      const remotes = new Map(); let room = null, roomZone = null, netT = 0, joining = false, retryAt = 0;
+      const remotes = new Map(), PK_ADDR = new Map(); let room = null, roomZone = null, netT = 0, joining = false, retryAt = 0;
       /* CONNECTION WATCH (2026-10-06: "When a player loses connection to the server, they should be notified so they
          don't continue to play on a broken server"). A room can die without ever saying 'closed' (the arcade node restarts
          and the page's link to it never comes back): then you play on alone and nobody sees you. Signs, all from what the
@@ -1765,7 +1767,7 @@
         if (me.boat === 2) { coreCall(() => { me.boat = 1; me.ride = null; me.knock = false; me.path = []; }); hud.chat(nm + ' has dropped out of the game. You take the stern and steer; they ride on with you.', 'sys'); }
         else hud.chat(nm + ' has dropped out of the game. They stay in the bow and travel on with you.', 'sys');
         r.boat = 2; r.ride = myNetId; r.knock = false; r.anim = 'sit'; r.e.H.play('sit', { loop: true });
-        if (core.S.players[id] && core.S.players[id].puppet) core.removePlayer(id);
+        if (core.S.players[id] && core.S.players[id].puppet) coreCall(() => core.removePlayer(id));   /* [Claude 2026-10-14] through coreCall: a seat it stands up tells the Bank */
         carryTell(r, 1);
       }
       function ghostTick(id, r, now) {
@@ -1773,7 +1775,7 @@
         if (now - r.offline.told > 15000) { r.offline.told = now; carryTell(r, 1); }
       }
       function dropRemote(id, hard, keep) { const r = remotes.get(id);
-        if (!hard && r && !r.offline && ghostable(r, id)) { makeGhost(id, r); return; } if (r) { if (r.name && r.name !== 'Adventurer') knewName.set(id, r.name); removeEnt(r.e); remotes.delete(id); } if (core.S.players[id] && core.S.players[id].puppet) core.removePlayer(id, keep); }
+        if (!hard && r && !r.offline && ghostable(r, id)) { makeGhost(id, r); return; } if (r) { if (r.name && r.name !== 'Adventurer') knewName.set(id, r.name); removeEnt(r.e); remotes.delete(id); } if (core.S.players[id] && core.S.players[id].puppet) coreCall(() => core.removePlayer(id, keep)); }   /* [Claude 2026-10-14] coreCall: its events (a card-table cashout to the Bank) are handled, not lost */
       function dropRemotes(keep) { for (const id of Array.from(remotes.keys())) dropRemote(id, false, keep); }   /* keep [Claude 2026-10-12]: OUR room dropped - their chess seats wait for the host's word */
       /* fighting a monster of another area (the operator: attackers can be attacked back across borders): we tell the room which
          area we are fighting in, so that area gets a host even when nobody stands in it; 6 s after the last blow it ends */
@@ -2252,6 +2254,7 @@
         if (d.tr) { if (d.to === myNetId && trade && !via) trade.onMessage(from, d.tr); return; }   /* a trade window message, for us only */
         if (!r && !d.p && !d.g && !d.n && !d.M && !d.E && !d.F) { /* first contact carries state soon */ }
         if (r) { r.heard = performance.now(); if (r.offline) { r.offline = null; hud.chat((r.name || 'Your partner') + ' is back.', 'sys'); } }
+        if (from && from.address && !from.guest) { PK_ADDR.set(id, from.address); if (PK_ADDR.size > 200) PK_ADDR.delete(PK_ADDR.keys().next().value); }   /* [Claude 2026-10-14] kept after they leave: the dealer still names a gone player's seat to the Bank */
         if (!r) { const e = makeEnt('r:' + id, MOD.humanoid({}), { kind: 'remote', id }); const nm = knewName.get(id) || 'Adventurer'; e.tag = hud.tag(label(nm, from)); r = { e, buf: [], anim: 'idle', name: nm, from, lastS: -1, heard: performance.now(), fullT: 0 }; remotes.set(id, r); e.root.visible = false; }
         /* a VIEWER (neighbour region): drawn, never a puppet or a host. A full member of our room wins for 3 s after its last word */
         const view = !!via || d.nb === 1;
@@ -2326,7 +2329,7 @@
             if (!SEALING.has(k)) { SEALING.add(k); sealCards(r.t, r.h | 0, ref, c1, c2, pk).then(b => { if (PH[r.t] === P && !P.items.some(i => i[0] === ref)) { P.items.push([ref, b]); if (P.items.length >= want.length) { P.done = true; phSend(r.t, true); } } }).catch(e => console.warn('seal', e)).finally(() => SEALING.delete(k)); }
           }
         } else delete PH[r.t];
-        return Object.assign({}, r, { se: (r.se || []).map(s => [s[0], toNet(s[1]), s[2], s[3], s[4]]), co: (r.co || []).map(c => [toNet(c[0]), c[1], c[2]]), hc: r.hc ? hc : r.hc });
+        return Object.assign({}, r, { se: (r.se || []).map(s => [s[0], toNet(s[1]), s[2], s[3], s[4], s[5] | 0]), co: (r.co || []).map(c => [toNet(c[0]), c[1], c[2]]), hc: r.hc ? hc : r.hc });
       };
       /* [Claude 2026-10-13] A TABLE ROW AS CHANGES (the operator: build "two" - fit more into each message). At eight players a full row is
          ~800 bytes, three or four pieces for every bet. The dealer now sends what changed since the row it last put on the wire
@@ -2341,7 +2344,7 @@
         for (const k in full) {
           if (k === 't' || k === 'v') continue;
           if (JSON.stringify(full[k]) === JSON.stringify(base[k])) continue;
-          if (k === 'se' && Array.isArray(base.se) && Array.isArray(full.se) && base.se.length === full.se.length && full.se.every((x, i) => x[0] === base.se[i][0] && x[1] === base.se[i][1])) {
+          if (k === 'se' && Array.isArray(base.se) && Array.isArray(full.se) && base.se.length === full.se.length && full.se.every((x, i) => x[0] === base.se[i][0] && x[1] === base.se[i][1] && (x[5] | 0) === (base.se[i][5] | 0))) {
             d.sd = []; full.se.forEach((x, i) => { if (JSON.stringify(x) !== JSON.stringify(base.se[i])) d.sd.push([i, x[2], x[3], x[4]]); }); continue;
           }
           if (k === 'lg' && Array.isArray(base.lg) && Array.isArray(full.lg) && (full.lc | 0) > (base.lc | 0)) {
@@ -2402,7 +2405,7 @@
       const pkLocal = r => {   /* the room hears everything, so a hole card is dropped here, on the way in: a replica
                                   keeps faces only for its own seat, and a shown-down hand is public anyway. It says
                                   nothing about the wire - see handoff/poker_plan.md decision 4. */
-        const se = (r.se || []).map(s => [s[0], fromNet(s[1]), s[2], s[3], s[4]]), co = (r.co || []).map(c => [fromNet(c[0]), c[1], c[2]]);   /* [Claude] the cashouts name players as this page knows them */
+        const se = (r.se || []).map(s => [s[0], fromNet(s[1]), s[2], s[3], s[4], s[5] | 0]), co = (r.co || []).map(c => [fromNet(c[0]), c[1], c[2]]);   /* [Claude] the cashouts name players as this page knows them */
         const mine = {};   /* my chair at that table, as the row names it - a room can hold two players both called "me" */
         for (const s of se) if (s[1] === PID || (me.seat && me.seat.k === 'pk' && me.seat.t === r.t && (s[0] | 0) === (me.seat.s | 0))) mine[s[0] | 0] = 1;
         return Object.assign({}, r, { se, co, hc: r.hc ? r.hc.map(h => mine[h[0] | 0] ? openOwn(r, h) : [h[0] | 0, null, null]) : r.hc });   /* [Claude 2026-10-12] mine opened, the rest were never readable */
@@ -2556,7 +2559,7 @@
          table itself, 5 s; otherwise 20 s while the room is plainly alive (heard in the last 5 s) - then the last stack the dealer
          showed comes back. Offline time never counts: the dealer may still be holding the seat. The room id is handed to the core
          so a cashout written under it is still collected after a reload or a new connection. */
-      let pkAway = 0;
+      let pkAway = 0, pkAsked = 0;
       setInterval(() => {
         const P = core.S.players[PID]; if (!P || (!P.pk && !P.ch)) { pkAway = 0; return; }
         if (room && myNetId) { core.pokerNetId(PID, myNetId); core.chessNetId(PID, myNetId); }   /* the chess stake too (the operator: "make sure we don't have the same problem with the chess game") */
@@ -2567,7 +2570,10 @@
         if (!mineToDeal && now - NW.heard > 5000) { pkAway = 0; return; }
         if (!pkAway) { pkAway = now; return; }
         if (now - pkAway < (mineToDeal ? 5000 : 20000)) return;
-        pkAway = 0; let n = 0; coreCall(() => { n = K.pk ? core.pokerReclaim(PID) : core.chessReclaim(PID); }); persist('now');   /* saved at once: a page that died before saving would pay the same chips back twice */
+        if (K.pk && P.pk.sn && !pkAsked) { pkAsked = now; ENGBANK.pkAsk(); return; }   /* [Claude 2026-10-14] a Bank-held seat: the Bank may already have paid it home */
+        if (pkAsked && now - pkAsked < 4000) return;
+        if (!core.S.players[PID].pk) { pkAway = pkAsked = 0; return; }
+        pkAway = 0; pkAsked = 0; let n = 0; coreCall(() => { n = K.pk ? core.pokerReclaim(PID) : core.chessReclaim(PID); }); persist('now');   /* saved at once: a page that died before saving would pay the same chips back twice */
       }, 2000);
       function shared(id, r, d) {
         if (d.j != null) { const nj = +d.j; if (r.j !== nj) { r.j = nj; elect(); } }
@@ -2595,7 +2601,7 @@
           if (Number.isFinite(+d.s)) r.lastA = +d.s;
         }
         if (Object.keys(pst).length) core.setPuppet(id, pst);
-        if (d.C != null) { const g = core.S.ground.find(q => q.uid === +d.C); if (g && iHostAt(g.x, g.y)) coreCall(() => core.claim(id, +d.C)); }
+        if (d.C != null) { const g = core.groundBy ? core.groundBy(+d.C) : core.S.ground.find(q => q.uid === +d.C); if (g && iHostAt(g.x, g.y)) coreCall(() => core.claim(id, +d.C)); }   /* groundBy [Claude 2026-10-14]: a guest may name a Bank copy by the Bank's uid */
         if (Array.isArray(d.XF)) { const f = d.XF; if (iHostAt(f[0], f[1])) coreCall(() => core.hostFire(f[0] | 0, f[1] | 0, f[2] | 0, String(f[3] || 'logs'))); }
         /* the chess park: a replica asks the host of the table's area to seat it, stand it up or play its move; the host answers in Ch rows */
         if (Array.isArray(d.CS)) { const T = core.tableById(String(d.CS[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostSit(id, T.id, d.CS[1] | 0, d.CS[2] | 0)); }
@@ -3096,13 +3102,12 @@
           if (!h) continue;   /* nothing in front of that chair - sitting it out, or the hand is folded and mucked */
           if (f & PKF[1]) continue;   /* [Claude 2026-10-12] a folded hand is mucked, face down and gone - never shown (the operator: "it shows the cards of people who folded") */
           const sd = show && st.r && st.r.sd ? st.r.sd.find(x => (x[0] | 0) === ref) : null;   /* [Claude 2026-10-11] at the showdown every shown hand lies face up, on every copy */
-          const c = sd ? [sd[1] | 0, sd[2] | 0] : typeof h[1] === 'number' ? [h[1] | 0, h[2] | 0] : null, up = !!c && (!!sd || ref === ms);   /* face up: a hand called to the showdown, or your own - not every hand this copy happens to know (the dealer knows them all) */
+          const c = sd ? [sd[1] | 0, sd[2] | 0] : typeof h[1] === 'number' ? [h[1] | 0, h[2] | 0] : null, up = !!c && !!sd;   /* face up: only a hand called to the showdown - not every hand this copy happens to know (the dealer knows them all); [Claude 2026-10-14] your own stay face down on the felt too, the HUD's box over them shows them to you (the operator) */
           hands.push({ ref, c: up ? c : null, down: up ? 0 : 1, tilt: up ? 1 : 0 });
           bets[ref] = s[3] | 0;
         }
         return { board: (st.bo || []).slice(), hands, bets, pot: st.p | 0, big: st.bg | 0, dealer: st.d >= 0 ? st.d : null, turn: st.a >= 0 && st.o === 'playing' && st.st !== 'none' ? st.a : null };
       }
-      const PK_LAST = {};
       /* [Claude 2026-10-13] the operator: "Add the poker game history to the chat box". The dealer's own game already hears the table
          (its core tells the players in the room); every other copy reads the row's last lines (lg) and their running count
          (lc) and writes the ones it has not written yet - for a player at that table, or anyone standing on its floor. */
@@ -3129,10 +3134,6 @@
           shown: st.r && st.r.sd ? st.r.sd.map(x => ({ ref: x[0] | 0, c: [x[1] | 0, x[2] | 0], name: String(x[3] || '') })) : [],   /* [Claude 2026-10-11] the showdown */
           min: Math.min((st.b | 0) + (st.mr | 0 || st.bg | 0 || 50), (st.b | 0) + ((mine && mine[2]) | 0)), big: st.bg | 0
         };
-        /* [Claude 2026-10-13] the last hand's result stays in the panel through the next hand (between hands it is up only
-           ~7 s, easy to miss on a phone - the operator: "not showing the results of the hand to all the players") */
-        if (st.r && st.st === 'none') PK_LAST[t] = { h: st.h | 0, result: v.result, shown: v.shown, winners: v.winners, seats: v.seats };
-        else if (PK_LAST[t] && PK_LAST[t].h === (st.h | 0) - 1) v.last = PK_LAST[t];
         return v;
       }
       function pokerFx(t, row) {   /* the small sound of the felt changing under your hands: a card going out, a new street */
@@ -3188,6 +3189,10 @@
         if (room) netDrop('the card table stopped answering', false);
       }
       function pokerClock(now) {
+        if (me.seat && me.seat.k === 'pk' && SCENE.pokerSpots && hud.pokerAnchor) {   /* [Claude 2026-10-14] the HUD's card boxes ride over their spots on the felt */
+          const sp = SCENE.pokerSpots(me.seat.t, me.seat.s | 0);
+          hud.pokerAnchor(sp ? { board: toScreen(sp.board, 0), hole: sp.hole ? toScreen(sp.hole, 0) : null } : null);
+        }
         if (!SCENE.pokerTimer) return;
         for (const T of core.pokerTables()) {
           const st = core.S.poker[T.id];

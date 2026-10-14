@@ -490,7 +490,9 @@
             if (data && data.t === 'carried' && bankFrom && R.me && data.to === R.me.address) { carriedHeard(data); return; }   /* carried in someone's canoe while away */
             if (data && data.t === 'marks' && bankFrom && R.me && data.to === R.me.address) { if (core.setMarks) core.setMarks(data.k, data.cells || []); return; }   /* maples tapped today, birches peeled this year */   /* trees others felled */
             if (data && data.t === 'scores' && bankFrom && R.me && data.to === R.me.address) { scoresHeard(data); return; }   /* the ruined keep's global dragon-killer board */
-            if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }   /* persisted drops near me */
+            if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }
+            if (data && data.t === 'pkok' && bankFrom && R.me && data.to === R.me.address) { pkHeard(data); return; }   /* [Claude 2026-10-14] the Bank has our card-table word */
+            if (data && data.t === 'pk' && bankFrom && R.me && data.to === R.me.address) { coreCall(() => core.pokerBankSeen && core.pokerBankSeen(PID, data.rows || [])); return; }   /* persisted drops near me */
             if (data && data.t === 'pals' && bankFrom && R.me && data.to === R.me.address) { palsHeard(data); return; }   /* the friends list */
             if (data && data.t === 'paid' && bankFrom && R.me && data.to === R.me.address) { const it = DATA.items && DATA.items.items && DATA.items.items[data.item]; hud.chat('The bank sent ' + (data.units | 0) + ' ' + (it && it.name ? it.name : String(data.item || '')) + ' to your wallet.', 'sys'); return; }   /* [Claude 2026-10-12] the Bank's word that a delivery went out (handoff/bank_rpc_plan.md 3b.4) */
             if (!data || data.t !== 'dep' || !bankFrom || !R.me || data.to !== R.me.address) return;   /* only @ashvale or @yourfirstname answers, only to me */
@@ -535,7 +537,71 @@
           R.send({ t: 'dep', v: 3, id, items, carried, chest, spent, reward, pend: pendOf(Object.keys(items)), from: fromAll(Object.keys(items)) });
         });
       }
-    return { CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
+      /* ---------- [Claude 2026-10-14] THE CARD TABLE'S GOLD, HELD BY @ashvale (the operator: "When the player buys in send that gold to the
+         Ashvale wallet; when they cash out or stand up or lose connection, send their remaining poker game balance back to them").
+         - pkbuy (our seat, its buy-in already out of the bag): the GOLD goes to @ashvale with the creator allowance (as returns do;
+           counted in L.out so returnNext never sends it again), then the Bank hears {pkbuy, s, n, tx}. Kept in L.pkb until done,
+           so a reload or a refused send tries again.
+         - pkout (the dealer's word on any seat): {pkout, s, who, n} - the Bank pays that seat home, the player online or not.
+         - pkcash (our own seat closed - the dealer's cashout seen, or the table gone): the coins are back in the bag and counted
+           as on their way (pend), and the Bank hears our own word {pkout, s, n}, which waits for the dealer's.
+         - at a load with a seat still open: 'pk?' - a seat the Bank already paid home closes (the GOLD is in the wallet, the chest).
+         Every word is sent again until the Bank answers 'pkok'. */
+      const PKQ = new Map();   /* s|kind -> {o, at, n} */
+      function pkSend(key, o) { PKQ.set(key, { o, at: 0, n: 0 }); pkFlush(); }
+      function pkFlush() {
+        const now = Date.now();
+        for (const [k, q] of PKQ) {
+          if (now - q.at < 15000) continue;
+          if (++q.n > 60) { PKQ.delete(k); console.warn('ASHVALE: the Bank never answered', k); continue; }
+          q.at = now; bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send(q.o); }).catch(() => {});
+        }
+      }
+      setInterval(pkFlush, 5000);
+      function pkHeard(d) { for (const k of Array.from(PKQ.keys())) if (k.split('|')[0] === d.s) PKQ.delete(k); }
+      let pkPaying = false;
+      async function pkPayNext() {
+        if (pkPaying || !walletState.address) return;
+        const L = ledgerFor(walletState.address); L.pkb = L.pkb || [];
+        const b = L.pkb.find(x => !x.tx && Date.now() >= (x.next || 0)); if (!b) return;
+        const W = walletState.data, pid = W && W.pids && W.pids.coins; if (!pid) return;
+        pkPaying = true; L.out = L.out || {};
+        const o = { id: 'pk:' + b.s, n: b.n, piece: null, st: 'pending', t: Date.now() };
+        if (!(L.out.coins || []).some(x => x.id === o.id)) { (L.out.coins = L.out.coins || []).push(o); ledgerSave(); }   /* returnNext: already on its way */
+        const oo = (L.out.coins || []).find(x => x.id === o.id);
+        const fail = () => { b.tries = (b.tries | 0) + 1; b.next = Date.now() + Math.min(600000, 30000 * b.tries); ledgerSave(); };   /* its L.out entry stays: returnNext must never send this GOLD without the Bank hearing which seat it was */
+        try {
+          const r = await fetch('/r/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+            body: JSON.stringify({ to: '@ashvale', label: 'ASHVALE', note: 'Card table buy-in', silent: true, kind: 'token', propertyid: pid, amount: String(b.n) }) });
+          const j = await r.json().catch(() => ({}));
+          if (r.status !== 202 || !j.id || j.status === 'failed') { fail(); return; }
+          let st = j;
+          for (let i = 0; i < 200 && st && st.status !== 'sent' && st.status !== 'failed'; i++) { await new Promise(ok => setTimeout(ok, 3000)); st = await fetch('/r/send/' + encodeURIComponent(j.id), { credentials: 'same-origin' }).then(x => x.json()).catch(() => null) || st; }
+          if (!st || st.status !== 'sent' || !st.txid) { fail(); return; }
+          b.tx = st.txid; if (oo) { oo.st = 'sent'; oo.t = Date.now(); } ledgerSave(); setTimeout(walletRefresh, 60000);
+          pkSend(b.s + '|buy', { t: 'pkbuy', v: 1, s: b.s, n: b.n, tx: b.tx });
+          L.pkb = L.pkb.filter(x => !(x.tx && Date.now() - (x.at || 0) > 7 * 86400000));
+        } catch (e) { fail(); }
+        finally { pkPaying = false; }
+      }
+      setInterval(pkPayNext, 4000);
+      function pkEvent(e, addrOf) {
+        if (e.e === 'pkout') {   /* the dealer: whose seat, by address */
+          const who = addrOf(e.p); if (!who) { console.warn('ASHVALE: no address for the card-table seat', e.p); return; }
+          pkSend(e.s + '|out', { t: 'pkout', v: 1, s: e.s, who, n: e.n | 0 }); return;
+        }
+        if (e.p !== PID || !walletState.address) return;
+        const L = ledgerFor(walletState.address);
+        if (e.e === 'pkbuy') { L.pkb = L.pkb || []; if (!L.pkb.some(x => x.s === e.s)) { L.pkb.push({ s: e.s, n: e.n | 0, at: Date.now() }); ledgerSave(); } setTimeout(pkPayNext, 300); return; }
+        if (e.e === 'pkcash') {
+          if (e.n > 0) { L.pend.coins = (L.pend.coins || 0) + (e.n | 0); ledgerSave(); }   /* back in the bag, paid by the Bank: on its way */
+          pkSend(e.s + '|cash', { t: 'pkout', v: 1, s: e.s, n: e.n | 0 });
+        }
+      }
+      let pkAskT = 0;
+      function pkAsk() { pkAskT = Date.now(); bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'pk?', v: 1 }); }).catch(() => {}); }
+      setInterval(() => { const P = core.S.players[PID]; if (P && P.pk && P.pk.sn && !(P.seat && P.seat.k === 'pk') && Date.now() - pkAskT > 30000) pkAsk(); }, 5000);
+    return { pkEvent, pkAsk, CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engbank', { api: 1, v: 1, needs: {} }, () => ({ api: 1, install }));
   if (typeof module !== 'undefined' && module.exports) module.exports = { install };

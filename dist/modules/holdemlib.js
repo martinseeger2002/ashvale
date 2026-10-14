@@ -276,7 +276,7 @@
       const pots = [];
       if (left.length <= 1) {   /* nobody to show down against - the pot, uncalled money included, goes across */
         const w = left[0] || who.find(s => !s.folded);
-        if (w && T.pot > 0) { const others = who.filter(s => s !== w).reduce((m, s) => Math.max(m, s.committed | 0), 0), back = Math.max(0, (w.committed | 0) - others), cut = Math.floor((T.pot - back) * (T.rake || 0)), paid = T.pot - cut;   /* [Claude 2026-10-13] the house cuts only what was called, never your own bet coming back */ T.raked = (T.raked | 0) + cut; w.chips += paid; w.won += paid; pots.push({ amount: paid, rake: cut, win: [w.ref], who: [w.name], note: 'uncontested' }); }
+        if (w && T.pot > 0) { const others = who.filter(s => s !== w).reduce((m, s) => Math.max(m, s.committed | 0), 0), back = Math.max(0, (w.committed | 0) - others), cut = Math.min(Math.floor((T.pot - back) * (T.rake || 0)), T.rakeCap > 0 ? T.rakeCap : Infinity), paid = T.pot - cut;   /* [Claude 2026-10-13] the house cuts only what was called, never your own bet coming back */ T.raked = (T.raked | 0) + cut; w.chips += paid; w.won += paid; pots.push({ amount: paid, rake: cut, win: [w.ref], who: [w.name], note: 'uncontested' }); }
       } else {
         const lv = []; for (const s of who) if (s.committed > 0 && lv.indexOf(s.committed) < 0) lv.push(s.committed);
         lv.sort((a, b) => a - b);
@@ -286,11 +286,11 @@
           if (amt > 0) pots.push({ amount: amt, elig: who.filter(s => !s.folded && s.committed >= L), from: who.filter(s => s.committed > prev).length });
           prev = L;
         }
-        let sum = 0; for (const p of pots) sum += p.amount;
+        let sum = 0, handCut = 0; for (const p of pots) sum += p.amount;
         if (sum !== T.pot && pots.length) pots[pots.length - 1].amount += T.pot - sum;   /* never lose a chip to rounding */
         for (const p of pots) {
           const back = p.elig && p.elig.length === 1 && p.from === 1;   /* [Claude 2026-10-13] a layer only its own owner put money in: an uncalled all-in coming back, uncut */
-          const cut = back ? 0 : Math.floor(p.amount * (T.rake || 0)); p.rake = cut; p.amount -= cut; T.raked = (T.raked | 0) + cut;   /* [Claude] the house's cut, before the pot is shared */
+          const cut = back ? 0 : Math.min(Math.floor(p.amount * (T.rake || 0)), T.rakeCap > 0 ? Math.max(0, T.rakeCap - handCut) : Infinity); handCut += cut; p.rake = cut;   /* [Claude 2026-10-14] at most rakeCap a hand (the operator: 2 at the 100 table, 20 at 1,000, 200 at 10,000) */ p.amount -= cut; T.raked = (T.raked | 0) + cut;   /* [Claude] the house's cut, before the pot is shared */
           const e = p.elig && p.elig.length ? p.elig : left.slice(0, 1);
           let top = -1; for (const s of e) if (s.score > top) top = s.score;
           const w = e.filter(s => s.score === top);

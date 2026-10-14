@@ -1079,3 +1079,31 @@ the walk here feature".
   follow the DRAWN body (r.vs, smoothed speed): walk/run while it moves (paced to speed, 1 tile/600 ms walk, 2 run), idle
   only once it is still; a 'walk' sample with a still body turns idle after 0.25 s. Canoes and non-locomotion anims untouched.
   ASH.remoteView(id) for tests. tests/remote_walk_pw.py (2 windows): slide with still legs 0.6-1.4 m before, <=0.14 m after.
+
+## 0.8.119 - 2026-10-14 (Claude + sadfrogltc): the card table redone, its GOLD held by @ashvale, death piles once - RELEASED (v146; cards 0ce536ff ASHVALE, ac80cea6 Ziibiing)
+- Card table HUD (the operator, on a phone): the betting bar along the bottom (buttons on top of it, status/pot/players under them),
+  your two cards in a box over their spot on the felt (on the felt they stay face down), the board in a box over the middle,
+  the chat at the top; the table's play only in the chat; the last hand's result only between hands; no All-in button on the
+  bar (slide to the end - the raise button then says "All-in N"); landscape: the slider on one row. Dealing animation: cards
+  fly from in front of the dealer, round the table twice, then the board. scene pokerSpots + engine pokerClock -> hud.pokerAnchor.
+- Rake: 10% of a pot, at most one big blind a hand (2 / 20 / 200 at the 100 / 1,000 / 10,000 tables). holdemlib T.rakeCap,
+  tests/sidepot_test.js checks it against the reference.
+- THE TABLE'S GOLD IS HELD BY @ashvale (the operator: "When the player buys in send that gold to the Ashvale wallet; when they cash
+  out or stand up or lose connection, send their remaining poker game balance back to them"). A seat is a session
+  '<table>:<gid>:<sn>' (se[5]). The player's game sends the buy-in to @ashvale (creator allowance, L.pkb, retried, never
+  doubled by returns) and tells the Bank (pkbuy + tx); the dealer tells the Bank each seat's cashout (pkout, by address, also
+  for a player whose page closed); the player's own word (pkout without who) waits 60 s for the dealer's. The Bank pays only a
+  buy-in the chain proves (arcade test-ledger: GOLD 26 from that address to @ashvale, exact amount), never more out of a table
+  game than its proven buy-ins (else HELD), in jobs of <= 10,000. At a load a seat the Bank already paid closes without coins
+  (they are in the wallet: the chest). Bank: .25 bank-rpc 590d997 (tests/bank_pk_test.py). Game: tests/poker_bank_pw.py.
+- Death piles (the operator: "Each time I died a lot of my items were duplicated ... all lying in a pile"): dying in an area another
+  game hosts, the Bank's copy of a persisted drop could arrive before the host's row and both were laid down. groundAdd joins
+  the host's uid to the Bank copy (huid); claim/groundRemove find a pile item by any of its names (core.groundBy).
+  tests/death_pile_once_test.js (fails on 0.8.118: every item twice). The chain never held duplicates.
+- sadfrogltc (GitHub 4722e98): Even Grove planting - a quest shoot in the wrong place is kept and says where it belongs, every
+  sapling kind plants; multiplayer attack sync - the attack target repeats in presence, stale monster rows superseded in the
+  send queue. tests/even_grove_pw.py, sapling_place_test, balance_test, shared_pw updates.
+- Gate: core_test ALL OK; 47 headless tests pass (balance_test 3, dragon_focus_test 1, worldgen_test 1 fail the same on the tree
+  before these changes); browser: even_grove_pw, combat_many_pw, poker_bank_pw, poker_leave_pw, poker_stakes_pw (nothing made
+  or lost, rake capped), remote_walk_pw ALL OK; poker_flow_pw only the old /r/inscriptions 404; shared_pw and poker_cases_pw
+  time out opening a page on this box (shared_pw the same on the old tree); candidate_live boots, no console errors.

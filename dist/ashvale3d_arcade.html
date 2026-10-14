@@ -5828,7 +5828,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       const pots = [];
       if (left.length <= 1) {   /* nobody to show down against - the pot, uncalled money included, goes across */
         const w = left[0] || who.find(s => !s.folded);
-        if (w && T.pot > 0) { const others = who.filter(s => s !== w).reduce((m, s) => Math.max(m, s.committed | 0), 0), back = Math.max(0, (w.committed | 0) - others), cut = Math.floor((T.pot - back) * (T.rake || 0)), paid = T.pot - cut;   /* [Claude 2026-10-13] the house cuts only what was called, never your own bet coming back */ T.raked = (T.raked | 0) + cut; w.chips += paid; w.won += paid; pots.push({ amount: paid, rake: cut, win: [w.ref], who: [w.name], note: 'uncontested' }); }
+        if (w && T.pot > 0) { const others = who.filter(s => s !== w).reduce((m, s) => Math.max(m, s.committed | 0), 0), back = Math.max(0, (w.committed | 0) - others), cut = Math.min(Math.floor((T.pot - back) * (T.rake || 0)), T.rakeCap > 0 ? T.rakeCap : Infinity), paid = T.pot - cut;   /* [Claude 2026-10-13] the house cuts only what was called, never your own bet coming back */ T.raked = (T.raked | 0) + cut; w.chips += paid; w.won += paid; pots.push({ amount: paid, rake: cut, win: [w.ref], who: [w.name], note: 'uncontested' }); }
       } else {
         const lv = []; for (const s of who) if (s.committed > 0 && lv.indexOf(s.committed) < 0) lv.push(s.committed);
         lv.sort((a, b) => a - b);
@@ -5838,11 +5838,11 @@ POSSIBILITY OF SUCH DAMAGE. */
           if (amt > 0) pots.push({ amount: amt, elig: who.filter(s => !s.folded && s.committed >= L), from: who.filter(s => s.committed > prev).length });
           prev = L;
         }
-        let sum = 0; for (const p of pots) sum += p.amount;
+        let sum = 0, handCut = 0; for (const p of pots) sum += p.amount;
         if (sum !== T.pot && pots.length) pots[pots.length - 1].amount += T.pot - sum;   /* never lose a chip to rounding */
         for (const p of pots) {
           const back = p.elig && p.elig.length === 1 && p.from === 1;   /* [Claude 2026-10-13] a layer only its own owner put money in: an uncalled all-in coming back, uncut */
-          const cut = back ? 0 : Math.floor(p.amount * (T.rake || 0)); p.rake = cut; p.amount -= cut; T.raked = (T.raked | 0) + cut;   /* [Claude] the house's cut, before the pot is shared */
+          const cut = back ? 0 : Math.min(Math.floor(p.amount * (T.rake || 0)), T.rakeCap > 0 ? Math.max(0, T.rakeCap - handCut) : Infinity); handCut += cut; p.rake = cut;   /* [Claude 2026-10-14] at most rakeCap a hand (the operator: 2 at the 100 table, 20 at 1,000, 200 at 10,000) */ p.amount -= cut; T.raked = (T.raked | 0) + cut;   /* [Claude] the house's cut, before the pot is shared */
           const e = p.elig && p.elig.length ? p.elig : left.slice(0, 1);
           let top = -1; for (const s of e) if (s.score > top) top = s.score;
           const w = e.filter(s => s.score === top);
@@ -7857,10 +7857,30 @@ POSSIBILITY OF SUCH DAMAGE. */
       if (p.using && p.using.slot === slot && !p.inv[slot]) { p.using = null; ev({ e: 'using', p: p.id }); }
       return id;
     }
+    function plantCounts(job, x, y, wasStump, cleared) {
+      if (!job || !job.st || !job.st.goal) return false;
+      const kind = job.st.goal.plant;
+      if (kind === 'stump') return !!(wasStump || cleared);
+      if (kind !== 'open' || wasStump) return false;
+      const near = job.st.near;
+      return !near || cheb(x, y, near[0], near[1]) <= (near[2] == null ? 16 : near[2]);
+    }
+    function plantQuestWhy(job, x, y, wasStump, cleared) {
+      if (!job || plantCounts(job, x, y, wasStump, cleared)) return null;
+      const kind = job.st.goal.plant;
+      if (kind === 'stump') return 'This shoot belongs in the grass left by a felled tree. It will not be used here.';
+      if (wasStump) return 'Let the stump crumble into grass before planting this quest shoot.';
+      const near = job.st.near;
+      if (near && cheb(x, y, near[0], near[1]) > (near[2] == null ? 16 : near[2])) return 'Vael asked for this shoot in the Even Grove, within sixteen tiles of the rope. It will not be used here.';
+      return kind === 'open' ? 'This quest shoot belongs in open grass. It will not be used here.' : null;
+    }
     function plantAt(p, x, y) {
       if (!canPlant(p, x, y)) { msg(p, (isWood(x, y) && !canReplant(p) ? 'You have not learned to set a shoot in a stump.' : null) || stumpWhy(p, x, y) || plantWhy(x, y) || 'That ground will not take a shoot.', 'warn'); return; }
       const job = plantJob(p), i = idx(x, y);
       const wasStump = isStump(x, y);
+      const wasCleared = isCleared(x, y);
+      const questWhy = plantQuestWhy(job, x, y, wasStump, wasCleared);
+      if (questWhy) { msg(p, questWhy, 'warn'); return; }
       if (wasStump) {
         if (M.clearTree) M.clearTree(x, y);
         delete S.dep[i]; delete S.fell[i];
@@ -7868,10 +7888,7 @@ POSSIBILITY OF SUCH DAMAGE. */
         ev({ e: 'clear', x, y, node: i });
       }
       const cleared = isCleared(x, y);
-      const onStump = wasStump || cleared;
-      const near = job && job.st.near;
-      const inGrove = !near || cheb(x, y, near[0], near[1]) <= (near[2] == null ? 16 : near[2]);
-      const count = !!(job && ((job.st.goal.plant === 'stump' && onStump) || (job.st.goal.plant === 'open' && !onStump && inGrove)));
+      const count = plantCounts(job, x, y, wasStump, cleared);
       const sapling = takeSapling(p); if (!sapling) return;
       const rec = { x, y, at: S.t, tile: M.tileAt(x, y), stump: 0, owner: p.id, grown: 0, sapling, tree: saplingKind(sapling) };
       if (count) { rec.qid = job.qid; rec.step = job.q.step; rec.counted = 1; }
@@ -8428,6 +8445,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       const st = pokerOf(id), t = L.table({ id: String(id), small: PK_SB, big: PK_BB, rake: PK_RAKE, int: (n) => R.int(n), tell: (text, by) => { for (const pid of S.order) { const p = S.players[pid]; if (p.x != null && zoneOf(p.x, p.y) === zoneOf(pokerTableById(id).x, pokerTableById(id).y)) msg(p, text, by || 'info'); } } });
       if (st.g) { try { Object.assign(t, JSON.parse(st.g)); } catch (e) { return null; } }
       else if (st.se.length) return null;   /* taken over from another game mid-hand: there is no deck to carry, so it is dealt out below */
+      t.rakeCap = st.buy > 0 ? pkBlinds(st.buy | 0)[1] : 0;   /* [Claude 2026-10-14] the rake's top: one big blind */
       PKG[id] = t; return t;
     }
     /* [Claude 2026-10-13] A NEW DEALER BETWEEN HANDS takes the table over as it stands: no card is out, so the row holds all of it
@@ -8436,10 +8454,11 @@ POSSIBILITY OF SUCH DAMAGE. */
        table changed dealer sends its sit once more, and hostPokerSit keeps the chair and takes the key). */
     function pokerAdopt(id) {
       const st = pokerOf(id), se = (st.se || []).slice();
+      st.sns = {}; for (const x of se) if (x && x[1] != null && x[5]) st.sns[x[1]] = x[5] | 0;   /* [Claude 2026-10-14] the seats' sessions go on with the table */
       delete PKG[id]; st.g = null; st.se = [];
       const t = pokerGame(id); st.se = se;
       if (!t) return pokerAbandon(id);
-      const bl = pkBlinds(st.buy | 0); t.small = bl[0]; t.big = bl[1]; t.hand = st.h | 0; t.dealer = st.d == null ? -1 : st.d | 0; t.raked = st.rk | 0;
+      const bl = pkBlinds(st.buy | 0); t.small = bl[0]; t.big = bl[1]; t.rakeCap = st.buy > 0 ? bl[1] : 0; t.hand = st.h | 0; t.dealer = st.d == null ? -1 : st.d | 0; t.raked = st.rk | 0;
       for (const x of se) {
         if (!x || x[1] == null) continue;
         if (!S.players[x[1]]) { pokerCashout(st, x[1], x[2] | 0); continue; }   /* gone from the game: their stack goes home now, as at an abandoned table */
@@ -8463,7 +8482,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       st.v = (st.v | 0) + 1; st.mine = 1; st.o = t.status; st.st = t.street; st.d = t.dealer; st.sb = t.sbSeat; st.bb = t.bbSeat;
       st.p = t.pot | 0; st.b = t.bet | 0; st.a = t.toAct; st.h = t.hand | 0; st.bo = t.board.slice();
       st.se = t.seats.filter(s => s && s.id != null).map(s => [s.ref | 0, s.id, s.chips | 0, s.bet | 0,
-        (s.in ? PK_IN : 0) | (s.folded ? PK_FOLD : 0) | (s.allin ? PK_ALLIN : 0) | ((s.hole && !s.out) ? PK_CARD : 0) | (s.acted ? PK_ACTED : 0) | (s.away ? PK_AWAY : 0)]);
+        (s.in ? PK_IN : 0) | (s.folded ? PK_FOLD : 0) | (s.allin ? PK_ALLIN : 0) | ((s.hole && !s.out) ? PK_CARD : 0) | (s.acted ? PK_ACTED : 0) | (s.away ? PK_AWAY : 0), (st.sns && st.sns[s.id]) | 0]);   /* [Claude 2026-10-14] se[5]: the seat's session number - the @ashvale Bank holds its GOLD under '<table>:<gid>:<sn>' */
       st.lg = t.log.slice(-6).map(l => String(l.t || '').slice(0, 90)); st.lc = (t.logBase | 0) + t.log.length;   /* [Claude 2026-10-13] the last six lines and how many there have been: every copy writes the table's play into its chat (the operator) */
       st.r = t.result ? { p: t.result.pots.map(q => [q.amount | 0, (q.win || []).map(x => x | 0)]), c: t.result.contested ? 1 : 0, rk: t.result.raked | 0, sd: (t.result.shown || []).slice(0, 8) } : null;   /* sd [Claude]: the showdown, every hand shown face up with its name */
       st.mr = t.minRaise | 0; st.bg = t.big | 0;   /* [Claude] the least a raise can be, and the big blind: the panel's slider runs from the one to all-in */
@@ -8475,7 +8494,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       st.tt = t.toAct >= 0 ? S.t : null;
       return st;
     }
-    function pokerRow(id) { const st = pokerOf(id), r = {}; for (const k in st) if (k !== 'g' && k !== 'mine' && k !== 'wt' && k !== 'tt') r[k] = st[k]; return r; }
+    function pokerRow(id) { const st = pokerOf(id), r = {}; for (const k in st) if (k !== 'g' && k !== 'mine' && k !== 'wt' && k !== 'tt' && k !== 'sns') r[k] = st[k]; return r; }
     function pokerRows(keep) { const out = []; for (const T of pokerTables()) { if (keep && !keep(T.x, T.y)) continue; const st = S.poker[T.id]; if (st && ((st.se && st.se.length) || st.mine === 1)) out.push(pokerRow(T.id)); } return out; }   /* [Claude 2026-10-13] a table this game deals goes out EMPTY too: a new dealer that opens the table it took over sent that word once, while the others still heard the old dealer as the host, and they sat on at a table that no longer had them (the operator: the game gets stuck when someone leaves) */
     function emitPoker(id, extra) { pokerSettle(id); ev(Object.assign({ e: 'poker', t: id }, pokerRow(id), extra || {})); }
     function pokerSeatName(p) { return String((p && p.name) || 'Someone').slice(0, 16); }
@@ -8498,6 +8517,7 @@ POSSIBILITY OF SUCH DAMAGE. */
     function pkOpen(p, id) { return !!(p.pk && p.pk.t === id); }
     function pkClose(p, n, how) {
       const k = p.pk; p.pk = null; p.pkDone = k ? k.key : null;
+      if (k && k.sn) ev({ e: 'pkcash', p: p.id, s: k.key + ':' + k.sn, n: Math.max(0, n | 0) });   /* [Claude 2026-10-14] a Bank-held seat: the Bank pays it home (the engine counts it as on its way) */
       if (n > 0) { if (addItem(p, 'coins', n)) dropGround('coins', n, p.x, p.y, p.id, 600); msg(p, how === 'back' ? 'The card table is gone: your ' + n + ' GOLD on it comes back to you.' : 'You cash out ' + n + ' GOLD.', 'trade'); ev({ e: 'inv', p: p.id }); }
       else msg(p, 'You leave the table with nothing.', 'info');
     }
@@ -8517,7 +8537,8 @@ POSSIBILITY OF SUCH DAMAGE. */
           if (invCount(p, 'coins') < st.buy) { msg(p, 'You cannot cover the buy-in of ' + st.buy + ' GOLD - you get up again.', 'warn'); pokerLeave(p, 'short'); continue; }
           if (p.pk && p.pk.t !== id) pokerReclaim(p.id, true);   /* a seat at another table still open: home first */
           removeItem(p, 'coins', st.buy); p.pkPaid = { key }; msg(p, 'You buy in for ' + st.buy + ' GOLD.', 'trade'); ev({ e: 'inv', p: p.id });
-          p.pk = { t: id, key, cs: st.cseq | 0, n: st.buy | 0, ids: [], at: S.t };
+          p.pk = { t: id, key, cs: st.cseq | 0, n: st.buy | 0, ids: [], at: S.t, sn: at[p.id][5] | 0 };
+          if (p.pk.sn) ev({ e: 'pkbuy', p: p.id, s: key + ':' + p.pk.sn, n: st.buy | 0 });   /* [Claude 2026-10-14] the engine sends it to @ashvale and tells the Bank */
         }
         if (at[p.id] && pkOpen(p, id)) p.pk.n = Math.max(0, at[p.id][2] | 0);   /* the stack as the dealer last showed it */
         p.pkGot = p.pkGot || {};
@@ -8540,17 +8561,34 @@ POSSIBILITY OF SUCH DAMAGE. */
       if (p.seat && p.seat.k === 'pk' && p.seat.t === p.pk.t) return 0;
       const n = Math.max(0, p.pk.n | 0); pkClose(p, n, 'back'); return n;
     }
+    function pokerBankSeen(pid, rows) {   /* [Claude 2026-10-14] the Bank's 'pk' rows [s, buy, out, state] for this player */
+      const p = S.players[pid]; if (!p || p.puppet || !p.pk || !p.pk.sn) return 0;
+      const s = p.pk.key + ':' + p.pk.sn, r = (rows || []).find(x => x && x[0] === s);
+      if (!r || (r[3] !== 'paid' && r[3] !== 'held')) return 0;
+      if (p.seat && p.seat.k === 'pk' && p.seat.t === p.pk.t) return 0;
+      const n = r[2] | 0; p.pkDone = p.pk.key; p.pk = null;
+      msg(p, r[3] === 'paid' ? 'Your ' + n + ' GOLD from the card table went home to your wallet (open your chest).' : 'Your ' + n + ' GOLD from the card table is waiting for the Bank to check it.', 'trade');
+      return n;
+    }
     function pokerNetId(pid, netId) {   /* the room id this game plays under now: kept with an open seat, so a cashout written under it is still ours later */
       const p = S.players[pid]; if (!p || !p.pk || typeof netId !== 'string' || !netId) return;
       const ids = p.pk.ids || (p.pk.ids = []); if (ids.indexOf(netId) < 0) { ids.push(netId); if (ids.length > 8) ids.splice(0, ids.length - 8); }
     }
-    function pokerCashout(st, pid, chips) { if (!(st.buy > 0)) return; st.cseq = (st.cseq | 0) + 1; st.co = (st.co || []).concat([[pid, chips | 0, st.cseq]]).slice(-12); }
+    function pokerCashout(st, pid, chips) {
+      if (!(st.buy > 0)) return; st.cseq = (st.cseq | 0) + 1; st.co = (st.co || []).concat([[pid, chips | 0, st.cseq]]).slice(-12);
+      /* [Claude 2026-10-14] THE TABLE'S GOLD IS HELD BY @ashvale (the operator: "When the player buys in send that gold to the Ashvale wallet;
+         when they cash out or stand up or lose connection, send their remaining poker game balance back to them"): the dealer
+         tells the Bank what this seat leaves with; the Bank pays it home to the player's wallet, online or not */
+      const id = Object.keys(S.poker).find(k => S.poker[k] === st), x = (st.se || []).find(q => q && q[1] === pid), sn = ((st.sns || {})[pid]) || (x && x[5]) | 0;
+      if (id && sn) ev({ e: 'pkout', p: pid, s: id + ':' + (st.gid | 0) + ':' + sn, n: chips | 0 });
+      if (st.sns) delete st.sns[pid];
+    }
     function pokerSitAt(p, T, si, buy, pk) {   /* p has walked onto the chair: take it. Two who can play and the hand is dealt */
       si = si | 0;
       const t = pokerGame(T.id);
       if (t && !pokerSeated(T.id) && !t.seats.some(s => s && s.id != null)) {   /* [Claude] the first to sit sets the buy-in and the blinds */
         const st0 = pokerOf(T.id); st0.buy = Math.max(0, Math.min(1000000, buy | 0)); st0.gid = (st0.gid | 0) + 1;
-        const bl = pkBlinds(st0.buy | 0); t.small = bl[0]; t.big = bl[1];
+        const bl = pkBlinds(st0.buy | 0); t.small = bl[0]; t.big = bl[1]; t.rakeCap = st0.buy > 0 ? bl[1] : 0;   /* [Claude 2026-10-14] the rake tops out at one big blind: 2 / 20 / 200 (the operator) */
       }
       if (!t && tAuth(T) && pokerOf(T.id).mine === 0) { if (pokerOf(T.id).st === 'none') pokerAdopt(T.id); else pokerAbandon(T.id); if (!pokerGame(T.id)) return false; return pokerSitAt(p, T, si, buy, pk); }   /* [Claude 2026-10-12] a table left over from another dealer: open it now, then sit */
       if (!t) { msg(p, 'This table is being dealt out and will take players again in a moment.', 'warn'); return false; }
@@ -8563,7 +8601,8 @@ POSSIBILITY OF SUCH DAMAGE. */
       const buyIn = pokerOf(T.id).buy > 0 ? pokerOf(T.id).buy | 0 : PK_BUY;   /* [Claude] a stack of as many chips as the buy-in */
       let chips = same ? here.chips : buyIn;
       if (chips <= 0) chips = buyIn;
-      t.addSeat(si, { id: p.id, name: pokerSeatName(p), chips }).pk = typeof pk === 'string' ? pk.slice(0, 160) : ''; p.seatAct = S.t;   /* [Claude 2026-10-12] their sealing key, kept with the dealer's seat */
+      t.addSeat(si, { id: p.id, name: pokerSeatName(p), chips }).pk = typeof pk === 'string' ? pk.slice(0, 160) : ''; p.seatAct = S.t;
+      if (!same || !((pokerOf(T.id).sns || {})[p.id])) (pokerOf(T.id).sns = pokerOf(T.id).sns || {})[p.id] = 1 + Math.floor(Math.random() * 999998);   /* [Claude 2026-10-14] a new seat, a new session */   /* [Claude 2026-10-12] their sealing key, kept with the dealer's seat */
       const seat = T.seats[si];
       p.x = seat[0]; p.y = seat[1]; p.path = []; p.act = null; p.skilling = null; p.seat = { t: T.id, s: si, k: 'pk' }; p.seatWait = null;
       p.face = faceTo(p.x, p.y, T.x, T.y); closeShop(p);
@@ -9676,8 +9715,11 @@ POSSIBILITY OF SUCH DAMAGE. */
       if (typeof st.n === 'string') { const nm = cleanName(st.n); if (nm) p.name = nm; }
       if (st.act !== undefined) p.act = st.act && st.act.k === 'attack' && mobByUid(st.act.uid) ? { k: 'attack', uid: st.act.uid } : null;
     }
+    /* [Claude 2026-10-14] a pile item by any of its names: its uid, the host's uid for a Bank copy (huid), or the Bank's uid for a
+       host copy that took the Bank's word (bank) - a guest that picked up the Bank's copy asks by the Bank's uid */
+    function groundBy(uid) { uid = +uid; return S.ground.find(q => q.uid === uid || q.huid === uid || (uid >= BANK_UID && q.bank === uid - BANK_UID)) || null; }
     function claim(pid, uid) {   /* first claim wins; the picker's own game adds the item when it hears the 'take' */
-      const g = S.ground.find(q => q.uid === uid), p = S.players[pid];
+      const g = groundBy(uid), p = S.players[pid];
       if (!g || !p || !isAuth(zoneOf(g.x, g.y)) || cheb(p.x, p.y, g.x, g.y) > 3) return false;
       if (g.bank != null) BANK_GONE.add(g.bank);
       if (g.uid >= BANK_UID) BANK_GONE.add(g.uid - BANK_UID);
@@ -9698,10 +9740,15 @@ POSSIBILITY OF SUCH DAMAGE. */
       if (S.took.has(uid)) return;   /* already in our bag: a host snapshot must not lay the same pile down again */
       const did = uid >= BANK_UID ? uid - BANK_UID : null;   /* a persisted drop (its uid says so), even from a host too old to say */
       if (did != null && BANK_GONE.has(did)) return;         /* the Bank already told us somebody took it: an old host's copy stays gone */
-      const g = S.ground.find(q => q.uid === uid); if (g) { g.n = n; return; }
+      const g = S.ground.find(q => q.uid === uid || q.huid === uid); if (g) { g.n = n; return; }
+      /* [Claude 2026-10-14] THE SAME THING TWICE (the operator: "Each time I died a lot of my items were duplicated ... all lying in a pile
+         where I died"): dying in an area another game hosts, the Bank's copy of a persisted drop (its own uid) can reach this game
+         before the host's row (the host's uid) - and the host's row was laid down beside it. It is one thing: the host's uid joins
+         the Bank's copy already lying there */
+      if (did == null) { const b = S.ground.find(q => q.bank != null && q.huid == null && q.id === id && q.x === x && q.y === y && (q.sunk || 0) === (sunk || 0)); if (b) { b.huid = uid; b.n = n; return; } }
       S.ground.push({ uid, id, n, x, y, owner: null, until: S.t + 1e9, from: from || null, bank: did, sunk: sunk || 0 }); ev({ e: 'drop', g: uid, id, n, x, y, sunk: sunk || 0 });
     }
-    function groundRemove(uid) { if (uid >= BANK_UID) BANK_GONE.add(uid - BANK_UID); const i = S.ground.findIndex(q => q.uid === uid); if (i >= 0 && !isAuth(zoneOf(S.ground[i].x, S.ground[i].y))) { S.ground.splice(i, 1); ev({ e: 'vanish', g: uid }); } }
+    function groundRemove(uid) { if (uid >= BANK_UID) BANK_GONE.add(uid - BANK_UID); const i = S.ground.findIndex(q => q.uid === uid || q.huid === uid);   /* huid [Claude 2026-10-14]: the host's name for a Bank copy */ if (i >= 0 && !isAuth(zoneOf(S.ground[i].x, S.ground[i].y))) { S.ground.splice(i, 1); ev({ e: 'vanish', g: uid }); } }
     /* PERSISTED DROPS (2026-10-06): what the @ashvale Bank holds on the ground (Gold, stones, magical things, anything
        worth 100+ GOLD that a player dropped), listed for a rectangle. Every game puts them down itself - the area's host may be
        an older game - each with a uid from its drop id (2^42 + n), so every game agrees on it; one already lying there (the
@@ -9783,7 +9830,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, trapOf, offerOf, isBlessed: (pid, x, y) => !!(S.players[pid] && blessed(S.players[pid], x, y)), setNature, natureHours, setNatureTell, seasonOn, dayHour, fireLit, steamFor, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       tableAt, tableById, tables, chessOf, chessRow, chessRows, chessGame, chessTurn, chessMoves, applyChess, hostSit, hostStand, hostMove, hostSel, standUp,
       setTableAuth: (id, v) => { if (v == null) delete TAUTH[id]; else TAUTH[id] = !!v; }, tableAuth: id => tAuth(pokerTableById(id)),
-      pokerTableAt, pokerTableById, pokerTables, pokerSeatKeys, pokerOpen, pokerOf, pokerRow, pokerRows, pokerGame, applyPoker, pokerClockTicks: () => PK_CLOCK, pokerReclaim, pokerNetId, chessReclaim, chessNetId, chessLimbo, seatHeld, setOnline: (b) => { S.online = !!b; }, hostPokerSit, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED, PK_AWAY], hostPokerStand, hostPokerAct, pokerLeave, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED],
+      pokerTableAt, pokerTableById, pokerTables, pokerSeatKeys, pokerOpen, pokerOf, pokerRow, pokerRows, pokerGame, applyPoker, pokerClockTicks: () => PK_CLOCK, pokerReclaim, pokerNetId, pokerBankSeen, chessReclaim, chessNetId, chessLimbo, seatHeld, setOnline: (b) => { S.online = !!b; }, hostPokerSit, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED, PK_AWAY], hostPokerStand, hostPokerAct, pokerLeave, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED],
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
@@ -9792,8 +9839,8 @@ POSSIBILITY OF SUCH DAMAGE. */
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
-      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, plantSnap, acceptPlant, acceptUnplant, hostPlant, hostUnplant, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
-      applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, takeOff: (pid, k) => { const p = S.players[pid]; return p ? takeOff(p, k) : null; }, setFelled,
+      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, isSapling, saplingKind, canPlant, plantYoung, plantHour: PLANT_HOUR, plantSnap, acceptPlant, acceptUnplant, hostPlant, hostUnplant, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
+      applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundBy, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, takeOff: (pid, k) => { const p = S.players[pid]; return p ? takeOff(p, k) : null; }, setFelled,
       hitXp: (pid, cls, dmg, dex) => { const p = S.players[pid]; if (p && !p.puppet) hitXp(p, cls, dmg, null, dex); },
       creditKill: (pid, key, x, y) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key, x, y); }
     };
@@ -10439,7 +10486,14 @@ POSSIBILITY OF SUCH DAMAGE. */
       const c = frac > 0.5 ? new THREE.Color(0x3fd25a).lerp(new THREE.Color(0xffd23f), (1 - frac) * 2) : new THREE.Color(0xffd23f).lerp(new THREE.Color(0xe8382c), (0.5 - frac) * 2);
       arc.material.color.copy(c);
     }
-    function pokerShow(id, m) {   /* the engine's model of a table: board, each seat's two cards (down for the ones it keeps),
+    function pokerSpots(id, ref) {   /* [Claude 2026-10-14] where the board and a chair's two cards lie, in world space, for the HUD's boxes over them */
+      const T = POKER[id]; if (!T) return null;
+      const R = T.r || 0.95, y = T.oy + CARD_Y, w = (x, z) => T.group.localToWorld(new THREE.Vector3(x, y, z));
+      const s = T.spots[ref | 0]; let hole = null;
+      if (s) { const dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1; hole = w(T.ox + dx / L * 0.66 * R, T.oz + dz / L * 0.66 * R); }
+      return { board: w(T.ox, T.oz - 0.07), hole };
+    }
+    function pokerShow(id, m, still) {   /* still: no dealing animation (the room built again around a hand in play). The engine's model of a table: board, each seat's two cards (down for the ones it keeps),
                                      the bets in front of each chair, who has the button, whose turn it is */
       PK_STATE[id] = m;
       const T = POKER[id]; if (!T) return;
@@ -10457,6 +10511,14 @@ POSSIBILITY OF SUCH DAMAGE. */
         want['h' + (h.ref | 0) + 1] = { face: h.down ? PBACK : (h.c && h.c[1] != null ? h.c[1] : PBACK), x: px - uz * 0.085, z: pz + ux * 0.085, ang: ang - 0.05, tilt: tl };
       }
       for (const k of Object.keys(T.cards)) if (!want[k]) { T.group.remove(T.cards[k].g); delete T.cards[k]; }
+      /* [Claude 2026-10-14] DEALING (the operator: "a short dealing animation where the cards get dealt around the table"): a card new to
+         the felt flies out from in front of the dealer - the hole cards one at a time round the table from the dealer's left,
+         twice round, then the board cards in turn */
+      let dox = T.ox, doz = T.oz; const ds = m.dealer != null ? T.spots[m.dealer | 0] : null;
+      if (ds) { const dx = ds.x - T.ox, dz = ds.z - T.oz, L = Math.hypot(dx, dz) || 1; dox = T.ox + dx / L * 0.5 * R; doz = T.oz + dz / L * 0.5 * R; }
+      const order = (m.hands || []).map(h => h.ref | 0).sort((a, b) => ((a - (m.dealer | 0) - 1 + 64) % 8) - ((b - (m.dealer | 0) - 1 + 64) % 8));
+      const dealAt = k => k[0] === 'h' ? (+k[k.length - 1]) * order.length + order.indexOf(+k.slice(1, -1)) : -1;
+      let newBoard = 0;
       for (const k of Object.keys(want)) {
         const w = want[k], c = T.cards[k], cy = top + CARD_Y + (w.tilt ? 0.03 : 0);
         if (c) {
@@ -10471,6 +10533,10 @@ POSSIBILITY OF SUCH DAMAGE. */
         holder.rotation.x = -Math.PI / 2 + (w.tilt || 0); g.add(holder); holder.add(mesh);
         g.position.set(w.x, cy, w.z); g.rotation.y = w.ang; g.userData.face = w.face;
         T.group.add(g); T.cards[k] = { g, m: mesh, h: holder };
+        if (!still) {
+          const n = k[0] === 'h' ? dealAt(k) : newBoard++;
+          if (n >= 0) { g.position.set(dox, cy, doz); TWEENS.push({ m: g, x0: dox, z0: doz, x: w.x, z: w.z, y: cy, t: 0, dur: 0.28, lift: 0.05, wait: n * (k[0] === 'h' ? 0.13 : 0.16), hide: true }); if (n > 0) g.visible = false; }
+        }
       }
       for (const s of T.spots) {   /* the pot in front of each chair: one chip to a big blind, stacked, capped */
         const ref = s.ref, n = (m.bets && m.bets[ref]) | 0, st = T.chips[ref] = T.chips[ref] || { n: -1, g: new THREE.Group() };
@@ -11790,7 +11856,7 @@ POSSIBILITY OF SUCH DAMAGE. */
             POKER[id] = { ox: x, oy: top, oz: z, r: R, spots: (o.seats || []).map((s, i) => ({ x: s[0] + 0.5, z: s[1] + 0.5, ref: i })), cards: {}, chips: {}, group: gg, mat };
             const pk = new THREE.Mesh(new THREE.BoxGeometry(2 * R + 0.2, 0.9, 2 * R + 0.2), new THREE.MeshBasicMaterial({ visible: false }));
             pk.position.set(x, fl + 0.4, z); pk.userData.pick = { kind: 'pokertable', id, x: o.x, y: o.y, lv }; into.add(pk); pickables.push(pk);
-            pokerShow(id, PK_STATE[id]);
+            pokerShow(id, PK_STATE[id], true);
             break;
           }
           case 'chair': { if (pkSeats.has(o.x + ',' + o.y)) break;   /* [Claude] a poker table draws its own, turned to the felt */
@@ -11984,7 +12050,7 @@ POSSIBILITY OF SUCH DAMAGE. */
           if (waterMesh) waterMesh.material.emissive.setHSL(0.58, 0.6, 0.08 + 0.02 * Math.sin(time * 1.5));
           if (waterMesh) waterMesh.position.y = Math.sin(time * 0.55) * 0.014;   /* the whole sheet rides a slow swell, some water sits on it */
           for (const a of anim) if (a.bob) a.bob.position.y = a.y0 + 0.12 * Math.sin(time * 2.6);
-          for (let i = TWEENS.length - 1; i >= 0; i--) { const w = TWEENS[i]; w.t = Math.min(1, w.t + dt / w.dur); const e = w.t < 0.5 ? 2 * w.t * w.t : 1 - Math.pow(-2 * w.t + 2, 2) / 2; w.m.position.set(w.x0 + (w.x - w.x0) * e, w.y + Math.sin(w.t * Math.PI) * w.lift, w.z0 + (w.z - w.z0) * e); if (w.t >= 1) TWEENS.splice(i, 1); }
+          for (let i = TWEENS.length - 1; i >= 0; i--) { const w = TWEENS[i]; if (w.wait > 0) { w.wait -= dt; w.m.visible = false; continue; } if (w.hide) w.m.visible = true; w.t = Math.min(1, w.t + dt / w.dur); const e = w.t < 0.5 ? 2 * w.t * w.t : 1 - Math.pow(-2 * w.t + 2, 2) / 2; w.m.position.set(w.x0 + (w.x - w.x0) * e, w.y + Math.sin(w.t * Math.PI) * w.lift, w.z0 + (w.z - w.z0) * e); if (w.t >= 1) TWEENS.splice(i, 1); }
           for (const a of anim) if (a.smoke) {
             if ((!a.litIn || !FIREQ || FIREQ(a.tx, a.ty)) && a.parts.length < 8 && Math.random() < dt * 3) { const m = new THREE.Mesh(smokeGeo, smokeMat); m.position.set(a.x, a.y, a.z); m.userData.t = 0; group.add(m); a.parts.push(m); }
             for (let k = a.parts.length - 1; k >= 0; k--) { const m = a.parts[k]; m.userData.t += dt; m.position.y += dt * 0.5; m.position.x += dt * 0.15; m.scale.setScalar(1 + m.userData.t * 0.8); m.rotation.y += dt; if (m.userData.t > 2.4) { group.remove(m); a.parts.splice(k, 1); } }
@@ -12007,7 +12073,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, viewQuery: fn => { VIEWQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerTimer, cardAtlas: () => { const t = cardKit(); return t && t.image && t.image.toDataURL ? t.image.toDataURL('image/png') : null; }, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, viewQuery: fn => { VIEWQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerTimer, pokerSpots, cardAtlas: () => { const t = cardKit(); return t && t.image && t.image.toDataURL ? t.image.toDataURL('image/png') : null; }, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -12438,7 +12504,7 @@ POSSIBILITY OF SUCH DAMAGE. */
             else if (g.light) h += 'Step ' + q.step + ': light ' + (need > 1 ? need + ' fires' : 'a fire') + ' (' + have + '/' + need + ').';
             else if (g.wait != null) { const left = Math.max(0, (q.t0 == null ? 0 : q.t0) + g.wait - (core.natureHours ? core.natureHours() : 0)); h += 'Step ' + q.step + ': ' + who(st.ends || Q[id].giver) + ' is at work. Come back in ' + (left >= 1 ? Math.ceil(left) + ' game hour' + (Math.ceil(left) > 1 ? 's' : '') : 'a little while') + '.'; }
             /* sadfrog's Even Grove: plant saplings (on open ground, or on stumps); slay several named foes, each counted */
-            else if (g.plant) h += 'Step ' + q.step + ': plant ' + (need > 1 ? need + ' saplings' : 'a sapling') + (g.plant === 'stump' ? ' where trees were cut down' : ' on open ground') + ' (' + have + '/' + need + ').';
+            else if (g.plant) h += 'Step ' + q.step + ': plant ' + (need > 1 ? need + ' saplings' : 'a sapling') + (g.plant === 'stump' ? ' where trees were cut down' : ' on open ground') + (st.near ? ' near ' + who(Q[id].giver) : '') + ' (' + have + '/' + need + ').';
             else if (g.kills) h += 'Step ' + q.step + ': slay ' + Object.keys(g.kills).map(k => { const m = core.D.monsters[k], n2 = g.kills[k]; return many(A.esc((m ? m.name : k).toLowerCase()), n2) + ' (' + Math.min(n2, (q.kn && q.kn[k]) | 0) + '/' + n2 + ')'; }).join(', ') + '.';
             else h += 'Step ' + q.step + ': ask ' + who(Q[id].giver) + ' what is left to do (' + have + '/' + need + ').';
           }
@@ -12905,39 +12971,53 @@ POSSIBILITY OF SUCH DAMAGE. */
   const CSS = `
 .ash .lay.poker > .ui:not(.pokerp):not(.chatw):not(.help){display:none !important}
 .ash .lay.poker .hover{display:none !important}
-.ash .lay.poker .chatw .chat:not(.big){max-height:54px}
-.ash .pokerp{position:absolute;right:8px;top:8px;width:216px;opacity:.94;max-width:calc(100vw - 20px);padding:8px 10px;font-size:13px;line-height:1.35;color:#eee;background:linear-gradient(#2b3a33,#1b241f);border:2px solid #12181a;border-radius:6px;box-shadow:0 4px 14px #0008;pointer-events:auto}
-.ash .pokerp h3{margin:0 0 6px;font:bold 15px Georgia,serif;color:#e9e2cf;letter-spacing:.5px}
-.ash .pokerp .pl{display:flex;justify-content:space-between;align-items:center;padding:3px 6px;border-radius:4px;margin:2px 0;background:#0003}
+.ash .lay.poker .chatw{top:calc(6px + env(safe-area-inset-top,0px));bottom:auto;left:8px;right:8px;width:auto;max-width:560px}
+.ash .lay.poker .chatw .chat:not(.big){max-height:calc(3*1.3em + 10px)}
+.ash .lay.poker .chatw .chatx{top:auto;bottom:-24px;border-radius:0 0 6px 6px}
+.ash .pokerp{position:absolute;color:#eee;font-size:13px;line-height:1.35;background:linear-gradient(#2b3a33f0,#1b241ff0);border:2px solid #12181a;border-radius:8px;box-shadow:0 4px 14px #0008;pointer-events:auto;box-sizing:border-box}
+.ash .pokerp.bar{display:flex;flex-direction:column;left:50%;transform:translateX(-50%);bottom:0;width:min(100vw,680px);border-radius:10px 10px 0 0;border-bottom:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));max-height:62vh;overflow-y:auto;touch-action:pan-y}
+.ash .pokerp.hole,.ash .pokerp.board{transform:translate(-50%,-50%);padding:5px 7px;white-space:nowrap;text-align:center;opacity:.97}
+.ash .pokerp.board{white-space:normal;max-width:min(92vw,420px)}
+.ash .pokerp .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.ash .pokerp .stt{color:#ffd23f;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ash .pokerp .stt.wait{color:#9fc3ff}
+.ash .pokerp .pot{color:#c8c3b4;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;white-space:nowrap}
+.ash .pokerp .pls{display:flex;flex-shrink:0;gap:4px;overflow-x:auto;margin:4px 0 0;scrollbar-width:none}
+.ash .pokerp .pl{flex:0 0 auto;display:flex;gap:5px;align-items:center;padding:2px 7px;border-radius:12px;background:#0004;font-size:12px}
 .ash .pokerp .pl.turn{background:#ffd23f22;box-shadow:inset 0 0 0 1px #ffd23f88}
 .ash .pokerp .pl.out{opacity:.45}
 .ash .pokerp .pl b{font-weight:normal;color:#cbd6cd}
 .ash .pokerp .pl .ch{font-family:ui-monospace,Menlo,Consolas,monospace;color:#e8e2d0}
-.ash .pokerp .pl .bt{color:#ffd23f;margin-left:6px}
-.ash .pokerp .pl .d{display:inline-block;width:13px;height:13px;border-radius:50%;background:#f2eee0;color:#26302a;font-size:9px;font-weight:bold;text-align:center;line-height:13px;margin-right:5px;vertical-align:-1px}
-.ash .pokerp .stt{margin:7px 0 3px;color:#ffd23f;font-weight:bold}
-.ash .pokerp .stt.wait{color:#9fc3ff}
-.ash .pokerp .cards{margin:2px 0 5px;font-size:17px;letter-spacing:1px;min-height:20px}
-.ash .pokerp .cd{display:inline-block;min-width:20px;padding:1px 3px;margin-right:3px;background:#f4f1e8;color:#20202a;border-radius:3px;box-shadow:0 1px 2px #0007;font-size:14px;text-align:center}
+.ash .pokerp .pl .bt{color:#ffd23f}
+.ash .pokerp .pl .d{display:inline-block;width:13px;height:13px;border-radius:50%;background:#f2eee0;color:#26302a;font-size:9px;font-weight:bold;text-align:center;line-height:13px}
+.ash .pokerp .cd{display:inline-block;min-width:22px;padding:2px 4px;margin:0 2px;background:#f4f1e8;color:#20202a;border-radius:4px;box-shadow:0 1px 2px #0007;font-size:16px;font-weight:bold;text-align:center}
 .ash .pokerp .cd.r{color:#b23a30}
 .ash .pokerp .cd.b{background:repeating-linear-gradient(45deg,#3a5f86,#3a5f86 3px,#2b4a6b 3px,#2b4a6b 6px);color:transparent}
-.ash .pokerp .pot{color:#c8c3b4;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
-.ash .pokerp .lg{font-size:11px;color:#a9b3a6;max-height:30px;overflow:hidden;margin:4px 0}
-.ash .pokerp .btns{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
-.ash .pokerp .btn{margin:0;padding:6px 9px}
-.ash .pokerp .rz{display:none;margin-top:6px;padding:6px;background:#0005;border-radius:4px}
+.ash .pokerp.hole .cd{font-size:22px;min-width:30px;padding:4px 6px}
+.ash .pokerp .lab{font-size:10px;color:#9aa79c;letter-spacing:.5px}
+.ash .pokerp .btns{display:flex;gap:6px;margin-bottom:4px}
+.ash .pokerp.bar > .rz{order:0}.ash .pokerp.bar > .btns{order:1}.ash .pokerp.bar > .top{order:2}.ash .pokerp.bar > .pls{order:3}.ash .pokerp.bar > .away{order:4}   /* [Claude 2026-10-14] the operator: the buttons on top, the reading of the table under them */
+.ash .pokerp .btns .btn{flex:1 1 0;width:auto;margin:0;padding:9px 4px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ash .pokerp .btns .btn.sm{flex:0 0 auto;padding:9px 10px;opacity:.85}
+.ash .pokerp .rz{display:none;margin-bottom:4px;padding:6px;background:#0005;border-radius:6px}
 .ash .pokerp .rz.on{display:block}
-.ash .pokerp .win{margin:6px 0;padding:7px 9px;border-radius:5px;background:#ffd23f22;border:1px solid #ffd23f88;color:#ffe9a0;font:bold 14px Georgia,serif;line-height:1.3}
-.ash .pokerp .sd{margin:4px 0;padding:4px 6px;border-radius:4px;background:#0004;font-size:12px;color:#d9d3c2}
+.ash .pokerp .win{margin:2px 0;color:#ffe9a0;font:bold 14px Georgia,serif;line-height:1.3}
+.ash .pokerp .sd{margin:3px 0;font-size:12px;color:#d9d3c2}
 .ash .pokerp .sd .cd{font-size:13px;min-width:18px}
 .ash .pokerp .sd b{color:#ffd23f;font-weight:normal}
-.ash .pokerp .rz .amt{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-family:ui-monospace,Menlo,Consolas,monospace;color:#ffd23f}
+.ash .pokerp .away{color:#9fc3ff;font-size:12px;margin-top:3px}
+.ash .pokerp .rz .amt{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;font-family:ui-monospace,Menlo,Consolas,monospace;color:#ffd23f}
 .ash .pokerp .rz input[type=range]{width:100%;margin:4px 0;accent-color:#ffd23f}
-.ash .pokerp .rz .qk{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
-.ash .pokerp .rz .qk .btn{padding:4px 7px;font-size:12px}
-@media (max-width:600px){.ash .pokerp{left:6px;right:6px;top:6px;width:auto;max-width:none;max-height:50vh;overflow:auto;font-size:15px;padding:10px 12px}.ash .pokerp h3{font-size:18px}.ash .pokerp .lg{max-height:40px;font-size:13px}.ash .pokerp .cd{font-size:20px;min-width:30px;padding:3px 6px}.ash .pokerp .btn{padding:10px 14px;font-size:15px}.ash .pokerp .win{font-size:17px}.ash .pokerp .sd{font-size:14px}}`;
-/* [Claude 2026-10-11] the operator: on a phone the panel fills the top half of the screen; a slider from the least raise to all-in;
-   the showdown shows every hand face up with its name and says plainly who won what with which hand */
+.ash .pokerp .rz .qk{display:flex;gap:4px;flex-wrap:wrap}
+.ash .pokerp .rz .qk .btn{width:auto;padding:6px 8px;font-size:13px;margin:0}
+@media (pointer:coarse),(max-width:600px){.ash .pokerp{font-size:14px}.ash .pokerp .btns .btn{padding:12px 4px;font-size:15px}.ash .pokerp .btns .btn.sm{padding:12px 10px}.ash .pokerp .pl{font-size:13px}}
+@media (max-height:520px){.ash .pokerp .rz.on{display:flex;align-items:center;gap:8px;padding:4px 6px}.ash .pokerp .rz .amt{margin:0;gap:6px;white-space:nowrap}.ash .pokerp .rz input[type=range]{flex:1;min-width:80px;margin:0}.ash .pokerp .rz .qk{flex-wrap:nowrap}.ash .pokerp .rz .qk .btn[data-to]{margin-left:4px !important}.ash .pokerp.bar{padding-top:4px;max-height:70vh}.ash .pokerp .pls{margin:2px 0}.ash .pokerp .btns .btn{padding:8px 4px}.ash .pokerp.hole .cd{font-size:18px;min-width:24px;padding:2px 4px}.ash .lay.poker .chatw{right:auto;width:min(46vw,420px)}.ash .lay.poker .chatw .chat:not(.big){max-height:calc(2*1.3em + 10px)}}`;
+/* [Claude 2026-10-11] a slider from the least raise to all-in; the showdown shows every hand face up with its name and says
+   plainly who won what with which hand.
+   [Claude 2026-10-14] the operator, on a phone: "I have to scroll down to use [the controls]", and in landscape they could not be
+   reached at all. Now three pieces: the betting bar along the bottom (status, players, buttons - never scrolled to), your two
+   cards in a small box over where they lie on the felt (on the felt they stay face down), and the board in a box over the
+   middle of the felt; the chat moves to the top. The engine hands the felt's screen spots every frame (pokerAnchor). */
   const RANK = '23456789TJQKA', SUIT = ['♣', '♦', '♥', '♠'], RED = [0, 1, 1, 0];
   const STREET = { none: 'between hands', preflop: 'the first round', flop: 'the flop', turn: 'the turn', river: 'the river' };
   function cardTxt(id) { return id == null ? '<span class="cd b">•</span>' : '<span class="cd' + (RED[id & 3] ? ' r' : '') + '">' + RANK[(id >> 2) % 13] + SUIT[id & 3] + '</span>'; }
@@ -12970,6 +13050,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       const wins = v.winners || [];
       return v.shown.map(h => { const s = v.seats.find(x => x.ref === h.ref); return '<div class="sd">' + (wins.indexOf(h.ref) >= 0 ? '&#9733; ' : '') + esc(s ? s.name : 'seat ' + (h.ref + 1)) + ': ' + cardTxt(h.c[0]) + cardTxt(h.c[1]) + ' <b>' + esc(h.name) + '</b></div>'; }).join('');
     }
+    let hbox = null, bbox = null, anchor = null;
     function draw() {
       if (!box || !view) return;
       const v = view, you = (s) => s.id === v.me, pot = v.pot, st = statusOf(v);
@@ -12977,37 +13058,63 @@ POSSIBILITY OF SUCH DAMAGE. */
       const hi = v.bet + (mine ? mine.chips : 0), lo = Math.min(Math.max(v.min || (v.bet ? v.bet * 2 : 100), v.bet + 1), hi), potR = Math.min(hi, Math.max(lo, v.bet + pot));
       const canRaise = hi > v.bet && lo <= hi, amounts = canRaise ? [lo] : [];
       if (raiseTo == null || raiseTo < lo || raiseTo > hi) raiseTo = lo;
-      box.innerHTML = '<h3>Card table' + (v.buy ? ' <small style="font:12px system-ui,sans-serif;color:#ffd23f">buy-in ' + v.buy.toLocaleString() + ' GOLD</small>' : ' <small style="font:12px system-ui,sans-serif;color:#cbd6cd">free chips</small>') + '</h3>'   /* [Claude] the buy-in the first sitter set */
-        + v.seats.map(s => '<div class="pl' + (v.turn === s.ref && !v.open ? ' turn' : '') + (((s.folded || !s.dealt) && !v.open) ? ' out' : '') + '">'
-          + '<span>' + (v.dealer === s.ref ? '<i class="d">D</i>' : '') + '<b>' + esc(s.name) + (you(s) ? ' <span style="color:#9fc3ff">(you)</span>' : '') + (s.away ? ' <span style="color:#9aa79c">(away)</span>' : '') + '</b></span>'
-          + '<span><span class="ch">' + s.chips + '</span>' + (s.bet ? '<span class="bt">' + s.bet + '</span>' : '') + '</span></div>').join('')
-        + '<div class="stt ' + (st.cls || '') + '">' + st.text + '</div>'
-        + '<div class="cards">' + (v.hole ? cardTxt(v.hole[0]) + cardTxt(v.hole[1]) : (v.inHand ? cardTxt(null) + cardTxt(null) : '<span style="font-size:12px;color:#9aa79c">not in this hand</span>'))
-        + (v.board.length ? '<span style="margin:0 4px;color:#8fa08c">|</span>' + v.board.map(cardTxt).join('') : '') + '</div>'
-        + '<div class="pot">pot ' + pot + (v.inHand && v.call > 0 ? ' · you owe ' + Math.min(v.call, v.stack) : v.bet ? ' · bet ' + v.bet : ' · nobody to beat') + (mine ? ' · your chips ' + mine.chips : '') + '</div>'
-        + (winTxt(v) ? '<div class="win">' + winTxt(v) + '</div>' + showdownHtml(v) : '')
-        + (!winTxt(v) && v.last ? (() => { const L = Object.assign({}, v, v.last); const w = winTxt(L); return w ? '<div class="win" style="opacity:.8">Last hand: ' + w + '</div>' + showdownHtml(L) : ''; })() : '')   /* [Claude 2026-10-13] */
-        + (raise && amounts.length ? '' : '<div class="lg">' + v.log.map(esc).join('<br>') + '</div>')
-        + (v.away ? '<div class="stt wait">You are dealt out (a minute on your hand). Tap to come back.</div>' : '')   /* [Claude] */
+      const act = v.myTurn && !v.pending;
+      if (!act) raise = false;
+      box.innerHTML = '<div class="top"><span class="stt ' + (st.cls || '') + '">' + st.text + '</span>'
+        + '<span class="pot">' + (v.buy ? v.buy.toLocaleString() + ' buy-in · ' : 'free chips · ') + 'pot ' + pot + (v.inHand && v.call > 0 ? ' · owe ' + Math.min(v.call, v.stack) : '') + '</span></div>'
+        + '<div class="pls">' + v.seats.map(s => '<div class="pl' + (v.turn === s.ref && !v.open ? ' turn' : '') + (((s.folded || !s.dealt) && !v.open) ? ' out' : '') + '">'
+          + (v.dealer === s.ref ? '<i class="d">D</i>' : '') + '<b>' + esc(s.name) + (you(s) ? ' <span style="color:#9fc3ff">(you)</span>' : '') + (s.away ? ' <span style="color:#9aa79c">(away)</span>' : '') + '</b>'
+          + '<span class="ch">' + s.chips + '</span>' + (s.bet ? '<span class="bt">' + s.bet + '</span>' : '') + '</div>').join('') + '</div>'
+        + (v.away ? '<div class="away">You are dealt out (a minute on your hand). Tap I\'m back.</div>' : '')
         + '<div class="rz' + (raise && amounts.length ? ' on' : '') + '" data-rz><div class="amt"><span>raise to</span><span data-amt>' + raiseTo + '</span></div>'
         + '<input type="range" min="' + lo + '" max="' + hi + '" step="1" value="' + raiseTo + '" data-sl>'
         + '<div class="qk"><button class="btn" data-q="' + lo + '">min ' + lo + '</button>' + (potR > lo && potR < hi ? '<button class="btn" data-q="' + potR + '">pot ' + potR + '</button>' : '') + '<button class="btn" data-q="' + hi + '">all-in ' + hi + '</button>'
         + '<button class="btn" data-to style="margin-left:auto;background:#5a4a1c;color:#ffe2a8">Raise to <span data-amt2>' + raiseTo + '</span></button></div></div>'
-        + '<div class="btns">' + (v.away ? '<button class="btn" data-a="back">I\'m back</button>' : '') + (v.myTurn && !v.pending ? '<button class="btn" data-a="fold">Fold</button>'
+        + '<div class="btns">' + (v.away ? '<button class="btn" data-a="back">I\'m back</button>' : '') + (act ? '<button class="btn" data-a="fold">Fold</button>'
           + '<button class="btn" data-a="' + (v.call > 0 ? 'call' : 'check') + '">' + (v.call > 0 ? (v.call >= v.stack ? 'Call all-in ' + v.stack : 'Call ' + v.call) : 'Check') + '</button>'
-          + (amounts.length ? '<button class="btn" data-r>Raise</button><button class="btn" data-a="allin">All-in</button>' : '') : '')
-        + '<button class="btn" data-a="stand">' + (v.inHand && !v.open ? 'Fold & stand' : 'Stand up') + '</button></div>'
+          + (amounts.length ? '<button class="btn" data-r>' + (raise ? 'Cancel' : 'Raise') + '</button>' : '') : '')   /* [Claude 2026-10-14] no All-in here (the operator): slide to all-in, or its quick button, then the raise button */
+        + '<button class="btn' + (act || v.away ? ' sm' : '') + '" data-a="stand">' + (act || v.away ? 'Stand' : v.inHand && !v.open ? 'Fold & stand up' : 'Stand up') + '</button></div>';
       for (const b of box.querySelectorAll('[data-a]')) b.onclick = () => { const a = b.dataset.a; raise = false; if (a === 'stand') { if (cb && cb.stand) cb.stand(); } else if (cb && cb.act) cb.act(a); api.sfx && api.sfx('click'); };
       const r = box.querySelector('[data-r]'); if (r) r.onclick = () => { raise = !raise; draw(); };
       const sl = box.querySelector('[data-sl]'), amt = box.querySelector('[data-amt]'), amt2 = box.querySelector('[data-amt2]');
       if (sl) { sl.oninput = () => { raiseTo = sl.value | 0; if (amt) amt.textContent = raiseTo; if (amt2) amt2.textContent = raiseTo; }; sl.onpointerdown = (e) => e.stopPropagation(); }
       for (const b of box.querySelectorAll('[data-q]')) b.onclick = () => { raiseTo = b.dataset.q | 0; if (sl) sl.value = raiseTo; if (amt) amt.textContent = raiseTo; if (amt2) amt2.textContent = raiseTo; };
-      const go = box.querySelector('[data-to]'); if (go) go.onclick = () => { raise = false; if (cb && cb.act) cb.act('raise', raiseTo | 0); api.sfx && api.sfx('click'); };
+      const goTxt = () => (raiseTo | 0) >= hi ? 'All-in ' + hi : 'Raise to ' + raiseTo, go = box.querySelector('[data-to]');
+      const syncGo = () => { if (go) go.textContent = goTxt(); };
+      if (sl) sl.addEventListener('input', syncGo); for (const b of box.querySelectorAll('[data-q]')) b.addEventListener('click', syncGo); syncGo();
+      if (go) go.onclick = () => { raise = false; const all = (raiseTo | 0) >= hi; if (cb && cb.act) { if (all) cb.act('allin'); else cb.act('raise', raiseTo | 0); } api.sfx && api.sfx('click'); };   /* the slider at its end is all-in */
+      /* your two cards, over where they lie on the felt; the board (and between hands, who won) over the middle */
+      const holeHtml = v.hole ? '<div class="cards">' + cardTxt(v.hole[0]) + cardTxt(v.hole[1]) + '</div>' : '';
+      if (holeHtml) { if (!hbox) hbox = el('pokerp hole ui', ui); if (hbox.innerHTML !== holeHtml) hbox.innerHTML = holeHtml; } else if (hbox) { hbox.remove(); hbox = null; }
+      const w = v.open ? winTxt(v) : '';   /* a result only between hands: once the next hand is dealt it is gone (2026-10-14) */
+      const boardHtml = (v.board.length ? '<div class="brd">' + v.board.map(cardTxt).join('') + '</div>' : '') + (w ? '<div class="win">' + w + '</div>' + showdownHtml(v) : '');
+      if (boardHtml) { if (!bbox) bbox = el('pokerp board ui', ui); if (bbox.innerHTML !== boardHtml) bbox.innerHTML = boardHtml; } else if (bbox) { bbox.remove(); bbox = null; }
+      place();
     }
-    function pokerOpen(v, callbacks) { cb = callbacks || null; view = v; raise = false; if (!box) box = el('pokerp felt ui', ui); ui.classList.add('poker'); draw(); }
+    /* keep a floating box at its felt spot, inside the screen and clear of the chat (top) and the bar (bottom) */
+    function put(b, at, fx, fy) {
+      if (!b) return;
+      const W = ui.clientWidth || innerWidth, H = ui.clientHeight || innerHeight, bw = b.offsetWidth, bh = b.offsetHeight;
+      const ch = document.querySelector('.ash .lay.poker .chatw'), topMin = ch ? ch.getBoundingClientRect().bottom - ui.getBoundingClientRect().top + 4 : 0;
+      const botMax = box ? H - box.offsetHeight - 4 : H;
+      let x = at ? at.x : W * fx, y = at ? at.y : H * fy;
+      x = Math.max(bw / 2 + 4, Math.min(W - bw / 2 - 4, x));
+      y = Math.max(topMin + bh / 2, Math.min(botMax - bh / 2, y));
+      const L = Math.round(x) + 'px', T = Math.round(y) + 'px';
+      if (b.style.left !== L) b.style.left = L; if (b.style.top !== T) b.style.top = T;
+    }
+    function place() {
+      put(hbox, anchor && anchor.hole, 0.5, 0.7); put(bbox, anchor && anchor.board, 0.5, 0.45);
+      if (hbox && bbox) {   /* a low screen (landscape) squeezes the two together: the board goes up off your cards */
+        const ht = hbox.offsetTop - hbox.offsetHeight / 2, bb = bbox.offsetTop + bbox.offsetHeight / 2;
+        if (bb > ht - 4 && Math.abs(hbox.offsetLeft - bbox.offsetLeft) < (hbox.offsetWidth + bbox.offsetWidth) / 2) put(bbox, { x: bbox.offsetLeft, y: ht - 4 - bbox.offsetHeight / 2 }, 0.5, 0.45);
+      }
+    }
+    function pokerAnchor(a) { anchor = a || null; if (box) place(); }
+    function pokerOpen(v, callbacks) { cb = callbacks || null; view = v; raise = false; if (!box) box = el('pokerp bar ui', ui); ui.classList.add('poker'); draw(); }
     function pokerUpdate(v) { if (!box) return; view = v; draw(); }
-    function pokerClose() { ui.classList.remove('poker'); if (box) { box.remove(); box = null; } view = null; cb = null; raise = false; }
-    K.pokerOpen = pokerOpen; K.pokerUpdate = pokerUpdate; K.pokerClose = pokerClose;
+    function pokerClose() { ui.classList.remove('poker'); for (const b of [box, hbox, bbox]) if (b) b.remove(); box = hbox = bbox = null; view = null; cb = null; raise = false; anchor = null; }
+    K.pokerOpen = pokerOpen; K.pokerUpdate = pokerUpdate; K.pokerClose = pokerClose; K.pokerAnchor = pokerAnchor;
     /* [Claude 2026-10-13] SOLITAIRE at the card table (the operator: "if you right click or long tap on the table you should also have
        the option to play Solitaire"). Klondike, draw one, as many passes through the stock as you like; the cards are the
        felt's own (the scene's card atlas). One tap plays a card where it fits best - up to its foundation if it can go,
@@ -13409,7 +13516,7 @@ POSSIBILITY OF SUCH DAMAGE. */
     const K = { host, api, core, P, A, el, ui, layer, panel, st, shopEl, ccEl, slotHtml, longPress, menu, hideMenu, chatLine, examine, itemOptions, updateOrbs, showHelp, promptSay,
       refresh() { }, drawShop() { }, openShop() { }, closeShop() { }, openChest() { }, closeChest() { }, drawChest() { }, invPointer() { }, creator() { }, creatorOpen: () => false,
       chessOpen() { }, chessUpdate() { }, chessClose() { }, chessPromo: null,
-      pokerOpen() { }, pokerUpdate() { }, pokerClose() { } };
+      pokerOpen() { }, pokerUpdate() { }, pokerClose() { }, pokerAnchor() { } };
     for (const part of PARTS) part.install(K);
     K.onChestClose = () => { if (st.tabWas === undefined) return; const back = st.tabWas; st.tabWas = undefined; setTab(back); };
     /* a quest's story so far, in the words of the one who gave it (2026-10-06): every step you finished - what they
@@ -13437,7 +13544,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab(api.isPhone ? null : 'inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       chessOpen: (v, cb) => K.chessOpen(v, cb), chessUpdate: v => K.chessUpdate(v), chessClose: () => K.chessClose(), get chessPromo() { return K.chessPromo; },
-      pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(), solitaireOpen: o => K.solitaireOpen && K.solitaireOpen(o), solitaireClose: () => K.solitaireClose && K.solitaireClose(), _sol: () => K._sol && K._sol(),
+      pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(), pokerAnchor: a => K.pokerAnchor && K.pokerAnchor(a), solitaireOpen: o => K.solitaireOpen && K.solitaireOpen(o), solitaireClose: () => K.solitaireClose && K.solitaireClose(), _sol: () => K._sol && K._sol(),
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };
   }
@@ -17206,7 +17313,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             if (data && data.t === 'carried' && bankFrom && R.me && data.to === R.me.address) { carriedHeard(data); return; }   /* carried in someone's canoe while away */
             if (data && data.t === 'marks' && bankFrom && R.me && data.to === R.me.address) { if (core.setMarks) core.setMarks(data.k, data.cells || []); return; }   /* maples tapped today, birches peeled this year */   /* trees others felled */
             if (data && data.t === 'scores' && bankFrom && R.me && data.to === R.me.address) { scoresHeard(data); return; }   /* the ruined keep's global dragon-killer board */
-            if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }   /* persisted drops near me */
+            if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }
+            if (data && data.t === 'pkok' && bankFrom && R.me && data.to === R.me.address) { pkHeard(data); return; }   /* [Claude 2026-10-14] the Bank has our card-table word */
+            if (data && data.t === 'pk' && bankFrom && R.me && data.to === R.me.address) { coreCall(() => core.pokerBankSeen && core.pokerBankSeen(PID, data.rows || [])); return; }   /* persisted drops near me */
             if (data && data.t === 'pals' && bankFrom && R.me && data.to === R.me.address) { palsHeard(data); return; }   /* the friends list */
             if (data && data.t === 'paid' && bankFrom && R.me && data.to === R.me.address) { const it = DATA.items && DATA.items.items && DATA.items.items[data.item]; hud.chat('The bank sent ' + (data.units | 0) + ' ' + (it && it.name ? it.name : String(data.item || '')) + ' to your wallet.', 'sys'); return; }   /* [Claude 2026-10-12] the Bank's word that a delivery went out (handoff/bank_rpc_plan.md 3b.4) */
             if (!data || data.t !== 'dep' || !bankFrom || !R.me || data.to !== R.me.address) return;   /* only @ashvale or @yourfirstname answers, only to me */
@@ -17251,7 +17360,71 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           R.send({ t: 'dep', v: 3, id, items, carried, chest, spent, reward, pend: pendOf(Object.keys(items)), from: fromAll(Object.keys(items)) });
         });
       }
-    return { CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
+      /* ---------- [Claude 2026-10-14] THE CARD TABLE'S GOLD, HELD BY @ashvale (the operator: "When the player buys in send that gold to the
+         Ashvale wallet; when they cash out or stand up or lose connection, send their remaining poker game balance back to them").
+         - pkbuy (our seat, its buy-in already out of the bag): the GOLD goes to @ashvale with the creator allowance (as returns do;
+           counted in L.out so returnNext never sends it again), then the Bank hears {pkbuy, s, n, tx}. Kept in L.pkb until done,
+           so a reload or a refused send tries again.
+         - pkout (the dealer's word on any seat): {pkout, s, who, n} - the Bank pays that seat home, the player online or not.
+         - pkcash (our own seat closed - the dealer's cashout seen, or the table gone): the coins are back in the bag and counted
+           as on their way (pend), and the Bank hears our own word {pkout, s, n}, which waits for the dealer's.
+         - at a load with a seat still open: 'pk?' - a seat the Bank already paid home closes (the GOLD is in the wallet, the chest).
+         Every word is sent again until the Bank answers 'pkok'. */
+      const PKQ = new Map();   /* s|kind -> {o, at, n} */
+      function pkSend(key, o) { PKQ.set(key, { o, at: 0, n: 0 }); pkFlush(); }
+      function pkFlush() {
+        const now = Date.now();
+        for (const [k, q] of PKQ) {
+          if (now - q.at < 15000) continue;
+          if (++q.n > 60) { PKQ.delete(k); console.warn('ASHVALE: the Bank never answered', k); continue; }
+          q.at = now; bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send(q.o); }).catch(() => {});
+        }
+      }
+      setInterval(pkFlush, 5000);
+      function pkHeard(d) { for (const k of Array.from(PKQ.keys())) if (k.split('|')[0] === d.s) PKQ.delete(k); }
+      let pkPaying = false;
+      async function pkPayNext() {
+        if (pkPaying || !walletState.address) return;
+        const L = ledgerFor(walletState.address); L.pkb = L.pkb || [];
+        const b = L.pkb.find(x => !x.tx && Date.now() >= (x.next || 0)); if (!b) return;
+        const W = walletState.data, pid = W && W.pids && W.pids.coins; if (!pid) return;
+        pkPaying = true; L.out = L.out || {};
+        const o = { id: 'pk:' + b.s, n: b.n, piece: null, st: 'pending', t: Date.now() };
+        if (!(L.out.coins || []).some(x => x.id === o.id)) { (L.out.coins = L.out.coins || []).push(o); ledgerSave(); }   /* returnNext: already on its way */
+        const oo = (L.out.coins || []).find(x => x.id === o.id);
+        const fail = () => { b.tries = (b.tries | 0) + 1; b.next = Date.now() + Math.min(600000, 30000 * b.tries); ledgerSave(); };   /* its L.out entry stays: returnNext must never send this GOLD without the Bank hearing which seat it was */
+        try {
+          const r = await fetch('/r/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+            body: JSON.stringify({ to: '@ashvale', label: 'ASHVALE', note: 'Card table buy-in', silent: true, kind: 'token', propertyid: pid, amount: String(b.n) }) });
+          const j = await r.json().catch(() => ({}));
+          if (r.status !== 202 || !j.id || j.status === 'failed') { fail(); return; }
+          let st = j;
+          for (let i = 0; i < 200 && st && st.status !== 'sent' && st.status !== 'failed'; i++) { await new Promise(ok => setTimeout(ok, 3000)); st = await fetch('/r/send/' + encodeURIComponent(j.id), { credentials: 'same-origin' }).then(x => x.json()).catch(() => null) || st; }
+          if (!st || st.status !== 'sent' || !st.txid) { fail(); return; }
+          b.tx = st.txid; if (oo) { oo.st = 'sent'; oo.t = Date.now(); } ledgerSave(); setTimeout(walletRefresh, 60000);
+          pkSend(b.s + '|buy', { t: 'pkbuy', v: 1, s: b.s, n: b.n, tx: b.tx });
+          L.pkb = L.pkb.filter(x => !(x.tx && Date.now() - (x.at || 0) > 7 * 86400000));
+        } catch (e) { fail(); }
+        finally { pkPaying = false; }
+      }
+      setInterval(pkPayNext, 4000);
+      function pkEvent(e, addrOf) {
+        if (e.e === 'pkout') {   /* the dealer: whose seat, by address */
+          const who = addrOf(e.p); if (!who) { console.warn('ASHVALE: no address for the card-table seat', e.p); return; }
+          pkSend(e.s + '|out', { t: 'pkout', v: 1, s: e.s, who, n: e.n | 0 }); return;
+        }
+        if (e.p !== PID || !walletState.address) return;
+        const L = ledgerFor(walletState.address);
+        if (e.e === 'pkbuy') { L.pkb = L.pkb || []; if (!L.pkb.some(x => x.s === e.s)) { L.pkb.push({ s: e.s, n: e.n | 0, at: Date.now() }); ledgerSave(); } setTimeout(pkPayNext, 300); return; }
+        if (e.e === 'pkcash') {
+          if (e.n > 0) { L.pend.coins = (L.pend.coins || 0) + (e.n | 0); ledgerSave(); }   /* back in the bag, paid by the Bank: on its way */
+          pkSend(e.s + '|cash', { t: 'pkout', v: 1, s: e.s, n: e.n | 0 });
+        }
+      }
+      let pkAskT = 0;
+      function pkAsk() { pkAskT = Date.now(); bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'pk?', v: 1 }); }).catch(() => {}); }
+      setInterval(() => { const P = core.S.players[PID]; if (P && P.pk && P.pk.sn && !(P.seat && P.seat.k === 'pk') && Date.now() - pkAskT > 30000) pkAsk(); }, 5000);
+    return { pkEvent, pkAsk, CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engbank', { api: 1, v: 1, needs: {} }, () => ({ api: 1, install }));
   if (typeof module !== 'undefined' && module.exports) module.exports = { install };
@@ -18527,6 +18700,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
              the button, whose turn. The row itself carries everything the page draws. */
           case 'psit': if (mine) pokerEnter(e.t); break;
           case 'pstand': if (mine) pokerLeave(e.t); break;
+          case 'pkbuy': case 'pkout': case 'pkcash': if (Array.isArray(G.__pkEv)) G.__pkEv.push(Object.assign({}, e));   /* a test watches these */
+            ENGBANK.pkEvent(e, pid => pid === PID ? (walletState.address || null) : (((remotes.get(pid) || {}).from || {}).address || PK_ADDR.get(pid) || null)); break;   /* [Claude 2026-10-14] the card table's GOLD through @ashvale */
           case 'poker': {
             if (SCENE.pokerShow) SCENE.pokerShow(e.t, pokerModel(e.t));
             pokerChat(e.t);
@@ -19277,9 +19452,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         else if (t.kind === 'mob') { const m = core.mobByUid(t.uid); if (m) { x = m.x; y = m.y; } }
         else if (t.kind === 'item') { const g = core.S.ground.find(q => q.uid === t.uid); if (g) { x = g.x; y = g.y; } }
         if (x == null) return null;
-        if (it.id === 'sapling') {
+        if (core.isSapling && core.isSapling(it.id)) {
           if (core.plantYoung && core.plantYoung(x, y)) return { html: 'Pick up <span class="c">sapling</span>', act: { c: 'unplant', x, y }, red: 1 };
-          return { html: 'Plant <span class="c">sapling</span>', act: { c: 'plant', x, y }, red: 1 };
+          return { html: 'Plant <span class="c">' + esc(d.name.toLowerCase()) + '</span>', act: { c: 'plant', x, y }, red: 1 };
         }
         if (d.tool && t.kind === 'node') return { html: 'Use <span class="o">' + esc(d.name) + '</span>', act: { c: 'gather', x, y }, red: 1 };
         return { html: 'Use <span class="o">' + esc(d.name) + '</span>', act: { c: 'useon', x, y }, red: 1 };
@@ -19387,7 +19562,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
          zone borders. Inside the room each AREA (a zone, or a 128 m square of seeded land) has its own host, elected among
          the members standing in it; monsters, loot, fires and weather of an area come only from its host. Players near a
          region border also VIEW the neighbour region's room (net.neighbours, below). Avatars are drawn 150 ms behind, interpolated. */
-      const remotes = new Map(); let room = null, roomZone = null, netT = 0, joining = false, retryAt = 0;
+      const remotes = new Map(), PK_ADDR = new Map(); let room = null, roomZone = null, netT = 0, joining = false, retryAt = 0;
       /* CONNECTION WATCH (2026-10-06: "When a player loses connection to the server, they should be notified so they
          don't continue to play on a broken server"). A room can die without ever saying 'closed' (the arcade node restarts
          and the page's link to it never comes back): then you play on alone and nobody sees you. Signs, all from what the
@@ -19440,7 +19615,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (me.boat === 2) { coreCall(() => { me.boat = 1; me.ride = null; me.knock = false; me.path = []; }); hud.chat(nm + ' has dropped out of the game. You take the stern and steer; they ride on with you.', 'sys'); }
         else hud.chat(nm + ' has dropped out of the game. They stay in the bow and travel on with you.', 'sys');
         r.boat = 2; r.ride = myNetId; r.knock = false; r.anim = 'sit'; r.e.H.play('sit', { loop: true });
-        if (core.S.players[id] && core.S.players[id].puppet) core.removePlayer(id);
+        if (core.S.players[id] && core.S.players[id].puppet) coreCall(() => core.removePlayer(id));   /* [Claude 2026-10-14] through coreCall: a seat it stands up tells the Bank */
         carryTell(r, 1);
       }
       function ghostTick(id, r, now) {
@@ -19448,7 +19623,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (now - r.offline.told > 15000) { r.offline.told = now; carryTell(r, 1); }
       }
       function dropRemote(id, hard, keep) { const r = remotes.get(id);
-        if (!hard && r && !r.offline && ghostable(r, id)) { makeGhost(id, r); return; } if (r) { if (r.name && r.name !== 'Adventurer') knewName.set(id, r.name); removeEnt(r.e); remotes.delete(id); } if (core.S.players[id] && core.S.players[id].puppet) core.removePlayer(id, keep); }
+        if (!hard && r && !r.offline && ghostable(r, id)) { makeGhost(id, r); return; } if (r) { if (r.name && r.name !== 'Adventurer') knewName.set(id, r.name); removeEnt(r.e); remotes.delete(id); } if (core.S.players[id] && core.S.players[id].puppet) coreCall(() => core.removePlayer(id, keep)); }   /* [Claude 2026-10-14] coreCall: its events (a card-table cashout to the Bank) are handled, not lost */
       function dropRemotes(keep) { for (const id of Array.from(remotes.keys())) dropRemote(id, false, keep); }   /* keep [Claude 2026-10-12]: OUR room dropped - their chess seats wait for the host's word */
       /* fighting a monster of another area (the operator: attackers can be attacked back across borders): we tell the room which
          area we are fighting in, so that area gets a host even when nobody stands in it; 6 s after the last blow it ends */
@@ -19762,7 +19937,11 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       /* outgoing queue: never more than 5 messages in any second or 9 in any 2 s (the mesh allows ~5/s, burst 10);
          a newer pure position state replaces a queued older one */
       const outQ = [];
-      const pureState = o => o.p && !o.M && !o.E && !o.F && !o.G && o.A === undefined && o.C === undefined && !o.X && !o.g && !o.o && !o.t;
+      /* A current attack target is part of presence, not a fire-and-forget command.  The small {A: uid} message from
+         netAct still makes a click responsive, but a mesh/backend refusal used to lose that one message forever: the
+         replica kept showing the player fighting while the area's host never rolled a blow.  Presence repeats A (and
+         A:0) until both games agree.  It is still a replaceable state row so a busy client cannot grow the send queue. */
+      const pureState = o => o.p && !o.M && !o.E && !o.F && !o.G && o.C === undefined && !o.X && !o.g && !o.o && !o.t;
       let DROP_NEXT = null;   /* tests: lose the next message carrying this key (a lost packet) */
       /* [Claude 2026-10-13] A ROOM MESSAGE IS AT MOST 500 BYTES and netSend drops a bigger one without a word. A card table's
          row grows with its players (4 players: 553, 8: 808 - the result of a hand the biggest of all) and the sealed hole
@@ -19785,7 +19964,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       function netPri(o) {
         if (!o || typeof o !== 'object') return 1;
         if (o.F !== undefined || o.W || o.g || o.o || o.GQ) return 2;
-        if (o.A !== undefined || o.C !== undefined || o.X || o.XP || o.XF || o.XU || o.PT || o.PS || o.PA || o.PQ || o.CX || o.CT || o.CS || o.CM || o.tr || o.E || o.Ph || o.Ch) return 0;
+        if ((o.A !== undefined && !o.p) || o.C !== undefined || o.X || o.XP || o.XF || o.XU || o.PT || o.PS || o.PA || o.PQ || o.CX || o.CT || o.CS || o.CM || o.tr || o.E || o.Ph || o.Ch) return 0;
         if (o.Pk && o.Pk.some(r => r && r.st === 'none' && r.r)) return 0;   /* a hand's result */
         return 1;
       }
@@ -19803,10 +19982,27 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         for (let i = 0; i < parts.length; i++) { const m = { BIG: [id, i, parts.length, parts[i]] }; netSend(m, R, pri); const w = outQ.find(q => q.o === m); if (w) { if (key) w.key = key; if (meta && i === parts.length - 1) w.meta = meta; } else if (meta && i === parts.length - 1 && meta.sent) meta.sent(); }
         return true;
       }
+      /* A busy hosted area can change more monster rows than the room's five-message budget can drain.  Keeping every
+         intermediate position made the queue minutes stale: a follower still saw a wolf at its spawn after the host had
+         moved it beside the player, so the follower's pathing abandoned an otherwise valid attack.  A monster row is
+         state, not an event; keep only its newest queued value.  Event fields on the same packet remain untouched. */
+      function supersedeMobRows(o, R) {
+        if (!o || !Array.isArray(o.M) || !o.M.length) return;
+        const fresh = new Set(o.M.filter(Array.isArray).map(r => r[0]));
+        for (let i = outQ.length - 1; i >= 0; i--) {
+          const q = outQ[i];
+          if (q.R !== R || !q.o || !Array.isArray(q.o.M)) continue;
+          q.o.M = q.o.M.filter(r => !Array.isArray(r) || !fresh.has(r[0]));
+          if (q.o.M.length) continue;
+          delete q.o.M;
+          if (pureState(q.o) || (q.o.F !== undefined && Object.keys(q.o).length === 1)) outQ.splice(i, 1);
+        }
+      }
       function netSend(o, R, pri) {   /* R: a neighbour room (viewer presence); default the main room. One budget for both. pri: the lane (netPri) */
         if (DROP_NEXT && o && o[DROP_NEXT] !== undefined) { DROP_NEXT = null; return; }
         if (!room) return false; R = R || null;
         try { if (new TextEncoder().encode(JSON.stringify(o)).length > 500) return false; } catch (e) { return false; }
+        supersedeMobRows(o, R);
         if (pureState(o)) { const i = outQ.findIndex(w => w.R === R && pureState(w.o)); if (i >= 0) { outQ[i].o = o; return true; } }
         outQ.push({ o, R, pri: pri == null ? netPri(o) : pri, at: performance.now() }); flushNet(); return true;
       }
@@ -19877,6 +20073,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       function stateMsg(now) {
         const p = myEnt.root.position;
         const m = { s: Math.round(now), p: [Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100], f: Math.round(myEnt.yaw * 100) / 100, a: myEnt.oneShot ? myEnt.lastOne || 'idle' : myEnt.loco || 'idle', j: myJoin, hp: me.hp, d: me.dead ? 1 : 0, k: myEnt.toolId || 0 };
+        m.A = me.act && me.act.k === 'attack' ? me.act.uid : 0;   /* repeat combat intent: packet loss must not make a visible monster unattackable */
         if (HOME) m.h = HOME;   /* where I was born: until my outfit message arrives others draw me in my home's defaults */
         if (me.lv > 0) m.l = me.lv | 0;   /* [Claude 2026-10-11] the storey I stand on: others draw me up there (they drew the Tap's upstairs on the ground floor) */
         if (myEnt.hl) m.hl = Math.round(myEnt.hl * 100) / 100;   /* where your head is looking, up or down (first person) */
@@ -19905,6 +20102,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (d.tr) { if (d.to === myNetId && trade && !via) trade.onMessage(from, d.tr); return; }   /* a trade window message, for us only */
         if (!r && !d.p && !d.g && !d.n && !d.M && !d.E && !d.F) { /* first contact carries state soon */ }
         if (r) { r.heard = performance.now(); if (r.offline) { r.offline = null; hud.chat((r.name || 'Your partner') + ' is back.', 'sys'); } }
+        if (from && from.address && !from.guest) { PK_ADDR.set(id, from.address); if (PK_ADDR.size > 200) PK_ADDR.delete(PK_ADDR.keys().next().value); }   /* [Claude 2026-10-14] kept after they leave: the dealer still names a gone player's seat to the Bank */
         if (!r) { const e = makeEnt('r:' + id, MOD.humanoid({}), { kind: 'remote', id }); const nm = knewName.get(id) || 'Adventurer'; e.tag = hud.tag(label(nm, from)); r = { e, buf: [], anim: 'idle', name: nm, from, lastS: -1, heard: performance.now(), fullT: 0 }; remotes.set(id, r); e.root.visible = false; }
         /* a VIEWER (neighbour region): drawn, never a puppet or a host. A full member of our room wins for 3 s after its last word */
         const view = !!via || d.nb === 1;
@@ -19979,7 +20177,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             if (!SEALING.has(k)) { SEALING.add(k); sealCards(r.t, r.h | 0, ref, c1, c2, pk).then(b => { if (PH[r.t] === P && !P.items.some(i => i[0] === ref)) { P.items.push([ref, b]); if (P.items.length >= want.length) { P.done = true; phSend(r.t, true); } } }).catch(e => console.warn('seal', e)).finally(() => SEALING.delete(k)); }
           }
         } else delete PH[r.t];
-        return Object.assign({}, r, { se: (r.se || []).map(s => [s[0], toNet(s[1]), s[2], s[3], s[4]]), co: (r.co || []).map(c => [toNet(c[0]), c[1], c[2]]), hc: r.hc ? hc : r.hc });
+        return Object.assign({}, r, { se: (r.se || []).map(s => [s[0], toNet(s[1]), s[2], s[3], s[4], s[5] | 0]), co: (r.co || []).map(c => [toNet(c[0]), c[1], c[2]]), hc: r.hc ? hc : r.hc });
       };
       /* [Claude 2026-10-13] A TABLE ROW AS CHANGES (the operator: build "two" - fit more into each message). At eight players a full row is
          ~800 bytes, three or four pieces for every bet. The dealer now sends what changed since the row it last put on the wire
@@ -19994,7 +20192,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         for (const k in full) {
           if (k === 't' || k === 'v') continue;
           if (JSON.stringify(full[k]) === JSON.stringify(base[k])) continue;
-          if (k === 'se' && Array.isArray(base.se) && Array.isArray(full.se) && base.se.length === full.se.length && full.se.every((x, i) => x[0] === base.se[i][0] && x[1] === base.se[i][1])) {
+          if (k === 'se' && Array.isArray(base.se) && Array.isArray(full.se) && base.se.length === full.se.length && full.se.every((x, i) => x[0] === base.se[i][0] && x[1] === base.se[i][1] && (x[5] | 0) === (base.se[i][5] | 0))) {
             d.sd = []; full.se.forEach((x, i) => { if (JSON.stringify(x) !== JSON.stringify(base.se[i])) d.sd.push([i, x[2], x[3], x[4]]); }); continue;
           }
           if (k === 'lg' && Array.isArray(base.lg) && Array.isArray(full.lg) && (full.lc | 0) > (base.lc | 0)) {
@@ -20055,7 +20253,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       const pkLocal = r => {   /* the room hears everything, so a hole card is dropped here, on the way in: a replica
                                   keeps faces only for its own seat, and a shown-down hand is public anyway. It says
                                   nothing about the wire - see handoff/poker_plan.md decision 4. */
-        const se = (r.se || []).map(s => [s[0], fromNet(s[1]), s[2], s[3], s[4]]), co = (r.co || []).map(c => [fromNet(c[0]), c[1], c[2]]);   /* [Claude] the cashouts name players as this page knows them */
+        const se = (r.se || []).map(s => [s[0], fromNet(s[1]), s[2], s[3], s[4], s[5] | 0]), co = (r.co || []).map(c => [fromNet(c[0]), c[1], c[2]]);   /* [Claude] the cashouts name players as this page knows them */
         const mine = {};   /* my chair at that table, as the row names it - a room can hold two players both called "me" */
         for (const s of se) if (s[1] === PID || (me.seat && me.seat.k === 'pk' && me.seat.t === r.t && (s[0] | 0) === (me.seat.s | 0))) mine[s[0] | 0] = 1;
         return Object.assign({}, r, { se, co, hc: r.hc ? r.hc.map(h => mine[h[0] | 0] ? openOwn(r, h) : [h[0] | 0, null, null]) : r.hc });   /* [Claude 2026-10-12] mine opened, the rest were never readable */
@@ -20144,7 +20342,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       function netAct() {   /* my current attack target, so the host (and any future host) knows what I'm doing */
         if (!room) return;
         const a = me.act && me.act.k === 'attack' ? me.act.uid : 0, sig = a + '';
-        if (sig !== lastAct) { lastAct = sig; netSend({ A: a }); }
+        if (sig !== lastAct) { lastAct = sig; netSend({ A: a, s: Math.round(performance.now()) }); }
       }
       function mobRows(all) {
         const rows = [];
@@ -20209,7 +20407,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
          table itself, 5 s; otherwise 20 s while the room is plainly alive (heard in the last 5 s) - then the last stack the dealer
          showed comes back. Offline time never counts: the dealer may still be holding the seat. The room id is handed to the core
          so a cashout written under it is still collected after a reload or a new connection. */
-      let pkAway = 0;
+      let pkAway = 0, pkAsked = 0;
       setInterval(() => {
         const P = core.S.players[PID]; if (!P || (!P.pk && !P.ch)) { pkAway = 0; return; }
         if (room && myNetId) { core.pokerNetId(PID, myNetId); core.chessNetId(PID, myNetId); }   /* the chess stake too (the operator: "make sure we don't have the same problem with the chess game") */
@@ -20220,7 +20418,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (!mineToDeal && now - NW.heard > 5000) { pkAway = 0; return; }
         if (!pkAway) { pkAway = now; return; }
         if (now - pkAway < (mineToDeal ? 5000 : 20000)) return;
-        pkAway = 0; let n = 0; coreCall(() => { n = K.pk ? core.pokerReclaim(PID) : core.chessReclaim(PID); }); persist('now');   /* saved at once: a page that died before saving would pay the same chips back twice */
+        if (K.pk && P.pk.sn && !pkAsked) { pkAsked = now; ENGBANK.pkAsk(); return; }   /* [Claude 2026-10-14] a Bank-held seat: the Bank may already have paid it home */
+        if (pkAsked && now - pkAsked < 4000) return;
+        if (!core.S.players[PID].pk) { pkAway = pkAsked = 0; return; }
+        pkAway = 0; pkAsked = 0; let n = 0; coreCall(() => { n = K.pk ? core.pokerReclaim(PID) : core.chessReclaim(PID); }); persist('now');   /* saved at once: a page that died before saving would pay the same chips back twice */
       }, 2000);
       function shared(id, r, d) {
         if (d.j != null) { const nj = +d.j; if (r.j !== nj) { r.j = nj; elect(); } }
@@ -20240,9 +20441,15 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (d.GQ && Date.now() - (NETGQ.t || 0) > 3000) { NETGQ.t = Date.now(); netGear(); }   /* someone asked for our stats: send them again (at most every 3 s) */
         if (d.st && typeof d.st === 'object') pst.st = d.st;
         if (d.pr !== undefined) pst.pr = typeof d.pr === 'string' ? d.pr : 0;
-        if (d.A !== undefined) pst.act = d.A ? { k: 'attack', uid: +d.A } : null;
+        /* Immediate target intents and repeated presence share the sender's monotonic stamp.  Events/state are applied
+           before the position row's general stale-message guard (an older packet can still carry a unique hit), so A
+           needs its own guard or an out-of-order active row can undo a newer A:0 and leave a ghost attack on the host. */
+        if (d.A !== undefined && (!Number.isFinite(+d.s) || r.lastA == null || +d.s > r.lastA)) {
+          pst.act = d.A ? { k: 'attack', uid: +d.A } : null;
+          if (Number.isFinite(+d.s)) r.lastA = +d.s;
+        }
         if (Object.keys(pst).length) core.setPuppet(id, pst);
-        if (d.C != null) { const g = core.S.ground.find(q => q.uid === +d.C); if (g && iHostAt(g.x, g.y)) coreCall(() => core.claim(id, +d.C)); }
+        if (d.C != null) { const g = core.groundBy ? core.groundBy(+d.C) : core.S.ground.find(q => q.uid === +d.C); if (g && iHostAt(g.x, g.y)) coreCall(() => core.claim(id, +d.C)); }   /* groundBy [Claude 2026-10-14]: a guest may name a Bank copy by the Bank's uid */
         if (Array.isArray(d.XF)) { const f = d.XF; if (iHostAt(f[0], f[1])) coreCall(() => core.hostFire(f[0] | 0, f[1] | 0, f[2] | 0, String(f[3] || 'logs'))); }
         /* the chess park: a replica asks the host of the table's area to seat it, stand it up or play its move; the host answers in Ch rows */
         if (Array.isArray(d.CS)) { const T = core.tableById(String(d.CS[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostSit(id, T.id, d.CS[1] | 0, d.CS[2] | 0)); }
@@ -20743,13 +20950,12 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           if (!h) continue;   /* nothing in front of that chair - sitting it out, or the hand is folded and mucked */
           if (f & PKF[1]) continue;   /* [Claude 2026-10-12] a folded hand is mucked, face down and gone - never shown (the operator: "it shows the cards of people who folded") */
           const sd = show && st.r && st.r.sd ? st.r.sd.find(x => (x[0] | 0) === ref) : null;   /* [Claude 2026-10-11] at the showdown every shown hand lies face up, on every copy */
-          const c = sd ? [sd[1] | 0, sd[2] | 0] : typeof h[1] === 'number' ? [h[1] | 0, h[2] | 0] : null, up = !!c && (!!sd || ref === ms);   /* face up: a hand called to the showdown, or your own - not every hand this copy happens to know (the dealer knows them all) */
+          const c = sd ? [sd[1] | 0, sd[2] | 0] : typeof h[1] === 'number' ? [h[1] | 0, h[2] | 0] : null, up = !!c && !!sd;   /* face up: only a hand called to the showdown - not every hand this copy happens to know (the dealer knows them all); [Claude 2026-10-14] your own stay face down on the felt too, the HUD's box over them shows them to you (the operator) */
           hands.push({ ref, c: up ? c : null, down: up ? 0 : 1, tilt: up ? 1 : 0 });
           bets[ref] = s[3] | 0;
         }
         return { board: (st.bo || []).slice(), hands, bets, pot: st.p | 0, big: st.bg | 0, dealer: st.d >= 0 ? st.d : null, turn: st.a >= 0 && st.o === 'playing' && st.st !== 'none' ? st.a : null };
       }
-      const PK_LAST = {};
       /* [Claude 2026-10-13] the operator: "Add the poker game history to the chat box". The dealer's own game already hears the table
          (its core tells the players in the room); every other copy reads the row's last lines (lg) and their running count
          (lc) and writes the ones it has not written yet - for a player at that table, or anyone standing on its floor. */
@@ -20776,10 +20982,6 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           shown: st.r && st.r.sd ? st.r.sd.map(x => ({ ref: x[0] | 0, c: [x[1] | 0, x[2] | 0], name: String(x[3] || '') })) : [],   /* [Claude 2026-10-11] the showdown */
           min: Math.min((st.b | 0) + (st.mr | 0 || st.bg | 0 || 50), (st.b | 0) + ((mine && mine[2]) | 0)), big: st.bg | 0
         };
-        /* [Claude 2026-10-13] the last hand's result stays in the panel through the next hand (between hands it is up only
-           ~7 s, easy to miss on a phone - the operator: "not showing the results of the hand to all the players") */
-        if (st.r && st.st === 'none') PK_LAST[t] = { h: st.h | 0, result: v.result, shown: v.shown, winners: v.winners, seats: v.seats };
-        else if (PK_LAST[t] && PK_LAST[t].h === (st.h | 0) - 1) v.last = PK_LAST[t];
         return v;
       }
       function pokerFx(t, row) {   /* the small sound of the felt changing under your hands: a card going out, a new street */
@@ -20835,6 +21037,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (room) netDrop('the card table stopped answering', false);
       }
       function pokerClock(now) {
+        if (me.seat && me.seat.k === 'pk' && SCENE.pokerSpots && hud.pokerAnchor) {   /* [Claude 2026-10-14] the HUD's card boxes ride over their spots on the felt */
+          const sp = SCENE.pokerSpots(me.seat.t, me.seat.s | 0);
+          hud.pokerAnchor(sp ? { board: toScreen(sp.board, 0), hole: sp.hole ? toScreen(sp.hole, 0) : null } : null);
+        }
         if (!SCENE.pokerTimer) return;
         for (const T of core.pokerTables()) {
           const st = core.S.poker[T.id];

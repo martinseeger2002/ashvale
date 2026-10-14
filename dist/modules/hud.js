@@ -309,7 +309,7 @@
     const K = { host, api, core, P, A, el, ui, layer, panel, st, shopEl, ccEl, slotHtml, longPress, menu, hideMenu, chatLine, examine, itemOptions, updateOrbs, showHelp, promptSay,
       refresh() { }, drawShop() { }, openShop() { }, closeShop() { }, openChest() { }, closeChest() { }, drawChest() { }, invPointer() { }, creator() { }, creatorOpen: () => false,
       chessOpen() { }, chessUpdate() { }, chessClose() { }, chessPromo: null,
-      pokerOpen() { }, pokerUpdate() { }, pokerClose() { } };
+      pokerOpen() { }, pokerUpdate() { }, pokerClose() { }, pokerAnchor() { } };
     for (const part of PARTS) part.install(K);
     K.onChestClose = () => { if (st.tabWas === undefined) return; const back = st.tabWas; st.tabWas = undefined; setTab(back); };
     /* a quest's story so far, in the words of the one who gave it (2026-10-06): every step you finished - what they
@@ -337,7 +337,7 @@
       layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab(api.isPhone ? null : 'inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       chessOpen: (v, cb) => K.chessOpen(v, cb), chessUpdate: v => K.chessUpdate(v), chessClose: () => K.chessClose(), get chessPromo() { return K.chessPromo; },
-      pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(), solitaireOpen: o => K.solitaireOpen && K.solitaireOpen(o), solitaireClose: () => K.solitaireClose && K.solitaireClose(), _sol: () => K._sol && K._sol(),
+      pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(), pokerAnchor: a => K.pokerAnchor && K.pokerAnchor(a), solitaireOpen: o => K.solitaireOpen && K.solitaireOpen(o), solitaireClose: () => K.solitaireClose && K.solitaireClose(), _sol: () => K._sol && K._sol(),
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };
   }

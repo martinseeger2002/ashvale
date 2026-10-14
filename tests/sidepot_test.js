@@ -9,13 +9,14 @@ const LIB = require('../src/holdemlib.js');
 let fails = 0, checks = 0;
 const ok = (c, m) => { checks++; if (!c) { fails++; if (fails < 12) console.log('FAIL', m); } };
 function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
-function reference(t, start, rake) {
+function reference(t, start, rake, cap) {
+  cap = cap > 0 ? cap : Infinity;   /* [Claude 2026-10-14] the house takes at most cap a hand (the operator: 2 / 20 / 200 at the 100 / 1,000 / 10,000 tables) */
   const seats = t.seats.filter(s => s && s.id != null && s.hole), live = seats.filter(s => !s.folded);
   const got = {}; for (const s of seats) got[s.ref] = 0; let house = 0;
   const pos = s => ((s.ref - t.dealer + 98) % 99 + 99) % 99;
   if (live.length === 1) {
     const w = live[0], pot = seats.reduce((a, s) => a + s.committed, 0), others = Math.max(0, ...seats.filter(s => s !== w).map(s => s.committed));
-    const back = Math.max(0, w.committed - others), cut = Math.floor((pot - back) * rake); got[w.ref] += pot - cut; house += cut;
+    const back = Math.max(0, w.committed - others), cut = Math.min(cap, Math.floor((pot - back) * rake)); got[w.ref] += pot - cut; house += cut;
   } else {
     const score = {}; for (const s of live) score[s.ref] = LIB.best(s.hole, t.board).score;
     const levels = [...new Set(seats.map(s => s.committed).filter(c => c > 0))].sort((a, b) => a - b);
@@ -24,7 +25,7 @@ function reference(t, start, rake) {
       const amt = seats.reduce((a, s) => a + Math.max(0, Math.min(s.committed, L) - prev), 0);
       const elig = live.filter(s => s.committed >= L), from = seats.filter(s => s.committed > prev).length;
       prev = L; if (!amt) continue;
-      const cut = elig.length === 1 && from === 1 ? 0 : Math.floor(amt * rake), net = amt - cut; house += cut;
+      const cut = elig.length === 1 && from === 1 ? 0 : Math.min(Math.max(0, cap - house), Math.floor(amt * rake)), net = amt - cut; house += cut;
       const top = Math.max(...elig.map(s => score[s.ref])), w = elig.filter(s => score[s.ref] === top).sort((a, b) => pos(a) - pos(b));
       const share = Math.floor(net / w.length); for (const x of w) got[x.ref] += share; got[w[0].ref] += net - share * w.length;
     }
@@ -34,8 +35,8 @@ function reference(t, start, rake) {
 }
 const N = +(process.argv[2] || 3000);
 for (let trial = 0; trial < N; trial++) {
-  const R = rng(1000 + trial), n = 2 + Math.floor(R() * 7), rake = R() < 0.5 ? 0.1 : 0;
-  const t = LIB.table({ id: 't', small: 10, big: 20, rake, int: k => Math.floor(R() * k) });
+  const R = rng(1000 + trial), n = 2 + Math.floor(R() * 7), rake = R() < 0.5 ? 0.1 : 0, cap = rake && R() < 0.6 ? [2, 20, 200][Math.floor(R() * 3)] : 0;
+  const t = LIB.table({ id: 't', small: 10, big: 20, rake, int: k => Math.floor(R() * k) }); t.rakeCap = cap;
   const start = {}; let total0 = 0;
   for (let i = 0; i < n; i++) {
     const c = R() < 0.2 && i ? start[i - 1] : 5 + Math.floor(R() * 3000);   /* ties on purpose */
@@ -51,10 +52,10 @@ for (let trial = 0; trial < N; trial++) {
   }
   ok(t.street === 'none' && t.result, 'trial ' + trial + ': the hand ended');
   if (!t.result) continue;
-  const ref = reference(t, start, rake), seats = t.seats.filter(s => s && s.id != null);
+  const ref = reference(t, start, rake, cap), seats = t.seats.filter(s => s && s.id != null);
   const total1 = seats.reduce((a, s) => a + s.chips, 0) + (t.raked | 0);
   ok(total1 === total0, 'trial ' + trial + ': every chip accounted for (' + total1 + ' vs ' + total0 + ')');
-  ok((t.raked | 0) === ref.house, 'trial ' + trial + ': the house cut matches (' + t.raked + ' vs ' + ref.house + ')');
+  ok((t.raked | 0) === ref.house && (!cap || (t.raked | 0) <= cap), 'trial ' + trial + ': the house cut matches (' + t.raked + ' vs ' + ref.house + ')');
   for (const s of seats) ok(s.chips === ref.out[s.ref], 'trial ' + trial + ' (' + n + ' players, rake ' + rake + '): seat ' + s.ref + ' ends with ' + s.chips + ', the reference says ' + ref.out[s.ref]);
 }
 console.log(fails ? fails + ' FAILED of ' + checks : 'all ' + checks + ' checks passed over ' + N + ' random hands');
