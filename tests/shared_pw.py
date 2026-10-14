@@ -4,11 +4,14 @@ Checks: one host is elected; every client shows the same monsters in the same pl
 same wolf fight A and die; the drop shows for both and only one can take it; B's own attacks are resolved by the host
 and B gets the XP; the host leaves mid-fight and the fight goes on under the new host; the zone repopulates only after it
 was empty; three players kill the bandit leader together (each gets XP for their own damage, one kill, one drop);
-the send budget holds. Screenshots: tests/shots/shared_*.png (two clients side by side, same wolf)."""
+the send budget holds. A separate regression drops one player's first attack intent while two players fight different
+monsters: periodic state must repair it, both monsters die consistently, and each attacker gets only their own XP.
+Screenshots: tests/shots/shared_*.png."""
 import os, sys, time, threading, json
 from playwright.sync_api import sync_playwright
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); OUT = os.path.join(ROOT, 'tests', 'shots')
-ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
+ORIGIN = os.environ.get('ASH_TEST_ORIGIN', 'http://127.0.0.1:8731').rstrip('/')
+ARGS = [] if os.environ.get('ASH_PW_DEFAULT_GPU') else ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
 fails = []
 def check(c, msg): print(('ok   ' if c else 'FAIL ') + msg, flush=True); (None if c else fails.append(msg))
 def wait(pg, js, t=30):
@@ -253,6 +256,54 @@ def adjacent_zones(b, url_for, label):
     check(not errs, 'no console errors %s' % errs[:3])
     ctx.close()
 
+def different_monsters(b, url_for, label):
+    """A lost one-shot target selection must be repaired from presence while two independent fights share an area.
+    This reproduces the reported state: B sees and targets a live monster, but the host never used to learn that target."""
+    print('== simultaneous different-monster fights with a dropped attack intent over', label)
+    ctx = b.new_context(viewport={'width': 720, 'height': 480}); errs = []
+    # Drop only B's first immediate {A: uid} packet. A repaired client repeats the target in its normal {p: ..., A: uid}
+    # state; the old client never did, leaving B apparently attacking forever without the host resolving a hit.
+    ctx.add_init_script("""(() => {
+      const raw = BroadcastChannel.prototype.postMessage;
+      BroadcastChannel.prototype.postMessage = function (m) {
+        const b = new URLSearchParams(location.search).get('seed') === 'different91';
+        if (b && !window.__droppedAttackIntent && m && m.t === 'msg' && m.data && m.data.A > 0 && !m.data.p) {
+          window.__droppedAttackIntent = true; return;
+        }
+        return raw.call(this, m);
+      };
+    })();""")
+    pa = open_page(ctx, url_for(90), errs, 'A'); pa.evaluate(STRONG + '; ASH.core.cmd("me", {c: "look", name: "Ann"}); ASH.teleport(23, 30)')
+    # SwiftShader can use every CPU core rendering one full Ashvale tab. Freeze A only while B compiles its scene, then
+    # resume it; BroadcastChannel's queued hello is delivered on resume and the actual test runs with both pages live.
+    cdp = ctx.new_cdp_session(pa); cdp.send('Page.setWebLifecycleState', {'state': 'frozen'})
+    pb = open_page(ctx, url_for(91), errs, 'B'); pb.evaluate(STRONG + '; ASH.core.cmd("me", {c: "look", name: "Ben"}); ASH.teleport(28, 30)')
+    cdp.send('Page.setWebLifecycleState', {'state': 'active'}); time.sleep(3)
+    check(wait(pb, 'ASH.net().host && !ASH.net().amHost', 20) and wait(pa, 'ASH.net().amHost', 5), 'A hosts the shared area and B follows it')
+    pair = pa.evaluate('''(() => {
+      const w = ASH.core.S.mobs.filter(m => m.key === "wolf" && !m.dead).slice(0, 2);
+      [[24,30], [27,30]].forEach((q, i) => { w[i].x = w[i].sx = q[0]; w[i].y = w[i].sy = q[1]; w[i].hp = 8; w[i].tgt = 0; w[i].path = null; w[i].wx = null; });
+      return w.map(m => m.uid);
+    })()''')
+    a, bb = pair
+    synced = wait(pb, '(() => { const a=ASH.core.mobByUid(%d), b=ASH.core.mobByUid(%d); return a && b && !a.dead && !b.dead && a.hp===8 && b.hp===8; })()' % (a, bb), 12)
+    check(synced, 'both clients begin with the same two live monster UIDs and hitpoints')
+    xa, xb = pa.evaluate('ASH.me.xp.attack'), pb.evaluate('ASH.me.xp.attack')
+    pa.evaluate('ASH.core.cmd("me", {c: "attack", uid: %d})' % a)
+    pb.evaluate('ASH.core.cmd("me", {c: "attack", uid: %d})' % bb)
+    check(wait(pb, 'window.__droppedAttackIntent === true', 5), "the test dropped B's first target packet")
+    both = wait(pa, 'ASH.core.mobByUid(%d).dead && ASH.core.mobByUid(%d).dead' % (a, bb), 45) and wait(pb, 'ASH.core.mobByUid(%d).dead && ASH.core.mobByUid(%d).dead' % (a, bb), 10)
+    check(both, 'both different monsters die on both clients after periodic state repairs the lost intent')
+    check(pa.evaluate('ASH.me.xp.attack') > xa and pb.evaluate('ASH.me.xp.attack') > xb, 'each player receives XP for their own fight')
+    states = [pg.evaluate('[ASH.core.mobByUid(%d).hp, !!ASH.core.mobByUid(%d).dead, ASH.core.mobByUid(%d).hp, !!ASH.core.mobByUid(%d).dead]' % (a, a, bb, bb)) for pg in (pa, pb)]
+    check(states[0] == states[1], 'both clients finish with identical HP/death state: %s' % states[0])
+    budgets = [pg.evaluate('ASH.net().stats') for pg in (pa, pb)]
+    check(all(s['max2s'] <= 10 and s['dropped'] == 0 for s in budgets), 'reconciliation stays inside the send budget: %s' % [(s['max2s'], s['dropped']) for s in budgets])
+    for pg in (pa, pb): pg.evaluate('ASH.setCam(0.3, 0.7, 10)')
+    time.sleep(0.8); side_by_side([pa, pb], 'shared_different_monsters.png')
+    check(not errs, 'no console errors %s' % errs[:3])
+    ctx.close()
+
 def neighbour_regions(b, url_for, label):
     """Neighbour rooms (2026-10-04, game-agnostic net.neighbours): A and B stand either side of a REGION border (two rooms).
     Each joins the other's room as a viewer and draws the other; neither becomes a puppet or a host in the other's room;
@@ -331,18 +382,21 @@ which = sys.argv[1] if len(sys.argv) > 1 else 'all'
 with sync_playwright() as p:
     b = p.chromium.launch(args=ARGS)
     if which == 'adjacent':   # just the adjacent-zones case
-        adjacent_zones(b, lambda i: 'http://127.0.0.1:8731/dist/ashvale3d.html?fresh&nocreator&loopback&seed=z%d' % i, 'loopback')
+        adjacent_zones(b, lambda i: ORIGIN + '/dist/ashvale3d.html?fresh&nocreator&loopback&seed=z%d' % i, 'loopback')
     if which == 'neighbours':   # just the neighbour-regions case
-        neighbour_regions(b, lambda i: 'http://127.0.0.1:8731/dist/ashvale3d.html?fresh&nocreator&loopback&nb&seed=n%d' % i, 'loopback')
+        neighbour_regions(b, lambda i: ORIGIN + '/dist/ashvale3d.html?fresh&nocreator&loopback&nb&seed=n%d' % i, 'loopback')
     if which == 'away':   # just the return-after-away case
-        return_after_away(b, lambda i: 'http://127.0.0.1:8731/dist/ashvale3d.html?fresh&nocreator&loopback&seed=w%d' % i, 'loopback')
+        return_after_away(b, lambda i: ORIGIN + '/dist/ashvale3d.html?fresh&nocreator&loopback&seed=w%d' % i, 'loopback')
+    if which == 'different':   # two fights in one area; B's first target packet is deliberately lost
+        different_monsters(b, lambda i: ORIGIN + '/dist/ashvale3d.html?fresh&nocreator&loopback&flat&seed=different%d' % i, 'loopback')
     if which in ('all', 'loopback'):
-        U = 'http://127.0.0.1:8731/dist/ashvale3d.html?fresh&nocreator&loopback&seed='
+        U = ORIGIN + '/dist/ashvale3d.html?fresh&nocreator&loopback&seed='
         session(b, lambda i: U + 's%d' % i, 'loopback')
         three_on_leader(b, lambda i: U + 't%d' % i, 'loopback')
         player_drop(b, lambda i: U + 'd%d' % i, 'loopback')
         drag_out_shared(b, lambda i: U + 'g%d' % i, 'loopback')
         remote_tool(b, lambda i: U + 'r%d' % i, 'loopback')
+        different_monsters(b, lambda i: U.replace('loopback&', 'loopback&flat&') + 'different%d' % i, 'loopback')
         return_after_away(b, lambda i: U + 'w%d' % i, 'loopback')
         adjacent_zones(b, lambda i: U + 'z%d' % i, 'loopback')
         neighbour_regions(b, lambda i: U.replace('loopback&', 'loopback&nb&') + 'n%d' % i, 'loopback')

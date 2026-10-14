@@ -38,3 +38,6 @@ __pycache__/
 *.webm
 *.wav
 .claude/
+
+# isolated local-agent generations; never publish with the game
+qwen-output/

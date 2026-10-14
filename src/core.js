@@ -1944,10 +1944,30 @@
       if (p.using && p.using.slot === slot && !p.inv[slot]) { p.using = null; ev({ e: 'using', p: p.id }); }
       return id;
     }
+    function plantCounts(job, x, y, wasStump, cleared) {
+      if (!job || !job.st || !job.st.goal) return false;
+      const kind = job.st.goal.plant;
+      if (kind === 'stump') return !!(wasStump || cleared);
+      if (kind !== 'open' || wasStump) return false;
+      const near = job.st.near;
+      return !near || cheb(x, y, near[0], near[1]) <= (near[2] == null ? 16 : near[2]);
+    }
+    function plantQuestWhy(job, x, y, wasStump, cleared) {
+      if (!job || plantCounts(job, x, y, wasStump, cleared)) return null;
+      const kind = job.st.goal.plant;
+      if (kind === 'stump') return 'This shoot belongs in the grass left by a felled tree. It will not be used here.';
+      if (wasStump) return 'Let the stump crumble into grass before planting this quest shoot.';
+      const near = job.st.near;
+      if (near && cheb(x, y, near[0], near[1]) > (near[2] == null ? 16 : near[2])) return 'Vael asked for this shoot in the Even Grove, within sixteen tiles of the rope. It will not be used here.';
+      return kind === 'open' ? 'This quest shoot belongs in open grass. It will not be used here.' : null;
+    }
     function plantAt(p, x, y) {
       if (!canPlant(p, x, y)) { msg(p, (isWood(x, y) && !canReplant(p) ? 'You have not learned to set a shoot in a stump.' : null) || stumpWhy(p, x, y) || plantWhy(x, y) || 'That ground will not take a shoot.', 'warn'); return; }
       const job = plantJob(p), i = idx(x, y);
       const wasStump = isStump(x, y);
+      const wasCleared = isCleared(x, y);
+      const questWhy = plantQuestWhy(job, x, y, wasStump, wasCleared);
+      if (questWhy) { msg(p, questWhy, 'warn'); return; }
       if (wasStump) {
         if (M.clearTree) M.clearTree(x, y);
         delete S.dep[i]; delete S.fell[i];
@@ -1955,10 +1975,7 @@
         ev({ e: 'clear', x, y, node: i });
       }
       const cleared = isCleared(x, y);
-      const onStump = wasStump || cleared;
-      const near = job && job.st.near;
-      const inGrove = !near || cheb(x, y, near[0], near[1]) <= (near[2] == null ? 16 : near[2]);
-      const count = !!(job && ((job.st.goal.plant === 'stump' && onStump) || (job.st.goal.plant === 'open' && !onStump && inGrove)));
+      const count = plantCounts(job, x, y, wasStump, cleared);
       const sapling = takeSapling(p); if (!sapling) return;
       const rec = { x, y, at: S.t, tile: M.tileAt(x, y), stump: 0, owner: p.id, grown: 0, sapling, tree: saplingKind(sapling) };
       if (count) { rec.qid = job.qid; rec.step = job.q.step; rec.counted = 1; }
@@ -3664,7 +3681,7 @@
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
-      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, plantSnap, acceptPlant, acceptUnplant, hostPlant, hostUnplant, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
+      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, isSapling, saplingKind, canPlant, plantYoung, plantHour: PLANT_HOUR, plantSnap, acceptPlant, acceptUnplant, hostPlant, hostUnplant, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
       applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, takeOff: (pid, k) => { const p = S.players[pid]; return p ? takeOff(p, k) : null; }, setFelled,
       hitXp: (pid, cls, dmg, dex) => { const p = S.players[pid]; if (p && !p.puppet) hitXp(p, cls, dmg, null, dex); },
       creditKill: (pid, key) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key); }

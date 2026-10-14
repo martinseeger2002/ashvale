@@ -115,7 +115,7 @@
             else if (g.light) h += 'Step ' + q.step + ': light ' + (need > 1 ? need + ' fires' : 'a fire') + ' (' + have + '/' + need + ').';
             else if (g.wait != null) { const left = Math.max(0, (q.t0 == null ? 0 : q.t0) + g.wait - (core.natureHours ? core.natureHours() : 0)); h += 'Step ' + q.step + ': ' + who(st.ends || Q[id].giver) + ' is at work. Come back in ' + (left >= 1 ? Math.ceil(left) + ' game hour' + (Math.ceil(left) > 1 ? 's' : '') : 'a little while') + '.'; }
             /* sadfrog's Even Grove: plant saplings (on open ground, or on stumps); slay several named foes, each counted */
-            else if (g.plant) h += 'Step ' + q.step + ': plant ' + (need > 1 ? need + ' saplings' : 'a sapling') + (g.plant === 'stump' ? ' where trees were cut down' : ' on open ground') + ' (' + have + '/' + need + ').';
+            else if (g.plant) h += 'Step ' + q.step + ': plant ' + (need > 1 ? need + ' saplings' : 'a sapling') + (g.plant === 'stump' ? ' where trees were cut down' : ' on open ground') + (st.near ? ' near ' + who(Q[id].giver) : '') + ' (' + have + '/' + need + ').';
             else if (g.kills) h += 'Step ' + q.step + ': slay ' + Object.keys(g.kills).map(k => { const m = core.D.monsters[k], n2 = g.kills[k]; return many(A.esc((m ? m.name : k).toLowerCase()), n2) + ' (' + Math.min(n2, (q.kn && q.kn[k]) | 0) + '/' + n2 + ')'; }).join(', ') + '.';
             else h += 'Step ' + q.step + ': ask ' + who(Q[id].giver) + ' what is left to do (' + have + '/' + need + ').';
           }

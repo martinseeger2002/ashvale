@@ -67,6 +67,20 @@ ok(!p.quests.even_guard, 'the harder quest is not offered yet');
 const opens = [];
 for (let y = -67; y <= -35 && opens.length < 3; y++) for (let x = 181; x <= 213 && opens.length < 3; x++) if (core.canPlant(p, x, y)) opens.push([x, y]);
 ok(opens.length === 3, 'three open tiles near the rope will take a shoot (' + opens.length + ')');
+let farOpen = null;
+for (let y = -74; y <= -27 && !farOpen; y++) for (let x = 176; x <= 219; x++) {
+  if (Math.max(Math.abs(x - 197), Math.abs(y + 51)) <= 16) continue;
+  if (core.canPlant(p, x, y)) { farOpen = [x, y]; break; }
+}
+const saplingsBeforeFarPlant = core.invCount(p, 'sapling');
+let farPlantText = '';
+if (farOpen) {
+  p.x = farOpen[0]; p.y = farOpen[1] + 1; p.path = []; p.act = null;
+  if (core.M.blocked(p.x, p.y)) { p.x = farOpen[0] + 1; p.y = farOpen[1]; }
+  core.cmd('p1', { c: 'plant', x: farOpen[0], y: farOpen[1] });
+  ticks(4, e => { if (e.e === 'msg' && e.p === 'p1') farPlantText += ' ' + e.text; });
+}
+ok(!!farOpen && core.invCount(p, 'sapling') === saplingsBeforeFarPlant && p.quests.even_grove.n === 0 && /grove|Vael|near|around/i.test(farPlantText), 'a quest shoot outside the grove is preserved and explains where it belongs');
 for (const [x, y] of opens) plant(x, y);
 ok(p.quests.even_grove.n === 3, 'three shoots in the open');
 const xp0 = p.xp.prayer;
@@ -130,9 +144,8 @@ for (const [x, y] of stumps) plant(x, y);
 ok(p.quests.even_grove.n === 2, 'two stumps replanted');
 talk('vael');
 ok(p.quests.even_grove.step === 4 && core.invCount(p, 'sapling') >= 1, 'the heart-tree step');
-let heart = null;
-for (let y = -67; y <= -35 && !heart; y++) for (let x = 181; x <= 213; x++) if (core.M.tileAt(x, y) === '.' && !core.S.cleared[core.idx(x, y)] && core.canPlant(p, x, y)) { heart = [x, y]; break; }
-ok(!!heart, 'one open tile left for the heart tree');
+const heart = other;
+ok(!!heart && core.M.tileAt(heart[0], heart[1]) === '.' && core.S.cleared[core.idx(heart[0], heart[1])] && core.canPlant(p, heart[0], heart[1]), 'cleared grass is available for the heart tree');
 plant(heart[0], heart[1]);
 talk('vael');
 ok(core.lv(p, 'prayer') === 15 && p.xp.prayer === XP[9] * 10 + 1442 * 10, 'Prayer climbs from 9 to 15 (' + core.lv(p, 'prayer') + ', xp ' + p.xp.prayer + ')');

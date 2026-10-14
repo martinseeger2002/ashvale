@@ -1561,9 +1561,9 @@
         else if (t.kind === 'mob') { const m = core.mobByUid(t.uid); if (m) { x = m.x; y = m.y; } }
         else if (t.kind === 'item') { const g = core.S.ground.find(q => q.uid === t.uid); if (g) { x = g.x; y = g.y; } }
         if (x == null) return null;
-        if (it.id === 'sapling') {
+        if (core.isSapling && core.isSapling(it.id)) {
           if (core.plantYoung && core.plantYoung(x, y)) return { html: 'Pick up <span class="c">sapling</span>', act: { c: 'unplant', x, y }, red: 1 };
-          return { html: 'Plant <span class="c">sapling</span>', act: { c: 'plant', x, y }, red: 1 };
+          return { html: 'Plant <span class="c">' + esc(d.name.toLowerCase()) + '</span>', act: { c: 'plant', x, y }, red: 1 };
         }
         if (d.tool && t.kind === 'node') return { html: 'Use <span class="o">' + esc(d.name) + '</span>', act: { c: 'gather', x, y }, red: 1 };
         return { html: 'Use <span class="o">' + esc(d.name) + '</span>', act: { c: 'useon', x, y }, red: 1 };
@@ -1970,7 +1970,11 @@
       /* outgoing queue: never more than 5 messages in any second or 9 in any 2 s (the mesh allows ~5/s, burst 10);
          a newer pure position state replaces a queued older one */
       const outQ = [];
-      const pureState = o => o.p && !o.M && !o.E && !o.F && !o.G && o.A === undefined && o.C === undefined && !o.X && !o.g && !o.o && !o.t;
+      /* A current attack target is part of presence, not a fire-and-forget command.  The small {A: uid} message from
+         netAct still makes a click responsive, but a mesh/backend refusal used to lose that one message forever: the
+         replica kept showing the player fighting while the area's host never rolled a blow.  Presence repeats A (and
+         A:0) until both games agree.  It is still a replaceable state row so a busy client cannot grow the send queue. */
+      const pureState = o => o.p && !o.M && !o.E && !o.F && !o.G && o.C === undefined && !o.X && !o.g && !o.o && !o.t;
       function netSend(o, R) {   /* R: a neighbour room (viewer presence); default the main room. One budget for both */
         if (!room) return false; R = R || null;
         try { if (new TextEncoder().encode(JSON.stringify(o)).length > 500) return false; } catch (e) { return false; }
@@ -2038,6 +2042,7 @@
       function stateMsg(now) {
         const p = myEnt.root.position;
         const m = { s: Math.round(now), p: [Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100], f: Math.round(myEnt.yaw * 100) / 100, a: myEnt.oneShot ? myEnt.lastOne || 'idle' : myEnt.loco || 'idle', j: myJoin, hp: me.hp, d: me.dead ? 1 : 0, k: myEnt.toolId || 0 };
+        m.A = me.act && me.act.k === 'attack' ? me.act.uid : 0;   /* repeat combat intent: packet loss must not make a visible monster unattackable */
         if (HOME) m.h = HOME;   /* where I was born: until my outfit message arrives others draw me in my home's defaults */
         if (me.lv > 0) m.l = me.lv | 0;   /* [Claude 2026-10-11] the storey I stand on: others draw me up there (they drew the Tap's upstairs on the ground floor) */
         if (myEnt.hl) m.hl = Math.round(myEnt.hl * 100) / 100;   /* where your head is looking, up or down (first person) */
@@ -2220,7 +2225,7 @@
       function netAct() {   /* my current attack target, so the host (and any future host) knows what I'm doing */
         if (!room) return;
         const a = me.act && me.act.k === 'attack' ? me.act.uid : 0, sig = a + '';
-        if (sig !== lastAct) { lastAct = sig; netSend({ A: a }); }
+        if (sig !== lastAct) { lastAct = sig; netSend({ A: a, s: Math.round(performance.now()) }); }
       }
       function mobRows(all) {
         const rows = [];
@@ -2307,7 +2312,13 @@
         if (d.GQ && Date.now() - (NETGQ.t || 0) > 3000) { NETGQ.t = Date.now(); netGear(); }   /* someone asked for our stats: send them again (at most every 3 s) */
         if (d.st && typeof d.st === 'object') pst.st = d.st;
         if (d.pr !== undefined) pst.pr = typeof d.pr === 'string' ? d.pr : 0;
-        if (d.A !== undefined) pst.act = d.A ? { k: 'attack', uid: +d.A } : null;
+        /* Immediate target intents and repeated presence share the sender's monotonic stamp.  Events/state are applied
+           before the position row's general stale-message guard (an older packet can still carry a unique hit), so A
+           needs its own guard or an out-of-order active row can undo a newer A:0 and leave a ghost attack on the host. */
+        if (d.A !== undefined && (!Number.isFinite(+d.s) || r.lastA == null || +d.s > r.lastA)) {
+          pst.act = d.A ? { k: 'attack', uid: +d.A } : null;
+          if (Number.isFinite(+d.s)) r.lastA = +d.s;
+        }
         if (Object.keys(pst).length) core.setPuppet(id, pst);
         if (d.C != null) { const g = core.S.ground.find(q => q.uid === +d.C); if (g && iHostAt(g.x, g.y)) coreCall(() => core.claim(id, +d.C)); }
         if (Array.isArray(d.XF)) { const f = d.XF; if (iHostAt(f[0], f[1])) coreCall(() => core.hostFire(f[0] | 0, f[1] | 0, f[2] | 0, String(f[3] || 'logs'))); }

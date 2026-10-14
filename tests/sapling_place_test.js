@@ -9,6 +9,7 @@ const D = { items: mod('items').items, monsters: mod('monsters').monsters, shops
 const core = AshCore.create(D, { seed: 'sapling-place' });
 const p = core.addPlayer('p1', {});
 let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'ok  ' : 'FAIL', m); };
+ok(core.isSapling('sapling') && core.isSapling('oak_sapling') && core.isSapling('yew_sapling') && !core.isSapling('logs'), 'every configured sapling uses the shared planting interaction');
 function stand(x, y) {
   for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
     if (!core.M.blocked(x + dx, y + dy)) { p.x = x + dx; p.y = y + dy; p.path = []; p.act = null; return; }
@@ -58,6 +59,19 @@ const bi = B.idx(open[0], open[1]);
 ok(B.S.plants[bi] && B.S.plants[bi].grown === 1 && !B.plantYoung(open[0], open[1]), 'the friend receives the grown pine and it does not come back up');
 B.acceptUnplant(open[0], open[1]);
 ok(B.S.plants[bi] && B.S.plants[bi].grown === 1, 'a grown pine is not pulled up');
+const C = AshCore.create(D, { seed: 'sapling-quest-client' }), cp = C.addPlayer('client', {});
+cp.quests.even_grove = { step: 2, n: 0 };
+C.grantItem('client', 'oak_sapling', 1);
+let clientOpen = null;
+for (let y = -67; y <= -35 && !clientOpen; y++) for (let x = 181; x <= 213; x++) if (C.canPlant(cp, x, y)) clientOpen = [x, y];
+C.setAuth('evengrove', false);
+const clientEvents = [];
+if (clientOpen) {
+  for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [-1, -1], [1, -1], [-1, 1]]) if (!C.M.blocked(clientOpen[0] + dx, clientOpen[1] + dy)) { cp.x = clientOpen[0] + dx; cp.y = clientOpen[1] + dy; break; }
+  C.cmd('client', { c: 'plant', x: clientOpen[0], y: clientOpen[1] });
+  for (let i = 0; i < 8; i++) clientEvents.push(...C.tick());
+}
+ok(!!clientOpen && cp.quests.even_grove.n === 1 && C.invCount(cp, 'oak_sapling') === 0 && clientEvents.some(e => e.e === 'xplant' && e.sapling === 'oak_sapling'), 'a non-host player plants an oak sapling and receives Vael quest credit locally');
 function growsAs(item, kind) {
   const C = AshCore.create(D, { seed: 'sapling-' + item }), q = C.addPlayer('p', {});
   C.grantItem('p', item, 1);

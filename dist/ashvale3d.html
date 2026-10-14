@@ -11457,10 +11457,30 @@ POSSIBILITY OF SUCH DAMAGE. */
       if (p.using && p.using.slot === slot && !p.inv[slot]) { p.using = null; ev({ e: 'using', p: p.id }); }
       return id;
     }
+    function plantCounts(job, x, y, wasStump, cleared) {
+      if (!job || !job.st || !job.st.goal) return false;
+      const kind = job.st.goal.plant;
+      if (kind === 'stump') return !!(wasStump || cleared);
+      if (kind !== 'open' || wasStump) return false;
+      const near = job.st.near;
+      return !near || cheb(x, y, near[0], near[1]) <= (near[2] == null ? 16 : near[2]);
+    }
+    function plantQuestWhy(job, x, y, wasStump, cleared) {
+      if (!job || plantCounts(job, x, y, wasStump, cleared)) return null;
+      const kind = job.st.goal.plant;
+      if (kind === 'stump') return 'This shoot belongs in the grass left by a felled tree. It will not be used here.';
+      if (wasStump) return 'Let the stump crumble into grass before planting this quest shoot.';
+      const near = job.st.near;
+      if (near && cheb(x, y, near[0], near[1]) > (near[2] == null ? 16 : near[2])) return 'Vael asked for this shoot in the Even Grove, within sixteen tiles of the rope. It will not be used here.';
+      return kind === 'open' ? 'This quest shoot belongs in open grass. It will not be used here.' : null;
+    }
     function plantAt(p, x, y) {
       if (!canPlant(p, x, y)) { msg(p, (isWood(x, y) && !canReplant(p) ? 'You have not learned to set a shoot in a stump.' : null) || stumpWhy(p, x, y) || plantWhy(x, y) || 'That ground will not take a shoot.', 'warn'); return; }
       const job = plantJob(p), i = idx(x, y);
       const wasStump = isStump(x, y);
+      const wasCleared = isCleared(x, y);
+      const questWhy = plantQuestWhy(job, x, y, wasStump, wasCleared);
+      if (questWhy) { msg(p, questWhy, 'warn'); return; }
       if (wasStump) {
         if (M.clearTree) M.clearTree(x, y);
         delete S.dep[i]; delete S.fell[i];
@@ -11468,10 +11488,7 @@ POSSIBILITY OF SUCH DAMAGE. */
         ev({ e: 'clear', x, y, node: i });
       }
       const cleared = isCleared(x, y);
-      const onStump = wasStump || cleared;
-      const near = job && job.st.near;
-      const inGrove = !near || cheb(x, y, near[0], near[1]) <= (near[2] == null ? 16 : near[2]);
-      const count = !!(job && ((job.st.goal.plant === 'stump' && onStump) || (job.st.goal.plant === 'open' && !onStump && inGrove)));
+      const count = plantCounts(job, x, y, wasStump, cleared);
       const sapling = takeSapling(p); if (!sapling) return;
       const rec = { x, y, at: S.t, tile: M.tileAt(x, y), stump: 0, owner: p.id, grown: 0, sapling, tree: saplingKind(sapling) };
       if (count) { rec.qid = job.qid; rec.step = job.q.step; rec.counted = 1; }
@@ -13177,7 +13194,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
-      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, plantSnap, acceptPlant, acceptUnplant, hostPlant, hostUnplant, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
+      setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, isSapling, saplingKind, canPlant, plantYoung, plantHour: PLANT_HOUR, plantSnap, acceptPlant, acceptUnplant, hostPlant, hostUnplant, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
       applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, takeOff: (pid, k) => { const p = S.players[pid]; return p ? takeOff(p, k) : null; }, setFelled,
       hitXp: (pid, cls, dmg, dex) => { const p = S.players[pid]; if (p && !p.puppet) hitXp(p, cls, dmg, null, dex); },
       creditKill: (pid, key) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key); }
@@ -15493,7 +15510,7 @@ POSSIBILITY OF SUCH DAMAGE. */
             else if (g.light) h += 'Step ' + q.step + ': light ' + (need > 1 ? need + ' fires' : 'a fire') + ' (' + have + '/' + need + ').';
             else if (g.wait != null) { const left = Math.max(0, (q.t0 == null ? 0 : q.t0) + g.wait - (core.natureHours ? core.natureHours() : 0)); h += 'Step ' + q.step + ': ' + who(st.ends || Q[id].giver) + ' is at work. Come back in ' + (left >= 1 ? Math.ceil(left) + ' game hour' + (Math.ceil(left) > 1 ? 's' : '') : 'a little while') + '.'; }
             /* sadfrog's Even Grove: plant saplings (on open ground, or on stumps); slay several named foes, each counted */
-            else if (g.plant) h += 'Step ' + q.step + ': plant ' + (need > 1 ? need + ' saplings' : 'a sapling') + (g.plant === 'stump' ? ' where trees were cut down' : ' on open ground') + ' (' + have + '/' + need + ').';
+            else if (g.plant) h += 'Step ' + q.step + ': plant ' + (need > 1 ? need + ' saplings' : 'a sapling') + (g.plant === 'stump' ? ' where trees were cut down' : ' on open ground') + (st.near ? ' near ' + who(Q[id].giver) : '') + ' (' + have + '/' + need + ').';
             else if (g.kills) h += 'Step ' + q.step + ': slay ' + Object.keys(g.kills).map(k => { const m = core.D.monsters[k], n2 = g.kills[k]; return many(A.esc((m ? m.name : k).toLowerCase()), n2) + ' (' + Math.min(n2, (q.kn && q.kn[k]) | 0) + '/' + n2 + ')'; }).join(', ') + '.';
             else h += 'Step ' + q.step + ': ask ' + who(Q[id].giver) + ' what is left to do (' + have + '/' + need + ').';
           }
@@ -22182,9 +22199,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         else if (t.kind === 'mob') { const m = core.mobByUid(t.uid); if (m) { x = m.x; y = m.y; } }
         else if (t.kind === 'item') { const g = core.S.ground.find(q => q.uid === t.uid); if (g) { x = g.x; y = g.y; } }
         if (x == null) return null;
-        if (it.id === 'sapling') {
+        if (core.isSapling && core.isSapling(it.id)) {
           if (core.plantYoung && core.plantYoung(x, y)) return { html: 'Pick up <span class="c">sapling</span>', act: { c: 'unplant', x, y }, red: 1 };
-          return { html: 'Plant <span class="c">sapling</span>', act: { c: 'plant', x, y }, red: 1 };
+          return { html: 'Plant <span class="c">' + esc(d.name.toLowerCase()) + '</span>', act: { c: 'plant', x, y }, red: 1 };
         }
         if (d.tool && t.kind === 'node') return { html: 'Use <span class="o">' + esc(d.name) + '</span>', act: { c: 'gather', x, y }, red: 1 };
         return { html: 'Use <span class="o">' + esc(d.name) + '</span>', act: { c: 'useon', x, y }, red: 1 };
@@ -22591,7 +22608,11 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       /* outgoing queue: never more than 5 messages in any second or 9 in any 2 s (the mesh allows ~5/s, burst 10);
          a newer pure position state replaces a queued older one */
       const outQ = [];
-      const pureState = o => o.p && !o.M && !o.E && !o.F && !o.G && o.A === undefined && o.C === undefined && !o.X && !o.g && !o.o && !o.t;
+      /* A current attack target is part of presence, not a fire-and-forget command.  The small {A: uid} message from
+         netAct still makes a click responsive, but a mesh/backend refusal used to lose that one message forever: the
+         replica kept showing the player fighting while the area's host never rolled a blow.  Presence repeats A (and
+         A:0) until both games agree.  It is still a replaceable state row so a busy client cannot grow the send queue. */
+      const pureState = o => o.p && !o.M && !o.E && !o.F && !o.G && o.C === undefined && !o.X && !o.g && !o.o && !o.t;
       function netSend(o, R) {   /* R: a neighbour room (viewer presence); default the main room. One budget for both */
         if (!room) return false; R = R || null;
         try { if (new TextEncoder().encode(JSON.stringify(o)).length > 500) return false; } catch (e) { return false; }
@@ -22659,6 +22680,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       function stateMsg(now) {
         const p = myEnt.root.position;
         const m = { s: Math.round(now), p: [Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100], f: Math.round(myEnt.yaw * 100) / 100, a: myEnt.oneShot ? myEnt.lastOne || 'idle' : myEnt.loco || 'idle', j: myJoin, hp: me.hp, d: me.dead ? 1 : 0, k: myEnt.toolId || 0 };
+        m.A = me.act && me.act.k === 'attack' ? me.act.uid : 0;   /* repeat combat intent: packet loss must not make a visible monster unattackable */
         if (HOME) m.h = HOME;   /* where I was born: until my outfit message arrives others draw me in my home's defaults */
         if (me.lv > 0) m.l = me.lv | 0;   /* [Claude 2026-10-11] the storey I stand on: others draw me up there (they drew the Tap's upstairs on the ground floor) */
         if (myEnt.hl) m.hl = Math.round(myEnt.hl * 100) / 100;   /* where your head is looking, up or down (first person) */
@@ -22841,7 +22863,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       function netAct() {   /* my current attack target, so the host (and any future host) knows what I'm doing */
         if (!room) return;
         const a = me.act && me.act.k === 'attack' ? me.act.uid : 0, sig = a + '';
-        if (sig !== lastAct) { lastAct = sig; netSend({ A: a }); }
+        if (sig !== lastAct) { lastAct = sig; netSend({ A: a, s: Math.round(performance.now()) }); }
       }
       function mobRows(all) {
         const rows = [];
@@ -22928,7 +22950,13 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (d.GQ && Date.now() - (NETGQ.t || 0) > 3000) { NETGQ.t = Date.now(); netGear(); }   /* someone asked for our stats: send them again (at most every 3 s) */
         if (d.st && typeof d.st === 'object') pst.st = d.st;
         if (d.pr !== undefined) pst.pr = typeof d.pr === 'string' ? d.pr : 0;
-        if (d.A !== undefined) pst.act = d.A ? { k: 'attack', uid: +d.A } : null;
+        /* Immediate target intents and repeated presence share the sender's monotonic stamp.  Events/state are applied
+           before the position row's general stale-message guard (an older packet can still carry a unique hit), so A
+           needs its own guard or an out-of-order active row can undo a newer A:0 and leave a ghost attack on the host. */
+        if (d.A !== undefined && (!Number.isFinite(+d.s) || r.lastA == null || +d.s > r.lastA)) {
+          pst.act = d.A ? { k: 'attack', uid: +d.A } : null;
+          if (Number.isFinite(+d.s)) r.lastA = +d.s;
+        }
         if (Object.keys(pst).length) core.setPuppet(id, pst);
         if (d.C != null) { const g = core.S.ground.find(q => q.uid === +d.C); if (g && iHostAt(g.x, g.y)) coreCall(() => core.claim(id, +d.C)); }
         if (Array.isArray(d.XF)) { const f = d.XF; if (iHostAt(f[0], f[1])) coreCall(() => core.hostFire(f[0] | 0, f[1] | 0, f[2] | 0, String(f[3] || 'logs'))); }
