@@ -173,9 +173,9 @@ ok(core.invCount(p, 'dragon_bones') === 0 && core.invCount(p, 'yew_sapling') ===
 dlg = talk('vael');
 ok(dlg && /Red Pyre/.test(dlg.lines.join(' ')) && !p.quests.even_guard, 'without the Red Pyre he will not call the three');
 p.quests.red_pyre = { step: D.quests.quests.red_pyre.steps.length + 1, n: 0 };
-ok(D.quests.quests.red_pyre.done.some(s => /Ancient Chapel/.test(s)) && D.quests.quests.red_pyre.steps[2].complete.some(s => /Ancient Chapel/.test(s)), 'Wenna, finished with the Pyre, points at the chapel');
+ok(D.quests.quests.red_pyre.done.some(s => /Ancient Chapel|broken stone chapel/.test(s)) && D.quests.quests.red_pyre.steps[2].complete.some(s => /Ancient Chapel|broken stone chapel/.test(s)), 'Wenna, finished with the Pyre, points at the chapel');
 dlg = talk('wenna');
-ok(dlg && /Ancient Chapel/.test(dlg.lines.join(' ')), 'Wenna says it aloud');
+ok(dlg && /Ancient Chapel|broken stone chapel/.test(dlg.lines.join(' ')), 'Wenna says it aloud');   /* sadfrog 2026-10-10 (1e87793): she describes it now, no name or coordinates */
 
 p.x = 198; p.y = 12; p.pp = 1;
 core.cmd('p1', { c: 'gather', x: 198, y: 11 });
@@ -321,12 +321,12 @@ ok(!core.canPlant(p, spot[0], spot[1]), 'the grown tree cannot be picked back up
 const gv = core.M.npcs.filter(n => n.watch === 'village'), gs = core.M.npcs.filter(n => n.watch === 'saltmere');
 ok(gv.length === 3 && gs.length === 4 && !!core.M.npcs.find(n => n.road), 'town guards stand in Ashvale and Saltmere, and one has the road');
 ok(gv.every(n => !n.foe) && core.guardCb === 33, 'the guards are combat 33 and do not start a fight');
-const said = [];
-for (let i = 0; i < 12; i++) { const d = talk(gv[i % gv.length].id); said.push(d && d.lines ? d.lines.join(' ') : ''); }
-ok(said.every(s => s.length > 0) && new Set(said).size === 12, 'each talk with a town guard is the next remark, then the set comes round');
+const said = [];   /* [Claude 2026-10-14] as many talks as there are remarks (sadfrog added the dragon's ruin on 2026-10-10: thirteen now) */
+for (let i = 0; i < 40; i++) { const d = talk(gv[i % gv.length].id), t = d && d.lines ? d.lines.join(' ') : ''; if (i && t === said[0]) break; said.push(t); }
+ok(said.every(s => s.length > 0) && said.length >= 12 && new Set(said).size === said.length, 'each talk with a town guard is the next remark (' + said.length + '), then the set comes round');
 ok(said.some(s => /Lake Castle/.test(s)) && said[0] !== said[1], 'one of the remarks is the far castle they call Lake Castle');
 const again = talk(gv[0].id);
-ok(again && again.lines.join(' ') === said[0], 'the thirteenth talk starts the same remarks over');
+ok(again && again.lines.join(' ') === said[1], 'after the last remark they start the same remarks over');   /* the loop above already heard said[0] again */
 const g0 = gv[0];
 p.x = g0.x + 1; p.y = g0.y; if (core.M.blocked(p.x, p.y)) { p.x = g0.x; p.y = g0.y + 1; }
 p.path = []; p.act = null; p.dead = 0; p.hp = core.maxHp(p);

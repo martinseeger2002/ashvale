@@ -2013,7 +2013,11 @@
       const TKEY = 'ashvale3d.trips', tripKeep = { load: () => { try { return JSON.parse(G.localStorage.getItem(TKEY) || '[]'); } catch (e) { return []; } },
         save: (L) => { try { G.localStorage.setItem(TKEY, JSON.stringify(L)); } catch (e) { /* private window */ } } };
       let tripSeen = 0;
-      const TRIP = deps.trip ? deps.trip.create({ core, pid: PID, ticks: (D.rules.trip || {}).ticks, bridge, keep: tripKeep, facts: () => { const w = walletState.data; return w ? { tokens: Object.assign({}, w.raw || {}), pieces: (w.pieces || []).slice() } : null; }, onChange: (st) => {
+      /* [Claude 2026-10-14] a referee seed is asked for only with a wallet: a guest's ask came back 400 from /account/referee/seed
+         (a console error on every guest's boot - check_live). Waits up to 10 s for the wallet to be known; without one, practice. */
+      const tripBridge = (msg, kind, ms) => kind !== 'seed' ? bridge(msg, kind, ms) : new Promise(ok => {
+        const t0 = Date.now(), look = () => { if (walletState.address) ok(bridge(msg, kind, ms)); else if ((room && room.me && room.me.guest) || Date.now() - t0 > 10000) ok({ error: 'no wallet: practice' }); else setTimeout(look, 500); }; look(); });
+      const TRIP = deps.trip ? deps.trip.create({ core, pid: PID, ticks: (D.rules.trip || {}).ticks, bridge: tripBridge, keep: tripKeep, facts: () => { const w = walletState.data; return w ? { tokens: Object.assign({}, w.raw || {}), pieces: (w.pieces || []).slice() } : null; }, onChange: (st) => {
         if (st.done.length > tripSeen) { const L = st.done[st.done.length - 1], k = L.rec.kills.length, g = Object.values(L.rec.gathered).reduce((a, b) => a + b, 0);
           void k; void g;   /* no chat line (2026-10-05: it said 'practice: no arcade seed', but rewards come from the @ashvale Bank as you play, not from these windows) */ }
         tripSeen = st.done.length;

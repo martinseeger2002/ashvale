@@ -25,13 +25,15 @@ for (let i = 0; i < 16; i++) { a.hp = core.maxHp(a); b.hp = core.maxHp(b); for (
 ok(dr.tgt === 'a' && told > 0, 'the first ranger to shoot is who it faces, and it still winds a blow (' + dr.tgt + ', ' + told + ' tells)');
 
 core.cmd('b', { c: 'attack', uid: dr.uid });
-let switched = 0, told2 = 0;
-for (let i = 0; i < 20; i++) {
+/* [Claude 2026-10-14] 2026-10-13 (0.8.116): monsters take turns among everyone fighting them, the dragon too - it turns
+   only once its own blow has landed, so a wind-up is never cancelled (this replaces "a second ranger does not steal its focus") */
+let told2 = 0; const struck = { a: 0, b: 0 };
+for (let i = 0; i < 60; i++) {
   a.hp = core.maxHp(a); b.hp = core.maxHp(b);
-  for (const e of core.tick()) { if (e.e === 'tell' && e.mob === dr.uid) told2++; if (e.e === 'hit' && e.dst === dr.uid && e.src === 'b' && dr.tgt === 'b') switched++; }
+  for (const e of core.tick()) { if (e.e === 'tell' && e.mob === dr.uid) told2++; if (e.e === 'hit' && e.src === dr.uid && (e.dst === 'a' || e.dst === 'b')) struck[e.dst]++; }
 }
-ok(dr.tgt === 'a' && switched === 0, 'a second ranger does not steal its focus (' + dr.tgt + ')');
-ok(told2 > 0, 'it keeps winding blows at the one it chose (' + told2 + ' tells)');
+ok(struck.a > 0 && struck.b > 0, 'with two rangers shooting it takes them in turn (blows at a ' + struck.a + ', at b ' + struck.b + ')');
+ok(told2 > 0, 'it keeps winding its blows (' + told2 + ' tells)');
 
 const wounded = 40;
 dr.hp = wounded; dr.back = 0;
