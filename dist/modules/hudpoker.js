@@ -15,7 +15,8 @@
 .ash .pokerp{position:absolute;color:#eee;font-size:13px;line-height:1.35;background:linear-gradient(#2b3a33f0,#1b241ff0);border:2px solid #12181a;border-radius:8px;box-shadow:0 4px 14px #0008;pointer-events:auto;box-sizing:border-box}
 .ash .pokerp.bar{display:flex;flex-direction:column;left:50%;transform:translateX(-50%);bottom:0;width:min(100vw,680px);border-radius:10px 10px 0 0;border-bottom:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));max-height:62vh;overflow-y:auto;touch-action:pan-y}
 .ash .pokerp.hole,.ash .pokerp.board{transform:translate(-50%,-50%);padding:5px 7px;white-space:nowrap;text-align:center;opacity:.97}
-.ash .pokerp.board{white-space:normal;max-width:min(92vw,420px)}
+.ash .pokerp.board{white-space:normal;width:max-content;max-width:min(92vw,420px)}
+.ash .pokerp.board .brd,.ash .pokerp.hole .cards{white-space:nowrap}   /* [Claude 2026-10-14] five cards in one row: a box placed by its centre was only given the width to the screen's edge (the operator: the river dropped below) */
 .ash .pokerp .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .ash .pokerp .stt{color:#ffd23f;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ash .pokerp .stt.wait{color:#9fc3ff}

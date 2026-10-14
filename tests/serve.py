@@ -3,15 +3,15 @@
 game asks on its own - a newer registry (/r/inscriptions), balances, tags - so a test page logs no "404 (File not found)"
 console error that has nothing to do with the game (the operator: "figure out and fix whatever is failing"). Threaded."""
 import http.server, json, sys, os
-EMPTY = {'/r/inscriptions': [], '/r/balances': [], '/r/tokens': [], '/r/holders': [], '/r/collections': []}
+EMPTY = {'/r/inscriptions': []}   # only the registry poll: an empty answer to anything else is NOT the same as no answer (the wallet code reads
+# an empty /r/inscription/<piece> as 'not yours any more' - chest_ledger_pw's worn helmet came off), so the rest still 404 as before
 class H(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_GET(self):
         path = self.path.split('?', 1)[0]
         if path == '/favicon.ico': self.send_response(204); self.end_headers(); return   # the browser asks for one; the game has none
-        if path.startswith('/r/'):
-            key = next((k for k in EMPTY if path == k or path.startswith(k + '/')), None)
-            body = json.dumps(EMPTY[key] if key else {}).encode()
+        if path in EMPTY:
+            body = json.dumps(EMPTY[path]).encode()
             self.send_response(200); self.send_header('Content-Type', 'application/json'); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body); return
         return super().do_GET()
 os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

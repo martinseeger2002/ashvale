@@ -41,7 +41,7 @@ def side_by_side(pages, name):
     pth = os.path.join(OUT, name); out.save(pth); print('     shot', pth)
 
 def open_page(ctx, url, errs, tag):
-    pg = ctx.new_page(); pg.on('pageerror', lambda e: errs.append(tag + ' PAGEERROR ' + str(e))); pg.on('console', lambda m: m.type == 'error' and '/r/inscriptions?' not in (m.location or {}).get('url', '') and errs.append(tag + ' ' + m.text + ' @ ' + (m.location or {}).get('url', '')))
+    pg = ctx.new_page(); pg.on('pageerror', lambda e: errs.append(tag + ' PAGEERROR ' + str(e))); pg.on('console', lambda m: m.type == 'error' and '/r/inscriptions?' not in (m.location or {}).get('url', '') and '/favicon.ico' not in (m.location or {}).get('url', '') and errs.append(tag + ' ' + m.text + ' @ ' + (m.location or {}).get('url', '')))
     pg.goto(url, wait_until='domcontentloaded', timeout=120000); wait(pg, '!!(window.ASH && ASH.core)', 90); return pg
 
 def session(b, url_for, label, sandbox=False):
@@ -215,19 +215,30 @@ def adjacent_zones(b, url_for, label):
     check(ga < 1.2 and gb < 1.2, 'positions update across the border: B draws A within %.2f m of A, A draws B within %.2f m of B' % (ga, gb))
     # A walks from the village up the path into Whisperwood; B watches every step
     mobs_b = json.loads(pb.evaluate(MOBS))
+    pa.evaluate('window.__trail = []; clearInterval(window.__trailT); window.__trailT = setInterval(() => window.__trail.push([Date.now() / 1000, ASH.me.x + 0.5, ASH.me.y + 0.5]), 100)')   # [Claude 2026-10-14] A's own trail, ten times a second
     pa.evaluate('ASH.core.cmd("me", {c: "walk", x: 24, y: 33})')
     # "sees A the whole way": B's avatar of A stays visible and is always where A was a moment ago (within 1.5 m of a tile
-    # A stood on in the last 2.5 s: drawing runs ~0.4 s behind, plus one send interval and this busy machine's frame rate)
-    samples, worst, lost, crossed, hist = 0, 0.0, 0, False, []
+    # A stood on in the last 2.5 s (now: A's path since the sample before that): drawing runs ~0.4 s behind, plus one send interval and this busy machine's frame rate)
+    samples, worst, lost, crossed, hist, stops = 0, 0.0, 0, False, [], []
     t0 = time.time()
     while time.time() - t0 < 40:
-        st = pa.evaluate('[ASH.me.x, ASH.me.y, ASH.net().area]'); now = time.time(); hist.append((now, st[0] + 0.5, st[1] + 0.5))
+        st = pa.evaluate('[ASH.me.x, ASH.me.y, ASH.net().area]'); now = time.time()
+        hist.extend(tuple(t) for t in pa.evaluate('window.__trail.splice(0)')); hist.append((now, st[0] + 0.5, st[1] + 0.5))
         crossed = crossed or st[2] == 'whisperwood'
         rp = pb.evaluate('(() => { const r = %s[0]; return r ? [r.root.position.x, r.root.position.z] : null; })()' % REM)
         if not rp: lost += 1
-        else: worst = max(worst, min(((rp[0] - x) ** 2 + (rp[1] - y) ** 2) ** 0.5 for t_, x, y in hist if now - t_ <= 2.5))
+        else:   # [Claude 2026-10-14] against A's PATH (the segments between samples), from the sample before the window on: on a busy
+                # machine one evaluate can take 3 s, and a 2.5 s window then held a single point A had already walked on from
+            win = [h for h in hist if now - h[0] <= 2.5]; older = [h for h in hist if now - h[0] > 2.5]
+            pts = ([older[-1]] if older else []) + win
+            def seg(px, py, a, b):
+                ax, ay, bx, by = a[1], a[2], b[1], b[2]; dx, dy = bx - ax, by - ay; L = dx * dx + dy * dy
+                t = 0 if not L else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / L))
+                return ((px - ax - t * dx) ** 2 + (py - ay - t * dy) ** 2) ** 0.5
+            worst = max(worst, min([seg(rp[0], rp[1], pts[i], pts[i + 1]) for i in range(len(pts) - 1)] or [((rp[0] - pts[-1][1]) ** 2 + (rp[1] - pts[-1][2]) ** 2) ** 0.5]))
         samples += 1
-        if st[0] == 24 and st[1] == 33 and len(hist) > 3 and hist[-4][1:] == hist[-1][1:]: break
+        stops.append((st[0], st[1]))
+        if st[0] == 24 and st[1] == 33 and len(stops) > 3 and stops[-4] == stops[-1]: break
         time.sleep(0.25)
     time.sleep(1.5)
     check(crossed and lost == 0 and worst < 1.5, 'A walked from the village into Whisperwood and B saw A the whole way (%d samples, never lost, worst %.1f m from where A just was)' % (samples, worst))
