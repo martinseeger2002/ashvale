@@ -16,6 +16,7 @@
     const ORE = { R: 0xc8702c, N: 0xd8d8d0, I: 0x8a4632, C: 0x33333c, G: 0xd9a930, A: 0x6f86c8, S: 0x3a3a40, V: 0x0e0e14 };
     const WATER_Y = -0.16;
     let LAMPQ = null;   /* (x, y) -> whether a tended lamp or town torch is lit; the engine sets this from the guards */
+    let VIEWQ = null;   /* () -> [x, y, lv]: where the viewer stands (tile and storey); the engine sets it. A light inside a building shines only for a viewer in that room */
     let FIREQ = null;   /* (x, y) -> whether the fire at a tile is burning (a zone fire with `litIn` is cold out of its season) */
     let STEAMQ = null;  /* kind -> 0-1, how hard the kettle over that fire steams (core works it out from the season and the hour) */
     const BOARDS = Object.create(null);   /* painted wooden signs (dragon killers): id -> { lines, faces } */
@@ -1257,7 +1258,7 @@
             B.add('box', 0x2a2a2a, x, y + 1.22, z, 0.2, 0.08, 0.2);
             const f = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.32, 5), new THREE.MeshBasicMaterial({ color: 0xffa030 })); f.position.set(x, y + 1.42, z); group.add(f);
             const f2 = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.2, 5), new THREE.MeshBasicMaterial({ color: 0xfff0a0 })); f2.position.set(x, y + 1.36, z); group.add(f2);
-            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x, y, z, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y });
+            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x, y, z, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y, lv: o.lv | 0 });
             break;
           }
           case 'lamp': {   /* a gas street lamp on the verge of a trail (2026-10-07): iron post, glass lantern, pyramid cap */
@@ -1283,7 +1284,7 @@
             { const [a, b, c] = at(0.34); B.add('cyl', 0x2a1f16, a, b, c, 0.09, 0.08, 0.09, ry, TL); }
             const f = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.24, 5), new THREE.MeshBasicMaterial({ color: 0xffa030 })), f2 = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.15, 5), new THREE.MeshBasicMaterial({ color: 0xfff0a0 }));
             for (const [m, d] of [[f, 0.48], [f2, 0.44]]) { m.position.set(...at(d)); m.rotation.set(TL, ry, 0, 'YXZ'); group.add(m); }
-            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x: wx, y, z: wz, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y });
+            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x: wx, y, z: wz, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y, lv: o.lv | 0 });
             break;
           }
           case 'iwall': {   /* a room divider inside a walk-in building (2026-10-07: Saltmere town hall) */
@@ -1550,7 +1551,7 @@
               wheel.add(mesh(new THREE.CylinderGeometry(0.018, 0.02, h, 6), 0xf1e6c4, cx, h / 2 + 0.01, cz));
               const f = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.055, 5), new THREE.MeshBasicMaterial({ color: 0xffd060 })); f.position.set(cx, h + 0.035, cz); flames.add(f);
             }
-            torches.unshift({ f: flames, ph: hash2(o.x, o.y) * 10, x, y: top - 0.8, z, night: false, tend: false, tx: o.x, ty: o.y, candle: true });   /* the light sits at the flames (y + 1.5) */
+            torches.unshift({ f: flames, ph: hash2(o.x, o.y) * 10, x, y: top - 0.8, z, night: false, tend: false, tx: o.x, ty: o.y, lv, candle: true });   /* the light sits at the flames (y + 1.5) */
             const mat = new THREE.MeshBasicMaterial({ map: cardKit(), side: THREE.DoubleSide });
             mat.userData.shared = true;   /* the atlas is one for the whole game - dispose() must not take it with this region */
             const gg = new THREE.Group(); into.add(gg);
@@ -1688,7 +1689,12 @@
       }
       /* torch light: two warm lights at the village plaza (more would cost too much on phones) */
       const lights = [];
-      for (const t of torches.filter(t => !t.glow && t.x != null && !(t.litIn && FIREQ && !FIREQ(t.tx, t.ty))).slice(0, 2)) { const L = new THREE.PointLight(0xffa050, 3, 6, 1.6); L.position.set(t.x, t.y + 1.5, t.z); group.add(L); lights.push(L); }
+      for (const t of torches.filter(t => !t.glow && t.x != null && !(t.litIn && FIREQ && !FIREQ(t.tx, t.ty))).slice(0, 2)) { const L = new THREE.PointLight(0xffa050, 3, 6, 1.6); L.position.set(t.x, t.y + 1.5, t.z); group.add(L); lights.push(L);
+        /* [Claude 2026-10-13] a light has no shadow, so it shines through floors and walls (the operator: the card table's candles lit the
+           third storey's walls at night; "Make sure the same thing doesn't happen with the torch on the wall"). One inside a
+           building belongs to its room: lit only while the viewer stands in that building on that storey (update below). It is
+           dimmed, never hidden - see A FIXED NUMBER OF LIGHTS in engine.js */
+        const rf = roofs.find(r => t.tx >= r.x0 && t.tx <= r.x1 && t.ty >= r.y0 && t.ty <= r.y1); if (rf) L.userData.room = { x0: rf.x0, y0: rf.y0, x1: rf.x1, y1: rf.y1, lv: t.lv | 0 }; }
 
       const smokeGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12), smokeMat = new THREE.MeshLambertMaterial({ color: 0xc8c8c8, transparent: true, opacity: 0.35, depthWrite: false });
       const steamMat = new THREE.MeshLambertMaterial({ color: 0xf2f6fa, transparent: true, opacity: 0.22, depthWrite: false });   /* boiling sap: whiter and thinner than a fire's smoke */
@@ -1738,7 +1744,8 @@
           for (const L of street) { const on = LAMPQ ? !!LAMPQ(L.x, L.y) : NIGHTK > 0.04; L.mat.color.copy(LAMP_OFF).lerp(LAMP_ON, on ? 1 : 0); }
           for (const L of lights) {   /* [Claude 2026-10-11] a flame's light gutters: three unrelated rhythms and a dip now and then, not one smooth wave */
             const p = L.position.x * 1.7 + L.position.z * 0.3, g = Math.sin(time * 9.1 + p) * 0.22 + Math.sin(time * 23.7 + p * 1.9) * 0.11 + Math.sin(time * 41.3 + p * 3.1) * 0.07, dip = Math.sin(time * 1.3 + p) > 0.93 ? -0.45 : 0;
-            L.intensity = 2.5 + g + dip;
+            const R = L.userData.room, v = R && VIEWQ ? VIEWQ() : null;
+            L.intensity = R && !(v && v[0] >= R.x0 && v[0] <= R.x1 && v[1] >= R.y0 && v[1] <= R.y1 && v[2] === R.lv) ? 0 : 2.5 + g + dip;
           }
           for (const s of spots) { const ice = !!(map.iceAt && map.iceAt(s.x, s.y)); s.rings.forEach(r => { r.visible = !ice; }); }   /* a frozen pond does not ripple: you fish through the ice */
           for (const s of spots) if (s.rings[0].visible) s.rings.forEach((r, k) => { const p = ((time * 0.6 + s.ph + k / 3) % 1); r.scale.setScalar(0.6 + p * 2.2); r.material.opacity = 0.75 * (1 - p); });
@@ -1768,7 +1775,7 @@
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerTimer, cardAtlas: () => { const t = cardKit(); return t && t.image && t.image.toDataURL ? t.image.toDataURL('image/png') : null; }, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, viewQuery: fn => { VIEWQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerTimer, cardAtlas: () => { const t = cardKit(); return t && t.image && t.image.toDataURL ? t.image.toDataURL('image/png') : null; }, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

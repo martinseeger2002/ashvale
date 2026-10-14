@@ -248,8 +248,8 @@ items["hat_bigchief"] = {"name": "Big Chief Headdress", "kind": "hat", "eq": "he
 # not sold, not dropped; Edition 20 keeps shops from buying it and the Bank from minting a 21st.
 items["hat_featherband"] = {"name": "Feather Headband", "kind": "hat", "eq": "head", "value": 1500, "defence": 0, "edition": "20",
                             "nft": {"copies": 20, "key": "hat_featherband"}}
-# the Spider Cave (2026-10-07): the Spider Queen's Crown - about one Queen in twenty drops one, minted fresh by the
-# Bank into its own collection and numbered #1, #2 ... (no edition cap: it is earned)
+# the Spider Cave (2026-10-07): the Spider Queen's Crown, minted fresh by the Bank into its own collection and numbered
+# #1, #2 ... (no edition cap: it is earned). Since 2026-10-13 every adventurer gets one, once: their first Spider Queen kill
 # a hand torch (2026-10-07: "Add a torch to the general store so that a user can buy a torch and hold it at night and
 # illuminate his surroundings"): held in the off hand (the shield slot), it lights about 8 tiles round you
 items["torch"] = {"name": "Torch", "kind": "torch", "eq": "shield", "value": 6, "light": 8, "_kg": 0.6}
@@ -510,7 +510,10 @@ CAVE = {
                      "respawn": int(round(600 / 0.6)), "anim": "bite", "look": "spider_queen", "animal": True, "roam": 2, "gold": 120,
                      "venom": {"chance": 35, "ticks": 30, "dmg": 1},
                      "drops": [{"item": "spider_silk", "n": [5, 10], "one_in": 1}, {"item": "potion", "n": [2, 2], "one_in": 1}, {"item": "antidote", "one_in": 1},
-                               {"item": "hat_spidercrown", "one_in": 20}]},
+                               ],
+                     # [Claude 2026-10-13] the operator: the crown once per player - the first Spider Queen you kill leaves one at your
+                     # feet (core creditKill, flag 'spidercrown' in rules.flags); no random drop any more
+                     "award": {"item": "hat_spidercrown", "once": "spidercrown"}},
     # the end of the Ashen Crown, moved into the cave (2026-10-07: "Add wraiths ... so that the final quest from the ashen crown
     # can be completed"; "all of it in the cave"): three wraiths, the Ash Knight at the way into the lair, the Lich at the very end
     "wraith": {"name": "Wraith", "level": 24, "hp": 42, "att": 22, "def": 18, "attb": 14, "defb": 12, "max": 5, "speed": 4, "aggro": 6,

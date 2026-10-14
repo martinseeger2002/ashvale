@@ -19,6 +19,7 @@
         const NS = (DATA.globecfg || {}).north === -1 ? -1 : 1;   /* the world's north: the globe's -z (2026-10-07: the northern hemisphere) */
         const SEASONS = (() => { try { const SM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('seasons'); return SM && SM.create ? SM.create({ epoch: SUN_EPOCH, dayS: DAY_S }) : null; } catch (e) { return null; } })();
         const SUNL = { dark: 0, dir: [-0.45, 0.8, 0.3], key: '', b: null, lonA: null, base: new THREE.Color(SKY), col: new THREE.Color(), night: new THREE.Color(), phase: null };
+        if (SCENE.viewQuery) SCENE.viewQuery(() => [me.x, me.y, me.lv | 0]);   /* lights inside a building shine only in their own room */
         if (SCENE.lampQuery) SCENE.lampQuery((x, y) => core.lampLit ? core.lampLit(x, y) : true);
         /* a fire or a kettle that only works in one season (zone data litIn / steamIn) asks the core, which asks the
            seasons module - so a cold sugar bush in winter draws cold stones and no steam, and none of it is sugar law */
@@ -309,7 +310,7 @@
           const real = Date.now(); if (real - SEASON.t < (TL.n > 1 ? 250 : 3000)) return; SEASON.t = real; const now = skyNow();
           const lat = NS * Math.asin(Math.max(-1, Math.min(1, B.u[2]))) * 180 / Math.PI, S = SEASONS.at(lat, now);
           const key = [S.name, S.day, Math.round(S.leaf.bud * 20), Math.round(S.leaf.grow * 20), Math.round(S.leaf.colourT * 20), Math.round(S.leaf.springT * 10), Math.round(S.snow * 20), S.frozen].join(':');   /* every game day: in the leaf fall each tree has its own day */
-          if (key !== SEASON.key) { SEASON.key = key; const ta = performance.now(); if (SCENE.seasonApply) SCENE.seasonApply(S, SEASONS); SEASON.applyMs = performance.now() - ta; SEASON.applies = (SEASON.applies || 0) + 1; SEASON.snowy = S.name === 'winter' && S.snow > 0.3;   /* it snows only in winter (2026-10-07: "It shouldn't be snowing in the spring time") */ K.wxShown = ''; if (core.setSeason) core.setSeason({ snowy: SEASON.snowy, rice: !!S.rice, riceLate: S.p > 0.551 && S.p < 0.95 }); if (K.pineSnow) K.pineSnow(); if (K.pineSnow) K.pineSnow(); showWeather(); }
+          if (key !== SEASON.key) { SEASON.key = key; const ta = performance.now(); if (SCENE.seasonApply) SCENE.seasonApply(S, SEASONS); SEASON.applyMs = performance.now() - ta; SEASON.applies = (SEASON.applies || 0) + 1; SEASON.snowy = S.snow > 0.3;   /* it snows while the ground lies white, rains once it has melted: no snow on a green spring (2026-10-07: "It shouldn't be snowing in the spring time"), no rain on the snow just after the equinox (2026-10-13: "it's raining in Ashvale it's winter") */ K.wxShown = ''; if (core.setSeason) core.setSeason({ snowy: SEASON.snowy, rice: !!S.rice, riceLate: S.p > 0.551 && S.p < 0.95 }); if (K.pineSnow) K.pineSnow(); if (K.pineSnow) K.pineSnow(); showWeather(); }
           if (S.name !== SEASON.name) { if (SEASON.name) { const C = SEASONS.calendar(now); hud.chat(S.name.charAt(0).toUpperCase() + S.name.slice(1) + ' has come: year ' + C.year + ', day ' + C.day + '.', 'sys'); } SEASON.name = S.name; }
           /* a time-lapse runs the weather fast too: every few seconds each region this viewer hosts rolls again (for its season) */
           /* local time from the sun itself (2026-10-08): noon is when the sun stands highest here. SEASON.lon is the shift, in degrees,

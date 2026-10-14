@@ -3947,7 +3947,7 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
      const r = await net.join(roomId, {game, loopback})   -> {online, room, why, backend}
      room.me                     {id, tag, address, guest}   (tag without '@'; '' for guests)
      room.send(obj) -> Promise<bool>   never throws or rejects (false = dropped: too big, too fast, not in room)
-     room.on('message', fn({from, data})) / on('join', fn({from})) / on('leave', fn({from})) / on('closed', fn(why))
+     room.on('message', fn({from, data})) / on('join', fn({from})) / on('leave', fn({from})) / on('closed', fn(why)) / on('rejoined', fn({me}))
      room.members() -> [player]  ;  room.leave() -> Promise
    A player is {id, tag, address, guest}; remote state is keyed by id. The sender is stamped by the arcade node, never
    taken from the message.
@@ -3971,6 +3971,9 @@ ASH3D.defineValue('three', { api: 160, v: '0.160.0' }, THREE);
         if (t === 'message') r.on('message', (data, p) => { const from = norm(p); if (from.id !== me.id || (o && o.self)) fn({ from, data }); });
         else if (t === 'join' || t === 'leave') r.on(t, p => { const from = norm(p); if (from.id !== me.id) fn({ from }); });
         else if (t === 'closed') r.on('closed', why => fn(why));
+        /* [Claude 2026-10-13] the arcade seated this page again after its streams dropped (realtime.js, docs/multiplayer.md): the
+           others saw us leave and join and built us afresh, so resend what they draw us with. An older realtime.js never fires it */
+        else if (t === 'rejoined') { try { r.on('rejoined', m => fn({ me: m ? norm(m) : me })); } catch (e) { /* older arcade */ } }
         return room;
       },
       leave() { try { return Promise.resolve(r.leave()).catch(() => { }); } catch (e) { return Promise.resolve(); } }
@@ -10338,11 +10341,11 @@ POSSIBILITY OF SUCH DAMAGE. */
           if (!(p.seat && p.seat.t === T.id)) { if (pk) { p.pkDone = null; p.pkPaid = null; } else { p.chDone = null; p.chPaid = null; } }   /* [Claude 2026-10-12] a sit asked for now is a new seat: never one already paid back (an open seat is still kept by p.pk) */
           p.act = { k: 'sit', t: T.id, s: si, stake, pk: typeof c.pk === 'string' ? c.pk.slice(0, 160) : '' }; p.skilling = null; closeShop(p); break;   /* pk [Claude 2026-10-12]: the sitter's key, so the dealer can seal their cards for them alone */
         }
-        case 'stand': { if (p.seat) { if (isAuth(zoneOf(p.x, p.y))) standUp(p); else { const t = p.seat.t, pk = p.seat.k === 'pk'; if (!pk && chOpen(p, t)) { const cst = chessOf(t), oth = cst.w === p.id ? cst.b : cst.w; if (cst.status === 'playing' && cst.moves.length && cst.w && cst.b && S.players[oth]) chClose(p, 0, 'resign'); }   /* opponent gone from my view: the host's word decides (I may have won) */ p.seat = null; ev({ e: pk ? 'pstand' : 'stand', p: p.id, t }); ev({ e: pk ? 'xpstand' : 'xstand', p: p.id, t }); } } p.seatWait = null; break; }
+        case 'stand': { if (p.seat) { if (p.seat.k === 'pk' ? tAuth(pokerTableById(p.seat.t)) : isAuth(zoneOf(p.x, p.y))) standUp(p); else { const t = p.seat.t, pk = p.seat.k === 'pk'; if (!pk && chOpen(p, t)) { const cst = chessOf(t), oth = cst.w === p.id ? cst.b : cst.w; if (cst.status === 'playing' && cst.moves.length && cst.w && cst.b && S.players[oth]) chClose(p, 0, 'resign'); }   /* opponent gone from my view: the host's word decides (I may have won) */ p.seat = null; ev({ e: pk ? 'pstand' : 'stand', p: p.id, t }); ev({ e: pk ? 'xpstand' : 'xstand', p: p.id, t }); } } p.seatWait = null; break; }
         case 'pact': {   /* fold / check / call / raise to N / all-in: the host of the area deals, as with a chess move */
           if (!p.seat || p.seat.k !== 'pk') break;
           const id = p.seat.t, a = String(c.a || '').slice(0, 6), to = c.to == null ? 0 : Math.max(0, Math.min(999999, c.to | 0));   /* 'back' [Claude]: come back after being dealt out */
-          if (isAuth(zoneOf(p.x, p.y))) pokerAct(p, id, a, to); else ev({ e: 'xpact', p: p.id, t: id, a, to });
+          if (tAuth(pokerTableById(id))) pokerAct(p, id, a, to); else ev({ e: 'xpact', p: p.id, t: id, a, to });
           break;
         }
         case 'csel': {   /* [Claude 2026-10-11] the square you picked up (or none): the host tells the table, so the opponent's board lights it too */
@@ -10652,8 +10655,9 @@ POSSIBILITY OF SUCH DAMAGE. */
         m.hurt = p.id; m.hurtT = S.t; m.back = 0;
         /* a chained / windup beast (the dragon) keeps the one it already has, so two rangers cannot bounce it
            between them and cancel every blow. Other monsters still switch to the latest hitter so a group can tank. */
+        m.foes = m.foes || {}; m.foes[p.id] = S.t;   /* who is fighting it (mobAttack takes them in turn) */
         if (MON[m.key].fleeHit) m.tgt = 0;
-        else if (!(MON[m.key].windup || MON[m.key].chain) || !tgtOk(m)) m.tgt = p.id;
+        else if (!tgtOk(m)) m.tgt = p.id;   /* [Claude 2026-10-13] squares up to a hitter when it has nobody; mobAttack takes turns */
         const ai = MON[m.key].ai; if (ai) rally(m, p.id, ai.defended ? 10 : ai.rally || 6);
       }
       if (m.hp <= 0) killMob(m, p);
@@ -10719,9 +10723,18 @@ POSSIBILITY OF SUCH DAMAGE. */
       return L;
     }
     function signAt(x, y) { return (M.objects || []).find(o => o.k === 'wsign' && o.x === (x | 0) && o.y === (y | 0)) || null; }
-    function creditKill(p, key) {
+    function creditKill(p, key, x, y) {
       const md = MON[key]; if (!md) return;
       p.kills[key] = (p.kills[key] || 0) + 1;
+      /* [Claude 2026-10-13] a once-per-adventurer award (monster data `award: {item, once}`; the operator: the Spider Queen's crown,
+         "Once per player"): the killer's own game leaves it at the kill, theirs alone, the first time - and remembers it in the
+         flag `once` (rules.flags, so it is saved). Someone who already has the item carried or worn counts as having had it */
+      const A = md.award;
+      if (A && A.item && IT[A.item] && A.once && FLAGS[A.once] && !hasFlag(p, A.once)) {
+        p.flags = p.flags || {}; p.flags[A.once] = S.t || 1; ev({ e: 'flag', p: p.id, flag: A.once });
+        const had = invCount(p, A.item) > 0 || Object.values(p.eq || {}).some(s => s && s.id === A.item);
+        if (!had) { dropGround(A.item, 1, x != null ? x : p.x, y != null ? y : p.y, p.id, 600); msg(p, (md.name || 'It') + ' leaves you ' + IT[A.item].name + '. It is yours: pick it up.', 'quest'); }
+      }
       for (const qid in p.quests) {
         const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.steps[q.step - 1]; if (!st) continue;
         if (st.goal.kill === key && q.n < (st.goal.n == null ? 1 : st.goal.n)) { q.n++; msg(p, Q.name + ': ' + q.n + ' / ' + (st.goal.n || 1) + ' ' + md.name.toLowerCase() + ((st.goal.n || 1) > 1 ? 's' : '') + ' slain.', 'quest'); }
@@ -10748,7 +10761,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       const md = MON[m.key];
       m.dead = S.t; m.tgt = 0; m.dropAt = S.t + 2; m.killer = p ? p.id : null;
       ev({ e: 'die', mob: m.uid, killer: p ? p.id : null }); void md;
-      if (p && !p.puppet) creditKill(p, m.key);
+      if (p && !p.puppet) creditKill(p, m.key, m.x, m.y);
       if (p && m.key === 'chain_dragon') scoreKill(m.key, p.tag ? '@' + String(p.tag).replace(/^@/, '') : p.name, p.id);
       for (const pid of S.order) { const o = S.players[pid]; if (o.act && o.act.k === 'attack' && o.act.uid === m.uid) o.act = null; }
     }
@@ -10781,6 +10794,20 @@ POSSIBILITY OF SUCH DAMAGE. */
       if (prot || ward) dmg = 0;
       const fx = magic && hit && C.fx && !prot && !ward && !hk && (!C.fxChance || R.int(C.fxChance) === 0) ? C.fx : null;
       ev({ e: 'attack', src: m.uid, dst: p.id, anim: ranged ? 'bow' : magic ? 'cast' : md.anim, delay: ranged || magic ? 1 : 0, cls, ammo: ranged ? m._ammo : null, spell: magic ? C.name || 'Shadow bolt' : null });
+      /* [Claude 2026-10-13] TURN ABOUT (the operator: "Make sure monsters are attacking all players if attacked by more than one player
+         alternating"): it used to turn on the latest hitter, but blows land in the same order every tick, so the latest was
+         always the same player and the rest fought it for free. Now, after each blow, it turns to whoever of those who hurt it
+         in the last 12 ticks it struck longest ago (the dragon as well: it only turns once its own blow has landed) */
+      m.struck = m.struck || {}; m.struck[p.id] = S.t;
+      if (m.foes) {   /* the dragon too: it turns after its own blow has landed, so no hit can cancel a wind-up */
+        let next = null, nt = Infinity;
+        for (const id in m.foes) {
+          const q = S.players[id];
+          if (S.t - m.foes[id] > 12 || !q || q.dead || q.lv > 0 || M.zoneAt(q.x, q.y) !== m.zone) { if (S.t - m.foes[id] > 12) delete m.foes[id]; continue; }
+          const at = m.struck[id] == null ? -1 : m.struck[id]; if (at < nt) { nt = at; next = q; }
+        }
+        if (next && next.id !== p.id) { m.tgt = next.id; m.path = null; }
+      }
       if (!p.puppet) { if (hk) p.hawkHp -= dmg; else p.hp -= dmg; }
       ev({ e: 'hit', dst: p.id, src: m.uid, dmg, max: hk ? HK.hp : maxHp(p), hp: hk ? p.hawkHp : p.puppet ? Math.max(0, p.hp - dmg) : p.hp, hawk: hk ? 1 : 0, cls, blocked: !hit && !!p.eq.shield, dodged, prot: prot || ward ? 1 : 0, raw, fx, fxt: fx ? C.fxTicks || 5 : 0 });
       if (p.puppet) return;
@@ -11984,7 +12011,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       st.v++; emitChess(id, { move: st.lm, check: g.inCheck() });
       return true;
     }
-    function hostSit(pid, id, si, stake) { const p = S.players[pid], T = tableById(id); if (!p || !T || !T.seats[si]) return false; const seat = T.seats[si]; if (cheb(p.x, p.y, seat[0], seat[1]) > 8) return false; return sitAt(p, T, si | 0, stake | 0); }   /* the puppet's spot lags the walker by a message or two */
+    function hostSit(pid, id, si, stake) { const p = S.players[pid], T = tableById(id); if (!p || !T || !T.seats[si]) return false; { const cs = chessOf(id); if ((si | 0) === 1 ? cs.w === pid : cs.b === pid) return true; }   /* [Claude 2026-10-13] asked again (seatWaitTick) when already sitting there */ const seat = T.seats[si]; if (cheb(p.x, p.y, seat[0], seat[1]) > 8) return false; return sitAt(p, T, si | 0, stake | 0); }   /* the puppet's spot lags the walker by a message or two */
     function hostStand(pid, id) {
       const p = S.players[pid]; if (!p) return;
       /* [Claude 2026-10-12] the table is the word, not the puppet's seat flag: a host whose room dropped and came back makes its
@@ -12065,17 +12092,45 @@ POSSIBILITY OF SUCH DAMAGE. */
       }
       const l = FURN.get(x + ',' + y); return l != null && l === (lv | 0);
     }
+    /* [Claude 2026-10-13] A CARD TABLE'S OWN ROOM (the operator: "would it help if we set it up so each poker table sets up its own game
+       room?"): the engine elects a dealer among the players in the table's room and says here who it is (setTableAuth). A table
+       with a word deals by it; one without (no room at all: solo) by the area as before. */
+    const TAUTH = {};
+    function tAuth(T) { if (!T) return false; const v = TAUTH[T.id]; return v != null ? v : isAuth(zoneOf(T.x, T.y)); }
     function pokerGame(id) {   /* the hand a table this game deals is running; from the stored word when it is new here */
+      /* [Claude 2026-10-13] only the dealer holds a game: a replica that made one (a guest's own stand-up, a puppet removed) kept it,
+         and when it later took the table over, that stale game was synced over the dealer's row - the table looked opened again
+         but nobody was stood up and its own player kept a chair the table no longer had (8-window test, case 7) */
+      const TT = pokerTableById(id); if (!TT) return null;
+      if (!tAuth(TT)) { delete PKG[id]; return null; }
       if (PKG[id]) return PKG[id];
       const L = holdemLib(); if (!L) return null;
-      if (!pokerTableById(id)) return null;
       const st = pokerOf(id), t = L.table({ id: String(id), small: PK_SB, big: PK_BB, rake: PK_RAKE, int: (n) => R.int(n), tell: (text, by) => { for (const pid of S.order) { const p = S.players[pid]; if (p.x != null && zoneOf(p.x, p.y) === zoneOf(pokerTableById(id).x, pokerTableById(id).y)) msg(p, text, by || 'info'); } } });
       if (st.g) { try { Object.assign(t, JSON.parse(st.g)); } catch (e) { return null; } }
       else if (st.se.length) return null;   /* taken over from another game mid-hand: there is no deck to carry, so it is dealt out below */
       PKG[id] = t; return t;
     }
+    /* [Claude 2026-10-13] A NEW DEALER BETWEEN HANDS takes the table over as it stands: no card is out, so the row holds all of it
+       (who sits where with how many chips, the button, the stakes). Mid-hand there is a deck it never saw: that hand is dealt
+       out (pokerAbandon), as before. The sealing keys come again from the players themselves (engine: a seated player whose
+       table changed dealer sends its sit once more, and hostPokerSit keeps the chair and takes the key). */
+    function pokerAdopt(id) {
+      const st = pokerOf(id), se = (st.se || []).slice();
+      delete PKG[id]; st.g = null; st.se = [];
+      const t = pokerGame(id); st.se = se;
+      if (!t) return pokerAbandon(id);
+      const bl = pkBlinds(st.buy | 0); t.small = bl[0]; t.big = bl[1]; t.hand = st.h | 0; t.dealer = st.d == null ? -1 : st.d | 0; t.raked = st.rk | 0;
+      for (const x of se) {
+        if (!x || x[1] == null) continue;
+        if (!S.players[x[1]]) { pokerCashout(st, x[1], x[2] | 0); continue; }   /* gone from the game: their stack goes home now, as at an abandoned table */
+        const seat = t.addSeat(x[0] | 0, { id: x[1], name: pokerSeatName(S.players[x[1]]), chips: x[2] | 0 });
+        if ((x[4] | 0) & PK_AWAY) { seat.away = true; seat.in = false; }
+      }
+      if (!t.seats.some(x => x && x.id != null)) st.buy = 0;   /* nobody left: an empty table forgets its stakes */
+      st.mine = 1; st.wt = S.t + PK_WAIT; st.tt = null; pokerSync(id, t); emitPoker(id, {});
+    }
     function pokerAbandon(id) {   /* this game has taken over a hand it cannot continue: the table is dealt out again */
-      const st = pokerOf(id);
+      const st = pokerOf(id); delete PKG[id];   /* a fresh game for the opened table */
       st.o = 'open'; st.st = 'none'; st.a = -1; st.b = 0; st.p = 0; st.r = null; st.g = null; st.wt = S.t + PK_WAIT; st.mine = 1;
       for (const s of st.se || []) if (s && s[1] != null) pokerCashout(st, s[1], s[2] | 0);   /* [Claude] everyone takes their stack with them */
       st.se = []; st.hc = null; st.v = (st.v | 0) + 1; st.buy = 0;
@@ -12101,7 +12156,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       return st;
     }
     function pokerRow(id) { const st = pokerOf(id), r = {}; for (const k in st) if (k !== 'g' && k !== 'mine' && k !== 'wt' && k !== 'tt') r[k] = st[k]; return r; }
-    function pokerRows(keep) { const out = []; for (const T of pokerTables()) { if (keep && !keep(T.x, T.y)) continue; const st = S.poker[T.id]; if (st && st.se && st.se.length) out.push(pokerRow(T.id)); } return out; }
+    function pokerRows(keep) { const out = []; for (const T of pokerTables()) { if (keep && !keep(T.x, T.y)) continue; const st = S.poker[T.id]; if (st && ((st.se && st.se.length) || st.mine === 1)) out.push(pokerRow(T.id)); } return out; }   /* [Claude 2026-10-13] a table this game deals goes out EMPTY too: a new dealer that opens the table it took over sent that word once, while the others still heard the old dealer as the host, and they sat on at a table that no longer had them (the operator: the game gets stuck when someone leaves) */
     function emitPoker(id, extra) { pokerSettle(id); ev(Object.assign({ e: 'poker', t: id }, pokerRow(id), extra || {})); }
     function pokerSeatName(p) { return String((p && p.name) || 'Someone').slice(0, 16); }
     /* [Claude 2026-10-11] THE BUY-IN (the operator: buy-ins in ASHVALE GOLD; "the first person to sit down should be the one who
@@ -12133,7 +12188,7 @@ POSSIBILITY OF SUCH DAMAGE. */
         const key = id + ':' + (st.gid | 0);
         if (at[p.id] && st.buy > 0 && p.pkDone === key && !pkOpen(p, id)) {   /* paid back already: a dealer that still shows the seat is told we are up */
           if (p.seat && p.seat.t === id) {
-            if (isAuth(zoneOf(p.x, p.y))) { const t = pokerGame(id), sh = t && t.seats[p.seat.s | 0]; if (sh && sh.id === p.id) sh.chips = 0; pokerLeave(p, 'left'); }   /* its stack was already paid: nothing more to cash out */
+            if (tAuth(pokerTableById(id))) { const t = pokerGame(id), sh = t && t.seats[p.seat.s | 0]; if (sh && sh.id === p.id) sh.chips = 0; pokerLeave(p, 'left'); }   /* its stack was already paid: nothing more to cash out */
             else { const tt = p.seat.t; p.seat = null; ev({ e: 'pstand', p: p.id, t: tt }); ev({ e: 'xpstand', p: p.id, t: tt }); }
           }
           continue;
@@ -12177,7 +12232,7 @@ POSSIBILITY OF SUCH DAMAGE. */
         const st0 = pokerOf(T.id); st0.buy = Math.max(0, Math.min(1000000, buy | 0)); st0.gid = (st0.gid | 0) + 1;
         const bl = pkBlinds(st0.buy | 0); t.small = bl[0]; t.big = bl[1];
       }
-      if (!t && isAuth(zoneOf(T.x, T.y)) && pokerOf(T.id).mine === 0) { pokerAbandon(T.id); return pokerSitAt(p, T, si, buy, pk); }   /* [Claude 2026-10-12] a table left over from another dealer: open it now, then sit */
+      if (!t && tAuth(T) && pokerOf(T.id).mine === 0) { if (pokerOf(T.id).st === 'none') pokerAdopt(T.id); else pokerAbandon(T.id); if (!pokerGame(T.id)) return false; return pokerSitAt(p, T, si, buy, pk); }   /* [Claude 2026-10-12] a table left over from another dealer: open it now, then sit */
       if (!t) { msg(p, 'This table is being dealt out and will take players again in a moment.', 'warn'); return false; }
       if (!T.seats || !T.seats[si]) return false;
       const here = t.seats[si];
@@ -12234,7 +12289,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       emitPoker(id, {});
       return true;
     }
-    function hostPokerSit(pid, id, si, buy, pk) { const p = S.players[pid], T = pokerTableById(id); if (!p || !T || !T.seats[si]) return false; const seat = T.seats[si]; if (cheb(p.x, p.y, seat[0], seat[1]) > 8) return false; return pokerSitAt(p, T, si | 0, buy | 0, pk); }
+    function hostPokerSit(pid, id, si, buy, pk) { const p = S.players[pid], T = pokerTableById(id); if (!p || !T || !T.seats[si]) return false; if ((pokerOf(id).se || []).some(x => x && x[1] === pid && (x[0] | 0) === (si | 0))) { const g = PKG[id], sh = g && g.seats[si | 0]; if (sh && sh.id === pid && typeof pk === 'string' && pk) sh.pk = pk.slice(0, 160); return true; }   /* asked again: keep the chair, take the key (a new dealer needs it to seal the cards) */   /* [Claude 2026-10-13] asked again (seatWaitTick) after it was already seated: nothing to do */ const seat = T.seats[si]; if (cheb(p.x, p.y, seat[0], seat[1]) > 8) return false; return pokerSitAt(p, T, si | 0, buy | 0, pk); }
     function hostPokerStand(pid, id) {
       const p = S.players[pid]; if (!p) return;
       /* [Claude 2026-10-12] the table is the word, not the puppet's seat flag (a dealer whose room dropped makes its puppets anew, seatless) */
@@ -12251,7 +12306,7 @@ POSSIBILITY OF SUCH DAMAGE. */
     function applyPoker(rows) {   /* the dealer's word on its tables: the row, and our own seat follows it, as in chess */
       for (const r of rows || []) {
         if (!r || !r.t) continue;
-        const st = pokerOf(r.t), was = st.v;
+        const st = pokerOf(r.t), was = st.v; delete PKG[r.t];   /* another game deals it: nothing of ours stays */
         for (const k of ['o', 'st', 'd', 'sb', 'bb', 'p', 'b', 'a', 'h', 'bo', 'se', 'lg', 'r', 'hc', 'buy', 'gid', 'co', 'cseq', 'mr', 'bg', 'rk', 'lc']) if (r[k] !== undefined) st[k] = r[k];   /* mr, bg [Claude 2026-10-12]: the smallest raise and the big blind - without them every guest's panel said 'min 50' at a 1/2 table (the operator) */
         if (r.v != null) st.v = r.v | 0;
         st.mine = 0;
@@ -12261,28 +12316,70 @@ POSSIBILITY OF SUCH DAMAGE. */
           if (at[p.id] != null && (!p.seat || p.seat.t !== r.t)) {
             const si = at[p.id], seat = T && T.seats[si];
             if (seat) { p.x = seat[0]; p.y = seat[1]; p.path = []; p.act = null; p.seat = { t: r.t, s: si, k: 'pk' }; p.seatWait = null; p.face = faceTo(p.x, p.y, T.x, T.y); ev({ e: 'psit', p: p.id, t: r.t, s: si }); }
+          } else if (at[p.id] != null && p.seat && p.seat.t === r.t && p.seat.k === 'pk' && (p.seat.s | 0) !== at[p.id]) {   /* [Claude 2026-10-13] the dealer has us in another chair at this table (we moved; an older row had put us back in the old one first): follow the row */
+            const si = at[p.id], seat = T && T.seats[si];
+            if (seat) { p.x = seat[0]; p.y = seat[1]; p.path = []; p.act = null; p.seat = { t: r.t, s: si, k: 'pk' }; p.seatWait = null; p.face = faceTo(p.x, p.y, T.x, T.y); ev({ e: 'psit', p: p.id, t: r.t, s: si }); }
           } else if (p.seat && p.seat.t === r.t && p.seat.k === 'pk' && at[p.id] == null) { p.seat = null; ev({ e: 'pstand', p: p.id, t: r.t }); }
         }
         if (st.o === 'playing' && !Object.keys(at).length) { for (const p of Object.values(S.players)) if (p.seat && p.seat.t === r.t && p.seat.k === 'pk') { p.seat = null; ev({ e: 'pstand', p: p.id, t: r.t }); } }
         if (was !== st.v) emitPoker(r.t, {});
       }
     }
+    /* [Claude 2026-10-13] a sit asked of the host is asked again (8-window test, case 7: two guests' one request reached the new
+       dealer in the second it took over, and they stood beside their chairs for good): every 8 ticks while the chair has not
+       come, six times, then the player is told and the wait ends */
+    function seatWaitTick() {
+      for (const pid of S.order) {
+        const p = S.players[pid], w = p && p.seatWait;
+        if (!w || p.puppet || p.seat || w.at == null || S.t - w.at < 8) continue;
+        if (++w.n > 6) { p.seatWait = null; msg(p, 'Nobody is dealing at that table just now. Try the chair again in a moment.', 'warn'); continue; }
+        w.at = S.t; ev({ e: w.pk ? 'xpsit' : 'xsit', p: p.id, t: w.t, s: w.s, stake: w.stake | 0, pk: w.key || '' });
+      }
+    }
     function seatTick() {   /* [Claude 2026-10-11] fifteen minutes without playing: up you get, at either table (a poker stack is cashed out, a chess game with moves is resigned) */
       if (S.t % 10) return;
       for (const p of Object.values(S.players)) {
-        if (!p.seat || !isAuth(zoneOf(p.x, p.y))) continue;
+        if (!p.seat || !(p.seat.k === 'pk' ? tAuth(pokerTableById(p.seat.t)) : isAuth(zoneOf(p.x, p.y)))) continue;
         if (p.seatAct == null) { p.seatAct = S.t; continue; }
         if (S.t - p.seatAct < SEAT_IDLE) continue;
         msg(p, 'Fifteen minutes without playing: you are stood up from the table.', 'warn');
         if (p.seat.k === 'pk') pokerLeave(p, 'idle'); else standUp(p, 'idle');
       }
     }
+    /* [Claude 2026-10-13] a chair is free once its player has gone (the operator: "it says that Apple is sitting there, but Apple has
+       been off the chair for quite some time"): the stand-up word is one message and can be lost, and a guest made anew after a
+       room hiccup carries no seat flag, so removePlayer did not stand it up. The dealer looks for itself: a guest it has heard
+       standing more than two tiles from the chair (or on another storey) for PK_OFF ticks, or no longer in the game at all for
+       PK_GONE (longer than the arcade's 30 s rejoin grace), is stood up and its stack cashed out - the GOLD comes home as for
+       any stand-up. Returns true when it changed the table. */
+    const PK_OFF = 15, PK_GONE = 75, PK_LEFT = {};
+    function pokerPresence(T, t) {
+      let changed = false;
+      for (let i = 0; i < t.seats.length; i++) {
+        const sh = t.seats[i]; if (!sh || sh.id == null) continue;
+        const q = S.players[sh.id], chair = T.seats[i], key = T.id + ':' + sh.id;
+        const off = !q ? PK_GONE : (q.puppet && q.posAt != null && chair && (cheb(q.x, q.y, chair[0], chair[1]) > 2 || (q.lv | 0) !== (T.lv | 0))) ? PK_OFF : 0;
+        if (!off) { delete PK_LEFT[key]; continue; }
+        if (PK_LEFT[key] == null) { PK_LEFT[key] = S.t; continue; }
+        if (S.t - PK_LEFT[key] < off) continue;
+        delete PK_LEFT[key];
+        if (q) { if (!q.seat || q.seat.t !== T.id) q.seat = { t: T.id, s: i, k: 'pk' }; pokerLeave(q, 'left'); }
+        else { pokerCashout(pokerOf(T.id), sh.id, sh.chips | 0); pokerUnseat(t, i); pokerSync(T.id, t); if (!t.seats.some(x => x && x.id != null)) pokerOf(T.id).buy = 0; ev({ e: 'pstand', p: sh.id, t: T.id }); emitPoker(T.id); }
+        t.say((sh.name || 'A player') + ' has left the table.', 'sys'); pokerSync(T.id, t); emitPoker(T.id);
+        changed = true;
+      }
+      return changed;
+    }
     function pokerTick() {   /* the dealer's own clock: a fresh hand once the last is settled, and a seat that will not answer folded */
       for (const T of pokerTables()) {
-        if (!isAuth(zoneOf(T.x, T.y))) continue;
+        if (!tAuth(T)) continue;
         const st = pokerOf(T.id);
-        if (st.mine === 0 && st.se && st.se.length) { pokerAbandon(T.id); continue; }   /* [Claude 2026-10-12] another dealer's table, between hands too: it cannot be run here (no deck, no seat keys), so everyone is cashed out and the table is open again - it used to sit stuck forever (the operator: nobody could sit back down) */
+        if (st.mine === 0 && st.se && st.se.length) { if (st.st === 'none') pokerAdopt(T.id); else pokerAbandon(T.id); continue; }   /* [Claude 2026-10-13] between hands the table goes on */   /* [Claude 2026-10-12] another dealer's table, between hands too: it cannot be run here (no deck, no seat keys), so everyone is cashed out and the table is open again - it used to sit stuck forever (the operator: nobody could sit back down) */
         const t = pokerGame(T.id); if (!t) continue;
+        /* [Claude 2026-10-13] the dealer's own: a player of this game whose seat flag points at this table but whom the game does
+           not have (a takeover from a row that no longer had them) stands, so the chair can be taken again */
+        for (const pid of S.order) { const q = S.players[pid]; if (q && !q.puppet && q.seat && q.seat.k === 'pk' && q.seat.t === T.id && !t.seats.some(x => x && x.id === q.id)) { q.seat = null; ev({ e: 'pstand', p: q.id, t: T.id }); } }
+        if (pokerPresence(T, t)) continue;
         if (t.street === 'none') {
           if (st.wt == null) { pokerSync(T.id, t); continue; }
           if (S.t >= st.wt) { if (t.playable() < 2) { if (t.status !== 'open') { t.status = 'open'; pokerSync(T.id, t); emitPoker(T.id); } st.wt = S.t + PK_WAIT; continue; } t.newHand(); pokerSync(T.id, t); emitPoker(T.id); }
@@ -12798,7 +12895,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       } else if (a && a.k === 'sit') {   /* walk onto the bench, then sit (a replica asks the area's host, which seats it through Ch or Pk rows) */
         const T = tableById(a.t) || pokerTableById(a.t), pk = !!(T && T.k === 'pokertable'), seat = T && T.seats[a.s];
         if (!seat) p.act = null;
-        else if (p.x === seat[0] && p.y === seat[1]) { if (isAuth(zoneOf(p.x, p.y))) { if (pk) pokerSitAt(p, T, a.s, a.stake | 0, a.pk || ''); else sitAt(p, T, a.s, a.stake | 0); } else { p.seatWait = { t: T.id, s: a.s }; p.act = null; p.path = []; p.face = faceTo(p.x, p.y, T.x, T.y); ev({ e: pk ? 'xpsit' : 'xsit', p: p.id, t: T.id, s: a.s, stake: a.stake | 0, pk: a.pk || '' }); } }
+        else if (p.x === seat[0] && p.y === seat[1]) { if (pk ? tAuth(T) : isAuth(zoneOf(p.x, p.y))) { if (pk) pokerSitAt(p, T, a.s, a.stake | 0, a.pk || ''); else sitAt(p, T, a.s, a.stake | 0); } else { p.seatWait = { t: T.id, s: a.s, pk: !!pk, stake: a.stake | 0, key: a.pk || '', at: S.t, n: 0 }; p.act = null; p.path = []; p.face = faceTo(p.x, p.y, T.x, T.y); ev({ e: pk ? 'xpsit' : 'xsit', p: p.id, t: T.id, s: a.s, stake: a.stake | 0, pk: a.pk || '' }); } }
         else { p.path = findPath(p.x, p.y, (x, y) => x === seat[0] && y === seat[1], seat[0], seat[1]); stepPath(p); if (!p.path.length && !(p.x === seat[0] && p.y === seat[1])) { msg(p, "I can't reach that bench!", 'warn'); p.act = null; } }
       } else if (a && a.k === 'board') {   /* walk to the canoe, sit down in it: it floats where it lay */
         if (inReach(p.x, p.y, a.x, a.y, 1)) { const lb = BOATS.get(a.x + ',' + a.y); if (!lb && dockFull(a.x, a.y)) { msg(p, 'There is no canoe at the landing: three are already left at the banks nearby. Take one of those.', 'warn'); p.act = null; return; } if (lb) { p.face = lb.face; takeBoat(a.x, a.y, p.id); } p.act = null; p.path = []; p.boat = 1; p.x = a.x; p.y = a.y; p.land = null; ev({ e: 'boat', p: p.id, on: 1 }); msg(p, 'You sit down in the canoe and take up the paddle. Point at the water to paddle there, or at the shore to land.'); }
@@ -12893,7 +12990,8 @@ POSSIBILITY OF SUCH DAMAGE. */
       if (!lock && (!m.hurt || S.t - (m.hurtT || -1e9) > RETALIATE.ticks)) return false;
       if (!p || p.dead) return false;
       if (cheb(p.x, p.y, m.sx, m.sy) > leash + RETALIATE.beyond) return false;
-      m.tgt = p.id; m.back = 0; return true;
+      if (!(m.tgt && m.foes && m.foes[m.tgt] != null && S.t - m.foes[m.tgt] <= 12 && tgtOk(m))) m.tgt = p.id;   /* [Claude 2026-10-13] one of those fighting it already: mobAttack's turn about stands */
+      m.back = 0; return true;
     }
     function sightOf(m, md) { return md.aggro > 0 ? Math.max(1, Math.round(md.aggro * wx(m.zone, 'sight'))) : 0; }
     function mobAt(x, y, self) { for (const o of S.mobs) if (o !== self && !o.dead && o.x === x && o.y === y) return true; return false; }
@@ -13231,7 +13329,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       ageStumps();
       for (const k in S.dep) if (S.dep[k] <= S.t) { delete S.dep[k]; ev({ e: 'regrow', node: +k }); }
       for (const f of S.fires.slice()) if (f.until <= S.t && isAuth(zoneOf(f.x, f.y))) fireOut(f.uid);
-      pokerTick(); seatTick(); chessSweep();
+      pokerTick(); seatTick(); chessSweep(); seatWaitTick();
       weatherTick();
       return S.ev;
     }
@@ -13241,7 +13339,7 @@ POSSIBILITY OF SUCH DAMAGE. */
     function setPuppet(id, st) {
       const p = S.players[id]; if (!p || !p.puppet) return;
       if (Number.isInteger(st.x) && Number.isInteger(st.y) && inMap(st.x, st.y)) {
-        p.x = st.x; p.y = st.y;
+        p.x = st.x; p.y = st.y; p.posAt = S.t;   /* posAt: the dealer knows where a guest really stands (pokerPresence) */
         if (st.lv != null) { const lv = Math.max(0, st.lv | 0), bi = lv > 0 && M.buildingAt ? M.buildingAt(p.x, p.y) : -1; p.lv = bi >= 0 ? lv : 0; p.bld = bi >= 0 && lv > 0 ? bi : -1; }   /* [Claude 2026-10-11] the storey they say they are on (the Tap's card tables are upstairs) */
         for (const q of Object.values(S.players)) if (q.boat === 2 && q.ride === id && !q.puppet) { q.x = p.x; q.y = p.y; }   /* whoever rides in this canoe moves with it at once - even on the last word before it crosses into the next region */
       }
@@ -13364,6 +13462,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       setNewHome: h => { if (HOMES[h]) NEWHOME = h; }, markGift: (pid, id, n) => markGift(S.players[pid], id, n), homeOf: p => (p && p.home) || 'ashvale', npcFor, lineFor, questForHome, questMarks,
       API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, trapOf, offerOf, isBlessed: (pid, x, y) => !!(S.players[pid] && blessed(S.players[pid], x, y)), setNature, natureHours, setNatureTell, seasonOn, dayHour, fireLit, steamFor, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       tableAt, tableById, tables, chessOf, chessRow, chessRows, chessGame, chessTurn, chessMoves, applyChess, hostSit, hostStand, hostMove, hostSel, standUp,
+      setTableAuth: (id, v) => { if (v == null) delete TAUTH[id]; else TAUTH[id] = !!v; }, tableAuth: id => tAuth(pokerTableById(id)),
       pokerTableAt, pokerTableById, pokerTables, pokerSeatKeys, pokerOpen, pokerOf, pokerRow, pokerRows, pokerGame, applyPoker, pokerClockTicks: () => PK_CLOCK, pokerReclaim, pokerNetId, chessReclaim, chessNetId, chessLimbo, seatHeld, setOnline: (b) => { S.online = !!b; }, hostPokerSit, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED, PK_AWAY], hostPokerStand, hostPokerAct, pokerLeave, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED],
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
@@ -13376,7 +13475,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, canPlant, plantYoung, plantHour: PLANT_HOUR, plantSnap, acceptPlant, acceptUnplant, hostPlant, hostUnplant, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
       applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, takeOff: (pid, k) => { const p = S.players[pid]; return p ? takeOff(p, k) : null; }, setFelled,
       hitXp: (pid, cls, dmg, dex) => { const p = S.players[pid]; if (p && !p.puppet) hitXp(p, cls, dmg, null, dex); },
-      creditKill: (pid, key) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key); }
+      creditKill: (pid, key, x, y) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key, x, y); }
     };
   }
 
@@ -13829,6 +13928,7 @@ POSSIBILITY OF SUCH DAMAGE. */
     const ORE = { R: 0xc8702c, N: 0xd8d8d0, I: 0x8a4632, C: 0x33333c, G: 0xd9a930, A: 0x6f86c8, S: 0x3a3a40, V: 0x0e0e14 };
     const WATER_Y = -0.16;
     let LAMPQ = null;   /* (x, y) -> whether a tended lamp or town torch is lit; the engine sets this from the guards */
+    let VIEWQ = null;   /* () -> [x, y, lv]: where the viewer stands (tile and storey); the engine sets it. A light inside a building shines only for a viewer in that room */
     let FIREQ = null;   /* (x, y) -> whether the fire at a tile is burning (a zone fire with `litIn` is cold out of its season) */
     let STEAMQ = null;  /* kind -> 0-1, how hard the kettle over that fire steams (core works it out from the season and the hour) */
     const BOARDS = Object.create(null);   /* painted wooden signs (dragon killers): id -> { lines, faces } */
@@ -15070,7 +15170,7 @@ POSSIBILITY OF SUCH DAMAGE. */
             B.add('box', 0x2a2a2a, x, y + 1.22, z, 0.2, 0.08, 0.2);
             const f = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.32, 5), new THREE.MeshBasicMaterial({ color: 0xffa030 })); f.position.set(x, y + 1.42, z); group.add(f);
             const f2 = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.2, 5), new THREE.MeshBasicMaterial({ color: 0xfff0a0 })); f2.position.set(x, y + 1.36, z); group.add(f2);
-            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x, y, z, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y });
+            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x, y, z, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y, lv: o.lv | 0 });
             break;
           }
           case 'lamp': {   /* a gas street lamp on the verge of a trail (2026-10-07): iron post, glass lantern, pyramid cap */
@@ -15096,7 +15196,7 @@ POSSIBILITY OF SUCH DAMAGE. */
             { const [a, b, c] = at(0.34); B.add('cyl', 0x2a1f16, a, b, c, 0.09, 0.08, 0.09, ry, TL); }
             const f = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.24, 5), new THREE.MeshBasicMaterial({ color: 0xffa030 })), f2 = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.15, 5), new THREE.MeshBasicMaterial({ color: 0xfff0a0 }));
             for (const [m, d] of [[f, 0.48], [f2, 0.44]]) { m.position.set(...at(d)); m.rotation.set(TL, ry, 0, 'YXZ'); group.add(m); }
-            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x: wx, y, z: wz, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y });
+            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x: wx, y, z: wz, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y, lv: o.lv | 0 });
             break;
           }
           case 'iwall': {   /* a room divider inside a walk-in building (2026-10-07: Saltmere town hall) */
@@ -15363,7 +15463,7 @@ POSSIBILITY OF SUCH DAMAGE. */
               wheel.add(mesh(new THREE.CylinderGeometry(0.018, 0.02, h, 6), 0xf1e6c4, cx, h / 2 + 0.01, cz));
               const f = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.055, 5), new THREE.MeshBasicMaterial({ color: 0xffd060 })); f.position.set(cx, h + 0.035, cz); flames.add(f);
             }
-            torches.unshift({ f: flames, ph: hash2(o.x, o.y) * 10, x, y: top - 0.8, z, night: false, tend: false, tx: o.x, ty: o.y, candle: true });   /* the light sits at the flames (y + 1.5) */
+            torches.unshift({ f: flames, ph: hash2(o.x, o.y) * 10, x, y: top - 0.8, z, night: false, tend: false, tx: o.x, ty: o.y, lv, candle: true });   /* the light sits at the flames (y + 1.5) */
             const mat = new THREE.MeshBasicMaterial({ map: cardKit(), side: THREE.DoubleSide });
             mat.userData.shared = true;   /* the atlas is one for the whole game - dispose() must not take it with this region */
             const gg = new THREE.Group(); into.add(gg);
@@ -15501,7 +15601,12 @@ POSSIBILITY OF SUCH DAMAGE. */
       }
       /* torch light: two warm lights at the village plaza (more would cost too much on phones) */
       const lights = [];
-      for (const t of torches.filter(t => !t.glow && t.x != null && !(t.litIn && FIREQ && !FIREQ(t.tx, t.ty))).slice(0, 2)) { const L = new THREE.PointLight(0xffa050, 3, 6, 1.6); L.position.set(t.x, t.y + 1.5, t.z); group.add(L); lights.push(L); }
+      for (const t of torches.filter(t => !t.glow && t.x != null && !(t.litIn && FIREQ && !FIREQ(t.tx, t.ty))).slice(0, 2)) { const L = new THREE.PointLight(0xffa050, 3, 6, 1.6); L.position.set(t.x, t.y + 1.5, t.z); group.add(L); lights.push(L);
+        /* [Claude 2026-10-13] a light has no shadow, so it shines through floors and walls (the operator: the card table's candles lit the
+           third storey's walls at night; "Make sure the same thing doesn't happen with the torch on the wall"). One inside a
+           building belongs to its room: lit only while the viewer stands in that building on that storey (update below). It is
+           dimmed, never hidden - see A FIXED NUMBER OF LIGHTS in engine.js */
+        const rf = roofs.find(r => t.tx >= r.x0 && t.tx <= r.x1 && t.ty >= r.y0 && t.ty <= r.y1); if (rf) L.userData.room = { x0: rf.x0, y0: rf.y0, x1: rf.x1, y1: rf.y1, lv: t.lv | 0 }; }
 
       const smokeGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12), smokeMat = new THREE.MeshLambertMaterial({ color: 0xc8c8c8, transparent: true, opacity: 0.35, depthWrite: false });
       const steamMat = new THREE.MeshLambertMaterial({ color: 0xf2f6fa, transparent: true, opacity: 0.22, depthWrite: false });   /* boiling sap: whiter and thinner than a fire's smoke */
@@ -15551,7 +15656,8 @@ POSSIBILITY OF SUCH DAMAGE. */
           for (const L of street) { const on = LAMPQ ? !!LAMPQ(L.x, L.y) : NIGHTK > 0.04; L.mat.color.copy(LAMP_OFF).lerp(LAMP_ON, on ? 1 : 0); }
           for (const L of lights) {   /* [Claude 2026-10-11] a flame's light gutters: three unrelated rhythms and a dip now and then, not one smooth wave */
             const p = L.position.x * 1.7 + L.position.z * 0.3, g = Math.sin(time * 9.1 + p) * 0.22 + Math.sin(time * 23.7 + p * 1.9) * 0.11 + Math.sin(time * 41.3 + p * 3.1) * 0.07, dip = Math.sin(time * 1.3 + p) > 0.93 ? -0.45 : 0;
-            L.intensity = 2.5 + g + dip;
+            const R = L.userData.room, v = R && VIEWQ ? VIEWQ() : null;
+            L.intensity = R && !(v && v[0] >= R.x0 && v[0] <= R.x1 && v[1] >= R.y0 && v[1] <= R.y1 && v[2] === R.lv) ? 0 : 2.5 + g + dip;
           }
           for (const s of spots) { const ice = !!(map.iceAt && map.iceAt(s.x, s.y)); s.rings.forEach(r => { r.visible = !ice; }); }   /* a frozen pond does not ripple: you fish through the ice */
           for (const s of spots) if (s.rings[0].visible) s.rings.forEach((r, k) => { const p = ((time * 0.6 + s.ph + k / 3) % 1); r.scale.setScalar(0.6 + p * 2.2); r.material.opacity = 0.75 * (1 - p); });
@@ -15581,7 +15687,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerTimer, cardAtlas: () => { const t = cardKit(); return t && t.image && t.image.toDataURL ? t.image.toDataURL('image/png') : null; }, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, viewQuery: fn => { VIEWQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerTimer, cardAtlas: () => { const t = cardKit(); return t && t.image && t.image.toDataURL ? t.image.toDataURL('image/png') : null; }, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -19917,6 +20023,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         const NS = (DATA.globecfg || {}).north === -1 ? -1 : 1;   /* the world's north: the globe's -z (2026-10-07: the northern hemisphere) */
         const SEASONS = (() => { try { const SM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('seasons'); return SM && SM.create ? SM.create({ epoch: SUN_EPOCH, dayS: DAY_S }) : null; } catch (e) { return null; } })();
         const SUNL = { dark: 0, dir: [-0.45, 0.8, 0.3], key: '', b: null, lonA: null, base: new THREE.Color(SKY), col: new THREE.Color(), night: new THREE.Color(), phase: null };
+        if (SCENE.viewQuery) SCENE.viewQuery(() => [me.x, me.y, me.lv | 0]);   /* lights inside a building shine only in their own room */
         if (SCENE.lampQuery) SCENE.lampQuery((x, y) => core.lampLit ? core.lampLit(x, y) : true);
         /* a fire or a kettle that only works in one season (zone data litIn / steamIn) asks the core, which asks the
            seasons module - so a cold sugar bush in winter draws cold stones and no steam, and none of it is sugar law */
@@ -20207,7 +20314,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           const real = Date.now(); if (real - SEASON.t < (TL.n > 1 ? 250 : 3000)) return; SEASON.t = real; const now = skyNow();
           const lat = NS * Math.asin(Math.max(-1, Math.min(1, B.u[2]))) * 180 / Math.PI, S = SEASONS.at(lat, now);
           const key = [S.name, S.day, Math.round(S.leaf.bud * 20), Math.round(S.leaf.grow * 20), Math.round(S.leaf.colourT * 20), Math.round(S.leaf.springT * 10), Math.round(S.snow * 20), S.frozen].join(':');   /* every game day: in the leaf fall each tree has its own day */
-          if (key !== SEASON.key) { SEASON.key = key; const ta = performance.now(); if (SCENE.seasonApply) SCENE.seasonApply(S, SEASONS); SEASON.applyMs = performance.now() - ta; SEASON.applies = (SEASON.applies || 0) + 1; SEASON.snowy = S.name === 'winter' && S.snow > 0.3;   /* it snows only in winter (2026-10-07: "It shouldn't be snowing in the spring time") */ K.wxShown = ''; if (core.setSeason) core.setSeason({ snowy: SEASON.snowy, rice: !!S.rice, riceLate: S.p > 0.551 && S.p < 0.95 }); if (K.pineSnow) K.pineSnow(); if (K.pineSnow) K.pineSnow(); showWeather(); }
+          if (key !== SEASON.key) { SEASON.key = key; const ta = performance.now(); if (SCENE.seasonApply) SCENE.seasonApply(S, SEASONS); SEASON.applyMs = performance.now() - ta; SEASON.applies = (SEASON.applies || 0) + 1; SEASON.snowy = S.snow > 0.3;   /* it snows while the ground lies white, rains once it has melted: no snow on a green spring (2026-10-07: "It shouldn't be snowing in the spring time"), no rain on the snow just after the equinox (2026-10-13: "it's raining in Ashvale it's winter") */ K.wxShown = ''; if (core.setSeason) core.setSeason({ snowy: SEASON.snowy, rice: !!S.rice, riceLate: S.p > 0.551 && S.p < 0.95 }); if (K.pineSnow) K.pineSnow(); if (K.pineSnow) K.pineSnow(); showWeather(); }
           if (S.name !== SEASON.name) { if (SEASON.name) { const C = SEASONS.calendar(now); hud.chat(S.name.charAt(0).toUpperCase() + S.name.slice(1) + ' has come: year ' + C.year + ', day ' + C.day + '.', 'sys'); } SEASON.name = S.name; }
           /* a time-lapse runs the weather fast too: every few seconds each region this viewer hosts rolls again (for its season) */
           /* local time from the sun itself (2026-10-08): noon is when the sun stands highest here. SEASON.lon is the shift, in degrees,
@@ -21553,7 +21660,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         return [pt[0], pt[1]];
       }
       const PH = {}, PH_SENT = {};   /* the dealer's sealed set per table: {h, items: [[ref, blob]...]} - sent on its own small message (Ph) */
-      function phSend(t, force) { const P = PH[t]; if (!P || !P.done) return; const now = performance.now(); if (!force && now - (PH_SENT[t] || 0) < 3000) return; PH_SENT[t] = now; netSendBig({ Ph: [t, P.h, MYPK, P.items] }); }
+      function phSend(t, force) { const P = PH[t]; if (!P || !P.done) return; const now = performance.now(); if (!force && now - (PH_SENT[t] || 0) < 3000) return; PH_SENT[t] = now; netSendBig({ Ph: [t, P.h, MYPK, P.items] }, tRoom(t)); }
       const bounded = (m, n) => { while (m.size > n) m.delete(m.keys().next().value); };
       const SCORE_KEYS = ['chain_dragon', 'chess_wins'], SCORE_BOARD = { chain_dragon: 'dragon', chess_wins: 'chess' };   /* [Claude 2026-10-11] score key -> the sign it paints */
       /* 2026-10-12 (the operator: "the bank is the only thing that stores the high score and it doesn't get the high score from
@@ -22104,12 +22211,12 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             if (SCENE.pokerShow) SCENE.pokerShow(e.t, pokerModel(e.t));
             pokerChat(e.t);
             if (me.seat && me.seat.t === e.t && me.seat.k === 'pk') { pokerFx(e.t, e); if (hud.pokerUpdate) hud.pokerUpdate(pokerView(e.t)); }
-            const T = core.pokerTableById(e.t); if (T && iHostAt(T.x, T.y)) netSendBig({ Pk: [pkNet(core.pokerRow(e.t))] });
+            const T = core.pokerTableById(e.t); if (T && iDeal(T)) pkSendRow(e.t);   /* [Claude 2026-10-13] a delta when it pays */
             break;
           }
-          case 'xpsit': netSend({ PS: [e.t, e.s | 0, e.stake | 0, e.pk || ''] }); break;   /* [Claude] the buy-in the first sitter sets rides along */
-          case 'xpstand': netSend({ PT: [e.t] }); break;
-          case 'xpact': netSend({ PA: [e.t, e.a, e.to | 0] }); break;
+          case 'xpsit': netSend({ PS: [e.t, e.s | 0, e.stake | 0, e.pk || ''] }, tRoom(e.t)); break;   /* [Claude] the buy-in the first sitter sets rides along */
+          case 'xpstand': netSend({ PT: [e.t] }, tRoom(e.t)); break;
+          case 'xpact': netSend({ PA: [e.t, e.a, e.to | 0] }, tRoom(e.t)); break;
           case 'respawn': { const t = ents.get('p:' + e.p); if (!t) break; t.dead = false; t.oneShot = false; t.loco = null; t.H.setOpacity && t.H.setOpacity(1); t.root.visible = true; const p = core.S.players[e.p]; place(t, p.x, p.y); t.H.play('idle', { loop: true }); if (e.p === PID) { hud.death(false); cam.snap = true; arriveCheck(); } break; }
           case 'gone': { const t = ents.get('m:' + e.mob); if (t) { t.dead = true; t.deadT = now - 5000; t.oneShot = true; t.root.visible = false; } break; }   /* the host says it is dead: hide it at once (2026-10-02: frozen monsters after re-entering a zone) */
           case 'spawn': { const m = core.mobByUid(e.mob), t = ents.get('m:' + e.mob); if (!t) break; t.dead = false; t.oneShot = false; t.loco = null; t.root.visible = true; t.H.setOpacity && t.H.setOpacity(1); place(t, m.x, m.y); t.H.play('idle', { loop: true }); t.spawnT = now; t.hp = m.hp; break; }
@@ -22313,7 +22420,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         const flick = 1 + Math.sin(now * 0.017) * 0.08 + Math.sin(now * 0.041) * 0.05;
         const [r0, c0] = lightOf(Object.values(me.eq || {}).map(s => s && s.id)), P0 = myEnt.root.position;
         TORCH.me.intensity = r0 ? 2.8 * flick : 0; if (r0) { TORCH.me.distance = r0 + 1; TORCH.me.color.setHex(c0); TORCH.me.position.set(P0.x - 0.3, P0.y + 1.7, P0.z); }
-        const near = []; for (const r of remotes.values()) { const g = r.e && r.e.H && r.e.H.gear; if (!g) continue; const [rr, cc] = lightOf(Object.values(g)); if (rr) near.push([r, rr, Math.hypot(r.e.root.position.x - P0.x, r.e.root.position.z - P0.z), cc]); }
+        const near = []; for (const r of remotes.values()) { const g = r.e && r.e.H && r.e.H.gear; if (!g || (r.lvR | 0) !== (me.lv | 0)) continue; const [rr, cc] = lightOf(Object.values(g)); if (rr) near.push([r, rr, Math.hypot(r.e.root.position.x - P0.x, r.e.root.position.z - P0.z), cc]); }
         near.sort((a, b) => a[2] - b[2]);
         TORCH.pool.forEach((L, k) => { const n = near[k]; if (!n || n[2] > 30) { L.intensity = 0; return; } const q = n[0].e.root.position; L.position.set(q.x - 0.3, q.y + 1.7, q.z); L.distance = n[1] + 1; L.color.setHex(n[3]); L.intensity = 2.8 * flick; });
       }
@@ -23104,6 +23211,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             R.on('message', () => { if (room === R) NW.heard = performance.now(); }); R.on('join', () => { if (room === R) NW.heard = performance.now(); }); R.on('leave', () => { if (room === R) NW.heard = performance.now(); });
             R.on('leave', ev => { if (room !== R) return; dropRemote(ev.from.id); elect(); });
             R.on('join', () => { if (room !== R) return; clearTimeout(gearT); gearT = setTimeout(() => { netGear(); if (hosted.size) fullSnap(); }, 600); });   /* newcomers missed our gear/outfit/name: send it again (one resend for a burst of joins) */
+            R.on('rejoined', () => { if (room !== R) return; NW.heard = performance.now(); clearTimeout(gearT); gearT = setTimeout(() => { netGear(); if (hosted.size) fullSnap(); }, 600); });   /* [Claude 2026-10-13] the arcade seated us again after a drop: the others rebuilt us bare, so send our gear/outfit/name (and what we host) again */
             R.on('closed', why => { if (room !== R) return; room = null; core.setOnline(false); coreCall(() => core.chessLimbo(PID)); dropRemotes(true); hosts.clear(); passive = false; applyAuth(); hud.setOnline(false); NW.lost = true; NW.tries = 0; hud.netLost && hud.netLost(true, 'net', why || ''); hud.chat('Lost contact with other players' + (why ? ' (' + why + ')' : '') + '. Retrying soon.', 'sys'); retryAt = performance.now() + 15000; });
             netGear();
             if (R.me && !R.me.guest && R.me.address && R.me.address !== walletState.address) { walletState.address = R.me.address; walletRefresh(); }
@@ -23142,6 +23250,83 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         leave: (rid, ev) => { const r = remotes.get(ev.from.id); if (r && r.via === rid) dropRemote(ev.from.id); },
         closed: (rid) => { for (const [id, r] of Array.from(remotes)) if (r.via === rid) dropRemote(id); }
       } }) : null;
+      /* [Claude 2026-10-13] A CARD TABLE'S OWN ROOM (the operator: "would it help if we set it up so each poker table sets up its own game
+         room?" - "Yup"). The arcade counts five messages a second per player PER ROOM, so a table in its own room has a budget of
+         its own and its traffic reaches only those at it. A player within 8 tiles on its storey (or sitting at it) joins
+         'tbl:<region>:<table>' and stays in it out to 14 tiles. Everyone in the room says when they came in (TJ); the earliest
+         deals, and the core is told per table (setTableAuth) - so the dealer is whoever has been at the table longest, not the
+         area's host, and a player not in the room never deals it. The rows, the sealed cards and the sit/stand/act/whole-row
+         asks go through the room; a screen not in it (an older page) still uses the region room as before. Every 5 s the
+         dealer sends the whole row again, with the sealed cards. Solo (no region room): the table deals at home, as before. */
+      const TBL = { mem: {}, deal: {}, tj: {}, rid: {}, byRid: {}, wait: {}, ms: {}, heard: {}, tjAt: {}, t: 0, snap: 0, hi: 0 };
+      const tblMem = t => TBL.mem[t] || (TBL.mem[t] = new Map());
+      const tblRid = T => 'tbl:' + core.regionOf(T.x, T.y) + ':' + T.id;
+      const tblSeated = t => (me.seat && me.seat.k === 'pk' && me.seat.t === t) ? 1 : 0;
+      /* [Claude 2026-10-13] the dealer KEEPS the table while it is in the room (sitting down or standing up never moves the dealing);
+         when it leaves, the earliest-come SEATED player takes it, else the earliest-come watcher. Everyone says whom it follows
+         (TJ's 4th field), so a newcomer follows the table's dealer at once, and two who each think they deal settle on the one
+         who has been in the room longest. A newcomer listens 1.5 s before it would deal itself. */
+      function tblElect(t) {
+        if (!TBL.tj[t]) { TBL.deal[t] = null; if (core.setTableAuth) core.setTableAuth(t, room ? false : null); return; }
+        const M = tblMem(t); M.set(myNetId, { j: TBL.tj[t], s: tblSeated(t), d: TBL.deal[t] || null });
+        let cur = TBL.deal[t]; if (cur && !M.has(cur)) cur = null;   /* the dealer has left the room */
+        if (cur && cur !== myNetId && performance.now() - ((TBL.heard[t] || {})[cur] || TBL.tjAt[t] || 0) > 15000) { M.delete(cur); cur = null; }   /* or gone silent (a page that died: the arcade drops it only after 30 s) */
+        for (const [, m] of M) if (m.d && M.has(m.d) && m.d !== cur && (!cur || M.get(m.d).j < M.get(cur).j)) cur = m.d;   /* follow the table's dealer; a clash: the longest here */
+        if (!cur) {
+          const R = tRoom(t), n = R && R.members ? R.members().length : M.size;
+          if (performance.now() < (TBL.wait[t] || 0) && M.size < n) { TBL.deal[t] = null; if (core.setTableAuth) coreCall(() => core.setTableAuth(t, false)); return; }   /* just came in: hear the room first */
+          let best = null; for (const [id, m] of M) { if (!best || (m.s > best[1].s) || (m.s === best[1].s && (m.j < best[1].j || (m.j === best[1].j && id < best[0])))) best = [id, m]; }
+          cur = best ? best[0] : myNetId;
+        }
+        const was = TBL.deal[t]; TBL.deal[t] = cur; M.get(myNetId).d = cur;
+        if (core.setTableAuth) coreCall(() => core.setTableAuth(t, cur === myNetId));
+        if (was !== cur) {
+          if (cur === myNetId) PKBASE[t] = null;   /* a new dealer starts its rows whole */
+          else if (was && tblSeated(t) && me.seat) netSend({ PS: [t, me.seat.s | 0, 0, MYPK || ''] }, tRoom(t), 0);   /* my sealing key, for the new dealer */
+          tblHello(t);
+        }
+      }
+      const tRoom = t => { if (!TBL.tj[t] || !tbl) return null; const rid = TBL.rid[t]; return tbl.rooms().find(R => R.id === rid) || null; };
+      function iDeal(T) { if (!T) return false; if (!room) return true; if (!tbl) return iHostAt(T.x, T.y); return !!TBL.tj[T.id] && TBL.deal[T.id] === myNetId; }
+      function fromDealer(id, T) { if (tbl && TBL.tj[T.id]) return TBL.deal[T.id] === id; return fromHostOf(id, areaAt(T.x, T.y)); }
+      function tblHello(t) { const R = tRoom(t); if (R && TBL.tj[t]) netSend({ TJ: [t, TBL.tj[t], tblSeated(t), TBL.deal[t] || null] }, R, 0); TBL.ms[t] = tblSeated(t); }
+      function tblHeard(rid, ev) {
+        const t = TBL.byRid[rid], from = ev.from, id = from && from.id; if (!t || !id || id === myNetId) return;
+        let d = ev.data && typeof ev.data === 'object' ? ev.data : {};
+        if (Array.isArray(d.BIG) && d.BIG.length === 4) {   /* a big row in pieces, put together as onNet does */
+          const [bid, bi, bn, bc] = d.BIG, k = 't:' + id + ':' + bid, now = performance.now();
+          if (!(bn > 0 && bn <= 64 && bi >= 0 && bi < bn && typeof bc === 'string')) return;
+          for (const [kk, B] of BIGIN) if (now - B.t > 30000) BIGIN.delete(kk);
+          const B = BIGIN.get(k) || { n: bn, parts: {}, t: now }; B.parts[bi] = bc; BIGIN.set(k, B);
+          if (Object.keys(B.parts).length < B.n) return;
+          BIGIN.delete(k); try { d = JSON.parse(Array.from({ length: B.n }, (_, j) => B.parts[j]).join('')); } catch (e) { return; }
+          if (!d || typeof d !== 'object' || d.BIG) return;
+        }
+        (TBL.heard[t] || (TBL.heard[t] = {}))[id] = performance.now();   /* the dealer's rows and hellos keep it alive */
+        if (Array.isArray(d.TJ) && String(d.TJ[0]) === t) { const j = +d.TJ[1]; if (j > 0) { const M = tblMem(t), had = M.has(id); M.set(id, { j, s: d.TJ[2] ? 1 : 0, d: typeof d.TJ[3] === 'string' ? d.TJ[3] : null }); tblElect(t); if (!had) tblHello(t); } }
+        pkMsg(id, d);
+      }
+      const tbl = net.neighbours ? net.neighbours({ game: 'ashvale', loopback: q.has('loopback'), max: 2, on: {
+        message: (rid, ev) => tblHeard(rid, ev),
+        join: (rid, ev) => { const t = TBL.byRid[rid]; if (!t) return; if (ev.self) { TBL.tj[t] = Date.now(); TBL.tjAt[t] = performance.now(); TBL.wait[t] = performance.now() + 1500; tblMem(t).clear(); TBL.deal[t] = null; } tblHello(t); tblElect(t); },
+        leave: (rid, ev) => { const t = TBL.byRid[rid]; if (!t || !ev.from) return; tblMem(t).delete(ev.from.id); tblElect(t); },
+        closed: (rid) => { const t = TBL.byRid[rid]; if (!t) return; delete TBL.tj[t]; delete TBL.mem[t]; PKIN[t] = null; tblElect(t); }
+      } }) : null;
+      function tblTick(now) {
+        if (!tbl || now - TBL.t < 1000) return; TBL.t = now;
+        if (!room) { tbl.update([], []); for (const T of pkTablesCached()) if (core.setTableAuth) core.setTableAuth(T.id, null); return; }
+        const near = [], keep = [];
+        for (const T of pkTablesCached()) {
+          const rid = tblRid(T); TBL.rid[T.id] = rid; TBL.byRid[rid] = T.id;
+          const d = Math.max(Math.abs(T.x - me.x), Math.abs(T.y - me.y)), mine = me.seat && me.seat.t === T.id, same = (T.lv | 0) === (me.lv | 0);
+          if (mine || (same && d <= 8)) near.push(rid);
+          if (mine || (same && d <= 14)) keep.push(rid);
+          if (!TBL.tj[T.id]) tblElect(T.id); else { tblElect(T.id); if (TBL.ms[T.id] !== tblSeated(T.id)) tblHello(T.id); }   /* re-elect (the wait ends), and say when I sit or stand */
+        }
+        tbl.update(near, keep);
+        if (now - TBL.hi > 10000) { TBL.hi = now; for (const t in TBL.tj) if (TBL.tj[t]) { tblHello(t); if (tblSeated(t) && TBL.deal[t] && TBL.deal[t] !== myNetId && me.seat) netSend({ PS: [t, me.seat.s | 0, 0, MYPK || ''] }, tRoom(t), 2); } }   /* a late joiner hears who came in when; the dealer keeps my sealing key */
+        if (now - TBL.snap > 5000) { TBL.snap = now; const seq = Math.round(now); for (const T of pkTablesCached()) if (iDeal(T) && core.pokerRow) { const st = core.pokerOf(T.id); if (st && (st.se && st.se.length || st.mine === 1)) { pkSendRow(T.id, seq); phSend(T.id, false); } } }
+      }
       function netNeighbours(now) {
         if (!nb || joining || now - nbT < 1000) return; nbT = now;
         if (!room) { nb.update([], []); return; }
@@ -23252,7 +23437,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       }
       boardTag();
       const netStats = { sent: 0, dropped: 0, t0: performance.now(), times: [], max1s: 0, max2s: 0 };
-      window.addEventListener('pagehide', () => { if (nb) nb.close(); if (room) { const r = room; room = null; r.leave(); } });
+      window.addEventListener('pagehide', () => { if (nb) nb.close(); if (tbl) tbl.close(); if (room) { const r = room; room = null; r.leave(); } });   /* [Claude 2026-10-13] the card tables' rooms too: the others elect a new dealer at once */
       let lastSend = 0;
       /* outgoing queue: never more than 5 messages in any second or 9 in any 2 s (the mesh allows ~5/s, burst 10);
          a newer pure position state replaces a queued older one */
@@ -23266,33 +23451,59 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
          fits as it is, and a bigger one as numbered pieces {BIG: [id, i, n, text]} that onNet puts back together. */
       let bigSeq = Math.floor(Math.random() * 1e6);
       const utf8 = s => { try { return new TextEncoder().encode(s).length; } catch (e) { return s.length * 3; } };
-      function netSendBig(o, R) {
+      /* [Claude 2026-10-13] key: a message that a newer one with the same key makes worthless (a card table's row). Before it is
+         queued, whatever of an older one is still waiting is taken out of the queue - at eight players every action is a row
+         of three or four pieces and the room takes five messages a second, so the queue grew without end and the other screens
+         fell minutes behind the dealer: the turn sat on a player whose screen still showed someone else to act (8-window test) */
+      /* [Claude 2026-10-13] THREE LANES (the operator: "Can we split it up so certain things are sent more often than others?"). The room
+         takes about five messages a second from each player in it, so what goes first matters more than how much there is:
+           0 urgent     what a player is waiting on: my own act (attack, pick up, sit, stand, bet, a chess move, a trade), the
+                        host's events (hits, deaths, spawns, drops), a hand's sealed cards and its result
+           1 normal     where everyone is: positions, monsters' places, card-table rows, chat
+           2 background what is only said again: full snapshots, gear and outfit, weather
+         flushNet sends the lowest lane first; whatever has waited two seconds moves up a lane, so nothing starves. */
+      function netPri(o) {
+        if (!o || typeof o !== 'object') return 1;
+        if (o.F !== undefined || o.W || o.g || o.o || o.GQ) return 2;
+        if (o.A !== undefined || o.C !== undefined || o.X || o.XP || o.XF || o.XU || o.PT || o.PS || o.PA || o.PQ || o.CX || o.CT || o.CS || o.CM || o.tr || o.E || o.Ph || o.Ch) return 0;
+        if (o.Pk && o.Pk.some(r => r && r.st === 'none' && r.r)) return 0;   /* a hand's result */
+        return 1;
+      }
+      function netSendBig(o, R, key, meta) {
         let s; try { s = JSON.stringify(o); } catch (e) { return false; }
-        if (utf8(s) <= 490) return netSend(o, R);
+        if (key) for (let i = outQ.length - 1; i >= 0; i--) if (outQ[i].key === key) outQ.splice(i, 1);
+        const pri = netPri(o);
+        if (utf8(s) <= 490) { const ok = netSend(o, R, pri); if (ok && outQ.length && outQ[outQ.length - 1].o === o) { const w = outQ[outQ.length - 1]; if (key) w.key = key; if (meta) w.meta = meta; } else if (ok && meta && meta.sent) meta.sent(); return ok; }
         const id = bigSeq = (bigSeq + 1) % 1e9, parts = [];
         for (let i = 0; i < s.length;) {
           let n = Math.min(360, s.length - i);
           while (n > 20 && utf8(JSON.stringify({ BIG: [id, 999, 999, s.slice(i, i + n)] })) > 490) n -= 30;
           parts.push(s.slice(i, i + n)); i += n;
         }
-        for (let i = 0; i < parts.length; i++) netSend({ BIG: [id, i, parts.length, parts[i]] }, R);
+        for (let i = 0; i < parts.length; i++) { const m = { BIG: [id, i, parts.length, parts[i]] }; netSend(m, R, pri); const w = outQ.find(q => q.o === m); if (w) { if (key) w.key = key; if (meta && i === parts.length - 1) w.meta = meta; } else if (meta && i === parts.length - 1 && meta.sent) meta.sent(); }
         return true;
       }
-      function netSend(o, R) {   /* R: a neighbour room (viewer presence); default the main room. One budget for both */
+      function netSend(o, R, pri) {   /* R: a neighbour room (viewer presence); default the main room. One budget for both. pri: the lane (netPri) */
         if (DROP_NEXT && o && o[DROP_NEXT] !== undefined) { DROP_NEXT = null; return; }
         if (!room) return false; R = R || null;
         try { if (new TextEncoder().encode(JSON.stringify(o)).length > 500) return false; } catch (e) { return false; }
         if (pureState(o)) { const i = outQ.findIndex(w => w.R === R && pureState(w.o)); if (i >= 0) { outQ[i].o = o; return true; } }
-        outQ.push({ o, R }); flushNet(); return true;
+        outQ.push({ o, R, pri: pri == null ? netPri(o) : pri, at: performance.now() }); flushNet(); return true;
       }
       function flushNet() {
         if (!room) { outQ.length = 0; return; }
-        const now = performance.now(), T = netStats.times;
-        while (T.length && now - T[0] > 2000) T.shift();
-        while (outQ.length && T.filter(t => now - t <= 1000).length < 5 && T.length < 9) {
-          const w = outQ.shift(); T.push(now); if (!w.R) lastSend = now; netStats.sent++;
-          netStats.max2s = Math.max(netStats.max2s, T.length); netStats.max1s = Math.max(netStats.max1s, T.filter(t => now - t <= 1000).length);
-          (w.R || room).send(w.o).then(ok => { if (!ok) netStats.dropped++; if (!w.R) NW.fails = ok ? 0 : NW.fails + 1; }, () => { netStats.dropped++; if (!w.R) NW.fails++; });
+        /* [Claude 2026-10-13] a budget per room (the arcade counts each room apart): five a second, nine in two, in each */
+        const now = performance.now(), ok = new Map();
+        const times = R => R ? (R.__t || (R.__t = [])) : netStats.times;
+        const free = R => { if (ok.has(R)) return ok.get(R); const T = times(R); while (T.length && now - T[0] > 2000) T.shift(); const v = T.filter(t => now - t <= 1000).length < 5 && T.length < 9; ok.set(R, v); return v; };
+        for (;;) {
+          let bi = -1, bp = Infinity;   /* the lowest lane first, oldest first within it; two seconds' wait moves a message up a lane */
+          for (let i = 0; i < outQ.length; i++) { const q = outQ[i]; if (!free(q.R || null)) continue; const ep = (q.pri == null ? 1 : q.pri) - Math.floor((now - (q.at || now)) / 2000); if (ep < bp) { bp = ep; bi = i; } }
+          if (bi < 0) break;
+          const w = outQ.splice(bi, 1)[0], T = times(w.R || null); T.push(now); ok.delete(w.R || null); if (!w.R) lastSend = now; netStats.sent++;
+          if (w.meta && w.meta.sent) w.meta.sent();
+          netStats.max2s = Math.max(netStats.max2s, netStats.times.length); netStats.max1s = Math.max(netStats.max1s, netStats.times.filter(t => now - t <= 1000).length);
+          (w.R || room).send(w.o).then(ok2 => { if (!ok2) netStats.dropped++; if (!w.R) NW.fails = ok2 ? 0 : NW.fails + 1; }, () => { netStats.dropped++; if (!w.R) NW.fails++; });
         }
         netStats.queued = outQ.length;
       }
@@ -23407,7 +23618,14 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           if (core.S.players[id]) core.setPuppet(id, Object.assign({ x: Math.floor(+d.p[0]), y: Math.floor(+d.p[1]), lv: d.l | 0 }, typeof d.a === 'string' ? { bt: d.bt | 0, rd: d.rd || null, pl: d.pl ? 1 : 0, kn: d.kn ? 1 : 0 } : {}));   /* only a full state says whether they are in a canoe */
           r.area = core.areaOf(Math.floor(+d.p[0]), Math.floor(+d.p[1])); r.carea = typeof d.c === 'string' ? d.c.slice(0, 40) : null;
           if (r.buf.length) { const lb = r.buf[r.buf.length - 1]; if (Math.abs(lb.x - +d.p[0]) + Math.abs(lb.z - +d.p[1]) > 60) r.buf.length = 0; }   /* they crossed a cut edge of the net (or a portal): no sliding across the map */
-          if (!r.floorHid) r.e.root.visible = true; r.buf.push({ t: performance.now(), x: +d.p[0], z: +d.p[1], f: +d.f || 0, a: typeof d.a === 'string' ? d.a.slice(0, 12) : 'idle', l: d.l | 0 }); if (r.buf.length > 20) r.buf.shift();
+          if (!r.floorHid) r.e.root.visible = true; const arr = performance.now();
+          /* [Claude 2026-10-14] the operator: "their walking animation is not matching up with their movement ... it looks like they ski to
+             their final position". Samples were laid out by when they ARRIVED, and the send lanes deliver in bursts, so the drawn
+             path sped up and stalled. Lay them out by when the sender SENT them (d.s, its own clock) shifted onto ours by the
+             quickest delivery seen (r.off); r.jit (how late the rest run) widens the render delay so a burst is ridden out. */
+          let tt = arr;
+          if (typeof d.s === 'number' && isFinite(d.s)) { const est = arr - d.s; if (r.off == null || Math.abs(est - r.off) > 5000) { r.off = est; r.jit = 0; } else r.off = Math.min(est, r.off + 2); r.jit = Math.max((r.jit || 0) * 0.98, est - r.off); tt = d.s + r.off; }
+          r.buf.push({ t: tt, x: +d.p[0], z: +d.p[1], f: +d.f || 0, a: typeof d.a === 'string' ? d.a.slice(0, 12) : 'idle', l: d.l | 0 }); if (r.buf.length > 20) r.buf.shift();
         }
       }
       /* ---------- SHARED WORLD: a host per AREA simulates that area's monsters and loot; everyone else follows it.
@@ -23443,6 +23661,69 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         } else delete PH[r.t];
         return Object.assign({}, r, { se: (r.se || []).map(s => [s[0], toNet(s[1]), s[2], s[3], s[4]]), co: (r.co || []).map(c => [toNet(c[0]), c[1], c[2]]), hc: r.hc ? hc : r.hc });
       };
+      /* [Claude 2026-10-13] A TABLE ROW AS CHANGES (the operator: build "two" - fit more into each message). At eight players a full row is
+         ~800 bytes, three or four pieces for every bet. The dealer now sends what changed since the row it last put on the wire
+         (PKBASE): the fields that differ, the seats whose stack/bet/flags moved (sd), the new log lines only (la). A delta says
+         which version it is built on (pv); a screen holding that version merges it (PKIN), any other asks for the whole row
+         (PQ) and waits - the whole row also goes out every five seconds with the snapshot, and whenever a delta would not be
+         much smaller. */
+      const PKBASE = {}, PKIN = {}, PKQ = {};
+      function pkDelta(base, full) {
+        if (!base || base.t !== full.t || (base.gid | 0) !== (full.gid | 0) || base.v == null) return null;
+        const d = { t: full.t, v: full.v, pv: base.v, D: 1 }, rm = [];
+        for (const k in full) {
+          if (k === 't' || k === 'v') continue;
+          if (JSON.stringify(full[k]) === JSON.stringify(base[k])) continue;
+          if (k === 'se' && Array.isArray(base.se) && Array.isArray(full.se) && base.se.length === full.se.length && full.se.every((x, i) => x[0] === base.se[i][0] && x[1] === base.se[i][1])) {
+            d.sd = []; full.se.forEach((x, i) => { if (JSON.stringify(x) !== JSON.stringify(base.se[i])) d.sd.push([i, x[2], x[3], x[4]]); }); continue;
+          }
+          if (k === 'lg' && Array.isArray(base.lg) && Array.isArray(full.lg) && (full.lc | 0) > (base.lc | 0)) {
+            const n = (full.lc | 0) - (base.lc | 0), keep = full.lg.length - n;
+            if (n <= full.lg.length && keep <= base.lg.length && JSON.stringify(full.lg.slice(0, keep)) === JSON.stringify(base.lg.slice(base.lg.length - keep))) { d.la = full.lg.slice(keep); d.ln = full.lg.length; continue; }
+          }
+          d[k] = full[k];
+        }
+        for (const k in base) if (!(k in full)) rm.push(k);
+        if (rm.length) d.rm = rm;
+        return d;
+      }
+      function pkMerge(base, d) {
+        const r = Object.assign({}, base);
+        for (const k in d) if (!['D', 'pv', 'sd', 'la', 'ln', 'rm'].includes(k)) r[k] = d[k];
+        if (d.sd) { r.se = (base.se || []).map(x => x.slice()); for (const [i, c, b, f] of d.sd) if (r.se[i]) { r.se[i][2] = c; r.se[i][3] = b; r.se[i][4] = f; } }
+        if (d.la) r.lg = (base.lg || []).concat(d.la).slice(-(d.ln || 6));
+        for (const k of d.rm || []) delete r[k];
+        return r;
+      }
+      function pkSendRow(t, F, whole) {   /* the dealer's row for table t: a delta when it pays, else whole. F: the snapshot's seq (whole, background) */
+        const full = pkNet(core.pokerRow(t)), sizeF = utf8(JSON.stringify(full)), meta = { sent: () => { const b = PKBASE[t]; if (!b || (b.gid | 0) !== (full.gid | 0) || (full.v | 0) >= (b.v | 0)) PKBASE[t] = full; } };   /* never back to an older row (the lanes can send a resend after a newer delta) */
+        if (F != null) return netSendBig({ F, Pk: [full] }, tRoom(t), 'pkF:' + t, meta);
+        const d = pkDelta(PKBASE[t], full), res = full.st === 'none' && full.r;
+        const msg = !whole && d && utf8(JSON.stringify(d)) < sizeF * 0.8 ? d : full;
+        return netSendBig({ Pk: [msg] }, tRoom(t), res ? null : 'pk:' + t, meta);   /* a hand's result is never dropped for a newer row */
+      }
+      function pkHeard(id, rows) {   /* rows from the dealer, in wire form: deltas merged onto what this screen holds */
+        const out = [];
+        for (let r of rows) {
+          if (r.D) {
+            const b = PKIN[r.t];
+            if (!b || b.v !== r.pv) { const now = performance.now(); if (now - (PKQ[r.t] || 0) > 2000) { PKQ[r.t] = now; netSend({ PQ: r.t }, tRoom(r.t)); } continue; }   /* missed one: ask for the whole row */
+            r = pkMerge(b, r); delete r.D;
+          }
+          const h = PKIN[r.t];   /* [Claude 2026-10-13] an older whole row from the same dealer (the 5 s resend waits in the background lane and can land after newer deltas): not a step back */
+          if (!r.D && h && h.from === id && (h.gid | 0) === (r.gid | 0) && (r.v | 0) < (h.v | 0)) continue;
+          r.from = id; PKIN[r.t] = r; out.push(Object.assign({}, r, { from: undefined }));
+        }
+        return out;
+      }
+      function pkMsg(id, d) {   /* a card table's words, from the region room or the table's own room */
+        if (Array.isArray(d.PS)) { const T = core.pokerTableById(String(d.PS[0])); if (T && iDeal(T)) coreCall(() => core.hostPokerSit(id, T.id, d.PS[1] | 0, d.PS[2] | 0, typeof d.PS[3] === 'string' ? d.PS[3].slice(0, 160) : '')); }
+        if (Array.isArray(d.PT)) { const T = core.pokerTableById(String(d.PT[0])); if (T && iDeal(T)) coreCall(() => core.hostPokerStand(id, T.id)); }
+        if (Array.isArray(d.PA)) { const T = core.pokerTableById(String(d.PA[0])); if (T && iDeal(T)) coreCall(() => core.hostPokerAct(id, T.id, String(d.PA[1] || ''), d.PA[2] | 0)); }
+        if (Array.isArray(d.Ph) && d.Ph.length === 4) { const T = core.pokerTableById(String(d.Ph[0])); if (T && fromDealer(id, T)) phHeard(T.id, d.Ph[1] | 0, d.Ph[2], d.Ph[3]); }   /* [Claude 2026-10-12] the sealed hole cards */
+        if (Array.isArray(d.Pk)) { const rows = d.Pk.filter(r => r && r.t).filter(r => { const T = core.pokerTableById(String(r.t)); return T && fromDealer(id, T); }); const rows2 = pkHeard(id, rows).map(pkLocal); if (rows2.length) coreCall(() => core.applyPoker(rows2)); }
+        if (d.PQ != null) { const T = core.pokerTableById(String(d.PQ)); if (T && iDeal(T)) pkSendRow(T.id, null, true); }   /* [Claude 2026-10-13] a screen missed a delta: the whole row */
+      }
       const OPENED2 = new Map();   /* my own two, opened, by table|hand|seat */
       function openOwn(r, h) { const ref = h[0] | 0; if (typeof h[1] === 'number') return h; const o = OPENED2.get(r.t + '|' + (r.h | 0) + '|' + ref); return o ? [ref, o[0], o[1]] : [ref, null, null]; }
       function phHeard(t, h, hk, items) {   /* the dealer's sealed set: open mine, hand it to the core */
@@ -23589,7 +23870,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         const Fi = core.S.fires.filter(f => iHostAt(f.x, f.y)).map(f => [f.uid, f.x, f.y, f.until - core.S.t, f.log]);
         if (Fi.length) packSend({ F: seq }, 'Fi', Fi);
         const Ch = core.chessRows((x, y) => iHostAt(x, y)).map(netRow); for (const r of Ch) netSendBig({ F: seq, Ch: [r] });   /* the chess park's tables this game hosts */
-        const Pk = core.pokerRows((x, y) => iHostAt(x, y)).map(pkNet); for (const r of Pk) netSendBig({ F: seq, Pk: [r] });   /* one row a message, split if it is big (packSend could not split one row) */   /* and the felt in the tap room */
+        const Pk = [];   /* [Claude 2026-10-13] the card tables go out from tblTick, by whoever deals each in its own room */   /* one row a message, split if it is big (packSend could not split one row) */   /* and the felt in the tap room */
         for (const r of Pk) phSend(r.t, false);   /* [Claude 2026-10-12] the sealed hole cards again, every few seconds, for whoever just joined */
         const Pl = [];
         for (const a of hosted) for (const r of core.plantSnap(a)) Pl.push(r);
@@ -23615,7 +23896,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         const K = P.pk ? { t: P.pk.t, pk: true } : { t: P.ch.t, pk: false };
         if (P.seat && P.seat.t === K.t && (P.seat.k === 'pk') === K.pk) { pkAway = 0; return; }
         if (!room || core.seatHeld(PID)) { pkAway = 0; return; }   /* a row still seats us under an old id: the host decides first */
-        const now = performance.now(), T = K.pk ? core.pokerTableById(K.t) : core.tableById(K.t), mineToDeal = !!(T && iHostAt(T.x, T.y));
+        const now = performance.now(), T = K.pk ? core.pokerTableById(K.t) : core.tableById(K.t), mineToDeal = !!(T && (K.pk ? iDeal(T) : iHostAt(T.x, T.y)));
         if (!mineToDeal && now - NW.heard > 5000) { pkAway = 0; return; }
         if (!pkAway) { pkAway = now; return; }
         if (now - pkAway < (mineToDeal ? 5000 : 20000)) return;
@@ -23627,7 +23908,12 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         const pst = {};
         if (Number.isInteger(d.hp)) { pst.hp = d.hp; r.hp = d.hp; }
         if (d.d != null) pst.dead = !!d.d;
-        if (d.g && typeof d.g === 'object') pst.g = d.g;
+        if (d.g && typeof d.g === 'object') { pst.g = d.g; r.hasG = 1; }
+        /* [Claude 2026-10-13] a player we hear from but never got gear from (robin-4d: the arcade quietly rejoins a client whose
+           streams dropped - the others build it a fresh remote, its own page gets no 'join', so it never resends: @gx1 stood on
+           @apple's screen in the plain placeholder) - ask for it: GQ makes everyone resend (each at most every 3 s). Not before
+           3 s, the newcomer's own resend comes 600 ms after it joins; then at most every 5 s until the gear comes */
+        else if (!r.hasG) { const t = Date.now(); if (!r.seenAt) r.seenAt = t; else if (t - r.seenAt > 3000 && t - (r.gqAt || 0) > 5000 && (r.gqN || 0) < 4) { r.gqAt = t; r.gqN = (r.gqN || 0) + 1; netSend({ GQ: 1 }); } }   /* four asks, then it is left to the next join */
         if (Array.isArray(d.L)) { pst.L = d.L; r.maxHp = d.L[3] | 0; }
         if (Number.isInteger(d.ST) && d.ST >= 0 && d.ST <= 999) r.story = d.ST;
         if (d.SK && typeof d.SK === 'object') { const sk = {}; for (const k in d.SK) if (/^[a-z]{1,20}$/.test(k)) { const L = d.SK[k] | 0; if (L >= 1 && L <= 99) sk[k] = L; } r.skills = sk; if (r.wantStats && Date.now() - r.wantStats.at < 15000) hud.playerStats(r.wantStats.name, sk, r.wantStats.cb, r.story); r.wantStats = null; }
@@ -23646,11 +23932,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (Array.isArray(d.Ch)) { const rows = d.Ch.filter(r => r && r.t).filter(r => { const T = core.tableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).map(r => Object.assign({}, r, { w: r.w ? fromNet(r.w) : null, b: r.b ? fromNet(r.b) : null, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [fromNet(k), v])) : null, co: Array.isArray(r.co) ? r.co.map(c => [fromNet(c[0]), c[1], c[2]]) : [] })); if (rows.length) coreCall(() => core.applyChess(rows)); }   /* [Claude] who is owed the stake, named as this page knows them */
         /* the felt: a chair asked for, a player getting up, an action, or the host's word on a table. Same rules as the
            chess park: only the host of the area the table stands in answers, and a row only counts from that host. */
-        if (Array.isArray(d.PS)) { const T = core.pokerTableById(String(d.PS[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerSit(id, T.id, d.PS[1] | 0, d.PS[2] | 0, typeof d.PS[3] === 'string' ? d.PS[3].slice(0, 160) : '')); }
-        if (Array.isArray(d.PT)) { const T = core.pokerTableById(String(d.PT[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerStand(id, T.id)); }
-        if (Array.isArray(d.PA)) { const T = core.pokerTableById(String(d.PA[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostPokerAct(id, T.id, String(d.PA[1] || ''), d.PA[2] | 0)); }
-        if (Array.isArray(d.Ph) && d.Ph.length === 4) { const T = core.pokerTableById(String(d.Ph[0])); if (T && fromHostOf(id, areaAt(T.x, T.y))) phHeard(T.id, d.Ph[1] | 0, d.Ph[2], d.Ph[3]); }   /* [Claude 2026-10-12] the sealed hole cards */
-        if (Array.isArray(d.Pk)) { const rows = d.Pk.filter(r => r && r.t).filter(r => { const T = core.pokerTableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).map(pkLocal); if (rows.length) coreCall(() => core.applyPoker(rows)); }
+        pkMsg(id, d);   /* [Claude 2026-10-13] the card-table words (also heard in a table's own room: tblHeard) */
         if (Array.isArray(d.X)) { const x = d.X; if (core.item(x[0]) && iHostAt(x[2], x[3])) coreCall(() => core.hostDrop({ id: x[0], n: Math.max(1, x[1] | 0), x: x[2] | 0, y: x[3] | 0, life: x[4] | 0, from: x[5] ? fromNet(x[5]) : null, diedAt: x[6] | 0 })); }
         /* below: only the word of the host of the area concerned counts */
         if (Array.isArray(d.M)) { const rows = d.M.filter(w => Array.isArray(w) && fromHostOf(id, mobArea(w[0]))); if (rows.length) coreCall(() => core.applyMobs(rows)); }
@@ -23696,7 +23978,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             handle({ e: 'hit', src, dst, dmg, hp, max: maxOf(dst), cls: CLS[a[5]] || 'melee', blocked: !!(a[6] & 1), dodged: !!(a[6] & 2), prot: !!(a[6] & 8) }, now);
             break;
           }
-          case 'k': { const m = core.mobByUid(a[1]); if (!m) break; core.applyMobs([[m.uid, m.x, m.y, 0, 1]]); if (fromNet(a[2]) === PID) core.creditKill(PID, m.key); for (const pid of core.S.order) { const o = core.S.players[pid]; if (o.act && o.act.k === 'attack' && o.act.uid === m.uid) o.act = null; } handle({ e: 'die', mob: m.uid }, now); break; }
+          case 'k': { const m = core.mobByUid(a[1]); if (!m) break; core.applyMobs([[m.uid, m.x, m.y, 0, 1]]); if (fromNet(a[2]) === PID) core.creditKill(PID, m.key, m.x, m.y); for (const pid of core.S.order) { const o = core.S.players[pid]; if (o.act && o.act.k === 'attack' && o.act.uid === m.uid) o.act = null; } handle({ e: 'die', mob: m.uid }, now); break; }
           case 's': core.applyMobs([[a[1], a[2], a[3], a[4], 0]]); break;
           case 'd': core.groundAdd(a[1], a[2], a[3], a[4], a[5], a[6] ? fromNet(a[6]) : null, a[7] || 0); break;
           case 't': core.groundRemove(a[1]); if (fromNet(a[2]) === PID) { core.grantItem(PID, a[3], a[4], a[1]); persistTell({ e: 'take', p: PID, id: a[3], n: a[4], x: a[5], y: a[6] }); } break;   /* the host gave it to us: tell the Bank too */
@@ -23715,8 +23997,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       }
       function updateRemotes(now, dt) {
         if (room && now - electT > 500) { electT = now; elect(); }
-        const rt = now - 150 - 250;   /* render one send-interval + 150 ms behind */
         for (const [id, r] of remotes) {
+          const want = 400 + Math.min(1200, r.jit || 0); r.dly = r.dly == null ? want : r.dly + Math.max(-0.3 * dt * 1000, Math.min(0.3 * dt * 1000, want - r.dly));   /* eased, never more than 0.3 s per second, so their clock never runs backwards */
+          const rt = now - r.dly;   /* one send-interval + 150 ms behind, plus how late their messages run */
           if (r.offline) ghostTick(id, r, now);   /* a partner gone offline, riding on in the bow */
           else if (now - r.heard > 12000) { dropRemote(id); elect(); if (!remotes.has(id) || !remotes.get(id).offline) continue; }   /* silent for 12 s: gone (the node drops them after ~10 s) */
           if (!remotes.has(id)) continue;
@@ -23739,11 +24022,24 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           const lvR = Bs.l | 0, bR = lvR > 0 && core.M.buildingAt ? core.M.buildingAt(Math.floor(x), Math.floor(z)) : -1, upR = bR >= 0 ? lvR * (core.M.buildings[bR] && core.M.buildings[bR].lh ? core.M.buildings[bR].lh : 1.8) : 0;   /* [Claude 2026-10-11] on the storey their row names (the Tap's card tables upstairs) */
           /* [Claude 2026-10-12] the operator: "When someone is on one of the upper floors of one of the buildings, they should only be
              visible to people on the same floor" - from below, the storeys above are see-through and they stood in the air. */
+          r.lvR = lvR;   /* torchTick: a torch carried on another storey does not light this one */
           const offFloor = lvR > 0 && lvR !== (me.lv | 0);
           if (offFloor) { if (r.e.root.visible) { r.e.root.visible = false; r.floorHid = true; } }
           else if (r.floorHid) { r.e.root.visible = true; r.floorHid = false; }
           r.e.root.position.set(x, (r.e.canoe ? waterY(x, z) + (r.anim === 'pole' || r.anim === 'idle' ? 0.14 : 0) : heightAt(x, z) + seatLift(r.e) + upR) + (r.e.alt || 0), z); r.e.tyaw = Bs.f + turnS;   /* a chess player sits on the bench */
-          const an = Bs.a; if (an !== r.anim) { r.anim = an; r.e.H.play(an, { loop: /idle|walk|run|chop|mine|fish|cook|sit|paddle|pole|knock|crosslegged/.test(an) }); }
+          /* [Claude 2026-10-14] the feet follow the body actually drawn, not the newest message: their last sample says 'idle' at the
+             spot they stopped, and playing it at once slid the avatar the last stretch standing still. While the drawn body moves,
+             walk (or run), at a pace matched to how fast it goes; stand only once it has come to rest. */
+          const sp = dt > 0 && r.px != null ? Math.hypot(x - r.px, z - r.pz) / dt : 0; r.px = x; r.pz = z;
+          r.vs = (r.vs || 0) + (sp - (r.vs || 0)) * Math.min(1, dt * 8);
+          let an = Bs.a, aspd = 1; const loco = a => a === 'walk' || a === 'run' || a === 'idle';
+          if (!r.e.canoe && !r.boat && loco(an)) {
+            if (r.vs > 0.5) { an = an === 'run' || (A.a === 'run' && an === 'idle') ? 'run' : 'walk'; aspd = Math.max(0.6, Math.min(1.6, r.vs / (an === 'run' ? 2 * 1000 / TICK : 1000 / TICK))); r.stillT = 0; }
+            else if (an !== 'idle' && (r.stillT = (r.stillT || 0) + dt) > 0.25) an = 'idle';   /* a message says walking but the body has stood still a while */
+            else if (an !== 'idle') aspd = Math.max(0.6, r.vs / (1000 / TICK));
+          }
+          if (an !== r.anim) { r.anim = an; r.e.H.play(an, { loop: /idle|walk|run|chop|mine|fish|cook|sit|paddle|pole|knock|crosslegged/.test(an), speed: aspd }); }
+          else if (an === 'walk' || an === 'run') r.e.H.play(an, { loop: true, speed: aspd });   /* same loop: only its pace changes */
           r.e.yaw += (((r.e.tyaw - r.e.yaw + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI) * Math.min(1, dt * 10); r.e.root.rotation.y = r.e.yaw;
           if (r.boat === 2) { const T = r.ride === myNetId ? myEnt : (remotes.get(r.ride) || {}).e; if (T) { bowSeat(r.e, T, r.anim === 'knock'); } }
           r.e.H.update(dt); if (r.e.hawk) r.e.hawk.update(dt);
@@ -23850,7 +24146,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (lastOpp && now - lastOpp.t < 6000) { const m = typeof lastOpp.uid === 'number' ? core.mobByUid(lastOpp.uid) : null; if (m) hud.setOpp({ name: D.monsters[m.key].name, hp: m.hp, max: D.monsters[m.key].hp }); else hud.setOpp(null); } else hud.setOpp(null);
         if (now - mmT > 66) { mmT = now; drawMinimap(); }
         hud.setPos(me.x, me.y);
-        netPos(now); netNeighbours(now); flushNet();
+        netPos(now); netNeighbours(now); tblTick(now); flushNet();
         if (fogMod && myEnt) fogMod.focus(myEnt.root.position);
         if (wxMod && wxMod.focus && myEnt) wxMod.focus(myEnt.root.position);
         if (SCENE.see && myEnt) {   /* see-through: a circle round the avatar's chest on screen, for anything 2 m or more in front of it */
@@ -24288,6 +24584,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         tap: tapAt, menuAt, targetsAt, pad: () => PAD && PAD.state(), fps: () => frames, info: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries }), setCam(y, p, d) { if (y != null) cam.tyaw = cam.yaw = y; if (p != null) cam.tpitch = cam.pitch = p; if (d != null) cam.tdist = cam.dist = d; },
         myPos: () => [myEnt.root.position.x, myEnt.root.position.z, myEnt.yaw],   /* tests: where I am drawn (fluid travel) */
         remotesInfo: () => Array.from(remotes).map(([id, r]) => ({ id, boat: r.boat, ride: r.ride, offline: !!r.offline, name: r.name, via: r.via || null, at: [Math.round(r.e.root.position.x), Math.round(r.e.root.position.z)] })),   /* tests: who rides with whom, and who is a dropped-out partner */
+        tables: () => ({ deal: Object.assign({}, TBL.deal), tj: Object.assign({}, TBL.tj), rooms: tbl ? tbl.rooms().map(R => R.id) : [], mem: Object.fromEntries(Object.entries(TBL.mem).map(([k, M]) => [k, Array.from(M).map(([id, m]) => [id, m.j, m.s, m.d])])) }),
+        remoteView: id => { const r = remotes.get(id); return r ? { x: r.e.root.position.x, z: r.e.root.position.z, anim: r.anim, vs: r.vs || 0, dly: r.dly || 0 } : null; },   /* tests: how another player is drawn here */
         net: () => ({ host: hostOf(zoneHere()), amHost: !!room && hostOf(zoneHere()) === myNetId, hosts: Object.fromEntries(hosts), hosted: Array.from(hosted), area: zoneHere(), region: roomZone, myId: myNetId, ids: Array.from(remotes.keys()), room: room && room.id, me: room && room.me, neighbours: nb ? nb.rooms().map(R => R.id) : [], viewers: Array.from(remotes).filter(e => e[1].viewOnly).map(e => e[0]), status: netStatus, stats: Object.assign({ perSec: +(netStats.sent / Math.max(1, (performance.now() - netStats.t0) / 1000)).toFixed(2) }, netStats, { times: undefined }), gear: Array.from(remotes.values()).map(r => [r.name, r.e.H.gear || null]), remotes: Array.from(remotes.keys()), names: Array.from(remotes.values()).map(r => r.e.tag && r.e.tag.textContent.replace(/^Total level \d+/, '')) }),   /* the name itself, without the level line above it */
         weather: (kind, intensity, ticks) => coreCall(() => core.setWeather(zoneHere(), kind, intensity == null ? 80 : intensity, ticks || 500)),
         skyDirs: () => ({ north: trueNorth(me.x, me.y), season: SEASON.name, sun: SUNL.sv, moon: SUNL.mv, info: { eclipse: +(SUNL.eclipse || 0).toFixed(3), lunar: +(SUNL.lunar || 0).toFixed(3) } }),   /* a test aims the camera at the sun or the moon */
@@ -24321,7 +24619,7 @@ ASH3D.defineData({"ashvale3d":"module","name":"items","api":1,"v":4,"data":{"sch
 
 </script>
 <script>
-ASH3D.defineData({"ashvale3d":"module","name":"monsters","api":1,"v":1,"data":{"monsters":{"rat":{"name":"Giant rat","level":2,"hp":5,"att":1,"def":1,"attb":0,"defb":0,"max":1,"speed":4,"aggro":0,"respawn":50,"drops":[{"item":"rat_meat_raw","one_in":1},{"item":"rat_pelt","one_in":1}],"gold":0,"anim":"bite","look":"rat","animal":true},"wolf":{"name":"Grey wolf","level":8,"hp":18,"att":8,"def":6,"attb":4,"defb":4,"max":3,"speed":4,"aggro":2,"respawn":67,"drops":[{"item":"pelt","one_in":1}],"gold":0,"anim":"bite","look":"wolf","animal":true},"bandit":{"name":"Bandit","level":12,"hp":24,"att":12,"def":10,"attb":8,"defb":10,"max":4,"speed":4,"aggro":4,"respawn":83,"drops":[{"item":"sword_t2","one_in":1},{"item":"arrows_t1","n":[5,15],"one_in":3},{"item":"bread","one_in":4}],"gold":18,"anim":"stab","look":"bandit","animal":false,"ai":{"kind":"humanoid","faction":"bandit","rally":6,"leash":12,"keep":[4,6]}},"bandit_leader":{"name":"Bandit leader","level":18,"hp":45,"att":18,"def":16,"attb":14,"defb":16,"max":5,"speed":4,"aggro":5,"respawn":250,"drops":[{"item":"sword_t3","one_in":1},{"item":"helmet_t2","one_in":1},{"item":"body_t2","one_in":1},{"item":"arrows_t2","n":[10,20],"one_in":2},{"item":"potion","one_in":3}],"gold":27,"anim":"slash","look":"bandit_leader","animal":false,"ai":{"kind":"humanoid","faction":"bandit","rally":6,"leash":12,"keep":[4,6],"potionPct":30,"blockPct":25,"defended":true},"bones":"big_bones"},"goblin":{"name":"Goblin","level":10,"hp":20,"att":10,"def":8,"attb":6,"defb":6,"max":3,"speed":4,"aggro":2,"respawn":67,"drops":[{"item":"sword_t1","one_in":1},{"item":"arrows_t1","n":[3,10],"one_in":4},{"item":"bread","one_in":6}],"gold":15,"anim":"stab","look":"goblin","animal":false,"ai":{"kind":"humanoid","faction":"goblin","rally":6,"leash":12,"keep":[4,6],"fleePct":25}},"goblin_chief":{"name":"Goblin Chief","level":22,"hp":55,"att":22,"def":20,"attb":16,"defb":18,"max":6,"speed":4,"aggro":5,"respawn":500,"anim":"slash","look":"goblin_chief","animal":false,"gold":40,"drops":[{"item":"mace_t4","one_in":1},{"item":"shield_t2","one_in":1},{"item":"potion","one_in":2},{"item":"arrows_t2","n":[5,15],"one_in":3}],"ai":{"kind":"humanoid","faction":"goblin","rally":8,"leash":10,"keep":[4,6],"potionPct":30,"blockPct":25,"defended":true},"bones":"big_bones"},"chicken":{"name":"Chicken","level":1,"hp":3,"att":1,"def":1,"attb":0,"defb":0,"max":1,"speed":4,"aggro":0,"respawn":60,"drops":[{"item":"chicken_raw","one_in":1}],"gold":0,"anim":"bite","look":"chicken","animal":true,"shy":2,"ownDice":true,"roam":3,"fleeHit":true,"roamEvery":3},"hen":{"name":"Brown hen","level":1,"hp":3,"att":1,"def":1,"attb":0,"defb":0,"max":1,"speed":4,"aggro":0,"respawn":60,"drops":[{"item":"chicken_raw","one_in":1}],"gold":0,"anim":"bite","look":"hen_brown","animal":true,"shy":2,"ownDice":true,"roam":3,"fleeHit":true,"roamEvery":3},"hare":{"name":"Hare","level":1,"hp":4,"att":1,"def":2,"attb":0,"defb":0,"max":1,"speed":4,"aggro":0,"respawn":60,"drops":[{"item":"hare_raw","one_in":1},{"item":"hare_pelt","one_in":2}],"gold":0,"anim":"bite","look":"hare","animal":true,"shy":5,"ownDice":true,"roam":4,"fleeHit":true},"snow_hare":{"name":"Snow hare","level":2,"hp":5,"att":1,"def":3,"attb":0,"defb":0,"max":1,"speed":4,"aggro":0,"respawn":60,"drops":[{"item":"hare_raw","one_in":1},{"item":"snow_hare_pelt","one_in":2}],"gold":0,"anim":"bite","look":"snow_hare","animal":true,"shy":5,"ownDice":true,"roam":4,"fleeHit":true},"deer":{"name":"Red deer","level":5,"hp":14,"att":3,"def":6,"attb":0,"defb":0,"max":2,"speed":4,"aggro":0,"respawn":60,"drops":[{"item":"venison_raw","one_in":1},{"item":"deer_hide","one_in":1}],"gold":0,"anim":"bite","look":"deer","animal":true,"shy":7,"ownDice":true,"roam":5,"hunt":{"sure":10,"hits":{"birch_arrows":2,"arrows_t1":2,"arrows_t2":2,"arrows_t3":1,"arrows_t4":1,"arrows_t5":1,"obsidian_arrows":1}},"fleeHit":true},"goat":{"name":"Mountain goat","level":6,"hp":15,"att":5,"def":7,"attb":0,"defb":0,"max":2,"speed":4,"aggro":0,"respawn":60,"drops":[{"item":"goat_raw","one_in":1},{"item":"goat_hide","one_in":2}],"gold":0,"anim":"bite","look":"goat","animal":true,"shy":4,"ownDice":true,"roam":4,"fleeHit":true},"lizard":{"name":"Sand lizard","level":4,"hp":9,"att":4,"def":5,"attb":0,"defb":0,"max":2,"speed":4,"aggro":0,"respawn":60,"drops":[{"item":"lizard_skin","one_in":2}],"gold":0,"anim":"bite","look":"lizard","animal":true,"shy":3,"ownDice":true,"roam":3,"fleeHit":true},"boar":{"name":"Wild boar","level":9,"hp":22,"att":9,"def":8,"attb":4,"defb":5,"max":4,"speed":4,"aggro":0,"respawn":60,"drops":[{"item":"boar_raw","one_in":1},{"item":"boar_hide","one_in":1}],"gold":0,"anim":"bite","look":"boar","animal":true,"ownDice":true,"roam":4,"bones":"big_bones"},"timber_wolf":{"name":"Timber wolf","level":14,"hp":28,"att":13,"def":10,"attb":6,"defb":5,"max":4,"speed":4,"aggro":6,"respawn":60,"drops":[{"item":"timber_wolf_pelt","one_in":1}],"gold":0,"anim":"bite","look":"timber_wolf","animal":true,"hunter":true,"ownDice":true,"roam":5,"bones":"big_bones"},"chain_dragon":{"name":"Chained dragon","level":40,"hp":280,"att":55,"def":48,"attb":42,"defb":36,"max":12,"speed":8,"aggro":0,"respawn":200,"gold":0,"anim":"bite","look":"chain_dragon","animal":true,"bones":"dragon_bones","chain":4,"windup":4,"cast":{"name":"Dragonfire","att":80,"attb":60,"max":36,"range":6},"drops":[{"item":"mithril_ore","one_in":2,"n":[2,4]},{"any":["helmet_t5","body_t5","legs_t5","chain_t5","shield_t5","sword_t5","dagger_t5","longsword_t5","mace_t5"],"one_in":8},{"item":"dragon_cape","one_in":32}],"lines":["The chain has been here longer than the walls. I walk the circle it allows, and no further.","I do not hunt. Step in and I will still answer.","You will see the bite, and you will see the fire. If you cannot tell them apart, leave."],"hint":"It hits slowly, and shows a bite or dragonfire before either lands. Protect from Magic, or a dragon cape, is the only thing that stops the fire."},"giant_rat":{"name":"Giant rat","level":12,"hp":22,"att":11,"def":9,"attb":4,"defb":4,"max":3,"speed":4,"aggro":6,"respawn":150,"anim":"bite","look":"giant_rat","animal":true,"roam":3,"gold":0,"drops":[{"item":"rat_meat_raw","one_in":1},{"item":"rat_pelt","one_in":1}],"hunter":true,"relentless":true},"spider":{"name":"Cave spider","level":16,"hp":26,"att":15,"def":11,"attb":8,"defb":6,"max":3,"speed":3,"aggro":6,"respawn":150,"anim":"bite","look":"spider","animal":true,"roam":3,"gold":0,"venom":{"chance":25,"ticks":25,"dmg":1},"drops":[{"item":"spider_silk","one_in":1}],"hunter":true,"relentless":true},"giant_spider":{"name":"Giant spider","level":22,"hp":40,"att":20,"def":16,"attb":12,"defb":10,"max":5,"speed":4,"aggro":6,"respawn":200,"anim":"bite","look":"giant_spider","animal":true,"roam":3,"gold":0,"venom":{"chance":30,"ticks":30,"dmg":2},"drops":[{"item":"spider_silk","n":[2,3],"one_in":1},{"item":"potion","one_in":6}],"hunter":true,"relentless":true},"swamp_monster":{"name":"Swamp monster","level":28,"hp":70,"att":24,"def":22,"attb":16,"defb":16,"max":7,"speed":5,"aggro":6,"respawn":500,"anim":"crush","look":"swamp_monster","animal":false,"roam":2,"gold":60,"drops":[{"item":"potion","one_in":2},{"item":"antidote","one_in":3},{"item":"bread","one_in":2}],"hunter":true,"relentless":true},"spider_queen":{"name":"Spider Queen","level":32,"hp":80,"att":23,"def":24,"attb":16,"defb":15,"max":6,"speed":4,"aggro":7,"respawn":1000,"anim":"bite","look":"spider_queen","animal":true,"roam":2,"gold":120,"venom":{"chance":35,"ticks":30,"dmg":1},"drops":[{"item":"spider_silk","n":[5,10],"one_in":1},{"item":"potion","n":[2,2],"one_in":1},{"item":"antidote","one_in":1},{"item":"hat_spidercrown","one_in":20}],"hunter":true,"relentless":true},"wraith":{"name":"Wraith","level":24,"hp":42,"att":22,"def":18,"attb":14,"defb":12,"max":5,"speed":4,"aggro":6,"respawn":300,"anim":"cast","look":"wraith","animal":false,"roam":3,"gold":20,"drops":[{"item":"staff_t1","one_in":8}],"hunter":true,"relentless":true,"cast":{"name":"Shadow bolt","range":5,"att":16,"attb":14,"max":4,"fx":"bind","fxTicks":5,"fxChance":3},"ai":{"kind":"humanoid","faction":"wraith","rally":0,"leash":10}},"ash_knight":{"name":"Ash Knight","level":30,"hp":80,"att":26,"def":24,"attb":20,"defb":20,"max":6,"speed":5,"aggro":6,"respawn":1000,"anim":"slash","look":"ash_knight","animal":false,"roam":1,"gold":80,"drops":[{"item":"longsword_t3","one_in":3},{"item":"potion","one_in":2}],"hunter":true,"relentless":true},"lich":{"name":"Lich of Ashvale","level":34,"hp":100,"att":28,"def":24,"attb":21,"defb":17,"max":6,"speed":5,"aggro":7,"respawn":1500,"anim":"cast","look":"lich","animal":false,"roam":1,"gold":150,"drops":[{"item":"potion","n":[2,2],"one_in":1},{"item":"antidote","one_in":1}],"hunter":true,"relentless":true},"vorthan":{"name":"Vorthan","level":14,"hp":28,"att":13,"def":11,"attb":10,"defb":10,"max":4,"speed":5,"aggro":0,"respawn":90,"drops":[{"item":"vorth_rosary","one_in":1}],"gold":12,"anim":"cast","look":"vorthan","animal":false,"cover":{"quest":"red_pyre","step":3},"ai":{"kind":"humanoid","faction":"vorthan","rally":0,"leash":8}},"bramble":{"name":"Bramble","level":16,"hp":32,"att":48,"def":10,"attb":40,"defb":8,"max":4,"speed":5,"aggro":0,"respawn":0,"drops":[{"item":"oak_logs","one_in":2,"n":[1,2]},{"item":"sapling","one_in":8},{"item":"brambleheart_maul","one_in":64}],"gold":0,"bones":"bones","miss":50,"anim":"crush","look":"bramble","animal":false,"hint":"Swings like a drunk tree: a normal blow, then none.","ai":{"kind":"humanoid","faction":"balance","rally":0,"leash":30}},"keel":{"name":"Keel","level":18,"hp":30,"att":42,"def":12,"attb":36,"defb":10,"max":4,"speed":4,"aggro":0,"respawn":0,"drops":[{"item":"arrows_t1","one_in":2,"n":[10,20]},{"item":"arrows_t2","one_in":8,"n":[5,10]},{"item":"bow_evenflight","one_in":64}],"gold":0,"bones":"bones","miss":0,"anim":"bow","look":"keel","animal":false,"hint":"An ordinary arrow that keeps its time and does not miss the moment.","ai":{"kind":"humanoid","faction":"balance","rally":0,"leash":30,"keep":[4,6]}},"gale":{"name":"Gale","level":20,"hp":26,"att":20,"def":8,"attb":10,"defb":8,"max":4,"speed":5,"aggro":0,"respawn":0,"drops":[{"item":"potion","one_in":2},{"item":"prayer_potion","one_in":8},{"item":"staff_stillwind","one_in":64}],"gold":0,"bones":"bones","miss":0,"anim":"cast","look":"gale","animal":false,"hint":"Heavy magic, and it does not fidget.","cast":{"name":"Gale bolt","range":6,"att":90,"attb":90,"max":13},"ai":{"kind":"humanoid","faction":"balance","rally":0,"leash":30}}}}});
+ASH3D.defineData({"ashvale3d":"module","name":"monsters","api":1,"v":1,"data":{"monsters":{"rat":{"name":"Giant rat","level":2,"hp":5,"att":1,"def":1,"attb":0,"defb":0,"max":1,"speed":4,"aggro":0,"respawn":50,"drops":[{"item":"rat_meat_raw","one_in":1},{"item":"rat_pelt","one_in":1}],"gold":0,"anim":"bite","look":"rat","animal":true},"wolf":{"name":"Grey wolf","level":8,"hp":18,"att":8,"def":6,"attb":4,"defb":4,"max":3,"speed":4,"aggro":2,"respawn":67,"drops":[{"item":"pelt","one_in":1}],"gold":0,"anim":"bite","look":"wolf","animal":true},"bandit":{"name":"Bandit","level":12,"hp":24,"att":12,"def":10,"attb":8,"defb":10,"max":4,"speed":4,"aggro":4,"respawn":83,"drops":[{"item":"sword_t2","one_in":1},{"item":"arrows_t1","n":[5,15],"one_in":3},{"item":"bread","one_in":4}],"gold":18,"anim":"stab","look":"bandit","animal":false,"ai":{"kind":"humanoid","faction":"bandit","rally":6,"leash":12,"keep":[4,6]}},"bandit_leader":{"name":"Bandit leader","level":18,"hp":45,"att":18,"def":16,"attb":14,"defb":16,"max":5,"speed":4,"aggro":5,"respawn":250,"drops":[{"item":"sword_t3","one_in":1},{"item":"helmet_t2","one_in":1},{"item":"body_t2","one_in":1},{"item":"arrows_t2","n":[10,20],"one_in":2},{"item":"potion","one_in":3}],"gold":27,"anim":"slash","look":"bandit_leader","animal":false,"ai":{"kind":"humanoid","faction":"bandit","rally":6,"leash":12,"keep":[4,6],"potionPct":30,"blockPct":25,"defended":true},"bones":"big_bones"},"goblin":{"name":"Goblin","level":10,"hp":20,"att":10,"def":8,"attb":6,"defb":6,"max":3,"speed":4,"aggro":2,"respawn":67,"drops":[{"item":"sword_t1","one_in":1},{"item":"arrows_t1","n":[3,10],"one_in":4},{"item":"bread","one_in":6}],"gold":15,"anim":"stab","look":"goblin","animal":false,"ai":{"kind":"humanoid","faction":"goblin","rally":6,"leash":12,"keep":[4,6],"fleePct":25}},"goblin_chief":{"name":"Goblin Chief","level":22,"hp":55,"att":22,"def":20,"attb":16,"defb":18,"max":6,"speed":4,"aggro":5,"respawn":500,"anim":"slash","look":"goblin_chief","animal":false,"gold":40,"drops":[{"item":"mace_t4","one_in":1},{"item":"shield_t2","one_in":1},{"item":"potion","one_in":2},{"item":"arrows_t2","n":[5,15],"one_in":3}],"ai":{"kind":"humanoid","faction":"goblin","rally":8,"leash":10,"keep":[4,6],"potionPct":30,"blockPct":25,"defended":true},"bones":"big_bones"},"chicken":{"name":"Chicken","level":1,"hp":3,"att":1,"def":1,"attb":0,"defb":0,"max":1,"speed":4,"aggro":0,"respawn":60,"drops":[{"item":"chicken_raw","one_in":1}],"gold":0,"anim":"bite","look":"chicken","animal":true,"shy":2,"ownDice":true,"roam":3,"fleeHit":true,"roamEvery":3},"hen":{"name":"Brown hen","level":1,"hp":3,"att":1,"def":1,"attb":0,"defb":0,"max":1,"speed":4,"aggro":0,"respawn":60,"drops":[{"item":"chicken_raw","one_in":1}],"gold":0,"anim":"bite","look":"hen_brown","animal":true,"shy":2,"ownDice":true,"roam":3,"fleeHit":true,"roamEvery":3},"hare":{"name":"Hare","level":1,"hp":4,"att":1,"def":2,"attb":0,"defb":0,"max":1,"speed":4,"aggro":0,"respawn":60,"drops":[{"item":"hare_raw","one_in":1},{"item":"hare_pelt","one_in":2}],"gold":0,"anim":"bite","look":"hare","animal":true,"shy":5,"ownDice":true,"roam":4,"fleeHit":true},"snow_hare":{"name":"Snow hare","level":2,"hp":5,"att":1,"def":3,"attb":0,"defb":0,"max":1,"speed":4,"aggro":0,"respawn":60,"drops":[{"item":"hare_raw","one_in":1},{"item":"snow_hare_pelt","one_in":2}],"gold":0,"anim":"bite","look":"snow_hare","animal":true,"shy":5,"ownDice":true,"roam":4,"fleeHit":true},"deer":{"name":"Red deer","level":5,"hp":14,"att":3,"def":6,"attb":0,"defb":0,"max":2,"speed":4,"aggro":0,"respawn":60,"drops":[{"item":"venison_raw","one_in":1},{"item":"deer_hide","one_in":1}],"gold":0,"anim":"bite","look":"deer","animal":true,"shy":7,"ownDice":true,"roam":5,"hunt":{"sure":10,"hits":{"birch_arrows":2,"arrows_t1":2,"arrows_t2":2,"arrows_t3":1,"arrows_t4":1,"arrows_t5":1,"obsidian_arrows":1}},"fleeHit":true},"goat":{"name":"Mountain goat","level":6,"hp":15,"att":5,"def":7,"attb":0,"defb":0,"max":2,"speed":4,"aggro":0,"respawn":60,"drops":[{"item":"goat_raw","one_in":1},{"item":"goat_hide","one_in":2}],"gold":0,"anim":"bite","look":"goat","animal":true,"shy":4,"ownDice":true,"roam":4,"fleeHit":true},"lizard":{"name":"Sand lizard","level":4,"hp":9,"att":4,"def":5,"attb":0,"defb":0,"max":2,"speed":4,"aggro":0,"respawn":60,"drops":[{"item":"lizard_skin","one_in":2}],"gold":0,"anim":"bite","look":"lizard","animal":true,"shy":3,"ownDice":true,"roam":3,"fleeHit":true},"boar":{"name":"Wild boar","level":9,"hp":22,"att":9,"def":8,"attb":4,"defb":5,"max":4,"speed":4,"aggro":0,"respawn":60,"drops":[{"item":"boar_raw","one_in":1},{"item":"boar_hide","one_in":1}],"gold":0,"anim":"bite","look":"boar","animal":true,"ownDice":true,"roam":4,"bones":"big_bones"},"timber_wolf":{"name":"Timber wolf","level":14,"hp":28,"att":13,"def":10,"attb":6,"defb":5,"max":4,"speed":4,"aggro":6,"respawn":60,"drops":[{"item":"timber_wolf_pelt","one_in":1}],"gold":0,"anim":"bite","look":"timber_wolf","animal":true,"hunter":true,"ownDice":true,"roam":5,"bones":"big_bones"},"chain_dragon":{"name":"Chained dragon","level":40,"hp":280,"att":55,"def":48,"attb":42,"defb":36,"max":12,"speed":8,"aggro":0,"respawn":200,"gold":0,"anim":"bite","look":"chain_dragon","animal":true,"bones":"dragon_bones","chain":4,"windup":4,"cast":{"name":"Dragonfire","att":80,"attb":60,"max":36,"range":6},"drops":[{"item":"mithril_ore","one_in":2,"n":[2,4]},{"any":["helmet_t5","body_t5","legs_t5","chain_t5","shield_t5","sword_t5","dagger_t5","longsword_t5","mace_t5"],"one_in":8},{"item":"dragon_cape","one_in":32}],"lines":["The chain has been here longer than the walls. I walk the circle it allows, and no further.","I do not hunt. Step in and I will still answer.","You will see the bite, and you will see the fire. If you cannot tell them apart, leave."],"hint":"It hits slowly, and shows a bite or dragonfire before either lands. Protect from Magic, or a dragon cape, is the only thing that stops the fire."},"giant_rat":{"name":"Giant rat","level":12,"hp":22,"att":11,"def":9,"attb":4,"defb":4,"max":3,"speed":4,"aggro":6,"respawn":150,"anim":"bite","look":"giant_rat","animal":true,"roam":3,"gold":0,"drops":[{"item":"rat_meat_raw","one_in":1},{"item":"rat_pelt","one_in":1}],"hunter":true,"relentless":true},"spider":{"name":"Cave spider","level":16,"hp":26,"att":15,"def":11,"attb":8,"defb":6,"max":3,"speed":3,"aggro":6,"respawn":150,"anim":"bite","look":"spider","animal":true,"roam":3,"gold":0,"venom":{"chance":25,"ticks":25,"dmg":1},"drops":[{"item":"spider_silk","one_in":1}],"hunter":true,"relentless":true},"giant_spider":{"name":"Giant spider","level":22,"hp":40,"att":20,"def":16,"attb":12,"defb":10,"max":5,"speed":4,"aggro":6,"respawn":200,"anim":"bite","look":"giant_spider","animal":true,"roam":3,"gold":0,"venom":{"chance":30,"ticks":30,"dmg":2},"drops":[{"item":"spider_silk","n":[2,3],"one_in":1},{"item":"potion","one_in":6}],"hunter":true,"relentless":true},"swamp_monster":{"name":"Swamp monster","level":28,"hp":70,"att":24,"def":22,"attb":16,"defb":16,"max":7,"speed":5,"aggro":6,"respawn":500,"anim":"crush","look":"swamp_monster","animal":false,"roam":2,"gold":60,"drops":[{"item":"potion","one_in":2},{"item":"antidote","one_in":3},{"item":"bread","one_in":2}],"hunter":true,"relentless":true},"spider_queen":{"name":"Spider Queen","level":32,"hp":80,"att":23,"def":24,"attb":16,"defb":15,"max":6,"speed":4,"aggro":7,"respawn":1000,"anim":"bite","look":"spider_queen","animal":true,"roam":2,"gold":120,"venom":{"chance":35,"ticks":30,"dmg":1},"drops":[{"item":"spider_silk","n":[5,10],"one_in":1},{"item":"potion","n":[2,2],"one_in":1},{"item":"antidote","one_in":1}],"hunter":true,"relentless":true,"award":{"item":"hat_spidercrown","once":"spidercrown"}},"wraith":{"name":"Wraith","level":24,"hp":42,"att":22,"def":18,"attb":14,"defb":12,"max":5,"speed":4,"aggro":6,"respawn":300,"anim":"cast","look":"wraith","animal":false,"roam":3,"gold":20,"drops":[{"item":"staff_t1","one_in":8}],"hunter":true,"relentless":true,"cast":{"name":"Shadow bolt","range":5,"att":16,"attb":14,"max":4,"fx":"bind","fxTicks":5,"fxChance":3},"ai":{"kind":"humanoid","faction":"wraith","rally":0,"leash":10}},"ash_knight":{"name":"Ash Knight","level":30,"hp":80,"att":26,"def":24,"attb":20,"defb":20,"max":6,"speed":5,"aggro":6,"respawn":1000,"anim":"slash","look":"ash_knight","animal":false,"roam":1,"gold":80,"drops":[{"item":"longsword_t3","one_in":3},{"item":"potion","one_in":2}],"hunter":true,"relentless":true},"lich":{"name":"Lich of Ashvale","level":34,"hp":100,"att":28,"def":24,"attb":21,"defb":17,"max":6,"speed":5,"aggro":7,"respawn":1500,"anim":"cast","look":"lich","animal":false,"roam":1,"gold":150,"drops":[{"item":"potion","n":[2,2],"one_in":1},{"item":"antidote","one_in":1}],"hunter":true,"relentless":true},"vorthan":{"name":"Vorthan","level":14,"hp":28,"att":13,"def":11,"attb":10,"defb":10,"max":4,"speed":5,"aggro":0,"respawn":90,"drops":[{"item":"vorth_rosary","one_in":1}],"gold":12,"anim":"cast","look":"vorthan","animal":false,"cover":{"quest":"red_pyre","step":3},"ai":{"kind":"humanoid","faction":"vorthan","rally":0,"leash":8}},"bramble":{"name":"Bramble","level":16,"hp":32,"att":48,"def":10,"attb":40,"defb":8,"max":4,"speed":5,"aggro":0,"respawn":0,"drops":[{"item":"oak_logs","one_in":2,"n":[1,2]},{"item":"sapling","one_in":8},{"item":"brambleheart_maul","one_in":64}],"gold":0,"bones":"bones","miss":50,"anim":"crush","look":"bramble","animal":false,"hint":"Swings like a drunk tree: a normal blow, then none.","ai":{"kind":"humanoid","faction":"balance","rally":0,"leash":30}},"keel":{"name":"Keel","level":18,"hp":30,"att":42,"def":12,"attb":36,"defb":10,"max":4,"speed":4,"aggro":0,"respawn":0,"drops":[{"item":"arrows_t1","one_in":2,"n":[10,20]},{"item":"arrows_t2","one_in":8,"n":[5,10]},{"item":"bow_evenflight","one_in":64}],"gold":0,"bones":"bones","miss":0,"anim":"bow","look":"keel","animal":false,"hint":"An ordinary arrow that keeps its time and does not miss the moment.","ai":{"kind":"humanoid","faction":"balance","rally":0,"leash":30,"keep":[4,6]}},"gale":{"name":"Gale","level":20,"hp":26,"att":20,"def":8,"attb":10,"defb":8,"max":4,"speed":5,"aggro":0,"respawn":0,"drops":[{"item":"potion","one_in":2},{"item":"prayer_potion","one_in":8},{"item":"staff_stillwind","one_in":64}],"gold":0,"bones":"bones","miss":0,"anim":"cast","look":"gale","animal":false,"hint":"Heavy magic, and it does not fidget.","cast":{"name":"Gale bolt","range":6,"att":90,"attb":90,"max":13},"ai":{"kind":"humanoid","faction":"balance","rally":0,"leash":30}}}}});
 
 </script>
 <script>
@@ -24333,7 +24631,7 @@ ASH3D.defineData({"ashvale3d":"module","name":"quests","api":1,"v":2,"data":{"qu
 
 </script>
 <script>
-ASH3D.defineData({"ashvale3d":"module","name":"rules","api":1,"v":3,"data":{"xp":[0,0,83,174,276,388,512,650,801,969,1154,1358,1584,1833,2107,2411,2746,3115,3523,3973,4470,5018,5624,6291,7028,7842,8740,9730,10824,12031,13363,14833,16456,18247,20224,22406,24815,27473,30408,33648,37224,41171,45529,50339,55649,61512,67983,75127,83014,91721,101333,111945,123660,136594,150872,166636,184040,203254,224466,247886,273742,302288,333804,368599,407015,449428,496254,547953,605032,668051,737627,814445,899257,992895,1096278,1210421,1336443,1475581,1629200,1798808,1986068,2192818,2421087,2673114,2951373,3258594,3597792,3972294,4385776,4842295,5346332,5902831,6517253,7195629,7944614,8771558,9684577,10692629,11805606,13034431],"tiles":{"noFly":"ZD","block":"TPORNIr~FHXWMYCGAUSVJ^KZD","los":"TPORNIrHXWMYCGASV^KZD","tree":"TPOMWY","rock":"RNICGA","floor":"i"},"nodes":{"T":{"skill":"woodcutting","name":"Tree","item":"logs","req":1,"xp":250,"speed":4,"deplete":6,"regrow":-1},"P":{"skill":"woodcutting","name":"Pine tree","item":"logs","req":1,"xp":250,"speed":4,"deplete":6,"regrow":-1},"O":{"skill":"woodcutting","name":"Oak tree","item":"oak_logs","req":15,"xp":375,"speed":4,"deplete":8,"regrow":-1},"W":{"skill":"woodcutting","name":"Willow","item":"willow_logs","req":20,"xp":500,"speed":4,"deplete":8,"regrow":-1},"M":{"skill":"woodcutting","name":"Maple","item":"maple_logs","req":1,"hard":30,"xp":675,"speed":5,"deplete":8,"regrow":-1,"tap":{"xp":200,"ticks":5,"per":"day","mark":"sap","season":"sap","verb":"Collect sap from","say":"Ziinzibaakwadwaaboo drips from the cut into your {bucket} until it is full.","again":"This ininaatig has given its sap today. Try another tree.","none":"You need an empty biskitenaagan or an akik (pail) to catch the sap.","off":"The sap is not running. It runs in the spring, in the days before the maples bud.","cold":"The day never thawed: the sap is not running today.","warm":"The night did not freeze: the sap is not running today."}},"Q":{"skill":"woodcutting","name":"Cedar","item":"cedar_logs","req":20,"xp":500,"speed":4,"deplete":8,"regrow":-1},"L":{"skill":"woodcutting","name":"Tamarack","item":"tamarack_logs","req":20,"xp":500,"speed":4,"deplete":8,"regrow":-1},"E":{"skill":"woodcutting","name":"Birch","item":"birch_logs","req":1,"xp":250,"speed":4,"deplete":6,"regrow":-1,"peel":{"item":"wiigwaas","xp":150,"ticks":4,"per":"year","mark":"bark","verb":"Peel bark from","say":"You cut round the trunk and ease off a sheet of wiigwaas. The birch will heal by next year.","again":"This birch has given its wiigwaas this year. Leave it to heal and find another.","tool":"woodcutting","noTool":"You need a tomahawk or an axe to cut the wiigwaas (birch bark) from the tree."}},"Y":{"skill":"woodcutting","name":"Yew","item":"yew_logs","req":40,"xp":900,"speed":5,"deplete":10,"regrow":-1},"R":{"skill":"mining","name":"Copper rocks","item":"copper_ore","req":1,"xp":175,"speed":4,"deplete":1,"regrow":8},"N":{"skill":"mining","name":"Tin rocks","item":"tin_ore","req":1,"xp":175,"speed":4,"deplete":1,"regrow":8},"I":{"skill":"mining","name":"Iron rocks","item":"iron_ore","req":15,"xp":350,"speed":4,"deplete":1,"regrow":15},"C":{"skill":"mining","name":"Coal rocks","item":"coal","req":20,"xp":250,"speed":4,"deplete":1,"regrow":20},"G":{"skill":"mining","name":"Gold rocks","item":"gold_ore","req":30,"xp":420,"speed":4,"deplete":1,"regrow":30},"A":{"skill":"mining","name":"Mithril rocks","item":"mithril_ore","req":40,"xp":600,"speed":5,"deplete":1,"regrow":45},"S":{"skill":"mining","name":"Biiwaanag (flint)","item":"flint","req":1,"xp":50,"speed":3,"deplete":1,"regrow":12,"bare":true,"say":"You pry a nodule of biiwaanag (flint) out of the chalky bank."},"V":{"skill":"mining","name":"Obsidian","item":"obsidian","req":1,"xp":100,"speed":4,"deplete":1,"regrow":15,"bare":true,"say":"You work a piece of black obsidian loose from the bank. Its broken edge is sharper than any knife."},"J":{"skill":"woodcutting","name":"Miskwaabiimizh (red willow)","item":"willow_bark","req":1,"xp":0,"speed":4,"deplete":0,"regrow":-1,"peelOnly":true,"peel":{"item":"willow_bark","xp":60,"ticks":4,"per":"day","mark":"willow","verb":"Peel bark from","tool":"woodcutting","noTool":"You need a tomahawk or an axe to cut the bark from the miskwaabiimizh (red willow).","say":"You shave the red outer bark from a stem of miskwaabiimizh (red willow). It will grow back by tomorrow.","again":"This miskwaabiimizh (red willow) has given its bark today. Try another clump, or come back tomorrow."}},"fish":{"skill":"fishing","name":"Fishing spot","req":1,"xp":100,"speed":5,"deplete":0},"range":{"skill":"cooking","name":"Cooking range","speed":4},"fire":{"skill":"cooking","name":"Campfire","speed":4,"burnBonus":10},"altar":{"skill":"prayer","name":"Altar","speed":2}},"skills":["attack","strength","defence","hitpoints","ranged","magic","dexterity","speechcraft","woodcutting","mining","fishing","cooking","firemaking","prayer"],"fires":{"lightTicks":3,"basePct":50,"pctPerLevel":2,"maxPct":95,"sapDay":{"walk":[6.75,8],"gather":[8,12],"trips":4,"at":[32498,-2417],"kettle":[32496,-2417],"pour":[32496,-2418],"steam":[0.25,0.6],"trees":[[32495,-2411,32495,-2412],[32500,-2414,32500,-2413],[32497,-2410,32497,-2411],[32498,-2422,32498,-2423]]}},"effects":{"note":"effect library (core.js EFFECTS); item JSON: Effect, Effect ticks, Effect chance (%), Effect damage. Unknown effects are ignored.","known":["freeze","stun","slow","poison","burn"]},"spells":[[1,2,"Wind strike"],[5,4,"Water strike"],[9,6,"Earth strike"],[13,8,"Fire strike"],[17,9,"Wind bolt"],[23,10,"Water bolt"],[29,11,"Earth bolt"],[35,12,"Fire bolt"],[41,13,"Wind blast"],[47,14,"Water blast"]],"start":{"inv":[["coins",75],["bread",1],["bread",1],["bread",1]],"hitpoints":10,"points":10,"maxPerSkill":5,"skills":["attack","strength","defence","ranged","magic","hitpoints","dexterity","speechcraft"]},"items":{"categories":{"weapon":["sword","dagger","longsword","mace","bow","staff","tomahawk"],"armour":["helmet","platebody","chainbody","platelegs","kiteshield","robe","torch","boots"],"tool":["hatchet","pickaxe","net","rod","pot","tinderbox","stone","pole","knocker","snare","flint"],"pack":["pack"],"cosmetic":["hat","cape","robe"],"resource":["logs","ore","coal","bar","pelt","fish","mushroom","meat","bones","note","sapling","silk","grain","bark","sinew","bucket","curio","stone","tobacco"],"food":["bread","fish","mushroom","meat","candy"],"potion":["healing"],"ammo":["arrow"],"currency":["gold"],"jewellery":["ring","charm"]},"slots":{"weapon":"weapon","armour/helmet":"head","armour/platebody":"body","armour/chainbody":"body","armour/platelegs":"legs","armour/kiteshield":"shield","armour/torch":"shield","ammo":"ammo","pack":"pack","cosmetic/hat":"head","cosmetic/cape":"cape","cosmetic/robe":"body","jewellery/ring":"ring","armour/robe":"body","armour/boots":"feet","jewellery/charm":"shield"},"weapons":{"sword":{"class":"melee","anim":"slash"},"dagger":{"class":"melee","anim":"stab"},"longsword":{"class":"melee","anim":"slash"},"mace":{"class":"melee","anim":"crush"},"tomahawk":{"class":"melee","anim":"slash"},"bow":{"class":"ranged","anim":"bow","twoHanded":true},"staff":{"class":"magic","anim":"cast"}},"fireMix":[{"take":{"willow_bark":2,"asemaa":1},"give":{"apaakozigan":3},"xp":{"cooking":150},"say":"You toast the miskwaabiimizh (red willow) bark over the fire and rub it fine with the asemaa (tobacco): three pinches of apaakozigan (kinnikinnick)."}],"offers":{"tobacco":{"verb":"Biindaakoojige (offer tobacco)","xpAs":"bones","radius":12,"bonus":25,"say":"You set down a pinch of asemaa (tobacco) and give thanks before you take anything from here. The ground here is blessed for you today."}},"traps":{"snare":{"prey":["hare","snow_hare"],"near":12,"hours":[1,2],"max":3,"xp":{"dexterity":40},"say":"You bend a sapling, tie the noose of the nagwaagan (snare) across a waabooz (rabbit) run and leave it.","none":"There are no waabooz (rabbit) runs here. Set the nagwaagan (snare) where the rabbits are.","empty":"The nagwaagan (snare) is still empty. Leave it a while and come back.","caught":"There is a {prey} in your nagwaagan (snare)."}},"tools":{"hatchet":"woodcutting","pickaxe":"mining","net":"fishing","rod":"fishing","pot":"fishing","tinderbox":"firemaking","flint":"firemaking"},"edible":["food","potion"],"drink":["potion"],"traits":{"Edition":"edition","Cures":"cures","Light":"light","Form":"form","Teleport":"teleport","Cooldown ticks":"cooldown","Call to arms":"arms","Attack":"attack","Strength":"strength","Defence":"defence","Ranged":"ranged","Magic":"magic","Ranged strength":"rstr","Speed":"speed","Range":"range","Carry":["carry",1000],"Heal":"heal","Heal %":"healPct","Prayer %":"prayPct","Cooks into":"cooks","Burns into":"burns","Container":"vessel","Fills into":"fills","English":"english","Energy":"energy","Cooking level":"cookReq","Cooking XP":"cookXp","Firemaking level":"fireReq","Burn ticks":"burnTicks","Firemaking XP":"fireXp","Tool":"tool","Bound":"bound","Effect":"effect","Effect ticks":"effectTicks","Effect chance":"effectChance","Effect damage":"effectDamage","Prayer XP":["buryXp",10],"Prayer":"prayer","Prayer seconds":"prayerSec","Prayer hold":"ppHold","Teleport from step":"teleFrom"},"limits":{"perTier":{"Attack":12,"Strength":12,"Ranged":12,"Magic":12,"Defence":16,"Ranged strength":8},"flat":{"Speed":[2,7],"Range":[1,10],"Carry":[0,100],"Heal":[0,40],"Heal %":[0,100],"Prayer %":[0,100],"Cooking level":[1,99],"Cooking XP":[0,500],"Firemaking level":[1,99],"Burn ticks":[10,600],"Firemaking XP":[0,500],"Effect ticks":[1,50],"Effect chance":[0,100],"Effect damage":[0,20],"Prayer XP":[0,500],"Prayer":[0,30],"Prayer seconds":[0,30],"Prayer hold":[0,30]},"weight":[1,100000],"tier":[1,5]},"armouryMap":{"sword":"weapon/sword","bow":"weapon/bow","staff":"weapon/staff","helmet":"armour/helmet","body":"armour/platebody","legs":"armour/platelegs","shield":"armour/kiteshield","ring":"jewellery/ring"},"creator":"nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c","also":["ns3A7VS6DDaCoBvNFnayHeS9pysgi7Ukrf","@yourfirstname","yourfirstname"]},"weather":{"climate":{"0":{"kinds":{"clear":45,"rain":30,"fog":25},"min":300,"max":900},"1":{"kinds":{"clear":60,"rain":25,"fog":15},"min":300,"max":900},"2":{"kinds":{"clear":80,"rain":12,"fog":8},"min":400,"max":1100},"3":{"kinds":{"clear":96,"rain":2,"fog":2},"min":600,"max":1500},"4":{"kinds":{"clear":72,"rain":23,"fog":5},"min":300,"max":900},"5":{"kinds":{"clear":25,"rain":55,"fog":20},"min":240,"max":720},"6":{"kinds":{"clear":35,"snow":35,"fog":20,"rain":10},"min":300,"max":900},"7":{"kinds":{"clear":30,"snow":55,"fog":15},"min":300,"max":900},"coastFog":12},"kinds":{"clear":{},"fog":{"sight":0.5,"range":0.6},"rain":{"fireFail":0.25,"fireBurn":0.6},"snow":{"run":0.85,"sight":0.8}},"say":{"clear":"The sky clears.","fog":"A fog rolls in.","rain":"It starts to rain.","snow":"Snow begins to fall."},"intensity":[50,100]},"retaliate":{"ticks":10,"beyond":12,"note":"a monster hit in the last `ticks` keeps its attacker as target across zone borders and up to `beyond` tiles past its leash (the operator)"},"respawn":{"emptyTicks":50,"deadTicks":2000,"note":"a dead monster comes back when its zone has been empty this long (50 ticks = 30 s) and someone enters, or after deadTicks (2000 = 20 min) at its post when no player stands within 8 tiles of it"},"carry":{"base":30000,"perStrength":1000,"unit":"grams","frozenPct":150},"death":{"pileTicks":1000,"note":"everything carried and worn drops where you die; what rules.persist keeps (Gold, stones, magical, worth 100+) stays until taken, the rest lasts pileTicks (1000 = 10 minutes)"},"portals":[{"id":"ashvale","name":"Ashvale","x":19,"y":55,"to":[19,56]},{"id":"saltmere","name":"Saltmere","x":462,"y":28,"to":[462,29]},{"id":"castle","name":"the Lake Castle","x":4048,"y":8419,"to":[4049,8418]},{"id":"spidercave","name":"the Spider Cave","x":-124,"y":11,"to":[-124,10]}],"persist":{"minValue":100,"always":["currency"],"teleport":true,"note":"a drop lies where it fell until someone takes it when it is Gold, a teleport stone or rune stone, magical, or worth minValue GOLD or more (value x how many); everything else despawns. The @ashvale Bank holds persisted drops and shows them to every player"},"dexterity":{"drainPerLevelPermille":5,"drainMaxPermille":400,"dodgePerTenLevels":1,"fastAt":50,"fastKinds":["dagger","bow"],"xpPerRunTile":2,"xpPerDamage":10},"speechcraft":{"pctPerLevelPermille":4,"maxPermille":300,"xpPerGold":1,"xpQuestTalk":250},"homes":{"ashvale":{"name":"Ashvale"},"ziibiing":{"hud":"ziibiing","name":"Ziibiing","offerHint":"Before you take from the land, set down a little asemaa (tobacco) and give thanks: Biindaakoojige (offer tobacco) from your bag. The land gives more to those who ask.","spawn":[24048,24406],"inv":[["asemaa",5],["venison_cooked",1],["venison_cooked",1],["wild_rice",3]],"first":"Ningashi, your mother, sits by the fire. Tap her to change your hair and clothes.","help":["You open your eyes by the fire in your mother's wigwam. <span class=\"y\">Ningashi</span> sees to your hair and clothes. When you are ready, go and see <span class=\"y\">Mishoomis</span> in his wigwam.","Ziibiing means \"at the river\". The people of the village each know their own part of the world: the canoe, the fish, the rice, the plants, the sky, the drum. Right-click one and talk.","The <span class=\"y\">makak</span> by the village fire holds everything you own in your arcade wallet.","Eat when your hitpoints run low."],"creator":{"note":"2026-10-08: everyday Anishinaabe wear, never medieval clothing; long hair; a man may go bare-chested; dance regalia is earned later. A list may be split by body.","styles":{"hair":["loose","braids","mohawklong"],"beard":[null],"shirt":{"male":[null,"ribbon","beadvest","buckskin"],"female":["ribbondress","ribbon","beadvest","buckskin"]},"pants":{"male":["breechcloth"],"female":["ribbonskirt","buckskinskirt"]},"feet":["moccasins"]},"labels":{"loose":"long","braids":"braids","mohawklong":"mohawk","":"bare chest","ribbon":"ribbon shirt","beadvest":"beaded vest","buckskin":"buckskin shirt","ribbondress":"ribbon dress","breechcloth":"breechcloth","ribbonskirt":"ribbon skirt","buckskinskirt":"buckskin skirt","moccasins":"moccasins","boots":"Feet"},"colors":{"buckskin":"#b8895a","buckskinskirt":"#b8895a","breechcloth":"#2a2f5a","ribbondress":"#3f5d8a","ribbonskirt":"#5b3a7a","ribbon":"#8a3030","beadvest":"#3f5d8a"},"cloth":["#b8895a","#8a6a4a","#2a2f5a","#3f5d8a","#8a3030","#5b3a7a","#2f6a6a","#4f6d3a","#c8a040","#f4f1ea","#3a3430","#c86a2a"],"boots":["#b8895a","#c8a070","#8a6a4a","#5a3a22","#3a2a1c"],"defaults":{"skin":"#a86f48","hair":"loose","hairColor":"#1c1612","eyes":"#3a2a1e","beard":null,"feet":"moccasins","boots":"#b8895a","belt":null,"shirt":{"style":"ribbon","color":"#8a3030"},"pants":{"style":"breechcloth","color":"#2a2f5a"}}},"wake":"home","wakeSay":"You wake by the fire in your mother's wigwam.","noFire":"You need biiwaanag (flint) to light a fire. Mishoomis knows where it lies along the riverbank."}},"questHomes":["ashvale"],"yard":{"note":"2026-10-04: chickens wherever there are buildings - n birds per `per` buildings, by a building, at most max per town","kinds":["house","shop","smithy","inn","tavern","hall"],"per":2,"n":2,"max":14,"birds":["chicken","hen"]},"prayer":{"resist":100,"buryTicks":2,"bones":"bones","altarOffers":[{"bones":"dragon_bones","log":"logs","sapling":"yew_sapling","xp":240},{"bones":"big_bones","log":"logs","sapling":"oak_sapling","xp":50},{"bones":"bones","log":"logs","sapling":"sapling","xp":15}],"list":[{"id":"protect_from_melee","name":"Protect from Melee","level":1,"drain":12,"kind":"protect","desc":"Protects you from melee attacks.","g":"head","x":["head"],"protect":"melee","icon":"melee"},{"id":"protect_from_missiles","name":"Protect from Missiles","level":4,"drain":12,"kind":"protect","desc":"Protects you from ranged attacks.","g":"head","x":["head"],"protect":"ranged","icon":"missiles"},{"id":"protect_from_magic","name":"Protect from Magic","level":15,"drain":12,"kind":"protect","desc":"Protects you from magic attacks.","g":"head","x":["head"],"protect":"magic","icon":"magic"}]},"saplings":{"sapling":"P","oak_sapling":"O","yew_sapling":"Y"},"flags":{"gift_of_angels":{"name":"the Gift of Angels","quest":"angel_gift","ringCooldown":1000,"desc":"Iria's blessing is on you now: the Ring of Angels rests ten minutes between saves instead of an hour."},"vorth_gate":{"name":"Pike's latch","quest":"red_pyre","desc":"Pike has opened the compound gate. You may enter and leave."},"vorth_bag":{"name":"Edric's bag","quest":"red_pyre","desc":"You searched the bones in the Spider Cave."},"cave_antidote":{"name":"The cave crate","desc":"You already took the antidote hidden in the crate at the mouth of the Spider Cave."},"vorth_spoke":{"name":"Edric's last word","quest":"red_pyre","desc":"Edric's shade has said his piece and gone."},"replant":{"name":"Replanting","quest":"even_grove","desc":"You can set a sapling in any stump, anywhere a tree used to stand. The tree grows back."}}}});
+ASH3D.defineData({"ashvale3d":"module","name":"rules","api":1,"v":3,"data":{"xp":[0,0,83,174,276,388,512,650,801,969,1154,1358,1584,1833,2107,2411,2746,3115,3523,3973,4470,5018,5624,6291,7028,7842,8740,9730,10824,12031,13363,14833,16456,18247,20224,22406,24815,27473,30408,33648,37224,41171,45529,50339,55649,61512,67983,75127,83014,91721,101333,111945,123660,136594,150872,166636,184040,203254,224466,247886,273742,302288,333804,368599,407015,449428,496254,547953,605032,668051,737627,814445,899257,992895,1096278,1210421,1336443,1475581,1629200,1798808,1986068,2192818,2421087,2673114,2951373,3258594,3597792,3972294,4385776,4842295,5346332,5902831,6517253,7195629,7944614,8771558,9684577,10692629,11805606,13034431],"tiles":{"noFly":"ZD","block":"TPORNIr~FHXWMYCGAUSVJ^KZD","los":"TPORNIrHXWMYCGASV^KZD","tree":"TPOMWY","rock":"RNICGA","floor":"i"},"nodes":{"T":{"skill":"woodcutting","name":"Tree","item":"logs","req":1,"xp":250,"speed":4,"deplete":6,"regrow":-1},"P":{"skill":"woodcutting","name":"Pine tree","item":"logs","req":1,"xp":250,"speed":4,"deplete":6,"regrow":-1},"O":{"skill":"woodcutting","name":"Oak tree","item":"oak_logs","req":15,"xp":375,"speed":4,"deplete":8,"regrow":-1},"W":{"skill":"woodcutting","name":"Willow","item":"willow_logs","req":20,"xp":500,"speed":4,"deplete":8,"regrow":-1},"M":{"skill":"woodcutting","name":"Maple","item":"maple_logs","req":1,"hard":30,"xp":675,"speed":5,"deplete":8,"regrow":-1,"tap":{"xp":200,"ticks":5,"per":"day","mark":"sap","season":"sap","verb":"Collect sap from","say":"Ziinzibaakwadwaaboo drips from the cut into your {bucket} until it is full.","again":"This ininaatig has given its sap today. Try another tree.","none":"You need an empty biskitenaagan or an akik (pail) to catch the sap.","off":"The sap is not running. It runs in the spring, in the days before the maples bud.","cold":"The day never thawed: the sap is not running today.","warm":"The night did not freeze: the sap is not running today."}},"Q":{"skill":"woodcutting","name":"Cedar","item":"cedar_logs","req":20,"xp":500,"speed":4,"deplete":8,"regrow":-1},"L":{"skill":"woodcutting","name":"Tamarack","item":"tamarack_logs","req":20,"xp":500,"speed":4,"deplete":8,"regrow":-1},"E":{"skill":"woodcutting","name":"Birch","item":"birch_logs","req":1,"xp":250,"speed":4,"deplete":6,"regrow":-1,"peel":{"item":"wiigwaas","xp":150,"ticks":4,"per":"year","mark":"bark","verb":"Peel bark from","say":"You cut round the trunk and ease off a sheet of wiigwaas. The birch will heal by next year.","again":"This birch has given its wiigwaas this year. Leave it to heal and find another.","tool":"woodcutting","noTool":"You need a tomahawk or an axe to cut the wiigwaas (birch bark) from the tree."}},"Y":{"skill":"woodcutting","name":"Yew","item":"yew_logs","req":40,"xp":900,"speed":5,"deplete":10,"regrow":-1},"R":{"skill":"mining","name":"Copper rocks","item":"copper_ore","req":1,"xp":175,"speed":4,"deplete":1,"regrow":8},"N":{"skill":"mining","name":"Tin rocks","item":"tin_ore","req":1,"xp":175,"speed":4,"deplete":1,"regrow":8},"I":{"skill":"mining","name":"Iron rocks","item":"iron_ore","req":15,"xp":350,"speed":4,"deplete":1,"regrow":15},"C":{"skill":"mining","name":"Coal rocks","item":"coal","req":20,"xp":250,"speed":4,"deplete":1,"regrow":20},"G":{"skill":"mining","name":"Gold rocks","item":"gold_ore","req":30,"xp":420,"speed":4,"deplete":1,"regrow":30},"A":{"skill":"mining","name":"Mithril rocks","item":"mithril_ore","req":40,"xp":600,"speed":5,"deplete":1,"regrow":45},"S":{"skill":"mining","name":"Biiwaanag (flint)","item":"flint","req":1,"xp":50,"speed":3,"deplete":1,"regrow":12,"bare":true,"say":"You pry a nodule of biiwaanag (flint) out of the chalky bank."},"V":{"skill":"mining","name":"Obsidian","item":"obsidian","req":1,"xp":100,"speed":4,"deplete":1,"regrow":15,"bare":true,"say":"You work a piece of black obsidian loose from the bank. Its broken edge is sharper than any knife."},"J":{"skill":"woodcutting","name":"Miskwaabiimizh (red willow)","item":"willow_bark","req":1,"xp":0,"speed":4,"deplete":0,"regrow":-1,"peelOnly":true,"peel":{"item":"willow_bark","xp":60,"ticks":4,"per":"day","mark":"willow","verb":"Peel bark from","tool":"woodcutting","noTool":"You need a tomahawk or an axe to cut the bark from the miskwaabiimizh (red willow).","say":"You shave the red outer bark from a stem of miskwaabiimizh (red willow). It will grow back by tomorrow.","again":"This miskwaabiimizh (red willow) has given its bark today. Try another clump, or come back tomorrow."}},"fish":{"skill":"fishing","name":"Fishing spot","req":1,"xp":100,"speed":5,"deplete":0},"range":{"skill":"cooking","name":"Cooking range","speed":4},"fire":{"skill":"cooking","name":"Campfire","speed":4,"burnBonus":10},"altar":{"skill":"prayer","name":"Altar","speed":2}},"skills":["attack","strength","defence","hitpoints","ranged","magic","dexterity","speechcraft","woodcutting","mining","fishing","cooking","firemaking","prayer"],"fires":{"lightTicks":3,"basePct":50,"pctPerLevel":2,"maxPct":95,"sapDay":{"walk":[6.75,8],"gather":[8,12],"trips":4,"at":[32498,-2417],"kettle":[32496,-2417],"pour":[32496,-2418],"steam":[0.25,0.6],"trees":[[32495,-2411,32495,-2412],[32500,-2414,32500,-2413],[32497,-2410,32497,-2411],[32498,-2422,32498,-2423]]}},"effects":{"note":"effect library (core.js EFFECTS); item JSON: Effect, Effect ticks, Effect chance (%), Effect damage. Unknown effects are ignored.","known":["freeze","stun","slow","poison","burn"]},"spells":[[1,2,"Wind strike"],[5,4,"Water strike"],[9,6,"Earth strike"],[13,8,"Fire strike"],[17,9,"Wind bolt"],[23,10,"Water bolt"],[29,11,"Earth bolt"],[35,12,"Fire bolt"],[41,13,"Wind blast"],[47,14,"Water blast"]],"start":{"inv":[["coins",75],["bread",1],["bread",1],["bread",1]],"hitpoints":10,"points":10,"maxPerSkill":5,"skills":["attack","strength","defence","ranged","magic","hitpoints","dexterity","speechcraft"]},"items":{"categories":{"weapon":["sword","dagger","longsword","mace","bow","staff","tomahawk"],"armour":["helmet","platebody","chainbody","platelegs","kiteshield","robe","torch","boots"],"tool":["hatchet","pickaxe","net","rod","pot","tinderbox","stone","pole","knocker","snare","flint"],"pack":["pack"],"cosmetic":["hat","cape","robe"],"resource":["logs","ore","coal","bar","pelt","fish","mushroom","meat","bones","note","sapling","silk","grain","bark","sinew","bucket","curio","stone","tobacco"],"food":["bread","fish","mushroom","meat","candy"],"potion":["healing"],"ammo":["arrow"],"currency":["gold"],"jewellery":["ring","charm"]},"slots":{"weapon":"weapon","armour/helmet":"head","armour/platebody":"body","armour/chainbody":"body","armour/platelegs":"legs","armour/kiteshield":"shield","armour/torch":"shield","ammo":"ammo","pack":"pack","cosmetic/hat":"head","cosmetic/cape":"cape","cosmetic/robe":"body","jewellery/ring":"ring","armour/robe":"body","armour/boots":"feet","jewellery/charm":"shield"},"weapons":{"sword":{"class":"melee","anim":"slash"},"dagger":{"class":"melee","anim":"stab"},"longsword":{"class":"melee","anim":"slash"},"mace":{"class":"melee","anim":"crush"},"tomahawk":{"class":"melee","anim":"slash"},"bow":{"class":"ranged","anim":"bow","twoHanded":true},"staff":{"class":"magic","anim":"cast"}},"fireMix":[{"take":{"willow_bark":2,"asemaa":1},"give":{"apaakozigan":3},"xp":{"cooking":150},"say":"You toast the miskwaabiimizh (red willow) bark over the fire and rub it fine with the asemaa (tobacco): three pinches of apaakozigan (kinnikinnick)."}],"offers":{"tobacco":{"verb":"Biindaakoojige (offer tobacco)","xpAs":"bones","radius":12,"bonus":25,"say":"You set down a pinch of asemaa (tobacco) and give thanks before you take anything from here. The ground here is blessed for you today."}},"traps":{"snare":{"prey":["hare","snow_hare"],"near":12,"hours":[1,2],"max":3,"xp":{"dexterity":40},"say":"You bend a sapling, tie the noose of the nagwaagan (snare) across a waabooz (rabbit) run and leave it.","none":"There are no waabooz (rabbit) runs here. Set the nagwaagan (snare) where the rabbits are.","empty":"The nagwaagan (snare) is still empty. Leave it a while and come back.","caught":"There is a {prey} in your nagwaagan (snare)."}},"tools":{"hatchet":"woodcutting","pickaxe":"mining","net":"fishing","rod":"fishing","pot":"fishing","tinderbox":"firemaking","flint":"firemaking"},"edible":["food","potion"],"drink":["potion"],"traits":{"Edition":"edition","Cures":"cures","Light":"light","Form":"form","Teleport":"teleport","Cooldown ticks":"cooldown","Call to arms":"arms","Attack":"attack","Strength":"strength","Defence":"defence","Ranged":"ranged","Magic":"magic","Ranged strength":"rstr","Speed":"speed","Range":"range","Carry":["carry",1000],"Heal":"heal","Heal %":"healPct","Prayer %":"prayPct","Cooks into":"cooks","Burns into":"burns","Container":"vessel","Fills into":"fills","English":"english","Energy":"energy","Cooking level":"cookReq","Cooking XP":"cookXp","Firemaking level":"fireReq","Burn ticks":"burnTicks","Firemaking XP":"fireXp","Tool":"tool","Bound":"bound","Effect":"effect","Effect ticks":"effectTicks","Effect chance":"effectChance","Effect damage":"effectDamage","Prayer XP":["buryXp",10],"Prayer":"prayer","Prayer seconds":"prayerSec","Prayer hold":"ppHold","Teleport from step":"teleFrom"},"limits":{"perTier":{"Attack":12,"Strength":12,"Ranged":12,"Magic":12,"Defence":16,"Ranged strength":8},"flat":{"Speed":[2,7],"Range":[1,10],"Carry":[0,100],"Heal":[0,40],"Heal %":[0,100],"Prayer %":[0,100],"Cooking level":[1,99],"Cooking XP":[0,500],"Firemaking level":[1,99],"Burn ticks":[10,600],"Firemaking XP":[0,500],"Effect ticks":[1,50],"Effect chance":[0,100],"Effect damage":[0,20],"Prayer XP":[0,500],"Prayer":[0,30],"Prayer seconds":[0,30],"Prayer hold":[0,30]},"weight":[1,100000],"tier":[1,5]},"armouryMap":{"sword":"weapon/sword","bow":"weapon/bow","staff":"weapon/staff","helmet":"armour/helmet","body":"armour/platebody","legs":"armour/platelegs","shield":"armour/kiteshield","ring":"jewellery/ring"},"creator":"nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c","also":["ns3A7VS6DDaCoBvNFnayHeS9pysgi7Ukrf","@yourfirstname","yourfirstname"]},"weather":{"climate":{"0":{"kinds":{"clear":45,"rain":30,"fog":25},"min":300,"max":900},"1":{"kinds":{"clear":60,"rain":25,"fog":15},"min":300,"max":900},"2":{"kinds":{"clear":80,"rain":12,"fog":8},"min":400,"max":1100},"3":{"kinds":{"clear":96,"rain":2,"fog":2},"min":600,"max":1500},"4":{"kinds":{"clear":72,"rain":23,"fog":5},"min":300,"max":900},"5":{"kinds":{"clear":25,"rain":55,"fog":20},"min":240,"max":720},"6":{"kinds":{"clear":35,"snow":35,"fog":20,"rain":10},"min":300,"max":900},"7":{"kinds":{"clear":30,"snow":55,"fog":15},"min":300,"max":900},"coastFog":12},"kinds":{"clear":{},"fog":{"sight":0.5,"range":0.6},"rain":{"fireFail":0.25,"fireBurn":0.6},"snow":{"run":0.85,"sight":0.8}},"say":{"clear":"The sky clears.","fog":"A fog rolls in.","rain":"It starts to rain.","snow":"Snow begins to fall."},"intensity":[50,100]},"retaliate":{"ticks":10,"beyond":12,"note":"a monster hit in the last `ticks` keeps its attacker as target across zone borders and up to `beyond` tiles past its leash (the operator)"},"respawn":{"emptyTicks":50,"deadTicks":2000,"note":"a dead monster comes back when its zone has been empty this long (50 ticks = 30 s) and someone enters, or after deadTicks (2000 = 20 min) at its post when no player stands within 8 tiles of it"},"carry":{"base":30000,"perStrength":1000,"unit":"grams","frozenPct":150},"death":{"pileTicks":1000,"note":"everything carried and worn drops where you die; what rules.persist keeps (Gold, stones, magical, worth 100+) stays until taken, the rest lasts pileTicks (1000 = 10 minutes)"},"portals":[{"id":"ashvale","name":"Ashvale","x":19,"y":55,"to":[19,56]},{"id":"saltmere","name":"Saltmere","x":462,"y":28,"to":[462,29]},{"id":"castle","name":"the Lake Castle","x":4048,"y":8419,"to":[4049,8418]},{"id":"spidercave","name":"the Spider Cave","x":-124,"y":11,"to":[-124,10]}],"persist":{"minValue":100,"always":["currency"],"teleport":true,"note":"a drop lies where it fell until someone takes it when it is Gold, a teleport stone or rune stone, magical, or worth minValue GOLD or more (value x how many); everything else despawns. The @ashvale Bank holds persisted drops and shows them to every player"},"dexterity":{"drainPerLevelPermille":5,"drainMaxPermille":400,"dodgePerTenLevels":1,"fastAt":50,"fastKinds":["dagger","bow"],"xpPerRunTile":2,"xpPerDamage":10},"speechcraft":{"pctPerLevelPermille":4,"maxPermille":300,"xpPerGold":1,"xpQuestTalk":250},"homes":{"ashvale":{"name":"Ashvale"},"ziibiing":{"hud":"ziibiing","name":"Ziibiing","offerHint":"Before you take from the land, set down a little asemaa (tobacco) and give thanks: Biindaakoojige (offer tobacco) from your bag. The land gives more to those who ask.","spawn":[24048,24406],"inv":[["asemaa",5],["venison_cooked",1],["venison_cooked",1],["wild_rice",3]],"first":"Ningashi, your mother, sits by the fire. Tap her to change your hair and clothes.","help":["You open your eyes by the fire in your mother's wigwam. <span class=\"y\">Ningashi</span> sees to your hair and clothes. When you are ready, go and see <span class=\"y\">Mishoomis</span> in his wigwam.","Ziibiing means \"at the river\". The people of the village each know their own part of the world: the canoe, the fish, the rice, the plants, the sky, the drum. Right-click one and talk.","The <span class=\"y\">makak</span> by the village fire holds everything you own in your arcade wallet.","Eat when your hitpoints run low."],"creator":{"note":"2026-10-08: everyday Anishinaabe wear, never medieval clothing; long hair; a man may go bare-chested; dance regalia is earned later. A list may be split by body.","styles":{"hair":["loose","braids","mohawklong"],"beard":[null],"shirt":{"male":[null,"ribbon","beadvest","buckskin"],"female":["ribbondress","ribbon","beadvest","buckskin"]},"pants":{"male":["breechcloth"],"female":["ribbonskirt","buckskinskirt"]},"feet":["moccasins"]},"labels":{"loose":"long","braids":"braids","mohawklong":"mohawk","":"bare chest","ribbon":"ribbon shirt","beadvest":"beaded vest","buckskin":"buckskin shirt","ribbondress":"ribbon dress","breechcloth":"breechcloth","ribbonskirt":"ribbon skirt","buckskinskirt":"buckskin skirt","moccasins":"moccasins","boots":"Feet"},"colors":{"buckskin":"#b8895a","buckskinskirt":"#b8895a","breechcloth":"#2a2f5a","ribbondress":"#3f5d8a","ribbonskirt":"#5b3a7a","ribbon":"#8a3030","beadvest":"#3f5d8a"},"cloth":["#b8895a","#8a6a4a","#2a2f5a","#3f5d8a","#8a3030","#5b3a7a","#2f6a6a","#4f6d3a","#c8a040","#f4f1ea","#3a3430","#c86a2a"],"boots":["#b8895a","#c8a070","#8a6a4a","#5a3a22","#3a2a1c"],"defaults":{"skin":"#a86f48","hair":"loose","hairColor":"#1c1612","eyes":"#3a2a1e","beard":null,"feet":"moccasins","boots":"#b8895a","belt":null,"shirt":{"style":"ribbon","color":"#8a3030"},"pants":{"style":"breechcloth","color":"#2a2f5a"}}},"wake":"home","wakeSay":"You wake by the fire in your mother's wigwam.","noFire":"You need biiwaanag (flint) to light a fire. Mishoomis knows where it lies along the riverbank."}},"questHomes":["ashvale"],"yard":{"note":"2026-10-04: chickens wherever there are buildings - n birds per `per` buildings, by a building, at most max per town","kinds":["house","shop","smithy","inn","tavern","hall"],"per":2,"n":2,"max":14,"birds":["chicken","hen"]},"prayer":{"resist":100,"buryTicks":2,"bones":"bones","altarOffers":[{"bones":"dragon_bones","log":"logs","sapling":"yew_sapling","xp":240},{"bones":"big_bones","log":"logs","sapling":"oak_sapling","xp":50},{"bones":"bones","log":"logs","sapling":"sapling","xp":15}],"list":[{"id":"protect_from_melee","name":"Protect from Melee","level":1,"drain":12,"kind":"protect","desc":"Protects you from melee attacks.","g":"head","x":["head"],"protect":"melee","icon":"melee"},{"id":"protect_from_missiles","name":"Protect from Missiles","level":4,"drain":12,"kind":"protect","desc":"Protects you from ranged attacks.","g":"head","x":["head"],"protect":"ranged","icon":"missiles"},{"id":"protect_from_magic","name":"Protect from Magic","level":15,"drain":12,"kind":"protect","desc":"Protects you from magic attacks.","g":"head","x":["head"],"protect":"magic","icon":"magic"}]},"saplings":{"sapling":"P","oak_sapling":"O","yew_sapling":"Y"},"flags":{"gift_of_angels":{"name":"the Gift of Angels","quest":"angel_gift","ringCooldown":1000,"desc":"Iria's blessing is on you now: the Ring of Angels rests ten minutes between saves instead of an hour."},"vorth_gate":{"name":"Pike's latch","quest":"red_pyre","desc":"Pike has opened the compound gate. You may enter and leave."},"vorth_bag":{"name":"Edric's bag","quest":"red_pyre","desc":"You searched the bones in the Spider Cave."},"cave_antidote":{"name":"The cave crate","desc":"You already took the antidote hidden in the crate at the mouth of the Spider Cave."},"vorth_spoke":{"name":"Edric's last word","quest":"red_pyre","desc":"Edric's shade has said his piece and gone."},"replant":{"name":"Replanting","quest":"even_grove","desc":"You can set a sapling in any stump, anywhere a tree used to stand. The tree grows back."},"spidercrown":{"name":"the Spider Queen's Crown","desc":"You took the Spider Queen's crown from her. She gives it to each adventurer once."}}}});
 
 </script>
 <script>

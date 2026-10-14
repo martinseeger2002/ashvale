@@ -82,7 +82,7 @@ ok(!a.seat && st.se.length === 1 && evs.some(e => e.e === 'pstand' && e.p === 'p
 c.cmd('pb', { c: 'stand' }); run(30);
 st = c.pokerOf('poker1');
 ok(!b.seat && st.se.length === 0 && st.o === 'open', 'so does Bram; an empty table is open and quiet');
-ok(c.pokerRows().length === 0, 'an empty table has nothing to broadcast');
+ok(c.pokerRows().length >= 1 && c.pokerRows().every(r => !r.se.length), 'an empty table the game deals still goes out, with nobody in it (a new dealer\'s "opened again" must reach screens that heard it late)');
 
 /* the host of the area and a replica */
 const host = AshCore.create(D, { seed: 'h' }), rep = AshCore.create(D, { seed: 'r' });
@@ -307,6 +307,61 @@ ok(ct.board.length + cs.pokerOf('poker1').se.length > 0 && h1 === h2, 'a replaye
     h.S.players.g1.seat = null;   /* as after removePlayer + a fresh puppet */
     h.hostPokerStand('g1', 'poker1');
     ok(!h.pokerOf('poker1').se.some(x => x[1] === 'g1') && h.pokerOf('poker1').co.some(c => c[0] === 'g1'), 'the guest is stood up and cashed out though its puppet had no seat flag') }
+  /* 5. [Claude 2026-10-13] the dealer frees a chair on its own (the operator: "it says that Apple is sitting there, but Apple has been
+     off the chair for quite some time"): a guest heard standing away from it, and a guest gone from the game */
+  { const h = AshCore.create(D, { seed: 'presence' }), hp = noCoins(h.addPlayer('me', { name: 'Host' })); h.grantItem('me', 'coins', 2000);
+    hp.x = T5.seats[0][0]; hp.y = T5.seats[0][1]; hp.lv = 1;
+    h.cmd('me', { c: 'sit', table: 'poker1', seat: 0, buy: 1000 }); h.tick();
+    h.addPuppet('g1', { x: T5.seats[3][0], y: T5.seats[3][1], n: 'Apple' }); h.hostPokerSit('g1', 'poker1', 3, 0, '');
+    h.addPuppet('g2', { x: T5.seats[4][0], y: T5.seats[4][1], n: 'Gone' }); h.hostPokerSit('g2', 'poker1', 4, 0, '');
+    const seated = id => h.pokerOf('poker1').se.some(x => x[1] === id);
+    ok(seated('g1') && seated('g2'), 'two guests sit down');
+    h.setPuppet('g1', { x: T5.seats[3][0], y: T5.seats[3][1], lv: 1 }); for (let i = 0; i < 40; i++) h.tick();
+    ok(seated('g1'), 'a guest heard sitting in its chair keeps it');
+    h.setPuppet('g1', { x: T5.seats[3][0] + 6, y: T5.seats[3][1], lv: 1 }); for (let i = 0; i < 5; i++) h.tick();
+    ok(seated('g1'), 'a few ticks away is not yet leaving (a late word)');
+    for (let i = 0; i < 20; i++) h.tick();
+    ok(!seated('g1') && h.pokerOf('poker1').co.some(c => c[0] === 'g1'), 'a guest seen away from the chair for ~9 s is stood up and its stack cashed out');
+    h.removePlayer('g2'); h.addPuppet('g2x', {});   /* gone from the room; nothing told the table (no seat flag) */
+    for (let i = 0; i < 40; i++) h.tick();
+    ok(h.pokerGame('poker1').seats[4] == null || h.pokerGame('poker1').seats[4].id == null || seated('g2') === false, 'removePlayer of a seated guest frees its chair');
+    ok(seated('me'), 'and the dealer itself keeps its own chair throughout') }
+  /* 6. a guest gone from the game while its row still names it (no seat flag, nothing removed it): freed after PK_GONE */
+  { const h = AshCore.create(D, { seed: 'presence2' }), hp = noCoins(h.addPlayer('me', { name: 'Host' })); h.grantItem('me', 'coins', 2000);
+    hp.x = T5.seats[0][0]; hp.y = T5.seats[0][1]; hp.lv = 1;
+    h.cmd('me', { c: 'sit', table: 'poker1', seat: 0, buy: 1000 }); h.tick();
+    h.addPuppet('g3', { x: T5.seats[3][0], y: T5.seats[3][1], n: 'Ghost' }); h.hostPokerSit('g3', 'poker1', 3, 0, '');
+    const chips = h.pokerGame('poker1').seats[3].chips | 0;
+    h.S.players.g3.seat = null; delete h.S.players.g3; h.S.order = h.S.order.filter(q => q !== 'g3');
+    const seated = id => h.pokerOf('poker1').se.some(x => x[1] === id);
+    for (let i = 0; i < 40; i++) h.tick();
+    ok(seated('g3'), 'within the arcade\'s rejoin grace the chair is kept');
+    for (let i = 0; i < 60; i++) h.tick();
+    const co = h.pokerOf('poker1').co.find(c => c[0] === 'g3');
+    ok(!seated('g3') && co && co[1] === chips, 'after ~45 s gone the chair is free and the whole stack (' + chips + ') is cashed out: ' + JSON.stringify(co)) }
+}
+
+/* 7. [Claude 2026-10-13] a new dealer between hands (the table's own room elected another): the table goes on as it stands */
+{ const T7 = P[0];
+  const host = AshCore.create(D, { seed: 'adopt-h' }), rep = AshCore.create(D, { seed: 'adopt-r' });
+  const hp = noCoins(host.addPlayer('me', { name: 'Ann' })), rp = noCoins(rep.addPlayer('me', { name: 'Ben' }));
+  host.grantItem('me', 'coins', 5000); rep.grantItem('me', 'coins', 5000);
+  hp.x = T7.seats[0][0]; hp.y = T7.seats[0][1]; hp.lv = 1; rp.x = T7.seats[2][0]; rp.y = T7.seats[2][1]; rp.lv = 1;
+  rep.setTableAuth('poker1', false);
+  host.cmd('me', { c: 'sit', table: 'poker1', seat: 0, buy: 1000 }); for (let i = 0; i < 3; i++) host.tick();
+  host.addPuppet('ben', { x: rp.x, y: rp.y, n: 'Ben' }); host.setPuppet('ben', { x: rp.x, y: rp.y, lv: 1 }); host.hostPokerSit('ben', 'poker1', 2, 0, '');
+  const toRep = () => host.pokerRows().map(r => Object.assign({}, r, { se: r.se.map(x => [x[0], x[1] === 'me' ? 'ann' : x[1] === 'ben' ? 'me' : x[1], x[2], x[3], x[4]]), co: [] }));
+  for (let i = 0; i < 400 && host.pokerOf('poker1').h < 2; i++) { const g = host.pokerGame('poker1'); if (g && g.toAct >= 0) { const id = g.seats[g.toAct].id; host.hostPokerAct(id, 'poker1', 'call'); } host.tick(); }
+  for (let i = 0; i < 400 && host.pokerOf('poker1').st !== 'none'; i++) { const g = host.pokerGame('poker1'); if (g && g.toAct >= 0) host.hostPokerAct(g.seats[g.toAct].id, 'poker1', 'fold'); host.tick(); }
+  rep.addPuppet('ann', { x: hp.x, y: hp.y, n: 'Ann' }); rep.setPuppet('ann', { x: hp.x, y: hp.y, lv: 1 }); rep.applyPoker(toRep()); for (let i = 0; i < 3; i++) rep.tick();
+  const before = rep.pokerOf('poker1'), stacks = JSON.stringify(before.se.map(x => [x[0], x[2]])), h0 = before.h | 0;
+  ok(before.st === 'none' && rp.seat && before.se.length === 2, 'between hands, Ben\'s game shows both at the table: ' + stacks);
+  rep.setTableAuth('poker1', true); for (let i = 0; i < 2; i++) rep.tick();
+  const after = rep.pokerOf('poker1');
+  ok(after.mine === 1 && after.se.length === 2 && JSON.stringify(after.se.map(x => [x[0], x[2]])) === stacks, 'Ben takes the dealing over and the table stands as it was (no one cashed out): ' + JSON.stringify(after.se.map(x => [x[0], x[2]])));
+  ok(!(after.co || []).length && rp.seat, 'nothing is cashed out, and Ben is still sitting');
+  for (let i = 0; i < 40 && rep.pokerOf('poker1').st === 'none'; i++) rep.tick();
+  ok(rep.pokerOf('poker1').st !== 'none' && (rep.pokerOf('poker1').h | 0) > h0, 'and the new dealer deals the next hand: ' + rep.pokerOf('poker1').st + ' hand ' + rep.pokerOf('poker1').h);
 }
 
 console.log(fails ? fails + ' FAILED' : 'all ok');

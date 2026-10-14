@@ -1006,3 +1006,76 @@ the walk here feature".
   (MeshBasicMaterial colorWrite:false, depthWrite:false, DoubleSide) - invisible, still in the shadow map; own material
   restored on leaving; non-casting pieces (glass) visible=false while hidden. NOT seen in a browser yet (a test machine WebGL
   wedged since 14:54) - check with tools/shot_indoor_pw.py (the agent's measuring tool) after a reboot.
+
+## 0.8.110 - 2026-10-13 (Claude): no rain indoors; snow while the ground is white - RELEASED (v137, 6afac50)
+- The agent's src/weather.js W.indoor finally ships (held since 0.8.104): drops and fog sheets thin out under a roof, sky
+  and fog distance stay the street's. tests/weather_test.mjs: two stale checks fixed (the fog sheets are a second scene
+  object and a draw call), indoor checks added - 140 ok.
+- engsky.js: SEASON.snowy = S.snow > 0.3 (was winter && snow > 0.3). The operator: "it's raining in Ashvale it's winter" - the
+  north had just passed its spring equinox with the ground still white. Snow now falls from late autumn (trees bare) to the
+  spring melt (before any bud), rain otherwise.
+
+## 0.8.111 - 2026-10-13 (Claude): lights stay in their room - RELEASED (v138, ffbb08d; cards dad1b29b ASHVALE, a53dc312 Ziibiing)
+- the operator (night, the Tap): the card-table candle wheel lit the third storey's walls. Point lights cast no shadow, so they
+  shine through floors and walls. scene.js: a region light whose source tile is inside a building (roofs rect) gets
+  userData.room {rect, lv}; update() sets its intensity 0 unless SCENE.viewQuery (engsky: [me.x, me.y, me.lv]) is in that
+  rect on that storey. Never hidden, only dimmed (A FIXED NUMBER OF LIGHTS). Torch/sconce entries carry lv. engine.js
+  torchTick: a remote's carried light counts only on my storey (r.lvR). Node smoke (Saltmere only, real three r160):
+  street/ground/3rd storey 0, card room 2.5. NOT seen in a browser (a test machine WebGL still wedged).
+
+## 0.8.112 - 2026-10-13 (Claude): a bare remote asks for its gear - RELEASED (v139, engine)
+- robin-4d: @gx1 back on @apple's screen as the placeholder. The arcade quietly rejoins a client whose streams dropped;
+  the others rebuild its remote bare, its own page gets no 'join', so it never resent netGear. engine.js shared(): a
+  remote heard from without gear (r.hasG) sends {GQ:1} after 3 s, every 5 s, at most 4 times (GQ = everyone resends, <=1/3 s).
+
+## 0.8.113 - 2026-10-13 (Claude): 'rejoined' - RELEASED (v140, be1359d; cards c31d00f4 ASHVALE, aac58b5c Ziibiing)
+- The arcade now fires room.on('rejoined', fn(me)) (docs/multiplayer.md; seat kept 30 s). net.js arcadeRoom passes it
+  (try-wrapped for older realtime.js); engine resends netGear + fullSnap 600 ms after. Not tested with two browsers (WebGL).
+
+## 0.8.114 - 2026-10-13 (Claude): the dealer frees chairs itself - RELEASED (v141, core)
+- core pokerPresence: a guest heard >2 tiles from its chair (or another storey) for 15 ticks, or gone from the game for 75
+  (longer than the arcade's 30 s rejoin grace), is stood up and cashed out. tests/poker_core_test.js cases 5-6.
+
+## 0.8.115 - 2026-10-13 (Claude): card tables at eight and on a host change - RELEASED (v142, 83b79ac)
+- Found with eight real games in eight windows (tests/poker_eight_pw.py, poker_cases_pw.py - 9 stand-up cases - and
+  poker_stakes_pw.py - 100 and 1000 GOLD, every player's GOLD = start - buy-ins + cash-outs, sum + rake constant):
+  (1) the send queue grew without end at eight (5 msgs/s, a row = 3-4 pieces): netSendBig(o, R, key) drops an older queued
+  row of the same table; (2) a new dealer's "opened again" row was heard while the others still knew the old host: pokerRows
+  sends an empty table this game deals too; (3) a replica kept a stale PKG game and synced it over the row on takeover:
+  pokerGame returns null unless auth, applyPoker and pokerAbandon drop PKG. Tests launch Chromium with
+  --disable-backgrounding-occluded-windows (a covered window stops its game loop).
+
+## 0.8.116 - 2026-10-13 (Claude): monsters take turns; the Spider Queen's crown once per adventurer - RELEASED (v143, 0613f88; cards 958b861c ASHVALE, a208b708 Ziibiing)
+- the operator: "monsters attacking all players if attacked by more than one player alternating". It turned on the latest hitter,
+  always the same one (hits land in player order each tick), and retaliating() re-pinned m.hurt every tick. Now landOnMob
+  records m.foes, mobAttack (before its puppet return) turns to the foe of the last 12 ticks it struck longest ago, the
+  dragon too; retaliating keeps a current foe. tests/combat_many_pw.py (3 windows: same monsters on every screen, damage
+  from all, chief and dragon turn on each, deaths everywhere, dragon killed at 99).
+- Spider Queen's crown: was 1 in 20 per kill, uncapped (the Bank delivered 2). The operator: "Once per player". monsters.json
+  spider_queen.award {item, once:'spidercrown'} (rules.flags), core creditKill drops it owned by the killer the first time,
+  on the killer's own game; carrying/wearing one counts. tests/spidercrown_test.js. Bank side unchanged (a ground drop).
+
+## 0.8.117 - 2026-10-14 (Claude): every card table in its own room - RELEASED (v144, 578307f; cards e57b8675 ASHVALE, 70953c35 Ziibiing)
+- the operator: "build one and two" (send lanes, table rows as deltas) and "would it help if ... each poker table sets up its own
+  game room?" (the arcade's 5 msgs/s is per member PER ROOM: arcade mesh/node.py _Local bucket).
+- engine: netPri/flushNet - lanes 0 urgent (own acts, host events E, Ph, results) / 1 normal / 2 background (F, gear,
+  weather), 2 s wait = one lane up, a budget per room. pkDelta/pkMerge/pkSendRow/pkHeard - rows as changes (sd seats, la log
+  lines, rm), PQ asks the whole row, PKBASE moves only forward, an older whole row from the same dealer is ignored.
+  tests/pkdelta_test.js. TABLE ROOMS: 'tbl:<region>:<table>' joined within 8 tiles on the storey (kept to 14 / seated);
+  TJ [t, joined, seated, dealer]; the dealer is sticky, a new one = earliest seated (else earliest), a newcomer listens
+  1.5 s, a dealer silent 15 s is gone; core.setTableAuth per table (tAuth); pkMsg shared by both rooms; pagehide leaves.
+- core: pokerAdopt - a new dealer between hands carries the table on (seats, stacks, button, blinds; gone players cashed
+  out); mid-hand still pokerAbandon. seatWaitTick re-asks a sit every 8 ticks (6x); hostPokerSit/hostSit idempotent (and
+  take a new sealing key); applyPoker follows a chair move; a dealer's own stale seat stands. poker_core_test case 7.
+- Browser: poker_cases_pw (9 cases, 8 windows), poker_stakes_pw (100/1000), combat_many_pw - ALL OK. Chess tables still in
+  the region room (same pattern if wanted).
+
+## 0.8.118 - 2026-10-14 (Claude): other players walk without sliding - RELEASED (v145; cards 65abcbaf ASHVALE, 081f7ec9 Ziibiing)
+- the operator: "their walking animation is not matching up with their movement ... it looks like they ski to their final position".
+  updateRemotes played the NEWEST sample's anim (Bs.a), so the final 'idle' sample stood the legs still while the body still
+  blended the last 0.5-1.5 m; and samples were timed by arrival, so the send lanes' bursts made the drawn pace uneven.
+- engine: samples are laid on the SENDER's clock (d.s + r.off, r.off = quickest delivery seen, creeping 2 ms/sample), r.jit
+  (how late the rest run, decaying) widens the per-remote render delay r.dly (400 ms + jit, eased at most 0.3 s/s). The legs
+  follow the DRAWN body (r.vs, smoothed speed): walk/run while it moves (paced to speed, 1 tile/600 ms walk, 2 run), idle
+  only once it is still; a 'walk' sample with a still body turns idle after 0.25 s. Canoes and non-locomotion anims untouched.
+  ASH.remoteView(id) for tests. tests/remote_walk_pw.py (2 windows): slide with still legs 0.6-1.4 m before, <=0.14 m after.
