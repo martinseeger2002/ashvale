@@ -2,7 +2,7 @@
      const r = await net.join(roomId, {game, loopback})   -> {online, room, why, backend}
      room.me                     {id, tag, address, guest}   (tag without '@'; '' for guests)
      room.send(obj) -> Promise<bool>   never throws or rejects (false = dropped: too big, too fast, not in room)
-     room.on('message', fn({from, data})) / on('join', fn({from})) / on('leave', fn({from})) / on('closed', fn(why))
+     room.on('message', fn({from, data})) / on('join', fn({from})) / on('leave', fn({from})) / on('closed', fn(why)) / on('rejoined', fn({me}))
      room.members() -> [player]  ;  room.leave() -> Promise
    A player is {id, tag, address, guest}; remote state is keyed by id. The sender is stamped by the arcade node, never
    taken from the message.
@@ -26,6 +26,9 @@
         if (t === 'message') r.on('message', (data, p) => { const from = norm(p); if (from.id !== me.id || (o && o.self)) fn({ from, data }); });
         else if (t === 'join' || t === 'leave') r.on(t, p => { const from = norm(p); if (from.id !== me.id) fn({ from }); });
         else if (t === 'closed') r.on('closed', why => fn(why));
+        /* [Claude 2026-10-13] the arcade seated this page again after its streams dropped (realtime.js, docs/multiplayer.md): the
+           others saw us leave and join and built us afresh, so resend what they draw us with. An older realtime.js never fires it */
+        else if (t === 'rejoined') { try { r.on('rejoined', m => fn({ me: m ? norm(m) : me })); } catch (e) { /* older arcade */ } }
         return room;
       },
       leave() { try { return Promise.resolve(r.leave()).catch(() => { }); } catch (e) { return Promise.resolve(); } }

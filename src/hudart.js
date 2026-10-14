@@ -86,7 +86,11 @@
 .ash .chat .player{color:#7cf}
 .ash .bub{position:absolute;transform:translate(-50%,-100%);max-width:200px;padding:2px 7px;border-radius:7px;background:#0008;color:#ff0;font-size:12px;text-align:center;text-shadow:1px 1px 0 #000;pointer-events:none}
 .ash .chat{max-height:calc(5*1.3em + 12px);padding:5px 8px;background:#0007;border-radius:6px;font-size:12px;color:#fff;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer}
-.ash .chat.big{max-height:min(60%,260px);background:#000b;overflow:auto;justify-content:flex-start}
+.ash .chat > div{flex-shrink:0}   /* [Claude 2026-10-13] a wrapped line keeps its height: squeezed lines were drawn over each other (the operator) */
+.ash .chat.big{max-height:min(62vh,520px);background:#000c;overflow:auto;justify-content:flex-start}
+.ash .chatw.big{width:min(94vw,560px);z-index:25}
+.ash .chatw .chatx{position:absolute;left:0;top:-24px;padding:2px 10px;border-radius:6px 6px 0 0;background:#000a;color:#ffd23f;font:600 12px system-ui,sans-serif;cursor:pointer;pointer-events:auto}
+.ash .chat .table{color:#b8e6c4}
 @media (max-height:520px){.ash .inv{gap:2px}.ash .panel{padding:5px 6px}.ash .panel h4{margin-bottom:3px}.ash .chat{max-height:calc(3*1.3em + 10px);font-size:11px}.ash .chatw{width:min(40vw,360px)}}
 .ash .chat div{margin:1px 0;text-shadow:1px 1px 0 #000}
 .ash .chat .warn{color:#ff6a5a}.ash .chat .level{color:#7fd0ff}.ash .chat .trade{color:#ffd77a}.ash .chat .quest{color:#d9a0ff}.ash .chat .npc{color:#9cf}.ash .chat .sys{color:#ffcf3f}.ash .chat .dm{color:#ff9ce0}
@@ -162,9 +166,7 @@
 .ash .dragicon img{width:100%;height:100%}.ash .dragicon .n{position:absolute;left:2px;top:0;font-size:10px;color:#ff0;text-shadow:1px 1px 0 #000}
 .ash .slot.dragsrc{opacity:.35}
 .ash .splat.fx{width:30px;height:30px;font-size:10px;color:#003;text-shadow:none}
-.ash .netlost{position:absolute;left:50%;top:max(8px,env(safe-area-inset-top));transform:translateX(-50%);width:min(560px,calc(100vw - 24px));z-index:18;display:none;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:10px;background:#5a1414f0;box-shadow:0 0 0 2px #e05a4a,0 6px 20px #000a;color:#fde9e4;font:14px/1.35 system-ui,sans-serif}
-.ash .netlost b{color:#fff}
-.ash .netlost>div{flex:1 1 auto;min-width:0}.ash .netlost .btn{flex:none;width:auto;margin:0;padding:8px 14px}
+.ash .netlost{position:absolute;right:max(2px,env(safe-area-inset-right));top:max(1px,env(safe-area-inset-top));z-index:18;display:none;max-width:40vw;padding:1px 5px;border-radius:3px;background:#0009;color:#ff6a5a;font:600 11px/1.3 system-ui,sans-serif;text-align:right;text-shadow:0 1px 2px #000;pointer-events:auto;cursor:pointer}   /* [Claude 2026-10-12] a small red note top right (the operator: the big banner usually goes away within a second or two) */
 .ash .newver{position:absolute;left:50%;top:max(8px,env(safe-area-inset-top));transform:translateX(-50%);width:min(560px,calc(100vw - 24px));z-index:17;display:none;padding:10px 14px;border-radius:10px;background:#3b2c08f2;box-shadow:0 0 0 2px #e8b33a,0 6px 20px #000a;color:#fbefcf;font:14px/1.35 system-ui,sans-serif}
 .ash .newver b{color:#ffd76a}
 .ash .elsewhere{position:absolute;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:#0b0907e8;padding:16px}

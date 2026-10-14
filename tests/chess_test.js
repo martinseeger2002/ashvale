@@ -7,6 +7,7 @@ const DD = path.join(__dirname, '..', 'data');
 const mod = (n) => JSON.parse(fs.readFileSync(path.join(DD, n + '.json'), 'utf8')).data;
 const zones = fs.readdirSync(DD).filter(f => /^zone\..*\.json$/.test(f)).map(f => f.slice(5, -5)).sort().map(z => Object.assign({ id: z }, mod('zone.' + z)));
 const D = { items: mod('items').items, monsters: mod('monsters').monsters, shops: mod('shops'), quests: mod('quests'), rules: mod('rules'), zones, globecfg: mod('globecfg') };
+const noCoins = (p) => { p.inv = p.inv.map(x => x && x.id === 'coins' ? null : x); return p; };   /* a new character starts with a few coins: the GOLD sums count from zero */
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
 const BLOCK = new Set(D.rules.tiles.block);
@@ -106,14 +107,13 @@ cs.cmd('p1', { c: 'cmove', from: 'g1', to: 'f3' }); cs.tick(); cs.cmd('p2', { c:
 const h1 = cs.hash(), h2 = AshCore.replay(D, 'rep', { p1: SV1, p2: SV2 }, cs.log, cs.S.t);
 ok(cs.chessOf(t1.id).moves.join(' ') === 'Nf3 Nf6' && h1 === h2, 'a replayed log reaches the same hash with the same game on the board');
 
-console.log(fails ? fails + ' FAILED' : 'all ok');
-process.exit(fails ? 1 : 0);
+
 
 /* [Claude 2026-10-11] STAKES (the operator: "players should be able to wager against their opponent on a game of chess";
    "the first person to sit down should be the one who sets the stakes"): GOLD on the game, settled by the result */
 {
   const c2 = AshCore.create(D, { seed: 'stakes' }), t2 = T[1];
-  const w2 = c2.addPlayer('pw', { name: 'Wren' }), b2 = c2.addPlayer('pb', { name: 'Aldric' }), pp = c2.addPlayer('pp', { name: 'Pip' });
+  const w2 = noCoins(c2.addPlayer('pw', { name: 'Wren' })), b2 = noCoins(c2.addPlayer('pb', { name: 'Aldric' })), pp = noCoins(c2.addPlayer('pp', { name: 'Pip' }));
   c2.grantItem('pw', 'coins', 1000); c2.grantItem('pb', 'coins', 800); c2.grantItem('pp', 'coins', 100);
   const coins = (p) => p.inv.reduce((n, s) => n + (s && s.id === 'coins' ? s.n : 0), 0);
   const near = (p, s) => { p.x = s[0]; p.y = s[1]; p.path = []; p.act = null; };
@@ -152,7 +152,7 @@ process.exit(fails ? 1 : 0);
   c2.cmd('pw', { c: 'stand' }); c2.cmd('pb', { c: 'stand' }); run2(2);
   /* host and replica: the GOLD moves on each side's own copy, by the row */
   const host2 = AshCore.create(D, { seed: 'h2' }), rep2 = AshCore.create(D, { seed: 'r2' });
-  const hp2 = host2.addPlayer('me', { name: 'Host' }), rp2 = rep2.addPlayer('me', { name: 'Guest' });
+  const hp2 = noCoins(host2.addPlayer('me', { name: 'Host' })), rp2 = noCoins(rep2.addPlayer('me', { name: 'Guest' }));
   host2.grantItem('me', 'coins', 400); rep2.grantItem('me', 'coins', 150); rep2.setAuth(rep2.zoneOf(t2.x, t2.y), false);
   hp2.x = t2.seats[1][0]; hp2.y = t2.seats[1][1]; rp2.x = t2.seats[0][0]; rp2.y = t2.seats[0][1];
   host2.cmd('me', { c: 'sit', table: t2.id, seat: 1, stake: 100 }); for (let i = 0; i < 5; i++) host2.tick();
@@ -161,7 +161,7 @@ process.exit(fails ? 1 : 0);
   ok(xs2.some(e => e.e === 'xsit' && e.stake === 0) && coins(rp2) === 150, 'the replica asks the host for the bench; nothing is taken until the host seats it');
   host2.addPuppet('guest', { x: rp2.x, y: rp2.y, n: 'Guest' });
   ok(host2.hostSit('guest', t2.id, 0, 0) && host2.chessOf(t2.id).status === 'playing', 'the host seats the guest (the table keeps its 100)');
-  const toRep = () => rep2.applyChess(host2.chessRows().map(r => Object.assign({}, r, { w: r.w === 'me' ? 'host' : r.w, b: r.b === 'guest' ? 'me' : r.b, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [k === 'guest' ? 'me' : k === 'me' ? 'host' : k, v])) : null })));
+  const toRep = () => rep2.applyChess(host2.chessRows().map(r => Object.assign({}, r, { w: r.w === 'me' ? 'host' : r.w, b: r.b === 'guest' ? 'me' : r.b, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [k === 'guest' ? 'me' : k === 'me' ? 'host' : k, v])) : null, co: (r.co || []).map(c => [c[0] === 'guest' ? 'me' : c[0] === 'me' ? 'host' : c[0], c[1], c[2]]) })));
   toRep();
   ok(rp2.seat && coins(rp2) === 50, "the row seats the replica's player and its own copy takes the stake: " + coins(rp2));
   for (const [who, f, t] of [['me', 'e2', 'e4'], ['guest', 'e7', 'e5'], ['me', 'd1', 'h5'], ['guest', 'b8', 'c6'], ['me', 'f1', 'c4'], ['guest', 'g8', 'f6'], ['me', 'h5', 'f7']]) host2.hostMove(who, t2.id, f, t);
@@ -171,7 +171,7 @@ process.exit(fails ? 1 : 0);
   toRep();
   ok(coins(rp2) === 50 && coins(hp2) === 500, 'a row applied twice pays nothing twice');
   /* the guest is short when the seat comes back: it stands again */
-  const rep3 = AshCore.create(D, { seed: 'r3' }), rp3 = rep3.addPlayer('me', { name: 'Broke' }); rep3.grantItem('me', 'coins', 20); rep3.setAuth(rep3.zoneOf(t2.x, t2.y), false);
+  const rep3 = AshCore.create(D, { seed: 'r3' }), rp3 = noCoins(rep3.addPlayer('me', { name: 'Broke' })); rep3.grantItem('me', 'coins', 20); rep3.setAuth(rep3.zoneOf(t2.x, t2.y), false);
   const ev3 = rep3.S.ev = []; rep3.applyChess([{ t: t2.id, w: 'host', b: 'me', wn: 'Host', bn: 'Broke', fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', status: 'playing', n: 0, v: 9, stake: 100, gid: 3, paid: null }]);
   ok(!rp3.seat && coins(rp3) === 20 && ev3.some(e => e.e === 'msg' && /cannot cover the stake/.test(e.text)), 'a player who cannot cover the stake when the row seats them stands up again, nothing taken');
 }
@@ -179,12 +179,12 @@ process.exit(fails ? 1 : 0);
 /* [Claude 2026-10-11] IDLE: fifteen minutes without playing stands you up (the operator); and the opponent's pick travels */
 {
   const c3 = AshCore.create(D, { seed: 'idle' }), t3 = T[2];
-  const w3 = c3.addPlayer('pw', { name: 'Wren' }), b3 = c3.addPlayer('pb', { name: 'Aldric' });
+  const w3 = noCoins(c3.addPlayer('pw', { name: 'Wren' })), b3 = noCoins(c3.addPlayer('pb', { name: 'Aldric' }));
   const run3 = (n) => { for (let i = 0; i < n; i++) c3.tick(); };
   w3.x = t3.seats[1][0]; w3.y = t3.seats[1][1]; b3.x = t3.seats[0][0]; b3.y = t3.seats[0][1];
   c3.cmd('pw', { c: 'sit', table: t3.id, seat: 1 }); c3.cmd('pb', { c: 'sit', table: t3.id, seat: 0 }); run3(5);
   ok(c3.chessOf(t3.id).status === 'playing', 'a game is on');
-  const e3 = c3.S.ev = []; c3.cmd('pw', { c: 'csel', sq: 'e2' }); run3(1);
+  const e3 = []; c3.cmd('pw', { c: 'csel', sq: 'e2' }); for (const e of c3.tick()) e3.push(e);   /* the tick hands back its events */
   ok(c3.chessOf(t3.id).sw === 'e2' && c3.chessRow(t3.id).sw === 'e2' && e3.some(e => e.e === 'chess' && e.sw === 'e2'), "White picks up e2: the table says so in its row, so Black's board lights it too");
   c3.cmd('pw', { c: 'cmove', from: 'e2', to: 'e4' }); run3(1);
   ok(c3.chessOf(t3.id).sw === null && c3.chessOf(t3.id).moves.length === 1, 'the move puts it down: nothing is picked up');
@@ -199,3 +199,123 @@ process.exit(fails ? 1 : 0);
   c3.S.t += 1500; run3(10);
   ok(!b3.seat && c3.chessOf(t3.id).status === 'open', 'and Aldric follows when his fifteen minutes run out');
 }
+
+/* [Claude 2026-10-12] THE STAKE ALWAYS SETTLES (the operator: "there is no player stack, it's 100% wager in chess, so the winner
+   should automatically win if the other person leaves. But if the server drops both players, they should both be refunded") */
+{
+  const coins = (p) => p.inv.reduce((n, s) => n + (s && s.id === 'coins' ? s.n : 0), 0);
+  const tt = T[1];
+  /* a host and a guest at a 100 GOLD game with a move on the board; `gid` names the guest as the host knows it */
+  const setup = (seed, gid) => {
+    const host = AshCore.create(D, { seed: seed + 'h' }), rep = AshCore.create(D, { seed: seed + 'r' });
+    const hp = noCoins(host.addPlayer('me', { name: 'Host' })), rp = noCoins(rep.addPlayer('me', { name: 'Guest' }));
+    host.grantItem('me', 'coins', 100); rep.grantItem('me', 'coins', 100); rep.setAuth(rep.zoneOf(tt.x, tt.y), false);
+    host.setOnline(true); rep.setOnline(true);
+    hp.x = tt.seats[1][0]; hp.y = tt.seats[1][1]; rp.x = tt.seats[0][0]; rp.y = tt.seats[0][1];
+    host.cmd('me', { c: 'sit', table: tt.id, seat: 1, stake: 100 }); for (let i = 0; i < 5; i++) host.tick();
+    host.addPuppet(gid, { x: rp.x, y: rp.y, n: 'Guest' }); host.hostSit(gid, tt.id, 0, 0);
+    rep.addPuppet('host', { x: hp.x, y: hp.y, n: 'Host' });
+    return { host, rep, hp, rp };
+  };
+  const send = (host, rep, myId) => rep.applyChess(host.chessRows().map(r => { const m = x => x === 'me' ? 'host' : x === myId ? 'me' : x; return Object.assign({}, r, { w: r.w ? m(r.w) : null, b: r.b ? m(r.b) : null, paid: null, co: (r.co || []).map(c => [m(c[0]), c[1], c[2]]) }); }));
+  const ticks = (c, n) => { for (let i = 0; i < n; i++) c.tick(); };
+
+  /* 1. the room drops both: neither copy decides; back online the host sees both gone and each gets their stake back */
+  { const { host, rep, hp, rp } = setup('both', 'g1');
+    host.hostMove('me', tt.id, 'e2', 'e4'); send(host, rep, 'g1'); rep.chessNetId('me', 'g1');
+    ok(coins(hp) === 0 && coins(rp) === 0 && rp.ch && hp.ch, 'a 100 GOLD game with a move played: both stakes are on it');
+    host.setOnline(false); rep.setOnline(false);
+    host.chessLimbo('me'); host.removePlayer('g1', true); rep.chessLimbo('me'); rep.removePlayer('host', true);
+    rep.setAuth(rep.zoneOf(tt.x, tt.y), true); ticks(host, 80); ticks(rep, 80);
+    ok(coins(hp) === 0 && coins(rp) === 0 && host.chessOf(tt.id).status === 'playing', 'while the room is down nothing is decided on either side (it used to hand BOTH the win)');
+    host.setOnline(true); ticks(host, 60);
+    ok(coins(hp) === 100 && host.chessOf(tt.id).why === 'dropped' && !hp.ch, 'back online, the host finds both players gone: its own stake back, ' + coins(hp));
+    const rep2 = AshCore.create(D, { seed: 'both2' }), rp2 = rep2.addPlayer('me', Object.assign({}, rep.exportPlayer('me'), { x: rp.x, y: rp.y }));
+    rep2.setAuth(rep2.zoneOf(tt.x, tt.y), false); rep2.setOnline(true);
+    ok(rp2.ch && rp2.ch.ids.indexOf('g1') >= 0, 'the guest comes back with a new room id; its save still holds the stake');
+    send(host, rep2, 'g9');
+    ok(coins(rp2) === 100 && !rp2.ch, 'the host’s row pays it back under its old id: ' + coins(rp2) + ' - 200 staked, 200 back');
+    send(host, rep2, 'g9'); ok(coins(rp2) === 100 && rep2.chessReclaim('me') === 0, 'once') }
+
+  /* 2. the guest alone drops (the host saw it leave): the host wins both stakes; the guest, back, is told it lost */
+  { const { host, rep, hp, rp } = setup('one', 'g1');
+    host.hostMove('me', tt.id, 'e2', 'e4'); send(host, rep, 'g1'); rep.chessNetId('me', 'g1');
+    host.removePlayer('g1'); ticks(host, 3);
+    ok(coins(hp) === 200 && host.chessOf(tt.id).why === 'left', 'the guest left a begun game: the host wins the wager, ' + coins(hp));
+    const rep2 = AshCore.create(D, { seed: 'one2' }), rp2 = rep2.addPlayer('me', Object.assign({}, rep.exportPlayer('me'), { x: rp.x, y: rp.y }));
+    rep2.setAuth(rep2.zoneOf(tt.x, tt.y), false); rep2.setOnline(true);
+    send(host, rep2, 'g9');
+    ok(coins(rp2) === 0 && !rp2.ch && rep2.chessReclaim('me') === 0, 'back, the guest reads its loss under its old id and reclaims nothing') }
+
+  /* 3. the host's page alone drops, the guest stays: back online, the host is the one who left */
+  { const { host, rep, hp, rp } = setup('hostdrop', 'g1');
+    host.hostMove('me', tt.id, 'e2', 'e4'); send(host, rep, 'g1');
+    host.setOnline(false); host.chessLimbo('me'); host.removePlayer('g1', true);
+    host.setOnline(true); host.addPuppet('g1', { x: rp.x, y: rp.y, n: 'Guest' });   /* the guest never left: heard again at once */
+    const seated = host.chessOf(tt.id); ok(seated.b === 'g1', 'the guest is still in its seat on the host’s copy');
+    ticks(host, 60); send(host, rep, 'g1');
+    ok(coins(hp) === 0 && coins(rp) === 200 && host.chessOf(tt.id).result === '0-1', 'the host’s own drop loses the game: the guest takes both stakes, ' + coins(rp)) }
+
+  /* 4. leaving before the first move: the stake comes back, the other keeps their seat and theirs on the table */
+  { const { host, rep, hp, rp } = setup('nomove', 'g1');
+    send(host, rep, 'g1');
+    host.removePlayer('g1'); ticks(host, 3); send(host, rep, 'g1');
+    ok(coins(rp) === 100 && coins(hp) === 0 && hp.seat && host.chessOf(tt.id).status === 'open', 'no move played: the guest’s stake comes back (it used to vanish), the host waits on with its own on the table');
+    host.cmd('me', { c: 'stand' }); ticks(host, 3);
+    ok(coins(hp) === 100, 'and the host, standing up alone, gets its own back too') }
+
+  /* 5. a game no host remembers (the page that held it is gone): the stake comes back; a row still showing the seat holds it */
+  { const { host, rep, hp, rp } = setup('gone', 'g1');
+    host.hostMove('me', tt.id, 'e2', 'e4'); send(host, rep, 'g1'); rep.chessNetId('me', 'g1');
+    ok(rep.seatHeld('me') && rep.chessReclaim('me') === 0, 'while a row still seats it, nothing is reclaimed');
+    const rep2 = AshCore.create(D, { seed: 'gone2' }), rp2 = rep2.addPlayer('me', Object.assign({}, rep.exportPlayer('me'), { x: rp.x, y: rp.y }));
+    ok(!rep2.seatHeld('me') && rep2.chessReclaim('me') === 100 && coins(rp2) === 100 && !rp2.ch, 'no row anywhere: the stake comes home, once (' + coins(rp2) + ')');
+    ok(rep2.chessReclaim('me') === 0, 'and not twice') }
+
+  /* 6. a guest who stands up mid-game resigns: its own copy closes the stake at once */
+  { const { host, rep, hp, rp } = setup('resign', 'g1');
+    host.hostMove('me', tt.id, 'e2', 'e4'); send(host, rep, 'g1');
+    rep.cmd('me', { c: 'stand' }); rep.tick();
+    ok(!rp.ch && coins(rp) === 0 && rep.chessReclaim('me') === 0, 'standing up from a begun game is resigning: nothing left to reclaim after a reload') }
+
+  /* 8. The operator, stuck: the opponent's connection dropped; the host (that opponent's page, back online) made his puppet anew
+     without a seat, so his Stand up was ignored and every row sat him down again. Now the table is the word, and standing
+     up after the other has gone wins the wager */
+  { const { host, rep, hp, rp } = setup('stuck', 'g1');
+    host.hostMove('me', tt.id, 'e2', 'e4'); send(host, rep, 'g1'); rep.chessNetId('me', 'g1');
+    host.setOnline(false); host.chessLimbo('me'); host.removePlayer('g1', true); host.setOnline(true);
+    host.addPuppet('g1', { x: rp.x, y: rp.y, n: 'Guest' });
+    ok(!host.S.players.g1.seat && host.chessOf(tt.id).b === 'g1', 'the host made the guest anew without a seat flag, its table still seats him');
+    rep.removePlayer('host');   /* his page saw the opponent leave the room */
+    rep.cmd('me', { c: 'stand' }); rep.tick();
+    ok(rp.ch, 'the guest’s own copy does not count it a resignation while its opponent is gone from view... ' + (rp.ch ? 'kept' : 'closed'));
+    host.hostStand('g1', tt.id); host.tick();
+    const st = host.chessOf(tt.id);
+    ok(st.co.some(c => c[0] === 'g1' && c[1] === 200) && st.co.some(c => c[0] === 'me' && c[1] === 0) && !st.w && !st.b, 'the host takes his Stand up: the one who left was the host’s own player, so the guest wins');
+    send(host, rep, 'g1'); rep.tick();
+    ok(!rp.seat && coins(rp) === 200 && !rp.ch, 'and the row no longer sits him down: he is up, with both stakes, ' + coins(rp));
+    ok(coins(hp) === 0, 'the host, who dropped, gets nothing') }
+  /* 9. on the host itself: the opponent left the room, the host's player stands up at once (before the 30 s sweep) - it wins */
+  { const { host, rep, hp, rp } = setup('hoststand', 'g1');
+    host.hostMove('me', tt.id, 'e2', 'e4');
+    host.setOnline(true); host.removePlayer('g1', true);
+    host.cmd('me', { c: 'stand' }); host.tick();
+    ok(!hp.seat && coins(hp) === 200, 'standing up after the opponent has gone wins the wager: ' + coins(hp)) }
+  /* 10. both still there: standing up is still resigning */
+  { const { host, rep, hp, rp } = setup('stillthere', 'g1');
+    host.hostMove('me', tt.id, 'e2', 'e4');
+    host.cmd('me', { c: 'stand' }); host.tick();
+    ok(coins(hp) === 0 && host.chessOf(tt.id).result === '0-1', 'with the opponent still at the table, standing up resigns') }
+
+  /* 7. a new game at the same table is a new wager */
+  { const { host, rep, hp, rp } = setup('again', 'g1');
+    for (const [who, f, t] of [['me', 'e2', 'e4'], ['g1', 'e7', 'e5'], ['me', 'd1', 'h5'], ['g1', 'b8', 'c6'], ['me', 'f1', 'c4'], ['g1', 'g8', 'f6'], ['me', 'h5', 'f7']]) host.hostMove(who, tt.id, f, t);
+    ok(coins(hp) === 200, 'the host mates and takes 200');
+    host.removePlayer('g1'); ticks(host, 2);
+    host.addPuppet('g2', { x: rp.x, y: rp.y, n: 'Pip' }); const pip = host.S.players.g2; ok(host.hostSit('g2', tt.id, 0, 0), 'a new player sits at the host’s table');
+    ticks(host, 2);
+    ok(coins(hp) === 100 && host.chessOf(tt.id).status === 'playing', 'the host puts its stake on the new game too: ' + coins(hp)) }
+}
+
+console.log(fails ? fails + ' FAILED' : 'all ok');
+process.exit(fails ? 1 : 0);

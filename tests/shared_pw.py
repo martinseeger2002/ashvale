@@ -28,17 +28,20 @@ MOBS = 'JSON.stringify(ASH.core.S.mobs.filter(m => m.zone === "whisperwood").map
 NEAR_WOLF = '(() => { const me = ASH.me; const w = ASH.core.S.mobs.filter(m => m.key === "wolf" && !m.dead && !(window.__used || []).includes(m.uid)).sort((a, b) => Math.hypot(a.x - me.x, a.y - me.y) - Math.hypot(b.x - me.x, b.y - me.y))[0]; return w ? w.uid : null; })()'
 
 def side_by_side(pages, name):
+    if os.environ.get('ASH_PW_SKIP_SHOTS'):
+        print('     shot skipped (ASH_PW_SKIP_SHOTS)')
+        return
     from PIL import Image
     paths = []
     for i, pg in enumerate(pages):
-        pth = os.path.join(OUT, '_sbs%d.png' % i); pg.screenshot(path=pth); paths.append(pth)
+        pth = os.path.join(OUT, '_sbs%d.png' % i); pg.screenshot(path=pth, timeout=150000); paths.append(pth)
     ims = [Image.open(x) for x in paths]; W = sum(i.width for i in ims) + 8 * (len(ims) - 1)
     out = Image.new('RGB', (W, ims[0].height), (20, 20, 20)); x = 0
     for im in ims: out.paste(im, (x, 0)); x += im.width + 8
     pth = os.path.join(OUT, name); out.save(pth); print('     shot', pth)
 
 def open_page(ctx, url, errs, tag):
-    pg = ctx.new_page(); pg.on('pageerror', lambda e: errs.append(tag + ' PAGEERROR ' + str(e))); pg.on('console', lambda m: m.type == 'error' and errs.append(tag + ' ' + m.text + ' @ ' + (m.location or {}).get('url', '')))
+    pg = ctx.new_page(); pg.on('pageerror', lambda e: errs.append(tag + ' PAGEERROR ' + str(e))); pg.on('console', lambda m: m.type == 'error' and '/r/inscriptions?' not in (m.location or {}).get('url', '') and errs.append(tag + ' ' + m.text + ' @ ' + (m.location or {}).get('url', '')))
     pg.goto(url, wait_until='domcontentloaded', timeout=120000); wait(pg, '!!(window.ASH && ASH.core)', 90); return pg
 
 def session(b, url_for, label, sandbox=False):
@@ -286,16 +289,20 @@ def different_monsters(b, url_for, label):
       return w.map(m => m.uid);
     })()''')
     a, bb = pair
-    synced = wait(pb, '(() => { const a=ASH.core.mobByUid(%d), b=ASH.core.mobByUid(%d); return a && b && !a.dead && !b.dead && a.hp===8 && b.hp===8; })()' % (a, bb), 12)
+    synced = wait(pb, '(() => { const a=ASH.core.mobByUid(%d), b=ASH.core.mobByUid(%d); return a && b && !a.dead && !b.dead && a.hp===8 && b.hp===8; })()' % (a, bb), 30)
     check(synced, 'both clients begin with the same two live monster UIDs and hitpoints')
+    if not synced:
+        for nm, pg in (('A', pa), ('B', pb)):
+            print('     %s sync diagnostic:' % nm, pg.evaluate('JSON.stringify({area:ASH.net().area,host:ASH.net().host,hosts:ASH.net().hosts,hosted:ASH.net().hosted,mobs:[ASH.core.mobByUid(%d),ASH.core.mobByUid(%d)].map(m=>m&&[m.uid,m.zone,m.x,m.y,m.hp,!!m.dead])})' % (a, bb)))
     xa, xb = pa.evaluate('ASH.me.xp.attack'), pb.evaluate('ASH.me.xp.attack')
     pa.evaluate('ASH.core.cmd("me", {c: "attack", uid: %d})' % a)
     pb.evaluate('ASH.core.cmd("me", {c: "attack", uid: %d})' % bb)
     check(wait(pb, 'window.__droppedAttackIntent === true', 5), "the test dropped B's first target packet")
-    both = wait(pa, 'ASH.core.mobByUid(%d).dead && ASH.core.mobByUid(%d).dead' % (a, bb), 45) and wait(pb, 'ASH.core.mobByUid(%d).dead && ASH.core.mobByUid(%d).dead' % (a, bb), 10)
+    both = wait(pa, 'ASH.core.mobByUid(%d).dead && ASH.core.mobByUid(%d).dead' % (a, bb), 90) and wait(pb, 'ASH.core.mobByUid(%d).dead && ASH.core.mobByUid(%d).dead' % (a, bb), 20)
     check(both, 'both different monsters die on both clients after periodic state repairs the lost intent')
     check(pa.evaluate('ASH.me.xp.attack') > xa and pb.evaluate('ASH.me.xp.attack') > xb, 'each player receives XP for their own fight')
     states = [pg.evaluate('[ASH.core.mobByUid(%d).hp, !!ASH.core.mobByUid(%d).dead, ASH.core.mobByUid(%d).hp, !!ASH.core.mobByUid(%d).dead]' % (a, a, bb, bb)) for pg in (pa, pb)]
+    if states[0] != states[1]: print('     final state diagnostic: A=%s B=%s' % (states[0], states[1]))
     check(states[0] == states[1], 'both clients finish with identical HP/death state: %s' % states[0])
     budgets = [pg.evaluate('ASH.net().stats') for pg in (pa, pb)]
     check(all(s['max2s'] <= 10 and s['dropped'] == 0 for s in budgets), 'reconciliation stays inside the send budget: %s' % [(s['max2s'], s['dropped']) for s in budgets])

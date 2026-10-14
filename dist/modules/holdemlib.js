@@ -276,20 +276,21 @@
       const pots = [];
       if (left.length <= 1) {   /* nobody to show down against - the pot, uncalled money included, goes across */
         const w = left[0] || who.find(s => !s.folded);
-        if (w && T.pot > 0) { const cut = Math.floor(T.pot * (T.rake || 0)), paid = T.pot - cut; T.raked = (T.raked | 0) + cut; w.chips += paid; w.won += paid; pots.push({ amount: paid, rake: cut, win: [w.ref], who: [w.name], note: 'uncontested' }); }
+        if (w && T.pot > 0) { const others = who.filter(s => s !== w).reduce((m, s) => Math.max(m, s.committed | 0), 0), back = Math.max(0, (w.committed | 0) - others), cut = Math.floor((T.pot - back) * (T.rake || 0)), paid = T.pot - cut;   /* [Claude 2026-10-13] the house cuts only what was called, never your own bet coming back */ T.raked = (T.raked | 0) + cut; w.chips += paid; w.won += paid; pots.push({ amount: paid, rake: cut, win: [w.ref], who: [w.name], note: 'uncontested' }); }
       } else {
         const lv = []; for (const s of who) if (s.committed > 0 && lv.indexOf(s.committed) < 0) lv.push(s.committed);
         lv.sort((a, b) => a - b);
         let prev = 0;
         for (const L of lv) {
           let amt = 0; for (const s of who) amt += Math.max(0, Math.min(s.committed, L) - prev);
-          if (amt > 0) pots.push({ amount: amt, elig: who.filter(s => !s.folded && s.committed >= L) });
+          if (amt > 0) pots.push({ amount: amt, elig: who.filter(s => !s.folded && s.committed >= L), from: who.filter(s => s.committed > prev).length });
           prev = L;
         }
         let sum = 0; for (const p of pots) sum += p.amount;
         if (sum !== T.pot && pots.length) pots[pots.length - 1].amount += T.pot - sum;   /* never lose a chip to rounding */
         for (const p of pots) {
-          const cut = Math.floor(p.amount * (T.rake || 0)); p.rake = cut; p.amount -= cut; T.raked = (T.raked | 0) + cut;   /* [Claude] the house's cut, before the pot is shared */
+          const back = p.elig && p.elig.length === 1 && p.from === 1;   /* [Claude 2026-10-13] a layer only its own owner put money in: an uncalled all-in coming back, uncut */
+          const cut = back ? 0 : Math.floor(p.amount * (T.rake || 0)); p.rake = cut; p.amount -= cut; T.raked = (T.raked | 0) + cut;   /* [Claude] the house's cut, before the pot is shared */
           const e = p.elig && p.elig.length ? p.elig : left.slice(0, 1);
           let top = -1; for (const s of e) if (s.score > top) top = s.score;
           const w = e.filter(s => s.score === top);
@@ -297,7 +298,7 @@
           for (const x of w) { x.chips += share; x.won += share; }
           let odd = p.amount - share * w.length;
           if (odd > 0) { const first = w.slice().sort(byBtn)[0]; first.chips += odd; first.won += odd; }
-          p.win = w.map(x => x.ref); p.who = w.map(x => x.name); p.score = top; delete p.elig;
+          p.win = w.map(x => x.ref); p.who = w.map(x => x.name); p.score = top; if (back) p.note = 'uncalled, returned'; delete p.elig; delete p.from;
         }
         for (const s of left.slice().sort((a, b) => b.score - a.score))
           T.say((s.name || 'A player') + ': ' + s.hole.map(cname).join(' ') + ' - ' + describe(s.rank) + '.', 'sys');

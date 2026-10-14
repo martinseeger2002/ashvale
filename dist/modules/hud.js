@@ -138,7 +138,9 @@
       while (chat.children.length > 60) chat.removeChild(chat.firstChild);
       if (chat.classList.contains('big')) chat.scrollTop = chat.scrollHeight;
     }
-    chat.onclick = () => { chat.classList.toggle('big'); chat.scrollTop = chat.scrollHeight; };
+    /* [Claude 2026-10-13] tapping the chat opens it up (a separate button was dropped: the operator, "clicking the chat display does the same thing") */
+    const chatBig = (on) => { chat.classList.toggle('big', on); chatw.classList.toggle('big', on); chat.scrollTop = chat.scrollHeight; };
+    chat.onclick = () => chatBig(!chat.classList.contains('big'));
 
     /* ---------- options menu */
     function menu(x, y, opts) {
@@ -231,16 +233,18 @@
     /* the connection banner (2026-10-06: a player who lost the server is told, so they don't play on a broken one):
        kind 'net' = the shared world is not reachable (others can't see you; the game reconnects by itself), 'save' = progress
        is not being saved. Stays until the engine says it's back; Reload is always there. */
-    const nl = el('netlost ui', ui), NL = { net: null, save: null };
+    const nl = el('netlost ui', ui), NL = { net: null, save: null }; let nlT = 0;
+    /* [Claude 2026-10-12] the operator: "Replace this message with a little red explanation in the upper right hand corner because it
+       usually goes away within a second or two" - a short red note, shown only if the trouble lasts 2.5 s; tapping it reloads. */
     function netLost(on, kind, why) {
       kind = kind || 'net'; NL[kind] = on ? (why || '') : null;
       const k = NL.save != null ? 'save' : NL.net != null ? 'net' : null;
+      clearTimeout(nlT);
       if (!k) { nl.style.display = 'none'; return; }
-      nl.innerHTML = '<div><b>' + (k === 'save' ? 'Your progress is not being saved.' : 'Connection lost.') + '</b> ' +
-        (k === 'save' ? 'The arcade is not answering. Reload before you play on, or what you do now may be lost.'
-                      : 'Other players can\'t see you and the shared world isn\'t updating' + (NL.net ? ' (' + A.esc(NL.net) + ')' : '') + '. Reconnecting\u2026') +
-        '</div><button class="btn">Reload</button>';
-      nl.style.display = 'flex'; nl.querySelector('.btn').onclick = () => location.reload();
+      nl.textContent = k === 'save' ? 'Not saving \u21bb' : 'Offline\u2026';
+      nl.title = k === 'save' ? 'The arcade is not answering: what you do now may not be saved. Tap to reload.' : 'Other players can\'t see you right now' + (NL.net ? ' (' + NL.net + ')' : '') + '.';
+      nl.onclick = () => location.reload();
+      if (nl.style.display !== 'block') nlT = setTimeout(() => { nl.style.display = 'block'; }, 2500);
     }
     /* a new release is out (2026-10-06: players are told to leave, refresh their Games tab and come back in).
        The engine has saved before this shows; it stays up, the game keeps running until they go. */
@@ -333,7 +337,7 @@
       layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab(api.isPhone ? null : 'inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       chessOpen: (v, cb) => K.chessOpen(v, cb), chessUpdate: v => K.chessUpdate(v), chessClose: () => K.chessClose(), get chessPromo() { return K.chessPromo; },
-      pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(),
+      pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(), solitaireOpen: o => K.solitaireOpen && K.solitaireOpen(o), solitaireClose: () => K.solitaireClose && K.solitaireClose(), _sol: () => K._sol && K._sol(),
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };
   }

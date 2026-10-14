@@ -16,6 +16,7 @@
     const ORE = { R: 0xc8702c, N: 0xd8d8d0, I: 0x8a4632, C: 0x33333c, G: 0xd9a930, A: 0x6f86c8, S: 0x3a3a40, V: 0x0e0e14 };
     const WATER_Y = -0.16;
     let LAMPQ = null;   /* (x, y) -> whether a tended lamp or town torch is lit; the engine sets this from the guards */
+    let VIEWQ = null;   /* () -> [x, y, lv]: where the viewer stands (tile and storey); the engine sets it. A light inside a building shines only for a viewer in that room */
     let FIREQ = null;   /* (x, y) -> whether the fire at a tile is burning (a zone fire with `litIn` is cold out of its season) */
     let STEAMQ = null;  /* kind -> 0-1, how hard the kettle over that fire steams (core works it out from the season and the hour) */
     const BOARDS = Object.create(null);   /* painted wooden signs (dragon killers): id -> { lines, faces } */
@@ -99,7 +100,7 @@
       }
     }
     const BTN_GEO = new THREE.CylinderGeometry(0.065, 0.065, 0.022, 14), BTN_MAT = new THREE.MeshLambertMaterial({ color: 0xf2eee0 });
-    const TURN_GEO = new THREE.TorusGeometry(0.15, 0.014, 6, 22), TURN_MAT = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.85 });
+    const TURN_GEO = new THREE.TorusGeometry(0.255, 0.012, 6, 40), TURN_MAT = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.85 }), TURN_DIM = new THREE.MeshBasicMaterial({ color: 0x2a2a22, transparent: true, opacity: 0.55 });
     let CARD_TEX = null;
     function roundedRect(g, x, y, w, h, r) {
       g.beginPath(); g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
@@ -146,14 +147,21 @@
           g.fillStyle = '#c8a040'; g.fillRect(cx - 2.5, cy - 17, 5, 36); g.fillRect(cx - 12, cy - 9, 24, 5);
           continue;
         }
+        if (i >= 52) continue;   /* cells past the deck (only the back, 63, is used) */
         g.fillStyle = '#f8f5ec'; g.fill(); g.strokeStyle = '#bdb49d'; g.lineWidth = 2; g.stroke();
         const rank = PRANKS[i >> 2], suit = i & 3;
-        g.fillStyle = PINK[suit]; g.textAlign = 'left'; g.textBaseline = 'top';
-        g.font = 'bold ' + (rank === 'T' ? 19 : 24) + 'px "DejaVu Sans", sans-serif';
-        g.fillText(rank === 'T' ? '10' : rank, px + 10, py + 8);
-        pip(g, suit, px + PW - 26, py + PH - 32, PW * 0.17);
+        /* [Claude 2026-10-13] the operator (a picture of a standard deck): "each card has the number and the suit in the two opposite
+           corners" - the rank with its suit under it, top left, and the same turned upside down bottom right */
+        const index = () => {
+          g.fillStyle = PINK[suit]; g.textAlign = 'center'; g.textBaseline = 'top';
+          g.font = 'bold ' + (rank === 'T' ? 16 : 21) + 'px "DejaVu Sans", sans-serif';
+          g.fillText(rank === 'T' ? '10' : rank, 15, 6); pip(g, suit, 15, 39, PW * 0.085);
+        };
+        g.save(); g.translate(px + 4, py + 4); index(); g.restore();
+        g.save(); g.translate(px + PW - 4, py + PH - 4); g.rotate(Math.PI); index(); g.restore();
+        g.fillStyle = PINK[suit];   /* the pips below paint in the suit's colour (restore() took it back to the card's cream) */
         /* [Claude 2026-10-11] the operator: the pips in their places; the ace alone a single pip; simple artwork on the court cards */
-        const n = PRANKS.indexOf(rank) + 2, L = px + PW * 0.33, Rr = px + PW * 0.67, C = px + PW / 2, S = PW * 0.14;
+        const n = PRANKS.indexOf(rank) + 2, L = px + PW * 0.37, Rr = px + PW * 0.63, C = px + PW / 2, S = PW * 0.13;   /* columns kept clear of the corner indices */
         const Y = (f) => py + PH * f, pp = (x, y) => pip(g, suit, x, y, S);
         if (rank === 'A') pip(g, suit, C, Y(0.5), PW * 0.34);
         else if (n <= 10) {
@@ -169,7 +177,7 @@
           else { col4.forEach(f => { pp(L, Y(f)); pp(Rr, Y(f)); }); pp(C, Y(0.325)); pp(C, Y(0.675)); }
         } else {   /* J, Q, K: a framed figure in the suit's colour - a crown (K), a crown and a veil (Q), a cap with a feather (J) */
           const fx = C, fy = Y(0.5), col = PINK[suit], gold = '#c8a040';
-          g.strokeStyle = col; g.lineWidth = 1.5; g.strokeRect(px + 22, py + 34, PW - 44, PH - 68);
+          g.strokeStyle = col; g.lineWidth = 1.5; g.strokeRect(px + 29, py + 30, PW - 58, PH - 60);   /* [Claude 2026-10-13] kept inside the corner indices (the operator: the art covered the suit pip) */
           g.fillStyle = '#f0e6c8'; g.beginPath(); g.arc(fx, fy - 6, 11, 0, Math.PI * 2); g.fill();   /* the face */
           g.fillStyle = col; g.fillRect(fx - 16, fy + 6, 32, 24);   /* the robe */
           g.fillStyle = gold; g.fillRect(fx - 3, fy + 8, 6, 20);
@@ -191,6 +199,14 @@
       a.needsUpdate = true; mesh.userData.card = id;
     }
     function cardMesh(mat, id) { const m = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W, CARD_H), mat); cardFace(m, id); return m; }
+    function pokerTimer(id, frac) {   /* [Claude 2026-10-12] the turn ring as a clock: frac = the share of the turn's time still left */
+      const T = POKER[id], r = T && T.turn; if (!r || !r.userData.arc) return;
+      frac = Math.max(0, Math.min(1, +frac || 0)); if (Math.abs(frac - r.userData.frac) < 0.004) return;
+      r.userData.frac = frac; const arc = r.userData.arc;
+      arc.geometry.dispose(); arc.geometry = new THREE.RingGeometry(0.232, 0.278, 64, 1, Math.PI / 2, Math.max(0.0001, Math.PI * 2 * frac));
+      const c = frac > 0.5 ? new THREE.Color(0x3fd25a).lerp(new THREE.Color(0xffd23f), (1 - frac) * 2) : new THREE.Color(0xffd23f).lerp(new THREE.Color(0xe8382c), (0.5 - frac) * 2);
+      arc.material.color.copy(c);
+    }
     function pokerShow(id, m) {   /* the engine's model of a table: board, each seat's two cards (down for the ones it keeps),
                                      the bets in front of each chair, who has the button, whose turn it is */
       PK_STATE[id] = m;
@@ -245,7 +261,12 @@
       if (T.turn) { T.group.remove(T.turn); T.turn = null; }
       if (m.turn != null && T.spots[m.turn | 0]) {
         const s = T.spots[m.turn | 0], dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1;
-        const r = new THREE.Mesh(TURN_GEO, TURN_MAT); r.rotation.x = Math.PI / 2;
+        /* [Claude 2026-10-12] the operator: "The ring that is the indicator for whose turn it is should also be a visual timer ... like a
+           clock changing colors around the ring": a dim full ring, and over it the time left as an arc that runs down
+           clockwise, green to yellow to red (pokerTimer sets it every frame) */
+        const r = new THREE.Group(), base = new THREE.Mesh(TURN_GEO, TURN_DIM); base.rotation.x = Math.PI / 2; r.add(base);
+        const arc = new THREE.Mesh(new THREE.RingGeometry(0.232, 0.278, 64, 1, Math.PI / 2, Math.PI * 2), new THREE.MeshBasicMaterial({ color: 0x3fd25a, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false }));
+        arc.rotation.x = -Math.PI / 2; arc.position.y = 0.004; r.add(arc); r.userData.arc = arc; r.userData.frac = 1;
         r.position.set(T.ox + dx / L * 0.66 * R, top + 0.05, T.oz + dz / L * 0.66 * R); T.group.add(r); T.turn = r;
       }
     }
@@ -1237,7 +1258,7 @@
             B.add('box', 0x2a2a2a, x, y + 1.22, z, 0.2, 0.08, 0.2);
             const f = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.32, 5), new THREE.MeshBasicMaterial({ color: 0xffa030 })); f.position.set(x, y + 1.42, z); group.add(f);
             const f2 = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.2, 5), new THREE.MeshBasicMaterial({ color: 0xfff0a0 })); f2.position.set(x, y + 1.36, z); group.add(f2);
-            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x, y, z, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y });
+            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x, y, z, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y, lv: o.lv | 0 });
             break;
           }
           case 'lamp': {   /* a gas street lamp on the verge of a trail (2026-10-07): iron post, glass lantern, pyramid cap */
@@ -1263,7 +1284,7 @@
             { const [a, b, c] = at(0.34); B.add('cyl', 0x2a1f16, a, b, c, 0.09, 0.08, 0.09, ry, TL); }
             const f = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.24, 5), new THREE.MeshBasicMaterial({ color: 0xffa030 })), f2 = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.15, 5), new THREE.MeshBasicMaterial({ color: 0xfff0a0 }));
             for (const [m, d] of [[f, 0.48], [f2, 0.44]]) { m.position.set(...at(d)); m.rotation.set(TL, ry, 0, 'YXZ'); group.add(m); }
-            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x: wx, y, z: wz, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y });
+            torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x: wx, y, z: wz, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y, lv: o.lv | 0 });
             break;
           }
           case 'iwall': {   /* a room divider inside a walk-in building (2026-10-07: Saltmere town hall) */
@@ -1519,17 +1540,18 @@
             /* [Claude 2026-10-11] a candle wheel over the felt (the operator: the light should flicker like candles): an iron ring on
                three chains, six tallow candles, their flames one group so the torch loop makes them gutter; at the front of
                `torches` so it takes one of the region's two warm lights, whose intensity flickers like a candle below */
-            const wheel = new THREE.Group(); wheel.position.set(x, top + 1.05, z); into.add(wheel);
+            /* [Claude 2026-10-12] a storey is 1.8 m: the wheel hangs at 1.3 m over the floor (felt top + 0.55) and its chains end under the
+               ceiling - it had reached up through the third floor (the operator: "the chandeliers ... are visible on the third story floor") */
+            const wheel = new THREE.Group(); wheel.position.set(x, top + 0.55, z); into.add(wheel);
             wheel.add(mesh(new THREE.TorusGeometry(0.42, 0.022, 6, 20), 0x2a2622, 0, 0, 0)); wheel.children[0].rotation.x = Math.PI / 2;
-            for (let k = 0; k < 3; k++) { const a = k * Math.PI * 2 / 3, ch = mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.9, 4), 0x3a3632, Math.cos(a) * 0.21, 0.45, Math.sin(a) * 0.21); ch.rotation.z = -Math.cos(a) * 0.46; ch.rotation.x = Math.sin(a) * 0.46; wheel.add(ch); }
-            wheel.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.5, 4), 0x3a3632, 0, 1.12, 0));
+            for (let k = 0; k < 3; k++) { const a = k * Math.PI * 2 / 3, ch = mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.46, 4), 0x3a3632, Math.cos(a) * 0.21, 0.23, Math.sin(a) * 0.21); ch.rotation.z = -Math.cos(a) * 0.9; ch.rotation.x = Math.sin(a) * 0.9; wheel.add(ch); }
             const flames = new THREE.Group(); wheel.add(flames);
             for (let k = 0; k < 6; k++) {
               const a = k * Math.PI / 3 + 0.3, cx = Math.cos(a) * 0.42, cz = Math.sin(a) * 0.42, h = 0.09 + hash2(o.x + k, o.y) * 0.06;
               wheel.add(mesh(new THREE.CylinderGeometry(0.018, 0.02, h, 6), 0xf1e6c4, cx, h / 2 + 0.01, cz));
               const f = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.055, 5), new THREE.MeshBasicMaterial({ color: 0xffd060 })); f.position.set(cx, h + 0.035, cz); flames.add(f);
             }
-            torches.unshift({ f: flames, ph: hash2(o.x, o.y) * 10, x, y: top - 0.35, z, night: false, tend: false, tx: o.x, ty: o.y, candle: true });
+            torches.unshift({ f: flames, ph: hash2(o.x, o.y) * 10, x, y: top - 0.8, z, night: false, tend: false, tx: o.x, ty: o.y, lv, candle: true });   /* the light sits at the flames (y + 1.5) */
             const mat = new THREE.MeshBasicMaterial({ map: cardKit(), side: THREE.DoubleSide });
             mat.userData.shared = true;   /* the atlas is one for the whole game - dispose() must not take it with this region */
             const gg = new THREE.Group(); into.add(gg);
@@ -1647,7 +1669,7 @@
         }
         if (c === '^' && map.underNear && map.underNear(x, y)) continue;   /* underground the rock is the raised ground itself */
         if (c === '^') { if (r < 0.4) B.add('pyr', 0x76736b, x + 0.5, heightAt(x + 0.5, y + 0.5) + 0.5, y + 0.5, 1.4, 1 + r * 2, 1.4, r * 6); continue; }   /* mountain rock */
-        if (c === 'f') for (let k = 0; k < 5; k++) { const fx = x + 0.2 + hash2(x + k, y) * 0.6, fz = y + 0.2 + hash2(x, y + k) * 0.6, fy = heightAt(fx, fz); BF.add('box', 0x3a7a2a, fx, fy + 0.08, fz, 0.03, 0.16, 0.03); BF.add('box', FL[(x + y + k) % 5], fx, fy + 0.18, fz, 0.09, 0.07, 0.09); }
+        if (c === 'f') for (let k = 0; k < 5; k++) { const fx = x + 0.2 + hash2(x + k, y) * 0.6, fz = y + 0.2 + hash2(x, y + k) * 0.6, fy = heightAt(fx, fz); BF.add('box', 0x3a7a2a, fx, fy + 0.08, fz, 0.03, 0.16, 0.03); BF.add('box', FL[(((x + y + k) % 5) + 5) % 5], fx, fy + 0.18, fz, 0.09, 0.07, 0.09); }
         else if ((c === '.' || c === ',') && r < 0.28) { const fx = x + 0.2 + hash2(x, y + 2) * 0.6, fz = y + 0.2 + hash2(x + 2, y) * 0.6; BF.add('cone', c === ',' ? 0x3a6a26 : 0x4a8a30, fx, heightAt(fx, fz) + 0.1, fz, 0.22, 0.22, 0.22, r * 9); }
         else if (c === ',' && r > 0.965) { const fx = x + 0.3 + hash2(x, y + 7) * 0.4, fz = y + 0.3 + hash2(x + 7, y) * 0.4, fy = heightAt(fx, fz); BF.add('cyl6', 0xe8e0c8, fx, fy + 0.05, fz, 0.05, 0.1, 0.05); BF.add('cone', 0xb83a2a, fx, fy + 0.12, fz, 0.14, 0.07, 0.14); }
       }
@@ -1667,7 +1689,12 @@
       }
       /* torch light: two warm lights at the village plaza (more would cost too much on phones) */
       const lights = [];
-      for (const t of torches.filter(t => !t.glow && t.x != null && !(t.litIn && FIREQ && !FIREQ(t.tx, t.ty))).slice(0, 2)) { const L = new THREE.PointLight(0xffa050, 3, 6, 1.6); L.position.set(t.x, t.y + 1.5, t.z); group.add(L); lights.push(L); }
+      for (const t of torches.filter(t => !t.glow && t.x != null && !(t.litIn && FIREQ && !FIREQ(t.tx, t.ty))).slice(0, 2)) { const L = new THREE.PointLight(0xffa050, 3, 6, 1.6); L.position.set(t.x, t.y + 1.5, t.z); group.add(L); lights.push(L);
+        /* [Claude 2026-10-13] a light has no shadow, so it shines through floors and walls (the operator: the card table's candles lit the
+           third storey's walls at night; "Make sure the same thing doesn't happen with the torch on the wall"). One inside a
+           building belongs to its room: lit only while the viewer stands in that building on that storey (update below). It is
+           dimmed, never hidden - see A FIXED NUMBER OF LIGHTS in engine.js */
+        const rf = roofs.find(r => t.tx >= r.x0 && t.tx <= r.x1 && t.ty >= r.y0 && t.ty <= r.y1); if (rf) L.userData.room = { x0: rf.x0, y0: rf.y0, x1: rf.x1, y1: rf.y1, lv: t.lv | 0 }; }
 
       const smokeGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12), smokeMat = new THREE.MeshLambertMaterial({ color: 0xc8c8c8, transparent: true, opacity: 0.35, depthWrite: false });
       const steamMat = new THREE.MeshLambertMaterial({ color: 0xf2f6fa, transparent: true, opacity: 0.22, depthWrite: false });   /* boiling sap: whiter and thinner than a fire's smoke */
@@ -1717,7 +1744,8 @@
           for (const L of street) { const on = LAMPQ ? !!LAMPQ(L.x, L.y) : NIGHTK > 0.04; L.mat.color.copy(LAMP_OFF).lerp(LAMP_ON, on ? 1 : 0); }
           for (const L of lights) {   /* [Claude 2026-10-11] a flame's light gutters: three unrelated rhythms and a dip now and then, not one smooth wave */
             const p = L.position.x * 1.7 + L.position.z * 0.3, g = Math.sin(time * 9.1 + p) * 0.22 + Math.sin(time * 23.7 + p * 1.9) * 0.11 + Math.sin(time * 41.3 + p * 3.1) * 0.07, dip = Math.sin(time * 1.3 + p) > 0.93 ? -0.45 : 0;
-            L.intensity = 2.5 + g + dip;
+            const R = L.userData.room, v = R && VIEWQ ? VIEWQ() : null;
+            L.intensity = R && !(v && v[0] >= R.x0 && v[0] <= R.x1 && v[1] >= R.y0 && v[1] <= R.y1 && v[2] === R.lv) ? 0 : 2.5 + g + dip;
           }
           for (const s of spots) { const ice = !!(map.iceAt && map.iceAt(s.x, s.y)); s.rings.forEach(r => { r.visible = !ice; }); }   /* a frozen pond does not ripple: you fish through the ice */
           for (const s of spots) if (s.rings[0].visible) s.rings.forEach((r, k) => { const p = ((time * 0.6 + s.ph + k / 3) % 1); r.scale.setScalar(0.6 + p * 2.2); r.material.opacity = 0.75 * (1 - p); });
@@ -1747,7 +1775,7 @@
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, viewQuery: fn => { VIEWQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerTimer, cardAtlas: () => { const t = cardKit(); return t && t.image && t.image.toDataURL ? t.image.toDataURL('image/png') : null; }, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

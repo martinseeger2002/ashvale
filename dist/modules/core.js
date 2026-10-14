@@ -443,6 +443,8 @@
       if (Array.isArray(s.traps)) p.traps = s.traps.filter(t => t && IT[t.id] && trapOf(IT[t.id]) && Number.isInteger(t.x) && Number.isInteger(t.y)).slice(0, 8).map(t => ({ id: t.id, x: underMove(t.x, t.y)[0], y: underMove(t.x, t.y)[1], prey: String(t.prey || ''), ready: +t.ready || 0 }));
       if (typeof s.town === 'string') p.town = s.town;
       if (s.hawkHp != null) p.hawkHp = s.hawkHp | 0;
+      if (s.ch && typeof s.ch === 'object' && typeof s.ch.t === 'string' && (s.ch.n | 0) >= 0) p.ch = { t: s.ch.t.slice(0, 32), key: String(s.ch.key || '').slice(0, 48), cs: s.ch.cs | 0, n: Math.min(1000000, s.ch.n | 0), ids: Array.isArray(s.ch.ids) ? s.ch.ids.filter(x => typeof x === 'string').slice(-8) : [], at: 0 };   /* [Claude 2026-10-12] a chess stake still on a table */
+      if (s.pk && typeof s.pk === 'object' && typeof s.pk.t === 'string' && (s.pk.n | 0) >= 0) p.pk = { t: s.pk.t.slice(0, 32), key: String(s.pk.key || '').slice(0, 48), cs: s.pk.cs | 0, n: Math.min(1000000, s.pk.n | 0), ids: Array.isArray(s.pk.ids) ? s.pk.ids.filter(x => typeof x === 'string').slice(-8) : [], at: 0 };   /* [Claude 2026-10-12] an open card-table seat, paid back if the table forgot it */
       if (s.cd) { p.cd = {}; for (const k in s.cd) p.cd[k] = S.t + (s.cd[k] | 0); }
       if (s.gift && typeof s.gift === 'object') { p.gift = {}; for (const k in s.gift) if (IT[k] && s.gift[k] > 0) p.gift[k] = s.gift[k] | 0; }   /* items given by other players (quests do not count them) */   /* cooldowns are saved as ticks left */
       if (s.kills && typeof s.kills === 'object') { p.kills = {}; for (const k in s.kills) if (/^[a-z_]{1,32}$/.test(k) && (s.kills[k] | 0) > 0) p.kills[k] = s.kills[k] | 0; }
@@ -515,7 +517,7 @@
     function exportPlayer(id) {
       const p = S.players[id]; if (!p) return null;
       const at = p.dead ? wakeSpot(p).at : [p.x, p.y];
-      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, orders: p.orders || {}, traps: p.traps || [], bless: p.bless || [], town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, gift: p.gift && Object.keys(p.gift).length ? p.gift : undefined, kills: p.kills || {}, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
+      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, orders: p.orders || {}, traps: p.traps || [], bless: p.bless || [], town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, gift: p.gift && Object.keys(p.gift).length ? p.gift : undefined, kills: p.kills || {}, pk: p.pk || undefined, ch: p.ch || undefined, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
     }
 
     // ---------------- pathfinding: BFS over the tile grid, 8 directions, no corner cutting (RuneScape-style)
@@ -764,13 +766,14 @@
           const pk = T.k === 'pokertable', ask0 = Math.max(0, Math.min(1000000, (pk ? c.buy : c.stake) | 0)), ask = pk && PK_TIERS.indexOf(ask0) < 0 ? 0 : ask0;   /* [Claude] a card table's buy-in is one of the tiers, else free chips */
           const stake = pk ? (pokerSeated(T.id) ? pokerOf(T.id).buy | 0 : ask) : (chessOf(T.id).w || chessOf(T.id).b ? chessOf(T.id).stake | 0 : ask);
           if (stake > 0 && !p.puppet && invCount(p, 'coins') < stake) { msg(p, 'You need ' + stake + ' GOLD to sit at this table' + (pk ? ' (the buy-in).' : ' (the stake).'), 'warn'); break; }
+          if (!(p.seat && p.seat.t === T.id)) { if (pk) { p.pkDone = null; p.pkPaid = null; } else { p.chDone = null; p.chPaid = null; } }   /* [Claude 2026-10-12] a sit asked for now is a new seat: never one already paid back (an open seat is still kept by p.pk) */
           p.act = { k: 'sit', t: T.id, s: si, stake, pk: typeof c.pk === 'string' ? c.pk.slice(0, 160) : '' }; p.skilling = null; closeShop(p); break;   /* pk [Claude 2026-10-12]: the sitter's key, so the dealer can seal their cards for them alone */
         }
-        case 'stand': { if (p.seat) { if (isAuth(zoneOf(p.x, p.y))) standUp(p); else { const t = p.seat.t, pk = p.seat.k === 'pk'; p.seat = null; ev({ e: pk ? 'pstand' : 'stand', p: p.id, t }); ev({ e: pk ? 'xpstand' : 'xstand', p: p.id, t }); } } p.seatWait = null; break; }
+        case 'stand': { if (p.seat) { if (p.seat.k === 'pk' ? tAuth(pokerTableById(p.seat.t)) : isAuth(zoneOf(p.x, p.y))) standUp(p); else { const t = p.seat.t, pk = p.seat.k === 'pk'; if (!pk && chOpen(p, t)) { const cst = chessOf(t), oth = cst.w === p.id ? cst.b : cst.w; if (cst.status === 'playing' && cst.moves.length && cst.w && cst.b && S.players[oth]) chClose(p, 0, 'resign'); }   /* opponent gone from my view: the host's word decides (I may have won) */ p.seat = null; ev({ e: pk ? 'pstand' : 'stand', p: p.id, t }); ev({ e: pk ? 'xpstand' : 'xstand', p: p.id, t }); } } p.seatWait = null; break; }
         case 'pact': {   /* fold / check / call / raise to N / all-in: the host of the area deals, as with a chess move */
           if (!p.seat || p.seat.k !== 'pk') break;
           const id = p.seat.t, a = String(c.a || '').slice(0, 6), to = c.to == null ? 0 : Math.max(0, Math.min(999999, c.to | 0));   /* 'back' [Claude]: come back after being dealt out */
-          if (isAuth(zoneOf(p.x, p.y))) pokerAct(p, id, a, to); else ev({ e: 'xpact', p: p.id, t: id, a, to });
+          if (tAuth(pokerTableById(id))) pokerAct(p, id, a, to); else ev({ e: 'xpact', p: p.id, t: id, a, to });
           break;
         }
         case 'csel': {   /* [Claude 2026-10-11] the square you picked up (or none): the host tells the table, so the opponent's board lights it too */
@@ -1080,8 +1083,9 @@
         m.hurt = p.id; m.hurtT = S.t; m.back = 0;
         /* a chained / windup beast (the dragon) keeps the one it already has, so two rangers cannot bounce it
            between them and cancel every blow. Other monsters still switch to the latest hitter so a group can tank. */
+        m.foes = m.foes || {}; m.foes[p.id] = S.t;   /* who is fighting it (mobAttack takes them in turn) */
         if (MON[m.key].fleeHit) m.tgt = 0;
-        else if (!(MON[m.key].windup || MON[m.key].chain) || !tgtOk(m)) m.tgt = p.id;
+        else if (!tgtOk(m)) m.tgt = p.id;   /* [Claude 2026-10-13] squares up to a hitter when it has nobody; mobAttack takes turns */
         const ai = MON[m.key].ai; if (ai) rally(m, p.id, ai.defended ? 10 : ai.rally || 6);
       }
       if (m.hp <= 0) killMob(m, p);
@@ -1096,10 +1100,11 @@
         if (dex) addXp(p, 'dexterity', (DEX.xpPerDamage || 10) * dmg);
       }
     }
-    /* public kill boards (the ruined keep's wooden sign): a G-counter per character name. The @ashvale Bank holds the
-       global counts; two games merging take the higher count for each name and the painted total is the Bank's (or the
-       sum of names, if that is higher). */
-    const SCORES = {}, SCORE_N = {};
+    /* public kill boards (the ruined keep's wooden sign): a counter per character name. The @ashvale Bank is the ONLY
+       place a board is kept (2026-10-12: "make it so that the bank is the only thing that stores the high score
+       and it doesn't get the high score from the clients"): SCORES holds exactly what the Bank last answered and nothing
+       else - never a character's own kill counts, never another game's copy, so clearing the Bank's board clears it. */
+    const SCORES = {};
     function scoreName(n) {   /* the keep board uses the arcade @tag, never the default Adventurer (2026-10-10) */
       n = String(n || '').trim();
       if (n.charAt(0) === '@') {
@@ -1109,35 +1114,28 @@
       const c = cleanName(n);
       return c && !/^adventurer$/i.test(c) ? c : null;
     }
-    function mergeScores(key, names) {
+    function setScores(key, names) {   /* the Bank's answer: these rows ARE the board, so they replace what is shown */
       if (!/^[a-z_]{1,32}$/.test(String(key)) || !names || typeof names !== 'object') return 0;
-      const m = SCORES[key] = SCORES[key] || {}; let n = 0;
-      for (const raw in names) { const nm = scoreName(raw), v = names[raw] | 0; if (!nm || v <= 0 || v >= 1e9 || (m[nm] | 0) >= v) continue; m[nm] = v; n++; }
-      return n;
+      const m = {}; let n = 0;
+      for (const raw in names) { const nm = scoreName(raw), v = names[raw] | 0; if (!nm || v <= 0 || v >= 1e9) continue; m[nm] = v; n++; }
+      SCORES[key] = m; return n;
     }
-    function setScoreTotal(key, n) {
-      if (!/^[a-z_]{1,32}$/.test(String(key))) return 0;
-      n = n | 0; if (n < 0 || n >= 1e9) return 0;
-      SCORE_N[key] = Math.max(SCORE_N[key] | 0, n); return SCORE_N[key];
-    }
-    function scoreKill(key, name) {
+    function scoreKill(key, name, pid) {   /* one kill happened here: say WHO - and WHICH player, so the game that owns
+                                             that player's side of it is the one that tells the Bank (2026-10-12) */
       if (!/^[a-z_]{1,32}$/.test(String(key))) return 0;
       const nm = scoreName(name); if (!nm) return 0;
-      const m = SCORES[key] = SCORES[key] || {};
-      m[nm] = (m[nm] | 0) + 1;
-      SCORE_N[key] = Math.max(SCORE_N[key] | 0, 0) + 1;
-      ev({ e: 'score', key, name: nm, n: m[nm], names: Object.assign({}, m) });
-      return m[nm];
+      ev({ e: 'score', key, name: nm, p: pid });
+      return 1;
     }
     function scoresOf(key) {
       const m = SCORES[key] || {}; let sum = 0; const top = [];
       for (const nm in m) { if (!scoreName(nm)) continue; sum += m[nm] | 0; top.push([nm, m[nm] | 0]); }
       top.sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-      return { total: Math.max(SCORE_N[key] | 0, sum), top: top.slice(0, 10), names: m };
+      return { total: sum, top: top.slice(0, 10), names: m };
     }
     /* [Claude 2026-10-11] two boards share the Bank's score channel: the keep's dragon killers and the Chess Park's games won
        (the operator: "quick fix the leaderboard at chess" - the park's board was painting the dragon text). Wins, not Elo: the
-       Bank keeps one number per name, the highest a game reports; Elo and the match ledger stay in chess_park_plan phase 2. */
+       Bank adds up the wins games report, one per name; Elo and the match ledger stay in chess_park_plan phase 2. */
     const SCORE_TXT = { chain_dragon: { title: 'DRAGON KILLERS', sub: n => 'Slain ' + n + (n === 1 ? ' time' : ' times'), read: n => 'The chained dragon has been slain ' + n + ' time' + (n === 1 ? '' : 's') + '.', list: 'The names of its slayers, by how many times:' },
                         chess_wins: { title: 'CHESS CHAMPIONS', sub: n => n + (n === 1 ? ' game won' : ' games won'), read: n => n + ' game' + (n === 1 ? ' has' : 's have') + ' been won at the Chess Park tables.', list: 'The standings, by games won:' } };
     function scoreBoard(key) {
@@ -1153,9 +1151,18 @@
       return L;
     }
     function signAt(x, y) { return (M.objects || []).find(o => o.k === 'wsign' && o.x === (x | 0) && o.y === (y | 0)) || null; }
-    function creditKill(p, key) {
+    function creditKill(p, key, x, y) {
       const md = MON[key]; if (!md) return;
       p.kills[key] = (p.kills[key] || 0) + 1;
+      /* [Claude 2026-10-13] a once-per-adventurer award (monster data `award: {item, once}`; the operator: the Spider Queen's crown,
+         "Once per player"): the killer's own game leaves it at the kill, theirs alone, the first time - and remembers it in the
+         flag `once` (rules.flags, so it is saved). Someone who already has the item carried or worn counts as having had it */
+      const A = md.award;
+      if (A && A.item && IT[A.item] && A.once && FLAGS[A.once] && !hasFlag(p, A.once)) {
+        p.flags = p.flags || {}; p.flags[A.once] = S.t || 1; ev({ e: 'flag', p: p.id, flag: A.once });
+        const had = invCount(p, A.item) > 0 || Object.values(p.eq || {}).some(s => s && s.id === A.item);
+        if (!had) { dropGround(A.item, 1, x != null ? x : p.x, y != null ? y : p.y, p.id, 600); msg(p, (md.name || 'It') + ' leaves you ' + IT[A.item].name + '. It is yours: pick it up.', 'quest'); }
+      }
       for (const qid in p.quests) {
         const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.steps[q.step - 1]; if (!st) continue;
         if (st.goal.kill === key && q.n < (st.goal.n == null ? 1 : st.goal.n)) { q.n++; msg(p, Q.name + ': ' + q.n + ' / ' + (st.goal.n || 1) + ' ' + md.name.toLowerCase() + ((st.goal.n || 1) > 1 ? 's' : '') + ' slain.', 'quest'); }
@@ -1182,8 +1189,8 @@
       const md = MON[m.key];
       m.dead = S.t; m.tgt = 0; m.dropAt = S.t + 2; m.killer = p ? p.id : null;
       ev({ e: 'die', mob: m.uid, killer: p ? p.id : null }); void md;
-      if (p && !p.puppet) creditKill(p, m.key);
-      if (p && m.key === 'chain_dragon') scoreKill(m.key, p.tag ? '@' + String(p.tag).replace(/^@/, '') : p.name);
+      if (p && !p.puppet) creditKill(p, m.key, m.x, m.y);
+      if (p && m.key === 'chain_dragon') scoreKill(m.key, p.tag ? '@' + String(p.tag).replace(/^@/, '') : p.name, p.id);
       for (const pid of S.order) { const o = S.players[pid]; if (o.act && o.act.k === 'attack' && o.act.uid === m.uid) o.act = null; }
     }
     function mobDrops(m) {
@@ -1215,6 +1222,20 @@
       if (prot || ward) dmg = 0;
       const fx = magic && hit && C.fx && !prot && !ward && !hk && (!C.fxChance || R.int(C.fxChance) === 0) ? C.fx : null;
       ev({ e: 'attack', src: m.uid, dst: p.id, anim: ranged ? 'bow' : magic ? 'cast' : md.anim, delay: ranged || magic ? 1 : 0, cls, ammo: ranged ? m._ammo : null, spell: magic ? C.name || 'Shadow bolt' : null });
+      /* [Claude 2026-10-13] TURN ABOUT (the operator: "Make sure monsters are attacking all players if attacked by more than one player
+         alternating"): it used to turn on the latest hitter, but blows land in the same order every tick, so the latest was
+         always the same player and the rest fought it for free. Now, after each blow, it turns to whoever of those who hurt it
+         in the last 12 ticks it struck longest ago (the dragon as well: it only turns once its own blow has landed) */
+      m.struck = m.struck || {}; m.struck[p.id] = S.t;
+      if (m.foes) {   /* the dragon too: it turns after its own blow has landed, so no hit can cancel a wind-up */
+        let next = null, nt = Infinity;
+        for (const id in m.foes) {
+          const q = S.players[id];
+          if (S.t - m.foes[id] > 12 || !q || q.dead || q.lv > 0 || M.zoneAt(q.x, q.y) !== m.zone) { if (S.t - m.foes[id] > 12) delete m.foes[id]; continue; }
+          const at = m.struck[id] == null ? -1 : m.struck[id]; if (at < nt) { nt = at; next = q; }
+        }
+        if (next && next.id !== p.id) { m.tgt = next.id; m.path = null; }
+      }
       if (!p.puppet) { if (hk) p.hawkHp -= dmg; else p.hp -= dmg; }
       ev({ e: 'hit', dst: p.id, src: m.uid, dmg, max: hk ? HK.hp : maxHp(p), hp: hk ? p.hawkHp : p.puppet ? Math.max(0, p.hp - dmg) : p.hp, hawk: hk ? 1 : 0, cls, blocked: !hit && !!p.eq.shield, dodged, prot: prot || ward ? 1 : 0, raw, fx, fxt: fx ? C.fxTicks || 5 : 0 });
       if (p.puppet) return;
@@ -2251,7 +2272,7 @@
     function tableAt(x, y) { return (M.objects || []).find(o => o.k === 'chesstable' && o.x === (x | 0) && o.y === (y | 0)) || null; }
     function tableById(id) { return (M.objects || []).find(o => o.k === 'chesstable' && o.id === id) || null; }
     function tables() { return (M.objects || []).filter(o => o.k === 'chesstable'); }
-    function chessOf(id) { return S.chess[id] || (S.chess[id] = { w: null, b: null, wn: '', bn: '', fen: CHESS_START, moves: [], status: 'open', result: null, why: null, lm: null, v: 0, stake: 0, gid: 0, paid: null, sw: null, sb: null }); }
+    function chessOf(id) { return S.chess[id] || (S.chess[id] = { w: null, b: null, wn: '', bn: '', fen: CHESS_START, moves: [], status: 'open', result: null, why: null, lm: null, v: 0, stake: 0, gid: 0, paid: null, co: [], cseq: 0, sw: null, sb: null }); }
     /* [Claude 2026-10-11] sw / sb: the square White / Black has picked up (the operator: "the same squares that light up on their
        screen should light up on your screen"). It travels in the row like a move; the mover's clears when the move is played. */
     function chessSel(p, id, sq) { const st = chessOf(id), col = seatColour(st, p.id); p.seatAct = S.t; if (!col || st.status !== 'playing') return false; const k = col === 'w' ? 'sw' : 'sb'; if (st[k] === sq) return true; st[k] = sq; st.v++; emitChess(id, { sel: 1 }); return true; }
@@ -2264,31 +2285,108 @@
        the host for its own players, a replica when the row reaches it - the host cannot reach a replica's bag, and a
        replica is not believed about its bag. */
     function chessStakeReset(st) { st.stake = 0; st.paid = null; }
+    /* [Claude 2026-10-12] THE STAKE ALWAYS SETTLES (the operator: "there is no player stack, it's 100% wager in chess, so the winner
+       should automatically win if the other person leaves. But if the server drops both players, they should both be
+       refunded"). Who is owed what goes out as a numbered cashout list `co: [[pid, GOLD, seq]]`, as at the card table - the
+       winner both stakes and the loser 0, a draw or a game nobody started each their own - and each player's own copy takes
+       its entry once, also one written under a room id it had before a reload or a new connection (p.ch, kept in the save).
+       Only the table's host decides: a replica that loses sight of its opponent decides nothing (a dropped room used to
+       hand BOTH sides the win - 200 GOLD staked, 400 paid). Back online, the host looks at who is still there (chessSweep):
+       one player gone means the other wins; both gone - the room dropped them both - means both get their stake back. */
+    function chessCash(st, pid, n) { if (!(st.stake > 0) || pid == null) return; st.cseq = (st.cseq | 0) + 1; st.co = (st.co || []).concat([[pid, Math.max(0, n | 0), st.cseq]]).slice(-24); st.cot = S.t; }
     function chessPayout(st) {   /* the result is in: who is owed what */
       if (!(st.stake > 0) || st.paid || !st.result) return;
       const n = st.stake | 0, paid = {};
-      if (st.result === '1-0' && st.w) paid[st.w] = 2 * n; else if (st.result === '0-1' && st.b) paid[st.b] = 2 * n;
-      else { if (st.w) paid[st.w] = n; if (st.b) paid[st.b] = n; }
+      if (st.result === '1-0' && st.w) { paid[st.w] = 2 * n; chessCash(st, st.w, 2 * n); if (st.b) chessCash(st, st.b, 0); }
+      else if (st.result === '0-1' && st.b) { paid[st.b] = 2 * n; chessCash(st, st.b, 2 * n); if (st.w) chessCash(st, st.w, 0); }
+      else { if (st.w) { paid[st.w] = n; chessCash(st, st.w, n); } if (st.b) { paid[st.b] = n; chessCash(st, st.b, n); } }
       st.paid = paid;
+    }
+    function chOpen(p, id) { return !!(p.ch && p.ch.t === id); }
+    function chClose(p, n, how) {
+      const k = p.ch; p.ch = null; p.chDone = k ? k.key : null; if (p.chPaid) p.chPaid.got = n || -1;
+      if (n > 0) { if (addItem(p, 'coins', n)) dropGround('coins', n, p.x, p.y, p.id, 600); msg(p, how === 'back' ? 'The chess game is gone: your stake of ' + n + ' GOLD comes back to you.' : how === 'mine' && k && n === k.n ? 'Your stake of ' + n + ' GOLD comes back to you.' : 'You take the stakes: ' + n + ' GOLD.', 'trade'); ev({ e: 'inv', p: p.id }); }
+      else if (how === 'resign') msg(p, 'You resign: your stake goes to your opponent.', 'info');
     }
     function chessSettle(id) {   /* this game's own players: pay the stake once per game, take what the host says is theirs once */
       const st = chessOf(id);
       for (const p of Object.values(S.players)) {
         if (p.puppet) continue;
         const col = seatColour(st, p.id), key = id + ':' + (st.gid | 0);
-        if (col && st.stake > 0 && (!p.chPaid || p.chPaid.key !== key)) {
-          if (invCount(p, 'coins') < st.stake) { msg(p, 'You cannot cover the stake of ' + st.stake + ' GOLD - you get up again.', 'warn'); standUp(p, 'short'); continue; }
-          removeItem(p, 'coins', st.stake); p.chPaid = { key, got: 0 }; msg(p, 'You put ' + st.stake + ' GOLD on the game.', 'trade'); ev({ e: 'inv', p: p.id });
+        if (col && st.stake > 0 && p.chDone === key && !chOpen(p, id) && st.status !== 'over') {   /* settled already: a host that still shows us seated is told we are up */
+          if (p.seat && p.seat.t === id && !p.seat.k) { const T = tableById(id); if (T && isAuth(zoneOf(T.x, T.y))) standUp(p, 'gone'); else { p.seat = null; ev({ e: 'stand', p: p.id, t: id }); } }
+          continue;
         }
-        if (st.paid && st.paid[p.id] > 0 && p.chPaid && p.chPaid.key === key && !p.chPaid.got) {
-          const n = st.paid[p.id] | 0; p.chPaid.got = n; if (addItem(p, 'coins', n)) dropGround('coins', n, p.x, p.y, p.id, 600);
-          msg(p, (st.result === '1/2-1/2' || !st.result ? 'Your stake of ' + n + ' GOLD comes back to you.' : 'You take the stakes: ' + n + ' GOLD.'), 'trade'); ev({ e: 'inv', p: p.id });
+        if (col && st.stake > 0 && (!p.chPaid || p.chPaid.key !== key) && !(p.ch && p.ch.key === key)) {
+          if (invCount(p, 'coins') < st.stake) { msg(p, 'You cannot cover the stake of ' + st.stake + ' GOLD - you get up again.', 'warn'); standUp(p, 'short'); continue; }
+          if (p.ch && p.ch.t !== id) chessReclaim(p.id);
+          removeItem(p, 'coins', st.stake); p.chPaid = { key, got: 0 }; msg(p, 'You put ' + st.stake + ' GOLD on the game.', 'trade'); ev({ e: 'inv', p: p.id });
+          p.ch = { t: id, key, cs: st.cseq | 0, n: st.stake | 0, ids: [], at: S.t };
+        }
+        p.chGot = p.chGot || {};
+        for (const c of st.co || []) {
+          const mineNow = c[0] === p.id && (c[2] | 0) > (p.chGot[id] | 0);
+          const mineThen = !mineNow && chOpen(p, id) && c[0] !== p.id && (p.ch.ids || []).indexOf(c[0]) >= 0 && (c[2] | 0) > (p.ch.cs | 0);
+          if (!mineNow && !mineThen) continue;
+          if (mineNow) p.chGot[id] = c[2] | 0;
+          if (chOpen(p, id) && (c[2] | 0) > (p.ch.cs | 0)) chClose(p, c[1] | 0, 'mine');
         }
         /* [Claude 2026-10-11] a decided game counts once for its winner on the winner's own copy: the park's standings board */
         if (col && st.status === 'over' && (st.result === '1-0' || st.result === '0-1') && p.chWon !== key) {
           p.chWon = key;
-          if ((st.result === '1-0') === (col === 'w')) { p.kills = p.kills || {}; p.kills.chess_wins = (p.kills.chess_wins | 0) + 1; scoreKill('chess_wins', p.tag ? '@' + String(p.tag).replace(/^@/, '') : p.name); }
+          if ((st.result === '1-0') === (col === 'w')) { p.kills = p.kills || {}; p.kills.chess_wins = (p.kills.chess_wins | 0) + 1; scoreKill('chess_wins', p.tag ? '@' + String(p.tag).replace(/^@/, '') : p.name, p.id); }
         }
+      }
+    }
+    /* the stake of a game no host remembers (the page that held it is gone, the room restarted): it comes back. The engine
+       calls it only when no row shows the seat under any of this player's ids and the room is plainly alive. */
+    function chessReclaim(pid) {
+      const p = S.players[pid]; if (!p || p.puppet || !p.ch) return 0;
+      if (p.seat && !p.seat.k && p.seat.t === p.ch.t) return 0;
+      const n = Math.max(0, p.ch.n | 0); chClose(p, n, 'back'); return n;
+    }
+    function chessNetId(pid, netId) {
+      const p = S.players[pid]; if (!p || !p.ch || typeof netId !== 'string' || !netId) return;
+      const ids = p.ch.ids || (p.ch.ids = []); if (ids.indexOf(netId) < 0) { ids.push(netId); if (ids.length > 8) ids.splice(0, ids.length - 8); }
+    }
+    /* does a row still seat this player under an id it had (the host has not decided yet)? then nothing is reclaimed */
+    function seatHeld(pid) {
+      const p = S.players[pid]; if (!p) return false;
+      if (p.ch) { const st = S.chess[p.ch.t], ids = (p.ch.ids || []).concat([pid]); if (st && st.stake > 0 && st.status === 'playing' && (ids.indexOf(st.w) >= 0 || ids.indexOf(st.b) >= 0)) return true; }
+      if (p.pk) { const st = S.poker[p.pk.t], ids = (p.pk.ids || []).concat([pid]); if (st && (st.se || []).some(x => x && ids.indexOf(x[1]) >= 0)) return true; }
+      return false;
+    }
+    /* the room dropped this game's own player: its staked games wait for the host's word instead of being decided here */
+    function chessLimbo(pid) {
+      const p = S.players[pid]; if (!p || !p.seat || p.seat.k) return;
+      const st = S.chess[p.seat.t]; if (st && st.stake > 0 && st.status === 'playing' && seatColour(st, pid)) p.chLimbo = p.seat.t;
+    }
+    const CH_GONE = 50;   /* ticks (30 s) a seated player may be missing before the host decides */
+    function chessSweep() {
+      if (!S.online || S.t % 5) return;
+      for (const T of tables()) {
+        const st = S.chess[T.id]; if (!st || st.status !== 'playing' || !(st.stake > 0) || !isAuth(zoneOf(T.x, T.y))) { if (st) st.ab = null; continue; }
+        const gone = (id) => { if (id == null) return false; const q = S.players[id]; return !q || q.chLimbo === T.id; };
+        st.ab = st.ab || {};
+        for (const col of ['w', 'b']) { const id = st[col]; if (gone(id)) { if (st.ab[col] == null) st.ab[col] = S.t; } else st.ab[col] = null; }
+        const aw = st.ab.w != null, abk = st.ab.b != null, gw = aw && S.t - st.ab.w >= CH_GONE, gb = abk && S.t - st.ab.b >= CH_GONE;
+        if (!gw && !gb) continue;
+        if ((gw && abk && !gb) || (gb && aw && !gw)) continue;   /* both missing: wait until both have been gone the full time */
+        if (gw && gb) {   /* the room dropped them both: each takes their own stake back */
+          if (st.w) chessCash(st, st.w, st.stake); if (st.b) chessCash(st, st.b, st.stake);
+          st.status = 'over'; st.result = null; st.why = 'dropped'; st.paid = {};
+          for (const col of ['w', 'b']) { const q = S.players[st[col]]; if (q) { q.chLimbo = null; if (q.seat && q.seat.t === T.id) { q.seat = null; ev({ e: 'stand', p: q.id, t: T.id }); } } st[col] = null; st[col + 'n'] = ''; }
+          st.ab = null; st.v++; emitChess(T.id); chessStakeReset(st); continue;
+        }
+        /* one player gone, the other still here: the one who left loses the wager (a game not begun: their stake back) */
+        const lostCol = gw ? 'w' : 'b', lid = st[lostCol], q = S.players[lid];
+        if (q) { q.chLimbo = null; q.seat = q.seat || { t: T.id, s: lostCol === 'w' ? 1 : 0 }; standUp(q, 'left'); }
+        else {
+          if (st.moves.length) { st.status = 'over'; st.result = lostCol === 'w' ? '0-1' : '1-0'; st.why = 'left'; chessPayout(st); }
+          else { st.status = 'open'; chessCash(st, lid, st.stake); }
+          st[lostCol] = null; st[lostCol + 'n'] = ''; st.v++; emitChess(T.id);
+        }
+        st.ab = null;
       }
     }
     function chessGame(id) {   /* the chess.js position for a table, kept in step with its FEN */
@@ -2297,7 +2395,7 @@
       if (c && c.key === st.fen) return c.g;
       const g = new L.Chess(st.fen); CHG[id] = { key: st.fen, g }; return g;
     }
-    function chessRow(id) { const st = chessOf(id); return { t: id, w: st.w, b: st.b, wn: st.wn, bn: st.bn, fen: st.fen, status: st.status, result: st.result, why: st.why, n: st.moves.length, lm: st.lm, v: st.v, stake: st.stake | 0, gid: st.gid | 0, paid: st.paid || null, sw: st.sw || null, sb: st.sb || null }; }
+    function chessRow(id) { const st = chessOf(id); return { t: id, w: st.w, b: st.b, wn: st.wn, bn: st.bn, fen: st.fen, status: st.status, result: st.result, why: st.why, n: st.moves.length, lm: st.lm, v: st.v, stake: st.stake | 0, gid: st.gid | 0, paid: st.paid || null, co: st.co || [], cseq: st.cseq | 0, sw: st.sw || null, sb: st.sb || null }; }
     function chessTurn(id) { const g = chessGame(id); return g ? g.turn() : 'w'; }
     function chessMoves(id, square) {   /* where a piece on `square` may go: [{to, flags, promotion}] (for the page's highlights) */
       const g = chessGame(id); if (!g) return [];
@@ -2311,28 +2409,34 @@
       if (st[col] && st[col] !== p.id && S.players[st[col]] && S.players[st[col]].seat && S.players[st[col]].seat.t === T.id) { msg(p, 'That seat is taken.', 'warn'); st.v++; emitChess(T.id); return false; }
       if (st[other] === p.id) st[other] = null;
       if (p.seat && p.seat.t !== T.id) standUp(p);
-      st[col] = p.id; st[col + 'n'] = String(p.name || 'Someone').slice(0, 16); p.seatAct = S.t;
+      st[col] = p.id; st[col + 'n'] = String(p.name || 'Someone').slice(0, 16); p.seatAct = S.t; p.chLimbo = null;
       const seat = T.seats[si]; p.x = seat[0]; p.y = seat[1]; p.path = []; p.act = null; p.skilling = null; p.seat = { t: T.id, s: si }; p.seatWait = null;
       p.face = faceTo(p.x, p.y, T.x, T.y); closeShop(p);
-      if (st.status === 'over' || (st.status === 'open' && st.moves.length)) { st.fen = CHESS_START; st.moves = []; st.result = null; st.why = null; st.lm = null; st.status = 'open'; }
+      if (st.status === 'over' || (st.status === 'open' && st.moves.length)) { st.fen = CHESS_START; st.moves = []; st.result = null; st.why = null; st.lm = null; st.status = 'open'; st.gid = (st.gid | 0) + 1; st.paid = null; }   /* [Claude 2026-10-12] a new game is a new wager: both put the stake on it */
       if (st.w && st.b && st.status === 'open') { st.status = 'playing'; st.fen = CHESS_START; st.moves = []; st.lm = null; }
       st.v++; ev({ e: 'sit', p: p.id, t: T.id, s: si }); emitChess(T.id); return true;
     }
     function standUp(p, why) {   /* leave the bench: with a move on the board that is resigning (phase 1: no clocks) */
       if (!p.seat) return;
       if (p.seat.k === 'pk') return pokerLeave(p, why);
-      const id = p.seat.t, st = chessOf(id), col = seatColour(st, p.id); let other;
-      p.seat = null; p.seatWait = null;
+      const id = p.seat.t, st = chessOf(id), col = seatColour(st, p.id), T = tableById(id);
+      if (T && !isAuth(zoneOf(T.x, T.y))) { p.seat = null; p.seatWait = null; ev({ e: 'stand', p: p.id, t: id }); return; }   /* [Claude 2026-10-12] not this game's table to decide: the host's row will say */
+      p.seat = null; p.seatWait = null; p.chLimbo = null;
       if (col) {
-        if (st.status === 'playing') {
-          if (st.moves.length) { st.status = 'over'; st.result = col === 'w' ? '0-1' : '1-0'; st.why = why || 'resigned'; chessPayout(st); }
-          else st.status = 'open';
-        }
-        if (st.status === 'open' && st.stake > 0 && !st.paid && !st[other = col === 'w' ? 'b' : 'w']) { st.paid = {}; st.paid[p.id] = st.stake | 0; }   /* [Claude] nobody came: the stake comes back */
+        const oc = col === 'w' ? 'b' : 'w', oid = st[oc], oq = oid != null ? S.players[oid] : null;
+        const otherGone = oid != null && why !== 'left' && (!oq || oq.chLimbo === id);   /* [Claude 2026-10-12] the opponent's connection is gone */
+        if (st.status === 'playing' && st.moves.length && otherGone && why !== 'short') {   /* standing up after the other has left: the one who stayed wins (the operator: "the winner should automatically win if the other person leaves") */
+          st.status = 'over'; st.result = col === 'w' ? '1-0' : '0-1'; st.why = 'left'; chessPayout(st);
+          if (oq) { oq.chLimbo = null; if (oq.seat && oq.seat.t === id) { oq.seat = null; ev({ e: 'stand', p: oq.id, t: id }); } }
+          st[oc] = null; st[oc + 'n'] = '';
+        } else if (st.status === 'playing') {
+          if (st.moves.length && why !== 'short') { st.status = 'over'; st.result = col === 'w' ? '0-1' : '1-0'; st.why = why === 'left' ? 'left' : why || 'resigned'; chessPayout(st); }   /* leaving a begun game loses the wager (the operator) */
+          else { st.status = 'open'; if (why !== 'short') chessCash(st, p.id, st.stake); }   /* not begun: the stake comes back */
+        } else if (st.status === 'open' && why !== 'short') chessCash(st, p.id, st.stake);   /* [Claude] nobody came: the stake comes back */
         st[col] = null; st[col + 'n'] = ''; st[col === 'w' ? 'sw' : 'sb'] = null;
       }
       if (!st.w && !st.b && st.status !== 'open') { st.status = 'open'; st.fen = CHESS_START; st.moves = []; st.result = null; st.why = null; st.lm = null; }
-      if (!st.w && !st.b) { chessSettle(id); chessStakeReset(st); }   /* [Claude] an empty table forgets its stake (paid first, so the last to leave is paid) */
+      if (!st.w && !st.b) { chessSettle(id); chessStakeReset(st); }   /* [Claude] an empty table forgets its stake (paid first, so the last to leave is paid); the cashout list stays in the row */
       st.v++; ev({ e: 'stand', p: p.id, t: id }); emitChess(id);
     }
     function chessMove(p, id, from, to, promo) {
@@ -2352,28 +2456,35 @@
       st.v++; emitChess(id, { move: st.lm, check: g.inCheck() });
       return true;
     }
-    function hostSit(pid, id, si, stake) { const p = S.players[pid], T = tableById(id); if (!p || !T || !T.seats[si]) return false; const seat = T.seats[si]; if (cheb(p.x, p.y, seat[0], seat[1]) > 8) return false; return sitAt(p, T, si | 0, stake | 0); }   /* the puppet's spot lags the walker by a message or two */
-    function hostStand(pid, id) { const p = S.players[pid]; if (p && p.seat && p.seat.t === id) standUp(p); }
+    function hostSit(pid, id, si, stake) { const p = S.players[pid], T = tableById(id); if (!p || !T || !T.seats[si]) return false; { const cs = chessOf(id); if ((si | 0) === 1 ? cs.w === pid : cs.b === pid) return true; }   /* [Claude 2026-10-13] asked again (seatWaitTick) when already sitting there */ const seat = T.seats[si]; if (cheb(p.x, p.y, seat[0], seat[1]) > 8) return false; return sitAt(p, T, si | 0, stake | 0); }   /* the puppet's spot lags the walker by a message or two */
+    function hostStand(pid, id) {
+      const p = S.players[pid]; if (!p) return;
+      /* [Claude 2026-10-12] the table is the word, not the puppet's seat flag: a host whose room dropped and came back makes its
+         puppets anew, seatless, while its table still seats them - their Stand up was ignored and the next row sat them down
+         again (the operator, stuck at a chess table after his opponent's connection dropped) */
+      if (!p.seat) { const st = S.chess[id], col = st ? seatColour(st, pid) : null; if (col) p.seat = { t: id, s: col === 'w' ? 1 : 0 }; }
+      if (p.seat && p.seat.t === id) standUp(p);
+    }
     function hostMove(pid, id, from, to, promo) { const p = S.players[pid]; return !!p && chessMove(p, id, String(from), String(to), promo ? String(promo) : null); }
     function applyChess(rows) {   /* the host's word on its tables: fen, seats, result; our own seat follows it */
       for (const r of rows || []) {
         if (!r || !r.t) continue;
         const st = chessOf(r.t), was = st.fen, wasV = st.v;
-        Object.assign(st, { w: r.w || null, b: r.b || null, wn: r.wn || '', bn: r.bn || '', fen: r.fen || CHESS_START, status: r.status || 'open', result: r.result || null, why: r.why || null, lm: r.lm || null, v: r.v | 0, stake: r.stake | 0, gid: r.gid | 0, paid: r.paid || null, sw: r.sw || null, sb: r.sb || null });
+        Object.assign(st, { w: r.w || null, b: r.b || null, wn: r.wn || '', bn: r.bn || '', fen: r.fen || CHESS_START, status: r.status || 'open', result: r.result || null, why: r.why || null, lm: r.lm || null, v: r.v | 0, stake: r.stake | 0, gid: r.gid | 0, paid: r.paid || null, co: Array.isArray(r.co) ? r.co : [], cseq: r.cseq | 0, sw: r.sw || null, sb: r.sb || null });
         if (typeof r.n === 'number' && r.lm && st.moves.length < r.n) { while (st.moves.length < r.n - 1) st.moves.push('…'); st.moves.push(r.lm[4] || '…'); }
         if (r.n === 0) st.moves = [];
         const T = tableById(r.t);
         for (const p of Object.values(S.players)) {
           const col = seatColour(st, p.id);
           if (col && (!p.seat || p.seat.t !== r.t)) {   /* the host seated us (or another local player) */
-            if (T) { const si = col === 'w' ? 1 : 0, seat = T.seats[si]; p.x = seat[0]; p.y = seat[1]; p.path = []; p.act = null; p.seat = { t: r.t, s: si }; p.seatWait = null; p.face = faceTo(p.x, p.y, T.x, T.y); ev({ e: 'sit', p: p.id, t: r.t, s: si }); }
+            if (T) { const si = col === 'w' ? 1 : 0, seat = T.seats[si]; p.chLimbo = null; p.x = seat[0]; p.y = seat[1]; p.path = []; p.act = null; p.seat = { t: r.t, s: si }; p.seatWait = null; p.face = faceTo(p.x, p.y, T.x, T.y); ev({ e: 'sit', p: p.id, t: r.t, s: si }); }
           } else if (!col && p.seat && p.seat.t === r.t) { p.seat = null; ev({ e: 'stand', p: p.id, t: r.t }); }
           else if (!col && p.seatWait && p.seatWait.t === r.t && st[p.seatWait.s === 1 ? 'w' : 'b'] && st[p.seatWait.s === 1 ? 'w' : 'b'] !== p.id) { const otherFree = !st[p.seatWait.s === 1 ? 'b' : 'w']; p.seatWait = null; msg(p, otherFree ? 'That seat is taken - the other bench is free.' : 'Both seats at this table are taken.', 'warn'); }
         }
         if (was !== st.fen || wasV !== st.v) emitChess(r.t, st.lm && was !== st.fen ? { move: st.lm } : {});
       }
     }
-    function chessRows(keep) { const out = []; for (const T of tables()) { if (keep && !keep(T.x, T.y)) continue; const st = S.chess[T.id]; if (st && (st.w || st.b || st.status !== 'open')) out.push(chessRow(T.id)); } return out; }
+    function chessRows(keep) { const out = []; for (const T of tables()) { if (keep && !keep(T.x, T.y)) continue; const st = S.chess[T.id]; if (st && (st.w || st.b || st.status !== 'open' || (st.co && st.co.length && S.t - (st.cot | 0) < 3000))) out.push(chessRow(T.id)); } return out; }   /* [Claude 2026-10-12] a table just emptied keeps telling its cashouts for half an hour */
     function faceTo(ax, ay, bx, by) { const dx = Math.sign(bx - ax), dy = Math.sign(by - ay); for (let k = 0; k < 8; k++) if (DIRS[k][0] === dx && DIRS[k][1] === dy) return k; return 2; }
 
     // ---------------- THE POKER TABLES (2026-10-11, handoff/poker_plan.md)
@@ -2426,17 +2537,45 @@
       }
       const l = FURN.get(x + ',' + y); return l != null && l === (lv | 0);
     }
+    /* [Claude 2026-10-13] A CARD TABLE'S OWN ROOM (the operator: "would it help if we set it up so each poker table sets up its own game
+       room?"): the engine elects a dealer among the players in the table's room and says here who it is (setTableAuth). A table
+       with a word deals by it; one without (no room at all: solo) by the area as before. */
+    const TAUTH = {};
+    function tAuth(T) { if (!T) return false; const v = TAUTH[T.id]; return v != null ? v : isAuth(zoneOf(T.x, T.y)); }
     function pokerGame(id) {   /* the hand a table this game deals is running; from the stored word when it is new here */
+      /* [Claude 2026-10-13] only the dealer holds a game: a replica that made one (a guest's own stand-up, a puppet removed) kept it,
+         and when it later took the table over, that stale game was synced over the dealer's row - the table looked opened again
+         but nobody was stood up and its own player kept a chair the table no longer had (8-window test, case 7) */
+      const TT = pokerTableById(id); if (!TT) return null;
+      if (!tAuth(TT)) { delete PKG[id]; return null; }
       if (PKG[id]) return PKG[id];
       const L = holdemLib(); if (!L) return null;
-      if (!pokerTableById(id)) return null;
       const st = pokerOf(id), t = L.table({ id: String(id), small: PK_SB, big: PK_BB, rake: PK_RAKE, int: (n) => R.int(n), tell: (text, by) => { for (const pid of S.order) { const p = S.players[pid]; if (p.x != null && zoneOf(p.x, p.y) === zoneOf(pokerTableById(id).x, pokerTableById(id).y)) msg(p, text, by || 'info'); } } });
       if (st.g) { try { Object.assign(t, JSON.parse(st.g)); } catch (e) { return null; } }
       else if (st.se.length) return null;   /* taken over from another game mid-hand: there is no deck to carry, so it is dealt out below */
       PKG[id] = t; return t;
     }
+    /* [Claude 2026-10-13] A NEW DEALER BETWEEN HANDS takes the table over as it stands: no card is out, so the row holds all of it
+       (who sits where with how many chips, the button, the stakes). Mid-hand there is a deck it never saw: that hand is dealt
+       out (pokerAbandon), as before. The sealing keys come again from the players themselves (engine: a seated player whose
+       table changed dealer sends its sit once more, and hostPokerSit keeps the chair and takes the key). */
+    function pokerAdopt(id) {
+      const st = pokerOf(id), se = (st.se || []).slice();
+      delete PKG[id]; st.g = null; st.se = [];
+      const t = pokerGame(id); st.se = se;
+      if (!t) return pokerAbandon(id);
+      const bl = pkBlinds(st.buy | 0); t.small = bl[0]; t.big = bl[1]; t.hand = st.h | 0; t.dealer = st.d == null ? -1 : st.d | 0; t.raked = st.rk | 0;
+      for (const x of se) {
+        if (!x || x[1] == null) continue;
+        if (!S.players[x[1]]) { pokerCashout(st, x[1], x[2] | 0); continue; }   /* gone from the game: their stack goes home now, as at an abandoned table */
+        const seat = t.addSeat(x[0] | 0, { id: x[1], name: pokerSeatName(S.players[x[1]]), chips: x[2] | 0 });
+        if ((x[4] | 0) & PK_AWAY) { seat.away = true; seat.in = false; }
+      }
+      if (!t.seats.some(x => x && x.id != null)) st.buy = 0;   /* nobody left: an empty table forgets its stakes */
+      st.mine = 1; st.wt = S.t + PK_WAIT; st.tt = null; pokerSync(id, t); emitPoker(id, {});
+    }
     function pokerAbandon(id) {   /* this game has taken over a hand it cannot continue: the table is dealt out again */
-      const st = pokerOf(id);
+      const st = pokerOf(id); delete PKG[id];   /* a fresh game for the opened table */
       st.o = 'open'; st.st = 'none'; st.a = -1; st.b = 0; st.p = 0; st.r = null; st.g = null; st.wt = S.t + PK_WAIT; st.mine = 1;
       for (const s of st.se || []) if (s && s[1] != null) pokerCashout(st, s[1], s[2] | 0);   /* [Claude] everyone takes their stack with them */
       st.se = []; st.hc = null; st.v = (st.v | 0) + 1; st.buy = 0;
@@ -2445,12 +2584,12 @@
     }
     function pokerSync(id, t) {   /* the dealer's copy into the row that travels: one shape, host and replica alike */
       const st = pokerOf(id);
-      if (t.log.length > 40) t.log.splice(0, t.log.length - 40);
+      if (t.log.length > 40) { t.logBase = (t.logBase | 0) + (t.log.length - 40); t.log.splice(0, t.log.length - 40); }
       st.v = (st.v | 0) + 1; st.mine = 1; st.o = t.status; st.st = t.street; st.d = t.dealer; st.sb = t.sbSeat; st.bb = t.bbSeat;
       st.p = t.pot | 0; st.b = t.bet | 0; st.a = t.toAct; st.h = t.hand | 0; st.bo = t.board.slice();
       st.se = t.seats.filter(s => s && s.id != null).map(s => [s.ref | 0, s.id, s.chips | 0, s.bet | 0,
         (s.in ? PK_IN : 0) | (s.folded ? PK_FOLD : 0) | (s.allin ? PK_ALLIN : 0) | ((s.hole && !s.out) ? PK_CARD : 0) | (s.acted ? PK_ACTED : 0) | (s.away ? PK_AWAY : 0)]);
-      st.lg = t.log.slice(-2).map(l => String(l.t || '').slice(0, 90));
+      st.lg = t.log.slice(-6).map(l => String(l.t || '').slice(0, 90)); st.lc = (t.logBase | 0) + t.log.length;   /* [Claude 2026-10-13] the last six lines and how many there have been: every copy writes the table's play into its chat (the operator) */
       st.r = t.result ? { p: t.result.pots.map(q => [q.amount | 0, (q.win || []).map(x => x | 0)]), c: t.result.contested ? 1 : 0, rk: t.result.raked | 0, sd: (t.result.shown || []).slice(0, 8) } : null;   /* sd [Claude]: the showdown, every hand shown face up with its name */
       st.mr = t.minRaise | 0; st.bg = t.big | 0;   /* [Claude] the least a raise can be, and the big blind: the panel's slider runs from the one to all-in */
       st.rk = t.raked | 0;   /* [Claude] what the house has taken at this table so far */
@@ -2462,7 +2601,7 @@
       return st;
     }
     function pokerRow(id) { const st = pokerOf(id), r = {}; for (const k in st) if (k !== 'g' && k !== 'mine' && k !== 'wt' && k !== 'tt') r[k] = st[k]; return r; }
-    function pokerRows(keep) { const out = []; for (const T of pokerTables()) { if (keep && !keep(T.x, T.y)) continue; const st = S.poker[T.id]; if (st && st.se && st.se.length) out.push(pokerRow(T.id)); } return out; }
+    function pokerRows(keep) { const out = []; for (const T of pokerTables()) { if (keep && !keep(T.x, T.y)) continue; const st = S.poker[T.id]; if (st && ((st.se && st.se.length) || st.mine === 1)) out.push(pokerRow(T.id)); } return out; }   /* [Claude 2026-10-13] a table this game deals goes out EMPTY too: a new dealer that opens the table it took over sent that word once, while the others still heard the old dealer as the host, and they sat on at a table that no longer had them (the operator: the game gets stuck when someone leaves) */
     function emitPoker(id, extra) { pokerSettle(id); ev(Object.assign({ e: 'poker', t: id }, pokerRow(id), extra || {})); }
     function pokerSeatName(p) { return String((p && p.name) || 'Someone').slice(0, 16); }
     /* [Claude 2026-10-11] THE BUY-IN (the operator: buy-ins in ASHVALE GOLD; "the first person to sit down should be the one who
@@ -2472,22 +2611,63 @@
        chips. Standing up turns the stack back into GOLD: the host writes a cashout `co: [[pid, amount, seq]]` into the row
        and each copy credits its own players once per seq. A free-chip table writes none. */
     function pokerSeated(id) { const st = S.poker[id]; return !!(st && st.se && st.se.length); }
+    /* [Claude 2026-10-12] THE CHIPS ALWAYS COME HOME (the operator: "If somebody stands up from the table or times out or their phone
+       shuts off and they lose connection, whatever Gold they have on the table should automatically be cashed back out into
+       their wallet"). Each game remembers its own player's open seat in the save - p.pk = {t, key, cs, n, ids, at}: the table,
+       the buy-in it paid, the cashout count when it sat, the last stack the dealer showed, and the room ids it played under.
+       Standing up, timing out and dropping off all cash out through the dealer's row as before; a returning player (a new room
+       id after a reload, a dead phone, a dropped room) also collects the cashout written under an OLD id; and when the table
+       has forgotten the seat with no cashout at all (the dealer's game ended, the room restarted - 2026-10-12 @apple lost
+       2000 GOLD that way) pokerReclaim pays back the last stack the dealer showed. Every open seat is paid back exactly once:
+       the seat is closed by whichever pays first, and a seat closed by a reclaim is stood up if a dealer still shows it. */
+    function pkOpen(p, id) { return !!(p.pk && p.pk.t === id); }
+    function pkClose(p, n, how) {
+      const k = p.pk; p.pk = null; p.pkDone = k ? k.key : null;
+      if (n > 0) { if (addItem(p, 'coins', n)) dropGround('coins', n, p.x, p.y, p.id, 600); msg(p, how === 'back' ? 'The card table is gone: your ' + n + ' GOLD on it comes back to you.' : 'You cash out ' + n + ' GOLD.', 'trade'); ev({ e: 'inv', p: p.id }); }
+      else msg(p, 'You leave the table with nothing.', 'info');
+    }
     function pokerSettle(id) {
-      const st = pokerOf(id), at = {}; for (const s of st.se || []) if (s && s[1] != null) at[s[1]] = 1;
+      const st = pokerOf(id), at = {}; for (const s of st.se || []) if (s && s[1] != null) at[s[1]] = s;
       for (const p of Object.values(S.players)) {
         if (p.puppet) continue;
         const key = id + ':' + (st.gid | 0);
-        if (at[p.id] && st.buy > 0 && (!p.pkPaid || p.pkPaid.key !== key)) {
-          if (invCount(p, 'coins') < st.buy) { msg(p, 'You cannot cover the buy-in of ' + st.buy + ' GOLD - you get up again.', 'warn'); pokerLeave(p, 'short'); continue; }
-          removeItem(p, 'coins', st.buy); p.pkPaid = { key }; msg(p, 'You buy in for ' + st.buy + ' GOLD.', 'trade'); ev({ e: 'inv', p: p.id });
+        if (at[p.id] && st.buy > 0 && p.pkDone === key && !pkOpen(p, id)) {   /* paid back already: a dealer that still shows the seat is told we are up */
+          if (p.seat && p.seat.t === id) {
+            if (tAuth(pokerTableById(id))) { const t = pokerGame(id), sh = t && t.seats[p.seat.s | 0]; if (sh && sh.id === p.id) sh.chips = 0; pokerLeave(p, 'left'); }   /* its stack was already paid: nothing more to cash out */
+            else { const tt = p.seat.t; p.seat = null; ev({ e: 'pstand', p: p.id, t: tt }); ev({ e: 'xpstand', p: p.id, t: tt }); }
+          }
+          continue;
         }
+        if (at[p.id] && st.buy > 0 && (!p.pkPaid || p.pkPaid.key !== key) && !(p.pk && p.pk.key === key)) {
+          if (invCount(p, 'coins') < st.buy) { msg(p, 'You cannot cover the buy-in of ' + st.buy + ' GOLD - you get up again.', 'warn'); pokerLeave(p, 'short'); continue; }
+          if (p.pk && p.pk.t !== id) pokerReclaim(p.id, true);   /* a seat at another table still open: home first */
+          removeItem(p, 'coins', st.buy); p.pkPaid = { key }; msg(p, 'You buy in for ' + st.buy + ' GOLD.', 'trade'); ev({ e: 'inv', p: p.id });
+          p.pk = { t: id, key, cs: st.cseq | 0, n: st.buy | 0, ids: [], at: S.t };
+        }
+        if (at[p.id] && pkOpen(p, id)) p.pk.n = Math.max(0, at[p.id][2] | 0);   /* the stack as the dealer last showed it */
         p.pkGot = p.pkGot || {};
-        for (const c of st.co || []) if (c[0] === p.id && (c[2] | 0) > (p.pkGot[id] | 0)) {
-          p.pkGot[id] = c[2] | 0; const n = c[1] | 0;
-          if (n > 0) { if (addItem(p, 'coins', n)) dropGround('coins', n, p.x, p.y, p.id, 600); msg(p, 'You cash out ' + n + ' GOLD.', 'trade'); ev({ e: 'inv', p: p.id }); }
-          else msg(p, 'You leave the table with nothing.', 'info');
+        for (const c of st.co || []) {
+          const mineNow = c[0] === p.id && (c[2] | 0) > (p.pkGot[id] | 0);
+          const mineThen = !mineNow && pkOpen(p, id) && c[0] !== p.id && (p.pk.ids || []).indexOf(c[0]) >= 0 && (c[2] | 0) > (p.pk.cs | 0);
+          if (!mineNow && !mineThen) continue;
+          if (mineNow) p.pkGot[id] = c[2] | 0;
+          if (st.buy > 0 || pkOpen(p, id) || (c[1] | 0) > 0) {
+            if (pkOpen(p, id)) pkClose(p, c[1] | 0, 'co');
+            else if (p.pkPaid && p.pkPaid.key && p.pkPaid.key.indexOf(id + ':') === 0 && p.pkDone !== p.pkPaid.key) { p.pkDone = p.pkPaid.key; const n = c[1] | 0; if (n > 0) { if (addItem(p, 'coins', n)) dropGround('coins', n, p.x, p.y, p.id, 600); msg(p, 'You cash out ' + n + ' GOLD.', 'trade'); ev({ e: 'inv', p: p.id }); } }
+          }
         }
       }
+    }
+    /* the table has forgotten this player's open seat and wrote no cashout for it: the last stack the dealer showed comes back.
+       The engine calls it only when that is certain (not seated for a while with the room heard, or hosting the table itself). */
+    function pokerReclaim(pid, quiet) {
+      const p = S.players[pid]; if (!p || p.puppet || !p.pk) return 0;
+      if (p.seat && p.seat.k === 'pk' && p.seat.t === p.pk.t) return 0;
+      const n = Math.max(0, p.pk.n | 0); pkClose(p, n, 'back'); return n;
+    }
+    function pokerNetId(pid, netId) {   /* the room id this game plays under now: kept with an open seat, so a cashout written under it is still ours later */
+      const p = S.players[pid]; if (!p || !p.pk || typeof netId !== 'string' || !netId) return;
+      const ids = p.pk.ids || (p.pk.ids = []); if (ids.indexOf(netId) < 0) { ids.push(netId); if (ids.length > 8) ids.splice(0, ids.length - 8); }
     }
     function pokerCashout(st, pid, chips) { if (!(st.buy > 0)) return; st.cseq = (st.cseq | 0) + 1; st.co = (st.co || []).concat([[pid, chips | 0, st.cseq]]).slice(-12); }
     function pokerSitAt(p, T, si, buy, pk) {   /* p has walked onto the chair: take it. Two who can play and the hand is dealt */
@@ -2497,6 +2677,7 @@
         const st0 = pokerOf(T.id); st0.buy = Math.max(0, Math.min(1000000, buy | 0)); st0.gid = (st0.gid | 0) + 1;
         const bl = pkBlinds(st0.buy | 0); t.small = bl[0]; t.big = bl[1];
       }
+      if (!t && tAuth(T) && pokerOf(T.id).mine === 0) { if (pokerOf(T.id).st === 'none') pokerAdopt(T.id); else pokerAbandon(T.id); if (!pokerGame(T.id)) return false; return pokerSitAt(p, T, si, buy, pk); }   /* [Claude 2026-10-12] a table left over from another dealer: open it now, then sit */
       if (!t) { msg(p, 'This table is being dealt out and will take players again in a moment.', 'warn'); return false; }
       if (!T.seats || !T.seats[si]) return false;
       const here = t.seats[si];
@@ -2553,14 +2734,25 @@
       emitPoker(id, {});
       return true;
     }
-    function hostPokerSit(pid, id, si, buy, pk) { const p = S.players[pid], T = pokerTableById(id); if (!p || !T || !T.seats[si]) return false; const seat = T.seats[si]; if (cheb(p.x, p.y, seat[0], seat[1]) > 8) return false; return pokerSitAt(p, T, si | 0, buy | 0, pk); }
-    function hostPokerStand(pid, id) { const p = S.players[pid]; if (p && p.seat && p.seat.t === id) pokerLeave(p); }
-    function hostPokerAct(pid, id, a, to) { const p = S.players[pid]; return !!p && pokerAct(p, id, String(a || ''), to | 0); }
+    function hostPokerSit(pid, id, si, buy, pk) { const p = S.players[pid], T = pokerTableById(id); if (!p || !T || !T.seats[si]) return false; if ((pokerOf(id).se || []).some(x => x && x[1] === pid && (x[0] | 0) === (si | 0))) { const g = PKG[id], sh = g && g.seats[si | 0]; if (sh && sh.id === pid && typeof pk === 'string' && pk) sh.pk = pk.slice(0, 160); return true; }   /* asked again: keep the chair, take the key (a new dealer needs it to seal the cards) */   /* [Claude 2026-10-13] asked again (seatWaitTick) after it was already seated: nothing to do */ const seat = T.seats[si]; if (cheb(p.x, p.y, seat[0], seat[1]) > 8) return false; return pokerSitAt(p, T, si | 0, buy | 0, pk); }
+    function hostPokerStand(pid, id) {
+      const p = S.players[pid]; if (!p) return;
+      /* [Claude 2026-10-12] the table is the word, not the puppet's seat flag (a dealer whose room dropped makes its puppets anew, seatless) */
+      if (!p.seat) { const m = (pokerOf(id).se || []).find(x => x && x[1] === pid); if (m) p.seat = { t: id, s: m[0] | 0, k: 'pk' }; }
+      if (p.seat && p.seat.t === id) pokerLeave(p);
+    }
+    function hostPokerAct(pid, id, a, to) {
+      const p = S.players[pid]; if (!p) return false;
+      /* [Claude 2026-10-13] the table is the word (as hostPokerStand): a dealer that made this guest anew after a room hiccup
+         has no seat flag on it, and every call/fold/raise it sent was refused - the hand froze on its turn (the operator) */
+      if (!p.seat || p.seat.t !== id) { const m = (pokerOf(id).se || []).find(x => x && x[1] === pid); if (m) p.seat = { t: id, s: m[0] | 0, k: 'pk' }; }
+      return pokerAct(p, id, String(a || ''), to | 0);
+    }
     function applyPoker(rows) {   /* the dealer's word on its tables: the row, and our own seat follows it, as in chess */
       for (const r of rows || []) {
         if (!r || !r.t) continue;
-        const st = pokerOf(r.t), was = st.v;
-        for (const k of ['o', 'st', 'd', 'sb', 'bb', 'p', 'b', 'a', 'h', 'bo', 'se', 'lg', 'r', 'hc', 'buy', 'gid', 'co', 'cseq']) if (r[k] !== undefined) st[k] = r[k];
+        const st = pokerOf(r.t), was = st.v; delete PKG[r.t];   /* another game deals it: nothing of ours stays */
+        for (const k of ['o', 'st', 'd', 'sb', 'bb', 'p', 'b', 'a', 'h', 'bo', 'se', 'lg', 'r', 'hc', 'buy', 'gid', 'co', 'cseq', 'mr', 'bg', 'rk', 'lc']) if (r[k] !== undefined) st[k] = r[k];   /* mr, bg [Claude 2026-10-12]: the smallest raise and the big blind - without them every guest's panel said 'min 50' at a 1/2 table (the operator) */
         if (r.v != null) st.v = r.v | 0;
         st.mine = 0;
         const T = pokerTableById(r.t);
@@ -2569,28 +2761,70 @@
           if (at[p.id] != null && (!p.seat || p.seat.t !== r.t)) {
             const si = at[p.id], seat = T && T.seats[si];
             if (seat) { p.x = seat[0]; p.y = seat[1]; p.path = []; p.act = null; p.seat = { t: r.t, s: si, k: 'pk' }; p.seatWait = null; p.face = faceTo(p.x, p.y, T.x, T.y); ev({ e: 'psit', p: p.id, t: r.t, s: si }); }
+          } else if (at[p.id] != null && p.seat && p.seat.t === r.t && p.seat.k === 'pk' && (p.seat.s | 0) !== at[p.id]) {   /* [Claude 2026-10-13] the dealer has us in another chair at this table (we moved; an older row had put us back in the old one first): follow the row */
+            const si = at[p.id], seat = T && T.seats[si];
+            if (seat) { p.x = seat[0]; p.y = seat[1]; p.path = []; p.act = null; p.seat = { t: r.t, s: si, k: 'pk' }; p.seatWait = null; p.face = faceTo(p.x, p.y, T.x, T.y); ev({ e: 'psit', p: p.id, t: r.t, s: si }); }
           } else if (p.seat && p.seat.t === r.t && p.seat.k === 'pk' && at[p.id] == null) { p.seat = null; ev({ e: 'pstand', p: p.id, t: r.t }); }
         }
         if (st.o === 'playing' && !Object.keys(at).length) { for (const p of Object.values(S.players)) if (p.seat && p.seat.t === r.t && p.seat.k === 'pk') { p.seat = null; ev({ e: 'pstand', p: p.id, t: r.t }); } }
         if (was !== st.v) emitPoker(r.t, {});
       }
     }
+    /* [Claude 2026-10-13] a sit asked of the host is asked again (8-window test, case 7: two guests' one request reached the new
+       dealer in the second it took over, and they stood beside their chairs for good): every 8 ticks while the chair has not
+       come, six times, then the player is told and the wait ends */
+    function seatWaitTick() {
+      for (const pid of S.order) {
+        const p = S.players[pid], w = p && p.seatWait;
+        if (!w || p.puppet || p.seat || w.at == null || S.t - w.at < 8) continue;
+        if (++w.n > 6) { p.seatWait = null; msg(p, 'Nobody is dealing at that table just now. Try the chair again in a moment.', 'warn'); continue; }
+        w.at = S.t; ev({ e: w.pk ? 'xpsit' : 'xsit', p: p.id, t: w.t, s: w.s, stake: w.stake | 0, pk: w.key || '' });
+      }
+    }
     function seatTick() {   /* [Claude 2026-10-11] fifteen minutes without playing: up you get, at either table (a poker stack is cashed out, a chess game with moves is resigned) */
       if (S.t % 10) return;
       for (const p of Object.values(S.players)) {
-        if (!p.seat || !isAuth(zoneOf(p.x, p.y))) continue;
+        if (!p.seat || !(p.seat.k === 'pk' ? tAuth(pokerTableById(p.seat.t)) : isAuth(zoneOf(p.x, p.y)))) continue;
         if (p.seatAct == null) { p.seatAct = S.t; continue; }
         if (S.t - p.seatAct < SEAT_IDLE) continue;
         msg(p, 'Fifteen minutes without playing: you are stood up from the table.', 'warn');
         if (p.seat.k === 'pk') pokerLeave(p, 'idle'); else standUp(p, 'idle');
       }
     }
+    /* [Claude 2026-10-13] a chair is free once its player has gone (the operator: "it says that Apple is sitting there, but Apple has
+       been off the chair for quite some time"): the stand-up word is one message and can be lost, and a guest made anew after a
+       room hiccup carries no seat flag, so removePlayer did not stand it up. The dealer looks for itself: a guest it has heard
+       standing more than two tiles from the chair (or on another storey) for PK_OFF ticks, or no longer in the game at all for
+       PK_GONE (longer than the arcade's 30 s rejoin grace), is stood up and its stack cashed out - the GOLD comes home as for
+       any stand-up. Returns true when it changed the table. */
+    const PK_OFF = 15, PK_GONE = 75, PK_LEFT = {};
+    function pokerPresence(T, t) {
+      let changed = false;
+      for (let i = 0; i < t.seats.length; i++) {
+        const sh = t.seats[i]; if (!sh || sh.id == null) continue;
+        const q = S.players[sh.id], chair = T.seats[i], key = T.id + ':' + sh.id;
+        const off = !q ? PK_GONE : (q.puppet && q.posAt != null && chair && (cheb(q.x, q.y, chair[0], chair[1]) > 2 || (q.lv | 0) !== (T.lv | 0))) ? PK_OFF : 0;
+        if (!off) { delete PK_LEFT[key]; continue; }
+        if (PK_LEFT[key] == null) { PK_LEFT[key] = S.t; continue; }
+        if (S.t - PK_LEFT[key] < off) continue;
+        delete PK_LEFT[key];
+        if (q) { if (!q.seat || q.seat.t !== T.id) q.seat = { t: T.id, s: i, k: 'pk' }; pokerLeave(q, 'left'); }
+        else { pokerCashout(pokerOf(T.id), sh.id, sh.chips | 0); pokerUnseat(t, i); pokerSync(T.id, t); if (!t.seats.some(x => x && x.id != null)) pokerOf(T.id).buy = 0; ev({ e: 'pstand', p: sh.id, t: T.id }); emitPoker(T.id); }
+        t.say((sh.name || 'A player') + ' has left the table.', 'sys'); pokerSync(T.id, t); emitPoker(T.id);
+        changed = true;
+      }
+      return changed;
+    }
     function pokerTick() {   /* the dealer's own clock: a fresh hand once the last is settled, and a seat that will not answer folded */
       for (const T of pokerTables()) {
-        if (!isAuth(zoneOf(T.x, T.y))) continue;
+        if (!tAuth(T)) continue;
         const st = pokerOf(T.id);
-        if (st.mine === 0 && st.se && st.se.length) { if (st.o === 'playing') pokerAbandon(T.id); continue; }
+        if (st.mine === 0 && st.se && st.se.length) { if (st.st === 'none') pokerAdopt(T.id); else pokerAbandon(T.id); continue; }   /* [Claude 2026-10-13] between hands the table goes on */   /* [Claude 2026-10-12] another dealer's table, between hands too: it cannot be run here (no deck, no seat keys), so everyone is cashed out and the table is open again - it used to sit stuck forever (the operator: nobody could sit back down) */
         const t = pokerGame(T.id); if (!t) continue;
+        /* [Claude 2026-10-13] the dealer's own: a player of this game whose seat flag points at this table but whom the game does
+           not have (a takeover from a row that no longer had them) stands, so the chair can be taken again */
+        for (const pid of S.order) { const q = S.players[pid]; if (q && !q.puppet && q.seat && q.seat.k === 'pk' && q.seat.t === T.id && !t.seats.some(x => x && x.id === q.id)) { q.seat = null; ev({ e: 'pstand', p: q.id, t: T.id }); } }
+        if (pokerPresence(T, t)) continue;
         if (t.street === 'none') {
           if (st.wt == null) { pokerSync(T.id, t); continue; }
           if (S.t >= st.wt) { if (t.playable() < 2) { if (t.status !== 'open') { t.status = 'open'; pokerSync(T.id, t); emitPoker(T.id); } st.wt = S.t + PK_WAIT; continue; } t.newHand(); pokerSync(T.id, t); emitPoker(T.id); }
@@ -3106,7 +3340,7 @@
       } else if (a && a.k === 'sit') {   /* walk onto the bench, then sit (a replica asks the area's host, which seats it through Ch or Pk rows) */
         const T = tableById(a.t) || pokerTableById(a.t), pk = !!(T && T.k === 'pokertable'), seat = T && T.seats[a.s];
         if (!seat) p.act = null;
-        else if (p.x === seat[0] && p.y === seat[1]) { if (isAuth(zoneOf(p.x, p.y))) { if (pk) pokerSitAt(p, T, a.s, a.stake | 0, a.pk || ''); else sitAt(p, T, a.s, a.stake | 0); } else { p.seatWait = { t: T.id, s: a.s }; p.act = null; p.path = []; p.face = faceTo(p.x, p.y, T.x, T.y); ev({ e: pk ? 'xpsit' : 'xsit', p: p.id, t: T.id, s: a.s, stake: a.stake | 0, pk: a.pk || '' }); } }
+        else if (p.x === seat[0] && p.y === seat[1]) { if (pk ? tAuth(T) : isAuth(zoneOf(p.x, p.y))) { if (pk) pokerSitAt(p, T, a.s, a.stake | 0, a.pk || ''); else sitAt(p, T, a.s, a.stake | 0); } else { p.seatWait = { t: T.id, s: a.s, pk: !!pk, stake: a.stake | 0, key: a.pk || '', at: S.t, n: 0 }; p.act = null; p.path = []; p.face = faceTo(p.x, p.y, T.x, T.y); ev({ e: pk ? 'xpsit' : 'xsit', p: p.id, t: T.id, s: a.s, stake: a.stake | 0, pk: a.pk || '' }); } }
         else { p.path = findPath(p.x, p.y, (x, y) => x === seat[0] && y === seat[1], seat[0], seat[1]); stepPath(p); if (!p.path.length && !(p.x === seat[0] && p.y === seat[1])) { msg(p, "I can't reach that bench!", 'warn'); p.act = null; } }
       } else if (a && a.k === 'board') {   /* walk to the canoe, sit down in it: it floats where it lay */
         if (inReach(p.x, p.y, a.x, a.y, 1)) { const lb = BOATS.get(a.x + ',' + a.y); if (!lb && dockFull(a.x, a.y)) { msg(p, 'There is no canoe at the landing: three are already left at the banks nearby. Take one of those.', 'warn'); p.act = null; return; } if (lb) { p.face = lb.face; takeBoat(a.x, a.y, p.id); } p.act = null; p.path = []; p.boat = 1; p.x = a.x; p.y = a.y; p.land = null; ev({ e: 'boat', p: p.id, on: 1 }); msg(p, 'You sit down in the canoe and take up the paddle. Point at the water to paddle there, or at the shore to land.'); }
@@ -3201,7 +3435,8 @@
       if (!lock && (!m.hurt || S.t - (m.hurtT || -1e9) > RETALIATE.ticks)) return false;
       if (!p || p.dead) return false;
       if (cheb(p.x, p.y, m.sx, m.sy) > leash + RETALIATE.beyond) return false;
-      m.tgt = p.id; m.back = 0; return true;
+      if (!(m.tgt && m.foes && m.foes[m.tgt] != null && S.t - m.foes[m.tgt] <= 12 && tgtOk(m))) m.tgt = p.id;   /* [Claude 2026-10-13] one of those fighting it already: mobAttack's turn about stands */
+      m.back = 0; return true;
     }
     function sightOf(m, md) { return md.aggro > 0 ? Math.max(1, Math.round(md.aggro * wx(m.zone, 'sight'))) : 0; }
     function mobAt(x, y, self) { for (const o of S.mobs) if (o !== self && !o.dead && o.x === x && o.y === y) return true; return false; }
@@ -3539,7 +3774,7 @@
       ageStumps();
       for (const k in S.dep) if (S.dep[k] <= S.t) { delete S.dep[k]; ev({ e: 'regrow', node: +k }); }
       for (const f of S.fires.slice()) if (f.until <= S.t && isAuth(zoneOf(f.x, f.y))) fireOut(f.uid);
-      pokerTick(); seatTick();
+      pokerTick(); seatTick(); chessSweep(); seatWaitTick();
       weatherTick();
       return S.ev;
     }
@@ -3549,7 +3784,7 @@
     function setPuppet(id, st) {
       const p = S.players[id]; if (!p || !p.puppet) return;
       if (Number.isInteger(st.x) && Number.isInteger(st.y) && inMap(st.x, st.y)) {
-        p.x = st.x; p.y = st.y;
+        p.x = st.x; p.y = st.y; p.posAt = S.t;   /* posAt: the dealer knows where a guest really stands (pokerPresence) */
         if (st.lv != null) { const lv = Math.max(0, st.lv | 0), bi = lv > 0 && M.buildingAt ? M.buildingAt(p.x, p.y) : -1; p.lv = bi >= 0 ? lv : 0; p.bld = bi >= 0 && lv > 0 ? bi : -1; }   /* [Claude 2026-10-11] the storey they say they are on (the Tap's card tables are upstairs) */
         for (const q of Object.values(S.players)) if (q.boat === 2 && q.ride === id && !q.puppet) { q.x = p.x; q.y = p.y; }   /* whoever rides in this canoe moves with it at once - even on the last word before it crosses into the next region */
       }
@@ -3646,7 +3881,7 @@
       for (const qid in p.quests || {}) { const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.steps[q.step - 1]; if (st && st.kit) topUp(p, q, st); if (st && st.stumps) fellStumps(q, st); if (st) learnFlag(p, st); for (const s of (Q && Q.steps) || []) if (s.flag && q.step > s.id) learnFlag(p, s); }
       ev({ e: 'join', p: id }); return p;
     }
-    function removePlayer(id) { if (S.players[id] && S.players[id].seat) standUp(S.players[id], 'left'); delete S.players[id]; S.order = S.order.filter(q => q !== id); for (const m of S.mobs) if (m.tgt === id) loseTarget(m); }
+    function removePlayer(id, keep) { const q = S.players[id]; if (q && q.seat && !(keep && !q.seat.k)) standUp(q, 'left');   /* keep [Claude 2026-10-12]: the room dropped us, not them - a chess seat waits for the host's word */ delete S.players[id]; S.order = S.order.filter(q => q !== id); for (const m of S.mobs) if (m.tgt === id) loseTarget(m); }
     function hash() {
       let h = 2166136261 >>> 0; const mix = (v) => { h ^= v >>> 0; h = Math.imul(h, 16777619) >>> 0; };
       mix(S.t); mix(R.state); for (const z in S.weather) { mix(hashStr(S.weather[z].kind)); mix(S.weather[z].intensity); }
@@ -3672,19 +3907,20 @@
       setNewHome: h => { if (HOMES[h]) NEWHOME = h; }, markGift: (pid, id, n) => markGift(S.players[pid], id, n), homeOf: p => (p && p.home) || 'ashvale', npcFor, lineFor, questForHome, questMarks,
       API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, trapOf, offerOf, isBlessed: (pid, x, y) => !!(S.players[pid] && blessed(S.players[pid], x, y)), setNature, natureHours, setNatureTell, seasonOn, dayHour, fireLit, steamFor, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       tableAt, tableById, tables, chessOf, chessRow, chessRows, chessGame, chessTurn, chessMoves, applyChess, hostSit, hostStand, hostMove, hostSel, standUp,
-      pokerTableAt, pokerTableById, pokerTables, pokerSeatKeys, pokerOpen, pokerOf, pokerRow, pokerRows, pokerGame, applyPoker, hostPokerSit, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED, PK_AWAY], hostPokerStand, hostPokerAct, pokerLeave, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED],
+      setTableAuth: (id, v) => { if (v == null) delete TAUTH[id]; else TAUTH[id] = !!v; }, tableAuth: id => tAuth(pokerTableById(id)),
+      pokerTableAt, pokerTableById, pokerTables, pokerSeatKeys, pokerOpen, pokerOf, pokerRow, pokerRows, pokerGame, applyPoker, pokerClockTicks: () => PK_CLOCK, pokerReclaim, pokerNetId, chessReclaim, chessNetId, chessLimbo, seatHeld, setOnline: (b) => { S.online = !!b; }, hostPokerSit, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED, PK_AWAY], hostPokerStand, hostPokerAct, pokerLeave, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED],
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
       prayTicks(p, pts, drain) { let d = drain; if (d == null) { d = 0; for (const id in p.pray || {}) d += (PRAYERS[id] && PRAYERS[id].drain) || 0; } if (!d) return null; const n = pts == null ? (p.pp | 0) : pts, rs = resist(p, d); return n <= 0 ? 0 : Math.ceil(((n - 1) * rs + rs + 1 - (pts == null ? (p.pd | 0) : 0)) / d); },
-      isHawk, passageAt, crateAt, signAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, searchOpen, coverBlocks, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf, storyPoints, storyMax, scoreKill, mergeScores, setScoreTotal, scoresOf, scoreBoard, scoreRead,
+      isHawk, passageAt, crateAt, signAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, searchOpen, coverBlocks, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf, storyPoints, storyMax, scoreKill, setScores, scoresOf, scoreBoard, scoreRead,
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
       setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, isSapling, saplingKind, canPlant, plantYoung, plantHour: PLANT_HOUR, plantSnap, acceptPlant, acceptUnplant, hostPlant, hostUnplant, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
       applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, takeOff: (pid, k) => { const p = S.players[pid]; return p ? takeOff(p, k) : null; }, setFelled,
       hitXp: (pid, cls, dmg, dex) => { const p = S.players[pid]; if (p && !p.puppet) hitXp(p, cls, dmg, null, dex); },
-      creditKill: (pid, key) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key); }
+      creditKill: (pid, key, x, y) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key, x, y); }
     };
   }
 

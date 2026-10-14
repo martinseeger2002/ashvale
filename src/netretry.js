@@ -73,5 +73,63 @@
       stats.ms = Date.now() - t0;
     })().catch(e => { console.warn('ASHVALE: parallel downloads off (' + (e && e.message || e) + '), loading one by one'); });
   }
-  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('netretry', { api: API, v: 3 }, () => ({ on: !!(G.fetch && G.fetch.__ashRetry), early: stats }));
+
+  /* [Claude 2026-10-13] THE LOADING SCREEN (the operator: "Make sure the loading Ashvale and loading Ziibiing screen are displayed
+     until the game loads and add a progress bar"). The launcher (never re-inscribed) drops its "Loading Ashvale..." text the
+     moment the code is in - before the save is opened and the land around you is loaded - so a black screen sat there.
+     This module is the first the loader runs, so it puts up its own screen (#ashload, which the launcher does not know):
+     the game's name, a bar and a line of what is happening. The download moves the bar to 70% (every /content/ answer
+     counted against the modules still to come); the game then calls ASH_LOAD.set(frac, text) for the save and the land,
+     and ASH_LOAD.done() once the world has been drawn. A start that fails shows its reason here. */
+  if (G.document && !G.ASH_LOAD) {
+    const D = G.document, home = typeof G.ASH3D_HOME === 'string' && /^[a-z]{2,16}$/.test(G.ASH3D_HOME) && G.ASH3D_HOME !== 'ashvale' ? G.ASH3D_HOME : 'ashvale';
+    const title = home.charAt(0).toUpperCase() + home.slice(1);
+    const css = D.createElement('style');
+    css.textContent = '#ashload{position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#0b0906;color:#e8b54a;font:16px system-ui,sans-serif;transition:opacity .5s}' +
+      '#ashload h1{margin:0;font:600 30px Georgia,serif;letter-spacing:4px;color:#f3d08a;text-transform:uppercase}' +
+      '#ashload .bar{width:min(320px,72vw);height:10px;border-radius:6px;background:#2a2116;box-shadow:inset 0 0 0 1px #5b4526;overflow:hidden}' +
+      '#ashload .fill{height:100%;width:0;background:linear-gradient(90deg,#b8862d,#f3d08a);transition:width .3s}' +
+      '#ashload .say{font-size:13px;color:#cbb791;min-height:18px;text-align:center;padding:0 16px}#boot{visibility:hidden}';
+    const root = D.createElement('div'); root.id = 'ashload';
+    root.innerHTML = '<h1>' + title + '</h1><div class="bar"><div class="fill"></div></div><div class="say">Loading ' + title + '\u2026</div>';
+    const put = () => { if (!D.body) return setTimeout(put, 20); D.head.appendChild(css); D.body.appendChild(root); };
+    put();
+    const fill = root.querySelector('.fill'), say = root.querySelector('.say');
+    let frac = 0, gone = false;
+    const L = G.ASH_LOAD = {
+      set(f, text) { if (gone) return; if (typeof f === 'number' && f > frac) { frac = Math.min(1, f); fill.style.width = (frac * 100).toFixed(1) + '%'; } if (text) say.textContent = text; },
+      done() { if (gone) return; L.set(1, 'Welcome to ' + title + '.'); gone = true; root.style.pointerEvents = 'none'; setTimeout(() => { root.style.opacity = '0'; setTimeout(() => root.remove(), 600); }, 250); },
+      shown: () => !gone
+    };
+    L.set(0.03);
+    /* a page that loads these modules but is not the game (the Atlas) never starts it: if nothing claims the screen
+       (engine.start sets ASH_LOAD.claimed) within 3 s of the modules being in, it goes */
+    let inAt = 0; const lone = setInterval(() => {
+      if (gone || L.claimed) { clearInterval(lone); return; }
+      if (G.ASH3D && G.ASH3D._values) { if (!inAt) inAt = Date.now(); else if (Date.now() - inAt > 3000) { clearInterval(lone); L.done(); } }
+    }, 250);
+    /* the download: count /content/ answers against the modules the registry still has to bring */
+    let want = 0, got = 0;
+    const cnt = G.fetch;
+    if (cnt) {
+      const counting = function (url, opts) {
+        const p = cnt(url, opts);
+        if (typeof url === 'string' && url.indexOf('/content/') >= 0) p.then(() => { got++; if (want) L.set(0.05 + 0.65 * Math.min(1, got / want), 'Loading ' + title + '\u2026 ' + Math.min(got, want) + ' of ' + want); }, () => {});
+        return p;
+      };
+      for (const k of ['__ashRetry', '__ashEarly']) if (cnt[k]) counting[k] = cnt[k];
+      G.fetch = counting;
+    }
+    (async () => {
+      try {
+        const r = await cnt('/r/inscriptions?creator=' + CREATOR + '&limit=10'); const Li = await r.json(); let reg = null;
+        for (const q of Li || []) { const j = q && q.json; if (j && j.ashvale3d === 'registry' && (!reg || j.version > reg.version)) reg = j; }
+        if (reg && reg.modules) { let n = 0; const defs = (G.ASH3D && G.ASH3D._defs) || {}; for (const k in reg.modules) { const grp = k === 'data' || k === 'zones' || k === 'parts'; const items = grp ? Object.values(reg.modules[k]) : [reg.modules[k]]; for (const e of items) if (e && e.id) n++; } want = Math.max(1, n); }
+      } catch (e) { /* no count: the bar moves with the game's own steps */ }
+    })();
+    /* a start that fails: the launcher writes the reason into #boot - show it here */
+    const watch = () => { const b = D.getElementById('boot'); if (!b) return; const ob = new MutationObserver(() => { if (/could not/i.test(b.textContent || '')) { say.textContent = b.textContent; say.style.color = '#ff8a7a'; } }); ob.observe(b, { childList: true, characterData: true, subtree: true }); };
+    if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', watch); else watch();
+  }
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('netretry', { api: API, v: 4 }, () => ({ on: !!(G.fetch && G.fetch.__ashRetry), early: stats }));
 })(typeof globalThis !== 'undefined' ? globalThis : this);

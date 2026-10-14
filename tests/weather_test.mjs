@@ -35,8 +35,8 @@ function run(W, seconds, step) { step = step || 1 / 60; for (let k = 0; k < Math
 const S = make(), K = make();
 const wasChildren = S.scene.children.slice(), wasFog = S.scene.fog, wasNear = wasFog.near, wasFar = wasFog.far, wasSky = S.scene.background.clone();
 const W = createWeather(THREE, { scene: S.scene, camera: S.camera, quality: 'high' });
-ok(S.scene.children.length === wasChildren.length + 1, 'the module adds exactly one object to the scene');
-const box = S.scene.children.find(o => wasChildren.indexOf(o) < 0);
+ok(S.scene.children.length === wasChildren.length + 2, 'the module adds two objects to the scene: the box on the camera and the fog sheets');
+const box = S.scene.children.find(o => wasChildren.indexOf(o) < 0 && o.isGroup);
 ok(box && box.isGroup, 'what it adds is one group that carries the weather');
 const KIND = W.KIND;
 ok(!!(THREE.Points && THREE.PointsMaterial && THREE.LineSegments && THREE.LineBasicMaterial && THREE.ShaderMaterial), 'the three.js build here has the pieces the module needs');
@@ -82,7 +82,7 @@ for (const kind of ['clear', 'fog', 'rain', 'snow']) {
     if (parts > 0) box.traverse(o => { if (o.visible && (o.isLineSegments || o.isPoints)) {
       ok(o.material.opacity > 0.05, kind + ' ' + i + ': the ' + (o.isPoints ? 'flake' : 'drop') + ' sheet is drawn and opaque (opacity ' + o.material.opacity + ')');
     } });
-    if (kind === 'fog') ok(parts === 0 && st.draws === 1 && st.amounts.bank > 0, 'fog: no particles, only the bank (' + st.draws + ' draw call)');
+    if (kind === 'fog') ok(parts === 0 && st.draws === 1 + (st.sheets ? 1 : 0) && st.amounts.bank > 0, 'fog: no particles, only the bank and the fog sheets (' + st.draws + ' draw call)');
     if (kind === 'clear') ok(parts === 0 && st.draws === 0, 'clear: nothing drawn at all');
     ok(st.amounts.bank > 0 || kind === 'clear', kind + ': the bank of weather is up');
   }
@@ -146,6 +146,20 @@ ok(S.scene.children.every((o, k) => o === wasChildren[k]), 'and leaves the rest 
 ok(S.scene.fog === wasFog && S.scene.fog.near === wasNear && S.scene.fog.far === wasFar, 'dispose puts the fog back');
 ok(S.scene.fog.color.getHex() === wasSky.getHex() && S.scene.background.getHex() === wasSky.getHex(), 'and the sky colour');
 ok(W.state().gone === true, 'and says it is gone');
+
+/* under a roof (W.indoor, engine.js roofCheck): nothing falls on your head, the sky and the fog stay the street's */
+{ const R = make(), I = createWeather(THREE, { scene: R.scene, camera: R.camera, quality: 'high' });
+  I.set('rain', 1, { instant: true }); run(I, 3);
+  ok(I.state().parts.rain > 0, 'out in the rain the drops are falling');
+  const near = I.state().fog.near, sky = I.state().fog.sky;
+  I.indoor(true); run(I, 60);
+  ok(I.state().parts.rain === 0, 'indoors no rain is in the air (2026-10-13: "Definitely getting rain inside")');
+  ok(I.state().fog.near === near && I.state().fog.sky === sky, 'and the fog and the sky are still the weather outside');
+  I.set('snow', 1, { instant: true }); run(I, 60);
+  ok(I.state().parts.snow === 0, 'snow that starts while you are indoors stays outside too');
+  I.indoor(false); run(I, 60);
+  ok(I.state().parts.snow > 0, 'and it falls again when you step out');
+  I.dispose(); }
 
 /* a scene that never had fog gets it anyway, and gets it taken away again */
 const B = make(); B.scene.fog = null;

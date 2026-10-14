@@ -12,7 +12,7 @@ URL = os.environ.get(
     "http://127.0.0.1:8731/dist/ashvale3d.html?fresh&nocreator&seed=even-grove-pw&go=197,-68",
 )
 OUT = os.path.join(ROOT, "tests", "shots", "even_grove_quest.png")
-ARGS = [
+ARGS = [] if os.environ.get("ASH_PW_DEFAULT_GPU") else [
     "--use-gl=angle",
     "--use-angle=swiftshader",
     "--enable-unsafe-swiftshader",
@@ -32,7 +32,7 @@ with sync_playwright() as playwright:
     page = browser.new_page(viewport={"width": 1280, "height": 800})
     page.set_default_timeout(15000)
     page.on("pageerror", lambda error: failures.append("PAGEERROR " + str(error)))
-    page.goto(URL)
+    page.goto(URL, wait_until="domcontentloaded", timeout=120000)
     page.wait_for_function("window.ASH && ASH.me && ASH.core && ASH.hud", timeout=30000)
     page.wait_for_timeout(1200)
 

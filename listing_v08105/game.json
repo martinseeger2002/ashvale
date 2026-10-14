@@ -1,0 +1,13 @@
+{
+ "game": {
+  "name": "ASHVALE",
+  "description": "New in 0.8.105: Solitaire at the card tables - long-press a table and play. Cards with their rank and suit in both corners, a turn clock round the felt, and GOLD on a table always comes home. ASHVALE is free to play: knights, wizards and archers, the Saltmere Tap's card room upstairs, the Chess Park, and the Ojibwe village of Ziibiing on the far continent.",
+  "version": "0.8.105",
+  "players": "Solo or online",
+  "multiplayer": true,
+  "family": "ashvale",
+  "genre": "rpg",
+  "play": "c879bc1f5f3cfc1300b9f24252a47ce395028dc65fc78a0ab3004a9f272649f5",
+  "cover": "28d1007491d413d4c07cce95d43eff4c54600cffd78661ff3456606a15493210"
+ }
+}
