@@ -278,6 +278,7 @@
          preview ?home=ziibiing does the same */
       if (HOME && core.setNewHome) core.setNewHome(HOME);
       const me = core.addPlayer(PID, save);
+      if (!/^@/.test(String(me.name || ''))) me.name = '@guest';   /* [Claude 2026-10-15] no chosen names any more: '@guest' until the arcade says your @tag (the operator: "There's no need for two names") */
       /* [Claude 2026-10-12] PRIVATE HOLE CARDS (the operator). The mesh is broadcast-only, so secrecy is made here: every game holds an
          ECDH P-256 key for the session; a sitter's public key rides with the sit (cmd pk -> PS) and lives on the dealer's seat;
          the dealer seals each seat's two cards with AES-GCM under ECDH(dealer, seat) and puts only the sealed blobs in the row
@@ -1748,7 +1749,7 @@
         else if (others && NW.heard && now - NW.heard > 45000 && now - NW.quiet > 180000) { NW.quiet = now; netDrop('', false); }
       }
       function zoneHere() { return core.zoneOf(me.x, me.y); }
-      const label = (name, from) => name + ' (' + (from.tag ? '@' + from.tag : 'guest') + ')';   /* @tag = stamped by the arcade node */
+      const label = (name, from) => from && from.tag ? '@' + from.tag : (/^@/.test(String(name || '')) ? name : '@guest');   /* [Claude 2026-10-15] the operator: "Their name should be there @handle only ... There's no need for two names" - the @tag the arcade node stamps */
       /* a player's total level above the name over their head (2026-10-05) */
       const setTag = (el, name, from, total) => { const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); el.innerHTML = (total ? '<span class="tl">Total level ' + total + '</span><br>' : '') + esc(label(name, from)); };
       /* A name is told once, in the gear message at a join or an equip. A remote that goes quiet for 12 s is dropped
@@ -1873,6 +1874,7 @@
             R.on('join', () => { if (room !== R) return; clearTimeout(gearT); gearT = setTimeout(() => { netGear(); if (hosted.size) fullSnap(); }, 600); });   /* newcomers missed our gear/outfit/name: send it again (one resend for a burst of joins) */
             R.on('rejoined', () => { if (room !== R) return; NW.heard = performance.now(); clearTimeout(gearT); gearT = setTimeout(() => { netGear(); if (hosted.size) fullSnap(); }, 600); });   /* [Claude 2026-10-13] the arcade seated us again after a drop: the others rebuilt us bare, so send our gear/outfit/name (and what we host) again */
             R.on('closed', why => { if (room !== R) return; room = null; core.setOnline(false); coreCall(() => core.chessLimbo(PID)); dropRemotes(true); hosts.clear(); passive = false; applyAuth(); hud.setOnline(false); NW.lost = true; NW.tries = 0; hud.netLost && hud.netLost(true, 'net', why || ''); hud.chat('Lost contact with other players' + (why ? ' (' + why + ')' : '') + '. Retrying soon.', 'sys'); retryAt = performance.now() + 15000; });
+            if (R.me && R.me.tag && me.name !== '@' + R.me.tag) { me.name = '@' + R.me.tag; hud.refresh('all'); }   /* [Claude 2026-10-15] your name is your @tag (the operator) */
             netGear();
             if (R.me && !R.me.guest && R.me.address && R.me.address !== walletState.address) { walletState.address = R.me.address; walletRefresh(); }
             if (!trade && deps.trade) trade = deps.trade.create({ host, toast: (t, k) => hud.chat(t, k || 'trade'), send: (to, obj) => netSend({ tr: obj, to }), offerable: tradeOfferable, onSettled: tradeSettled, onUndone: tradeUndone, onOffer: tellOffer, itemOf: p => { const j = p && p.json; if (!j || !allowedAsset(p)) return null; const k = j.key || ((j.attributes || []).find(a => a && a.trait_type === 'Key') || {}).value; const d = k && core.item(k); return d ? { key: k, name: d.name, icon: (() => { try { return MOD.icon(k, 64); } catch (e) { return null; } })() } : null; }, nameOf: id => { const r = remotes.get(id); return r ? label(r.name, r.from) : 'another player'; } });
@@ -2228,7 +2230,7 @@
         hud.chat('To @' + tag + ': ' + String(text).slice(0, 120), 'dm');
       }
       function speak(e, text) { if (e.bub) e.bub.el.remove(); e.bub = { el: hud.bubble(text), t: performance.now() }; }
-      const cleanName = n => String(n || '').replace(/[^\w -]/g, '').trim().slice(0, 12) || 'Adventurer';
+      const cleanName = n => String(n || '').replace(/[^\w@ -]/g, '').trim().slice(0, 17) || '@guest';
       function netPos(now) {
         if (!room) return;
         if (hosted.size && room) { hostSend(now); return; }
@@ -2272,7 +2274,7 @@
         if (!r && !d.p && !d.g && !d.n && !d.M && !d.E && !d.F) { /* first contact carries state soon */ }
         if (r) { r.heard = performance.now(); if (r.offline) { r.offline = null; hud.chat((r.name || 'Your partner') + ' is back.', 'sys'); } }
         if (from && from.address && !from.guest) { PK_ADDR.set(id, from.address); if (PK_ADDR.size > 200) PK_ADDR.delete(PK_ADDR.keys().next().value); }   /* [Claude 2026-10-14] kept after they leave: the dealer still names a gone player's seat to the Bank */
-        if (!r) { const e = makeEnt('r:' + id, MOD.humanoid({}), { kind: 'remote', id }); const nm = knewName.get(id) || 'Adventurer'; e.tag = hud.tag(label(nm, from)); r = { e, buf: [], anim: 'idle', name: nm, from, lastS: -1, heard: performance.now(), fullT: 0 }; remotes.set(id, r); e.root.visible = false; }
+        if (!r) { const e = makeEnt('r:' + id, MOD.humanoid({}), { kind: 'remote', id }); const nm = (from && from.tag ? '@' + from.tag : null) || knewName.get(id) || '@guest'; e.tag = hud.tag(label(nm, from)); r = { e, buf: [], anim: 'idle', name: nm, from, lastS: -1, heard: performance.now(), fullT: 0 }; remotes.set(id, r); e.root.visible = false; }
         /* a VIEWER (neighbour region): drawn, never a puppet or a host. A full member of our room wins for 3 s after its last word */
         const view = !!via || d.nb === 1;
         if (!view) { r.fullT = r.heard; r.via = null; } else if (via && !r.via && performance.now() - r.fullT > 3000) r.via = via;
@@ -2286,7 +2288,7 @@
         if (Array.isArray(d.p) && typeof d.a === 'string') { r.boat = d.bt | 0; r.ride = d.rd || null; r.pole = !!d.pl; r.knock = !!d.kn; r.hl = isFinite(+d.hl) ? Math.max(-1.5, Math.min(1.5, +d.hl)) : 0; }
         if ('k' in d) { const tl = typeof d.k === 'string' && /^[a-z0-9_]{1,24}$/.test(d.k) ? d.k : null; if (tl !== r.tool) { r.tool = tl; r.e.H.setTool && r.e.H.setTool(tl); } }
         if (d.T != null) r.total = Math.max(0, Math.min(9999, d.T | 0));
-        if (d.n || d.T != null) { if (d.n) { r.name = cleanName(d.n); if (core.S.players[id]) core.setPuppet(id, { n: r.name }); } if (r.e.tag) setTag(r.e.tag, r.name, from, r.total); }
+        if (d.n || d.T != null) { if (d.n) { r.name = from && from.tag ? '@' + from.tag : cleanName(d.n);   /* the arcade's stamp, not what the game says */ if (core.S.players[id]) core.setPuppet(id, { n: r.name }); } if (r.e.tag) setTag(r.e.tag, r.name, from, r.total); }
         /* [Claude 2026-10-13] the operator: "when sitting at a poker table chat should be visible between those players at the table
            only. Not the whole town or next table": a word said at a card table reaches that table only, and a player sitting
            at one hears only it. The speaker's table is its own word (tb), or else where this game's rows seat it. */
@@ -3244,7 +3246,7 @@
         const HC = ((D.rules.homes || {})[core.homeOf(me)] || {}).creator || null;   /* the home's own creator: styles, labels, defaults */
         hud.creator({ first, home: HC, title: who || 'Wardrobe', look: before, startPoints: first && core.START ? core.START.points : 0, startMax: core.START ? core.START.max : 5, name: first ? '' : me.name, styles: MOD.outfitStyles, palette: MOD.palette,
           onChange: look => myEnt.H.setOutfit(look), onTurn: () => { cam.spin = ((cam.spin || 0) + Math.PI / 2) % (2 * Math.PI); },   /* see the back of your hair and clothes */
-          onDone: (look, name, start) => { cam.spin = 0; send({ c: 'look', look, name }); if (start && Object.keys(start).length) send({ c: 'start', pts: start }); cam.mode = null; cam.tyaw = cam.save.yaw; cam.tpitch = cam.save.pitch; cam.tdist = cam.save.dist; if (first) { hud.showHelp(true); } } });
+          onDone: (look, name, start) => { cam.spin = 0; send({ c: 'look', look });   /* no name: the @tag is the name (2026-10-15) */ if (start && Object.keys(start).length) send({ c: 'start', pts: start }); cam.mode = null; cam.tyaw = cam.save.yaw; cam.tpitch = cam.save.pitch; cam.tdist = cam.save.dist; if (first) { hud.showHelp(true); } } });
       }
       { const HD = (D.rules.homes || {})[core.homeOf(me)] || {};
         hud.chat('Welcome to ' + (HD.name || 'Ashvale') + '.', 'sys');

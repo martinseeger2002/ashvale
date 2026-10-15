@@ -1146,3 +1146,11 @@ the walk here feature".
 - With that, the Ziibiing preload is back: its own save ('ashvale3d.save.v1.ziibiing') and spawn. Live Ziibiing launcher +
   candidate: in the world in 16.7 s, the area under the character ('lodges') loaded at the first look, no console errors.
   ASHVALE launcher unchanged (village loaded, 537 x 88). poker_bank_pw (upstairs floors) ALL OK, globe_roam_pw all passed.
+
+## 0.8.123 - 2026-10-15 (Claude): your @tag is your only name - RELEASED (v150; cards fd2cc598 ASHVALE, 33b784e8 Ziibiing)
+- the operator: "wherever it says your name where it was adventure. Remove the adventure and the ability to create a name. Their name
+  should be there @handle only ... There's no need for two names" and "Same for ziibiing". Own name = '@' + the arcade room's
+  tag (set on join), '@guest' until then / with no account; a save's old chosen name is dropped; the creator has no name box;
+  core 'look' no longer takes a name; others are labelled with the @tag the arcade node stamps (never what the game says).
+  Quest lines, card-table lines and every {name} read p.name, so they say the @tag. Checked in two visible windows: own
+  '@dev_...', a 'look' name 'Ann' ignored, the other labelled '@dev_...'. 49 headless ALL OK; candidate_live boots clean.

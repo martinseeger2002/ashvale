@@ -409,7 +409,7 @@
 
     // ---------------- players
     function newPlayer(id, save) {
-      const home = (save && typeof save.home === 'string' && HOMES[save.home]) ? save.home : (save ? 'ashvale' : NEWHOME), R0 = spawnOf({ home }), p = { id, home, name: 'Adventurer', kind: 'p', x: R0[0], y: R0[1], path: [], act: null, hp: 10, xp: {}, inv: new Array(28).fill(null), eq: {},
+      const home = (save && typeof save.home === 'string' && HOMES[save.home]) ? save.home : (save ? 'ashvale' : NEWHOME), R0 = spawnOf({ home }), p = { id, home, name: '@guest', kind: 'p', x: R0[0], y: R0[1], path: [], act: null, hp: 10, xp: {}, inv: new Array(28).fill(null), eq: {},
         styles: { melee: 0, ranged: 0, magic: 0 }, look: null, run: true, energy: 10000, retal: true, atk: 0, dead: 0, face: 2, quests: {}, kills: {}, skilling: null, gT: 0, shop: null, moved: 0, spawnT: 0, using: null };
       for (const s of SK) p.xp[s] = 0;
       p.xp.hitpoints = XP[RU.start.hitpoints] * 10;
@@ -463,7 +463,7 @@
         else { const c = cleanVal(v); if (c !== undefined) o[k] = c; } }
       return o;
     }
-    function cleanName(n) { n = String(n || '').replace(/[^\w -]/g, '').trim().slice(0, 12); return n.length >= 2 ? n : null; }
+    function cleanName(n) { n = String(n || '').replace(/[^\w@ -]/g, '').trim().slice(0, 17); return n.length >= 2 ? n : null; }   /* '@' and 17: the @tag is the name (2026-10-15) */
     /* starting points (the operator: "spend starting points"): once, on a fresh character; each point = +1 starting level */
     function validStart(pts) {
       if (!pts || typeof pts !== 'object') return null; const o = {}; let sum = 0;
@@ -871,7 +871,7 @@
         case 'pray': setPrayer(p, String(c.id || ''), !!c.on); break;
         case 'close': closeShop(p); break;
         case 'start': startPoints(p, c.pts); break;
-        case 'look': if (c.look) p.look = cleanLook(c.look); if (c.name) p.name = cleanName(c.name) || p.name; ev({ e: 'look', p: p.id }); break;
+        case 'look': if (c.look) p.look = cleanLook(c.look); ev({ e: 'look', p: p.id }); break   /* no name here any more: the @tag is the name (2026-10-15) */;
       }
     }
     /* inventory drag and drop (the operator): move into an empty slot or swap two slots; deterministic and replayed */

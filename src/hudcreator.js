@@ -37,7 +37,7 @@
         const cyc = (k, lab) => '<div class="row"><span class="lab">' + lab + '</span><button class="arr" data-cy="' + k + '" data-d="-1">&#9664;</button><span class="val">' + esc(sty(k)) + '</span><button class="arr" data-cy="' + k + '" data-d="1">&#9654;</button></div>';
         const many = k => listOf(k).length > 1, bootsLab = (HC && HC.labels && HC.labels.boots) || 'Boots';
         cc.innerHTML = '<h3>' + (o.first ? esc((HC && HC.heading) || 'Create your adventurer') : esc(o.title || 'Wardrobe')) + '</h3>' +
-          (o.first ? '<div class="row"><span class="lab">Name</span><input maxlength="12" value="' + esc(name) + '" placeholder="Your name"></div>' : '') +
+          /* [Claude 2026-10-15] no name box: your @tag is your name (the operator: "Remove the adventure and the ability to create a name") */
           '<div class="row"><span class="lab">Body</span><button class="btn body ' + (L.body !== 'female' ? 'on' : '') + '" data-body="male" style="width:auto;flex:1;margin:0">Male</button><button class="btn body ' + (L.body === 'female' ? 'on' : '') + '" data-body="female" style="width:auto;flex:1;margin:0">Female</button></div>' +
           '<div class="row"><span class="lab">Skin</span>' + sw('skin', PA.skin) + '</div>' +
           cyc('hair', 'Hair') + '<div class="row"><span class="lab"></span>' + sw('hairColor', PA.hair) + '</div>' +

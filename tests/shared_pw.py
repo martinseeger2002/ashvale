@@ -343,7 +343,8 @@ def neighbour_regions(b, url_for, label):
     check(idb in pa.evaluate('ASH.net().viewers') and not pa.evaluate('!!ASH.core.S.players[%s]' % json.dumps(idb)) and idb not in pa.evaluate('Object.values(ASH.net().hosts)'), 'B is only a viewer on A\'s side: no puppet, never a host (hosts %s)' % pa.evaluate('JSON.stringify(ASH.net().hosts)'))
     check(pa.evaluate('ASH.net().amHost') and pb.evaluate('ASH.net().amHost'), 'each still hosts their own area')
     nm = pa.evaluate('%s[0].tag && %s[0].tag.textContent' % (REM, REM))
-    check(nm and 'Ben' in nm, 'A sees B\'s name over the border: %s' % nm)
+    btag = '@' + (pb.evaluate('ASH.net().me && ASH.net().me.tag') or '')
+    check(nm and nm.strip().endswith(btag) and 'Ben' not in nm, 'A sees B\'s name over the border, the @tag only: %s' % nm)   # [Claude 2026-10-15] the operator: "Their name should be there @handle only"
     pb.evaluate('ASH.core.cmd("me", {c: "walk", x: %d, y: %d})' % (bx + 4, by + 3)); wait(pb, 'ASH.me.x === %d && ASH.me.y === %d' % (bx + 4, by + 3), 20); time.sleep(3)
     g = pa.evaluate('(() => { const r = %s[0]; return r ? Math.hypot(r.root.position.x - %f, r.root.position.z - %f) : 99; })()' % (REM, bx + 4.5, by + 3.5))
     check(g < 1.5, 'B\'s move shows on A\'s screen across the border (%.2f m off)' % g)
