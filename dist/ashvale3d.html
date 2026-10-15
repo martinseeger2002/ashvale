@@ -14734,10 +14734,19 @@ POSSIBILITY OF SUCH DAMAGE. */
           return a[((cy & 63) << 6) | (cx & 63)];
         };
       }
-      const floor = map._floor || (map._floor = new Float32Array(W * H).fill(NaN));
+      /* [Claude 2026-10-14] building floors, kept per 64 x 64 chunk and only where a floor is written: a W x H array spanned the bounding box
+         of every area loaded at the start, and with Ziibiing's land among them that box was ~24,000 tiles square - 591 million floats,
+         "Array buffer allocation failed" and a phone that could not open Ziibiing at all. get() is NaN where no floor was written. */
+      const floor = map._floor || (map._floor = (() => {
+        const C = new Map(); let lk = null, la = null;
+        const key = (cx, cy) => (cx + 32768) * 65536 + (cy + 32768);
+        const arr = (x, y, make) => { const k = key(x >> 6, y >> 6); if (k === lk) return la; let a = C.get(k); if (!a && make) { a = new Float32Array(4096).fill(NaN); C.set(k, a); } if (a) { lk = k; la = a; } return a || null; };
+        return { get: (x, y) => { const a = arr(x, y, false); return a ? a[((y & 63) << 6) | (x & 63)] : NaN; },
+                 set: (x, y, v) => { arr(x, y, true)[((y & 63) << 6) | (x & 63)] = v; } };
+      })());
       function heightAt(x, z) {
         if (!seeded && (x < 0 || z < 0 || x > W || z > H)) return -0.3;
-        if (x >= 0 && z >= 0 && x < W && z < H) { const fl = floor[Math.floor(z) * W + Math.floor(x)]; if (fl === fl) return fl; }
+        if (seeded || (x >= 0 && z >= 0 && x < W && z < H)) { const fl = floor.get(Math.floor(x), Math.floor(z)); if (fl === fl) return fl; }
         const xi = seeded ? Math.floor(x) : Math.min(W - 1, Math.floor(x)), zi = seeded ? Math.floor(z) : Math.min(H - 1, Math.floor(z)), fx = x - xi, fz = z - zi;
         const a = corner(xi, zi), b = corner(xi + 1, zi), c = corner(xi, zi + 1), d = corner(xi + 1, zi + 1);
         return a * (1 - fx) * (1 - fz) + b * fx * (1 - fz) + c * (1 - fx) * fz + d * fx * fz;
@@ -14975,7 +14984,7 @@ POSSIBILITY OF SUCH DAMAGE. */
         const x0 = o.x, z0 = o.y, x1 = o.x + o.w, z1 = o.y + o.h, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
         let base = -9; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) base = Math.max(base, hAt(x, y), hAt(x + 1, y + 1));
         base += 0.04;
-        for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) floor[y * W + x] = base;
+        for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) floor.set(x, y, base);
         const wall = parseInt((o.wall || '#d8c9a3').slice(1), 16), roof = parseInt((o.roof || '#7a3b2a').slice(1), 16), WH = o.lh || 1.8, TH = 0.16;
         const STONEK = o.k === 'ckeep' && CK && CK.keepStorey;   /* the castle's walk-in keep: stone storeys from src/castle.js instead of the house kit */
         const g = new THREE.Group(); group.add(g);
@@ -15114,7 +15123,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       const surfOfMap = (tx, ty) => { const Hh = heightsOf(map); return Hh.surf ? Hh.surf(tx, ty) : heightAt(tx + 0.5, ty + 0.5); };
       const mounts = [];   /* items hung on walls: {obj, item, quest, untilStep} */
       const torches = [], street = [];
-      const floorY = (o, y) => { const f = floor[o.y * W + o.x]; return isNaN(f) ? y : f; };
+      const floorY = (o, y) => { const f = floor.get(o.x, o.y); return isNaN(f) ? y : f; };
       const siteObjs = chunk ? [].concat(...map.sitesIn(X0, Y0, X1 - 1, Y1 - 1).map(st => st.objects), ...(map.roadTorchesIn ? map.roadTorchesIn(X0, Y0, X1 - 1, Y1 - 1) : [])) : [];   /* tents, campfires, and lit posts along the town roads */
       const objs = (chunk ? siteObjs : map.objects.filter(o => inR(o.x, o.y))).sort((a, b) => (b.enter ? 1 : 0) - (a.enter ? 1 : 0));
       const pkSeats = new Set(); for (const o of objs) if (o.k === 'pokertable') for (const sq of o.seats || []) pkSeats.add(sq[0] + ',' + sq[1]);   /* [Claude] the seats a poker table furnishes itself */
@@ -21690,7 +21699,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       if (!ZINDEX) return;
       /* [Claude 2026-10-14] the character of THIS home (the operator: "In ziibiing the character loads into the world before the assets ... a
          blank world"): its own save ('ashvale3d.save.v1.ziibiing') and, for a new one, its home's spawn - the Ashvale save and spawn
-         loaded Ashvale's land behind the boot screen and Ziibiing's only after the world was already showing */
+         loaded Ashvale's land behind the boot screen and Ziibiing's only after the world showed. (0.8.120 shipped this and crashed
+         phones: scene's building floors were one array over the bounding box of the loaded areas - now kept per chunk.) */
       const homeSpawn = HOME && DATA.rules && DATA.rules.homes && DATA.rules.homes[HOME] && DATA.rules.homes[HOME].spawn;
       let at = (Array.isArray(homeSpawn) && homeSpawn) || (ZINDEX.find(z => z.respawn) || {}).respawn || [0, 0];
       try {
@@ -21715,7 +21725,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       if (G.ASH_LOAD) { G.ASH_LOAD.claimed = true; G.ASH_LOAD.set(0.71, 'Opening your character…'); }   /* [Claude 2026-10-13] the launcher opens the save before it starts the game: the screen is the game's from here */
       /* while the wallet opens the save (that can take seconds), the zones around the spawn are already on their way: most
          characters stand there, and for the rest it is a few KB that warm the cache */
-      if (ZINDEX && !G.ASH3D_LAZY_DELAY) { const hs = HOME && DATA.rules && DATA.rules.homes && DATA.rules.homes[HOME] && DATA.rules.homes[HOME].spawn, r0 = (Array.isArray(hs) && hs) || (ZINDEX.find(z => z.respawn) || {}).respawn;   /* [Claude 2026-10-14] this home's spawn */ if (r0) for (const id of zonesNear(r0[0], r0[1])) fetchZone(id).catch(() => {}); }   /* (not on a playtest page that shows a slow arrival) */
+      if (ZINDEX && !G.ASH3D_LAZY_DELAY) { const hs = HOME && DATA.rules && DATA.rules.homes && DATA.rules.homes[HOME] && DATA.rules.homes[HOME].spawn, r0 = (Array.isArray(hs) && hs) || (ZINDEX.find(z => z.respawn) || {}).respawn;   /* this home's spawn */ if (r0) for (const id of zonesNear(r0[0], r0[1])) fetchZone(id).catch(() => {}); }   /* (not on a playtest page that shows a slow arrival) */
       const st = await openStoreOnly();
       try { await cloudLoad(st); } catch (e) { console.warn('ASHVALE: cloud save', e && e.message); }
       try { await preloadZones(st); } catch (e) { console.warn('ASHVALE: zones', e && e.message); } return st;

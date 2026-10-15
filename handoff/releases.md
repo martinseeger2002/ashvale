@@ -1131,3 +1131,18 @@ the walk here feature".
   fails case 1 the same way on the 0.8.117 build on this loaded box (eight game windows + vLLM + the operator's Firefox): load, not code.
 - Gate: core_test ALL OK; 48 headless ALL OK; chest_homes_pw, chest_ledger_pw, chess_pw, poker_flow_pw ALL OK; candidate_live
   boots, no console errors.
+
+## 0.8.121 - 2026-10-14 (Claude): Ziibiing opens on phones again - RELEASED (v148; cards a45ac583 ASHVALE, 3179691b Ziibiing)
+- 0.8.120's Ziibiing preload (the home's own save and spawn) crashed the Ziibiing launcher on a phone ("A problem repeatedly
+  occurred"; candidate_live on the Ziibiing launcher: "Array buffer allocation failed" in scene heightsOf - a non-seeded map's
+  (W+1)(H+1) Float32Array over a huge bounding box). Reverted to the 0.8.119 preload; candidate_live on the Ziibiing launcher boots
+  in 14.8 s, no console errors. The blank-world-on-arrival fix needs redoing WITH a live Ziibiing-launcher boot test.
+
+## 0.8.122 - 2026-10-14 (Claude): Ziibiing's land is there when you arrive - RELEASING
+- The real cause of 0.8.120's crash: scene heightsOf kept building floors in ONE Float32Array of map.W x map.H, and map.W/H is the
+  bounding box of the areas loaded at the start - with Ziibiing's land among them ~24,213 x 24,413 (591 million floats). Floors are
+  now kept per 64 x 64 chunk, only where a floor is written (scene floor.get/set). No typed array over 5M elements on either
+  launcher (a constructor trap in candidate_live).
+- With that, the Ziibiing preload is back: its own save ('ashvale3d.save.v1.ziibiing') and spawn. Live Ziibiing launcher +
+  candidate: in the world in 16.7 s, the area under the character ('lodges') loaded at the first look, no console errors.
+  ASHVALE launcher unchanged (village loaded, 537 x 88). poker_bank_pw (upstairs floors) ALL OK, globe_roam_pw all passed.
