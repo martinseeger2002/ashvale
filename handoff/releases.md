@@ -1138,7 +1138,7 @@ the walk here feature".
   (W+1)(H+1) Float32Array over a huge bounding box). Reverted to the 0.8.119 preload; candidate_live on the Ziibiing launcher boots
   in 14.8 s, no console errors. The blank-world-on-arrival fix needs redoing WITH a live Ziibiing-launcher boot test.
 
-## 0.8.122 - 2026-10-14 (Claude): Ziibiing's land is there when you arrive - RELEASING
+## 0.8.122 - 2026-10-14 (Claude): Ziibiing's land is there when you arrive - RELEASED (v149; cards 936e3364 ASHVALE, bcc8ed68 Ziibiing)
 - The real cause of 0.8.120's crash: scene heightsOf kept building floors in ONE Float32Array of map.W x map.H, and map.W/H is the
   bounding box of the areas loaded at the start - with Ziibiing's land among them ~24,213 x 24,413 (591 million floats). Floors are
   now kept per 64 x 64 chunk, only where a floor is written (scene floor.get/set). No typed array over 5M elements on either
