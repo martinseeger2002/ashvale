@@ -1107,3 +1107,27 @@ the walk here feature".
   before these changes); browser: even_grove_pw, combat_many_pw, poker_bank_pw, poker_leave_pw, poker_stakes_pw (nothing made
   or lost, rake capped), remote_walk_pw ALL OK; poker_flow_pw only the old /r/inscriptions 404; shared_pw and poker_cases_pw
   time out opening a page on this box (shared_pw the same on the old tree); candidate_live boots, no console errors.
+
+## 0.8.120 - 2026-10-14 (Claude): one chest per home, Gold on its way, chess, Ziibiing arrival, favicon, the failing tests - RELEASED (v147; cards 6796addf ASHVALE, 76ce65f6 Ziibiing)
+- ONE CHEST PER HOME (the operator: deposited in Ziibiing's chest -> only Ziibiing's chests; Ashvale's -> only Ashvale's; arcade deposits
+  visible in both until taken; carried across and stored -> that chest's home). The Bank keeps, per wallet, what each home's chests
+  hold (bank.py chests table, cput/ctake/chests?, .25 ae00cb0, tests/bank_chests_test.py). A chest belongs to the home whose spawn
+  is nearest (3 km, else Ashvale). chestState().here = the full chest less what OTHER homes hold; the chest window, take and
+  withdraw-all use it; the Bank's deposit checks still see the full count. Chests there before today count as shared.
+  tests/chest_homes_pw.py (8 checks).
+- The chest counts Gold still on its way: arrivals are wallet GAINS since the last look (L.seen), not "beyond what is counted" (that
+  held the chest's own Gold, so a promise was taken as delivered at once - the operator's 630 GOLD from mithril showed 5,678 until it
+  landed). L.seen and L.pkb (card-table buy-ins to send) now saved with the ledger. chest_ledger_pw new case.
+- Chess: an older row from the same host (the 5 s resend after a newer move) is ignored (engine CHIN) - the piece popped back.
+- Card table: the board's five cards on one row (the operator: the river dropped below).
+- Ziibiing arrival: preloadZones reads the home's own save ('ashvale3d.save.v1.ziibiing') and, for a new one, the home's spawn -
+  it had loaded Ashvale's land behind the boot screen (the operator: "loaded into a blank world"). Not verified on the live launcher
+  (the test browser ran out of memory building the terrain on this busy box).
+- Favicon (the operator): data/brand/favicon.svg, inlined by build.py and set by the engine on the launcher page.
+- No referee seed asked without a wallet (a guest's 400 on every boot).
+- Tests fixed: balance_test (sadfrog's chapel wording, 13 guard remarks), dragon_focus_test (turn-taking since 0.8.116),
+  worldgen golden re-cut (moved globe), shared_pw (A's trail ten times a second), tests/serve.py (registry poll + favicon only).
+  Browser tests run in visible windows on the desktop now (headless + software GL cannot load a second page). poker_cases_pw
+  fails case 1 the same way on the 0.8.117 build on this loaded box (eight game windows + vLLM + the operator's Firefox): load, not code.
+- Gate: core_test ALL OK; 48 headless ALL OK; chest_homes_pw, chest_ledger_pw, chess_pw, poker_flow_pw ALL OK; candidate_live
+  boots, no console errors.

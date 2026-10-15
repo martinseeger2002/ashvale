@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2212%22 fill=%22%231b241f%22/%3E%3Cpath d=%22M32 6 L54 14 V30 C54 44 44 53 32 58 C20 53 10 44 10 30 V14 Z%22 fill=%22%23c9962e%22 stroke=%22%23ffd23f%22 stroke-width=%223%22/%3E%3Cpath d=%22M32 13 L47 18.5 V30 C47 40 40 47 32 51 C24 47 17 40 17 30 V18.5 Z%22 fill=%22%237a1f1f%22/%3E%3Crect x=%2229.5%22 y=%2216%22 width=%225%22 height=%2226%22 rx=%221.5%22 fill=%22%23e8e6df%22/%3E%3Crect x=%2223%22 y=%2238%22 width=%2218%22 height=%224%22 rx=%222%22 fill=%22%23ffd23f%22/%3E%3Crect x=%2230%22 y=%2242%22 width=%224%22 height=%227%22 rx=%221%22 fill=%22%236b4a1e%22/%3E%3C/svg%3E">
 <style>html,body{margin:0;height:100%;background:#0b0906;overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%}#ash{position:fixed;left:0;top:0;width:100vw;height:100vh;height:100dvh;touch-action:none}</style>
 </head><body>
 <div id="ash"></div>
@@ -12977,7 +12978,8 @@ POSSIBILITY OF SUCH DAMAGE. */
 .ash .pokerp{position:absolute;color:#eee;font-size:13px;line-height:1.35;background:linear-gradient(#2b3a33f0,#1b241ff0);border:2px solid #12181a;border-radius:8px;box-shadow:0 4px 14px #0008;pointer-events:auto;box-sizing:border-box}
 .ash .pokerp.bar{display:flex;flex-direction:column;left:50%;transform:translateX(-50%);bottom:0;width:min(100vw,680px);border-radius:10px 10px 0 0;border-bottom:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));max-height:62vh;overflow-y:auto;touch-action:pan-y}
 .ash .pokerp.hole,.ash .pokerp.board{transform:translate(-50%,-50%);padding:5px 7px;white-space:nowrap;text-align:center;opacity:.97}
-.ash .pokerp.board{white-space:normal;max-width:min(92vw,420px)}
+.ash .pokerp.board{white-space:normal;width:max-content;max-width:min(92vw,420px)}
+.ash .pokerp.board .brd,.ash .pokerp.hole .cards{white-space:nowrap}   /* [Claude 2026-10-14] five cards in one row: a box placed by its centre was only given the width to the screen's edge (the operator: the river dropped below) */
 .ash .pokerp .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .ash .pokerp .stt{color:#ffd23f;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ash .pokerp .stt.wait{color:#9fc3ff}
@@ -16846,6 +16848,28 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
          Asked when the chest opens, every minute, and again just before a take. */
       const HOLDS = { o: {}, at: 0, wait: [], multi: false, sent: '' };   /* multi: the Bank knows another character on this wallet */
       function holdsHeard(d) { HOLDS.o = d.o && typeof d.o === 'object' ? d.o : {}; HOLDS.multi = !!d.multi; HOLDS.at = Date.now(); const w = HOLDS.wait; HOLDS.wait = []; for (const f of w) f(); hud.refresh && hud.refresh('chest'); }
+      /* [Claude 2026-10-14] ONE CHEST PER HOME (the operator: "if an item is deposited in ziibiing chest it is visible only in ziibiing chests ...
+         If something is deposited into your wallet from Dogecoin arcade, it should be visible in both games until it is put into a
+         players inventory ... If an item from ziibiing is brought to Ashvale and put into an Ashvale chest it should be visible in
+         Ashvale chest"). The Bank keeps, per wallet, what was put in each home's chests (cput / ctake, 'chests?' -> rows [h, k, n]);
+         a chest belongs to the home whose spawn is nearest (setChestHome). What no home's chest holds - from the arcade, or there
+         from before - shows in every chest. chestState().here = this chest: everything less what OTHER homes' chests hold. */
+      const CS = { by: {}, at: 0, home: K.HOME || 'ashvale', parts: {} };
+      function chestsHeard(d) {
+        const q = String(d.q || ''); const P = CS.parts[q] = CS.parts[q] || { rows: [], n: 0 };
+        P.rows.push(...(Array.isArray(d.rows) ? d.rows : [])); P.n++;
+        if (P.n < (d.of | 0)) return;
+        delete CS.parts[q]; if (+q.slice(1) < (CS.told || 0)) return;   /* asked before our last put/take: the Bank's answer is older than what we know */
+        const by = {};
+        for (const r of P.rows) if (Array.isArray(r) && typeof r[0] === 'string' && typeof r[1] === 'string' && r[2] > 0) (by[r[0]] = by[r[0]] || {})[r[1]] = r[2] | 0;
+        CS.by = by; CS.at = Date.now(); hud.refresh('wallet');
+      }
+      function chestsAsk() { bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'chests?', v: 1, q: 'c' + Date.now() }); }).catch(() => {}); }
+      function setChestHome(h) { CS.home = h || K.HOME || 'ashvale'; chestsAsk(); }
+      const otherChests = k => { let n = 0; for (const h in CS.by) if (h !== CS.home) n += (CS.by[h][k] | 0); return n; };
+      function chestTell(t, k, n) { if (n <= 0) return; CS.told = Date.now(); const by = CS.by[CS.home] = CS.by[CS.home] || {}; by[k] = Math.max(0, (by[k] | 0) + (t === 'cput' ? n : -n)); if (!by[k]) delete by[k];
+        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t, v: 1, h: CS.home, k, n }); }).catch(() => {}); }
+      setInterval(() => { if (walletState.address) chestsAsk(); }, 60000);
       function holdsAsk() { return new Promise(res => { HOLDS.wait.push(res); setTimeout(res, 3000); bankRoom().then(R => R && R.send(K.withHome({ t: 'holds?' }))).catch(() => res()); }); }
       function holdSend() { if (!ledger || !walletState.address) return; const b = {}; for (const k in ledger.bag) if (ledger.bag[k] > 0) b[k] = ledger.bag[k]; for (const k in ledger.pend) if (ledger.pend[k] > 0) b[k] = (b[k] || 0) + ledger.pend[k];
         const j = JSON.stringify(b); if (j === HOLDS.sent) return; HOLDS.sent = j;   /* only when what is carried changed: saves go out often (the mesh allows ~5 messages a second) */
@@ -16869,7 +16893,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         L.addr = addr; ledger = L; return L;
       }
       const ledgerDrop = () => { ledger = null; };   /* the tests' lost count */
-      const ledgerSnap = () => ledger && { addr: ledger.addr, bag: ledger.bag, spent: ledger.spent, pend: ledger.pend, pspent: ledger.pspent, out: ledger.out || {}, gone: ledger.gone || {}, autoTake: ledger.autoTake || {}, pchest: ledger.pchest || {}, lchest: ledger.lchest || {} };
+      const ledgerSnap = () => ledger && { addr: ledger.addr, bag: ledger.bag, spent: ledger.spent, pend: ledger.pend, pspent: ledger.pspent, out: ledger.out || {}, gone: ledger.gone || {}, autoTake: ledger.autoTake || {}, pchest: ledger.pchest || {}, lchest: ledger.lchest || {}, seen: ledger.seen || {}, pkb: ledger.pkb || [] };   /* seen, pkb [Claude 2026-10-14]: the wallet's last look, and card-table buy-ins still to send */
       const ledgerSave = () => { if (!ledger) return; try { G.localStorage.setItem(CKEY(ledger.addr), JSON.stringify(ledgerSnap())); } catch (e) { /* private window */ } };
       function chestState() {
         if (!walletState.data || !walletState.address) return { chest: {}, loose: {}, bank, arriving: bank.arriving };
@@ -16889,8 +16913,12 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
              your wallet, and not on its way back to @ashvale, is yours again - never a new deposit (2026-10-04) */
           if (x < 0) { const away = ((L.out && L.out[k]) || []).reduce((a, o) => a + o.n, 0), back = Math.min(-x, Math.max(0, spent - away)); spent -= back; bag += back; x += back;
             const bp = Math.min(-x, pspent); pspent -= bp; pend += bp; }
-          /* 2. arrived: wallet units beyond what is counted turn promises into deliveries */
-          let av = wk - bag - spent - gone;
+          /* 2. arrived: wallet units beyond what is counted turn promises into deliveries.
+             [Claude 2026-10-14] only what the wallet GAINED since the last look (L.seen) can be an arrival: "beyond what is counted"
+             also holds everything already in the chest, so with a full chest a promise was taken as delivered at once - 630 GOLD
+             still on its way, stored, and the chest showed 5,678 instead of 6,308 until the payout landed (the operator) */
+          const seenK = L.seen && L.seen[k] != null ? L.seen[k] : null;
+          let av = wk - bag - spent - gone; if (seenK != null) av = Math.min(av, Math.max(0, wk - seenK));
           if (av > 0) { const d = Math.min(av, pend); pend -= d; bag += d; av -= d; const e = Math.min(av, pspent); pspent -= e; spent += e; const f = Math.min(av, pch); pch -= f; }   /* stored-while-arriving units land in the chest */
           /* 2b. only when the Bank said this count does not add up (a stale count, one per device): the wallet's unclaimed
              units stand for what you carry. New loot never eats your chest (the operator: a second steel helmet is a new one). */
@@ -16906,6 +16934,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           /* traded in: the piece goes into your bag as soon as your wallet shows it (the operator: trade from and into your inventory) */
           const at = L.autoTake[k]; if (at && at.n > 0) { if (Date.now() > at.until) delete L.autoTake[k]; else { const free = wk - bag - spent - gone; const m = Math.min(at.n, free); if (m > 0) { core.grantItem(PID, k, m); bag += m; c += m; at.n -= m; if (at.n <= 0) delete L.autoTake[k]; } } }
           put(L.bag, k, bag); put(L.spent, k, spent); put(L.pend, k, pend); put(L.pspent, k, pspent); put(L.gone, k, gone); put(L.pchest, k, pch);
+          if (walletState.data && walletState.data.at) { L.seen = L.seen || {}; if (L.seen[k] !== wk) L.seen[k] = wk; }   /* the wallet as this look saw it */
           /* what you dropped and is still lying on the ground is not in the chest, whatever the count says (2026-10-07: everything
              he dropped "showed up in his chest" too) */
           const onGround = core.S.ground.reduce((a, q) => a + (q.id === k && q.from === PID ? q.n : 0), 0);
@@ -16918,7 +16947,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         }
         if (JSON.stringify([L.bag, L.spent, L.pend, L.pspent, L.gone, L.autoTake, L.pchest, L.lchest]) !== before) ledgerSave();
         bank.arriving = arriving;
-        return { chest, loose, bank, arriving, bag: Object.assign({}, L.bag), pend: Object.assign({}, L.pend) };
+        const here = {}; for (const k in chest) { const v = Math.max(0, chest[k] - otherChests(k)); if (v > 0) here[k] = v; }   /* this home's chest */
+        return { chest, here, home: CS.home, loose, bank, arriving, bag: Object.assign({}, L.bag), pend: Object.assign({}, L.pend) };
       }
       /* ---------- returns: what you used up goes back to @ashvale (2026-10-04: a dropped Hawk ring stayed in his wallet
          while a friend carried it). A spent unit is sent to @ashvale with the arcade's creator allowance (testnet, no card,
@@ -17085,11 +17115,12 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       }
       function chestTake(k, n) { if (HOLDS.multi && Date.now() - HOLDS.at > 5000) holdsAsk().then(() => chestTake0(k, n)); else chestTake0(k, n); }   /* with a second character on the wallet, ask the Bank first: it may have just taken it */
       function chestTake0(k, n, quiet) {
-        const C = chestState(); n = Math.min(n, C.chest[k] || 0); if (n <= 0) return 0;
+        const C = chestState(); n = Math.min(n, (C.here || C.chest)[k] || 0); if (n <= 0) return 0;
         const d = core.item(k), free = me.inv.filter(s => !s).length, room0 = d.stack ? (core.invCount(me, k) || free ? n : 0) : Math.min(n, free);
         if (room0 <= 0) { if (!quiet) hud.chat('Your bag is full.', 'warn'); return 0; }
         core.grantItem(PID, k, room0); const L = ledgerFor(walletState.address), real = Math.max(0, (C.chest[k] || 0) - (L.pchest[k] || 0) - (L.lchest[k] || 0)), fromReal = Math.min(room0, real), fromP = Math.min(room0 - fromReal, L.pchest[k] || 0), fromL = room0 - fromReal - fromP;
         L.bag[k] = (L.bag[k] || 0) + fromReal; L.pchest[k] = (L.pchest[k] || 0) - fromP; L.pend[k] = (L.pend[k] || 0) + fromP; L.lchest[k] = Math.max(0, (L.lchest[k] || 0) - fromL); ledgerSave();
+        chestTell('ctake', k, Math.min(room0, (CS.by[CS.home] || {})[k] | 0));   /* out of this home's chest first; the rest was shared */
         if (!quiet) hud.chat('You take ' + (room0 > 1 ? room0 + ' x ' : '') + d.name + ' from your chest.', 'info'); hud.refresh('all');
         return room0;
       }
@@ -17097,9 +17128,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (!walletState.address) { hud.chat('Sign in to use the chest.', 'warn'); return; }
         const go = () => {
           const C = chestState(); let n = 0;
-          for (const k of Object.keys(C.chest)) n += chestTake0(k, C.chest[k] || 0, true);
+          const H = C.here || C.chest; for (const k of Object.keys(H)) n += chestTake0(k, H[k] || 0, true);
           if (n) hud.chat('You take what you can carry from your chest.', 'info');
-          else if (Object.keys(C.chest).length) hud.chat('Your bag is full.', 'warn');
+          else if (Object.keys(C.here || C.chest).length) hud.chat('Your bag is full.', 'warn');
           hud.refresh('all');
         };
         if (HOLDS.multi && Date.now() - HOLDS.at > 5000) holdsAsk().then(go); else go();
@@ -17110,6 +17141,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         const fromBag = Math.min(n, L.bag[k] || 0, have), fromPend = Math.min(n - fromBag, L.pend[k] || 0, have - fromBag), fromNew = Math.min(n - fromBag - fromPend, have - fromBag - fromPend), m = fromBag + fromPend + fromNew;   /* settled or not, it can go in the chest (2026-10-05) */
         if (m <= 0) return 0;
         core.storeItem(PID, k, m); L.bag[k] = (L.bag[k] || 0) - fromBag; L.pend[k] = (L.pend[k] || 0) - fromPend; L.pchest[k] = (L.pchest[k] || 0) + fromPend; L.lchest[k] = (L.lchest[k] || 0) + fromNew; ledgerSave();
+        chestTell('cput', k, m);
         if (!quiet) hud.chat('You put ' + (m > 1 ? m + ' x ' : '') + core.item(k).name + ' in your chest.', 'info'); hud.refresh('all');
         return m;
       }
@@ -17131,6 +17163,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           L.bag[e.id] = (L.bag[e.id] || 0) - fromBag; if (!L.bag[e.id]) delete L.bag[e.id];
           if (fromPend) { L.pend[e.id] -= fromPend; if (!L.pend[e.id]) delete L.pend[e.id]; L.pchest[e.id] = (L.pchest[e.id] || 0) + fromPend; }
           if (rest) L.lchest[e.id] = (L.lchest[e.id] || 0) + rest;
+          chestTell('cput', e.id, e.n);
           n++;
         }
         ledgerSave(); if (n) { hud.chat('You put your worn equipment in your chest.', 'info'); netGear(); }
@@ -17314,7 +17347,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             if (data && data.t === 'marks' && bankFrom && R.me && data.to === R.me.address) { if (core.setMarks) core.setMarks(data.k, data.cells || []); return; }   /* maples tapped today, birches peeled this year */   /* trees others felled */
             if (data && data.t === 'scores' && bankFrom && R.me && data.to === R.me.address) { scoresHeard(data); return; }   /* the ruined keep's global dragon-killer board */
             if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }
-            if (data && data.t === 'pkok' && bankFrom && R.me && data.to === R.me.address) { pkHeard(data); return; }   /* [Claude 2026-10-14] the Bank has our card-table word */
+            if (data && data.t === 'pkok' && bankFrom && R.me && data.to === R.me.address) { pkHeard(data); return; }
+            if (data && data.t === 'chests' && bankFrom && R.me && data.to === R.me.address) { chestsHeard(data); return; }   /* [Claude 2026-10-14] what each home's chests hold */   /* [Claude 2026-10-14] the Bank has our card-table word */
             if (data && data.t === 'pk' && bankFrom && R.me && data.to === R.me.address) { coreCall(() => core.pokerBankSeen && core.pokerBankSeen(PID, data.rows || [])); return; }   /* persisted drops near me */
             if (data && data.t === 'pals' && bankFrom && R.me && data.to === R.me.address) { palsHeard(data); return; }   /* the friends list */
             if (data && data.t === 'paid' && bankFrom && R.me && data.to === R.me.address) { const it = DATA.items && DATA.items.items && DATA.items.items[data.item]; hud.chat('The bank sent ' + (data.units | 0) + ' ' + (it && it.name ? it.name : String(data.item || '')) + ' to your wallet.', 'sys'); return; }   /* [Claude 2026-10-12] the Bank's word that a delivery went out (handoff/bank_rpc_plan.md 3b.4) */
@@ -17424,7 +17458,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       let pkAskT = 0;
       function pkAsk() { pkAskT = Date.now(); bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'pk?', v: 1 }); }).catch(() => {}); }
       setInterval(() => { const P = core.S.players[PID]; if (P && P.pk && P.pk.sn && !(P.seat && P.seat.k === 'pk') && Date.now() - pkAskT > 30000) pkAsk(); }, 5000);
-    return { pkEvent, pkAsk, CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
+    return { setChestHome, chestsAsk, chestsHeard, chestHomes: () => JSON.parse(JSON.stringify(CS.by)), pkEvent, pkAsk, CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engbank', { api: 1, v: 1, needs: {} }, () => ({ api: 1, install }));
   if (typeof module !== 'undefined' && module.exports) module.exports = { install };
@@ -17971,9 +18005,13 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
     /* before the world starts (behind the boot screen): the zones around where this character stands (a new one: the spawn) */
     async function preloadZones(st) {
       if (!ZINDEX) return;
-      let at = (ZINDEX.find(z => z.respawn) || {}).respawn || [0, 0];
+      /* [Claude 2026-10-14] the character of THIS home (the operator: "In ziibiing the character loads into the world before the assets ... a
+         blank world"): its own save ('ashvale3d.save.v1.ziibiing') and, for a new one, its home's spawn - the Ashvale save and spawn
+         loaded Ashvale's land behind the boot screen and Ziibiing's only after the world was already showing */
+      const homeSpawn = HOME && DATA.rules && DATA.rules.homes && DATA.rules.homes[HOME] && DATA.rules.homes[HOME].spawn;
+      let at = (Array.isArray(homeSpawn) && homeSpawn) || (ZINDEX.find(z => z.respawn) || {}).respawn || [0, 0];
       try {
-        const sv = JSON.parse(st.get('ashvale3d.save.v1') || 'null'), C = DATA.globecfg || {};
+        const sv = JSON.parse(st.get('ashvale3d.save.v1' + (HOME ? '.' + HOME : '')) || 'null'), C = DATA.globecfg || {};
         if (sv && (sv.v | 0) >= 2 && Array.isArray(sv.pos) && C.origin) at = [sv.pos[1] - C.origin[0], sv.pos[2] - C.origin[1]];
         else if (sv && Number.isInteger(sv.x) && Number.isInteger(sv.y)) at = [sv.x, sv.y];
         for (const r of [[-200, 16100, -80, 16184, 24200, 7900], [40, 16300, 253, 16313, 23960, 8100]]) if (at[0] >= r[0] && at[0] < r[2] && at[1] >= r[1] && at[1] < r[3]) { at = [at[0] + r[4], at[1] + r[5]]; break; }   /* the underground moved (core.underMove) */
@@ -17994,7 +18032,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       if (G.ASH_LOAD) { G.ASH_LOAD.claimed = true; G.ASH_LOAD.set(0.71, 'Opening your character…'); }   /* [Claude 2026-10-13] the launcher opens the save before it starts the game: the screen is the game's from here */
       /* while the wallet opens the save (that can take seconds), the zones around the spawn are already on their way: most
          characters stand there, and for the rest it is a few KB that warm the cache */
-      if (ZINDEX && !G.ASH3D_LAZY_DELAY) { const r0 = (ZINDEX.find(z => z.respawn) || {}).respawn; if (r0) for (const id of zonesNear(r0[0], r0[1])) fetchZone(id).catch(() => {}); }   /* (not on a playtest page that shows a slow arrival) */
+      if (ZINDEX && !G.ASH3D_LAZY_DELAY) { const hs = HOME && DATA.rules && DATA.rules.homes && DATA.rules.homes[HOME] && DATA.rules.homes[HOME].spawn, r0 = (Array.isArray(hs) && hs) || (ZINDEX.find(z => z.respawn) || {}).respawn;   /* [Claude 2026-10-14] this home's spawn */ if (r0) for (const id of zonesNear(r0[0], r0[1])) fetchZone(id).catch(() => {}); }   /* (not on a playtest page that shows a slow arrival) */
       const st = await openStoreOnly();
       try { await cloudLoad(st); } catch (e) { console.warn('ASHVALE: cloud save', e && e.message); }
       try { await preloadZones(st); } catch (e) { console.warn('ASHVALE: zones', e && e.message); } return st;
@@ -18006,6 +18044,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
        by the @ashvale Bank under your wallet address, in pieces small enough for a room message. Starting, the game asks the Bank
        first and takes its copy when it is newer than this device's; playing, it hands the Bank each new save (at most every 20 s,
        and as you leave). The Bank keeps the newest per address and never reads inside it. */
+    /* [Claude 2026-10-14] the operator: "we don't have a favicon, add one" - the launcher page is fixed on chain, so the game puts its icon
+       on whatever page it runs in (data/brand/favicon.svg; build.py also inlines it into the page head) */
+    try { if (typeof document !== 'undefined' && !document.querySelector('link[rel~="icon"]')) { const ic = document.createElement('link'); ic.rel = 'icon'; ic.type = 'image/svg+xml';
+      ic.href = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#1b241f"/><path d="M32 6 L54 14 V30 C54 44 44 53 32 58 C20 53 10 44 10 30 V14 Z" fill="#c9962e" stroke="#ffd23f" stroke-width="3"/><path d="M32 13 L47 18.5 V30 C47 40 40 47 32 51 C24 47 17 40 17 30 V18.5 Z" fill="#7a1f1f"/><rect x="29.5" y="16" width="5" height="26" rx="1.5" fill="#e8e6df"/><rect x="23" y="38" width="18" height="4" rx="2" fill="#ffd23f"/><rect x="30" y="42" width="4" height="7" rx="1" fill="#6b4a1e"/></svg>'); document.head.appendChild(ic); } } catch (e) { /* no document */ }
     const SAVE_KEY = 'ashvale3d.save.v1' + (HOME ? '.' + HOME : ''), CHUNK = 340;
     const slim = v => {   /* drop what a save does not need to say: nulls and empty objects (every value kept exactly) */
       if (Array.isArray(v)) return v.map(slim);
@@ -18744,7 +18786,11 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           case 'boatland': boatShow(e.x, e.y, e.face); docksShow(); if (e.by === PID) { boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, face: e.face, on: 0 }); } break;
           case 'cross': if (e.p === PID) { place(myEnt, e.x, e.y); cam.yaw += e.turn || 0; cam.tyaw += e.turn || 0; cam.snap = true; streamRegions(); TN.key = ''; } break;   /* over a cut edge of the net: the same ground, new map coordinates, the view turned with them */
           case 'boatgone': boatHide(e.x, e.y); docksShow(); if (e.by === PID) boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, on: 1 }); break;
-          case 'chest': if (mine) { const c = ents.get('n:' + e.npc); if (c) c.H.play('open'); hud.openChest(); holdsAsk(); } break;   /* the town chest */
+          case 'chest': if (mine) { const c = ents.get('n:' + e.npc); if (c) c.H.play('open');
+            /* [Claude 2026-10-14] whose chest this is: the home whose spawn is nearest (within 3 km; otherwise Ashvale's) - one chest per home */
+            const nn = core.M.npcs.find(q => q.id === e.npc), HS = D.rules.homes || {}; let ch = 'ashvale', bd = 3000;
+            if (nn) for (const h in HS) { const sp = HS[h] && HS[h].spawn; if (Array.isArray(sp)) { const d = Math.max(Math.abs(sp[0] - nn.x), Math.abs(sp[1] - nn.y)); if (d < bd) { bd = d; ch = h; } } }
+            ENGBANK.setChestHome(ch); hud.openChest(); holdsAsk(); } break;   /* the town chest */
           case 'shopclose': if (mine) hud.closeShop(); break;
           case 'mobjump': { const t = ents.get('m:' + e.mob); if (t) { place(t, e.x, e.y); if (t.path) t.path = null; } break; }   /* came through a cave opening */
           case 'poison': if (mine) { hud.setPoison && hud.setPoison(e.on); if (e.on) sfx('miss'); } break;   /* the green Hitpoints orb (2026-10-07) */
@@ -19861,7 +19907,11 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       const TKEY = 'ashvale3d.trips', tripKeep = { load: () => { try { return JSON.parse(G.localStorage.getItem(TKEY) || '[]'); } catch (e) { return []; } },
         save: (L) => { try { G.localStorage.setItem(TKEY, JSON.stringify(L)); } catch (e) { /* private window */ } } };
       let tripSeen = 0;
-      const TRIP = deps.trip ? deps.trip.create({ core, pid: PID, ticks: (D.rules.trip || {}).ticks, bridge, keep: tripKeep, facts: () => { const w = walletState.data; return w ? { tokens: Object.assign({}, w.raw || {}), pieces: (w.pieces || []).slice() } : null; }, onChange: (st) => {
+      /* [Claude 2026-10-14] a referee seed is asked for only with a wallet: a guest's ask came back 400 from /account/referee/seed
+         (a console error on every guest's boot - check_live). Waits up to 10 s for the wallet to be known; without one, practice. */
+      const tripBridge = (msg, kind, ms) => kind !== 'seed' ? bridge(msg, kind, ms) : new Promise(ok => {
+        const t0 = Date.now(), look = () => { if (walletState.address) ok(bridge(msg, kind, ms)); else if ((room && room.me && room.me.guest) || Date.now() - t0 > 10000) ok({ error: 'no wallet: practice' }); else setTimeout(look, 500); }; look(); });
+      const TRIP = deps.trip ? deps.trip.create({ core, pid: PID, ticks: (D.rules.trip || {}).ticks, bridge: tripBridge, keep: tripKeep, facts: () => { const w = walletState.data; return w ? { tokens: Object.assign({}, w.raw || {}), pieces: (w.pieces || []).slice() } : null; }, onChange: (st) => {
         if (st.done.length > tripSeen) { const L = st.done[st.done.length - 1], k = L.rec.kills.length, g = Object.values(L.rec.gathered).reduce((a, b) => a + b, 0);
           void k; void g;   /* no chat line (2026-10-05: it said 'practice: no arcade seed', but rewards come from the @ashvale Bank as you play, not from these windows) */ }
         tripSeen = st.done.length;
@@ -20186,6 +20236,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
          (PQ) and waits - the whole row also goes out every five seconds with the snapshot, and whenever a delta would not be
          much smaller. */
       const PKBASE = {}, PKIN = {}, PKQ = {};
+      const CHIN = {};   /* [Claude 2026-10-14] per chess table: who sent the newest row and its v */
       function pkDelta(base, full) {
         if (!base || base.t !== full.t || (base.gid | 0) !== (full.gid | 0) || base.v == null) return null;
         const d = { t: full.t, v: full.v, pv: base.v, D: 1 }, rm = [];
@@ -20456,7 +20507,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (Array.isArray(d.CT)) { const T = core.tableById(String(d.CT[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostStand(id, T.id)); }
         if (Array.isArray(d.CX)) { const T = core.tableById(String(d.CX[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostSel(id, T.id, String(d.CX[1] || ''))); }   /* [Claude] */
         if (Array.isArray(d.CM)) { const T = core.tableById(String(d.CM[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostMove(id, T.id, String(d.CM[1] || ''), String(d.CM[2] || ''), d.CM[3] ? String(d.CM[3]) : null)); }
-        if (Array.isArray(d.Ch)) { const rows = d.Ch.filter(r => r && r.t).filter(r => { const T = core.tableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).map(r => Object.assign({}, r, { w: r.w ? fromNet(r.w) : null, b: r.b ? fromNet(r.b) : null, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [fromNet(k), v])) : null, co: Array.isArray(r.co) ? r.co.map(c => [fromNet(c[0]), c[1], c[2]]) : [] })); if (rows.length) coreCall(() => core.applyChess(rows)); }   /* [Claude] who is owed the stake, named as this page knows them */
+        if (Array.isArray(d.Ch)) { const rows = d.Ch.filter(r => r && r.t).filter(r => { const T = core.tableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).filter(r => { const h = CHIN[r.t]; if (h && h.from === id && (r.v | 0) < h.v) return false; CHIN[r.t] = { from: id, v: r.v | 0 }; return true; })   /* [Claude 2026-10-14] an OLDER row from the same host (the 5 s resend can land after a newer move) is not a step back (the operator: the piece popped back, then moved again) */.map(r => Object.assign({}, r, { w: r.w ? fromNet(r.w) : null, b: r.b ? fromNet(r.b) : null, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [fromNet(k), v])) : null, co: Array.isArray(r.co) ? r.co.map(c => [fromNet(c[0]), c[1], c[2]]) : [] })); if (rows.length) coreCall(() => core.applyChess(rows)); }   /* [Claude] who is owed the stake, named as this page knows them */
         /* the felt: a chair asked for, a player getting up, an action, or the host's word on a table. Same rules as the
            chess park: only the host of the area the table stands in answers, and a row only counts from that host. */
         pkMsg(id, d);   /* [Claude 2026-10-13] the card-table words (also heard in a table's own room: tblHeard) */
@@ -20837,7 +20888,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         return {
           core, pid: PID, isPhone, isTouch, theme: () => ((D.rules.homes || {})[core.homeOf(me)] || {}).hud || null,
           walletState: () => walletState, walletRefresh: () => walletRefresh(), pid: PID,
-          chestState: (...a) => chestState(...a), chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a), depositInv: () => depositInv(), depositWorn: () => depositWorn(), withdrawAll: () => withdrawAll(),   /* the Bank part installs after the HUD is made */
+          chestState: (...a) => { const C = chestState(...a); return C && C.here ? Object.assign({}, C, { chest: C.here }) : C; },   /* [Claude 2026-10-14] the chest window shows this home's chest */ chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a), depositInv: () => depositInv(), depositWorn: () => depositWorn(), withdrawAll: () => withdrawAll(),   /* the Bank part installs after the HUD is made */
           friends: () => ({ rows: PALS.rows.slice(), note: PALS.note }),
           friendsRefresh: () => { loadPals().then(() => { if (hud.tab === 'friends') hud.refresh('friends'); }); },
           walletTake: (id) => chestTake(id, 1),   /* the same ledger as the chest (it bypassed it and could duplicate an NFT) */
@@ -21124,7 +21175,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         chestEventForTest: chestEvent,
         renderInfo: () => { let meshes = 0; scene.traverse(o => { if (o.isMesh) meshes++; }); return { geo: renderer.info.memory.geometries, tex: renderer.info.memory.textures, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, meshes, programs: (renderer.info.programs || []).length }; },   /* memory probes (2026-10-08: iPhone out-of-memory crashes) */
         showPals(rows, note) { PALS.rows = (rows || []).map(r => ({ tag: String(r.tag || '').replace(/^@/, ''), online: !!r.online })); PALS.note = note || ''; if (hud.tab === 'friends') hud.refresh('friends'); },
-        chest: { state: chestState, take: chestTake, store: chestStore, promise: paid => { const L = ledgerFor(walletState.address); for (const k in paid) L.pend[k] = (L.pend[k] || 0) + paid[k]; ledgerSave(); },
+        chest: { home: h => ENGBANK.setChestHome(h), homes: () => ENGBANK.chestHomes(), heard: rows => ENGBANK.chestsHeard({ q: 't', of: 1, rows }), state: chestState, take: chestTake, store: chestStore, promise: paid => { const L = ledgerFor(walletState.address); for (const k in paid) L.pend[k] = (L.pend[k] || 0) + paid[k]; ledgerSave(); },
           resetLedgerForTest: () => { if (!walletState.address) return; ledgerDrop(); save = null; try { G.localStorage.removeItem(CKEY(walletState.address)); } catch (e) { /* none */ } ledgerFor(walletState.address); },   /* a lost count: the tests' worst case */
           paidForTest: paid => { const L = ledgerFor(walletState.address); for (const k in paid) { const toChest = Math.min(paid[k], L.lchest[k] || 0); L.lchest[k] -= toChest; L.pchest[k] = (L.pchest[k] || 0) + toChest; L.pend[k] = (L.pend[k] || 0) + paid[k] - toChest; } ledgerSave(); } },   /* tests */ trip: () => TRIP && TRIP.state(), trade: () => trade, peers: () => Array.from(remotes.values()).map(r => r.from), _remIds: () => Array.from(remotes.keys()), optionsAt: (cx, cy) => { const L = []; for (const t of targetsAt(cx, cy)) for (const o of optionsFor(t)) L.push(o.html.replace(/<[^>]+>/g, '')); return L; }, _remAnim: () => JSON.stringify(Array.from(remotes.values()).map(r => [r.anim, r.buf.length, r.buf.length && r.buf[r.buf.length - 1].a])),
         stop() { stopped = true; },
