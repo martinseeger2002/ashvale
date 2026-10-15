@@ -23083,6 +23083,13 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           return [{ html: 'Read ' + nm, fn: () => { scoresAsk(true); core.scoreRead(sk).forEach(l => hud.chat(l, 'sys')); }, red: 1 },
                   { html: 'Examine ' + nm, fn: () => hud.chat(o.board === 'chess' ? 'An oak board on two posts by the tables. The names of those who have won games here are chalked on it, most wins first.' : 'A weathered oak board nailed to the ruin wall. Names of those who have slain the chained dragon are carved into it.', 'sys') }];
         }
+        /* [Claude 2026-10-15] A GOLD wager asks first (the operator: "There should be a confirmation button when joining a game
+           that has a gold wager"): joining a staked chess game or a card table with a buy-in, or sitting first and setting
+           the stake, opens a Yes/No box saying what it costs; only Yes sits. A friendly table sits straight away. */
+        const wagerSit = (line, act, gold, game) => gold > 0 ? { html: line, fn: () => hud.confirm('Play for ' + gold.toLocaleString() + ' GOLD?',
+            game === 'pk' ? 'This card table plays for real GOLD: sitting down buys in for ' + gold.toLocaleString() + ' GOLD from your pack. You keep what is in front of you when you stand up.'
+                          : 'This chess game is played for a stake of ' + gold.toLocaleString() + ' GOLD each: it comes out of your pack when you sit. The winner takes both stakes; a draw gives each their own back; standing up after a move has been played loses it.',
+            'Sit down', 'Not now', () => send(Object.assign({}, act, { run: !!settings.runToggle }))) } : { html: line, act };
         if (t.kind === 'chesstable' || t.kind === 'square') {   /* THE CHESS PARK (2026-10-10): a bench each side; seated, the board itself takes the taps */
           const T = core.tableById(t.id); if (!T) return [];
           if (t.kind === 'square' && me.seat && me.seat.t === t.id) { const sq = SCENE.chessSquare ? SCENE.chessSquare(t.id, t.pt) : null; return sq ? [{ html: 'Square ' + sq, fn: () => chessTap(sq) }] : []; }
@@ -23093,9 +23100,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             /* [Claude 2026-10-11] STAKES: at an empty table the first to sit sets them (the operator); at a table with someone the
                line says what the game is played for, and sitting is agreeing to it */
             const note = empty ? '' : stake ? ' <span class="y">(stake ' + stake.toLocaleString() + ' GOLD)</span>' : ' <span class="c">(friendly)</span>';
-            if (wFree) out.push({ html: 'Sit down as White <span class="c">(south bench)</span>' + note, act: { c: 'sit', table: t.id, seat: 1, stake: 0 }, red: 1 }); else taken.push({ html: 'White: <span class="y">' + esc(st.wn || 'someone') + '</span>', fn: () => hud.chat(esc(st.wn) + ' is playing White here.', 'sys') });
-            if (bFree) out.push({ html: 'Sit down as Black <span class="c">(north bench)</span>' + note, act: { c: 'sit', table: t.id, seat: 0, stake: 0 }, red: out.length ? 0 : 1 });
-            if (empty) for (const n of [100, 500, 1000]) out.push({ html: 'Sit as White for a stake of <span class="y">' + n.toLocaleString() + ' GOLD</span>', act: { c: 'sit', table: t.id, seat: 1, stake: n } }); else taken.push({ html: 'Black: <span class="y">' + esc(st.bn || 'someone') + '</span>', fn: () => hud.chat(esc(st.bn) + ' is playing Black here.', 'sys') });
+            if (wFree) out.push({ ...wagerSit('Sit down as White <span class="c">(south bench)</span>' + note, { c: 'sit', table: t.id, seat: 1, stake: 0 }, empty ? 0 : stake, 'ch'), red: 1 }); else taken.push({ html: 'White: <span class="y">' + esc(st.wn || 'someone') + '</span>', fn: () => hud.chat(esc(st.wn) + ' is playing White here.', 'sys') });
+            if (bFree) out.push({ ...wagerSit('Sit down as Black <span class="c">(north bench)</span>' + note, { c: 'sit', table: t.id, seat: 0, stake: 0 }, empty ? 0 : stake, 'ch'), red: out.length ? 0 : 1 });
+            if (empty) for (const n of [100, 500, 1000]) out.push(wagerSit('Sit as White for a stake of <span class="y">' + n.toLocaleString() + ' GOLD</span>', { c: 'sit', table: t.id, seat: 1, stake: n }, n, 'ch')); else taken.push({ html: 'Black: <span class="y">' + esc(st.bn || 'someone') + '</span>', fn: () => hud.chat(esc(st.bn) + ' is playing Black here.', 'sys') });
           }
           out.push(...taken, { html: 'Examine <span class="c">Chess table</span>', fn: () => hud.chat(chessExamine(st), 'sys') });
           return out;
@@ -23111,9 +23118,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           else (T.seats || []).forEach((s, i) => {
             const who = at[i];
             if (who && who !== PID) taken.push({ html: 'Chair ' + (i + 1) + ': <span class="y">' + pokerWho(who) + '</span>', fn: () => hud.chat(pokerWho(who) + ' is sitting there.', 'sys') });
-            else out.push({ html: 'Sit down <span class="c">(chair ' + (i + 1) + ')</span>' + pkNote, act: { c: 'sit', table: t.id, seat: i, buy: 0 }, red: out.length ? 0 : 1 });
+            else out.push({ ...wagerSit('Sit down <span class="c">(chair ' + (i + 1) + ')</span>' + pkNote, { c: 'sit', table: t.id, seat: i, buy: 0 }, pkEmpty ? 0 : buy, 'pk'), red: out.length ? 0 : 1 });
           });
-          if (pkEmpty && !(me.seat && me.seat.t === t.id)) { const free = (T.seats || []).findIndex((s, i) => !at[i]); if (free >= 0) for (const n of [100, 1000, 10000]) out.push({ html: 'Buy in for <span class="y">' + n.toLocaleString() + ' GOLD</span> <span class="c">(chair ' + (free + 1) + ', sets the table\'s stakes)</span>', act: { c: 'sit', table: t.id, seat: free, buy: n } }); }
+          if (pkEmpty && !(me.seat && me.seat.t === t.id)) { const free = (T.seats || []).findIndex((s, i) => !at[i]); if (free >= 0) for (const n of [100, 1000, 10000]) out.push(wagerSit('Buy in for <span class="y">' + n.toLocaleString() + ' GOLD</span> <span class="c">(chair ' + (free + 1) + ', sets the table\'s stakes)</span>', { c: 'sit', table: t.id, seat: free, buy: n }, n, 'pk')); }
           out.push(...taken, { html: 'Play <span class="y">Solitaire</span>', fn: openSolitaire }, { html: 'Examine <span class="c">Card table</span>', fn: () => hud.chat(pokerExamine(st), 'sys') });   /* Solitaire [Claude 2026-10-13]: the operator */
           return out;
         }

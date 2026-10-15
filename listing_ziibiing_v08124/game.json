@@ -1,0 +1,12 @@
+{
+  "game": {
+    "name": "Ziibiing",
+    "description": "Ziibiing, 0.8.109: the Ojibwe village on the far continent, 50 N, where the maples run and the manoomin stands. Wigwams on the east bank of a river 34 paces wide, the sugar camp up the trail, the flint, red willow and obsidian banks a short paddle away. Ma'iingan lends one snare and Mitigwaabiike one tomahawk. Same world as ASHVALE: take the trail and the sea to Saltmere's new upstairs.",
+    "version": "0.8.124",
+    "players": "Solo or online",
+    "multiplayer": true,
+    "family": "ziibiing",
+    "genre": "rpg",
+    "play": "9632c68c1f38ed8167b1cf01728cf8d1e419eedc2d69cfeeba99087437d21409"
+  }
+}
