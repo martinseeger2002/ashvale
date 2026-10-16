@@ -171,7 +171,8 @@ for (const [qid, Q] of Object.entries(D.quests.quests)) {
                     : s.goal.plant ? (s.goal.plant === 'open' || s.goal.plant === 'stump') && many(s.goal.n)   /* sadfrog's Even Grove: saplings on open ground or stumps */
                     : s.goal.kills ? Object.keys(s.goal.kills).every(m => D.monsters[m]) && many(s.goal.n)
                     : s.goal.light ? (s.goal.light === '*' || !!D.items[s.goal.light]) && many(s.goal.n)   /* a fire you light (Mishoomis's flint) */
-                    : s.goal.wait != null ? s.goal.wait > 0 : false),   /* game hours while the giver makes something (Mitigwaabiike's bow) */
+                    : s.goal.wait != null ? s.goal.wait > 0   /* game hours while the giver makes something (Mitigwaabiike's bow) */
+                    : s.goal.flag ? !!(D.rules.flags || {})[s.goal.flag] : false),   /* [Claude 2026-10-16] a world deed, e.g. The Heart Below's dragon_heart_reset */
      qid + ': every reachable step wants something that exists');
   const payOk = (r) => Array.isArray(r) ? r.every(payOk) : r.indexOf('xp:') === 0 ? D.rules.skills.indexOf(r.split(':')[1]) >= 0 : r.indexOf('flag:') === 0 ? !!(D.rules.flags || {})[r.slice(5)] : /^[a-z0-9_]+:\d+$/.test(r) ? !!D.items[r.split(':')[0]] : !!D.items[r];   /* a list, or "id:n" */
   ok(live.every(s => !s.reward || payOk(s.reward)),
@@ -283,7 +284,8 @@ for (const S of Object.values(D.shops.shops)) {
       if (g.kill) { const m = D.monsters[g.kill]; if (!m || !m.name) nameless(where + ' wants ' + (g.n || 1) + ' ' + g.kill + ', which is not in the monsters table' + (s.zone && !built.has(s.zone) ? ' (zone ' + s.zone + ' is not built)' : '')); else ok(true, where + ' slays ' + m.name); }
       if (g.bring) for (const b of [].concat(g.bring)) { const it = D.items[b]; if (!it || !it.name) nameless(where + ' wants ' + (g.n || 1) + ' of ' + b + ', which is not an item'); else ok(true, where + ' asks for ' + it.name); }
       if (g.talk) { if (!npcHere[g.talk]) nameless(where + ' sends you to ' + g.talk + ', who stands nowhere'); else ok(true, where + ' sends you to ' + g.talk + ' in ' + npcHere[g.talk]); }
-      if (!g.kill && !g.bring && !g.talk && !g.plant && !g.kills && !g.light && !g.cook && g.wait == null) ok(false, where + ' has a goal the panel cannot describe: ' + JSON.stringify(g));   /* cook is a goal kind the panel says (hudpanels.js: "cook N of X", counted in core at the fire) - re-measured 2026-10-10 */
+      /* [Claude 2026-10-16] flag (a world deed, The Heart Below step 3) is a goal kind the engine and panel describe */
+      if (!g.kill && !g.bring && !g.talk && !g.plant && !g.kills && !g.light && !g.cook && !g.flag && g.wait == null) ok(false, where + ' has a goal the panel cannot describe: ' + JSON.stringify(g));   /* cook is a goal kind the panel says (hudpanels.js: "cook N of X", counted in core at the fire) - re-measured 2026-10-10 */
       for (const r of [].concat(s.reward || [])) {
       if (typeof r === 'string' && r.startsWith('xp:')) { const [, sk] = r.split(':'); ok(D.rules.skills.indexOf(sk) >= 0 || sk === 'hitpoints', where + ' pays ' + r + ' in a skill the game has'); }
       else if (typeof r === 'string' && r.startsWith('flag:')) ok(!!(D.rules.flags || {})[r.slice(5)], where + ' leaves the ' + r.slice(5) + ' flag, which the rules define');

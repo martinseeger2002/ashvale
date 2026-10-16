@@ -117,6 +117,8 @@
             /* sadfrog's Even Grove: plant saplings (on open ground, or on stumps); slay several named foes, each counted */
             else if (g.plant) h += 'Step ' + q.step + ': plant ' + (need > 1 ? need + ' saplings' : 'a sapling') + (g.plant === 'stump' ? ' where trees were cut down' : ' on open ground') + (st.near ? ' near ' + who(Q[id].giver) : '') + ' (' + have + '/' + need + ').';
             else if (g.kills) h += 'Step ' + q.step + ': slay ' + Object.keys(g.kills).map(k => { const m = core.D.monsters[k], n2 = g.kills[k]; return many(A.esc((m ? m.name : k).toLowerCase()), n2) + ' (' + Math.min(n2, (q.kn && q.kn[k]) | 0) + '/' + n2 + ')'; }).join(', ') + '.';
+            /* [Claude 2026-10-16] a flag goal (The Heart Below step 3: dragon_heart_reset) names the deed from rules.flags */
+            else if (g.flag) { const fl = (core.D.rules.flags || {})[g.flag]; h += 'Step ' + q.step + ': ' + (fl ? 'bring about ' + A.esc(fl.name) : 'finish what ' + who(Q[id].giver) + ' asked') + (have ? ' (done)' : '') + '.'; }
             else h += 'Step ' + q.step + ': ask ' + who(Q[id].giver) + ' what is left to do (' + have + '/' + need + ').';
           }
           h += '</div></div>';
