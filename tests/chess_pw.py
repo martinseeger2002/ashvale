@@ -69,6 +69,8 @@ with sync_playwright() as p:
         check(tap(pg, 'square', [TABLE, frm]), '%s taps %s' % (who, frm)); time.sleep(0.4)
         check(tap(pg, 'square', [TABLE, to]), '%s taps %s' % (who, to))
         return wait(pa, 'ASH.core.chessOf(%s).moves.length === %d' % (json.dumps(TABLE), n), 15) and wait(pb, 'ASH.core.chessOf(%s).moves.length === %d' % (json.dumps(TABLE), n), 15)
+    PANEL_H = 'document.querySelector(".chessp").getBoundingClientRect().height'
+    h0 = ev(pa, PANEL_H)
     check(move(pa, 'Ann', 'e2', 'e4', 1), '1. e4 is on both boards')
     time.sleep(0.8); shot(pa, 'chess_05_after_e4')
     check(move(pb, 'Ben', 'e7', 'e5', 2), '1... e5')
@@ -77,6 +79,12 @@ with sync_playwright() as p:
     check(move(pa, 'Ann', 'f1', 'c4', 5), '3. Bc4')
     check(move(pb, 'Ben', 'g8', 'f6', 6), '3... Nf6')
     check(ev(pa, FEN) == ev(pb, FEN), 'the two games hold the same position: ' + str(ev(pa, FEN))[:40])
+    # [Claude 2026-10-16] the operator: "The move history should be moved to the unexpanded chat at the bottom and this HUD should
+    #   not expand any further down that is because it is blocking chess pieces"
+    chat = ev(pa, 'document.querySelector(".chat").textContent')
+    check('1. e4 White' in chat and '3... Nf6 Black' in chat, 'every move is a line in the chat: ' + chat[-120:])
+    check(not ev(pa, '!!document.querySelector(".chessp .mv")'), 'and no move list in the panel')
+    check(ev(pa, PANEL_H) <= h0 + 2, 'the panel is no taller after six moves (%s -> %s px)' % (h0, ev(pa, PANEL_H)))
     check(move(pa, 'Ann', 'h5', 'f7', 7), '4. Qxf7#')
     check(wait(pa, 'ASH.core.chessOf(%s).status === "over"' % json.dumps(TABLE), 10) and ev(pa, 'ASH.core.chessOf(%s).result' % json.dumps(TABLE)) == '1-0', "checkmate: 1-0 on Ann's screen")
     check(wait(pb, 'ASH.core.chessOf(%s).status === "over"' % json.dumps(TABLE), 10) and ev(pb, 'ASH.core.chessOf(%s).result' % json.dumps(TABLE)) == '1-0', "and on Ben's")

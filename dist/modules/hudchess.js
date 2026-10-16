@@ -18,23 +18,35 @@
 .ash .chessp .pl i.w{background:#e9e2cf}.ash .chessp .pl i.b{background:#2b2118}
 .ash .chessp .stt{margin:6px 0 4px;color:#ffd23f;font-weight:bold}
 .ash .chessp .stt.over{color:#f0a0a0}
-.ash .chessp .sel{color:#9fc3ff;min-height:16px}
-.ash .chessp .mv{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:#c8c3b4;max-height:84px;overflow:hidden;margin:4px 0;word-break:break-word}
+.ash .chessp .sel{color:#9fc3ff;min-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ash .chessp .btns{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
 .ash .chessp .btn{margin:0;padding:6px 10px}
 .ash .chessp .promo{display:none;margin-top:6px;padding:6px;background:#0005;border-radius:4px}
 .ash .chessp .promo.on{display:block}
+.ash .chessp.promoting .sel{display:none}
 .ash .chessp .promo .btn{min-width:38px;text-align:center;font-weight:bold}
-@media (max-width:600px){.ash .chessp{right:6px;top:6px;width:170px;font-size:12px}.ash .chessp .mv{max-height:52px}}`;
+@media (max-width:600px){.ash .chessp{right:6px;top:6px;width:170px;font-size:12px}}`;
   const PIECE = { q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight' };
   function install(K) {
     const { api, el, ui, A } = K, esc = A.esc;
     if (!document.getElementById('ash-chess-css')) { const st = document.createElement('style'); st.id = 'ash-chess-css'; st.textContent = CSS; document.head.appendChild(st); }
-    let box = null, cb = null, view = null, promoGo = null;
-    function movesText(st) {
-      const m = st.moves || [], out = [];
-      for (let i = Math.max(0, m.length - 12); i < m.length; i++) { if (i % 2 === 0) out.push((i / 2 + 1) + '.'); out.push(m[i]); }
-      return (m.length > 12 ? '… ' : '') + out.join(' ');
+    let box = null, cb = null, view = null, promoGo = null, posted = 0, postedGame = null;
+    /* [Claude 2026-10-16] THE MOVES GO TO THE CHAT (the operator: "The move history should be moved to the unexpanded chat at the
+       bottom and this HUD should not expand any further down that is because it is blocking chess pieces"): each new move
+       is one chat line ("12. Nf3 - White"), so the slate keeps its size over the board. A game already under way when you
+       sit down says how far it has got in one line rather than replaying every move. */
+    function postMoves(st) {
+      const m = st.moves || [], game = (st.gid | 0) + ':' + (st.w || '') + ':' + (st.b || '');
+      if (postedGame !== game || m.length < posted) {
+        postedGame = game; posted = m.length;
+        if (m.length && K.chatLine) K.chatLine('Chess: ' + Math.ceil(m.length / 2) + ' move' + (m.length > 2 ? 's' : '') + ' played so far.', 'sys');
+        return;
+      }
+      for (let i = posted; i < m.length; i++) {
+        /* short, so a move is one line in a phone's narrow chat (the panel already says who plays which colour) */
+        if (K.chatLine) K.chatLine((Math.floor(i / 2) + 1) + (i % 2 ? '... ' : '. ') + m[i] + ' ' + (i % 2 === 0 ? 'White' : 'Black'), 'sys');
+      }
+      posted = m.length;
     }
     function draw() {
       if (!box || !view) return;
@@ -51,14 +63,15 @@
         + '<div class="stt ' + cls + '">' + status + '</div>'
         + (st.stake ? '<div class="sel" style="color:#ffd23f">Stake: ' + (st.stake | 0).toLocaleString() + ' GOLD each' + (st.status === 'playing' && (st.moves || []).length ? ' — standing up forfeits it' : '') + '</div>' : '')   /* [Claude] the stake the first sitter set */
         + '<div class="sel">' + sel + '</div>'
-        + '<div class="mv">' + esc(movesText(st)) + '</div>'
         + '<div class="promo" data-promo><div style="margin-bottom:4px">Promote to</div>' + ['q', 'r', 'b', 'n'].map(p => '<button class="btn" data-p="' + p + '" title="' + PIECE[p] + '">' + PIECE[p][0] + '</button>').join('') + '</div>'
         + '<div class="btns"><button class="btn" data-a="stand">' + standTxt + '</button></div>';
       box.querySelector('[data-a=stand]').onclick = () => { if (cb && cb.stand) cb.stand(); api.sfx && api.sfx('click'); };
       for (const b of box.querySelectorAll('[data-p]')) b.onclick = () => { const go = promoGo; promoGo = null; box.querySelector('[data-promo]').classList.remove('on'); if (go) go(b.dataset.p); };
       if (promoGo) box.querySelector('[data-promo]').classList.add('on');
+      box.classList.toggle('promoting', !!promoGo);   /* the picker takes the selection line's place: the slate does not grow */
+      postMoves(st);
     }
-    function chessOpen(v, callbacks) { cb = callbacks || null; view = v; promoGo = null; if (!box) box = el('chessp stone ui', ui); ui.classList.add('chess'); draw(); }
+    function chessOpen(v, callbacks) { cb = callbacks || null; view = v; promoGo = null; postedGame = null; posted = 0; if (!box) box = el('chessp stone ui', ui); ui.classList.add('chess'); draw(); }
     function chessUpdate(v) { if (!box) return; view = v; draw(); }
     function chessClose() { ui.classList.remove('chess'); if (box) { box.remove(); box = null; } view = null; cb = null; promoGo = null; }
     function chessPromo(go) { promoGo = go; draw(); }
