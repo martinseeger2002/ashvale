@@ -354,12 +354,6 @@
     "api": 1,
     "kind": "json"
    },
-   "char.auditor": {
-    "id": null,
-    "v": 1,
-    "api": 1,
-    "kind": "json"
-   },
    "char.bandit": {
     "id": null,
     "v": 1,
@@ -445,12 +439,6 @@
     "kind": "json"
    },
    "char.edric_skel": {
-    "id": null,
-    "v": 1,
-    "api": 1,
-    "kind": "json"
-   },
-   "char.fenn": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -679,12 +667,6 @@
     "kind": "json"
    },
    "char.pike": {
-    "id": null,
-    "v": 1,
-    "api": 1,
-    "kind": "json"
-   },
-   "char.pip": {
     "id": null,
     "v": 1,
     "api": 1,

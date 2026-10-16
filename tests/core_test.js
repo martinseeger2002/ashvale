@@ -206,11 +206,12 @@ ok(d10 && new RegExp((5 - p9.quests.drove_road.n) + '\\s*more wolf').test(d10.li
 // ground that is already built, so the core is shown to run those two goal kinds without a monster anywhere.
 {
   const Dg = JSON.parse(JSON.stringify(D));
-  // an NPC gives exactly one quest, so the made-up one hangs off a clerk whose only other trade is talking
-  const gv = Dg.zones.find(z => z.id === 'village').npcs.find(n => n.id === 'auditor');
+  // an NPC gives exactly one quest, so the made-up one hangs off an NPC whose only other trade is talking
+  // [Claude 2026-10-16] was the Auditor (removed from the game); Pax is another lines-only village NPC
+  const gv = Dg.zones.find(z => z.id === 'village').npcs.find(n => n.id === 'pax');
   gv.quest = 'post_ride'; delete gv.lines;
   Dg.quests.quests.post_ride = {
-    name: 'The Post Ride', giver: 'auditor',
+    name: 'The Post Ride', giver: 'pax',
     steps: [
       { id: 1, zone: 'village', goal: { bring: 'rat_pelt', n: 2 }, reward: 'xp:speechcraft:700',
         talk: ['Two rat pelts. The boy on the north road is cut up and I have nothing to pad a bandage with.',
@@ -232,19 +233,19 @@ ok(d10 && new RegExp((5 - p9.quests.drove_road.n) + '\\s*more wolf').test(d10.li
   const pelts = () => (pg.inv.find(i => i && i.id === 'rat_pelt') || { n: 0 }).n;
   const holds = (id) => pg.inv.some(i => i && i.id === id);
   const ask = (id) => { let d = null; cg.cmd('p1', { c: 'npc', id }); for (let i = 0; i < 400 && !d; i++) for (const e of cg.tick()) if (e.e === 'dialog' && e.npc === id) d = e; return d; };
-  let dg = ask('auditor');
+  let dg = ask('pax');
   ok(dg && /1\s*short/.test(dg.lines.join(' ')) && pg.quests.post_ride.step === 1, 'a bring step wants the item first: ' + (dg ? dg.lines[0] : 'nothing'));
   pg.inv.push({ id: 'rat_pelt', n: 1 });
-  dg = ask('auditor');
+  dg = ask('pax');
   ok(pg.quests.post_ride.step === 2 && pelts() === 0, 'the bring step takes the pelts and pays in XP');
   dg = ask('symmetry');
   ok(dg && pg.quests.post_ride.n === 1, 'the talk step credits the message being passed on');
   let rew = null;
-  cg.cmd('p1', { c: 'npc', id: 'auditor' });
+  cg.cmd('p1', { c: 'npc', id: 'pax' });
   for (let i = 0; i < 400 && !rew; i++) for (const e of cg.tick()) if (e.e === 'reward') rew = e;
   ok(pg.quests.post_ride.step === 3 && holds('sword_t2') && rew && rew.collection === 'ASHVALE The Post Ride',
      'the talk step pays its reward into the collection');
-  dg = ask('auditor');
+  dg = ask('pax');
   ok(dg && /post ride/i.test(dg.lines.join(' ')), 'the giver has a last word when both kinds of step are done');
 }
 
@@ -1083,6 +1084,15 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
   for (let i = 0; i < 200 && !d2; i++) for (const e of cb.tick()) if (e.e === 'dialog' && e.npc === 'silas') d2 = e;
   ok(d2 && /more coal/i.test(d2.lines.join(' ')), 'a player short of step 2 is told what is still wanted: ' + ((d2 || {}).lines || []).join(' ').slice(0, 56));
 }
+/* [Claude 2026-10-16] SPEED: the 6 km tally of what the seeded land sites out was walked twice (the kill-count rule and
+   the bring rule below), ~45 s each. Sites come from worldgen (world.js sitesIn -> netSites), not from the game's own
+   seed, so one walk serves both rules: same numbers, half the time. */
+let WILD6K = null;
+function wild6k(c) {
+  if (WILD6K) return WILD6K;
+  WILD6K = {}; for (const s of c.M.sitesIn(-3000, -3000, 3000, 3000)) for (const m of (s.spawns || [])) WILD6K[m.m] = (WILD6K[m.m] || 0) + 1;
+  return WILD6K;
+}
 /* The Sail Loft (Mabb the sailmaker, Saltmere's third thread, 2026-10-05). The rule that pays for it is the one
    under this: a quest may not ask you to kill something the world does not have enough of. The Deer question came
    up while writing it - the loft wanted rat pelts, and there are no rats anywhere near the harbour: the nearest rat
@@ -1095,7 +1105,7 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
   const posted = {};                                     /* monsters a hand-built zone posts itself */
   for (const z of D.zones) for (const sp of (z.spawns || [])) posted[sp.m] = (posted[sp.m] || 0) + 1;
   const wild = {};                                        /* and monsters the seeded land sites out */
-  for (const s of cw.M.sitesIn(-3000, -3000, 3000, 3000)) for (const m of (s.spawns || [])) wild[m.m] = (wild[m.m] || 0) + 1;
+  for (const [m, n] of Object.entries(wild6k(cw))) wild[m] = (wild[m] || 0) + n;   /* [Claude 2026-10-16] shared walk, see wild6k */
   const thin = [];
   for (const Q of Object.values(D.quests.quests)) for (const st of Q.steps) {
     const k = st.goal.kill;
@@ -1178,7 +1188,7 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
   const marks = new Set(); for (const z of D.zones) for (const m of (z.fishing || [])) marks.add(m.fish);
   const keeps = {};                                /* how many of a kind the world holds, posted and seeded */
   for (const z of D.zones) for (const sp of (z.spawns || [])) keeps[sp.m] = (keeps[sp.m] || 0) + 1;
-  for (const s of ci.M.sitesIn(-3000, -3000, 3000, 3000)) for (const m of (s.spawns || [])) keeps[m.m] = (keeps[m.m] || 0) + 1;
+  for (const [m, n] of Object.entries(wild6k(ci))) keeps[m] = (keeps[m] || 0) + n;   /* [Claude 2026-10-16] shared walk, see wild6k */
   const dropped = {};                              /* and how many of an item that is, across every beast that sheds it */
   for (const [k, mo] of Object.entries(D.monsters)) for (const dr of (mo.drops || [])) dropped[dr.item] = (dropped[dr.item] || 0) + (keeps[k] || 0);
   const shelf = new Set();                         /* plus anything a shop in a built town stands behind */
@@ -1210,75 +1220,7 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
   }
   ok(!dead.length, 'a bring step may only want a thing the world can actually hand over' + (dead.length ? ': ' + dead.join(' | ') : ''));
 }
-/* The Tin Pipe (Pip the apprentice, Ashvale's fourth thread, 2026-10-05). The village mine gives copper, tin, coal
-   and gold and the Bronze Gate only ever wanted the copper and the coal, so the low seam flooded in February and
-   nobody had a use for the soft grey metal that would have pumped it out. Pip gets the errand, and it is the first
-   quest in the game with no building and no beast at the middle of it: it is a pump. Everything in it was measured
-   off the shipped map first - three tinstones 15 m from the village centre, hare herds from 123 m out with 603 in
-   the world, and the eight grey wolves the village's own wood posts, 37 m away - which is what the two rules above
-   would have caught anyway. */
-{
-  const AshWorld = require('../src/world.js'), AG = require('../src/globe.js'), WGM = require('../src/worldgen.js');
-  const vz = allZones.find(z => z.id === 'village'), pip = vz.npcs.find(n => n.id === 'pip');
-  const D4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-  ok(pip.quest === 'tin_pipe' && !pip.lines && !pip.shop && !pip.tailor,
-     'Pip the apprentice is a giver now - his two chat lines went into the pump, and the fish walking up a tree is still in there');
-  const cw = AshCore.create(Object.assign({}, D, { wg: AshWorld.seededWorldgen(WGM, AG, D) }), { seed: 'tin-pipe' });
-  const rew = [];
-  const p = cw.addPlayer('pp', { xp: { attack: 372240, strength: 372240, defence: 372240, hitpoints: 2000000 },
-                                 quests: { tin_pipe: { step: 1, n: 0 } }, inv: [{ id: 'tin_ore', n: 6 }] });
-  const beside = (n) => D4.map(d => [n.x + d[0], n.y + d[1]]).find(xy => !BLOCK.has((vz.tiles[xy[1] - vz.origin[1]] || '')[xy[0] - vz.origin[0]]));
-  const stand = (n) => { const xy = beside(n); p.x = xy[0]; p.y = xy[1]; };
-  const talkTo = (id) => {
-    let d = null; cw.cmd('pp', { c: 'npc', id });
-    for (let i = 0; i < 600 && !d; i++) for (const e of cw.tick()) { if (e.e === 'dialog' && e.npc === id) d = e; if (e.e === 'reward') rew.push(e); }
-    return d;
-  };
-  stand(pip);
-  const mn0 = p.xp.mining || 0;
-  let d = talkTo('pip');
-  ok(p.quests.tin_pipe.step === 2 && (p.xp.mining || 0) > mn0 && !p.inv.some(i => i && i.id === 'tin_ore'),
-     'step 1: six tin out of the old stopes - three tinstones, 15 m from the village centre, wanted by nobody until today');
-  ok(d && /tin|pump|water/i.test(d.lines.join(' ')), 'it opens on winter water in a coal seam, not on a carcass: ' + ((d || {}).lines || []).join(' / ').slice(0, 62));
-  /* step 2 has to be walked: a herd only exists once you are standing in it, and a hare is shy at five paces */
-  const cx = vz.origin[0] + Math.round(vz.size[0] / 2), cy = vz.origin[1] + Math.round(vz.size[1] / 2);
-  const herds = cw.M.sitesIn(cx - 700, cy - 700, cx + 700, cy + 700).filter(s => s.monster === 'hare')
-    .sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
-  ok(herds.length > 0, 'the stubble fields Pip sends you to hold hares - ' + herds.length + ' herds within 700 m of Ashvale, nearest ' + (herds.length ? Math.round(Math.hypot(herds[0].x - cx, herds[0].y - cy)) : '?') + ' m');
-  let shot = 0;
-  for (const h of herds.slice(0, 8)) {
-    p.x = h.x; p.y = h.y; while (cw.M.blocked(p.x, p.y)) p.y++;
-    for (let i = 0; i < 20; i++) cw.tick();
-    for (const buck of cw.S.mobs.filter(m => m.key === 'hare' && !m.dead && Math.hypot(m.x - p.x, m.y - p.y) < 40)) {   /* this herd only (2026-10-10, see the Elder Bow note) */
-      cw.cmd('pp', { c: 'attack', uid: buck.uid, run: true });
-      for (let i = 0; i < 900 && !buck.dead && !p.dead && shot < 4; i++) { p.hp = Math.max(p.hp, 60); cw.tick(); }
-      if (buck.dead) shot++;
-    }
-    if (shot >= 4) break;
-  }
-  ok(shot >= 4 && p.quests.tin_pipe.n >= 4, 'step 2: four hare skins off the stubble and the washers are paid for (' + p.quests.tin_pipe.n + '/4)');
-  const rg0 = p.xp.ranged || 0; stand(pip); d = talkTo('pip');
-  ok(p.quests.tin_pipe.step === 3 && (p.xp.ranged || 0) > rg0,
-     'and the skins are paid for in ranged - a hare will outwalk your legs, so the step says bring the bow and means it');
-  p.inv.push({ id: 'pelt', n: 2 });
-  const st0 = p.xp.strength || 0; d = talkTo('pip');
-  ok(p.quests.tin_pipe.step === 4 && (p.xp.strength || 0) > st0 && !p.inv.some(i => i && i.id === 'pelt'),
-     'step 3: two wolf pelts off the wood the village has on its own doorstep, unrolled and not scraped');
-  stand(vz.npcs.find(n => n.id === 'modulus')); d = talkTo('modulus');   /* the last step is the one Pip cannot do himself */
-  ok(p.quests.tin_pipe.step === 4 && p.quests.tin_pipe.n === 1,
-     'step 4: the fall of the ground is asked for at a man with his own chat lines still on him - a talk goal lands at anybody who stands in town');
-  stand(pip); d = talkTo('pip');
-  ok(p.quests.tin_pipe.step === 5 && p.inv.some(i => i && i.id === 'tinderbox'),
-     'and the pump is paid for with the box with the spark in it, an item the general store had sold to nobody until now');
-  ok(rew.some(e => e.id === 'tinderbox' && e.collection === 'ASHVALE The Tin Pipe'),
-     'the tinderbox is minted into its own collection: ' + (rew.length ? rew[rew.length - 1].collection : 'nothing'));
-  ok(d && /shouldn.t work|buckets|works/i.test(d.lines.join(' ')), 'and he gets the last word about a thing that shouldn\'t work: ' + ((d || {}).lines || []).slice(-1).join('').slice(0, 72));
-  const shortie = cw.addPlayer('pp2', { quests: { tin_pipe: { step: 1, n: 0 } } });
-  const xy = beside(pip); shortie.x = xy[0]; shortie.y = xy[1];
-  let d2 = null; cw.cmd('pp2', { c: 'npc', id: 'pip' });
-  for (let i = 0; i < 200 && !d2; i++) for (const e of cw.tick()) if (e.e === 'dialog' && e.npc === 'pip') d2 = e;
-  ok(d2 && /6 more tin/i.test(d2.lines.join(' ')), 'a player with no tin is told the count, not a shrug: ' + ((d2 || {}).lines || []).join(' ').slice(0, 56));
-}
+/* [Claude 2026-10-16] The Tin Pipe test lived here; Pip, the Auditor and The Tin Pipe were removed from the game (the operator: "please remove pip and auditor and their associated quests"). */
 /* The Elder Bow (Latency the warden, Ashvale's sixth thread out of the village, 2026-10-05). The bow ladder and the
    wood ladder are the same ladder - every bow in the game is named after a tree - and the probes (2026-10-05) found
    the top rung lying in the open: tier 4 is a "Yew shortbow" and it stands on Saltmere's shelf at 1600, while there
@@ -1579,7 +1521,9 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
   const stubbleH = ck.M.sitesIn(RG.x - 220, RG.y - 220, RG.x + 220, RG.y + 220).filter(s => s.monster === 'hare')
     .sort((a, b) => Math.hypot(a.x - RG.x, a.y - RG.y) - Math.hypot(b.x - RG.x, b.y - RG.y)).slice(0, 10);
   let shots = 0;
-  while (cookSome('hare_cooked', 3, 'hare_raw') < 3 && shots++ < 4) hunt('hare', 'hare_raw', 9, stubbleH);
+  /* [Claude 2026-10-16] SPEED: the hares are handed over instead of shot off the stubble (the operator: tests teleport and
+     talk; movement problems are reported from play). The stubble above still has to hold hares; the cooking is real. */
+  while (cookSome('hare_cooked', 3, 'hare_raw') < 3 && shots++ < 4) for (let n = 0; n < 3; n++) { const f = p.inv.findIndex(t => !t); if (f >= 0 && stubbleH.length) p.inv[f] = { id: 'hare_raw', n: 1 }; }
   ok(ck.invCount(p, 'hare_cooked') >= 3 && ck.lv(p, 'cooking') >= 5,
      'step 2: hares off the stubble and three of them cooked through at cooking ' + ck.lv(p, 'cooking') + ' - ' + shots + ' trip' + (shots === 1 ? '' : 's') + ' out, ' + scorched.n + ' gone black, ' + ck.invCount(p, 'hare_raw') + ' raw left in the bag');
   const f1 = p.xp.fishing; standV(cin); d = talkTo('cinder');
@@ -1598,7 +1542,8 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
   const grazingH = ck.M.sitesIn(RG.x - 450, RG.y - 450, RG.x + 450, RG.y + 450).filter(s => s.monster === 'deer')
     .sort((a, b) => Math.hypot(a.x - RG.x, a.y - RG.y) - Math.hypot(b.x - RG.x, b.y - RG.y)).slice(0, 8);
   let rides = 0;
-  while (cookSome('venison_cooked', 2, 'venison_raw') < 2 && rides++ < 2) hunt('deer', 'venison_raw', 4, grazingH);
+  /* [Claude 2026-10-16] SPEED: no deer chase either - the meat is handed over just below (grazingH still has to be there) */
+  if (!grazingH.length) rides = 99;
   /* A stag that has seen you is gone, and this file already walks a deer hunt of its own two hundred lines
      above (sail_loft step 2), so what the fire needs is the meat, not a second chase. */
   for (let n = 0; n < 10 && cookSome('venison_cooked', 2, 'venison_raw') < 2; n++) p.inv.push({ id: 'venison_raw', n: 1 });
@@ -1622,157 +1567,8 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
   for (let i = 0; i < 200 && !d2; i++) for (const e of ck.tick()) if (e.e === 'dialog' && e.npc === 'cinder') d2 = e;
   ok(d2 && /10 more shrimp/i.test(d2.lines.join(' ')), 'a player with an empty bag is told the count, not a shrug: ' + ((d2 || {}).lines || []).join(' ').slice(0, 56));
 }
-/* increment 13: The Skinning Knife (a tester, 2026-10-05). This village has killed something every day of its
-   existence and has never once asked where the skin went. In the whole data set exactly six skins have ever been
-   wanted - four deer hides for a warden's bow and two wolf pelts for an apprentice's pump washers - while rat_pelt,
-   hare_pelt, boar_hide, snow_hare_pelt, timber_wolf_pelt, lizard_skin and goat_hide sit in the item tables worth
-   five to forty-five coins, taking four pence in the pound at a general store that will buy anything, and wanted by
-   nobody. Fenn the tanner says all of that out loud and pays in dexterity, which no thread in this game has ever
-   paid a point of. Every number out of his mouth is measured below on the seeded world first: 995 herds of rats,
-   hares, boars and timber wolves inside three kilometres of the well, no goat and no lizard anywhere near it, and a
-   tier four skinner's knife that exists in the ledgers and hangs on no counter in three towns. */
-{
-  const AshWorld = require('../src/world.js'), AG = require('../src/globe.js'), WGM = require('../src/worldgen.js');
-  const vz = allZones.find(z => z.id === 'village'), V = { x: vz.start[0], y: vz.start[1] };
-  const fen = vz.npcs.find(n => n.id === 'fenn'), ap = vz.npcs.find(n => n.id === 'pip');
-  const D4 = [[1, 0], [-1, 0], [0, 1], [0, -1]], D8 = D4.concat([[1, 1], [1, -1], [-1, 1], [-1, -1]]);
-  const SK = D.quests.quests.skinning_knife, SKINS = new Set(['rat_pelt', 'hare_pelt', 'boar_hide', 'snow_hare_pelt', 'timber_wolf_pelt', 'lizard_skin', 'goat_hide']);
-  const dv = (x, y) => Math.round(Math.hypot(x - V.x, y - V.y));
-  ok(!!fen && fen.quest === 'skinning_knife' && !fen.shop && !fen.tailor && !fen.lines && ap.quest === 'tin_pipe',
-     'Fenn the tanner gives one thing on the lane below the southwest road, and the apprentice whose washers he mentions is still standing where he was: ' + ((fen || {}).name || 'nobody'));
-  const ck = AshCore.create(Object.assign({}, D, { wg: AshWorld.seededWorldgen(WGM, AG, D) }), { seed: 'kitchen-range' });
-  ok(!!D4.map(d => [fen.x + d[0], fen.y + d[1]]).find(xy => !ck.M.blocked(xy[0], xy[1])),
-     'and there is ground to stand beside him on at ' + fen.x + ',' + fen.y + ', ' + dv(fen.x, fen.y) + ' paces from the well');
-  const herds = (k, r) => { const out = [], seen = new Set();
-    for (const s of ck.M.sitesIn(V.x - r, V.y - r, V.x + r, V.y + r))
-      if (s.monster === k && !seen.has(s.x + ',' + s.y)) { seen.add(s.x + ',' + s.y); out.push(s); }
-    return out; };
-  const nearest = (k, r) => herds(k, r).sort((a, b) => dv(a.x, a.y) - dv(b.x, b.y))[0];
-  const skinsOf = (k) => (D.monsters[k].drops || []).filter(d => /pelt|hide|skin/.test(d.item));
-  const rung = { rat: 'rat_pelt', hare: 'hare_pelt', boar: 'boar_hide', timber_wolf: 'timber_wolf_pelt' };
-  ok(Object.keys(rung).every(k => skinsOf(k).length === 1 && skinsOf(k)[0].item === rung[k]),
-     'the ladder is in the beasts before it is in the quest: ' + Object.keys(rung).map(k => k + ' gives ' + skinsOf(k).map(d => d.item).join('/')).join(', '));
-  ok(skinsOf('rat')[0].one_in === 1 && skinsOf('hare')[0].one_in === 2 && skinsOf('boar')[0].one_in === 1 && skinsOf('timber_wolf')[0].one_in === 1,
-     'and the odds are as he says them - a rat one for one at ' + D.items.rat_pelt.value + ' coins, a hare one in two at ' + D.items.hare_pelt.value +
-     ', a boar one for one at ' + D.items.boar_hide.value + ', a timber wolf one for one at ' + D.items.timber_wolf_pelt.value);
-  ok([...SKINS].every(i => D.items[i]), 'and all seven of the skins are real items, ' + [...SKINS].map(i => i + ' ' + D.items[i].value).join(', '));
-  const wanted = Object.entries(D.quests.quests).flatMap(([k, q]) => q.steps.filter(st => /pelt|hide|skin/.test(String(st.goal.bring))).map(st => st.goal.bring + ' x' + st.goal.n + ' (' + k + ')'));
-  /* Re-measured on the current quests 2026-10-10: Fenn's ladder is no longer the only thread that wants one of the
-     seven skins - Iria's supper and the angel gift each want a timber wolf pelt, and Waabooz wants a hare pelt or a
-     snow hare pelt. The list is exhaustive: a fifth quest asking for one of the seven still fails this. */
-  const asksSkin = Object.entries(D.quests.quests).filter(([k, q]) => q.steps.some(st => [].concat(st.goal.bring || []).some(b => SKINS.has(b)))).map(([k]) => k).sort();
-  ok(asksSkin.join() === ['angel_gift', 'iria_supper', 'skinning_knife', 'waabooz'].join(),
-     'and the threads that have ever asked for one of the seven skins are exactly these - everything this village has wanted off a carcass is: ' + wanted.join(', '));
-  /* Re-measured on the current worldgen 2026-10-10 (they were rat 191, hare 495, boar 81, timber wolf 236 - 1003
-     together - and the nearest timber wolf stood 774 m off; the herd seeds moved, the quest ladder under them did not). */
-  /* Re-measured 2026-10-11 when Ziibiing moved to the other continent: its woods wall and groves left this face, and the
-     herd seeds round Ashvale went back to where they stood before them (rat 191, hare 497, boar 79, timber wolf 236 -
-     1003 - the nearest timber wolf 774 m off again). */
-  const COUNT = { rat: 191, hare: 497, boar: 79, timber_wolf: 236 }, NEAR = { rat: 250, hare: 117, boar: 138, timber_wolf: 774 }, IN6 = { rat: 7, hare: 27, boar: 4 };
-  ok(Object.keys(COUNT).every(k => herds(k, 3000).length === COUNT[k]),
-     'within three kilometres of the well: ' + Object.keys(COUNT).map(k => k + ' ' + herds(k, 3000).length + ' herds, nearest ' + dv(nearest(k, 3000).x, nearest(k, 3000).y) + ' m').join(' | '));
-  ok(Object.keys(COUNT).reduce((a, k) => a + herds(k, 3000).length, 0) === 1003 && Object.keys(NEAR).every(k => dv(nearest(k, 3000).x, nearest(k, 3000).y) === NEAR[k]),
-     '1003 herds of the four of them, and the nearest of each stands exactly where he says it does');
-  ok(Object.keys(IN6).every(k => herds(k, 600).length === IN6[k]) && herds('timber_wolf', 600).length === 0,
-     'inside six hundred paces: ' + Object.keys(IN6).map(k => k + ' ' + herds(k, 600).length).join(', ') + ', and no timber wolf inside six hundred, which is why the last rung is the long walk');
-  ok(!herds('goat', 3000).length && !herds('lizard', 3000).length,
-     'and the ledgers are simply wrong about two of them: ' + herds('goat', 3000).length + ' goats and ' + herds('lizard', 3000).length + ' lizards within three kilometres of Ashvale, though goat_hide and lizard_skin are both in the item tables');
-  const anybuys = Object.entries(D.shops.shops).filter(([, s]) => s.buys === 'any');
-  ok(anybuys.length === 4 && D.shops.shops.general.buys === 'any' && D.shops.shops.general.buyRate === 40,
-     'every skin does have a buyer and it is a bad one: ' + anybuys.length + ' counters buy anything at all, the village one at ' + D.shops.shops.general.buyRate + ' pence in the pound');
-  const onShelf = (i) => Object.values(D.shops.shops).some(s => (s.stock || []).some(x => (x.id || x) === i));
-  ok(D.items.dagger_t4.tier === 4 && !onShelf('dagger_t4') && !Object.entries(D.quests.quests).some(([k, q]) => k !== 'skinning_knife' && q.steps.some(st => st.reward === 'dagger_t4')),
-     'the pay at rung four is a knife that is on no counter and in no other quest: ' + D.items.dagger_t4.name + ', tier ' + D.items.dagger_t4.tier + ', ' + D.items.dagger_t4.value + ' coins');
-  ok(['dagger_t1', 'dagger_t2', 'dagger_t3'].every(onShelf) && !onShelf('dagger_t5'),
-     'and tiers one to three of the same blade hang on the armourer\'s wall while four and five are nowhere at all - the ladder stops at three everywhere but here');
-  ok(!Object.entries(D.quests.quests).some(([k, q]) => k !== 'skinning_knife' && q.steps.some(st => /^xp:dexterity:/.test(String(st.reward)))),
-     'no thread in this game has ever paid a point of dexterity; every skill any quest has handed over is ' +
-     Object.entries(D.quests.quests).filter(([k]) => k !== 'skinning_knife')
-       .map(([, q]) => q.steps.map(st => String(st.reward)).filter(r => /^xp:/.test(r))).flat().map(r => r.split(':')[1]).filter((v, i, a) => a.indexOf(v) === i).join(', '));
-  const DEX = SK.steps.reduce((a, st) => a + (/^xp:dexterity:/.test(String(st.reward)) ? +String(st.reward).split(':')[2] : 0), 0);
-  ok(DEX === 13600, 'the whole ladder is ' + DEX + ' points of dexterity, which is what the engine pays at ' + (2 * D.rules.dexterity.xpPerRunTile) +
-     ' a run tile for ' + (DEX / (2 * D.rules.dexterity.xpPerRunTile)) + ' tiles of running - and that is the whole of what a person can be handed for a skin, so the rest of the skill comes off their own legs');
-  /* played end to end: the rats on the nearest ground, the hares on the stubble, the boars that object, the wolves
-     that are a long walk, and the apprentice who has been cutting hare leather for years without being told */
-  const rew = [];
-  const p = ck.addPlayer('pr', { xp: { attack: 372240, strength: 372240, defence: 372240, ranged: 372240, hitpoints: 2000000 },
-                                 quests: { skinning_knife: { step: 1, n: 0 } },
-                                 inv: [{ id: 'net', n: 1 }, { id: 'fishing_rod', n: 1 }, { id: 'bow_t1', n: 1 }, { id: 'arrows_t1', n: 600 }] });
-  ck.cmd('pr', { c: 'equip', slot: 2 }); ck.tick();
-  ck.cmd('pr', { c: 'equip', slot: 3 }); ck.tick();
-  ok(ck.lv(p, 'dexterity') === 1 && ck.combatLevel(p) >= 40, 'the skinning starts at nothing where it matters: dexterity ' + ck.lv(p, 'dexterity') + ' at combat ' + ck.combatLevel(p));
-  const standBy = (n) => { const xy = D4.map(d => [n.x + d[0], n.y + d[1]]).find(xy => !ck.M.blocked(xy[0], xy[1])); p.x = xy[0]; p.y = xy[1]; };
-  const talkTo = (id) => {
-    let d = null; ck.cmd('pr', { c: 'npc', id });
-    for (let i = 0; i < 600 && !d; i++) for (const e of ck.tick()) { if (e.e === 'dialog' && e.npc === id) d = e; if (e.e === 'reward') rew.push(e); }
-    return d;
-  };
-  const makeRoom = () => { if (!p.inv.some(t => !t)) for (let k = 0; k < p.inv.length; k++) if (p.inv[k] && !SKINS.has(p.inv[k].id)) p.inv[k] = null; };
-  const flay = (kind, item, want, spots) => {                        /* the same shoot-and-crouch the cook's thread
-                                                                      uses: the skin comes off the beast and lies where
-                                                                      the beast stopped, not in your bag */
-    for (const herd of spots) {
-      if (ck.invCount(p, item) >= want) break;
-      p.x = herd.x; p.y = herd.y; while (ck.M.blocked(p.x, p.y)) p.y++;
-      for (let i = 0; i < 25; i++) ck.tick();
-      for (let shot = 0; shot < 10 && ck.invCount(p, item) < want; shot++) {
-        makeRoom();
-        const beast = ck.S.mobs.filter(m => m.key === kind && !m.dead && Math.abs(m.x - p.x) < 40 && Math.abs(m.y - p.y) < 40)
-          .sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0];
-        if (!beast) break;
-        ck.cmd('pr', { c: 'attack', uid: beast.uid, run: true });
-        for (let i = 0; i < 200 && !beast.dead && !p.dead; i++) { p.hp = Math.max(p.hp, 400); ck.tick(); }
-        for (let i = 0; i < 4 && beast.dead; i++) ck.tick();
-      }
-      for (const g of ck.S.ground.filter(g => g.id === item && Math.abs(g.x - p.x) < 130 && Math.abs(g.y - p.y) < 130)) {
-        if (!ck.M.blocked(g.x, g.y)) { p.x = g.x; p.y = g.y; } else { p.x = g.x + 1; p.y = g.y; }
-        ck.cmd('pr', { c: 'take', uid: g.uid });
-        for (let i = 0; i < 25 && ck.S.ground.some(q => q.uid === g.uid); i++) { p.hp = Math.max(p.hp, 400); ck.tick(); }
-      }
-    }
-    return ck.invCount(p, item);
-  };
-  const roundUp = (kind, item, want, r) => {
-    let got = 0;
-    for (let n = 0; n < 3 && got < want; n++) got = flay(kind, item, want, herds(kind, r + 200 * n).sort((a, b) => dv(a.x, a.y) - dv(b.x, b.y)));
-    return got;
-  };
-  let got = roundUp('rat', 'rat_pelt', 6, 600);
-  ok(got >= 6, 'rung one, on the ground he points at first: ' + got + ' pelts off ' + herds('rat', 600).length + ' packs inside six hundred paces, one pelt to a rat');
-  let x0 = p.xp.dexterity || 0; standBy(fen); let d = talkTo('fenn');
-  ok(p.quests.skinning_knife.step === 2 && ck.invCount(p, 'rat_pelt') === got - 6 && (p.xp.dexterity || 0) > x0,
-     'step 1: six of the ' + got + ' rat pelts in, the rest still in the bag because he asked for six, and the first point of dexterity anybody has ever handed over in this village (' + ck.lv(p, 'dexterity') + ')');
-  ok(d && /rat|pelt|skin|dress/i.test(d.lines.join(' ')), 'it opens on a man who dresses skins: ' + ((d || {}).lines || []).join(' / ').slice(0, 62));
-  got = roundUp('hare', 'hare_pelt', 8, 600);
-  for (let n = 0; n < 6 && got < 8; n++) { p.inv.push({ id: 'hare_pelt', n: 1 }); got++; }   /* a hare is level one and shy 5,
-     and this file already walks the honest version of that chase twice above - what this rung is about is the one in
-     two, not a third walk round the same stubble */
-  x0 = p.xp.dexterity; standBy(fen); d = talkTo('fenn');
-  ok(p.quests.skinning_knife.step === 3 && (p.xp.dexterity - x0) >= 3200,
-     'step 2: eight hare pelts, which is sixteen hares at one skin in two - ' + (p.xp.dexterity - x0) + ' points paid out, dexterity ' + ck.lv(p, 'dexterity'));
-  got = roundUp('boar', 'boar_hide', 3, 600);
-  ok(got >= 3, 'rung three is the one that objects: ' + got + ' hides off ' + herds('boar', 600).length + ' herds inside six hundred paces, at level ' + D.monsters.boar.level + ' and ' + D.monsters.boar.hp + ' hitpoints');
-  x0 = p.xp.dexterity; standBy(fen); d = talkTo('fenn');
-  ok(p.quests.skinning_knife.step === 4 && (p.xp.dexterity || 0) > x0, 'step 3: three boar hides whole, paid in dexterity again (' + ck.lv(p, 'dexterity') + ')');
-  got = roundUp('timber_wolf', 'timber_wolf_pelt', 2, 800);
-  x0 = p.xp.dexterity; standBy(fen); d = talkTo('fenn');
-  ok(p.quests.skinning_knife.step === 5 && got >= 2 && p.inv.some(i => i && i.id === 'dagger_t4'),
-     'step 4: two timber wolf pelts off the long walk (' + dv(nearest('timber_wolf', 3000).x, nearest('timber_wolf', 3000).y) + ' m) and the knife comes off his belt: ' + D.items.dagger_t4.name);
-  ok(rew.some(e => e.id === 'dagger_t4' && e.collection === 'ASHVALE The Skinning Knife'),
-     'and it is minted into its own collection: ' + (rew.length ? rew[rew.length - 1].collection : 'nothing'));
-  standBy(ap); d = talkTo('pip');
-  ok(p.quests.skinning_knife.step === 5 && p.quests.skinning_knife.n === 1, 'step 5: the message is carried down the lane to the apprentice who has been cutting hare leather for years without being told');
-  x0 = p.xp.dexterity; standBy(fen); d = talkTo('fenn');
-  ok(p.quests.skinning_knife.step === 6 && (p.xp.dexterity || 0) >= x0 + 4400 && ck.lv(p, 'dexterity') >= 30,
-     'and the ladder ends where he said it would: ' + (p.xp.dexterity || 0) + ' points of dexterity, level ' + ck.lv(p, 'dexterity'));
-  ok(d && /goat|skin|dexterity|knife/i.test(d.lines.join(' ')), 'and the last word is that there is no goat: ' + ((d || {}).lines || []).slice(-1).join('').slice(0, 74));
-  const shortie = ck.addPlayer('pr2', { quests: { skinning_knife: { step: 1, n: 0 } } });
-  const xy2 = D4.map(dd => [fen.x + dd[0], fen.y + dd[1]]).find(xy2 => !ck.M.blocked(xy2[0], xy2[1]));
-  shortie.x = xy2[0]; shortie.y = xy2[1];
-  let d2 = null; ck.cmd('pr2', { c: 'npc', id: 'fenn' });
-  for (let i = 0; i < 200 && !d2; i++) for (const e of ck.tick()) if (e.e === 'dialog' && e.npc === 'fenn') d2 = e;
-  ok(d2 && /6 more rat pelts/i.test(d2.lines.join(' ')), 'a player with an empty bag is told the count and the distance: ' + ((d2 || {}).lines || []).join(' ').slice(0, 58));
-}
+/* [Claude 2026-10-16] The Skinning Knife test (increment 13) lived here; the quest and Fenn the tanner were removed from the
+   game (the operator: "you can delete the skinning knife quest then for now"). */
 /* AV23: the combat level a monster is shown with has to be the one the game actually judges it by
    (@yourfirstname through a tester: "combat levels should be shown in the game"). A monster turns
    a player away when that player's combatLevel is above it, so the engine now prints core.mobCombat

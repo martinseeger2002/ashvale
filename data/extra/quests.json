@@ -1154,20 +1154,6 @@
   "elder_bow": {
    "story": 3
   },
-  "skinning_knife": {
-   "story": 3,
-   "steps": [
-    {
-     "id": 1,
-     "talk": [
-      "You have walked this lane more than once and never looked up. Fenn. I dress skins, which is a trade in this village the way a range is a trade to a village that cooks on an idea of a fire.",
-      "Six rat pelts to start, and it isn't beneath you. There are a hundred and ninety-one packs of rats inside three kilometres of that well, seven of them inside six hundred paces, and the nearest pack stands two hundred and fifty paces out. Three to a pack, level two, five hitpoints between an argument and a wet day.",
-      "Here's why I start you on rats and not on something with a reputation: a rat gives up its pelt one for one. Every one. That's the only even trade in this whole valley, and everything I ask you for after this one gets worse than it.",
-      "Mind the general store on your way back. They'll buy any skin you carry at four parts in ten of what it's worth, and they'll never once ask what anybody in this village intends to do with the other six parts. Six pelts, and your pay is in dexterity - which I know you've never had from a person before."
-     ]
-    }
-   ]
-  },
   "drove_road": {
    "story": 2,
    "steps": [
@@ -1199,9 +1185,6 @@
    "story": 2
   },
   "rudder": {
-   "story": 1
-  },
-  "tin_pipe": {
    "story": 1
   }
  }

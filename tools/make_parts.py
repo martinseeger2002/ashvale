@@ -653,14 +653,7 @@ part('char.symmetry', 'char', role='npc', name='Symmetry the curator', body='hum
      outfit={"body": "female", "skin": "#f1c9a5", "hair": "bun", "hairColor": "#c8a24a", "eyes": "#2f6a6a",
              "shirt": {"style": "robe", "color": "#e8e4d8"}, "pants": {"style": "robe", "color": "#e8e4d8"},
              "boots": "#8a7a5a", "belt": "#c8a040"})
-part('char.auditor', 'char', role='npc', name='Auditor the clerk', body='humanoid', build='small',
-     outfit={"skin": "#d8b08a", "hair": "curly", "hairColor": "#6a4a3a", "beard": "goatee",
-             "shirt": {"style": "shirt", "color": "#dcd6c4"}, "pants": {"style": "trousers", "color": "#5a4a3a"},
-             "boots": "#3a3a3a", "belt": "#5a4a3a", "gloves": "#c8c0a8"})
-part('char.pip', 'char', role='npc', name='Pip the apprentice', body='humanoid', build='small',
-     outfit={"skin": "#f1c9a5", "hair": "mohawk", "hairColor": "#3a6ac8", "eyes": "#2f6a6a",
-             "shirt": {"style": "tunic", "color": "#3a6ac8"}, "pants": {"style": "shorts", "color": "#6a5a3a"},
-             "boots": "#5a3a22", "apron": "#7a6a4a"})
+# [Claude 2026-10-16] char.auditor and char.pip removed: Pip, the Auditor and The Tin Pipe are out of the game (the operator's request)
 # Saltmere's and the lake castle's people get their own looks (2026-10-05: "the saltmere shop keeps are the same as
 # Ashvale they should be changed")
 part('char.hollis', 'char', role='npc', name='Hollis the taverner', body='humanoid', build='big',
@@ -689,8 +682,7 @@ part('char.hob', 'char', role='npc', name='Hob the cook', body='humanoid', build
      outfit={"skin": "#e0a882", "hair": "bald", "beard": "full", "beardColor": "#b8622a", "shirt": {"style": "shirt", "color": "#8a4a2a"}, "pants": {"style": "trousers", "color": "#3a3028"}, "boots": "#2a2420", "apron": "#8a8478", "belt": "#5a3a22"})
 # every person gets a look of their own (2026-10-06: "Fenn the tanner is the same body as Pip... make sure that
 # characters aren't being used more than once") - tests/unique_looks_test.js keeps it that way
-part('char.fenn', 'char', role='npc', name='Fenn the tanner', body='humanoid', build='normal',
-     outfit={"skin": "#b88458", "hair": "long", "hairColor": "#4a2e1a", "beard": "stubble", "beardColor": "#4a2e1a", "shirt": {"style": "vest", "color": "#8a6a42"}, "pants": {"style": "trousers", "color": "#5a4430"}, "boots": "#3a2616", "apron": "#6a4a2a", "gloves": "#5a3a1e"})
+# [Claude 2026-10-16] char.fenn removed with The Skinning Knife
 part('char.rowan', 'char', role='npc', name='Rowan the drover', body='humanoid', build='normal',
      outfit={"skin": "#d8a072", "hair": "curly", "hairColor": "#a0522a", "hat": {"style": "feather", "color": "#6a5a2a"}, "shirt": {"style": "tunic", "color": "#5a7a3a"}, "pants": {"style": "trousers", "color": "#4a3a28"}, "boots": "#3a2a18", "belt": "#7a5a2a", "cape": "#7a6a4a"})
 part('char.bryce', 'char', role='npc', name='Bryce the shipwright', body='humanoid', build='big', gear={"weapon": "hammer"},

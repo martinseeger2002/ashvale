@@ -16,7 +16,7 @@ ok(Qs.ashen_crown.story === 5, 'The Ashen Crown is five: wolves, chiefs, wraiths
 ok(Qs.wayside_prayer.story === 1 && Qs.biiwaanag.story === 1, 'a short talk or a first fire is one');
 ok(Qs.red_pyre.story === 3 && Qs.even_guard.story === 3, 'the Red Pyre and the Even Guard are three');
 const tot = ids.reduce((a, id) => a + (Qs[id].story | 0), 0);
-ok(tot === 46, 'the valley has 46 story points in all (' + tot + ')');   /* 49 until the Hawk Ring quest (3 points) was retired, 2026-10-10 */
+ok(tot === 47, 'the valley has 47 story points in all (' + tot + ')');   /* 49 until the Hawk Ring quest (3 points) was retired, 2026-10-10; [Claude 2026-10-16] 46 - Tin Pipe (1) - Skinning Knife (3), both removed, + Foolhardy Hero (1) + The Heart Below (4) = 47 */
 
 const last = Qs.ashen_crown.steps[5];
 ok(Array.isArray(last.reward) && last.reward.indexOf('xp:strength:8000') >= 0 && last.reward.indexOf('fighter_boots') >= 0, 'the last Ashen Crown step pays Strength XP and fighter boots');

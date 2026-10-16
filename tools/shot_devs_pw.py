@@ -13,9 +13,8 @@ OUT = os.path.join(ROOT, 'tests', 'shots'); os.makedirs(OUT, exist_ok=True)
 URL = 'http://127.0.0.1:8731/dist/ashvale3d.html?fresh&nocreator&seed=devs1'
 ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
 WALK = '.pfi'
-DEVS = [('silas', 'I laid that well'), ('pip', 'You found a thing'), ('pax', 'Every colour'),
-        ('modulus', 'I measured this street'), ('latency', 'North gate'), ('symmetry', 'I keep the things'),
-        ('auditor', 'Ticket, please')]
+DEVS = [('silas', 'I laid that well'), ('pax', 'Every colour'),   # [Claude 2026-10-16] pip and auditor removed from the game
+        ('modulus', 'I measured this street'), ('latency', 'North gate'), ('symmetry', 'I keep the things')]
 zone = json.load(open(os.path.join(ROOT, 'data', 'zone.village.json')))['data']
 TILES = zone['tiles']
 tile = lambda x, y: TILES[y - zone['origin'][1]][x]

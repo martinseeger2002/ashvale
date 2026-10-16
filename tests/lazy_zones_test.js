@@ -72,7 +72,9 @@ for (const z of zones) for (let y = -2; y < z.size[1] + 2; y++) for (let x = -2;
   for (const c of [A, B]) { if (c.M.tileAt(gx, gy) !== eager.M.tileAt(gx, gy) || c.M.blocked(gx, gy) !== eager.M.blocked(gx, gy) || c.M.insideAt(gx, gy) !== eager.M.insideAt(gx, gy)) tileDiff++; if (c.M.wallAt(gx, gy) !== eager.M.wallAt(gx, gy)) wallDiff++; }
 }
 ok(tileDiff === 0 && wallDiff === 0, 'every town tile, wall and indoor flag matches (B had its land filled before the towns came)' + (tileDiff || wallDiff ? ' tiles ' + tileDiff + ' walls ' + wallDiff : ''));
-ok(zones.every(z => A.M.zoneAt(z.origin[0] + 1, z.origin[1] + 1) === z.id), 'zoneAt names each town once it is loaded');
+/* [Claude 2026-10-16] probe one tile in, but never past the far edge: dragonapproach (Squire Elian's spot) is a 1x1 zone */
+const probeIn = (z, k) => z.origin[k] + Math.min(1, z.size[k] - 1);
+ok(zones.every(z => A.M.zoneAt(probeIn(z, 0), probeIn(z, 1)) === z.id), 'zoneAt names each town once it is loaded');
 { const C0 = lazyGame([]), q = Object.values(full.quests.quests).find(Q => Q.steps.some(st => st.zone === 'saltmere'));
   ok(!C0.hasZone('saltmere') && C0.zoneIndex().some(z => z.id === 'saltmere'), 'before arriving, Saltmere is in the index but not loaded');
   ok(C0.addZone(Object.assign({}, zones.find(z => z.id === 'saltmere'))) && !C0.addZone(Object.assign({}, zones.find(z => z.id === 'saltmere'))), 'a zone arrives once (a second addZone is ignored)');

@@ -481,16 +481,6 @@
    "examine": "Silas the mason. He laid the well, the two shops and the southwest gate, and he means you to know it."
   },
   {
-   "id": "pip",
-   "name": "Pip the apprentice",
-   "look": "pip",
-   "x": 20,
-   "y": 52,
-   "talk": "quest",
-   "quest": "tin_pipe",
-   "examine": "Pip the apprentice, holding something that very likely shouldn't work."
-  },
-  {
    "id": "pax",
    "name": "Pax the painter",
    "look": "pax",
@@ -548,16 +538,6 @@
    "examine": "Hob the cook, at the range seven paces from the well - the only person in this village who has ever used it."
   },
   {
-   "id": "fenn",
-   "name": "Fenn the tanner",
-   "look": "fenn",
-   "x": 36,
-   "y": 48,
-   "talk": "quest",
-   "quest": "skinning_knife",
-   "examine": "Fenn the tanner, on the lane below the Saltmere road, with frames of skins that nobody in this village knew he had."
-  },
-  {
    "id": "chest",
    "name": "Ashvale chest",
    "look": "chest",
@@ -565,18 +545,6 @@
    "y": 53,
    "chest": true,
    "examine": "The Ashvale chest. Everything you own from Ashvale is kept in your arcade wallet; this is where you see it."
-  },
-  {
-   "id": "auditor",
-   "name": "Auditor the clerk",
-   "look": "auditor",
-   "x": 25,
-   "y": 53,
-   "examine": "Auditor the clerk, with a ledger, a scale, and one line in the ledger he has waited forty years to close.",
-   "lines": [
-    "Every coin, every catch, every word in this village gets written down somewhere. It mostly balances.",
-    "Gold drawn out of the Ashvale seam: nil. Gold struck in Ashvale: nine hundred and forty coin, every one out of the old lord's hoard."
-   ]
   },
   {
    "id": "aldous",
