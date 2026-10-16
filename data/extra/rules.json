@@ -214,6 +214,46 @@
    "name": "Replanting",
    "quest": "even_grove",
    "desc": "You can set a sapling in any stump, anywhere a tree used to stand. The tree grows back."
+  },
+  "heart_iron_tuned": {
+   "name": "the iron root seal",
+   "quest": "dragon_heart",
+   "desc": "The first Dragon Heart chamber is tuned."
+  },
+  "heart_echo_cleared": {
+   "name": "the echo trial",
+   "quest": "dragon_heart",
+   "desc": "The first guardian wave has fallen."
+  },
+  "heart_prayer_melee": {
+   "name": "the crimson prayer rune",
+   "quest": "dragon_heart",
+   "desc": "You faced the chamber's melee rock test."
+  },
+  "heart_prayer_ranged": {
+   "name": "the verdant prayer rune",
+   "quest": "dragon_heart",
+   "desc": "You faced the chamber's ranged arrow test."
+  },
+  "heart_prayer_magic": {
+   "name": "the azure prayer rune",
+   "quest": "dragon_heart",
+   "desc": "You faced the chamber's magic bolt test."
+  },
+  "heart_balance_tuned": {
+   "name": "the balance seal",
+   "quest": "dragon_heart",
+   "desc": "The prayer seal below the keep is balanced."
+  },
+  "heart_war_cleared": {
+   "name": "the war trial",
+   "quest": "dragon_heart",
+   "desc": "The final guardian wave has fallen."
+  },
+  "dragon_heart_reset": {
+   "name": "the restored Dragon Heart",
+   "quest": "dragon_heart",
+   "desc": "The power beneath the ruined keep is steady again."
   }
  },
  "portals": [

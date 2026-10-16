@@ -1132,6 +1132,12 @@
       const surfOfMap = (tx, ty) => { const Hh = heightsOf(map); return Hh.surf ? Hh.surf(tx, ty) : heightAt(tx + 0.5, ty + 0.5); };
       const mounts = [];   /* items hung on walls: {obj, item, quest, untilStep} */
       const torches = [], street = [];
+      const dungeonLayers = new Map();
+      function dungeonLayer(lv) {
+        lv |= 0; let d = dungeonLayers.get(lv); if (d) return d;
+        const g = new THREE.Group(); g.userData.dungeonLevel = lv; group.add(g);
+        d = { g, b: Batcher(g) }; dungeonLayers.set(lv, d); return d;
+      }
       const floorY = (o, y) => { const f = floor[o.y * W + o.x]; return isNaN(f) ? y : f; };
       const siteObjs = chunk ? [].concat(...map.sitesIn(X0, Y0, X1 - 1, Y1 - 1).map(st => st.objects), ...(map.roadTorchesIn ? map.roadTorchesIn(X0, Y0, X1 - 1, Y1 - 1) : [])) : [];   /* tents, campfires, and lit posts along the town roads */
       const objs = (chunk ? siteObjs : map.objects.filter(o => inR(o.x, o.y))).sort((a, b) => (b.enter ? 1 : 0) - (a.enter ? 1 : 0));
@@ -1177,6 +1183,56 @@
             }
             const pk = new THREE.Mesh(new THREE.BoxGeometry(1.3, 2.8, 1.3), new THREE.MeshBasicMaterial({ visible: false }));
             pk.position.set(x, y + 1.35, z); pk.userData.pick = { kind: 'passage', x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
+            break;
+          }
+          case 'hatch': case 'heartladder': {   /* a true vertical passage: same x/y, a negative building floor below the keep */
+            const lv = o.lv | 0, by = y + lv * 3.2, L = lv < 0 ? dungeonLayer(lv) : null, DB = L ? L.b : B, parent = L ? L.g : group, IRON = 0x34383d, EDGE = 0x171a1d;
+            if (o.k === 'hatch') {
+              DB.add('box', EDGE, x, by + 0.035, z, 1.18, 0.07, 1.18);
+              DB.add('box', IRON, x, by + 0.08, z, 1.02, 0.08, 1.02);
+              for (const d of [-0.34, 0, 0.34]) DB.add('box', 0x545b62, x + d, by + 0.13, z, 0.055, 0.04, 0.9);
+              const ring = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.025, 6, 14), new THREE.MeshLambertMaterial({ color: 0x9b7838 })); ring.position.set(x + 0.29, by + 0.18, z + 0.2); ring.rotation.x = Math.PI / 2; parent.add(ring);
+            } else {
+              /* An emergency way up is visibly a ladder, not an iron hatch with a few rungs laid over it. */
+              DB.add('box', 0x4a2f1f, x - 0.43, by + 1.38, z - 0.35, 0.10, 2.72, 0.12);
+              DB.add('box', 0x4a2f1f, x + 0.43, by + 1.38, z - 0.35, 0.10, 2.72, 0.12);
+              for (let k = 0; k < 7; k++) DB.add('box', 0x7b5130, x, by + 0.22 + k * 0.40, z - 0.35, 0.84, 0.08, 0.11);
+            }
+            const pk = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.65, 1.35), new THREE.MeshBasicMaterial({ visible: false }));
+            pk.position.set(x, by + 0.3, z); pk.userData.pick = { kind: 'passage', x: o.x, y: o.y, lv }; parent.add(pk); pickables.push(pk);
+            break;
+          }
+          case 'dungeonroom': {   /* one chamber directly under the same keep footprint; lv is negative */
+            const lv = o.lv | 0, by = y + lv * 3.2, w = o.w || 8, h = o.h || 8, L = dungeonLayer(lv), DB = L.b, ST = lv === -4 ? 0x363040 : 0x4a4742, FL = lv === -4 ? 0x292331 : 0x363532;
+            DB.add('box', FL, o.x + w / 2, by - 0.09, o.y + h / 2, w, 0.18, h);
+            DB.add('box', 0x1b1a1c, o.x + w / 2, by + 3.05, o.y + h / 2, w + 0.5, 0.2, h + 0.5);   /* a real ceiling: no sky, weather or upper floor leaks through */
+            for (let tz = 1; tz < h - 1; tz++) for (let tx = 1; tx < w - 1; tx++) if ((tx + tz) % 2 === 0) DB.add('box', lv === -4 ? 0x332b3c : 0x403e39, o.x + tx + 0.5, by + 0.015, o.y + tz + 0.5, 0.94, 0.04, 0.94);
+            for (let i = 0; i < w; i++) { DB.add('box', ST, o.x + i + 0.5, by + 1.5, o.y + 0.08, 1, 3, 0.22); DB.add('box', ST, o.x + i + 0.5, by + 1.5, o.y + h - 0.08, 1, 3, 0.22); }
+            for (let i = 0; i < h; i++) { DB.add('box', ST, o.x + 0.08, by + 1.5, o.y + i + 0.5, 0.22, 3, 1); DB.add('box', ST, o.x + w - 0.08, by + 1.5, o.y + i + 0.5, 0.22, 3, 1); }
+            for (const [dx, dz] of [[1.2,1.2],[w-1.2,1.2],[1.2,h-1.2],[w-1.2,h-1.2]]) { DB.add('cyl', 0x5b5650, o.x + dx, by + 1.45, o.y + dz, 0.55, 2.9, 0.55); DB.add('box', 0x716a61, o.x + dx, by + 2.85, o.y + dz, 0.9, 0.18, 0.9); }
+            for (const [dx, dz] of [[1, 1], [w / 2, 1], [w - 1, 1], [w - 1, h / 2], [w - 1, h - 1], [w / 2, h - 1], [1, h - 1], [1, h / 2]]) {
+              const f = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.42, 6), new THREE.MeshBasicMaterial({ color: lv === -4 ? 0xb06cff : 0xff8a20 })); f.position.set(o.x + dx, by + 1.55, o.y + dz); L.g.add(f); torches.push({ f, ph: dx + dz + lv, x: o.x + dx, y: by + 1.5, z: o.y + dz, lv });
+            }
+            break;
+          }
+          case 'mechanism': {
+            const lv = o.lv | 0, by = y + lv * 3.2, L = lv < 0 ? dungeonLayer(lv) : null, DB = L ? L.b : B, parent = L ? L.g : group, C = o.id === 'dragon_heart' ? 0xb050e8 : o.skill === 'mining' ? 0x8b9298 : o.skill === 'prayer' ? 0xe8d890 : o.skill === 'firemaking' ? 0xe86a28 : 0x668ee8;
+            DB.add('cyl', 0x55514b, x, by + 0.32, z, 0.72, 0.64, 0.72);
+            DB.add('cyl', 0x777168, x, by + 0.69, z, 0.5, 0.12, 0.5);
+            if (o.id === 'dragon_heart') {
+              const orb = new THREE.Mesh(new THREE.OctahedronGeometry(0.34, 0), new THREE.MeshBasicMaterial({ color: C })); orb.position.set(x, by + 1.18, z); parent.add(orb); torches.push({ f: orb, ph: 2, glow: true, x, y: by + 1.18, z, lv });
+            } else {
+              { const ring = new THREE.Mesh(new THREE.TorusGeometry(0.29, 0.045, 6, 18), new THREE.MeshLambertMaterial({ color: C })); ring.position.set(x, by + 0.82, z); ring.rotation.x = Math.PI / 2; parent.add(ring); }
+              DB.add('box', C, x, by + 0.86, z, 0.08, 0.08, 0.52, Math.PI / 4);
+            }
+            const pk = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.58, 1.5, 8), new THREE.MeshBasicMaterial({ visible: false })); pk.position.set(x, by + 0.75, z); pk.userData.pick = { kind: 'mechanism', x: o.x, y: o.y, lv }; parent.add(pk); pickables.push(pk);
+            break;
+          }
+          case 'prayerpad': {
+            const lv = o.lv | 0, by = y + lv * 3.2, L = dungeonLayer(lv), DB = L.b, C = o.style === 'magic' ? 0x3488ff : o.style === 'ranged' ? 0x52c96b : 0xd64b42;
+            DB.add('box', 0x23242a, x, by + 0.035, z, 1.0, 0.07, 1.0);
+            DB.add('cyl', C, x, by + 0.08, z, 0.72, 0.05, 0.72);
+            const rune = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.36, o.style === 'melee' ? 4 : 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: C, side: THREE.DoubleSide })); rune.position.set(x, by + 0.12, z); rune.rotation.y = o.style === 'melee' ? Math.PI / 4 : 0; L.g.add(rune);
             break;
           }
           case 'wsign': {   /* a wooden board nailed to posts on a wall (the ruined keep's dragon killers) */
@@ -1674,6 +1730,7 @@
         else if (c === ',' && r > 0.965) { const fx = x + 0.3 + hash2(x, y + 7) * 0.4, fz = y + 0.3 + hash2(x + 7, y) * 0.4, fy = heightAt(fx, fz); BF.add('cyl6', 0xe8e0c8, fx, fy + 0.05, fz, 0.05, 0.1, 0.05); BF.add('cone', 0xb83a2a, fx, fy + 0.12, fz, 0.14, 0.07, 0.14); }
       }
       B.finish();
+      for (const d of dungeonLayers.values()) d.b.finish();
       { const reg = { sets: BF.finish(), g: group }; FLORA_REG.push(reg); floraSeason(reg); }
       if (RICEP.length) {   /* the manoomin: stalk, a blade off it, and the head on top; tinted per plant by the season */
         const mk = () => { const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0xffffff), RICEP.length); im.castShadow = true; im.frustumCulled = false; im.setColorAt(0, new THREE.Color()); group.add(im); return im; };
@@ -1700,6 +1757,10 @@
       const steamMat = new THREE.MeshLambertMaterial({ color: 0xf2f6fa, transparent: true, opacity: 0.22, depthWrite: false });   /* boiling sap: whiter and thinner than a fire's smoke */
       return {
         group, heightAt, pickables, waterY: seeded ? map.waterH() - 0.05 : WATER_Y, terrain: terrainMesh, rect: RC, roofs, mounts,
+        setFloor(lv) {
+          lv |= 0;
+          for (const c of group.children) c.visible = lv < 0 ? ((c.userData && c.userData.dungeonLevel) === lv) : !(c.userData && c.userData.dungeonLevel < 0);
+        },
         setView(px, pz, r) {   /* seeded chunks: show a quadrant's trees only while it is within r metres of the player */
           if (!chunk) return;
           for (let q = 0; q < 4; q++) {

@@ -14,6 +14,6 @@ with sync_playwright() as p:
     pg.goto(os.environ.get('PAGE', 'http://127.0.0.1:8731/dist/ashvale3d.html') + '?' + qs); pg.wait_for_timeout(5000)
     if js:
         print('js ->', pg.evaluate(js)); pg.wait_for_timeout(2500)
-    pg.screenshot(path=os.path.join(OUT, name + '.png'))
+    pg.screenshot(path=os.path.join(OUT, name + '.png'), timeout=120000)
     print('fps frames', pg.evaluate('window.ASH && window.ASH.fps()'), 'errors:', errs[:12])
     b.close()

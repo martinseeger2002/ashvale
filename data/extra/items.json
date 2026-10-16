@@ -66,6 +66,44 @@
     }
    ]
   },
+  "hero_bones": {
+   "name": "Hero's Bones",
+   "description": "The scorched bones of Sir Garran, the Hero of Ashvale. His squire is waiting on the path below the ruined keep.",
+   "examine": "Sir Garran's scorched remains. Bring them to Squire Elian on the path northwest of the ruined keep.",
+   "collection": "ASHVALE The Foolhardy Hero",
+   "game": "ashvale",
+   "quest": true,
+   "category": "resource",
+   "subcategory": "curio",
+   "weight": 900,
+   "model": "item.hero_bones",
+   "value": 0,
+   "attributes": [
+    {
+     "trait_type": "Bound",
+     "value": 1
+    }
+   ]
+  },
+  "dragonheart_key": {
+   "name": "Dragon-Heart Key",
+   "description": "Father Aldous's old iron key for the hatch beneath the chained dragon's ruined keep.",
+   "examine": "An old iron key shaped like a flame around a heart. It opens the hatch inside the ruined keep.",
+   "collection": "ASHVALE The Heart Below",
+   "game": "ashvale",
+   "quest": true,
+   "category": "resource",
+   "subcategory": "curio",
+   "weight": 120,
+   "model": "item.dragonheart_key",
+   "value": 0,
+   "attributes": [
+    {
+     "trait_type": "Bound",
+     "value": 1
+    }
+   ]
+  },
   "monk_robe": {
    "name": "Monk's robe",
    "description": "A monk's robe of undyed wool, given by the chapel in Saltmere for the Wayside Prayer. Magic +1, Prayer +3. Adds a full second to each prayer point on top of any other Prayer bonus.",

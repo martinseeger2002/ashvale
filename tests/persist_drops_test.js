@@ -49,6 +49,8 @@ ok(core.S.ground.some(g => g.bank === 9), 'an answer about another area leaves t
   const q = c3.addPlayer('me', null); q.x = 21; q.y = 52; const uid = 4398046511104 + 88;
   c3.groundAdd(uid, 'coins', 200, 22, 52); const had = (q.inv.find(s => s && s.id === 'coins') || {}).n || 0;
   c3.cmd('me', { c: 'take', uid }); for (let i = 0; i < 6; i++) c3.tick();
+  ok(c3.invCount(q, 'coins') === had, 'a replica waits for the host to award persisted Gold');
+  c3.groundRemove(uid); c3.grantItem('me', 'coins', 200, uid);
   const got = ((q.inv.find(s => s && s.id === 'coins') || {}).n || 0) - had;
   ok(got === 200 && !c3.S.ground.some(g => g.uid === uid), 'a persisted drop is picked up here (200 Gold)');
   c3.groundAdd(uid, 'coins', 200, 22, 52);

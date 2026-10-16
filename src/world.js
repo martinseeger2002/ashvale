@@ -141,11 +141,13 @@
     /* the walk-in buildings with more than one storey, and the tile their stairs stand on (an inside corner, away from
        the door unless the object names one) */
     const STOREYED = [];
-    const storeys = (objs) => { for (const o of objs) if (o.enter && (o.floors | 0) > 1) {
+    const storeys = (objs) => { for (const o of objs) if (o.enter && ((o.floors | 0) > 1 || (o.basements | 0) > 0)) {
       let st = o.stairsAt;
       if (!st) { const dx = o.door ? o.door[0] : -9; st = [Math.abs(dx - (o.x + o.w - 2)) > 1 ? o.x + o.w - 2 : o.x + 1, o.y + 1]; }
       const alt = [st[0] - 1 > o.x ? st[0] - 1 : st[0] + 1, st[1]];   /* the flights alternate st / alt floor by floor (a switchback) */
-      STOREYED.push({ x: o.x, y: o.y, w: o.w, h: o.h, floors: o.floors | 0, stairs: st, alt, lh: o.lh || null });   /* lh: a storey's height (the castle keep's are 3.2 m) */
+      const floorBounds = {};
+      for (const k in o.floorBounds || {}) { const q = o.floorBounds[k]; if (Array.isArray(q) && q.length >= 4) floorBounds[k | 0] = [q[0] | 0, q[1] | 0, Math.max(1, q[2] | 0), Math.max(1, q[3] | 0)]; }
+      STOREYED.push({ x: o.x, y: o.y, w: o.w, h: o.h, floors: Math.max(1, o.floors | 0), basements: Math.max(0, o.basements | 0), minFloor: -Math.max(0, o.basements | 0), stairs: st, alt, lh: o.lh || null, floorBounds });   /* each basement may spread past the building above without ceasing to be physically below it */
     } };
     storeys(objects);
     /* raised walkable ground (kind 'cdeck', tools/castle/make_castle.js; 2026-10-05: walls "should be able to have a
@@ -156,12 +158,12 @@
     const LIFT = new Map();
     const lifts = (objs) => { for (const o of objs) if (o.k === 'cdeck' && o.cells) { for (const c of o.cells) LIFT.set(c[0] + ',' + c[1], o.lh || 4.2); for (const r of o.ramps || []) LIFT.set(r[0] + ',' + r[1], r[2]); } };
     lifts(objects);
-    const buildingAt = (x, y) => { for (let i = 0; i < STOREYED.length; i++) { const b = STOREYED[i]; if (x >= b.x && y >= b.y && x < b.x + b.w && y < b.y + b.h) return i; } return -1; };
+    const buildingAt = (x, y, lv) => { for (let i = 0; i < STOREYED.length; i++) { const b = STOREYED[i], q = lv != null && b.floorBounds && b.floorBounds[lv | 0], bx = q ? q[0] : b.x, by = q ? q[1] : b.y, bw = q ? q[2] : b.w, bh = q ? q[3] : b.h; if (x >= bx && y >= by && x < bx + bw && y < by + bh) return i; } return -1; };
     const inOld = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
     const wset = (x, y, b) => { const k = key(x, y); wall.set(k, (wall.get(k) || 0) | b); touched.add(k); };   /* anywhere: not only the old map's rectangle (the operator: walls you could walk through) */
     const wclr = (x, y, b) => { const k = key(x, y); wall.set(k, (wall.get(k) || 0) & ~b); touched.add(k); };
     const touched = new Set();   /* tile keys whose wall / inside / open state a zone set (baked into chunks below) */
-    const walls = (objs, npcList) => { for (const o of objs) if (o.enter) {
+    const walls = (objs, npcList) => { for (const o of objs) if (o.enter && !o.basementOnly) {
       const x1 = o.x + o.w - 1, y1 = o.y + o.h - 1;
       for (let x = o.x; x <= x1; x++) { wset(x, o.y, 1); wset(x, o.y - 1, 4); wset(x, y1, 4); wset(x, y1 + 1, 1); }
       for (let y = o.y; y <= y1; y++) { wset(o.x, y, 8); wset(o.x - 1, y, 2); wset(x1, y, 2); wset(x1 + 1, y, 8); }

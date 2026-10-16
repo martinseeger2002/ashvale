@@ -3,7 +3,7 @@ import * as THREE from '/vendor/three.module.min.js';
 import { createModels } from '/src/models.js';
 
 const $ = id => document.getElementById(id);
-const state = { catalog: null, cls: null, design: null, parts: {}, M: null, scene: null, cam: null, renderer: null, obj: null, pal: [], shapeI: 0, shapeMeshes: [] };
+const state = { catalog: null, cls: null, design: null, parts: {}, M: null, scene: null, cam: null, renderer: null, obj: null, pal: [], shapeI: 0, shapeMeshes: [], tool: 'move', gizmo: null };
 const KINDS = ['box', 'cyl', 'cone', 'sphere', 'ico', 'torus', 'disc', 'capsule'];
 
 function num(v, d) {
@@ -41,6 +41,7 @@ function cloneShape(s, dx) {
   const n = sizeLabels(o.t || 'box').length, src = Array.isArray(o.s) ? o.s : [];
   o.s = [];
   for (let k = 0; k < n; k++) o.s[k] = num(src[k], 0.05);
+  o.k = bakeVec(o.k, [1, 1, 1]);
   if (dx) o.p[0] += dx;
   return o;
 }
@@ -50,6 +51,15 @@ function tagShapeMeshes(g) {
   kids.forEach((o, i) => { o.userData.shapeI = i; });
   state.shapeMeshes = kids;
   highlightSel();
+}
+function frameItem(g) {
+  const box = new THREE.Box3().setFromObject(g);
+  const size = new THREE.Vector3(), c = new THREE.Vector3();
+  box.getSize(size); box.getCenter(c);
+  state.lookY = Math.max(0.02, c.y);
+  if (!state.orbit) return;
+  const m = Math.max(size.x, size.y, size.z, 0.06);
+  state.orbit.dist = Math.max(0.7, Math.min(5, m * 6 + 0.35));
 }
 
 async function boot() {
@@ -88,34 +98,52 @@ function setupStage() {
   const cam = new THREE.PerspectiveCamera(40, 1, 0.05, 80);
   cam.position.set(2.4, 1.8, 4.2); cam.lookAt(0, 0.8, 0);
   state.scene = sc; state.cam = cam; state.renderer = r;
-  const drag = { on: false, x: 0, y: 0, yaw: 0.4, pitch: 0.35, dist: 5, moved: false };
+  const drag = { on: false, x: 0, y: 0, x0: 0, y0: 0, yaw: 0.4, pitch: 0.35, dist: 5, moved: false, mode: 'orbit', axis: null, start: null };
   state.orbit = drag;
   state.ray = new THREE.Raycaster();
   state.ptr = new THREE.Vector2();
-  host.addEventListener('pointerdown', e => { drag.on = true; drag.moved = false; drag.x = e.clientX; drag.y = e.clientY; host.setPointerCapture(e.pointerId); });
+  state._v = { right: new THREE.Vector3(), up: new THREE.Vector3(), fwd: new THREE.Vector3(), world: new THREE.Vector3() };
+  host.addEventListener('contextmenu', e => e.preventDefault());
+  host.addEventListener('pointerdown', e => {
+    drag.on = true; drag.moved = false; drag.x = drag.x0 = e.clientX; drag.y = drag.y0 = e.clientY;
+    try { host.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer events have no capture */ }
+    if (e.button === 2 || e.button === 1) { drag.mode = 'orbit'; return; }
+    const hit = hitStage(e);
+    if (hit && hit.gizmo) {
+      drag.mode = 'xf'; drag.axis = hit.axis;
+      if (hit.shapeI != null) state.shapeI = hit.shapeI;
+      drag.start = snapshotShape(); return;
+    }
+    if (hit && hit.shapeI != null) {
+      if (hit.shapeI !== state.shapeI) { state.shapeI = hit.shapeI; drawForm(); highlightSel(); }
+      drag.mode = 'xf'; drag.axis = null; drag.start = snapshotShape(); return;
+    }
+    drag.mode = 'orbit';
+  });
   host.addEventListener('pointerup', e => {
-    if (drag.on && !drag.moved) pickShapeAt(e);
-    drag.on = false;
+    if (drag.on && !drag.moved && drag.mode !== 'xf') pickShapeAt(e);
+    if (drag.mode === 'xf') fillShapeFields();
+    drag.on = false; drag.mode = 'orbit'; drag.axis = null;
   });
   host.addEventListener('pointermove', e => {
     if (!drag.on) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    if (Math.hypot(dx, dy) > 3) drag.moved = true;
+    if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 3) drag.moved = true;
     drag.x = e.clientX; drag.y = e.clientY;
-    const sh = selectedShape();
-    if (sh && e.shiftKey) {   /* artists slide a piece in the view */
-      sh.p = bakeVec(sh.p, [0, 0, 0]);
-      sh.p[0] += dx * 0.0025; sh.p[1] -= dy * 0.0025;
-      applyLive(); fillShapeFields(); return;
-    }
-    if (sh && e.altKey) {   /* Alt-drag turns the selected piece */
-      sh.r = bakeVec(sh.r, [0, 0, 0]);
-      sh.r[1] += dx * 0.012; sh.r[0] += dy * 0.012;
-      applyLive(); fillShapeFields(); return;
+    if (drag.mode === 'xf' && selectedShape() && drag.start) {
+      mouseXform(e.clientX - drag.x0, e.clientY - drag.y0);
+      return;
     }
     drag.yaw -= dx * 0.008; drag.pitch = Math.max(0.08, Math.min(1.3, drag.pitch + dy * 0.006));
   });
   host.addEventListener('wheel', e => { drag.dist = Math.max(1.4, Math.min(18, drag.dist + e.deltaY * 0.01)); e.preventDefault(); }, { passive: false });
+  window.addEventListener('keydown', e => {
+    if (e.target && /input|textarea|select/i.test(e.target.tagName)) return;
+    const map = { g: 'move', r: 'rotate', s: 'scale', t: 'slice' };
+    if (map[e.key.toLowerCase()]) { setTool(map[e.key.toLowerCase()]); e.preventDefault(); }
+  });
+  bindToolBar();
+  rebuildGizmo();
   function frame() {
     const w = host.clientWidth, h = host.clientHeight;
     if (w && h && (r.domElement.width !== w || r.domElement.height !== h)) { r.setSize(w, h, false); cam.aspect = w / Math.max(1, h); cam.updateProjectionMatrix(); }
@@ -123,10 +151,154 @@ function setupStage() {
     cam.position.set(Math.sin(drag.yaw) * drag.dist, lookY + Math.sin(drag.pitch) * drag.dist * 0.55, Math.cos(drag.yaw) * drag.dist);
     cam.lookAt(0, lookY, 0);
     if (state.obj && state.obj.update) state.obj.update(1 / 60);
+    placeGizmo();
     r.render(sc, cam);
     requestAnimationFrame(frame);
   }
   frame();
+}
+
+function bindToolBar() {
+  const bar = $('tools'); if (!bar) return;
+  bar.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
+}
+function setTool(name) {
+  state.tool = name;
+  document.querySelectorAll('#tools [data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === name));
+  rebuildGizmo();
+  toolHint();
+}
+function toolHint() {
+  const d = state.design;
+  if (!$('hint') || !d) return;
+  const t = state.tool || 'move';
+  const say = {
+    move: 'Move: drag the piece or a coloured arrow. Right-drag turns the view.',
+    rotate: 'Rotate: drag to turn the piece, or grab a ring for one axis.',
+    scale: 'Scale: drag to grow or shrink the whole piece.',
+    slice: 'Slice: drag to squash or stretch one axis — flatten a box, thin a ring.',
+  };
+  $('hint').textContent = (d.name || '') + ' · ' + (say[t] || say.move);
+}
+function snapshotShape() {
+  const s = selectedShape(); if (!s) return null;
+  return { p: bakeVec(s.p, [0, 0, 0]), r: bakeVec(s.r, [0, 0, 0]), k: bakeVec(s.k, [1, 1, 1]) };
+}
+function ndcOf(e) {
+  const rect = $('stage').getBoundingClientRect();
+  state.ptr.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  state.ptr.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  state.ray.setFromCamera(state.ptr, state.cam);
+}
+function hitStage(e) {
+  ndcOf(e);
+  if (state.gizmo) {
+    const gh = state.ray.intersectObjects(state.gizmo.children, true);
+    if (gh[0]) {
+      let o = gh[0].object;
+      while (o && o.userData.axis == null) o = o.parent;
+      if (o) return { gizmo: true, axis: o.userData.axis };
+    }
+  }
+  if (state.shapeMeshes && state.shapeMeshes.length) {
+    const hits = state.ray.intersectObjects(state.shapeMeshes, true);
+    if (hits[0]) {
+      let o = hits[0].object;
+      while (o && o.userData.shapeI == null) o = o.parent;
+      if (o) return { shapeI: o.userData.shapeI };
+    }
+  }
+  return null;
+}
+function mouseXform(dx, dy) {
+  const sh = selectedShape(), st = dragStart(); if (!sh || !st) return;
+  const tool = state.tool || 'move', axis = state.orbit.axis, dist = state.orbit.dist || 3;
+  sh.p = bakeVec(sh.p, [0, 0, 0]); sh.r = bakeVec(sh.r, [0, 0, 0]); sh.k = bakeVec(sh.k, [1, 1, 1]);
+  const cam = state.cam, V = state._v;
+  cam.getWorldDirection(V.fwd);
+  V.right.set(1, 0, 0).applyQuaternion(cam.quaternion).normalize();
+  V.up.set(0, 1, 0);
+  const sp = dist * 0.00155;
+  if (tool === 'move') {
+    if (axis == null) {
+      sh.p[0] = st.p[0] + (V.right.x * dx - V.up.x * dy) * sp;
+      sh.p[1] = st.p[1] + (V.right.y * dx - V.up.y * dy) * sp;
+      sh.p[2] = st.p[2] + (V.right.z * dx - V.up.z * dy) * sp;
+    } else {
+      const ax = [[1, 0, 0], [0, 1, 0], [0, 0, 1]][axis];
+      V.world.set(ax[0], ax[1], ax[2]);
+      const along = V.right.dot(V.world) * dx - V.up.dot(V.world) * dy;
+      sh.p[0] = st.p[0]; sh.p[1] = st.p[1]; sh.p[2] = st.p[2];
+      sh.p[axis] = st.p[axis] + along * sp;
+    }
+  } else if (tool === 'rotate') {
+    const a = axis == null ? 1 : axis;
+    sh.r[0] = st.r[0]; sh.r[1] = st.r[1]; sh.r[2] = st.r[2];
+    if (axis == null) { sh.r[1] = st.r[1] + dx * 0.012; sh.r[0] = st.r[0] + dy * 0.012; }
+    else sh.r[a] = st.r[a] + (axis === 1 ? dx : -dy) * 0.012;
+  } else if (tool === 'scale') {
+    const f = Math.max(0.08, Math.min(8, Math.exp((-dy + dx * 0.25) * 0.008)));
+    sh.k[0] = st.k[0] * f; sh.k[1] = st.k[1] * f; sh.k[2] = st.k[2] * f;
+    if (axis != null) { sh.k[0] = st.k[0]; sh.k[1] = st.k[1]; sh.k[2] = st.k[2]; sh.k[axis] = st.k[axis] * f; }
+  } else if (tool === 'slice') {
+    const a = axis != null ? axis : (Math.abs(dx) > Math.abs(dy) ? 0 : 1);
+    const f = Math.max(0.06, Math.min(8, Math.exp((a === 1 ? -dy : dx) * 0.01)));
+    sh.k[0] = st.k[0]; sh.k[1] = st.k[1]; sh.k[2] = st.k[2];
+    sh.k[a] = st.k[a] * f;
+  }
+  applyLive(); fillShapeFields();
+}
+function dragStart() { return state.orbit.start; }
+function axisTint(i) { return [0xe14b4b, 0x3ec56a, 0x4b8ae1][i]; }
+function rebuildGizmo() {
+  if (state.gizmo) { state.scene.remove(state.gizmo); state.gizmo.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); }
+  if (!state.scene) return;
+  const root = new THREE.Group(); root.name = 'gizmo';
+  const tool = state.tool || 'move';
+  for (let a = 0; a < 3; a++) {
+    const g = new THREE.Group();
+    if (a === 0) g.rotation.z = -Math.PI / 2;
+    if (a === 2) g.rotation.x = Math.PI / 2;
+    g.userData.axis = a;
+    const mat = new THREE.MeshBasicMaterial({ color: axisTint(a), depthTest: false, depthWrite: false, transparent: true, opacity: 0.92, side: THREE.DoubleSide });
+    let mesh;
+    if (tool === 'move') {
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.42, 6), mat);
+      shaft.position.y = 0.22; g.add(shaft);
+      mesh = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.1, 8), mat.clone());
+      mesh.position.y = 0.48; g.add(mesh);
+    } else if (tool === 'rotate') {
+      mesh = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.018, 6, 24), mat);
+      mesh.rotation.x = Math.PI / 2; g.add(mesh);
+    } else if (tool === 'scale') {
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.34, 6), mat);
+      shaft.position.y = 0.18; g.add(shaft);
+      mesh = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.07), mat.clone());
+      mesh.position.y = 0.38; g.add(mesh);
+    } else {
+      mesh = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.012, 0.22), mat);
+      g.add(mesh);
+    }
+    g.traverse(o => { if (o.isMesh) { o.userData.axis = a; o.renderOrder = 20; } });
+    root.add(g);
+  }
+  if (tool === 'scale') {
+    const mid = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.09), new THREE.MeshBasicMaterial({ color: 0xf0e2a8, depthTest: false, depthWrite: false }));
+    mid.userData.axis = null; mid.renderOrder = 21; root.add(mid);
+  }
+  state.gizmo = root; state.scene.add(root);
+}
+function placeGizmo() {
+  const g = state.gizmo, o = state.shapeMeshes && state.shapeMeshes[state.shapeI];
+  if (!g) return;
+  const show = !!(o && state.cls && state.cls.group === 'item');
+  g.visible = show;
+  if (!show) return;
+  o.getWorldPosition(g.position);
+  const box = new THREE.Box3().setFromObject(o);
+  const sz = box.getSize(state._v.world);
+  const m = Math.max(sz.x, sz.y, sz.z, 0.03);
+  g.scale.setScalar(Math.max(0.1, Math.min(0.42, m * 2.2)));
 }
 
 function drawNav() {
@@ -258,6 +430,8 @@ function drawForm() {
   if (cls.group === 'item') html += itemFields(d, pal);
   if (cls.group === 'npc') html += npcFields(d, pal);
   if (cls.group === 'building') html += buildingFields(d);
+  html += '<h4>From a picture</h4><p class="fine">Qwen on this machine reads text, not pixels. Drop a picture and the studio sends its colours plus your note. Qwen builds shapes from the class you have open and the parts already in the game.</p>';
+  html += '<div id="genbox">Drop a picture, or <a href="#" id="genpick">choose one</a>.<input id="genImg" type="file" accept="image/*" hidden><img id="genPrev" alt="" hidden><textarea id="genNote" placeholder="a copper hoop with a red stone"></textarea><button class="btn" type="button" id="gen">Generate with Qwen</button></div>';
   html += '<div id="drop">Drop a part JSON or a PNG here, or <a href="#" id="pickf">choose a file</a>. PNG becomes colours (the game has no textures).</div>';
   html += '<button class="btn" id="save">Save draft</button>';
   html += '<button class="btn gh" id="suggest">Suggest to GitHub</button>';
@@ -316,7 +490,7 @@ function selectedShape() {
 function shapeEditor(part) {
   const L = (part && part.shapes) || [];
   if (L.length && (state.shapeI < 0 || state.shapeI >= L.length)) state.shapeI = 0;
-  let h = '<label>shapes (' + L.length + ') — click a row or the preview to select. Shift-drag moves it, Alt-drag turns it.</label><div class="shapes">';
+  let h = '<label>shapes (' + L.length + ') — click a row or the preview to select. Move / Rotate / Scale / Slice on the canvas to place it.</label><div class="shapes">';
   L.forEach((s, i) => {
     const on = i === state.shapeI;
     h += '<div class="sh' + (on ? ' on' : '') + '" data-sel="' + i + '">';
@@ -418,6 +592,52 @@ function bindForm() {
   g('save').onclick = saveDraft;
   g('suggest').onclick = suggestGh;
   setupDrop();
+  setupGenerate();
+}
+function sampleColors(file) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas'); c.width = 24; c.height = 24;
+      const g = c.getContext('2d'); g.drawImage(img, 0, 0, 24, 24);
+      const d = g.getImageData(0, 0, 24, 24).data;
+      const buckets = new Map();
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] < 20) continue;
+        const hex = '#' + [d[i], d[i + 1], d[i + 2]].map(n => (n & 0xf0).toString(16).padStart(2, '0')).join('');
+        buckets.set(hex, (buckets.get(hex) || 0) + 1);
+      }
+      const top = [...buckets.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(e => e[0]);
+      URL.revokeObjectURL(img.src);
+      resolve(top);
+    };
+    img.onerror = () => resolve([]);
+    img.src = URL.createObjectURL(file);
+  });
+}
+function setupGenerate() {
+  const box = $('genbox'), file = $('genImg'), prev = $('genPrev');
+  if (!box) return;
+  let shot = null;
+  $('genpick').onclick = e => { e.preventDefault(); file.click(); };
+  const take = f => { shot = f; prev.hidden = false; prev.src = URL.createObjectURL(f); };
+  file.onchange = () => { if (file.files[0]) take(file.files[0]); };
+  box.ondragover = e => { e.preventDefault(); box.classList.add('hot'); };
+  box.ondragleave = () => box.classList.remove('hot');
+  box.ondrop = e => { e.preventDefault(); box.classList.remove('hot'); const f = e.dataTransfer.files[0]; if (f && /^image\//.test(f.type)) take(f); };
+  $('gen').onclick = async () => {
+    const btn = $('gen'); btn.disabled = true; say('Asking Qwen…', true);
+    try {
+      const colors = shot ? await sampleColors(shot) : [];
+      const r = await (await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ class: state.cls && state.cls.class, note: $('genNote').value, colors }) })).json();
+      if (!r.ok) throw new Error(r.error || 'no shapes');
+      state.design.part.shapes = r.shapes;
+      state.shapeI = 0;
+      drawForm(); preview();
+      say('Qwen built ' + r.shapes.length + ' shapes from ' + (colors.length ? colors.join(' ') : 'your note') + '. It did not see the picture itself.', true);
+    } catch (e) { say(e.message || String(e), false); }
+    const b2 = $('gen'); if (b2) b2.disabled = false;
+  };
 }
 function bindShapes() {
   const d = state.design;
@@ -476,7 +696,7 @@ function writeShapeField(el, rebuild) {
     const cur = vec3(s[f], def);
     cur.length = n; cur[k] = el.dataset.deg ? rad(el.value) : +el.value;
     s[f] = cur;
-    if (rebuild) { drawForm(); preview(); } else applyLive();
+    if (rebuild || f === 's') { preview(); } else applyLive();
   }
 }
 function fillShapeFields() {
@@ -492,9 +712,10 @@ function applyLive() {
   const s = selectedShape(), o = state.shapeMeshes && state.shapeMeshes[state.shapeI];
   if (!s) return;
   if (!o) { preview(); return; }
-  const p = vec3(s.p, [0, 0, 0]), r = vec3(s.r, [0, 0, 0]);
+  const p = vec3(s.p, [0, 0, 0]), r = vec3(s.r, [0, 0, 0]), k = vec3(s.k, [1, 1, 1]);
   o.position.set(p[0], p[1], p[2]);
   o.rotation.set(r[0], r[1], r[2]);
+  o.scale.set(k[0], k[1], k[2]);
   highlightSel();
 }
 function pickShapeAt(e) {
@@ -528,7 +749,7 @@ function highlightSel() {
 }
 function sideListen(sync) {
   $('form').querySelectorAll('input, textarea, select').forEach(el => {
-    if (el.type === 'file' || el.closest('.shapes')) return;
+    if (el.type === 'file' || el.id === 'genNote' || el.closest('.shapes')) return;
     el.addEventListener('input', sync);
     el.addEventListener('change', sync);
   });
@@ -606,10 +827,10 @@ function preview() {
     if (state.cls.group === 'item') {
       state.M.addPart(d.part);
       const g = state.M.item(Object.keys(d.part.items || { [d.id]: 1 })[0] || d.id);
-      g.position.set(0, 0, 0); state.scene.add(g); state.obj = g; state.lookY = 0.35;
-      if (state.orbit && !state.orbit.locked) { state.orbit.dist = 3.2; state.orbit.locked = true; }
+      g.position.set(0, 0, 0); state.scene.add(g); state.obj = g;
       tagShapeMeshes(g);
-      $('hint').textContent = d.name + ' · click a piece, Shift-drag to move, Alt-drag to turn';
+      if (state.orbit && !state.orbit.locked) { frameItem(g); state.orbit.locked = true; }
+      toolHint();
     } else if (state.cls.group === 'npc') {
       state.M.addPart(d.part);
       const key = (d.part.id || '').replace(/^char\./, '');

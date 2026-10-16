@@ -79,11 +79,13 @@
       const p = P(), it = p.inv[slot]; if (!it) return [];
       const d = core.item(it.id), nm = '<span class="o">' + A.esc(d.name) + '</span>', o = [];
       if (st.chest && api.chestStore) {
-        const n = p.inv.reduce((a, s) => a + (s && s.id === it.id ? s.n : 0), 0);
-        o.push({ html: 'Deposit ' + nm, fn: () => api.chestStore(it.id, 1) });
-        if (n > 1) {
-          o.push({ html: 'Deposit N ' + nm, fn: () => K.askCount('Deposit ' + d.name, n, m => api.chestStore(it.id, m)) });
-          o.push({ html: 'Deposit all ' + nm, fn: () => api.chestStore(it.id, n) });
+        if (!d.bound) {
+          const n = p.inv.reduce((a, s) => a + (s && s.id === it.id ? s.n : 0), 0);
+          o.push({ html: 'Deposit ' + nm, fn: () => api.chestStore(it.id, 1) });
+          if (n > 1) {
+            o.push({ html: 'Deposit N ' + nm, fn: () => K.askCount('Deposit ' + d.name, n, m => api.chestStore(it.id, m)) });
+            o.push({ html: 'Deposit all ' + nm, fn: () => api.chestStore(it.id, n) });
+          }
         }
         if (d.eq) o.push({ html: (d.eq === 'weapon' ? 'Wield ' : 'Wear ') + nm, fn: () => api.cmd({ c: 'equip', slot }) });
         o.push({ html: 'Examine ' + nm, fn: () => chatLine(examine(it.id, it.n), 'sys') });
@@ -98,7 +100,7 @@
       else if (d.teleport && d.eq !== 'ring') o.push({ html: 'Use ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
       else if (!d.eq && !d.edible) o.push({ html: 'Use ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
       if (d.arms) { o.push({ html: 'Call to arms <span class="c">castle guard</span>', fn: () => api.cmd({ c: 'arms', on: true }) }); o.push({ html: 'Stand down <span class="c">castle guard</span>', fn: () => api.cmd({ c: 'arms', on: false }) }); }   /* the Lake Castle stone (2026-10-05) */
-      o.push({ html: 'Drop ' + nm, fn: () => api.cmd({ c: 'drop', slot }) });
+      if (!d.bound) o.push({ html: 'Drop ' + nm, fn: () => api.cmd({ c: 'drop', slot }) });
       o.push({ html: 'Examine ' + nm, fn: () => chatLine(examine(it.id, it.n), 'sys') });
       return o;
     }
@@ -114,7 +116,7 @@
       if (d.weight) b.push((d.weight * Math.max(1, n || 1) / 1000).toFixed(d.weight * (n || 1) < 1000 ? 2 : 1) + ' kg');
       if (d.carry) b.push('Carry +' + (d.carry / 1000) + ' kg');
       if (d.energy) b.push('Run energy +' + Math.round(d.energy / 100) + '%');
-      return d.name + (d.english ? ' (' + d.english + ')' : '') + (n > 1 ? ' x ' + n.toLocaleString() : '') + ': ' + (b.length ? b.join(', ') + '. ' : '') + (req ? 'Requires ' + req + '. ' : '') + 'Value ' + d.value + ' GOLD.' + (d.nft ? ' (ASHVALE Armoury: ' + d.nft.copies + ' NFT copies)' : '');
+      return d.name + (d.english ? ' (' + d.english + ')' : '') + (n > 1 ? ' x ' + n.toLocaleString() : '') + ': ' + (d.examine ? d.examine + ' ' : '') + (b.length ? b.join(', ') + '. ' : '') + (req ? 'Requires ' + req + '. ' : '') + 'Value ' + d.value + ' GOLD.' + (d.nft ? ' (ASHVALE Armoury: ' + d.nft.copies + ' NFT copies)' : '');
     }
 
     function updateOrbs() {
@@ -158,21 +160,29 @@
 
     /* ---------- NPC dialogue */
     function dialog(name, linesIn, onClose, choices) {
-      if (dlgQ && dlgQ.onClose) { const prev = dlgQ.onClose; dlgQ.onClose = null; prev(); }
+      if (dlgQ && dlgQ.onClose) { const prev = dlgQ.onClose; dlgQ.onClose = null; prev('dismiss'); }
       dlgQ = { name, lines: (linesIn || []).slice(), i: 0, onClose: onClose || null, choices: choices && choices.length ? choices : null }; drawDlg();
+    }
+    function closeDialog(pick) {
+      const done = dlgQ && dlgQ.onClose; dlg.style.display = 'none'; dlgQ = null; if (done) done(pick);
     }
     function drawDlg() {
       if (!dlgQ || dlgQ.i >= dlgQ.lines.length) {
-        const done = dlgQ && dlgQ.onClose; dlg.style.display = 'none'; dlgQ = null; if (done) done(); return;
+        closeDialog(); return;
       }
       const last = dlgQ.i >= dlgQ.lines.length - 1, pick = last && dlgQ.choices;
       dlg.style.display = 'block';
       dlg.innerHTML = '<div class="nm">' + A.esc(dlgQ.name) + '</div><div class="ln">' + A.esc(dlgQ.lines[dlgQ.i]) + '</div>' +
         (pick ? '<div class="go">' + dlgQ.choices.map(c => '<button type="button" class="btn" data-pick="' + A.esc(c.id) + '">' + A.esc(c.label) + '</button>').join(' ') + '</div>'
           : '<div class="go">' + (last ? 'Tap here to close' : 'Tap here to continue') + '</div>');
-      if (pick) dlg.querySelectorAll('[data-pick]').forEach(b => { b.onclick = (ev) => { ev.stopPropagation(); const id = b.getAttribute('data-pick'), fn = dlgQ && dlgQ.onClose; dlg.style.display = 'none'; dlgQ = null; if (fn) fn(id); }; });
+      if (pick) dlg.querySelectorAll('[data-pick]').forEach(b => { b.onclick = (ev) => { ev.stopPropagation(); closeDialog(b.getAttribute('data-pick')); }; });
     }
     dlg.onclick = () => { if (!dlgQ) return; if (dlgQ.choices && dlgQ.i >= dlgQ.lines.length - 1) return; dlgQ.i++; drawDlg(); K.refresh('quest'); };
+    host.addEventListener('pointerdown', e => {
+      if (help.style.display === 'block' && !help.contains(e.target)) { help.style.display = 'none'; e.preventDefault(); e.stopPropagation(); }
+      if (!dlgQ || dlg.contains(e.target)) return;
+      e.preventDefault(); e.stopPropagation(); closeDialog('dismiss');
+    }, true);
 
     /* ---------- another player's stats (long-press / right-click > View stats): their own levels as their game sent them */
     function confirm(title, body, yesLabel, noLabel, onYes) {
@@ -292,9 +302,12 @@
       const nv = st.north || [0, -1], sx = nv[0] * Math.cos(st.yaw) - nv[1] * Math.sin(st.yaw), sy = nv[0] * Math.sin(st.yaw) + nv[1] * Math.cos(st.yaw);   /* the map turns by yaw: so does north */
       compass.style.transform = 'rotate(' + Math.atan2(sx, -sy) + 'rad)';
     }
+    let mmLastTap = null;
     mmBox.addEventListener('pointerup', e => {
       const r = mmBox.getBoundingClientRect(), dx = (e.clientX - r.left - r.width / 2) / r.width * 300, dy = (e.clientY - r.top - r.height / 2) / r.height * 300;
-      api.minimapTap(dx, dy, 300 / 112 * 1.15 * 4);
+      const now = performance.now(), run = !!(mmLastTap && now - mmLastTap.t < 300 && Math.hypot(e.clientX - mmLastTap.x, e.clientY - mmLastTap.y) < 40);
+      api.minimapTap(dx, dy, 300 / 112 * 1.15 * 4, run);
+      mmLastTap = run ? null : { t: now, x: e.clientX, y: e.clientY };
     });
     window.addEventListener('keydown', e => {
       if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;

@@ -42,7 +42,7 @@
     if (!j || !j.category || !RI) return j;   /* pre-schema data (old saves/pages): already in the internal shape */
     const cs = j.category + '/' + j.subcategory;
     const d = { id, name: j.name, category: j.category, subcategory: j.subcategory, kind: j.subcategory, tier: j.tier || 0, weight: j.weight | 0,
-      value: j.value | 0, req: j.req || {}, stack: !!j.stackable, model: j.model, nft: j.nft || null, ward: j.ward || null };
+      value: j.value | 0, req: j.req || {}, stack: !!j.stackable, model: j.model, nft: j.nft || null, quest: !!j.quest, examine: j.examine || null, ward: j.ward || null };
     d.eq = RI.slots[cs] || RI.slots[j.category] || null;
     if (j.category === 'weapon') Object.assign(d, RI.weapons[j.subcategory] || {});
     if (j.category === 'tool') d.tool = RI.tools[j.subcategory] || null;
@@ -69,6 +69,7 @@
       if (per != null && (typeof a.value !== 'number' || a.value < 0 || a.value > per * Math.max(1, j.tier || 1) + 4)) errs.push(a.trait_type + ' out of range for tier ' + (j.tier || 1));
       if (flat && (typeof a.value !== 'number' || a.value < flat[0] || a.value > flat[1])) errs.push(a.trait_type + ' out of range');
     }
+    if (j.quest && j.nft) errs.push('quest item cannot be an NFT');
     const also = RI.also || ['ns3A7VS6DDaCoBvNFnayHeS9pysgi7Ukrf', '@yourfirstname', 'yourfirstname'];
     if (o.chain && o.creator !== RI.creator && o.creator !== '@ashvale' && also.indexOf(o.creator) < 0) errs.push('not created by @ashvale or @yourfirstname');
     return { ok: !errs.length, errors: errs };
@@ -557,6 +558,13 @@
       const nx = x + dx, ny = y + dy;
       if (FLY) return inMap(nx, ny) && (!NOFLY || NOFLY.indexOf(M.tileAt(nx, ny)) < 0);   /* a hawk flies over trees, walls and water - but not the old woods' wall (rules.tiles.noFly, 2026-10-09: a hawk crossed it to a lake inside and died there) */
       if (BOAT) return inMap(nx, ny) && isWet(nx, ny) && (!dx || !dy || (isWet(x + dx, y) && isWet(x, y + dy)));
+      /* Basement floors are their own walkable plans. They may be wider than the keep above, and surface trees, walls and
+         water have no authority several metres below them. The current floor's explicit bounds are the enclosing rock. */
+      if (GATE_P && (GATE_P.lv | 0) < 0) {
+        if (!inMap(nx, ny) || LV_LIMIT < 0 || !M.buildingAt || M.buildingAt(nx, ny, GATE_P.lv | 0) !== LV_LIMIT) return false;
+        if (furnitureAt(nx, ny, GATE_P.lv | 0)) return false;
+        return !dx || !dy || (M.buildingAt(x + dx, y, GATE_P.lv | 0) === LV_LIMIT && M.buildingAt(x, y + dy, GATE_P.lv | 0) === LV_LIMIT);
+      }
       if (M.lifts && LV_LIMIT < 0) {   /* raised ground (a castle's stairs and wall walk): heights decide, not the wall tiles */
         const la = M.liftAt(x, y), lb = M.liftAt(nx, ny);
         if (la || lb) {
@@ -566,7 +574,7 @@
         }
       }
       if (!inMap(nx, ny) || (M.blocked(nx, ny) && !gateOpen(nx, ny))) return false;
-      if (LV_LIMIT >= 0 && M.buildingAt(nx, ny) !== LV_LIMIT) return false;
+      if (LV_LIMIT >= 0 && M.buildingAt(nx, ny, GATE_P ? GATE_P.lv | 0 : 0) !== LV_LIMIT) return false;
       if (furnitureAt(nx, ny, GATE_P ? GATE_P.lv | 0 : 0)) return false;   /* [Claude 2026-10-11] a poker table or a chess board is solid (the operator: "Add collision to tables and chessboards") */
       return stepClear(x, y, dx, dy);
     }
@@ -682,17 +690,22 @@
     function dropGround(id, n, x, y, owner, life, extra) {
       if (!isAuth(zoneOf(x, y))) { ev(Object.assign({ e: 'xdrop', id, n, x, y, life: life || 300, owner: owner || null }, extra || {})); return null; }
       const sunk = extra && extra.sunk || 0;
-      const g = S.ground.find(q => q.x === x && q.y === y && q.id === id && IT[id].stack && (q.sunk || 0) === sunk);
+      const fl = extra && extra.lv | 0;
+      const diedAt = extra && Object.prototype.hasOwnProperty.call(extra, 'diedAt') ? extra.diedAt : null, from = extra && extra.from || null;
+      /* A death pile is one claimable object per item and death. Never merge it with another player's pile, an older
+         death, or an ordinary drop at the same tile: every instance can retire the exact uid after pickup. */
+      const samePile = q => diedAt != null ? q.diedAt === diedAt && q.from === from : q.diedAt == null;
+      const g = S.ground.find(q => q.x === x && q.y === y && (q.lv | 0) === fl && q.id === id && IT[id].stack && (q.sunk || 0) === sunk && samePile(q));
       const keep = sunk || !perishable(id, g ? g.n + n : n);   /* what lies at the bottom of a lake stays there until it is fished up */   /* gear, tools and Gold (rules.persist) and every magical item lie where they fell until someone takes them; the rest despawns (2026-10-04) */
       if (g) { g.n += n; g.until = keep ? 1e15 : S.t + (life || 300); ev({ e: 'ground', g: g.uid, n: g.n, x, y }); return g; }
       const ng = { uid: nuid(), id, n, x, y, owner: owner || null, until: keep ? 1e15 : S.t + (life || 300) };
       if (extra) Object.assign(ng, extra);
-      S.ground.push(ng); ev({ e: 'drop', g: ng.uid, id, n, x, y, from: ng.from || null, owner: owner || null, sunk: ng.sunk || 0 }); return ng;   /* owner: who let it fall (the chest's exact-NFT drops) */
+      S.ground.push(ng); ev({ e: 'drop', g: ng.uid, id, n, x, y, from: ng.from || null, owner: owner || null, sunk: ng.sunk || 0, lv: ng.lv | 0 }); return ng;   /* owner: who let it fall (the chest's exact-NFT drops) */
     }
 
     // ---------------- commands
     function cmd(pid, c) { if (!c || typeof c.c !== 'string') return; queue.push([pid, c]); log.push([S.t, pid, c]); }
-    function apply(p, c) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); BOAT = !!p.boat && !FLY; GATE_P = p; try { apply0(p, c); } finally { LV_LIMIT = -1; FLY = false; BOAT = false; GATE_P = null; } }
+    function apply(p, c) { LV_LIMIT = p.lv !== 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); BOAT = !!p.boat && !FLY; GATE_P = p; try { apply0(p, c); } finally { LV_LIMIT = -1; FLY = false; BOAT = false; GATE_P = null; } }
     const SEATED_BLOCK = new Set(['walk', 'attack', 'attackn', 'npc', 'take', 'gather', 'board', 'ride', 'climb', 'enter', 'crate', 'sign', 'follow', 'perch', 'sit']);
     function apply0(p, c) {
       if (p.dead && c.c !== 'style' && c.c !== 'run' && c.c !== 'retal' && c.c !== 'look') return;
@@ -740,9 +753,9 @@
           break;
         }
         case 'attack': {
-          if (p.lv > 0) { msg(p, "You can't reach that from up here.", 'warn'); break; }
           if (c.id) { const n = M.npcs.find(q => q.id === c.id); if (n && n.watch && !n.down) { p.act = { k: 'attackn', id: n.id }; p.skilling = null; p._stall = 0; closeShop(p); } break; }
-          const m = mobByUid(c.uid); if (m && !m.dead) { if (coverBlocks(p, m)) { msg(p, 'You dare not strike. One blow here would unmask you both.', 'warn'); break; } p.act = { k: 'attack', uid: m.uid }; p.skilling = null; p._stall = 0; closeShop(p); } break;
+          const m = mobByUid(c.uid); if (m && (m.lv | 0) !== (p.lv | 0)) { msg(p, "You can't reach that from this floor.", 'warn'); break; }
+          if (m && !m.dead) { if (coverBlocks(p, m)) { msg(p, 'You dare not strike. One blow here would unmask you both.', 'warn'); break; } p.act = { k: 'attack', uid: m.uid }; p.skilling = null; p._stall = 0; closeShop(p); } break;
         }
         case 'escape': {
           const n = M.npcs.find(q => q.id === c.id);
@@ -752,8 +765,9 @@
           teleport(p, { to: n.escape, id: 'caveexit' }, n.escapeSay || 'You climb back up into the daylight.');
           break;
         }
-        case 'take': { const g = S.ground.find(q => q.uid === c.uid); if (g) { p.act = { k: 'take', uid: g.uid }; p.skilling = null; closeShop(p); } break; }
-        case 'enter': { const o = passageAt(c.x, c.y); if (o && !p.dead) { p.act = { k: 'enter', x: o.x, y: o.y }; p.skilling = null; closeShop(p); } break; }   /* a cave mouth, a way out */
+        case 'take': { const g = S.ground.find(q => q.uid === c.uid && (q.lv | 0) === (p.lv | 0)); if (g) { p.act = { k: 'take', uid: g.uid }; p.skilling = null; closeShop(p); } break; }
+        case 'enter': { const o = passageAt(c.x, c.y, p.lv); if (o && !p.dead) { p.act = { k: 'enter', x: o.x, y: o.y, lv: p.lv | 0 }; p.skilling = null; closeShop(p); } break; }   /* a cave mouth, a way out, or a vertical hatch */
+        case 'mechanism': { const o = mechanismAt(c.x, c.y, p.lv); if (o && !p.dead) { p.act = { k: 'mechanism', x: o.x, y: o.y, lv: p.lv | 0 }; p.skilling = null; closeShop(p); } break; }
         case 'crate': { const o = crateAt(c.x | 0, c.y | 0); if (o && !p.dead) { p.act = { k: 'crate', x: o.x, y: o.y }; p.skilling = null; closeShop(p); } break; }
         case 'sit': {   /* a chair at a chess table or a poker table: walk there, sit; the host of the area seats you */
           const T = tableById(String(c.table || '')) || pokerTableById(String(c.table || '')), n = T && T.seats ? T.seats.length : 0;
@@ -789,6 +803,27 @@
           break;
         }
         case 'npc': { const n = M.npcs.find(q => q.id === c.id); if (n) { p._trade = !!c.trade; p.act = { k: 'npc', id: n.id }; p.skilling = null; closeShop(p); } break; }
+        case 'mobtalk': {
+          const m = mobByUid(c.uid), d = m && D.monsters[m.key];
+          if (!m || m.dead || !d || !d.lines) break;
+          if (!inReach(p.x, p.y, m.x, m.y, 2)) { msg(p, "You need to get closer to speak to it.", 'warn'); break; }
+          let special = null;
+          for (const qid in p.quests || {}) {
+            const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.steps[q.step - 1];
+            if (st && st.mob === m.key) { special = { qid, q, Q, st }; break; }
+          }
+          if (!special) { ev({ e: 'dialog', p: p.id, name: d.name, lines: linesFor(p, d.lines) }); break; }
+          const st = special.st, give = st.mobGive;
+          if (give && IT[give] && invCount(p, give) < 1) {
+            if (addItem(p, give, 1)) { msg(p, 'Your bag is full: make room for what the dragon leaves behind.', 'warn'); break; }
+            ev({ e: 'inv', p: p.id }); ev({ e: 'take', p: p.id, id: give, n: 1 });
+            msg(p, 'You receive ' + IT[give].name + '.', 'quest');
+          }
+          const goalDone = st.goal && st.goal.flag && hasFlag(p, st.goal.flag);
+          const mobLines = goalDone && st.mobSayDone ? st.mobSayDone : (st.mobSay || d.lines);
+          ev({ e: 'dialog', p: p.id, name: d.name, lines: linesFor(p, mobLines).map(l => String(l).replace(/\{name\}/g, p.name || 'traveller')) });
+          break;
+        }
         case 'acceptq': {   /* yes on a starting dialogue, or yes when Vael asks before calling the three again */
           const qid = String(c.q || ''), Q = D.quests.quests[qid];
           if (!Q || !prereqDone(Q, p)) { msg(p, 'That is not yours to begin.', 'warn'); break; }
@@ -859,7 +894,7 @@
           if (!airborne(p)) break; const n = nodeAt(idx(c.x | 0, c.y | 0)); if (!n || nodeDef(n).skill !== 'woodcutting') break;
           p.path = findPath(p.x, p.y, (x, y) => x === n.x && y === n.y, n.x, n.y, 80); p.act = null; p.skilling = null;
           p.perch = { x: n.x, y: n.y, sx: Math.sign(c.sx | 0), sy: Math.sign(c.sy | 0) }; ev({ e: 'perch', p: p.id, x: n.x, y: n.y }); break; }
-        case 'drop': { const s = p.inv[c.slot | 0]; if (s && IT[s.id] && IT[s.id].bound) { msg(p, IT[s.id].name + ' was made for you. You keep it.', 'warn'); break; } if (s) { p.inv[c.slot | 0] = null; dropGround(s.id, s.n, p.x, p.y, p.id, 300); ev({ e: 'inv', p: p.id }); } break; }
+        case 'drop': { const s = p.inv[c.slot | 0], d = s && IT[s.id]; if (d && d.bound) { msg(p, d.quest ? d.name + ' is a quest item. You keep it safe.' : d.name + ' was made for you. You keep it.', 'warn'); break; } if (s) { p.inv[c.slot | 0] = null; dropGround(s.id, s.n, p.x, p.y, p.id, 300, { lv: p.lv | 0 }); ev({ e: 'inv', p: p.id }); } break; }
         case 'buy': buy(p, c.shop, c.item, Math.max(1, Math.min(1000, c.n | 0))); break;
         case 'sell': sell(p, c.shop, c.slot | 0, Math.max(1, c.n | 0)); break;
         case 'style': { const cl = wclass(p); p.styles[cl] = Math.max(0, Math.min(STYLES[cl].length - 1, c.i | 0)); ev({ e: 'style', p: p.id }); break; }
@@ -932,7 +967,58 @@
         m.x = x; m.y = y; m.path = null; m.step = 0; ev({ e: 'mobjump', mob: m.uid, x, y }); return;
       }
     }
-    function passageAt(x, y) { for (const o of M.objects) if (o.to && o.x === x && o.y === y) return o; return null; }
+    function passageAt(x, y, lv) { for (const o of M.objects) if ((o.to || o.level != null) && o.x === x && o.y === y && (lv == null || (o.lv | 0) === (lv | 0))) return o; return null; }
+    function mechanismAt(x, y, lv) { return (M.objects || []).find(o => o.k === 'mechanism' && o.x === (x | 0) && o.y === (y | 0) && (lv == null || (o.lv | 0) === (lv | 0))) || null; }
+    function prayerPadAt(x, y, lv) { return (M.objects || []).find(o => o.k === 'prayerpad' && o.x === (x | 0) && o.y === (y | 0) && (o.lv | 0) === (lv | 0)) || null; }
+    function setQuestFlag(p, k, text, unlock) {
+      if (!k || !FLAGS[k] || hasFlag(p, k)) return false;
+      p.flags = p.flags || {}; p.flags[k] = S.t || 1;
+      ev({ e: 'flag', p: p.id, flag: k });
+      if (unlock) ev({ e: 'dialog', p: p.id, name: 'Hatch unlocked', lines: [typeof unlock === 'string' ? unlock : text || 'A hatch unlocks nearby.'], unlock: 1 });
+      else if (text) msg(p, text, 'quest');
+      return true;
+    }
+    /* A mechanism can set a persistent seal immediately, or call a personal monster wave whose clear flag is awarded by
+       creditKill. It deliberately reuses the Even Guard's summoned-bout rules, so another player cannot clear your room. */
+    function useMechanism(p, o) {
+      if (!o || p.dead) return;
+      const Q = o.quest && D.quests.quests[o.quest], q = Q && p.quests[o.quest], st = q && Q.steps[q.step - 1];
+      if (!q || !st || (o.step && q.step !== o.step)) { msg(p, o.shut || 'The mechanism is silent. You do not yet understand its purpose.', 'warn'); return; }
+      for (const k of [].concat(o.need || [])) if (k && !hasFlag(p, k)) { msg(p, o.shut || 'Another seal must be restored first.', 'warn'); return; }
+      if (o.flag && hasFlag(p, o.flag)) { msg(p, o.done || 'This part of the mechanism is already steady.', 'info'); return; }
+      const carried = id => invCount(p, id) > 0 || Object.values(p.eq || {}).some(s => s && s.id === id);
+      const toolFor = sk => p.inv.concat(Object.values(p.eq || {})).some(s => s && IT[s.id] && IT[s.id].tool === sk);
+      if (o.item && !carried(o.item)) { msg(p, o.noTool || ('It looks like I will need ' + ((IT[o.item] && IT[o.item].name) || o.item) + ' to ' + (o.verb || 'work this mechanism') + '.'), 'warn'); return; }
+      if (o.tool && !toolFor(o.tool)) { msg(p, o.noTool || ('It looks like I will need ' + (o.tool === 'mining' ? 'a pickaxe' : 'the right tool') + ' to ' + (o.verb || 'work this mechanism') + '.'), 'warn'); return; }
+      if (o.skill && lv(p, o.skill) < (o.level | 0)) { msg(p, 'It looks like I will need ' + cap(o.skill) + ' level ' + (o.level | 0) + ' to ' + (o.verb || 'work this mechanism') + '.', 'warn'); return; }
+      if (o.summon && o.kills) {
+        const live = S.mobs.some(m => m.summon && m.owner === p.id && !m.gone && !m.dead);
+        if (live) { msg(p, 'Your trial is still alive in this chamber.', 'warn'); return; }
+        q.kn = {}; q.trial = { id: o.id || (o.x + ',' + o.y), flag: o.flag, kills: JSON.parse(JSON.stringify(o.kills)), unlock: o.unlock || null };
+        p.summonBye = 0;
+        const n = summonFor(p, q, { summon: o.summon, goal: { kills: o.kills }, home: o.home || [o.x, o.y, 30], quiet: true }, {});
+        if (!n) { delete q.trial; msg(p, 'The mechanism strains, but nothing answers.', 'warn'); return; }
+        msg(p, o.say || 'The seal wakes. Shapes step out of the dark.', 'quest');
+      } else setQuestFlag(p, o.flag, o.say || 'The mechanism answers and a distant lock turns.', o.unlock);
+      if (o.skill && o.xp) addXp(p, o.skill, (o.xp | 0) * 10);
+    }
+    /* The prayer chamber tests recognition, not luck: entering a new rune fires its wall trap exactly once. A matching
+       overhead prayer makes the hit zero but still proves the rune was faced. All three persistent marks open the hatch. */
+    function prayerPadTick(p) {
+      if ((p.lv | 0) >= 0) { p.prayerPad = null; return; }
+      const o = prayerPadAt(p.x, p.y, p.lv), id = o && (o.id || (o.x + ',' + o.y));
+      if (!o || !o.flag || hasFlag(p, o.flag)) { if (!o) p.prayerPad = null; return; }
+      if (p.prayerPad === id) return;
+      p.prayerPad = id;
+      const cls = o.style || 'melee', raw = Math.max(0, o.damage | 0), prot = protects(p, cls), dmg = prot ? 0 : Math.min(raw, p.hp);
+      p.hp -= dmg;
+      ev({ e: 'trialshot', p: p.id, x: o.x, y: o.y, lv: o.lv | 0, cls, dmg, raw, prot: prot ? 1 : 0 });
+      ev({ e: 'hit', dst: p.id, src: null, dmg, max: maxHp(p), hp: p.hp, cls, prot: prot ? 1 : 0, raw });
+      setQuestFlag(p, o.flag, (o.say || ('The ' + cls + ' rune has tested you.')) + (prot ? ' Your prayer turns the strike aside.' : ' The wall strike deals ' + dmg + ' damage. That was a ' + cls + ' attack; the matching protection prayer should stop it.'));
+      const all = ['heart_prayer_melee', 'heart_prayer_ranged', 'heart_prayer_magic'].every(k => hasFlag(p, k));
+      if (all) setQuestFlag(p, 'heart_balance_tuned', 'All three runes have tested you. The hatch to the Heart releases.', 'All three runes answer together. The hatch to the Heart is now unlocked.');
+      if (p.hp <= 0 && !angelSave(p)) killPlayer(p);
+    }
     function teleport(p, P, text) {
       const ox = p.x, oy = p.y, passage = P.id === 'cavemouth' || P.id === 'caveexit';
       if (p.seat) standUp(p, 'left'); p.x = P.to[0]; p.y = P.to[1]; p.path = []; p.act = null; p.skilling = null; p.lv = 0; p.bld = -1; closeShop(p); if (p.boat === 1) landBoat(ox, oy, p.face, p.id); if (p.boat) { p.boat = 0; p.land = null; p.ride = null; ev({ e: 'boat', p: p.id, on: 0 }); }
@@ -963,7 +1049,7 @@
       p.eq[d.eq] = { id: s.id, n: s.n };
       removed.forEach((o, j) => { if (j === 0 && !(IT[o.id].stack && invFind(p, o.id) >= 0)) p.inv[slot] = o; else addItem(p, o.id, o.n); });
       if (d.form === 'hawk') {   /* you become a hawk: what is in the lower slots falls where you stand */
-        let fell = 0; for (let i = HK.slots; i < p.inv.length; i++) { const q = p.inv[i]; if (q) { p.inv[i] = null; dropGround(q.id, q.n, p.x, p.y, p.id, 300); fell++; } }
+        let fell = 0; for (let i = HK.slots; i < p.inv.length; i++) { const q = p.inv[i]; if (q && !(IT[q.id] && IT[q.id].bound)) { p.inv[i] = null; dropGround(q.id, q.n, p.x, p.y, p.id, 300); fell++; } }
         if (p.hawkHp == null || p.hawkHp <= 0) p.hawkHp = HK.hp;
         if (fell) msg(p, 'A hawk carries little: ' + fell + ' thing' + (fell === 1 ? '' : 's') + ' from your lower slots fell to the ground.', 'warn');
         ev({ e: 'inv', p: p.id }); burdenCheck(p);
@@ -1016,7 +1102,7 @@
     function sell(p, shopId, slot, n) {
       const sh = shopOf(shopId); if (!sh || p.shop !== shopId || !nearKeeper(p, sh)) return;
       const s = p.inv[slot]; if (!s) return; const d = IT[s.id];
-      if (!shopBuys(sh, d) || d.bound) { msg(p, d.bound ? d.name + ' was made for you. It is not for sale.' : "The shopkeeper isn't interested in that.", 'warn'); return; }
+      if (!shopBuys(sh, d) || d.bound) { msg(p, d.bound ? (d.quest ? d.name + ' is a quest item. It is not for sale.' : d.name + ' was made for you. It is not for sale.') : "The shopkeeper isn't interested in that.", 'warn'); return; }
       const each = priceSell(shopId, s.id, p), id = s.id;
       const have = invCount(p, id); n = Math.min(n, have);
       if (each > 0 && !canAdd(p, 'coins', 1) && !(s.n === n || !d.stack)) { msg(p, 'You have no room for the GOLD.', 'warn'); return; }
@@ -1165,6 +1251,14 @@
       }
       for (const qid in p.quests) {
         const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.steps[q.step - 1]; if (!st) continue;
+        if (q.trial && q.trial.kills && q.trial.kills[key] != null) {
+          q.kn = q.kn || {}; const capn = q.trial.kills[key] | 0;
+          if ((q.kn[key] | 0) < capn) q.kn[key] = (q.kn[key] | 0) + 1;
+          let got = 0, want = 0, clear = true;
+          for (const k in q.trial.kills) { const n = q.trial.kills[k] | 0; want += n; got += Math.min(n, (q.kn[k] | 0)); if ((q.kn[k] | 0) < n) clear = false; }
+          msg(p, Q.name + ': trial wave ' + got + ' / ' + want + '.', 'quest');
+          if (clear) { const flag = q.trial.flag, unlock = q.trial.unlock; delete q.trial; setQuestFlag(p, flag, 'The last guardian falls. Stone grinds beyond the chamber: the next seal is open.', unlock); }
+        }
         if (st.goal.kill === key && q.n < (st.goal.n == null ? 1 : st.goal.n)) { q.n++; msg(p, Q.name + ': ' + q.n + ' / ' + (st.goal.n || 1) + ' ' + md.name.toLowerCase() + ((st.goal.n || 1) > 1 ? 's' : '') + ' slain.', 'quest'); }
         if (st.goal.kills && st.goal.kills[key] != null) {
           q.kn = q.kn || {}; const capn = st.goal.kills[key];
@@ -1196,13 +1290,13 @@
     function mobDrops(m) {
       const md = MON[m.key], owner = m.killer;
       if (m.summon && !m.summonLoot) return;   /* called fighters only leave configured loot when their bout opts in */
-      if (md.gold) dropGround('coins', md.gold, m.x, m.y, owner, 300);
-      const bn = md.bones === undefined ? PRAY.bones : md.bones; if (bn && IT[bn]) dropGround(bn, 1, m.x, m.y, owner, 300);   /* every monster leaves bones (2026-10-07) */
-      if (!m.summon) for (const k in m.carry || {}) if (m.carry[k] > 0 && IT[k]) dropGround(k, m.carry[k], m.x, m.y, owner, 300);   /* a summoned archer's combat supply is not loot */
-      for (const d of md.drops) if (!(m.carry0 && !m.summon && d.item && (d.item in m.carry0)) && R.int(d.one_in) === 0) {
+      if (md.gold) dropGround('coins', md.gold, m.x, m.y, owner, 300, { lv: m.lv | 0 });
+      const bn = md.bones === undefined ? PRAY.bones : md.bones; if (bn && IT[bn]) dropGround(bn, 1, m.x, m.y, owner, 300, { lv: m.lv | 0 });   /* every monster leaves bones (2026-10-07) */
+      if (!m.summon) for (const k in m.carry || {}) if (m.carry[k] > 0 && IT[k]) dropGround(k, m.carry[k], m.x, m.y, owner, 300, { lv: m.lv | 0 });   /* a summoned archer's combat supply is not loot */
+      for (const d of (m.trialDrops || md.drops || [])) if (!(m.carry0 && !m.summon && d.item && (d.item in m.carry0)) && R.int(d.one_in || 1) === 0) {
         const id = d.any && d.any.length ? d.any[R.int(d.any.length)] : d.item;
         if (!id || !IT[id]) continue;
-        const n = d.n ? d.n[0] + R.int(d.n[1] - d.n[0] + 1) : 1; dropGround(id, n, m.x, m.y, owner, 300);
+        const n = d.n ? d.n[0] + R.int(d.n[1] - d.n[0] + 1) : 1; dropGround(id, n, m.x, m.y, owner, 300, { lv: m.lv | 0 });
       }
     }
     function mobAttack(m, p, mode) {
@@ -1343,16 +1437,20 @@
       p.dead = S.t; p.act = null; p.path = []; p.skilling = null; closeShop(p); prayersOff(p); p.pfx = null;
       ev({ e: 'die', p: p.id });
       msg(p, 'Oh dear, you are dead!', 'warn');
-      /* 2026-10-01: everything you carry and wear drops where you die; anyone may take it (no grace period) */
+      /* A data-marked dungeon exit receives underground death piles. A dead player must never need a dropped key or a
+         cleared personal seal merely to recover their things. Lake deaths still sink where they happened. */
+      const rescue = !sunkKey && (p.lv | 0) < 0 && (M.objects || []).find(o => o.k === 'hatch' && (o.lv | 0) === 0 && Array.isArray(o.deathDrop) && M.buildingAt && M.buildingAt(o.x, o.y, 0) === M.buildingAt(p.x, p.y, p.lv));
+      const dropX = rescue ? rescue.deathDrop[0] | 0 : p.x, dropY = rescue ? rescue.deathDrop[1] | 0 : p.y, dropLv = rescue ? 0 : p.lv | 0;
+      /* 2026-10-01: everything you carry and wear drops at the recovery point; anyone may take it (no grace period) */
       const pile = [];
       for (let i = 0; i < p.inv.length; i++) { const s = p.inv[i]; if (s && !IT[s.id].bound) { pile.push(s); p.inv[i] = null; } }   /* what was made for you (bound) stays with you */
       for (const k of EQ_SLOTS) { const e = p.eq[k]; if (e && !IT[e.id].bound) { pile.push(e); delete p.eq[k]; } }
-      for (const it of pile) dropGround(it.id, it.n, p.x, p.y, null, DEATH.pileTicks || 1000, sunkKey ? { from: p.id, diedAt: S.t, sunk: sunkKey } : { from: p.id, diedAt: S.t });
+      for (const it of pile) dropGround(it.id, it.n, dropX, dropY, null, DEATH.pileTicks || 1000, sunkKey ? { from: p.id, diedAt: S.t, sunk: sunkKey, lv: p.lv | 0 } : { from: p.id, diedAt: S.t, lv: dropLv });
       if (pile.length && sunkKey) { msg(p, 'Everything you carried sinks to the bottom of the lake. Someone fishing here might hook it one day.', 'warn'); ev({ e: 'inv', p: p.id }); ev({ e: 'equip', p: p.id }); }
       else if (pile.length) {
-        const z = M.zoneAt(p.x, p.y);
-        msg(p, 'Your belongings lie where you fell (' + (z || 'the wild') + ', ' + p.x + ',' + p.y + ') for ' + Math.round((DEATH.pileTicks || 1000) * 0.6 / 60) + ' minutes. Others will be able to take them once shared loot arrives.', 'warn');
-        p.deathPile = { x: p.x, y: p.y, t: S.t };
+        const z = M.zoneAt(dropX, dropY), where = rescue ? 'outside the ' + (rescue.name || 'dungeon hatch').toLowerCase() : 'where you fell';
+        msg(p, 'Your belongings lie ' + where + ' (' + (z || 'the wild') + ', ' + dropX + ',' + dropY + ') for ' + Math.round((DEATH.pileTicks || 1000) * 0.6 / 60) + ' minutes. Others will be able to take them once shared loot arrives.', 'warn');
+        p.deathPile = { x: dropX, y: dropY, lv: dropLv, t: S.t };
         ev({ e: 'inv', p: p.id }); ev({ e: 'equip', p: p.id });
       }
       for (const m of S.mobs) if (m.tgt === p.id) loseTarget(m);
@@ -1701,6 +1799,7 @@
         const bringHave = (g) => bids(g).reduce((a, id) => a + Math.max(0, invCount(p, id) - giftOf(p, id)), 0);   /* what another player gave you does not count (2026-10-09: block gifts only - what you gathered yourself counts, even from before the quest) */
         const counted = (st) => {
           if (st.goal.kills) { let n = 0; for (const k in st.goal.kills) n += Math.min(st.goal.kills[k], (q.kn && q.kn[k]) | 0); return n; }
+          if (st.goal.flag) return hasFlag(p, st.goal.flag) ? 1 : 0;
           return (st.goal.kill || st.goal.cook || st.goal.talk || st.goal.plant || st.goal.light) ? (q.n | 0) : (st.goal.bring && bids(st.goal).length ? bringHave(st.goal) : (q.n | 0));
         };
         const killsMet = (st) => { const K = st.goal.kills; if (!K) return true; for (const k in K) if (((q.kn && q.kn[k]) | 0) < K[k]) return false; return true; };
@@ -1709,11 +1808,13 @@
           if ((g.kill || g.cook || g.talk || g.plant || g.light) && (q.n | 0) < need(st)) return false;
           if (g.wait != null && !(natureHours() >= (q.t0 == null ? Infinity : q.t0) + g.wait)) return false;
           if (g.kills && !killsMet(st)) return false;
+          if (g.flag && !hasFlag(p, g.flag)) return false;
           if (g.bring && (!bids(g).length || bringHave(g) < bringN(st))) return false;
           if (withs(st).some(([id, k]) => !IT[id] || invCount(p, id) < k)) return false;
-          return !!(g.kill || g.cook || g.talk || g.bring || g.plant || g.kills || g.light || g.wait != null);
+          return !!(g.kill || g.cook || g.talk || g.bring || g.plant || g.kills || g.flag || g.light || g.wait != null);
         };
         const fill = (L, st) => linesFor(p, L).map(l => String(l).replace(/\{(n|goal|left|name)\}/g, (m, k) => k === 'name' ? (p.name || 'traveller') : !st ? '' : k === 'n' ? counted(st) : k === 'goal' ? need(st) : Math.max(0, need(st) - counted(st))));
+        const doneTalk = () => Q.nextAfter && !questFinished(p, Q.nextAfter) ? (Q.nextLocked || Q.done) : (Q.nextReady || Q.done);
         const open = (st) => st && ZINDEX.some(z => z.id === st.zone);   /* a step opens when its zone EXISTS (it may not be loaded yet) */
         if (!q && !inSeason(Q)) {   /* out of its season: when it opens, not the errand */
           const sn = seasonOf(Q), when = whenText(sn.days);
@@ -1733,7 +1834,7 @@
         }
         else {
           const st = Q.steps[q.step - 1];
-          if (!st) lines = fill(Q.done, null);
+          if (!st) lines = fill(doneTalk(), null);
           else if (!open(st)) { const prev = Q.steps[q.step - 2]; lines = prev && prev.locked && prev.locked.length ? fill(prev.locked, st) : ['The road to that place is not open yet. Come back another day.']; }
           else if (met(st) && (!st.ends || st.ends === n.id)) {
             if (st.goal.bring) {   /* the goods change hands here, and only here: a step cannot be handed in twice */
@@ -1750,7 +1851,7 @@
             if (!nx) {
               const pts = Q.story | 0;
               if (pts) { msg(p, 'You have earned ' + pts + ' Story point' + (pts === 1 ? '' : 's') + '.', 'quest'); ev({ e: 'story', p: p.id, q: qid, n: pts, total: storyPoints(p) }); }
-              lines = done.concat(fill(Q.done, null));
+              lines = done.concat(fill(doneTalk(), null));
             }
             else if (!open(nx)) { lines = done.concat(st.locked && st.locked.length ? fill(st.locked, nx) : ['Rest now. When the road to ' + nx.zone + ' opens, come and see me again.']); q.wait = 1; }
             else lines = done.concat(fill(nx.talk, nx));
@@ -1852,11 +1953,11 @@
         if (S.mobs.some(m => m.summon && m.owner === p.id && m.key === sp.m && !m.gone && !m.dead)) continue;
         const md = MON[sp.m]; if (!md) continue;
         const uid = S.uid++;
-        const mob = { uid, key: sp.m, x: sp.x, y: sp.y, sx: sp.x, sy: sp.y, hp: md.hp, tgt: p.id, atk: 0, dead: 0, back: 0, face: 2, step: 0, zone: M.zoneAt(sp.x, sp.y),
-          carry0: sp.carry || null, carry: sp.carry ? Object.assign({}, sp.carry) : null, summon: 1, summonLoot: !!sp.loot, owner: p.id, home: home };
+        const mob = { uid, key: sp.m, x: sp.x, y: sp.y, sx: sp.x, sy: sp.y, lv: sp.lv == null ? (p.lv | 0) : (sp.lv | 0), hp: md.hp, tgt: p.id, atk: 0, dead: 0, back: 0, face: 2, step: 0, zone: M.zoneAt(sp.x, sp.y),
+          carry0: sp.carry || null, carry: sp.carry ? Object.assign({}, sp.carry) : null, summon: 1, summonLoot: !!sp.loot, trialDrops: sp.drops || null, owner: p.id, home: home };
         S.mobs.push(mob); ev({ e: 'mobadd', mob: uid }); n++;
       }
-      if (n) msg(p, 'They step out of the wind. Stay within fifty tiles of the rope, and do not fall.', 'warn');
+      if (n && !st.quiet) msg(p, 'They step out of the wind. Stay within fifty tiles of the rope, and do not fall.', 'warn');
       return n;
     }
     function dismissSummon(m) {
@@ -2957,7 +3058,7 @@
       if (p.boat === 1 && moved > 2 && !FLY) { addXp(p, 'dexterity', 2 * (DEX.xpPerRunTile || 2)); p.energy = Math.max(0, p.energy - Math.floor((crew ? 0.5 : 1) * 60 * (1000 - Math.min(DEX.drainMaxPermille || 400, (DEX.drainPerLevelPermille || 5) * lv(p, 'dexterity'))) / 1000)); if (!p.energy) msg(p, 'Your arms are spent: the canoe slows to an easy pace.', 'warn'); }
       if (moved === 2 && !FLY && !p.boat) { addXp(p, 'dexterity', 2 * (DEX.xpPerRunTile || 2)); p.energy = Math.max(0, p.energy - Math.floor(60 * (1000 - Math.min(DEX.drainMaxPermille || 400, (DEX.drainPerLevelPermille || 5) * lv(p, 'dexterity'))) / 1000)); if (!p.energy) { p.run = false; msg(p, 'You are out of run energy.', 'warn'); ev({ e: 'run', p: p.id }); } }
     }
-    function playerAt(x, y, self) { for (const pid of S.order) { const o = S.players[pid]; if (o !== self && !o.dead && o.x === x && o.y === y) return true; } return false; }
+    function playerAt(x, y, self) { const fl = self && self.lv | 0; for (const pid of S.order) { const o = S.players[pid]; if (o !== self && !o.dead && (o.lv | 0) === fl && o.x === x && o.y === y) return true; } return false; }
     function puppetTick(p) {   /* another player's character in this game: position comes from the network, never stepped here */
       if (p.dead) return;
       if (p.atk > 0) p.atk--;
@@ -3240,7 +3341,7 @@
         if (nx != null) { const x = kx(nx), y = ky(nx); if (!M.npcs.some(o => o !== n && o.escort && o.x === x && o.y === y)) { n.x = x; n.y = y; } }
       }
     }
-    function playerTick(p) { LV_LIMIT = p.lv > 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); BOAT = !!p.boat && !FLY; GATE_P = p; try { playerTick0(p); } finally { LV_LIMIT = -1; FLY = false; BOAT = false; GATE_P = null; } }
+    function playerTick(p) { LV_LIMIT = p.lv !== 0 && M.buildingAt ? p.bld : -1; FLY = isHawk(p) && !(p.burden > 0); BOAT = !!p.boat && !FLY; GATE_P = p; try { playerTick0(p); } finally { LV_LIMIT = -1; FLY = false; BOAT = false; GATE_P = null; } }
     function playerTick0(p) {
       if (!(p.hp >= 0)) p.hp = maxHp(p);
       if (p.boat === 2 && !p.dead && !p.puppet) rideTick(p);   /* hitpoints that are not a number (the antidote bug, 2026-10-07): back to full */
@@ -3256,7 +3357,7 @@
         return;
       }
       if (p.atk > 0) p.atk--;
-      prayerTick(p); fxTick(p);
+      prayerTick(p); fxTick(p); prayerPadTick(p);
       if (p.hawkHp != null && p.hawkHp < HK.hp && S.t % HK.regenEvery === 0) p.hawkHp++;   /* a hawk's wounds mend slowly */
       const a = p.act;
       if (a && a.k === 'light') { lightTick(p, a); }
@@ -3303,10 +3404,10 @@
         }
       } else if (a && a.k === 'take') {
         const g = S.ground.find(q => q.uid === a.uid);
-        if (!g) p.act = null;
+        if (!g || (g.lv | 0) !== (p.lv | 0)) p.act = null;
         else {
           if (p.x !== g.x || p.y !== g.y) { p.path = findPath(p.x, p.y, (x, y) => x === g.x && y === g.y, g.x, g.y); stepPath(p); if (!p.path.length && (p.x !== g.x || p.y !== g.y)) p.act = null; }
-          if (p.act && p.x === g.x && p.y === g.y && !isAuth(zoneOf(g.x, g.y)) && g.bank == null) {   /* replica: ask the host; first claim wins. A Bank-persisted drop (g.bank != null) is NOT claimed through the host: the Bank's 'took' decides who has it, so this game takes it itself - and only here does S.took (line below) and BANK_GONE remember it, which is what stops the host's next ground snapshot, or an old host's copy, laying the same 200 Gold back down (2026-10-06: "I am able to keep picking up the same 200 Gold over and over again"). The death-pile doubling this branch used to be blamed for (2026-10-09) is closed by that same S.took uid guard, not by routing persisted drops through the host. */
+          if (p.act && p.x === g.x && p.y === g.y && !isAuth(zoneOf(g.x, g.y))) {   /* All shared pickups wait for the host's first-claim decision, including Bank-persisted items. */
             if (!canAdd(p, g.id, g.n)) msg(p, "You don't have enough inventory space to hold that item.", 'warn'); else ev({ e: 'claim', p: p.id, g: g.uid });
             p.act = null;
           }
@@ -3322,7 +3423,7 @@
               ev({ e: 'take', p: p.id, g: g.uid, id: g.id, n: got, x: g.x, y: g.y, own: g.from === p.id ? 1 : 0 });
               if (g.from && g.from !== p.id) markGift(p, g.id, got);   /* another player's drop: a gift, for quests */
               g.n -= got;
-              if (g.n > 0) ev({ e: 'ground', g: g.uid, n: g.n, x: g.x, y: g.y });
+              if (g.n > 0) { GROUND_GONE.add(g.uid); g.uid = nuid(); ev({ e: 'drop', g: g.uid, id: g.id, n: g.n, x: g.x, y: g.y, from: g.from || null, lv: g.lv | 0 }); }
               else { S.ground.splice(S.ground.indexOf(g), 1); if (g.bank != null) BANK_GONE.add(g.bank); }   /* a persisted drop taken here: no host's copy brings it back (2026-10-06: the same 200 Gold, picked up again and again) */
             }
             p.act = null;
@@ -3351,16 +3452,28 @@
         else if (inReach(p.x, p.y, o.x, o.y, 1)) { p.face = faceTo(p.x, p.y, o.x, o.y); p.act = null; p.path = []; openCrate(p, o); }
         else { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, o.x, o.y, 1), o.x, o.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, o.x, o.y, 1)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
       } else if (a && a.k === 'enter') {   /* walk up to a passage and go through: it takes you to its `to` */
-        const o = passageAt(a.x, a.y);
+        const o = passageAt(a.x, a.y, a.lv);
         if (!o) p.act = null;
         else if (inReach(p.x, p.y, o.x, o.y, 1)) {
           if (o.need && !hasFlag(p, o.need)) { msg(p, o.shut || 'It will not open.', 'warn'); p.act = null; }
+          else if (o.item && invCount(p, o.item) < 1) { msg(p, o.shut || 'It needs a key.', 'warn'); p.act = null; }
           else {
-            const dest = o.out && p.x > o.x ? o.out : o.to;
-            teleport(p, { to: dest, id: o.k }, o.say || (o.k === 'cavemouth' ? 'You climb down into the dark. Something skitters ahead.' : o.k === 'gate' ? 'You slip through the gate.' : 'You climb back up into the daylight.'));
+            if (o.level != null) {
+              const bi = M.buildingAt ? M.buildingAt(o.x, o.y) : -1, B = bi >= 0 ? M.buildings[bi] : null, nl = o.level | 0;
+              if (!B || nl < (B.minFloor | 0) || nl >= B.floors) { msg(p, 'The way below is not stable.', 'warn'); p.act = null; }
+              else { p.lv = nl; p.bld = nl ? bi : -1; p.x = o.land ? o.land[0] | 0 : o.x; p.y = o.land ? o.land[1] | 0 : o.y; p.path = []; p.act = null; p.skilling = null; closeShop(p); ev({ e: 'climb', p: p.id, lv: nl }); const say = o.say || (nl < 0 ? 'You climb down beneath the ruins.' : 'You climb back into the daylight.'); if (o.unlock) ev({ e: 'dialog', p: p.id, name: 'Hatch unlocked', lines: [o.unlock === true ? say : o.unlock], unlock: 1 }); else msg(p, say, 'info'); }
+            } else {
+              const dest = o.out && p.x > o.x ? o.out : o.to;
+              teleport(p, { to: dest, id: o.k }, o.say || (o.k === 'cavemouth' ? 'You climb down into the dark. Something skitters ahead.' : o.k === 'gate' ? 'You slip through the gate.' : 'You climb back up into the daylight.'));
+            }
           }
         }
         else { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, o.x, o.y, 1), o.x, o.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, o.x, o.y, 1)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
+      } else if (a && a.k === 'mechanism') {
+        const o = mechanismAt(a.x, a.y, a.lv);
+        if (!o) p.act = null;
+        else if (inReach(p.x, p.y, o.x, o.y, 1)) { p.face = faceTo(p.x, p.y, o.x, o.y); p.act = null; p.path = []; useMechanism(p, o); }
+        else { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, o.x, o.y, 1), o.x, o.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, o.x, o.y, 1)) { msg(p, "I can't reach that mechanism!", 'warn'); p.act = null; } }
       } else if (a && a.k === 'npc') {
         const n = M.npcs.find(q => q.id === a.id);
         if (inReach(p.x, p.y, n.x, n.y, 1)) { p.face = faceTo(p.x, p.y, n.x, n.y); p.act = null; p.path = []; talk(p, npcFor(p, n)); ev({ e: 'face', npc: n.id, x: p.x, y: p.y }); }
@@ -3384,14 +3497,14 @@
     }
 
     // ---------------- per-tick: monsters (RuneScape-style dumb pathing: step straight at the target, get stuck on trees)
-    function occupied(x, y, self) { for (const m of S.mobs) if (m !== self && !m.dead && m.x === x && m.y === y) return true; return playerAt(x, y, null); }   /* monsters never step onto a player */
+    function occupied(x, y, self) { const fl = self && self.lv | 0; for (const m of S.mobs) if (m !== self && !m.dead && (m.lv | 0) === fl && m.x === x && m.y === y) return true; return playerAt(x, y, self); }   /* another floor at the same x/y is not occupied */
     function mobStepToward(m, tx, ty) {
       const dx = Math.sign(tx - m.x), dy = Math.sign(ty - m.y);
       const tries = dx && dy ? [[dx, dy], [dx, 0], [0, dy]] : dx ? [[dx, 0], [dx, 1], [dx, -1]] : [[0, dy], [1, dy], [-1, dy]];
       for (const [sx, sy] of tries) {
         if (!sx && !sy) continue;
         if (MON[m.key].chain && cheb(m.x + sx, m.y + sy, m.sx, m.sy) > MON[m.key].chain) continue;   /* a chained beast stays on its pole */
-        if (canStep(m.x, m.y, sx, sy) && !M.insideAt(m.x + sx, m.y + sy) && !occupied(m.x + sx, m.y + sy, m) && (m.crossing || m.summon || M.zoneAt(m.x + sx, m.y + sy) === M.zoneAt(m.sx, m.sy))) { m.face = faceTo(m.x, m.y, m.x + sx, m.y + sy); m.x += sx; m.y += sy; m.step = 1; return true; }
+        if (canStep(m.x, m.y, sx, sy) && ((m.lv | 0) < 0 || !M.insideAt(m.x + sx, m.y + sy)) && !occupied(m.x + sx, m.y + sy, m) && (m.crossing || m.summon || M.zoneAt(m.x + sx, m.y + sy) === M.zoneAt(m.sx, m.sy))) { m.face = faceTo(m.x, m.y, m.x + sx, m.y + sy); m.x += sx; m.y += sy; m.step = 1; return true; }
       }
       return false;
     }
@@ -3404,7 +3517,7 @@
        (up to RETALIATE.beyond tiles beyond the leash), steps out of its zone to reach them and shoots back if it can. When the
        attacks stop, or the player dies or goes too far, the normal leash and walk-home logic takes over again. */
     const RETALIATE = RU.retaliate || { ticks: 10, beyond: 12 };
-    function tgtOk(m) { const p = m.tgt && S.players[m.tgt]; return !!(p && !p.dead); }
+    function tgtOk(m) { const p = m.tgt && S.players[m.tgt]; return !!(p && !p.dead && (p.lv | 0) === (m.lv | 0)); }
     function otherFighter(m, except) {
       for (const pid of S.order) {
         if (pid === except) continue;
@@ -3439,7 +3552,7 @@
       m.back = 0; return true;
     }
     function sightOf(m, md) { return md.aggro > 0 ? Math.max(1, Math.round(md.aggro * wx(m.zone, 'sight'))) : 0; }
-    function mobAt(x, y, self) { for (const o of S.mobs) if (o !== self && !o.dead && o.x === x && o.y === y) return true; return false; }
+    function mobAt(x, y, self) { const fl = self && self.lv | 0; for (const o of S.mobs) if (o !== self && !o.dead && (o.lv | 0) === fl && o.x === x && o.y === y) return true; return false; }
     /* "I can't reach that" is the player's side of a fact that belongs to the monster: it is standing where melee can
        never land. a tester lost the back half of two hunt runs to one rat like that (2026-10-04) - 75 s of swings at
        distance 1-3 for zero damage - and @apple confirmed it in-world twice ("there is no way to get to that rat").
@@ -3474,7 +3587,7 @@
       if (!m.path || !m.path.length || m.pathKey !== key || S.t - (m.pathT || 0) > 4) { m.path = findPath(m.x, m.y, goal, ax, ay, depth || 16); m.pathKey = key; m.pathT = S.t; }
       if (!m.path.length) return false;
       const n = m.path[0], nx = kx(n), ny = ky(n);
-      if (!canStep(m.x, m.y, nx - m.x, ny - m.y) || occupied(nx, ny, m) || M.insideAt(nx, ny) || (!m.crossing && !m.summon && M.zoneAt(nx, ny) !== m.zone)) { m.path = null; return false; }
+      if (!canStep(m.x, m.y, nx - m.x, ny - m.y) || occupied(nx, ny, m) || ((m.lv | 0) >= 0 && M.insideAt(nx, ny)) || (!m.crossing && !m.summon && M.zoneAt(nx, ny) !== m.zone)) { m.path = null; return false; }
       m.face = faceTo(m.x, m.y, nx, ny); m.x = nx; m.y = ny; m.path.shift(); m.step = 1; return true;
     }
     /* STAMPEDE (2026-10-06: "I want game animals to all run if you attack one of the herd ... They all should run in the
@@ -3507,7 +3620,7 @@
         let best = null, bd = 1e9;
         for (const [dx, dy] of DIRS) {
           const nx = m.x + dx, ny = m.y + dy;
-          if (!canStep(m.x, m.y, dx, dy) || occupied(nx, ny, m) || M.insideAt(nx, ny) || M.zoneAt(nx, ny) !== m.zone) continue;
+          if (!canStep(m.x, m.y, dx, dy) || occupied(nx, ny, m) || ((m.lv | 0) >= 0 && M.insideAt(nx, ny)) || M.zoneAt(nx, ny) !== m.zone) continue;
           const d = Math.abs(nx - F.tx) + Math.abs(ny - F.ty); if (d < bd) { bd = d; best = [dx, dy]; }
         }
         if (!best || bd >= Math.abs(m.x - F.tx) + Math.abs(m.y - F.ty) + 1) break;   /* nowhere closer: it stops here */
@@ -3525,7 +3638,7 @@
       const d0 = cheb(m.x, m.y, p.x, p.y); let best = null, bd = d0;
       for (const [dx, dy] of DIRS) {
         const nx = m.x + dx, ny = m.y + dy;
-        if (!canStep(m.x, m.y, dx, dy) || occupied(nx, ny, m) || M.insideAt(nx, ny) || (!m.crossing && M.zoneAt(nx, ny) !== m.zone) || cheb(nx, ny, m.sx, m.sy) > leash + (m.crossing ? RETALIATE.beyond : 0)) continue;
+        if (!canStep(m.x, m.y, dx, dy) || occupied(nx, ny, m) || ((m.lv | 0) >= 0 && M.insideAt(nx, ny)) || (!m.crossing && M.zoneAt(nx, ny) !== m.zone) || cheb(nx, ny, m.sx, m.sy) > leash + (m.crossing ? RETALIATE.beyond : 0)) continue;
         const d = cheb(nx, ny, p.x, p.y); if (d > bd) { bd = d; best = [dx, dy]; }
       }
       if (!best) return false;
@@ -3535,7 +3648,7 @@
       let best = null, bd = 99;
       for (const pid of S.order) {
         const q = S.players[pid];
-        if (q.dead || q.lv > 0 || (airborne(q) && !shooter(m, md)) || S.t - q.spawnT <= 8 || combatLevel(q) > mobCombat(md) || M.zoneAt(q.x, q.y) !== m.zone) continue;   /* monsters keep to the ground floor, and cannot reach a hawk */
+        if (q.dead || (q.lv | 0) !== (m.lv | 0) || (airborne(q) && !shooter(m, md)) || S.t - q.spawnT <= 8 || combatLevel(q) > mobCombat(md) || M.zoneAt(q.x, q.y) !== m.zone) continue;   /* monsters only see adventurers on their own vertical floor */
         const d = cheb(q.x, q.y, m.x, m.y); if (d <= sightOf(m, md) && d < bd) { bd = d; best = q; }
       }
       if (best) { m.tgt = best.id; m.back = 0; m.path = null; }
@@ -3549,6 +3662,7 @@
         ev({ e: 'mobeat', mob: m.uid }); return;
       }
       let p = m.tgt ? S.players[m.tgt] : null;
+      if (p && (p.lv | 0) !== (m.lv | 0)) p = loseTarget(m);
       m.crossing = retaliating(m, ai.leash);
       if (p && !(m.crossing && p.id === m.hurt) && (p.dead || cheb(m.x, m.y, m.sx, m.sy) > (m.summon && m.home ? m.home[2] : ai.leash) || cheb(p.x, p.y, m.sx, m.sy) > (m.summon && m.home ? m.home[2] : ai.leash) + 4 || (!m.summon && M.zoneAt(p.x, p.y) !== m.zone))) { p = loseTarget(m); m.fleeing = 0; }
       if (p && ai.fleePct && !m.fled && m.hp * 100 < md.hp * ai.fleePct) { m.fled = 1; m.fleeing = S.t; m.path = null; ev({ e: 'mobflee', mob: m.uid }); }
@@ -3595,7 +3709,7 @@
       m.step = 0;
       if (m.summon) {   /* death or fifty tiles from the rope ends the call, whether or not this zone is the one being stepped */
         const own = S.players[m.owner], home = m.home || [m.sx, m.sy, 50];
-        const left = !own || !!own.dead || cheb(own.x, own.y, home[0], home[1]) > (home[2] || 50);
+        const left = !own || !!own.dead || (own.lv | 0) !== (m.lv | 0) || cheb(own.x, own.y, home[0], home[1]) > (home[2] || 50);
         if (left || m.gone) { if (!m.gone) dismissSummon(m); return; }
         if (m.dead) { if (m.summonLoot && m.dropAt && S.t >= m.dropAt) { m.dropAt = 0; mobDrops(m); } return; }
         m.tgt = own.id; m.back = 0;
@@ -3631,6 +3745,7 @@
       if (comeStep(m)) { mobHeal(m, md, 10); return; }   /* someone is trying to hit us and cannot: come out to them, without attacking */
       if (m.follow) { if (S.t < m.follow.at) return; followThrough(m); }   /* coming up (or down) through a cave opening after its target */
       let p = m.tgt ? S.players[m.tgt] : null;
+      if (p && (p.lv | 0) !== (m.lv | 0)) p = loseTarget(m);
       /* RELENTLESS (2026-10-07, the Spider Cave: "they should follow you out of their spawn zone indefinitely"): once it
          has you it ignores its area and its leash, and only stops when you die (or leave the game) */
       if (md.relentless) { m.crossing = !!p; if (p && p.dead) p = loseTarget(m); }
@@ -3641,7 +3756,7 @@
       }
       if (p && airborne(p) && !shooter(m, md)) { m.tgt = 0; m.back = 1; p = null; }   /* the hawk flew off: no bite or blow reaches it (2026-10-08) */
       if (!p && !m.back && md.aggro > 0) {
-        for (const pid of S.order) { const q = S.players[pid]; if (!q.dead && !(airborne(q) && !shooter(m, md)) && S.t - q.spawnT > 8 && cheb(q.x, q.y, m.x, m.y) <= sightOf(m, md) && (md.hunter || combatLevel(q) <= mobCombat(md)) && M.zoneAt(q.x, q.y) === M.zoneAt(m.sx, m.sy)) { m.tgt = q.id; p = q; break; } }   /* hunters (timber wolves) take on anyone */
+        for (const pid of S.order) { const q = S.players[pid]; if (!q.dead && (q.lv | 0) === (m.lv | 0) && !(airborne(q) && !shooter(m, md)) && S.t - q.spawnT > 8 && cheb(q.x, q.y, m.x, m.y) <= sightOf(m, md) && (md.hunter || combatLevel(q) <= mobCombat(md)) && M.zoneAt(q.x, q.y) === M.zoneAt(m.sx, m.sy)) { m.tgt = q.id; p = q; break; } }   /* monsters only acquire targets on their floor */
       }
       /* shy animals (2026-10-04: chickens scatter, deer flee when you come close): within md.shy tiles of a
          player they run, two steps a tick, away from the nearest one and back toward home after. Hit one and it is
@@ -3763,7 +3878,10 @@
       for (const pid of S.order) playerTick(S.players[pid]);
       if (M.netGap) for (const pid of S.order) netCross(S.players[pid]);   /* the open globe: past a cut edge of the net, carried to where that ground lies */
       if (M.seeded) for (const pid of S.order) wake(S.players[pid]);
-      for (const m of S.mobs) mobTick(m);
+      for (const m of S.mobs) {
+        LV_LIMIT = (m.lv | 0) < 0 && M.buildingAt ? M.buildingAt(m.x, m.y, m.lv | 0) : -1; GATE_P = m;
+        try { mobTick(m); } finally { LV_LIMIT = -1; GATE_P = null; }
+      }
       patrolTick(); guardTick(); watchTick();
       for (let i = 0; i < S.pending.length;) { const h = S.pending[i]; if (h.at <= S.t) { S.pending.splice(i, 1); if (h.guard) landOnGuard(h); else landOnMob(h); } else i++; }
       for (let i = 0; i < S.ground.length;) { const g = S.ground[i]; if (g.until <= S.t && isAuth(zoneOf(g.x, g.y))) { S.ground.splice(i, 1); ev({ e: 'vanish', g: g.uid, x: g.x, y: g.y }); } else i++; }
@@ -3803,12 +3921,13 @@
     }
     function claim(pid, uid) {   /* first claim wins; the picker's own game adds the item when it hears the 'take' */
       const g = S.ground.find(q => q.uid === uid), p = S.players[pid];
-      if (!g || !p || !isAuth(zoneOf(g.x, g.y)) || cheb(p.x, p.y, g.x, g.y) > 3) return false;
+      if (!g || !p || p.dead || GROUND_GONE.has(uid) || (g.lv | 0) !== (p.lv | 0) || !isAuth(zoneOf(g.x, g.y)) || cheb(p.x, p.y, g.x, g.y) > 3) return false;
+      GROUND_GONE.add(uid);
       if (g.bank != null) BANK_GONE.add(g.bank);
       if (g.uid >= BANK_UID) BANK_GONE.add(g.uid - BANK_UID);
       S.ground.splice(S.ground.indexOf(g), 1); ev({ e: 'take', p: pid, g: g.uid, id: g.id, n: g.n, remote: 1, x: g.x, y: g.y }); return true;
     }
-    function hostDrop(o) { return dropGround(o.id, o.n, o.x, o.y, null, o.life || 300, o.from ? { from: o.from, diedAt: o.diedAt || S.t } : null); }
+    function hostDrop(o) { return dropGround(o.id, o.n, o.x, o.y, null, o.life || 300, { from: o.from || null, diedAt: o.diedAt || S.t, lv: o.lv | 0 }); }
     /* replica side: take the host's state */
     function applyMobs(list) {
       for (const r of list) {
@@ -3818,31 +3937,37 @@
         else if (!r[4] && m.dead) { m.dead = 0; ev({ e: 'spawn', mob: m.uid }); }
       }
     }
-    function groundAdd(uid, id, n, x, y, from, sunk) {
+    function groundAdd(uid, id, n, x, y, from, sunk, lv) {
       if (!IT[id] || isAuth(zoneOf(x, y))) return;
-      if (S.took.has(uid)) return;   /* already in our bag: a host snapshot must not lay the same pile down again */
+      if (S.took.has(uid) || GROUND_GONE.has(uid)) return;   /* consumed on any client: stale snapshots cannot restore it */
       const did = uid >= BANK_UID ? uid - BANK_UID : null;   /* a persisted drop (its uid says so), even from a host too old to say */
       if (did != null && BANK_GONE.has(did)) return;         /* the Bank already told us somebody took it: an old host's copy stays gone */
       const g = S.ground.find(q => q.uid === uid); if (g) { g.n = n; return; }
-      S.ground.push({ uid, id, n, x, y, owner: null, until: S.t + 1e9, from: from || null, bank: did, sunk: sunk || 0 }); ev({ e: 'drop', g: uid, id, n, x, y, sunk: sunk || 0 });
+      S.ground.push({ uid, id, n, x, y, owner: null, until: S.t + 1e9, from: from || null, bank: did, sunk: sunk || 0, lv: lv | 0 }); ev({ e: 'drop', g: uid, id, n, x, y, sunk: sunk || 0, lv: lv | 0 });
     }
-    function groundRemove(uid) { if (uid >= BANK_UID) BANK_GONE.add(uid - BANK_UID); const i = S.ground.findIndex(q => q.uid === uid); if (i >= 0 && !isAuth(zoneOf(S.ground[i].x, S.ground[i].y))) { S.ground.splice(i, 1); ev({ e: 'vanish', g: uid }); } }
+    function groundRemove(uid) {
+      GROUND_GONE.add(uid);
+      if (uid >= BANK_UID) BANK_GONE.add(uid - BANK_UID);
+      const i = S.ground.findIndex(q => q.uid === uid);
+      if (i >= 0) { const g = S.ground[i]; if (g.bank != null) BANK_GONE.add(g.bank); S.ground.splice(i, 1); ev({ e: 'vanish', g: uid }); }
+    }
     /* PERSISTED DROPS (2026-10-06): what the @ashvale Bank holds on the ground (Gold, stones, magical things, anything
        worth 100+ GOLD that a player dropped), listed for a rectangle. Every game puts them down itself - the area's host may be
        an older game - each with a uid from its drop id (2^42 + n), so every game agrees on it; one already lying there (the
-       fresh drop itself) is linked, not doubled. A host's ground snapshot leaves them alone, and taking one needs no host:
-       the Bank's 'took' decides who has it. Those the Bank no longer lists in the rectangle (somebody took them) go. */
-    const BANK_UID = 4398046511104, BANK_GONE = new Set();
+       fresh drop itself) is linked, not doubled. Shared pickups wait for the area host; consumed ids stay retired even
+       when a delayed Bank listing or host snapshot arrives. */
+    const BANK_UID = 4398046511104, BANK_GONE = new Set(), GROUND_GONE = new Set();
     function bankGround(box, items) {
       const want = new Set();
       for (const r of items || []) {
         const did = r[0] | 0, id = String(r[1]), n = Math.max(1, r[2] | 0), x = r[3] | 0, y = r[4] | 0, sunk = r[5] ? String(r[5]) : 0;
         if (!IT[id] || !inMap(x, y)) continue;   /* every game puts them down (the area's host may be an older game): same uid everywhere */
         want.add(did); const uid = BANK_UID + did;
+        if (BANK_GONE.has(did) || GROUND_GONE.has(uid) || S.took.has(uid)) continue;
         const g = S.ground.find(q => q.uid === uid || q.bank === did);
         if (g) { g.n = n; g.until = 1e15; if (sunk) g.sunk = sunk; continue; }
         const live = S.ground.find(q => q.bank == null && q.id === id && q.x === x && q.y === y);
-        if (live) { live.bank = did; live.until = 1e15; if (sunk) live.sunk = sunk; continue; }
+        if (live) { GROUND_GONE.add(live.uid); live.uid = uid; live.bank = did; live.until = 1e15; if (sunk) live.sunk = sunk; continue; }
         S.ground.push({ uid, id, n, x, y, owner: null, until: 1e15, bank: did, sunk }); ev({ e: 'drop', g: uid, id, n, x, y, bank: 1, sunk });
       }
       const [x0, y0, x1, y1] = box || [0, 0, -1, -1];
@@ -3853,7 +3978,7 @@
       }
       return want.size;
     }
-    function groundFull(zone, list) { S.ground = S.ground.filter(g => zoneOf(g.x, g.y) !== zone || isAuth(zone) || g.bank != null);   /* the Bank's persisted drops stay: the Bank, not the host, says when they go */ for (const r of list) groundAdd(r[0], r[1], r[2], r[3], r[4], r[5], r[6]); }
+    function groundFull(zone, list) { S.ground = S.ground.filter(g => zoneOf(g.x, g.y) !== zone || isAuth(zone) || g.bank != null);   /* the Bank's persisted drops stay: the Bank, not the host, says when they go */ for (const r of list) groundAdd(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]); }
     /* owner side: what the host resolved about OUR player */
     function applyHit(pid, dmg, cls, fromMob, fx, fxt) { const p = S.players[pid]; if (!p || p.puppet || p.dead) return; if (fromMob && cls && protects(p, cls)) dmg = 0; else if (fromMob && fx) magicFx(p, fx, fxt || 5); p.hp -= Math.min(dmg, p.hp); if (angelSave(p)) return; if (p.retal && !p.act && !p.path.length) { } if (p.hp <= 0) killPlayer(p); }
     function storeItem(pid, id, n) {
@@ -3877,7 +4002,7 @@
       const p = newPlayer(id, save);
       /* a saved upper floor holds only if that building still has it */
       p.lv = 0; p.bld = -1;
-      if (save && save.lv > 0 && M.buildingAt) { const bi = M.buildingAt(p.x, p.y); if (bi >= 0 && save.lv < M.buildings[bi].floors) { p.lv = save.lv | 0; p.bld = bi; } } S.players[id] = p; if (S.order.indexOf(id) < 0) S.order.push(id); p.spawnT = S.t;
+      if (save && save.lv && M.buildingAt) { const bi = M.buildingAt(p.x, p.y), B = bi >= 0 ? M.buildings[bi] : null; if (B && save.lv >= (B.minFloor | 0) && save.lv < B.floors) { p.lv = save.lv | 0; p.bld = bi; } } S.players[id] = p; if (S.order.indexOf(id) < 0) S.order.push(id); p.spawnT = S.t;
       for (const qid in p.quests || {}) { const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.steps[q.step - 1]; if (st && st.kit) topUp(p, q, st); if (st && st.stumps) fellStumps(q, st); if (st) learnFlag(p, st); for (const s of (Q && Q.steps) || []) if (s.flag && q.step > s.id) learnFlag(p, s); }
       ev({ e: 'join', p: id }); return p;
     }
@@ -3913,7 +4038,7 @@
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
       prayTicks(p, pts, drain) { let d = drain; if (d == null) { d = 0; for (const id in p.pray || {}) d += (PRAYERS[id] && PRAYERS[id].drain) || 0; } if (!d) return null; const n = pts == null ? (p.pp | 0) : pts, rs = resist(p, d); return n <= 0 ? 0 : Math.ceil(((n - 1) * rs + rs + 1 - (pts == null ? (p.pd | 0) : 0)) / d); },
-      isHawk, passageAt, crateAt, signAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, searchOpen, coverBlocks, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf, storyPoints, storyMax, scoreKill, setScores, scoresOf, scoreBoard, scoreRead,
+      isHawk, passageAt, mechanismAt, crateAt, signAt, airborne, hasFlag, flag: (k) => FLAGS[k] || null, searchOpen, coverBlocks, hawkMax: () => HK.hp, slotLimit, lv, maxHp, combatLevel, mobCombat, bonuses, wclass, style, styles: (p) => STYLES[wclass(p)], maxHit, attackSpeed, attackRange, spell, invCount, lvlOf, storyPoints, storyMax, scoreKill, setScores, scoresOf, scoreBoard, scoreRead,
       xpFor: (L) => XP[Math.max(1, Math.min(99, L))], item: (id) => IT[id], node: (i) => M.nodeAt(i), nodeDef, shop: shopOf, mobByUid,
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,

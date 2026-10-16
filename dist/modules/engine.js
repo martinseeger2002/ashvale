@@ -249,7 +249,7 @@
       const store = opts.store || memoryStore();
       const SAVE = SAVE_KEY, SET = 'ashvale3d.settings.v1';
       let save = null; try { save = JSON.parse(store.get(SAVE) || 'null'); } catch (e) { save = null; }
-      if (opts.fresh || q.has('fresh')) save = null;
+      if (opts.fresh || q.has('fresh') || q.has('dragonheart')) save = null;
       let settings = { sound: true, shadows: !isPhone, runToggle: false }; try { Object.assign(settings, JSON.parse(store.get(SET) || '{}')); } catch (e) { /* defaults */ }
 
       /* ---------- data + rules */
@@ -269,6 +269,30 @@
          preview ?home=ziibiing does the same */
       if (HOME && core.setNewHome) core.setNewHome(HOME);
       const me = core.addPlayer(PID, save);
+      /* Purpose-built local playtest for The Heart Below. It never runs in the framed arcade and always starts from a fresh,
+         disposable character: all combat and dungeon-check skills at 99, prerequisite stories complete, and top-tier kit. */
+      if (q.has('dragonheart') && !(G.parent && G.parent !== G)) {
+        for (const sk of D.rules.skills || []) me.xp[sk] = core.xpFor(99) * 10;
+        for (const id of ['wayside_prayer', 'red_pyre', 'even_grove', 'even_guard', 'foolhardy_hero']) {
+          const Q = D.quests.quests[id]; if (Q) me.quests[id] = { step: Q.steps.length + 1, n: 0 };
+        }
+        me.name = 'Heart Tester'; me.x = -10; me.y = -78; me.hp = core.maxHp(me); me.pp = core.maxPp(me);
+        me.inv = new Array(28).fill(null);
+        [['bow_t5', 1], ['staff_t5', 1], ['arrows_t5', 500], ['pickaxe', 1], ['tinderbox', 1], ['potion', 8], ['prayer_potion', 8], ['antidote', 4], ['lobster', 10]].forEach(([id, n], i) => { if (core.item(id)) me.inv[i] = { id, n }; });
+        me.eq = {};
+        for (const [slot, id, n] of [['head', 'helmet_t5', 1], ['cape', 'dragon_cape', 1], ['body', 'body_t5', 1], ['legs', 'legs_t5', 1], ['feet', 'fighter_boots', 1], ['weapon', 'sword_t5', 1], ['shield', 'shield_t5', 1], ['ammo', 'arrows_t5', 500]]) if (core.item(id)) me.eq[slot] = { id, n };
+        if (q.has('dungeon')) {
+          const floor = Math.max(-4, Math.min(-1, parseInt(q.get('dungeon') || '-1', 10) || -1));
+          me.quests.dragon_heart = { step: 3, n: 0, kn: {} };
+          if (!me.inv.some(s => s && s.id === 'dragonheart_key')) me.inv[me.inv.findIndex(s => !s)] = { id: 'dragonheart_key', n: 1 };
+          me.x = floor === -1 ? -57 : floor === -2 ? -59 : -60; me.y = floor === -1 ? -101 : floor === -2 ? -104 : -105;
+          me.lv = floor; me.bld = core.M.buildingAt(me.x, me.y, floor); me.path = []; me.act = null;
+          me.flags = me.flags || {};
+          if (floor <= -2) me.flags.heart_iron_tuned = 1;
+          if (floor <= -3) me.flags.heart_echo_cleared = 1;
+          if (floor <= -4) Object.assign(me.flags, { heart_prayer_melee: 1, heart_prayer_ranged: 1, heart_prayer_magic: 1, heart_balance_tuned: 1 });
+        }
+      }
       /* [Claude 2026-10-12] PRIVATE HOLE CARDS (the operator). The mesh is broadcast-only, so secrecy is made here: every game holds an
          ECDH P-256 key for the session; a sitter's public key rides with the sit (cmd pk -> PS) and lives on the dealer's seat;
          the dealer seals each seat's two cards with AES-GCM under ECDH(dealer, seat) and puts only the sealed blobs in the row
@@ -421,7 +445,7 @@
         requestAnimationFrame(tick);
       }
       const caveTravel = (kind, name) => travelScreen(kind, name, false);
-      const PASSK = { cavemouth: 'down', caveexit: 'up', wigwamdoor: 'lodge', wigwamout: 'lodgeout' };
+      const PASSK = { cavemouth: 'down', caveexit: 'up', hatch: 'down', heartladder: 'up', wigwamdoor: 'lodge', wigwamout: 'lodgeout' };
       /* the moment you choose a passage or a portal: up goes the screen (when you are already beside it), and the area on
          the far side starts loading now rather than when you arrive */
       function travelSoon(kind, name, tx, ty, near) {
@@ -487,9 +511,10 @@
         const c = e.key.charAt(0);
         let up = 0;
         if (c === 'p') { const p = core.S.players[e.key.slice(2)]; if (p && p.lv) { const B = p.bld >= 0 && core.M.buildings ? core.M.buildings[p.bld] : null; up = p.lv * (B && B.lh ? B.lh : 1.8); } }
+        else if (c === 'm') { const m = core.mobByUid(+e.key.slice(2)); if (m && m.lv) { const bi = core.M.buildingAt ? core.M.buildingAt(Math.floor(e.to.x), Math.floor(e.to.z), m.lv | 0) : -1, B = bi >= 0 && core.M.buildings ? core.M.buildings[bi] : null; up = m.lv * (B && B.lh ? B.lh : 1.8); } }
         else if (c === 'r') {   /* [Claude 2026-10-11] another player on a storey: their last row says which (l), the building under them says how tall */
           const r = remotes.get(e.key.slice(2)), b = r && r.buf.length ? r.buf[r.buf.length - 1] : null;
-          if (b && b.l > 0) { const bi = core.M.buildingAt ? core.M.buildingAt(Math.floor(e.to.x), Math.floor(e.to.z)) : -1, B = bi >= 0 && core.M.buildings ? core.M.buildings[bi] : null; up = b.l * (B && B.lh ? B.lh : 1.8); }
+          if (b && b.l) { const bi = core.M.buildingAt ? core.M.buildingAt(Math.floor(e.to.x), Math.floor(e.to.z)) : -1, B = bi >= 0 && core.M.buildings ? core.M.buildings[bi] : null; up = b.l * (B && B.lh ? B.lh : 1.8); }
         }
         /* raised ground (a castle's stairs and wall walk): the height of the tiles you walk between, blended as you go - so you walk up the steps */
         if (core.M.lifts && (c === 'p' || c === 'n' || c === 'r' || c === 'm')) {
@@ -629,7 +654,8 @@
       function syncMobEnts() {
         for (const m of core.S.mobs) {
           const d = Math.max(Math.abs(m.x - me.x), Math.abs(m.y - me.y)), e = ents.get('m:' + m.uid);
-          if (!e && d <= MOB_NEAR) mobEnt(m); else if (e && d > MOB_FAR) removeEnt(e);
+          const sameFloor = (m.lv | 0) === (me.lv | 0);
+          if (!e && sameFloor && d <= MOB_NEAR) mobEnt(m); else if (e && (!sameFloor || d > MOB_FAR)) removeEnt(e);
         }
       }
       syncMobEnts();
@@ -650,14 +676,14 @@
       function syncGround() {
         const seen = new Set(), perTile = {};
         for (const g of core.S.ground) {
-          if (g.sunk) continue;   /* on the bottom of a lake: nobody sees it */
+          if (g.sunk || (g.lv | 0) !== (me.lv | 0)) continue;   /* another floor is another room, even at the same x/y */
           seen.add(g.uid); const k = g.x + ',' + g.y, n = perTile[k] = (perTile[k] || 0) + 1;
           if (gItems.has(g.uid)) continue;
           const o = new THREE.Group(), m = g.id === 'torch' ? standingTorch() : MOD.item(g.id); if (g.id !== 'torch') m.scale.setScalar(1.0); o.add(m);
           const a = (g.uid * 2.39996) % (2 * PI), r = n > 1 ? 0.22 : 0;
-          o.position.set(g.x + 0.5 + Math.cos(a) * r, 0, g.y + 0.5 + Math.sin(a) * r); o.position.y = heightAt(o.position.x, o.position.z) + 0.02; o.rotation.y = a;
+          o.position.set(g.x + 0.5 + Math.cos(a) * r, 0, g.y + 0.5 + Math.sin(a) * r); o.position.y = heightAt(o.position.x, o.position.z) + (g.lv | 0) * 3.2 + 0.02; o.rotation.y = a;
           m.traverse(c => { if (c.isMesh) c.castShadow = true; });
-          const px = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.5, 0.75), proxyMat); px.position.y = 0.2; px.userData.pick = { kind: 'item', uid: g.uid }; o.add(px); proxies.push(px);
+          const px = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.5, 0.75), proxyMat); px.position.y = 0.2; px.userData.pick = { kind: 'item', uid: g.uid, lv: g.lv | 0 }; o.add(px); proxies.push(px);
           o.userData.px = px; o.userData.born = performance.now(); scene.add(o); gItems.set(g.uid, o);
         }
         for (const [uid, o] of gItems) if (!seen.has(uid)) { const fl = o.children[0] && o.children[0].userData.flame; if (fl) gFlames.splice(gFlames.indexOf(fl), 1); scene.remove(o); proxies.splice(proxies.indexOf(o.userData.px), 1); gItems.delete(uid); }
@@ -740,6 +766,7 @@
         /* positions */
         for (const pid of core.S.order) {
           const p = core.S.players[pid], e = ents.get('p:' + pid); if (!e) continue;
+          if (e !== myEnt) e.root.visible = (p.lv | 0) === (me.lv | 0);
           if (p.dead) continue;
           const mv = moveTo(e, p.x, p.y, stamp);
           if (mv && !p.boat) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else e.tyaw = faceYaw(p.face);   /* a canoe faces its heading, even backing up */
@@ -753,13 +780,14 @@
         }
         for (const n of core.M.npcs) {
           const e = ents.get('n:' + n.id); if (!e) continue;
-          e.root.visible = npcShown(n);
+          e.root.visible = (me.lv | 0) === 0 && npcShown(n);
           if (n.patrol || n.guard || n.watch || n.sapAt || n.sapDay) { if (moveTo(e, n.x, n.y, stamp)) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else if (n.wface != null) e.tyaw = faceYaw(n.wface); }   /* a watchman walking his round, a guard answering the call to arms, the village at the sugar bush; standing still at a job, they face the maple or the akik (core says which way) */
           if (n.sapDay) { const sk = n.work ? 'cook' : null; if (sk !== e.skill) e.skill = sk; }   /* hands at the work: the spile at a maple, a bucket tipped at the akik. Their buckets are not items, so nothing goes in them but the pose */
         }   /* hidden NPCs stay unseen until their flag */
         syncMobEnts();
         for (const m of core.S.mobs) {
           const e = ents.get('m:' + m.uid); if (!e || m.dead) continue;   /* (syncMobEnts runs right before) */
+          e.root.visible = (m.lv | 0) === (me.lv | 0);
           const mv = moveTo(e, m.x, m.y, stamp);
           if (mv) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else if (m.tgt) e.tyaw = faceYaw(m.face);
           e.hp = m.hp;
@@ -817,6 +845,16 @@
             src.impacts.push({ dst: e.dst, src: e.src, cls: e.cls, tier: e.ammo ? +String(e.ammo).slice(-1) : 1, spell: e.spell, delay: e.delay, t: now, hit: null, fired: false });
             if (e.cls === 'melee') sfx('swing', src);
             void sp; break;
+          }
+          case 'trialshot': {
+            const tgt = entOf(e.p); if (!tgt) break;
+            const kind = e.cls === 'ranged' ? 'arrow' : e.cls === 'magic' ? 'spell' : 'rock';
+            const obj = kind === 'arrow' ? MOD.projectile('arrow', 2) : kind === 'spell' ? MOD.projectile('spell', '#58a8ff') : new THREE.Mesh(new THREE.DodecahedronGeometry(0.22, 0), new THREE.MeshLambertMaterial({ color: 0x77736a, flatShading: true }));
+            const tx = e.x + 0.5, tz = e.y + 0.5, dx = tx < -54 ? -4 : tx > -54 ? 4 : 0, dz = tz < -99 ? -4 : tz > -99 ? 4 : 0;
+            const from = new THREE.Vector3(tx + dx, tgt.root.position.y + 1.15, tz + dz); obj.position.copy(from); obj.userData.isProjectile = true; scene.add(obj);
+            projs.push({ obj, from, tgt, t: 0, dur: 0.42, hit: null, src: null, dst: e.p, kind: e.cls, arrived: false });
+            sfx(e.cls === 'ranged' ? 'bow' : e.cls === 'magic' ? 'cast' : 'swing');
+            break;
           }
           case 'hit': {
             noteCombat(e);
@@ -915,12 +953,12 @@
               { id: 'no', label: 'Not now.' }
             ] : e.make ? e.make.map(m => ({ id: 'make' + m.i, label: m.label })).concat([{ id: 'no', label: 'Nothing for now.' }]) : null;   /* which thing to make (core orderCraft) */
             hud.dialog(e.name, e.lines, (pick) => {
-              if (pick === 'no') return;
+              if (pick === 'no' || pick === 'dismiss') return;
               if (typeof pick === 'string' && pick.indexOf('make') === 0) { send({ c: 'craft', npc: e.npc, i: +pick.slice(4) }); return; }
               if (pick === 'yes') send({ c: 'acceptq', q: e.offer || e.recall, recall: e.recall ? 1 : 0, replay: e.replay ? 1 : 0 });
               if (after) after();
             }, choices);
-            faceNpc(e.npc); sfx('click');
+            faceNpc(e.npc); sfx(e.unlock ? 'unlock' : 'click');
             if (n && n.pose) myEnt.restPose = n.pose;   /* sit down with him the same way (2026-10-07) */
           } break;
           case 'unhide': { const t = ents.get('n:' + e.npc); if (t) t.root.visible = true; break; }
@@ -976,7 +1014,7 @@
         const n = Math.min(list.length, GLOW.max);
         for (let k = 0; k < n; k++) {
           const o = list[k], sz = o[4] ? 13 : 10, x = o[0] + 0.5, z = o[1] + 0.5;
-          GLOW.m.makeScale(sz, 1, sz).setPosition(x, heightAt(x, z) + 0.08, z); GLOW.mesh.setMatrixAt(k, GLOW.m); GLOW.mesh.setColorAt(k, GLOW.c.setHex(o[3]));
+          GLOW.m.makeScale(sz, 1, sz).setPosition(x, heightAt(x, z) + 0.08 + (o[5] || 0), z); GLOW.mesh.setMatrixAt(k, GLOW.m); GLOW.mesh.setColorAt(k, GLOW.c.setHex(o[3]));
         }
         GLOW.mesh.count = n; GLOW.mesh.instanceMatrix.needsUpdate = true; if (GLOW.mesh.instanceColor) GLOW.mesh.instanceColor.needsUpdate = true;
       }
@@ -997,13 +1035,14 @@
         LBUD.pad.forEach((L, k) => { L.visible = k < LBUD.n - n; });
       }
       function caveTick(now) {
-        const inCave = !!(core.M && core.M.underAt && core.M.underAt(me.x, me.y) != null);
+        const inCave = (me.lv | 0) < 0 || !!(core.M && core.M.underAt && core.M.underAt(me.x, me.y) != null);
+        const fullDungeon = (me.lv | 0) < 0 && (core.M.objects || []).some(o => o.k === 'dungeonroom' && (o.lv | 0) === (me.lv | 0) && me.x >= o.x && me.y >= o.y && me.x < o.x + (o.w || 8) && me.y < o.y + (o.h || 8));
         if (inCave !== CAVE.on) {
           CAVE.on = inCave;
           if (inCave) {
             CAVE.keep = { bg: scene.background.getHex(), fc: scene.fog.color.getHex(), fn: scene.fog.near, ff: scene.fog.far, hemi: hemi.intensity, sun: sun.intensity };
             if (wxMod && wxMod.set) try { wxMod.set('clear', 0, { instant: true }); } catch (e) { /* weather module */ }
-            scene.background.setHex(0x030303); scene.fog.color.setHex(0x030303); scene.fog.near = 5; scene.fog.far = 16; hemi.intensity = 0.14; sun.intensity = 0.04;
+            scene.background.setHex(0x030303); scene.fog.color.setHex(0x030303); scene.fog.near = fullDungeon ? 28 : 5; scene.fog.far = fullDungeon ? 44 : 16; hemi.intensity = 0.14; sun.intensity = 0.04;
             /* no light of your own (2026-10-07: "The player should not give off any light. The only light should be coming from the torches") */
           } else {
             const K = CAVE.keep || {}; scene.background.setHex(K.bg != null ? K.bg : SKY); scene.fog.color.setHex(K.fc != null ? K.fc : SKY); scene.fog.near = K.fn || 24; scene.fog.far = K.ff || 52;
@@ -1011,7 +1050,8 @@
             wxShown = ''; showWeather(true);
           }
         }
-        /* the four torches, ranges and campfires nearest you really light their surroundings - underground always, up top while
+        if (inCave) { scene.fog.near = fullDungeon ? 28 : 5; scene.fog.far = fullDungeon ? 44 : 16; }
+        /* the nearest torches, ranges and campfires really light their surroundings - underground always, up top while
            it is dark (a moonless night has no other light: 2026-10-07) */
         const darkUp = !inCave && SUNL.dark > 0.3;
         if (GLOW.mesh) { GLOW.mesh.visible = inCave || darkUp; GLOW.mesh.material.opacity = inCave ? 1 : Math.min(1, Math.max(0, (SUNL.dark - 0.3) / 0.4)); }
@@ -1022,8 +1062,16 @@
              trails between them, sadfrog 2026-10-07), ranges, campfires, and torches dropped on the ground (2026-10-07) */
           /* every light out to the edge of what you can see (2026-10-07: "The light from the illumination should load
              farther out"): the nearest few are real lights, every one of them gets a pool of light on the ground (GLOW) */
-          const R = inCave ? 18 : Math.min(viewR(), 90), LT = { torch: 1.6, sconce: 1.5, lamp: 2.6, range: 0.9, campfire: 0.9 }, near = [], add = o => { if (!LT[o.k] || Math.abs(o.x - me.x) >= R || Math.abs(o.y - me.y) >= R) return; if (core.lampLit && !core.lampLit(o.x, o.y)) return; if (o.litIn && core.fireLit && !core.fireLit(o.x, o.y)) return;   /* a fire that lights only in one season (zone data `litIn`): out of it, the ring is cold, and cold stones light nothing */ near.push([o.x, o.y, LT[o.k], o.k === 'lamp' ? 0xffd27a : 0xff9a3c, o.k === 'lamp']); };
-          for (const o of core.M.objects || []) add(o);
+          const R = inCave ? 24 : Math.min(viewR(), 90), LT = { torch: 1.6, sconce: 1.5, lamp: 2.6, range: 0.9, campfire: 0.9 }, near = [], add = o => { if ((o.lv | 0) !== (me.lv | 0) || !LT[o.k] || Math.abs(o.x - me.x) >= R || Math.abs(o.y - me.y) >= R) return; if (core.lampLit && !core.lampLit(o.x, o.y)) return; if (o.litIn && core.fireLit && !core.fireLit(o.x, o.y)) return;   /* a fire that lights only in one season (zone data `litIn`): out of it, the ring is cold, and cold stones light nothing */ near.push([o.x, o.y, LT[o.k], o.k === 'lamp' ? 0xffd27a : 0xff9a3c, o.k === 'lamp']); };
+          for (const o of core.M.objects || []) {
+            if (o.k !== 'dungeonroom' || (o.lv | 0) !== (me.lv | 0)) { add(o); continue; }
+            const w = o.w || 8, h = o.h || 8, lv = o.lv | 0;
+            const lamps = [[1, 1], [w / 2, 1], [w - 1, 1], [w - 1, h / 2], [w - 1, h - 1], [w / 2, h - 1], [1, h - 1], [1, h / 2]];
+            for (const a of lamps) {
+              const lx = o.x + a[0], ly = o.y + a[1];
+              if (Math.abs(lx - me.x) < R && Math.abs(ly - me.y) < R) near.push([lx, ly, 1.55 + lv * 3.2, lv === -4 ? 0xb06cff : 0xff9a3c, false, lv * 3.2]);
+            }
+          }
           if (!inCave && core.M.roadTorchesIn) for (const o of core.M.roadTorchesIn(me.x - R, me.y - R, me.x + R, me.y + R)) add(o);
           for (const f of fires.values()) { const q = f.position; if (Math.abs(q.x - me.x) < R && Math.abs(q.z - me.y) < R) near.push([q.x - 0.5, q.z - 0.5, 0.8, 0xff9a3c]); }
           for (const g of core.S.ground) if (g.id === 'torch' && Math.abs(g.x - me.x) < R && Math.abs(g.y - me.y) < R) near.push([g.x, g.y, 1.6, 0xff9a3c]);
@@ -1260,6 +1308,7 @@
           const ss = rf.storeys;
           for (let i = 0; ss && i < ss.length; i++) shadeGroup(ss[i], here && i + 1 > lvNow);
         }
+        inside = inside || (me.lv | 0) < 0;
         if (inside !== indoors) { indoors = inside; if (wxMod && wxMod.indoor) wxMod.indoor(inside); }   /* no rain on your head indoors */
       }
 
@@ -1314,6 +1363,7 @@
           case 'die': tone(300, 0.9, 'sawtooth', 0.25, 60); break;
           case 'mobdie': tone(200, 0.4, 'square', 0.15, 70); break;
           case 'click': tone(1200, 0.03, 'square', 0.06); break;
+          case 'unlock': noise(0.32, 520, 0.45, 2); tone(115, 0.34, 'square', 0.28, 82); tone(740, 0.42, 'triangle', 0.22, 1180, 0.2); break;
           case 'freeze': tone(1800, 0.25, 'sine', 0.2, 2600); noise(0.3, 6000, 0.15, 3); break;
           case 'beep': tone(1250, 0.09, 'square', 0.11, 1250); break;   /* [Claude 2026-10-12] the card table's last ten seconds, your turn only */
           case 'pray': tone(660, 0.35, 'sine', 0.25, 990); tone(990, 0.3, 'sine', 0.12, 0, 0.08); break;
@@ -1413,6 +1463,8 @@
           if (t.kind === 'tree' || t.kind === 'ground' || t.kind === 'deckpick') { const reg = regions.find(r2 => r2.built && (r2.built.pickables.indexOf(h.object) >= 0)); t = reg ? reg.built.pickInfo(h) : null; if (!t) continue; }
           if (t.kind === 'ground') { const x = Math.floor(t.point.x), y = Math.floor(t.point.z); t = { kind: 'ground', x, y }; }
           if (t.kind === 'self') continue;
+          if (t.lv != null && (t.lv | 0) !== (me.lv | 0)) continue;
+          if ((me.lv | 0) < 0 && t.lv == null && (t.kind === 'ground' || t.kind === 'node' || t.kind === 'passage' || t.kind === 'mechanism' || t.kind === 'sign' || t.kind === 'crate')) continue;
           if ((t.kind === 'pokertable' || t.kind === 'chesstable') && (t.lv | 0) !== (me.lv | 0)) continue;   /* [Claude 2026-10-12] a table on another storey is not under your finger: the tap falls through to the floor (the operator: tapping the Tap's ground floor under the tables only said they were upstairs) */
           if (t.kind === 'node' && h.point) t = Object.assign({}, t, { hp: [h.point.x, h.point.z] });   /* where on the tree you tapped (a hawk perches on that side) */
           if (t.kind === 'square' && h.point) t = Object.assign({}, t, { pt: { x: h.point.x, z: h.point.z } });   /* which square of a chess board */
@@ -1423,7 +1475,7 @@
         /* upstairs (a storey, a castle wall walk): the tile you tap is on YOUR floor, not on the ground under it - the ray
            meets the plane you stand on (2026-10-05: the Saltmere stairs "very hard to navigate": a tap on the
            opening upstairs used to land on the ground tile a storey below, metres away) */
-        if (((me.lv || 0) > 0 || (core.M.lifts && core.M.liftAt(me.x, me.y) > 0)) && myEnt) {
+        if (((me.lv || 0) !== 0 || (core.M.lifts && core.M.liftAt(me.x, me.y) > 0)) && myEnt) {
           const pt = ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -myEnt.root.position.y), new THREE.Vector3());
           const gi = out.findIndex(t => t.kind === 'ground');
           if (pt) { const g = { kind: 'ground', x: Math.floor(pt.x), y: Math.floor(pt.z) }; if (gi >= 0) out[gi] = g; else out.push(g); }
@@ -1442,7 +1494,7 @@
       function lvColor(l) { const d = l - core.combatLevel(me); return d > 9 ? '#ff0000' : d > 6 ? '#ff3000' : d > 3 ? '#ff7000' : d > 0 ? '#ffb000' : d === 0 ? '#ffff00' : d > -4 ? '#c0ff00' : d > -7 ? '#80ff00' : '#40ff00'; }
       function optionsForRaw(t) {
         const esc = s => String(s).replace(/</g, '&lt;');
-        if (t.kind === 'mob') { const m = core.mobByUid(t.uid), d = D.monsters[m.key], cb = core.mobCombat(d); const nm = '<span class="y">' + esc(d.name) + '</span> <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>'; const o = [{ html: 'Attack ' + nm, act: { c: 'attack', uid: t.uid }, red: 1 }]; if (d.lines) o.push({ html: 'Talk-to ' + nm, fn: () => hud.dialog(d.name, d.lines) }); o.push({ html: 'Examine ' + nm, fn: () => hud.chat(d.name + ': combat ' + cb + ' (' + (cb > core.combatLevel(me) ? 'stronger than you' : cb === core.combatLevel(me) ? 'evenly matched' : 'weaker than you') + '), ' + d.hp + ' hitpoints, hits up to ' + d.max + '.' + (d.aggro ? ' Aggressive.' : '') + (d.cast ? ' It breathes fire as well as biting.' : '') + (d.hint ? ' ' + d.hint : ''), 'sys') }); return o; }
+        if (t.kind === 'mob') { const m = core.mobByUid(t.uid), d = D.monsters[m.key], cb = core.mobCombat(d); const nm = '<span class="y">' + esc(d.name) + '</span> <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>'; const o = [{ html: 'Attack ' + nm, act: { c: 'attack', uid: t.uid }, red: 1 }]; if (d.lines) o.push({ html: 'Talk-to ' + nm, act: { c: 'mobtalk', uid: t.uid } }); o.push({ html: 'Examine ' + nm, fn: () => hud.chat(d.name + ': combat ' + cb + ' (' + (cb > core.combatLevel(me) ? 'stronger than you' : cb === core.combatLevel(me) ? 'evenly matched' : 'weaker than you') + '), ' + d.hp + ' hitpoints, hits up to ' + d.max + '.' + (d.aggro ? ' Aggressive.' : '') + (d.cast ? ' It breathes fire as well as biting.' : '') + (d.hint ? ' ' + d.hint : ''), 'sys') }); return o; }
         if (t.kind === 'npc') { const n = NPCN[t.id]; if (!n || !npcShown(n)) return []; const cb = n.watch ? (core.guardCb || 33) : 0; const nm = '<span class="y">' + esc(n.name) + '</span>' + (cb ? ' <span style="color:' + lvColor(cb) + '">(combat-' + cb + ')</span>' : ''); const o = []; if (n.tailor) { o.push({ html: 'Change-look ' + nm, act: { c: 'npc', id: n.id }, red: 1 }); if (n.shop) o.push({ html: 'Trade ' + nm, act: { c: 'npc', id: n.id, trade: 1 }, red: 1 }); }
           else if (n.chest) o.push({ html: 'Open ' + nm, act: { c: 'npc', id: n.id }, red: 1 });
           else if (n.portal) o.push({ html: 'Use ' + nm, act: { c: 'npc', id: n.id }, red: 1 });
@@ -1532,9 +1584,12 @@
           const nm = '<span class="c">Crate</span>';
           return [{ html: 'Search ' + nm, act: { c: 'crate', x: o.x, y: o.y }, red: 1 }, { html: 'Examine ' + nm, fn: () => hud.chat(o.examine || 'A wooden crate.', 'sys') }];
         }
-        if (t.kind === 'passage') { const o = core.passageAt(t.x, t.y); if (!o) return []; const nm = '<span class="c">' + esc(o.name || (o.k === 'cavemouth' ? 'Cave' : o.k === 'gate' ? 'Gate' : 'Way out')) + '</span>';
+        if (t.kind === 'mechanism') { const o = core.mechanismAt(t.x, t.y, me.lv); if (!o) return []; const nm = '<span class="c">' + esc(o.name || 'Ancient mechanism') + '</span>';
+          return [{ html: esc(o.label || o.verb || 'Use') + ' ' + nm, act: { c: 'mechanism', x: o.x, y: o.y }, red: 1 },
+                  { html: 'Examine ' + nm, fn: () => hud.chat(o.examine || 'A mechanism built into the foundations of the ruined keep.', 'sys') }]; }
+        if (t.kind === 'passage') { const o = core.passageAt(t.x, t.y, me.lv); if (!o) return []; const nm = '<span class="c">' + esc(o.name || (o.k === 'cavemouth' ? 'Cave' : o.k === 'gate' ? 'Gate' : o.k === 'hatch' ? 'Iron hatch' : 'Way out')) + '</span>';
           return [{ html: esc(o.label || 'Go through'), act: { c: 'enter', x: o.x, y: o.y }, red: 1, then: () => { if (o.k !== 'gate' && o.to) travelSoon(PASSK[o.k] || null, (zoneAtIndex(o.to[0], o.to[1]) || {}).name || '', o.to[0], o.to[1], Math.max(Math.abs(me.x - o.x), Math.abs(me.y - o.y)) <= 1); } },
-                  { html: 'Examine ' + nm, fn: () => hud.chat(o.k === 'cavemouth' ? 'A dark opening in the rock. Webs hang just inside, and the air smells of damp and old fur.' : o.k === 'gate' ? 'A barred wooden gate in a palisade. The lookout has the latch.' : 'A ladder up to a shaft of daylight.', 'sys') }]; }
+                  { html: 'Examine ' + nm, fn: () => hud.chat(o.examine || (o.k === 'cavemouth' ? 'A dark opening in the rock. Webs hang just inside, and the air smells of damp and old fur.' : o.k === 'gate' ? 'A barred gate. Its lock is tied to a nearby seal.' : o.k === 'hatch' ? 'An iron hatch set into the old paving. Its keyhole is shaped like a flame around a heart.' : 'A ladder up through the foundations.'), 'sys') }]; }
         if (t.kind === 'remote') {
           const r = remotes.get(t.id); if (!r) return [];
           if (r.boat === 1 && !me.boat && !Object.values(core.S.players).some(q => q.boat === 2 && q.ride === t.id))   /* two in the canoe: with their push pole and my knockers, ricing; else paddling together (2026-10-08) */
@@ -2225,7 +2280,7 @@
         const m = { s: Math.round(now), p: [Math.round(p.x * 100) / 100, Math.round(p.z * 100) / 100], f: Math.round(myEnt.yaw * 100) / 100, a: myEnt.oneShot ? myEnt.lastOne || 'idle' : myEnt.loco || 'idle', j: myJoin, hp: me.hp, d: me.dead ? 1 : 0, k: myEnt.toolId || 0 };
         m.A = me.act && me.act.k === 'attack' ? me.act.uid : 0;   /* repeat combat intent: packet loss must not make a visible monster unattackable */
         if (HOME) m.h = HOME;   /* where I was born: until my outfit message arrives others draw me in my home's defaults */
-        if (me.lv > 0) m.l = me.lv | 0;   /* [Claude 2026-10-11] the storey I stand on: others draw me up there (they drew the Tap's upstairs on the ground floor) */
+        if (me.lv) m.l = me.lv | 0;   /* the vertical floor I stand on, including a basement below level zero */
         if (myEnt.hl) m.hl = Math.round(myEnt.hl * 100) / 100;   /* where your head is looking, up or down (first person) */
         if (me.boat) { m.bt = me.boat; if (me.boat === 2) m.rd = me.ride; if (me.boat === 1 && me.inv.some(sl => sl && sl.id === 'push_pole')) m.pl = 1; if (me.boat === 2 && me.knock) m.kn = 1; }   /* pl: a push pole aboard; kn: knocking rice in the bow */   /* in a canoe: 1 poling it, 2 riding in someone's bow (rd: whose) */
         const oh = core.overhead(me) || 0; if (oh || lastPr) { m.pr = oh; lastPr = oh; }   /* the overhead prayer, so hosts' monsters respect it and others see it */
@@ -2463,7 +2518,7 @@
         if (!room) return;
         if (e.e === 'claim' && e.p === PID) { netSend({ C: e.g }); return; }
         if (e.e === 'xfire') { if (iHostAt(e.x, e.y)) core.hostFire(e.x, e.y, e.ticks, e.log); else netSend({ XF: [e.x, e.y, e.ticks, e.log] }); return; }
-        if (e.e === 'xdrop') { if (iHostAt(e.x, e.y)) core.hostDrop(e); else netSend({ X: [e.id, e.n, e.x, e.y, e.life || 300, e.from ? toNet(e.from) : 0, e.diedAt || 0] }); return; }
+        if (e.e === 'xdrop') { if (iHostAt(e.x, e.y)) core.hostDrop(e); else netSend({ X: [e.id, e.n, e.x, e.y, e.life || 300, e.from ? toNet(e.from) : 0, e.diedAt || 0, e.lv | 0] }); return; }
         if (e.e === 'xplant') { if (iHostAt(e.x, e.y)) core.hostPlant(e.x, e.y, e.p, e.sapling); else netSend({ XP: [e.x, e.y, e.p ? toNet(e.p) : 0, e.sapling || 'sapling'] }); return; }
         if (e.e === 'xunplant') { if (iHostAt(e.x, e.y)) core.hostUnplant(e.x, e.y); else netSend({ XU: [e.x, e.y] }); return; }
         if (!hosted.size) return;
@@ -2473,7 +2528,7 @@
           case 'hit': if (fight()) hostQ.push(['h', toNet(e.src), toNet(e.dst), e.dmg, e.hp, (e.cls || 'm')[0] === 'm' ? 'm' : e.cls === 'ranged' ? 'r' : 'g', (e.blocked ? 1 : 0) | (e.dodged ? 2 : 0) | (e.dex ? 4 : 0) | (e.prot ? 8 : 0), e.prot ? e.raw | 0 : 0, e.fx || 0, e.fxt | 0]); break;
           case 'die': if (e.mob != null && mobIn(e.mob)) hostQ.push(['k', e.mob, e.killer ? toNet(e.killer) : 0]); break;
           case 'spawn': { const m = core.mobByUid(e.mob); if (m && iHost(m.zone)) hostQ.push(['s', m.uid, m.x, m.y, m.hp]); break; }
-          case 'drop': if (iHostAt(e.x, e.y)) hostQ.push(['d', e.g, e.id, e.n, e.x, e.y, e.from ? toNet(e.from) : 0, e.sunk || 0]); break;
+          case 'drop': if (iHostAt(e.x, e.y)) hostQ.push(['d', e.g, e.id, e.n, e.x, e.y, e.from ? toNet(e.from) : 0, e.sunk || 0, e.lv | 0]); break;
           case 'take': if (iHostAt(e.x, e.y)) hostQ.push(['t', e.g, toNet(e.p), e.id, e.n, e.x, e.y]); break;
           case 'vanish': if (iHostAt(e.x, e.y)) hostQ.push(['v', e.g, e.x, e.y]); break;
           case 'ground': if (iHostAt(e.x, e.y)) hostQ.push(['n', e.g, e.n, e.x, e.y]); break;
@@ -2530,7 +2585,7 @@
         fullT = performance.now(); const seq = Math.round(fullT);
         packSend({ F: seq }, 'M', mobRows(true));
         for (const a of hosted) {
-          const G = core.S.ground.filter(g => areaAt(g.x, g.y) === a).map(g => [g.uid, g.id, g.n, g.x, g.y, g.from ? toNet(g.from) : 0, g.sunk || 0]);
+          const G = core.S.ground.filter(g => areaAt(g.x, g.y) === a).map(g => [g.uid, g.id, g.n, g.x, g.y, g.from ? toNet(g.from) : 0, g.sunk || 0, g.lv | 0]);
           packSend({ F: seq, Gr: a }, 'G', G, 470, 'Gend');
           const wz = core.weatherOf(a); if (wz) netSend({ F: seq, W: [a, wz.kind, wz.intensity, Math.max(1, wz.until - core.S.t)] });
         }
@@ -2606,7 +2661,7 @@
         /* the felt: a chair asked for, a player getting up, an action, or the host's word on a table. Same rules as the
            chess park: only the host of the area the table stands in answers, and a row only counts from that host. */
         pkMsg(id, d);   /* [Claude 2026-10-13] the card-table words (also heard in a table's own room: tblHeard) */
-        if (Array.isArray(d.X)) { const x = d.X; if (core.item(x[0]) && iHostAt(x[2], x[3])) coreCall(() => core.hostDrop({ id: x[0], n: Math.max(1, x[1] | 0), x: x[2] | 0, y: x[3] | 0, life: x[4] | 0, from: x[5] ? fromNet(x[5]) : null, diedAt: x[6] | 0 })); }
+        if (Array.isArray(d.X)) { const x = d.X; if (core.item(x[0]) && iHostAt(x[2], x[3])) coreCall(() => core.hostDrop({ id: x[0], n: Math.max(1, x[1] | 0), x: x[2] | 0, y: x[3] | 0, life: x[4] | 0, from: x[5] ? fromNet(x[5]) : null, diedAt: x[6] | 0, lv: x[7] | 0 })); }
         /* below: only the word of the host of the area concerned counts */
         if (Array.isArray(d.M)) { const rows = d.M.filter(w => Array.isArray(w) && fromHostOf(id, mobArea(w[0]))); if (rows.length) coreCall(() => core.applyMobs(rows)); }
         if (Array.isArray(d.W) && fromHostOf(id, d.W[0])) coreCall(() => core.setWeather(d.W[0], String(d.W[1]), d.W[2] | 0, d.W[3] | 0));
@@ -2622,7 +2677,7 @@
               buf.push.apply(buf, d.G);
               if (d.Gend === 1) { gSnap.delete(key); core.groundFull(d.Gr, buf); } else gSnap.set(key, buf);
             }
-          } else if (!d.Gr) for (const g of d.G) if (fromHostOf(id, areaAt(g[3], g[4]))) core.groundAdd(g[0], g[1], g[2], g[3], g[4], g[5] ? fromNet(g[5]) : null, g[6] || 0);
+          } else if (!d.Gr) for (const g of d.G) if (fromHostOf(id, areaAt(g[3], g[4]))) core.groundAdd(g[0], g[1], g[2], g[3], g[4], g[5] ? fromNet(g[5]) : null, g[6] || 0, g[7] | 0);
         });
         if (Array.isArray(d.E)) coreCall(() => { for (const a of d.E) if (Array.isArray(a) && eventFromHost(id, a)) applyEvent(a); });
       }
@@ -2653,8 +2708,8 @@
           }
           case 'k': { const m = core.mobByUid(a[1]); if (!m) break; core.applyMobs([[m.uid, m.x, m.y, 0, 1]]); if (fromNet(a[2]) === PID) core.creditKill(PID, m.key, m.x, m.y); for (const pid of core.S.order) { const o = core.S.players[pid]; if (o.act && o.act.k === 'attack' && o.act.uid === m.uid) o.act = null; } handle({ e: 'die', mob: m.uid }, now); break; }
           case 's': core.applyMobs([[a[1], a[2], a[3], a[4], 0]]); break;
-          case 'd': core.groundAdd(a[1], a[2], a[3], a[4], a[5], a[6] ? fromNet(a[6]) : null, a[7] || 0); break;
-          case 't': core.groundRemove(a[1]); if (fromNet(a[2]) === PID) { core.grantItem(PID, a[3], a[4], a[1]); persistTell({ e: 'take', p: PID, id: a[3], n: a[4], x: a[5], y: a[6] }); } break;   /* the host gave it to us: tell the Bank too */
+          case 'd': core.groundAdd(a[1], a[2], a[3], a[4], a[5], a[6] ? fromNet(a[6]) : null, a[7] || 0, a[8] | 0); break;
+          case 't': core.groundRemove(a[1]); if (fromNet(a[2]) === PID && !core.S.took.has(a[1])) { core.grantItem(PID, a[3], a[4], a[1]); persistTell({ e: 'take', p: PID, id: a[3], n: a[4], x: a[5], y: a[6] }); } break;   /* Report the host's award to the Bank once, even if the packet repeats. */
           case 'v': core.groundRemove(a[1]); break;
           case 'n': { const g = core.S.ground.find(q => q.uid === a[1]); if (g) g.n = a[2]; break; }
           case 'e': handle({ e: 'mobeat', mob: a[1] }, now); break;
@@ -2692,11 +2747,11 @@
           if (core.M.netNear && Math.abs(x - me.x) + Math.abs(z - me.y) > 400) { const q = core.M.netNear(x, z, me.x + 0.5, me.y + 0.5); if (q && Math.abs(q[0] - me.x) + Math.abs(q[1] - me.y) < 400) { x = q[0]; z = q[1]; turnS = q[2]; } }   /* across a seam: at their true place beside us */
           boatLook(r.e, r.boat === 1);
           r.e.root.position.set(x, 0, z); smoothPos(r.e, dt, false); x = r.e.root.position.x; z = r.e.root.position.z;   /* fluid travel: other players glide too */
-          const lvR = Bs.l | 0, bR = lvR > 0 && core.M.buildingAt ? core.M.buildingAt(Math.floor(x), Math.floor(z)) : -1, upR = bR >= 0 ? lvR * (core.M.buildings[bR] && core.M.buildings[bR].lh ? core.M.buildings[bR].lh : 1.8) : 0;   /* [Claude 2026-10-11] on the storey their row names (the Tap's card tables upstairs) */
+          const lvR = Bs.l | 0, bR = lvR && core.M.buildingAt ? core.M.buildingAt(Math.floor(x), Math.floor(z)) : -1, upR = bR >= 0 ? lvR * (core.M.buildings[bR] && core.M.buildings[bR].lh ? core.M.buildings[bR].lh : 1.8) : 0;   /* positive storeys and negative basement floors share the same vertical scale */
           /* [Claude 2026-10-12] the operator: "When someone is on one of the upper floors of one of the buildings, they should only be
              visible to people on the same floor" - from below, the storeys above are see-through and they stood in the air. */
           r.lvR = lvR;   /* torchTick: a torch carried on another storey does not light this one */
-          const offFloor = lvR > 0 && lvR !== (me.lv | 0);
+          const offFloor = lvR !== (me.lv | 0);
           if (offFloor) { if (r.e.root.visible) { r.e.root.visible = false; r.floorHid = true; } }
           else if (r.floorHid) { r.e.root.visible = true; r.floorHid = false; }
           r.e.root.position.set(x, (r.e.canoe ? waterY(x, z) + (r.anim === 'pole' || r.anim === 'idle' ? 0.14 : 0) : heightAt(x, z) + seatLift(r.e) + upR) + (r.e.alt || 0), z); r.e.tyaw = Bs.f + turnS;   /* a chess player sits on the bench */
@@ -2728,6 +2783,7 @@
       function frame(rafNow) {
         if (stopped) return;
         requestAnimationFrame(frame);
+        for (const r of regions) if (r.built && r.built.setFloor) r.built.setFloor(me.lv | 0);
         caveTick(performance.now()); torchTick(performance.now());
         for (const t of gFlames) { const q = performance.now() / 1000, k = 0.85 + 0.15 * Math.sin(q * 13 + t.ph) + 0.08 * Math.sin(q * 31 + t.ph * 2); t.f.scale.set(1, k, 1); t.f2.scale.set(1, k, 1); }
         /* One clock. The tick loop keeps lastTick on performance.now() and stamps each stride with the tick's own
@@ -2826,7 +2882,7 @@
           const S = SCENE.see, hp = _seeV.copy(myEnt.root.position); hp.y += 1.0;
           const d = camera.position.distanceTo(hp); hp.project(camera);
           const sz = renderer.getDrawingBufferSize(_seeS);
-          if (hp.z > -1 && hp.z < 1 && settings.seeThrough !== false) { S.uSeeP.value.set((hp.x + 1) / 2 * sz.x, (hp.y + 1) / 2 * sz.y); S.uSeeR.value = sz.y * 0.13; S.uSeeD.value = d - 2.0; if (S.uSeeY) S.uSeeY.value = myEnt.root.position.y + 0.25; } else S.uSeeR.value = 0;
+          if (hp.z > -1 && hp.z < 1 && settings.seeThrough !== false) { S.uSeeP.value.set((hp.x + 1) / 2 * sz.x, (hp.y + 1) / 2 * sz.y); S.uSeeR.value = CAVE.on ? Math.hypot(sz.x, sz.y) : sz.y * 0.13; S.uSeeD.value = d - (CAVE.on ? 0.35 : 2.0); if (S.uSeeY) S.uSeeY.value = myEnt.root.position.y + (CAVE.on ? -0.04 : 0.25); } else S.uSeeR.value = 0;
         }
         /* FOGV: the fog's distances are meant from the player; three measures them from the camera, which stands cam.dist
            behind - so they are pushed out by that much for the draw (and a hawk sees further), then put back for whoever
@@ -3000,7 +3056,7 @@
           savesHere: () => store.backend,
           home: () => { const HD = (D.rules.homes || {})[core.homeOf(me)]; return HD && HD.help ? HD : null; },
           modulesText: () => 'Players: ' + netStatus + '. Saves: ' + ({ arcade: 'on the arcade', browser: 'in this browser', memory: 'not saved (this session only)' }[store.backend] || store.backend) + '. Modules: ' + (opts.report || []).map(r => r[0] + ' v' + r[1]).join(', '),
-          minimapTap: (dx, dy, k) => { const c = Math.cos(-cam.yaw), s = Math.sin(-cam.yaw); const tx = Math.floor(myEnt.root.position.x + (dx * c - dy * s) / k), ty = Math.floor(myEnt.root.position.z + (dx * s + dy * c) / k); send({ c: 'walk', x: tx, y: ty }); flag = [tx, ty]; }
+          minimapTap: (dx, dy, k, run) => { const c = Math.cos(-cam.yaw), s = Math.sin(-cam.yaw); const tx = Math.floor(myEnt.root.position.x + (dx * c - dy * s) / k), ty = Math.floor(myEnt.root.position.z + (dx * s + dy * c) / k); send({ c: 'walk', x: tx, y: ty, run: runFor(run ? true : !!settings.runToggle) }); flag = [tx, ty]; }
         };
       }
       let stopped = false;

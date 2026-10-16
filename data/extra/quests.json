@@ -476,6 +476,147 @@
    ],
    "story": 2
   },
+  "foolhardy_hero": {
+   "name": "The Foolhardy Hero",
+   "giver": "squire_elian",
+   "steps": [
+    {
+     "id": 1,
+     "zone": "dragonkeep",
+     "goal": {
+      "bring": "hero_bones",
+      "n": 1
+     },
+     "mob": "chain_dragon",
+     "mobGive": "hero_bones",
+     "reward": "xp:prayer:250",
+     "mobSay": [
+      "The little knight? He climbed down my ladder, drew his bright sword, and challenged me by every title he could remember.",
+      "I ate him. He was braver than he was wise, and not nearly as filling as his speech promised.",
+      "The dragon gives a deep, smoky burp. Something pale and scorched clatters onto the stones at your feet.",
+      "Take those bones back to the one waiting outside. Tell him his hero found the dragon, and the dragon won."
+     ],
+     "talk": [
+      "I'm Elian, squire to Sir Garran—the Hero of Ashvale, and the strongest knight in the valley. He is brave beyond measure. Sensible only when it suits him.",
+      "Yesterday he found the ruined keep southeast along the bandit path. He told me to wait here while he climbed the outside ladder and took care of the chained dragon.",
+      "That was more than a day ago. Sir Garran can be braver than smart sometimes, but he has never left me waiting this long.",
+      "Follow your compass southeast along the path to the ruins, climb the ladder over the wall, and find out what happened to him. Please."
+     ],
+     "progress": [
+      "The Hero went over the ruined keep wall more than a day ago. Follow your compass southeast along the path, use the outside ladder, and speak to the chained dragon. Bring me any sign of Sir Garran."
+     ],
+     "complete": [
+      "Those are his. I know the nick in that silver buckle. Sir Garran said a hero should leave a story behind. I wish he had settled for telling one.",
+      "Thank you for bringing him home. I will carry the Hero of Ashvale back myself—and next time someone calls courage the same thing as wisdom, I will know better."
+     ]
+    }
+   ],
+   "done": [
+    "Sir Garran came home, even if not in the fashion either of us imagined. The ruined keep is yours to face now. I have had enough of dragons for one lifetime."
+   ],
+   "nextAfter": "even_guard",
+   "nextLocked": [
+    "Sir Garran used to say that prayer steadies the hand courage sends forward. I thought bravery was enough. His bones taught me otherwise.",
+    "Vael tends the Even Grove and teaches that balance. Stand with the Even Guard, learn what prayer asks of you, then return. I cannot ask the next duty of you before that."
+   ],
+   "nextReady": [
+    "You stood with the Even Guard. Vael's lesson of prayer and balance sits in you now; Sir Garran would have respected that.",
+    "When I am ready to speak of the next duty, you will be ready to hear it."
+   ],
+   "story": 1
+  },
+  "dragon_heart": {
+   "name": "The Heart Below",
+   "giver": "squire_elian",
+   "after": "foolhardy_hero",
+   "needs": [
+    "even_guard"
+   ],
+   "steps": [
+    {
+     "id": 1,
+     "zone": "dragonkeep",
+     "goal": {
+      "kill": "chain_dragon",
+      "n": 1
+     },
+     "ends": "squire_elian",
+     "talk": [
+      "Sir Garran went to the dragon because he thought courage made every other plan unnecessary. I will not make that mistake twice.",
+      "Avenge him. Kill the chained dragon in the ruined keep. While you fight, I will take Sir Garran's bones to Father Aldous in Ashvale and ask that they be laid somewhere kinder than this road.",
+      "Come back to me after the dragon falls. I should be back from the church by then."
+     ],
+     "progress": [
+      "The chained dragon still lives inside the ruined keep southeast along the path. Slay it, then return to Elian."
+     ],
+     "complete": [
+      "You actually killed it? Right. Good. Very good. I returned Sir Garran's bones to Father Aldous, and I may have mentioned that you were going to avenge him, and Father Aldous said the dragon was—",
+      "No. I should not finish that sentence. Go to the Ashvale church and speak to Father Aldous. Please."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "village",
+     "goal": {
+      "talk": "aldous"
+     },
+     "ends": "aldous",
+     "reward": "dragonheart_key",
+     "talk": [
+      "Elian has taken Sir Garran's bones to Father Aldous in Ashvale. The squire looked frightened by whatever the priest told him. Speak to Father Aldous in the church."
+     ],
+     "progress": [
+      "Father Aldous is in the Ashvale church, north of the village square."
+     ],
+     "complete": [
+      "You killed the dragon? You killed it? That creature did not merely threaten the road—it protected a great power beneath the ruined keep!",
+      "You: It's just a video game. The dragon has probably already respawned.",
+      "That is not the point! Respawned or not, its death breaks the old balance. The power below must be reset at the Heart of the dungeon before it tears itself loose.",
+      "Take this Dragon-Heart Key. It opens the iron hatch inside the keep. The dragon is older than my order; when it returns, speak to it. It knows the trials below better than any priest."
+     ]
+    },
+    {
+     "id": 3,
+     "zone": "dragonkeep",
+     "goal": {
+      "flag": "dragon_heart_reset",
+      "n": 1
+     },
+     "ends": "aldous",
+     "mob": "chain_dragon",
+     "mobSay": [
+      "So. You killed me, and now the priest has remembered why my chain exists. At least one of you learns eventually.",
+      "The hatch descends through four chambers directly beneath this keep. It does not lead elsewhere; every floor is under the stones where you stand.",
+      "No, I will not solve the old keepers' trials for you. Look at each obstacle, try it, and pay attention to what the stone tells you when you fail. Preparation matters more than guessing.",
+      "Every chamber has an emergency ladder to daylight. If the dungeon shows you that you came unprepared, retreat, bring what you learned you need, and return."
+     ],
+     "mobSayDone": [
+      "The Heart beats evenly again. I can feel its rhythm through every link in this chain.",
+      "Your work below is finished. Mine resumes.",
+      "Return to Father Aldous in the Ashvale church. Tell him the Heart is steady; he is the one who must close this matter."
+     ],
+     "talk": [
+      "Use the Dragon-Heart Key on the iron hatch inside the ruined keep. Speak to the dragon after it returns for its account of the four trials below."
+     ],
+     "progress": [
+     "The dungeon occupies four increasingly broad floors directly beneath the ruined keep. Examine and attempt each obstacle, use the hints it gives you, reach and reset the Heart, then report to Father Aldous."
+     ],
+     "complete": [
+      "The pressure is gone. I can feel the old stones settle from here.",
+      "You were irreverent, reckless, and—against every lesson I intended to teach—successful. The Heart is balanced, the dragon has its charge again, and Sir Garran may finally rest.",
+      "Next time someone says 'it is only a game,' remember that a world can still ask you to take care of it."
+     ],
+     "reward": [
+      "xp:prayer:2500",
+      "xp:magic:2500"
+     ]
+    }
+   ],
+   "done": [
+    "The Heart below the chained dragon is steady. Let it remain so for a while, {name}."
+   ],
+   "story": 4
+  },
   "even_guard": {
    "name": "The Even Guard",
    "giver": "vael",

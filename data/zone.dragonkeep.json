@@ -71,6 +71,247 @@
     "visual": false
    },
    {
+    "k": "basement",
+    "x": -58,
+    "y": -103,
+    "w": 8,
+    "h": 8,
+    "enter": true,
+    "basementOnly": true,
+    "floors": 1,
+    "basements": 4,
+    "floorBounds": {
+     "-1": [-58, -103, 8, 8],
+     "-2": [-60, -105, 12, 12],
+     "-3": [-61, -106, 14, 14],
+     "-4": [-61, -106, 14, 14]
+    },
+    "stairsAt": [-57, -102],
+    "lh": 3.2
+   },
+   {
+    "k": "hatch",
+    "x": -57,
+    "y": -102,
+    "lv": 0,
+    "level": -1,
+    "land": [-57, -101],
+    "deathDrop": [-57, -101],
+    "item": "dragonheart_key",
+    "name": "Dragon Heart hatch",
+    "label": "Unlock and descend",
+    "shut": "The iron hatch is locked. Its keyhole is shaped like a flame around a heart.",
+    "say": "The Dragon-Heart Key turns. You descend without moving east or west, directly beneath the ruined keep.",
+    "unlock": "The Dragon-Heart Key turns and the main hatch unlocks. You descend directly beneath the ruined keep.",
+    "examine": "An iron hatch sunk into the keep's paving. It descends directly beneath this spot."
+   },
+   {
+    "k": "dungeonroom",
+    "x": -58,
+    "y": -103,
+    "w": 8,
+    "h": 8,
+    "lv": -1
+   },
+   {
+    "k": "mechanism",
+    "id": "iron_root",
+    "x": -54,
+    "y": -99,
+    "lv": -1,
+    "quest": "dragon_heart",
+    "step": 3,
+    "skill": "mining",
+    "level": 15,
+    "tool": "mining",
+    "noTool": "It looks like I will need a pickaxe to strike the iron root seal.",
+    "xp": 750,
+    "flag": "heart_iron_tuned",
+    "name": "Iron root seal",
+    "label": "Tune",
+    "verb": "tune the iron root",
+    "say": "You read the stresses in the old iron, strike the false note free, and tune the root seal. A hatch unlocks below.",
+    "unlock": "The iron root seal releases. The hatch to the echo chamber is now unlocked.",
+    "done": "The iron root holds a low, steady note.",
+    "examine": "Veins of iron run into the foundation like roots. A skilled miner could find the fault in their resonance."
+   },
+   {
+    "k": "heartladder", "x": -57, "y": -102, "lv": -1, "level": 0, "land": [-57, -101],
+    "name": "Retreat ladder", "label": "Climb back to the ruined keep",
+    "say": "You climb the emergency ladder back into the ruined keep. The dungeon will wait until you are prepared."
+   },
+   {
+    "k": "hatch",
+    "x": -52,
+    "y": -97,
+    "lv": -1,
+    "level": -2,
+    "land": [-52, -98],
+    "need": "heart_iron_tuned",
+    "name": "Echo stair",
+    "label": "Descend to the echo chamber",
+    "shut": "The iron root seal has not released this hatch."
+   },
+   {
+    "k": "dungeonroom",
+    "w": 12,
+    "h": 12,
+    "x": -60,
+    "y": -105,
+    "lv": -2
+   },
+   {
+    "k": "mechanism",
+    "id": "echo_seal",
+    "x": -55,
+    "y": -100,
+    "lv": -2,
+    "quest": "dragon_heart",
+    "step": 3,
+    "skill": "magic",
+    "level": 50,
+    "xp": 900,
+    "flag": "heart_echo_cleared",
+    "name": "Echo seal",
+    "label": "Wake",
+    "verb": "wake the echo seal",
+    "say": "Magic crosses the seal. Three answers step out of different ages—venom, shadow, and ash. Survive all three.",
+    "unlock": "The last echo guardian falls. The hatch to the balance chamber is now unlocked.",
+    "done": "The echo seal is quiet. Its three answering shapes are gone.",
+    "examine": "Three broken spell-circles overlap here. Magic could make their echoes solid enough to fight.",
+    "home": [-54, -99, 12],
+    "kills": {"giant_spider": 1, "wraith": 1, "ash_knight": 1},
+    "summon": [
+     {"m": "giant_spider", "x": -58, "y": -103, "loot": true, "drops": [{"item":"lobster","n":[2,3]},{"item":"potion","one_in":2},{"any":["helmet_t4","body_t4","legs_t4","chain_t4","shield_t4","sword_t4","dagger_t4","longsword_t4","mace_t4"],"one_in":10}]},
+     {"m": "wraith", "x": -50, "y": -103, "loot": true, "drops": [{"item":"prayer_potion"},{"item":"lobster","n":[1,2]},{"any":["helmet_t4","body_t4","legs_t4","chain_t4","shield_t4","sword_t4","dagger_t4","longsword_t4","mace_t4"],"one_in":10}]},
+     {"m": "ash_knight", "x": -54, "y": -95, "loot": true, "drops": [{"item":"potion"},{"item":"lobster","n":[2,4]},{"any":["helmet_t4","body_t4","legs_t4","chain_t4","shield_t4","sword_t4","dagger_t4","longsword_t4","mace_t4"],"one_in":10}]}
+    ]
+   },
+   {
+    "k": "heartladder", "x": -59, "y": -104, "lv": -2, "level": 0, "land": [-57, -101],
+    "name": "Retreat ladder", "label": "Climb back to the ruined keep",
+    "say": "You follow the emergency shaft back to daylight."
+   },
+   {
+    "k": "hatch",
+    "x": -57,
+    "y": -102,
+    "lv": -2,
+    "level": -3,
+    "land": [-56, -102],
+    "need": "heart_echo_cleared",
+    "name": "Balance stair",
+    "label": "Descend to the balance chamber",
+    "shut": "The echo guardians still bind this hatch."
+   },
+   {
+    "k": "dungeonroom",
+    "x": -61,
+    "y": -106,
+    "w": 14,
+    "h": 14,
+    "lv": -3
+   },
+   {
+    "k": "prayerpad", "id": "melee_rune", "x": -58, "y": -103, "lv": -3,
+    "style": "melee", "damage": 10, "flag": "heart_prayer_melee", "color": "red",
+    "name": "Crimson stone rune", "say": "A slab in the wall hurls a crushing rock at the crimson rune."
+   },
+   {
+    "k": "prayerpad", "id": "ranged_rune", "x": -54, "y": -99, "lv": -3,
+    "style": "ranged", "damage": 20, "flag": "heart_prayer_ranged", "color": "green",
+    "name": "Verdant arrow rune", "say": "An arrow snaps from the wall toward the verdant rune."
+   },
+   {
+    "k": "prayerpad", "id": "magic_rune", "x": -50, "y": -95, "lv": -3,
+    "style": "magic", "damage": 30, "flag": "heart_prayer_magic", "color": "blue",
+    "name": "Azure spell rune", "say": "An azure bolt leaps from the wall into the spell rune."
+   },
+   {
+    "k": "heartladder", "x": -60, "y": -105, "lv": -3, "level": 0, "land": [-57, -101],
+    "name": "Retreat ladder", "label": "Climb back to the ruined keep", "say": "You retreat up the emergency shaft."
+   },
+   {
+    "k": "hatch",
+    "x": -52,
+    "y": -97,
+    "lv": -3,
+    "level": -4,
+    "land": [-52, -98],
+    "need": "heart_balance_tuned",
+    "name": "Heart stair",
+    "label": "Descend to the Heart",
+    "shut": "The balance seal has not released the lowest hatch."
+   },
+   {
+    "k": "dungeonroom",
+    "x": -61,
+    "y": -106,
+    "w": 14,
+    "h": 14,
+    "lv": -4
+   },
+   {
+    "k": "mechanism",
+    "id": "war_seal",
+    "x": -55,
+    "y": -100,
+    "lv": -4,
+    "quest": "dragon_heart",
+    "step": 3,
+    "skill": "firemaking",
+    "level": 15,
+    "item": "tinderbox",
+    "noTool": "It looks like I will need a tinderbox to light the war seal.",
+    "xp": 1100,
+    "flag": "heart_war_cleared",
+    "name": "War seal",
+    "label": "Ignite",
+    "verb": "ignite the war seal",
+    "say": "You feed the seal a clean spark. Gale, Keel, and Bramble form around the Heart: one heavy spell, one certain arrow, one staggering blow.",
+    "done": "The war seal is cold. Its guardians have been defeated.",
+    "examine": "A fire channel divides into three combat runes. It will demand several protection styles in quick succession.",
+    "home": [-54, -99, 12],
+    "kills": {"gale": 1, "keel": 1, "bramble": 1},
+    "summon": [
+     {"m": "gale", "x": -59, "y": -104, "loot": true, "drops": [{"item":"prayer_potion"},{"item":"lobster","n":[2,4]},{"any":["helmet_t4","body_t4","legs_t4","chain_t4","shield_t4","sword_t4","dagger_t4","longsword_t4","mace_t4"],"one_in":10}]},
+     {"m": "keel", "x": -49, "y": -104, "carry": {"arrows_t1": 400}, "loot": true, "drops": [{"item":"potion"},{"item":"lobster","n":[2,4]},{"any":["helmet_t4","body_t4","legs_t4","chain_t4","shield_t4","sword_t4","dagger_t4","longsword_t4","mace_t4"],"one_in":10}]},
+     {"m": "bramble", "x": -54, "y": -94, "loot": true, "drops": [{"item":"potion","n":[1,2]},{"item":"lobster","n":[3,5]},{"any":["helmet_t4","body_t4","legs_t4","chain_t4","shield_t4","sword_t4","dagger_t4","longsword_t4","mace_t4"],"one_in":10}]}
+    ]
+   },
+   {
+    "k": "mechanism",
+    "id": "dragon_heart",
+    "x": -54,
+    "y": -99,
+    "lv": -4,
+    "quest": "dragon_heart",
+    "step": 3,
+    "skill": "magic",
+    "level": 60,
+    "xp": 1500,
+    "need": "heart_war_cleared",
+    "flag": "dragon_heart_reset",
+    "name": "Dragon Heart",
+    "label": "Reset",
+    "verb": "reset the Dragon Heart",
+    "shut": "The Heart throws your hand away. Its three war guardians still hold it out of balance.",
+    "say": "You turn the Heart through its broken beat, catch the returning pulse, and set it back into the old rhythm. A ladder unfolds all the way to the hatch above.",
+    "done": "The Dragon Heart beats slowly and evenly beneath the keep.",
+    "examine": "A knot of violet power held inside four iron rings. Its rhythm is dangerously uneven."
+   },
+   {
+    "k": "heartladder",
+    "x": -57,
+    "y": -102,
+    "lv": -4,
+    "level": 0,
+    "land": [-57, -101],
+    "name": "Heart ladder",
+    "label": "Climb to the ruined keep",
+    "say": "The emergency ladder carries you straight up through all four floors to the hatch in the ruined keep."
+   },
+   {
     "k": "wsign",
     "x": -56,
     "y": -94,

@@ -53,7 +53,7 @@
         const L = ledgerFor(walletState.address), w = walCounts(), keys = new Set(Object.keys(w).concat(Object.keys(L.bag), Object.keys(L.spent), Object.keys(L.pend), Object.keys(L.pspent), Object.keys(L.gone), Object.keys(L.autoTake), Object.keys(L.pchest), Object.keys(L.lchest)));
         for (const s of me.inv) if (s) keys.add(s.id);
         for (const q of Object.values(me.eq || {})) if (q) keys.add(q.id);
-        for (const k of [...keys]) { const d = core.item(k); if (d && d.bound) keys.delete(k); }   /* made for this character (bound): never in the chest, never minted */
+        for (const k of [...keys]) { const d = core.item(k); if (d && d.bound) keys.delete(k); }   /* character-bound and quest items: never in the chest, never minted */
         const chest = {}, loose = {}, before = JSON.stringify([L.bag, L.spent, L.pend, L.pspent, L.gone, L.autoTake, L.pchest, L.lchest]); let arriving = 0;
         const g = (o, k) => o[k] || 0, put = (o, k, v) => { if (v > 0) o[k] = v; else delete o[k]; };
         for (const k of keys) {
@@ -228,15 +228,17 @@
         chestState(); const L = ledgerFor(walletState.address);
         const busy = new Set(Object.values(L.out || {}).flat().map(o => o.piece));
         for (const k in L.bag) {
+          const d = core.item(k); if (!d || d.bound) continue;
           if (!W.gear[k] || !(L.bag[k] > 0) || !core.invCount(me, k)) continue;   /* in the bag (not worn), delivered */
           const pieces = W.gear[k].filter(pc => !busy.has(pc)).slice(0, Math.min(L.bag[k], core.invCount(me, k))); if (!pieces.length) continue;
-          const d = core.item(k); let icon = null; try { icon = MOD.icon(k, 64); } catch (e) { /* none */ }
+          let icon = null; try { icon = MOD.icon(k, 64); } catch (e) { /* none */ }
           kinds.push({ key: k, name: d.name, icon, pieces });
         }
         for (const k in L.bag) {   /* stacks (logs, ore, meat...): any number of them, up to what you carry (2026-10-04) */
+          const d = core.item(k); if (!d || d.bound) continue;
           if (k === 'coins' || W.gear[k] || !(W.pids && W.pids[k]) || !(L.bag[k] > 0)) continue;
           const max = Math.min(L.bag[k], core.invCount(me, k)); if (max <= 0) continue;
-          const d = core.item(k); let icon = null; try { icon = MOD.icon(k, 64); } catch (e) { /* none */ }
+          let icon = null; try { icon = MOD.icon(k, 64); } catch (e) { /* none */ }
           kinds.push({ key: k, name: d.name, icon, token: W.pids[k], max, pieces: [] });
         }
         return { kinds, gold: Math.min(core.invCount(me, 'coins'), L.bag.coins || 0) };
@@ -282,7 +284,7 @@
         if (HOLDS.multi && Date.now() - HOLDS.at > 5000) holdsAsk().then(go); else go();
       }
       function chestStore(k, n, quiet) {
-        if (core.item(k) && core.item(k).bound) { if (!quiet) hud.chat(core.item(k).name + ' was made for you. It stays with you.', 'warn'); return 0; }
+        if (core.item(k) && core.item(k).bound) { if (!quiet) { const d = core.item(k); hud.chat(d.quest ? d.name + ' is a quest item. It stays with you.' : d.name + ' was made for you. It stays with you.', 'warn'); } return 0; }
         chestState(); const L = ledgerFor(walletState.address), have = core.invCount(me, k);
         const fromBag = Math.min(n, L.bag[k] || 0, have), fromPend = Math.min(n - fromBag, L.pend[k] || 0, have - fromBag), fromNew = Math.min(n - fromBag - fromPend, have - fromBag - fromPend), m = fromBag + fromPend + fromNew;   /* settled or not, it can go in the chest (2026-10-05) */
         if (m <= 0) return 0;

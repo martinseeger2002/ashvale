@@ -4,7 +4,13 @@
    "bones": "big_bones"
   },
   "goblin_chief": {
-   "bones": "big_bones"
+   "bones": "big_bones",
+   "drops": [
+    {"any": ["helmet_t4", "body_t4", "legs_t4", "chain_t4", "shield_t4", "sword_t4", "dagger_t4", "longsword_t4", "mace_t4"], "one_in": 10},
+    {"item": "shield_t2", "one_in": 1},
+    {"item": "potion", "one_in": 2},
+    {"item": "arrows_t2", "n": [5, 15], "one_in": 3}
+   ]
   },
   "boar": {
    "bones": "big_bones"

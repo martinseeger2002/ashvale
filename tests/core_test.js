@@ -1203,7 +1203,7 @@ ok(Object.values(IT).every(d => Number.isInteger(d.weight) && d.weight > 0), 'ev
     if (!list.length || (st.zone && !allZones.some(z => z.id === st.zone))) continue;
     /* a cooked thing is getable one step earlier: the raw it comes from has to exist somewhere, and the town you are
        asked to bring it to has to have a fire to cook it on - otherwise the goal is a plate with a cold range behind it */
-    const has = (it, deep) => getable(it, st.goal.n) || (deep < 4 && !!rawOf[it] && has(rawOf[it], deep + 1) && (!st.zone || fires.has(st.zone)));   /* sap -> syrup -> sugar: a fire, more than once */
+    const has = (it, deep) => (st.mobGive === it && !!D.monsters[st.mob]) || getable(it, st.goal.n) || (deep < 4 && !!rawOf[it] && has(rawOf[it], deep + 1) && (!st.zone || fires.has(st.zone)));   /* sap -> syrup -> sugar: a fire, more than once; a quest-aware talking monster may also hand over its named item */
     if (list.some(it => has(it, 0))) continue;
     dead.push(Q.name + ' step ' + st.id + ' wants ' + st.goal.n + ' ' + list.map(it => ((D.items[it] || {}).name || it)).join(' or ') +
       ', which is off no node, no mark, no shelf and no range, and the beasts that drop it number ' + list.map(it => dropped[it] || 0).join('/'));

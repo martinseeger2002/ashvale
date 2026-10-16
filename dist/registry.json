@@ -738,6 +738,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.squire_elian": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.swamp_monster": {
     "id": null,
     "v": 1,
@@ -1488,6 +1494,12 @@
     "api": 1,
     "kind": "json"
    },
+   "item.dragonheart_key": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.fish": {
     "id": null,
     "v": 1,
@@ -1495,6 +1507,12 @@
     "kind": "json"
    },
    "item.flint": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.hero_bones": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1763,6 +1781,12 @@
     "kind": "json"
    },
    "willowbank": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "dragonapproach": {
     "id": null,
     "v": 1,
     "api": 1,

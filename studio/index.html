@@ -8,16 +8,22 @@
 </head>
 <body>
   <header>
-    <h1>ASHVALE <span>design studio</span></h1>
-    <div>compose shapes · reorient · GitHub suggestion</div>
+    <h1>ASHVALE <span>Studio</span></h1>
+    <div class="menuline">File is a local draft. Suggest sends a review, it does not inscribe.</div>
     <div class="who">
       <label style="margin:0;text-transform:none;letter-spacing:0">you</label>
       <input id="author" type="text" placeholder="your name or @handle" style="width:180px">
     </div>
   </header>
+  <div id="tools">
+    <button type="button" data-tool="move" class="on" title="Move (G)">V</button>
+    <button type="button" data-tool="rotate" title="Rotate (R)">R</button>
+    <button type="button" data-tool="scale" title="Scale (S)">S</button>
+    <button type="button" data-tool="slice" title="Slice (T)">T</button>
+  </div>
   <nav id="nav"></nav>
   <div id="stage">
-    <div id="hint">Pick a class on the left. Drag to turn the preview.</div>
+    <div id="hint">Click a piece. V moves, R rotates, S scales, T slices. Right-drag turns the view.</div>
   </div>
   <aside id="form"></aside>
   <footer id="foot">Local drafts stay on this machine. Suggest to GitHub opens a review PR against main — nothing is inscribed until someone merges it.</footer>

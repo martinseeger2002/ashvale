@@ -3,7 +3,7 @@
 
     python3 studio/server.py [port]     default 8760, localhost only
 """
-import http.server, json, os, re, shutil, subprocess, tempfile, time, urllib.parse
+import http.server, json, os, re, shutil, subprocess, tempfile, time, urllib.parse, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STU = os.path.join(ROOT, 'studio')
@@ -280,6 +280,93 @@ def suggest(d):
             shutil.rmtree(wt, ignore_errors=True)
 
 
+QWEN = os.environ.get('ASH_QWEN', 'http://127.0.0.1:8033/v1/chat/completions')
+SHAPE_T = {'box', 'cyl', 'cone', 'sphere', 'torus', 'ico', 'capsule', 'kite', 'tube', 'disc'}
+
+
+def clean_shapes(raw, colors):
+    out = []
+    for s in raw or []:
+        if not isinstance(s, dict) or s.get('t') not in SHAPE_T:
+            continue
+        one = {'t': s['t']}
+        for k in ('s', 'p', 'r', 'seg', 'k'):
+            if k in s:
+                one[k] = s[k]
+        c = s.get('c') if isinstance(s.get('c'), str) else ''
+        if c != '$c' and not HEX.match(c or ''):
+            c = colors[0] if colors else '$c'
+        one['c'] = c
+        out.append(one)
+        if len(out) >= 10:
+            break
+    return out
+
+
+def extract_json(text):
+    text = re.sub(r'```(?:json)?', '', text or '')
+    a = text.find('{')
+    b = text.rfind('}')
+    if a < 0 or b <= a:
+        raise ValueError('Qwen did not return a shape list')
+    blob = re.sub(r',\s*([}\]])', r'\1', text[a:b + 1])
+    return json.loads(blob)
+
+
+def salvage_shapes(text):
+    found = []
+    for m in re.finditer(r'\{[^{}]*"t"\s*:\s*"[a-z]+"[^{}]*\}', text or ''):
+        try:
+            found.append(json.loads(m.group(0)))
+        except Exception:
+            pass
+    return found
+
+
+def qwen_generate(body):
+    colors = [c for c in (body.get('colors') or []) if isinstance(c, str) and HEX.match(c)][:6]
+    note = str(body.get('note') or '')[:400]
+    cls = str(body.get('class') or 'item')[:40]
+    ask = (
+        'Design one ASHVALE part. Reply with JSON only, no markdown: {"shapes":[{"t":"box","s":[0.1,0.1,0.1],"c":"#rrggbb","p":[0,0,0]}]}.\n'
+        'Allowed t: box, cyl, cone, sphere, torus, ico, capsule. Use 3 to 8 shapes. Sizes are metres, about 0.02 to 0.4.\n'
+        'Class: %s\nPicture colours, use these: %s\nRequest: %s\n'
+        'This model cannot see the photo. Build the object from the request and those colours.'
+    ) % (cls, ', '.join(colors) or '#d9a930', note or 'a simple object in those colours')
+    payload = {
+        'model': 'qwen3.5-4b',
+        'messages': [{'role': 'user', 'content': ask}],
+        'temperature': 0.3,
+        'max_tokens': 700,
+    }
+    text = ''
+    last = None
+    for _ in range(2):
+        req = urllib.request.Request(QWEN, data=json.dumps(payload).encode(), headers={'Content-Type': 'application/json'})
+        try:
+            with urllib.request.urlopen(req, timeout=90) as r:
+                data = json.loads(r.read().decode())
+        except Exception as e:
+            raise ValueError('Qwen at 127.0.0.1:8033 did not answer (%s)' % e)
+        text = (((data.get('choices') or [{}])[0].get('message') or {}).get('content')) or ''
+        try:
+            parsed = extract_json(text)
+            shapes = clean_shapes(parsed.get('shapes') if isinstance(parsed, dict) else None, colors)
+        except Exception as e:
+            last = e
+            shapes = []
+        if len(shapes) < 2:
+            shapes = clean_shapes(salvage_shapes(text), colors) or shapes
+        if len(shapes) >= 1:
+            break
+        last = last or ValueError('too few shapes')
+    else:
+        shapes = []
+    if not shapes:
+        raise ValueError('Qwen reply was not usable shapes (%s)' % (last or 'empty'))
+    return {'ok': True, 'shapes': shapes, 'colors': colors, 'seesPictures': False}
+
+
 def github_repo(url):
     u = url.rstrip('.git')
     if u.startswith('git@github.com:'):
@@ -364,6 +451,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     except Exception:
                         pass
                 return send(self, 200, suggest(d))
+            except Exception as e:
+                return send(self, 400, {'error': str(e)})
+        if path == '/api/generate':
+            try:
+                return send(self, 200, qwen_generate(self.read_json()))
             except Exception as e:
                 return send(self, 400, {'error': str(e)})
         if path == '/api/import':
