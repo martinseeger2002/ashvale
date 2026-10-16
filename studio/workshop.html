@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ASHVALE Workshop</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link rel="stylesheet" href="/studio/workshop.css">
+</head>
+<body>
+  <header>
+    <h1>ASHVALE <span>Workshop</span></h1>
+    <div class="sub">dream up anything · shape it · send it to @ashvale</div>
+    <div class="files">
+      <select id="drafts" title="Your saved designs on this device"></select>
+      <button id="newBtn" title="Start a new design">New</button>
+      <button id="exportBtn" title="Download the design as JSON">Export</button>
+      <button id="importBtn" title="Load a design or ASHVALE part JSON">Import</button>
+    </div>
+  </header>
+
+  <div id="tools">
+    <div class="grp" id="addShapes"><b>Add</b></div>
+    <div class="grp">
+      <b>Tool</b>
+      <button data-mode="translate" class="on" title="Move (W)">Move</button>
+      <button data-mode="rotate" title="Turn (E)">Turn</button>
+      <button data-mode="scale" title="Stretch (R)">Stretch</button>
+    </div>
+    <div class="grp">
+      <button id="dupBtn" title="Duplicate (Ctrl+D)">Duplicate</button>
+      <button id="delBtn" title="Delete (Del)">Delete</button>
+      <button id="undoBtn" title="Undo (Ctrl+Z)">Undo</button>
+      <button id="redoBtn" title="Redo (Ctrl+Y)">Redo</button>
+    </div>
+    <div class="grp">
+      <label class="chk"><input type="checkbox" id="snap" checked> Snap</label>
+      <label class="chk"><input type="checkbox" id="person"> Person for scale</label>
+      <button id="frameBtn" title="Fit the view to the design (F)">Frame</button>
+    </div>
+    <div class="grp"><button id="courtBtn" class="primary" title="Walk round it with your character in an Ashvale courtyard">See it in Ashvale</button></div>
+  </div>
+
+  <main>
+    <div id="stage"><div id="stageHint">Click a shape to select it. Drag the coloured handles to move, turn or stretch it. Drag empty space to look around.</div></div>
+    <aside id="panel">
+      <nav id="tabs">
+        <button data-tab="shape" class="on">Shape</button>
+        <button data-tab="object">Object</button>
+        <button data-tab="send">Send</button>
+      </nav>
+      <section id="tab-shape"></section>
+      <section id="tab-object" hidden></section>
+      <section id="tab-send" hidden></section>
+    </aside>
+  </main>
+  <div id="toast"></div>
+  <input id="importFile" type="file" accept=".json" hidden>
+  <script type="module" src="/studio/workshop.js"></script>
+</body>
+</html>

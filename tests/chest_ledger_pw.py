@@ -72,4 +72,13 @@ with sync_playwright() as p:
     ok(E("!!(ASH.me.eq.head && ASH.me.eq.head.id === 'helmet_t1')"), 'one wallet read without it: still worn')
     E("(() => { const D = ASH.walletState().data; D.gear = {}; D.at = Date.now() + 120000; })()"); s = S()
     ok(E("!(ASH.me.eq.head && ASH.me.eq.head.id === 'helmet_t1')") and E("ASH.core.invCount(ASH.me, 'helmet_t1')") == 0 and not s['loose'].get('helmet_t1'), 'a second read agrees: it comes off your head and is gone, nothing deposited again')
+    # [Claude 2026-10-14] the operator: 630 GOLD from mithril, paid by the Bank but not landed yet, put in a chest that already held 5,678:
+    # the chest showed 5,678 until the payout landed - a promise counted as delivered because the chest's own Gold looked like an arrival
+    E("(() => { const D = ASH.walletState().data; D.at = Date.now() + 150000; })()"); c0 = S()['chest'].get('coins', 0)
+    E("(() => { ASH.give('coins', 30); ASH.chest.promise({ coins: 30 }); const D = ASH.walletState().data; D.at = Date.now() + 160000; })()"); s = S()
+    ok(s['chest'].get('coins', 0) == c0 and not s['loose'].get('coins'), 'Gold the Bank has promised is in the bag, the chest still holds %d (%s), nothing to deposit' % (c0, s['chest'].get('coins')))
+    E("ASH.chest.store('coins', 30)"); s = S()
+    ok(s['chest'].get('coins', 0) == c0 + 30, 'stored before it lands: the chest shows %d at once (%s)' % (c0 + 30, s['chest'].get('coins')))
+    E("(() => { const D = ASH.walletState().data; D.gold += 30; D.raw = Object.assign({}, D.raw); D.at = Date.now() + 170000; })()"); s = S()
+    ok(s['chest'].get('coins', 0) == c0 + 30 and not s['loose'].get('coins'), 'the payout lands: still %d, counted once (%s)' % (c0 + 30, s['chest'].get('coins')))
     print('FAILED: %d' % fails if fails else 'ALL OK'); b.close()

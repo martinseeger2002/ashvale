@@ -207,7 +207,14 @@
       const c = frac > 0.5 ? new THREE.Color(0x3fd25a).lerp(new THREE.Color(0xffd23f), (1 - frac) * 2) : new THREE.Color(0xffd23f).lerp(new THREE.Color(0xe8382c), (0.5 - frac) * 2);
       arc.material.color.copy(c);
     }
-    function pokerShow(id, m) {   /* the engine's model of a table: board, each seat's two cards (down for the ones it keeps),
+    function pokerSpots(id, ref) {   /* [Claude 2026-10-14] where the board and a chair's two cards lie, in world space, for the HUD's boxes over them */
+      const T = POKER[id]; if (!T) return null;
+      const R = T.r || 0.95, y = T.oy + CARD_Y, w = (x, z) => T.group.localToWorld(new THREE.Vector3(x, y, z));
+      const s = T.spots[ref | 0]; let hole = null;
+      if (s) { const dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1; hole = w(T.ox + dx / L * 0.66 * R, T.oz + dz / L * 0.66 * R); }
+      return { board: w(T.ox, T.oz - 0.07), hole };
+    }
+    function pokerShow(id, m, still) {   /* still: no dealing animation (the room built again around a hand in play). The engine's model of a table: board, each seat's two cards (down for the ones it keeps),
                                      the bets in front of each chair, who has the button, whose turn it is */
       PK_STATE[id] = m;
       const T = POKER[id]; if (!T) return;
@@ -225,6 +232,14 @@
         want['h' + (h.ref | 0) + 1] = { face: h.down ? PBACK : (h.c && h.c[1] != null ? h.c[1] : PBACK), x: px - uz * 0.085, z: pz + ux * 0.085, ang: ang - 0.05, tilt: tl };
       }
       for (const k of Object.keys(T.cards)) if (!want[k]) { T.group.remove(T.cards[k].g); delete T.cards[k]; }
+      /* [Claude 2026-10-14] DEALING (the operator: "a short dealing animation where the cards get dealt around the table"): a card new to
+         the felt flies out from in front of the dealer - the hole cards one at a time round the table from the dealer's left,
+         twice round, then the board cards in turn */
+      let dox = T.ox, doz = T.oz; const ds = m.dealer != null ? T.spots[m.dealer | 0] : null;
+      if (ds) { const dx = ds.x - T.ox, dz = ds.z - T.oz, L = Math.hypot(dx, dz) || 1; dox = T.ox + dx / L * 0.5 * R; doz = T.oz + dz / L * 0.5 * R; }
+      const order = (m.hands || []).map(h => h.ref | 0).sort((a, b) => ((a - (m.dealer | 0) - 1 + 64) % 8) - ((b - (m.dealer | 0) - 1 + 64) % 8));
+      const dealAt = k => k[0] === 'h' ? (+k[k.length - 1]) * order.length + order.indexOf(+k.slice(1, -1)) : -1;
+      let newBoard = 0;
       for (const k of Object.keys(want)) {
         const w = want[k], c = T.cards[k], cy = top + CARD_Y + (w.tilt ? 0.03 : 0);
         if (c) {
@@ -239,6 +254,10 @@
         holder.rotation.x = -Math.PI / 2 + (w.tilt || 0); g.add(holder); holder.add(mesh);
         g.position.set(w.x, cy, w.z); g.rotation.y = w.ang; g.userData.face = w.face;
         T.group.add(g); T.cards[k] = { g, m: mesh, h: holder };
+        if (!still) {
+          const n = k[0] === 'h' ? dealAt(k) : newBoard++;
+          if (n >= 0) { g.position.set(dox, cy, doz); TWEENS.push({ m: g, x0: dox, z0: doz, x: w.x, z: w.z, y: cy, t: 0, dur: 0.28, lift: 0.05, wait: n * (k[0] === 'h' ? 0.13 : 0.16), hide: true }); if (n > 0) g.visible = false; }
+        }
       }
       for (const s of T.spots) {   /* the pot in front of each chair: one chip to a big blind, stacked, capped */
         const ref = s.ref, n = (m.bets && m.bets[ref]) | 0, st = T.chips[ref] = T.chips[ref] || { n: -1, g: new THREE.Group() };
@@ -752,10 +771,19 @@
           return a[((cy & 63) << 6) | (cx & 63)];
         };
       }
-      const floor = map._floor || (map._floor = new Float32Array(W * H).fill(NaN));
+      /* [Claude 2026-10-14] building floors, kept per 64 x 64 chunk and only where a floor is written: a W x H array spanned the bounding box
+         of every area loaded at the start, and with Ziibiing's land among them that box was ~24,000 tiles square - 591 million floats,
+         "Array buffer allocation failed" and a phone that could not open Ziibiing at all. get() is NaN where no floor was written. */
+      const floor = map._floor || (map._floor = (() => {
+        const C = new Map(); let lk = null, la = null;
+        const key = (cx, cy) => (cx + 32768) * 65536 + (cy + 32768);
+        const arr = (x, y, make) => { const k = key(x >> 6, y >> 6); if (k === lk) return la; let a = C.get(k); if (!a && make) { a = new Float32Array(4096).fill(NaN); C.set(k, a); } if (a) { lk = k; la = a; } return a || null; };
+        return { get: (x, y) => { const a = arr(x, y, false); return a ? a[((y & 63) << 6) | (x & 63)] : NaN; },
+                 set: (x, y, v) => { arr(x, y, true)[((y & 63) << 6) | (x & 63)] = v; } };
+      })());
       function heightAt(x, z) {
         if (!seeded && (x < 0 || z < 0 || x > W || z > H)) return -0.3;
-        if (x >= 0 && z >= 0 && x < W && z < H) { const fl = floor[Math.floor(z) * W + Math.floor(x)]; if (fl === fl) return fl; }
+        if (seeded || (x >= 0 && z >= 0 && x < W && z < H)) { const fl = floor.get(Math.floor(x), Math.floor(z)); if (fl === fl) return fl; }
         const xi = seeded ? Math.floor(x) : Math.min(W - 1, Math.floor(x)), zi = seeded ? Math.floor(z) : Math.min(H - 1, Math.floor(z)), fx = x - xi, fz = z - zi;
         const a = corner(xi, zi), b = corner(xi + 1, zi), c = corner(xi, zi + 1), d = corner(xi + 1, zi + 1);
         return a * (1 - fx) * (1 - fz) + b * fx * (1 - fz) + c * (1 - fx) * fz + d * fx * fz;
@@ -993,7 +1021,7 @@
         const x0 = o.x, z0 = o.y, x1 = o.x + o.w, z1 = o.y + o.h, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
         let base = -9; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) base = Math.max(base, hAt(x, y), hAt(x + 1, y + 1));
         base += 0.04;
-        for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) floor[y * W + x] = base;
+        for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) floor.set(x, y, base);
         const wall = parseInt((o.wall || '#d8c9a3').slice(1), 16), roof = parseInt((o.roof || '#7a3b2a').slice(1), 16), WH = o.lh || 1.8, TH = 0.16;
         const STONEK = o.k === 'ckeep' && CK && CK.keepStorey;   /* the castle's walk-in keep: stone storeys from src/castle.js instead of the house kit */
         const g = new THREE.Group(); group.add(g);
@@ -1138,7 +1166,7 @@
         const g = new THREE.Group(); g.userData.dungeonLevel = lv; group.add(g);
         d = { g, b: Batcher(g) }; dungeonLayers.set(lv, d); return d;
       }
-      const floorY = (o, y) => { const f = floor[o.y * W + o.x]; return isNaN(f) ? y : f; };
+      const floorY = (o, y) => { const f = floor.get(o.x, o.y); return isNaN(f) ? y : f; };
       const siteObjs = chunk ? [].concat(...map.sitesIn(X0, Y0, X1 - 1, Y1 - 1).map(st => st.objects), ...(map.roadTorchesIn ? map.roadTorchesIn(X0, Y0, X1 - 1, Y1 - 1) : [])) : [];   /* tents, campfires, and lit posts along the town roads */
       const objs = (chunk ? siteObjs : map.objects.filter(o => inR(o.x, o.y))).sort((a, b) => (b.enter ? 1 : 0) - (a.enter ? 1 : 0));
       const pkSeats = new Set(); for (const o of objs) if (o.k === 'pokertable') for (const sq of o.seats || []) pkSeats.add(sq[0] + ',' + sq[1]);   /* [Claude] the seats a poker table furnishes itself */
@@ -1614,7 +1642,7 @@
             POKER[id] = { ox: x, oy: top, oz: z, r: R, spots: (o.seats || []).map((s, i) => ({ x: s[0] + 0.5, z: s[1] + 0.5, ref: i })), cards: {}, chips: {}, group: gg, mat };
             const pk = new THREE.Mesh(new THREE.BoxGeometry(2 * R + 0.2, 0.9, 2 * R + 0.2), new THREE.MeshBasicMaterial({ visible: false }));
             pk.position.set(x, fl + 0.4, z); pk.userData.pick = { kind: 'pokertable', id, x: o.x, y: o.y, lv }; into.add(pk); pickables.push(pk);
-            pokerShow(id, PK_STATE[id]);
+            pokerShow(id, PK_STATE[id], true);
             break;
           }
           case 'chair': { if (pkSeats.has(o.x + ',' + o.y)) break;   /* [Claude] a poker table draws its own, turned to the felt */
@@ -1813,7 +1841,7 @@
           if (waterMesh) waterMesh.material.emissive.setHSL(0.58, 0.6, 0.08 + 0.02 * Math.sin(time * 1.5));
           if (waterMesh) waterMesh.position.y = Math.sin(time * 0.55) * 0.014;   /* the whole sheet rides a slow swell, some water sits on it */
           for (const a of anim) if (a.bob) a.bob.position.y = a.y0 + 0.12 * Math.sin(time * 2.6);
-          for (let i = TWEENS.length - 1; i >= 0; i--) { const w = TWEENS[i]; w.t = Math.min(1, w.t + dt / w.dur); const e = w.t < 0.5 ? 2 * w.t * w.t : 1 - Math.pow(-2 * w.t + 2, 2) / 2; w.m.position.set(w.x0 + (w.x - w.x0) * e, w.y + Math.sin(w.t * Math.PI) * w.lift, w.z0 + (w.z - w.z0) * e); if (w.t >= 1) TWEENS.splice(i, 1); }
+          for (let i = TWEENS.length - 1; i >= 0; i--) { const w = TWEENS[i]; if (w.wait > 0) { w.wait -= dt; w.m.visible = false; continue; } if (w.hide) w.m.visible = true; w.t = Math.min(1, w.t + dt / w.dur); const e = w.t < 0.5 ? 2 * w.t * w.t : 1 - Math.pow(-2 * w.t + 2, 2) / 2; w.m.position.set(w.x0 + (w.x - w.x0) * e, w.y + Math.sin(w.t * Math.PI) * w.lift, w.z0 + (w.z - w.z0) * e); if (w.t >= 1) TWEENS.splice(i, 1); }
           for (const a of anim) if (a.smoke) {
             if ((!a.litIn || !FIREQ || FIREQ(a.tx, a.ty)) && a.parts.length < 8 && Math.random() < dt * 3) { const m = new THREE.Mesh(smokeGeo, smokeMat); m.position.set(a.x, a.y, a.z); m.userData.t = 0; group.add(m); a.parts.push(m); }
             for (let k = a.parts.length - 1; k >= 0; k--) { const m = a.parts[k]; m.userData.t += dt; m.position.y += dt * 0.5; m.position.x += dt * 0.15; m.scale.setScalar(1 + m.userData.t * 0.8); m.rotation.y += dt; if (m.userData.t > 2.4) { group.remove(m); a.parts.splice(k, 1); } }
@@ -1836,7 +1864,7 @@
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, viewQuery: fn => { VIEWQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerTimer, cardAtlas: () => { const t = cardKit(); return t && t.image && t.image.toDataURL ? t.image.toDataURL('image/png') : null; }, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, viewQuery: fn => { VIEWQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerTimer, pokerSpots, cardAtlas: () => { const t = cardKit(); return t && t.image && t.image.toDataURL ? t.image.toDataURL('image/png') : null; }, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

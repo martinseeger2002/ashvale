@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2212%22 fill=%22%231b241f%22/%3E%3Cpath d=%22M32 6 L54 14 V30 C54 44 44 53 32 58 C20 53 10 44 10 30 V14 Z%22 fill=%22%23c9962e%22 stroke=%22%23ffd23f%22 stroke-width=%223%22/%3E%3Cpath d=%22M32 13 L47 18.5 V30 C47 40 40 47 32 51 C24 47 17 40 17 30 V18.5 Z%22 fill=%22%237a1f1f%22/%3E%3Crect x=%2229.5%22 y=%2216%22 width=%225%22 height=%2226%22 rx=%221.5%22 fill=%22%23e8e6df%22/%3E%3Crect x=%2223%22 y=%2238%22 width=%2218%22 height=%224%22 rx=%222%22 fill=%22%23ffd23f%22/%3E%3Crect x=%2230%22 y=%2242%22 width=%224%22 height=%227%22 rx=%221%22 fill=%22%236b4a1e%22/%3E%3C/svg%3E">
 <style>html,body{margin:0;height:100%;background:#0b0906;overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%}#ash{position:fixed;left:0;top:0;width:100vw;height:100vh;height:100dvh;touch-action:none}</style>
 </head><body>
 <div id="ash"></div>
@@ -9513,7 +9514,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       const pots = [];
       if (left.length <= 1) {   /* nobody to show down against - the pot, uncalled money included, goes across */
         const w = left[0] || who.find(s => !s.folded);
-        if (w && T.pot > 0) { const others = who.filter(s => s !== w).reduce((m, s) => Math.max(m, s.committed | 0), 0), back = Math.max(0, (w.committed | 0) - others), cut = Math.floor((T.pot - back) * (T.rake || 0)), paid = T.pot - cut;   /* [Claude 2026-10-13] the house cuts only what was called, never your own bet coming back */ T.raked = (T.raked | 0) + cut; w.chips += paid; w.won += paid; pots.push({ amount: paid, rake: cut, win: [w.ref], who: [w.name], note: 'uncontested' }); }
+        if (w && T.pot > 0) { const others = who.filter(s => s !== w).reduce((m, s) => Math.max(m, s.committed | 0), 0), back = Math.max(0, (w.committed | 0) - others), cut = Math.min(Math.floor((T.pot - back) * (T.rake || 0)), T.rakeCap > 0 ? T.rakeCap : Infinity), paid = T.pot - cut;   /* [Claude 2026-10-13] the house cuts only what was called, never your own bet coming back */ T.raked = (T.raked | 0) + cut; w.chips += paid; w.won += paid; pots.push({ amount: paid, rake: cut, win: [w.ref], who: [w.name], note: 'uncontested' }); }
       } else {
         const lv = []; for (const s of who) if (s.committed > 0 && lv.indexOf(s.committed) < 0) lv.push(s.committed);
         lv.sort((a, b) => a - b);
@@ -9523,11 +9524,11 @@ POSSIBILITY OF SUCH DAMAGE. */
           if (amt > 0) pots.push({ amount: amt, elig: who.filter(s => !s.folded && s.committed >= L), from: who.filter(s => s.committed > prev).length });
           prev = L;
         }
-        let sum = 0; for (const p of pots) sum += p.amount;
+        let sum = 0, handCut = 0; for (const p of pots) sum += p.amount;
         if (sum !== T.pot && pots.length) pots[pots.length - 1].amount += T.pot - sum;   /* never lose a chip to rounding */
         for (const p of pots) {
           const back = p.elig && p.elig.length === 1 && p.from === 1;   /* [Claude 2026-10-13] a layer only its own owner put money in: an uncalled all-in coming back, uncut */
-          const cut = back ? 0 : Math.floor(p.amount * (T.rake || 0)); p.rake = cut; p.amount -= cut; T.raked = (T.raked | 0) + cut;   /* [Claude] the house's cut, before the pot is shared */
+          const cut = back ? 0 : Math.min(Math.floor(p.amount * (T.rake || 0)), T.rakeCap > 0 ? Math.max(0, T.rakeCap - handCut) : Infinity); handCut += cut; p.rake = cut;   /* [Claude 2026-10-14] at most rakeCap a hand (the operator: 2 at the 100 table, 20 at 1,000, 200 at 10,000) */ p.amount -= cut; T.raked = (T.raked | 0) + cut;   /* [Claude] the house's cut, before the pot is shared */
           const e = p.elig && p.elig.length ? p.elig : left.slice(0, 1);
           let top = -1; for (const s of e) if (s.score > top) top = s.score;
           const w = e.filter(s => s.score === top);
@@ -9987,7 +9988,7 @@ POSSIBILITY OF SUCH DAMAGE. */
 
     // ---------------- players
     function newPlayer(id, save) {
-      const home = (save && typeof save.home === 'string' && HOMES[save.home]) ? save.home : (save ? 'ashvale' : NEWHOME), R0 = spawnOf({ home }), p = { id, home, name: 'Adventurer', kind: 'p', x: R0[0], y: R0[1], path: [], act: null, hp: 10, xp: {}, inv: new Array(28).fill(null), eq: {},
+      const home = (save && typeof save.home === 'string' && HOMES[save.home]) ? save.home : (save ? 'ashvale' : NEWHOME), R0 = spawnOf({ home }), p = { id, home, name: '@guest', kind: 'p', x: R0[0], y: R0[1], path: [], act: null, hp: 10, xp: {}, inv: new Array(28).fill(null), eq: {},
         styles: { melee: 0, ranged: 0, magic: 0 }, look: null, run: true, energy: 10000, retal: true, atk: 0, dead: 0, face: 2, quests: {}, kills: {}, skilling: null, gT: 0, shop: null, moved: 0, spawnT: 0, using: null };
       for (const s of SK) p.xp[s] = 0;
       p.xp.hitpoints = XP[RU.start.hitpoints] * 10;
@@ -10041,7 +10042,7 @@ POSSIBILITY OF SUCH DAMAGE. */
         else { const c = cleanVal(v); if (c !== undefined) o[k] = c; } }
       return o;
     }
-    function cleanName(n) { n = String(n || '').replace(/[^\w -]/g, '').trim().slice(0, 12); return n.length >= 2 ? n : null; }
+    function cleanName(n) { n = String(n || '').replace(/[^\w@ -]/g, '').trim().slice(0, 17); return n.length >= 2 ? n : null; }   /* '@' and 17: the @tag is the name (2026-10-15) */
     /* starting points (the operator: "spend starting points"): once, on a fresh character; each point = +1 starting level */
     function validStart(pts) {
       if (!pts || typeof pts !== 'object') return null; const o = {}; let sum = 0;
@@ -10483,7 +10484,7 @@ POSSIBILITY OF SUCH DAMAGE. */
         case 'pray': setPrayer(p, String(c.id || ''), !!c.on); break;
         case 'close': closeShop(p); break;
         case 'start': startPoints(p, c.pts); break;
-        case 'look': if (c.look) p.look = cleanLook(c.look); if (c.name) p.name = cleanName(c.name) || p.name; ev({ e: 'look', p: p.id }); break;
+        case 'look': if (c.look) p.look = cleanLook(c.look); ev({ e: 'look', p: p.id }); break   /* no name here any more: the @tag is the name (2026-10-15) */;
       }
     }
     /* inventory drag and drop (the operator): move into an empty slot or swap two slots; deterministic and replayed */
@@ -12231,6 +12232,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       const st = pokerOf(id), t = L.table({ id: String(id), small: PK_SB, big: PK_BB, rake: PK_RAKE, int: (n) => R.int(n), tell: (text, by) => { for (const pid of S.order) { const p = S.players[pid]; if (p.x != null && zoneOf(p.x, p.y) === zoneOf(pokerTableById(id).x, pokerTableById(id).y)) msg(p, text, by || 'info'); } } });
       if (st.g) { try { Object.assign(t, JSON.parse(st.g)); } catch (e) { return null; } }
       else if (st.se.length) return null;   /* taken over from another game mid-hand: there is no deck to carry, so it is dealt out below */
+      t.rakeCap = st.buy > 0 ? pkBlinds(st.buy | 0)[1] : 0;   /* [Claude 2026-10-14] the rake's top: one big blind */
       PKG[id] = t; return t;
     }
     /* [Claude 2026-10-13] A NEW DEALER BETWEEN HANDS takes the table over as it stands: no card is out, so the row holds all of it
@@ -12239,10 +12241,11 @@ POSSIBILITY OF SUCH DAMAGE. */
        table changed dealer sends its sit once more, and hostPokerSit keeps the chair and takes the key). */
     function pokerAdopt(id) {
       const st = pokerOf(id), se = (st.se || []).slice();
+      st.sns = {}; for (const x of se) if (x && x[1] != null && x[5]) st.sns[x[1]] = x[5] | 0;   /* [Claude 2026-10-14] the seats' sessions go on with the table */
       delete PKG[id]; st.g = null; st.se = [];
       const t = pokerGame(id); st.se = se;
       if (!t) return pokerAbandon(id);
-      const bl = pkBlinds(st.buy | 0); t.small = bl[0]; t.big = bl[1]; t.hand = st.h | 0; t.dealer = st.d == null ? -1 : st.d | 0; t.raked = st.rk | 0;
+      const bl = pkBlinds(st.buy | 0); t.small = bl[0]; t.big = bl[1]; t.rakeCap = st.buy > 0 ? bl[1] : 0; t.hand = st.h | 0; t.dealer = st.d == null ? -1 : st.d | 0; t.raked = st.rk | 0;
       for (const x of se) {
         if (!x || x[1] == null) continue;
         if (!S.players[x[1]]) { pokerCashout(st, x[1], x[2] | 0); continue; }   /* gone from the game: their stack goes home now, as at an abandoned table */
@@ -12266,7 +12269,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       st.v = (st.v | 0) + 1; st.mine = 1; st.o = t.status; st.st = t.street; st.d = t.dealer; st.sb = t.sbSeat; st.bb = t.bbSeat;
       st.p = t.pot | 0; st.b = t.bet | 0; st.a = t.toAct; st.h = t.hand | 0; st.bo = t.board.slice();
       st.se = t.seats.filter(s => s && s.id != null).map(s => [s.ref | 0, s.id, s.chips | 0, s.bet | 0,
-        (s.in ? PK_IN : 0) | (s.folded ? PK_FOLD : 0) | (s.allin ? PK_ALLIN : 0) | ((s.hole && !s.out) ? PK_CARD : 0) | (s.acted ? PK_ACTED : 0) | (s.away ? PK_AWAY : 0)]);
+        (s.in ? PK_IN : 0) | (s.folded ? PK_FOLD : 0) | (s.allin ? PK_ALLIN : 0) | ((s.hole && !s.out) ? PK_CARD : 0) | (s.acted ? PK_ACTED : 0) | (s.away ? PK_AWAY : 0), (st.sns && st.sns[s.id]) | 0]);   /* [Claude 2026-10-14] se[5]: the seat's session number - the @ashvale Bank holds its GOLD under '<table>:<gid>:<sn>' */
       st.lg = t.log.slice(-6).map(l => String(l.t || '').slice(0, 90)); st.lc = (t.logBase | 0) + t.log.length;   /* [Claude 2026-10-13] the last six lines and how many there have been: every copy writes the table's play into its chat (the operator) */
       st.r = t.result ? { p: t.result.pots.map(q => [q.amount | 0, (q.win || []).map(x => x | 0)]), c: t.result.contested ? 1 : 0, rk: t.result.raked | 0, sd: (t.result.shown || []).slice(0, 8) } : null;   /* sd [Claude]: the showdown, every hand shown face up with its name */
       st.mr = t.minRaise | 0; st.bg = t.big | 0;   /* [Claude] the least a raise can be, and the big blind: the panel's slider runs from the one to all-in */
@@ -12278,7 +12281,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       st.tt = t.toAct >= 0 ? S.t : null;
       return st;
     }
-    function pokerRow(id) { const st = pokerOf(id), r = {}; for (const k in st) if (k !== 'g' && k !== 'mine' && k !== 'wt' && k !== 'tt') r[k] = st[k]; return r; }
+    function pokerRow(id) { const st = pokerOf(id), r = {}; for (const k in st) if (k !== 'g' && k !== 'mine' && k !== 'wt' && k !== 'tt' && k !== 'sns') r[k] = st[k]; return r; }
     function pokerRows(keep) { const out = []; for (const T of pokerTables()) { if (keep && !keep(T.x, T.y)) continue; const st = S.poker[T.id]; if (st && ((st.se && st.se.length) || st.mine === 1)) out.push(pokerRow(T.id)); } return out; }   /* [Claude 2026-10-13] a table this game deals goes out EMPTY too: a new dealer that opens the table it took over sent that word once, while the others still heard the old dealer as the host, and they sat on at a table that no longer had them (the operator: the game gets stuck when someone leaves) */
     function emitPoker(id, extra) { pokerSettle(id); ev(Object.assign({ e: 'poker', t: id }, pokerRow(id), extra || {})); }
     function pokerSeatName(p) { return String((p && p.name) || 'Someone').slice(0, 16); }
@@ -12301,6 +12304,7 @@ POSSIBILITY OF SUCH DAMAGE. */
     function pkOpen(p, id) { return !!(p.pk && p.pk.t === id); }
     function pkClose(p, n, how) {
       const k = p.pk; p.pk = null; p.pkDone = k ? k.key : null;
+      if (k && k.sn) ev({ e: 'pkcash', p: p.id, s: k.key + ':' + k.sn, n: Math.max(0, n | 0) });   /* [Claude 2026-10-14] a Bank-held seat: the Bank pays it home (the engine counts it as on its way) */
       if (n > 0) { if (addItem(p, 'coins', n)) dropGround('coins', n, p.x, p.y, p.id, 600); msg(p, how === 'back' ? 'The card table is gone: your ' + n + ' GOLD on it comes back to you.' : 'You cash out ' + n + ' GOLD.', 'trade'); ev({ e: 'inv', p: p.id }); }
       else msg(p, 'You leave the table with nothing.', 'info');
     }
@@ -12320,7 +12324,8 @@ POSSIBILITY OF SUCH DAMAGE. */
           if (invCount(p, 'coins') < st.buy) { msg(p, 'You cannot cover the buy-in of ' + st.buy + ' GOLD - you get up again.', 'warn'); pokerLeave(p, 'short'); continue; }
           if (p.pk && p.pk.t !== id) pokerReclaim(p.id, true);   /* a seat at another table still open: home first */
           removeItem(p, 'coins', st.buy); p.pkPaid = { key }; msg(p, 'You buy in for ' + st.buy + ' GOLD.', 'trade'); ev({ e: 'inv', p: p.id });
-          p.pk = { t: id, key, cs: st.cseq | 0, n: st.buy | 0, ids: [], at: S.t };
+          p.pk = { t: id, key, cs: st.cseq | 0, n: st.buy | 0, ids: [], at: S.t, sn: at[p.id][5] | 0 };
+          if (p.pk.sn) ev({ e: 'pkbuy', p: p.id, s: key + ':' + p.pk.sn, n: st.buy | 0 });   /* [Claude 2026-10-14] the engine sends it to @ashvale and tells the Bank */
         }
         if (at[p.id] && pkOpen(p, id)) p.pk.n = Math.max(0, at[p.id][2] | 0);   /* the stack as the dealer last showed it */
         p.pkGot = p.pkGot || {};
@@ -12343,17 +12348,34 @@ POSSIBILITY OF SUCH DAMAGE. */
       if (p.seat && p.seat.k === 'pk' && p.seat.t === p.pk.t) return 0;
       const n = Math.max(0, p.pk.n | 0); pkClose(p, n, 'back'); return n;
     }
+    function pokerBankSeen(pid, rows) {   /* [Claude 2026-10-14] the Bank's 'pk' rows [s, buy, out, state] for this player */
+      const p = S.players[pid]; if (!p || p.puppet || !p.pk || !p.pk.sn) return 0;
+      const s = p.pk.key + ':' + p.pk.sn, r = (rows || []).find(x => x && x[0] === s);
+      if (!r || (r[3] !== 'paid' && r[3] !== 'held')) return 0;
+      if (p.seat && p.seat.k === 'pk' && p.seat.t === p.pk.t) return 0;
+      const n = r[2] | 0; p.pkDone = p.pk.key; p.pk = null;
+      msg(p, r[3] === 'paid' ? 'Your ' + n + ' GOLD from the card table went home to your wallet (open your chest).' : 'Your ' + n + ' GOLD from the card table is waiting for the Bank to check it.', 'trade');
+      return n;
+    }
     function pokerNetId(pid, netId) {   /* the room id this game plays under now: kept with an open seat, so a cashout written under it is still ours later */
       const p = S.players[pid]; if (!p || !p.pk || typeof netId !== 'string' || !netId) return;
       const ids = p.pk.ids || (p.pk.ids = []); if (ids.indexOf(netId) < 0) { ids.push(netId); if (ids.length > 8) ids.splice(0, ids.length - 8); }
     }
-    function pokerCashout(st, pid, chips) { if (!(st.buy > 0)) return; st.cseq = (st.cseq | 0) + 1; st.co = (st.co || []).concat([[pid, chips | 0, st.cseq]]).slice(-12); }
+    function pokerCashout(st, pid, chips) {
+      if (!(st.buy > 0)) return; st.cseq = (st.cseq | 0) + 1; st.co = (st.co || []).concat([[pid, chips | 0, st.cseq]]).slice(-12);
+      /* [Claude 2026-10-14] THE TABLE'S GOLD IS HELD BY @ashvale (the operator: "When the player buys in send that gold to the Ashvale wallet;
+         when they cash out or stand up or lose connection, send their remaining poker game balance back to them"): the dealer
+         tells the Bank what this seat leaves with; the Bank pays it home to the player's wallet, online or not */
+      const id = Object.keys(S.poker).find(k => S.poker[k] === st), x = (st.se || []).find(q => q && q[1] === pid), sn = ((st.sns || {})[pid]) || (x && x[5]) | 0;
+      if (id && sn) ev({ e: 'pkout', p: pid, s: id + ':' + (st.gid | 0) + ':' + sn, n: chips | 0 });
+      if (st.sns) delete st.sns[pid];
+    }
     function pokerSitAt(p, T, si, buy, pk) {   /* p has walked onto the chair: take it. Two who can play and the hand is dealt */
       si = si | 0;
       const t = pokerGame(T.id);
       if (t && !pokerSeated(T.id) && !t.seats.some(s => s && s.id != null)) {   /* [Claude] the first to sit sets the buy-in and the blinds */
         const st0 = pokerOf(T.id); st0.buy = Math.max(0, Math.min(1000000, buy | 0)); st0.gid = (st0.gid | 0) + 1;
-        const bl = pkBlinds(st0.buy | 0); t.small = bl[0]; t.big = bl[1];
+        const bl = pkBlinds(st0.buy | 0); t.small = bl[0]; t.big = bl[1]; t.rakeCap = st0.buy > 0 ? bl[1] : 0;   /* [Claude 2026-10-14] the rake tops out at one big blind: 2 / 20 / 200 (the operator) */
       }
       if (!t && tAuth(T) && pokerOf(T.id).mine === 0) { if (pokerOf(T.id).st === 'none') pokerAdopt(T.id); else pokerAbandon(T.id); if (!pokerGame(T.id)) return false; return pokerSitAt(p, T, si, buy, pk); }   /* [Claude 2026-10-12] a table left over from another dealer: open it now, then sit */
       if (!t) { msg(p, 'This table is being dealt out and will take players again in a moment.', 'warn'); return false; }
@@ -12366,7 +12388,8 @@ POSSIBILITY OF SUCH DAMAGE. */
       const buyIn = pokerOf(T.id).buy > 0 ? pokerOf(T.id).buy | 0 : PK_BUY;   /* [Claude] a stack of as many chips as the buy-in */
       let chips = same ? here.chips : buyIn;
       if (chips <= 0) chips = buyIn;
-      t.addSeat(si, { id: p.id, name: pokerSeatName(p), chips }).pk = typeof pk === 'string' ? pk.slice(0, 160) : ''; p.seatAct = S.t;   /* [Claude 2026-10-12] their sealing key, kept with the dealer's seat */
+      t.addSeat(si, { id: p.id, name: pokerSeatName(p), chips }).pk = typeof pk === 'string' ? pk.slice(0, 160) : ''; p.seatAct = S.t;
+      if (!same || !((pokerOf(T.id).sns || {})[p.id])) (pokerOf(T.id).sns = pokerOf(T.id).sns || {})[p.id] = 1 + Math.floor(Math.random() * 999998);   /* [Claude 2026-10-14] a new seat, a new session */   /* [Claude 2026-10-12] their sealing key, kept with the dealer's seat */
       const seat = T.seats[si];
       p.x = seat[0]; p.y = seat[1]; p.path = []; p.act = null; p.skilling = null; p.seat = { t: T.id, s: si, k: 'pk' }; p.seatWait = null;
       p.face = faceTo(p.x, p.y, T.x, T.y); closeShop(p);
@@ -13496,8 +13519,11 @@ POSSIBILITY OF SUCH DAMAGE. */
       if (typeof st.n === 'string') { const nm = cleanName(st.n); if (nm) p.name = nm; }
       if (st.act !== undefined) p.act = st.act && st.act.k === 'attack' && mobByUid(st.act.uid) ? { k: 'attack', uid: st.act.uid } : null;
     }
+    /* [Claude 2026-10-14] a pile item by any of its names: its uid, the host's uid for a Bank copy (huid), or the Bank's uid for a
+       host copy that took the Bank's word (bank) - a guest that picked up the Bank's copy asks by the Bank's uid */
+    function groundBy(uid) { uid = +uid; return S.ground.find(q => q.uid === uid || q.huid === uid || (uid >= BANK_UID && q.bank === uid - BANK_UID)) || null; }
     function claim(pid, uid) {   /* first claim wins; the picker's own game adds the item when it hears the 'take' */
-      const g = S.ground.find(q => q.uid === uid), p = S.players[pid];
+      const g = groundBy(uid), p = S.players[pid];
       if (!g || !p || p.dead || GROUND_GONE.has(uid) || (g.lv | 0) !== (p.lv | 0) || !isAuth(zoneOf(g.x, g.y)) || cheb(p.x, p.y, g.x, g.y) > 3) return false;
       GROUND_GONE.add(uid);
       if (g.bank != null) BANK_GONE.add(g.bank);
@@ -13519,14 +13545,19 @@ POSSIBILITY OF SUCH DAMAGE. */
       if (S.took.has(uid) || GROUND_GONE.has(uid)) return;   /* consumed on any client: stale snapshots cannot restore it */
       const did = uid >= BANK_UID ? uid - BANK_UID : null;   /* a persisted drop (its uid says so), even from a host too old to say */
       if (did != null && BANK_GONE.has(did)) return;         /* the Bank already told us somebody took it: an old host's copy stays gone */
-      const g = S.ground.find(q => q.uid === uid); if (g) { g.n = n; return; }
+      const g = S.ground.find(q => q.uid === uid || q.huid === uid); if (g) { g.n = n; return; }
+      /* [Claude 2026-10-14] THE SAME THING TWICE (the operator: "Each time I died a lot of my items were duplicated ... all lying in a pile
+         where I died"): dying in an area another game hosts, the Bank's copy of a persisted drop (its own uid) can reach this game
+         before the host's row (the host's uid) - and the host's row was laid down beside it. It is one thing: the host's uid joins
+         the Bank's copy already lying there */
+      if (did == null) { const b = S.ground.find(q => q.bank != null && q.huid == null && q.id === id && q.x === x && q.y === y && (q.sunk || 0) === (sunk || 0) && (q.lv | 0) === (lv | 0)); if (b) { b.huid = uid; b.n = n; return; } }
       S.ground.push({ uid, id, n, x, y, owner: null, until: S.t + 1e9, from: from || null, bank: did, sunk: sunk || 0, lv: lv | 0 }); ev({ e: 'drop', g: uid, id, n, x, y, sunk: sunk || 0, lv: lv | 0 });
     }
     function groundRemove(uid) {
       GROUND_GONE.add(uid);
       if (uid >= BANK_UID) BANK_GONE.add(uid - BANK_UID);
-      const i = S.ground.findIndex(q => q.uid === uid);
-      if (i >= 0) { const g = S.ground[i]; if (g.bank != null) BANK_GONE.add(g.bank); S.ground.splice(i, 1); ev({ e: 'vanish', g: uid }); }
+      const i = S.ground.findIndex(q => q.uid === uid || q.huid === uid);   /* huid [Claude 2026-10-14]: the host's name for a Bank copy */
+      if (i >= 0) { const g = S.ground[i]; if (g.bank != null) BANK_GONE.add(g.bank); if (g.huid != null) GROUND_GONE.add(g.huid); S.ground.splice(i, 1); ev({ e: 'vanish', g: uid }); }
     }
     /* PERSISTED DROPS (2026-10-06): what the @ashvale Bank holds on the ground (Gold, stones, magical things, anything
        worth 100+ GOLD that a player dropped), listed for a rectangle. Every game puts them down itself - the area's host may be
@@ -13544,7 +13575,7 @@ POSSIBILITY OF SUCH DAMAGE. */
         const g = S.ground.find(q => q.uid === uid || q.bank === did);
         if (g) { g.n = n; g.until = 1e15; if (sunk) g.sunk = sunk; continue; }
         const live = S.ground.find(q => q.bank == null && q.id === id && q.x === x && q.y === y);
-        if (live) { GROUND_GONE.add(live.uid); live.uid = uid; live.bank = did; live.until = 1e15; if (sunk) live.sunk = sunk; continue; }
+        if (live) { live.huid = live.uid; live.uid = uid; live.bank = did; live.until = 1e15; if (sunk) live.sunk = sunk; continue; }
         S.ground.push({ uid, id, n, x, y, owner: null, until: 1e15, bank: did, sunk }); ev({ e: 'drop', g: uid, id, n, x, y, bank: 1, sunk });
       }
       const [x0, y0, x1, y1] = box || [0, 0, -1, -1];
@@ -13610,7 +13641,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, trapOf, offerOf, isBlessed: (pid, x, y) => !!(S.players[pid] && blessed(S.players[pid], x, y)), setNature, natureHours, setNatureTell, seasonOn, dayHour, fireLit, steamFor, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       tableAt, tableById, tables, chessOf, chessRow, chessRows, chessGame, chessTurn, chessMoves, applyChess, hostSit, hostStand, hostMove, hostSel, standUp,
       setTableAuth: (id, v) => { if (v == null) delete TAUTH[id]; else TAUTH[id] = !!v; }, tableAuth: id => tAuth(pokerTableById(id)),
-      pokerTableAt, pokerTableById, pokerTables, pokerSeatKeys, pokerOpen, pokerOf, pokerRow, pokerRows, pokerGame, applyPoker, pokerClockTicks: () => PK_CLOCK, pokerReclaim, pokerNetId, chessReclaim, chessNetId, chessLimbo, seatHeld, setOnline: (b) => { S.online = !!b; }, hostPokerSit, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED, PK_AWAY], hostPokerStand, hostPokerAct, pokerLeave, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED],
+      pokerTableAt, pokerTableById, pokerTables, pokerSeatKeys, pokerOpen, pokerOf, pokerRow, pokerRows, pokerGame, applyPoker, pokerClockTicks: () => PK_CLOCK, pokerReclaim, pokerNetId, pokerBankSeen, chessReclaim, chessNetId, chessLimbo, seatHeld, setOnline: (b) => { S.online = !!b; }, hostPokerSit, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED, PK_AWAY], hostPokerStand, hostPokerAct, pokerLeave, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED],
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
@@ -13620,7 +13651,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
       setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, isSapling, saplingKind, canPlant, plantYoung, plantHour: PLANT_HOUR, plantSnap, acceptPlant, acceptUnplant, hostPlant, hostUnplant, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
-      applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, takeOff: (pid, k) => { const p = S.players[pid]; return p ? takeOff(p, k) : null; }, setFelled,
+      applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundBy, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, takeOff: (pid, k) => { const p = S.players[pid]; return p ? takeOff(p, k) : null; }, setFelled,
       hitXp: (pid, cls, dmg, dex) => { const p = S.players[pid]; if (p && !p.puppet) hitXp(p, cls, dmg, null, dex); },
       creditKill: (pid, key, x, y) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key, x, y); }
     };
@@ -13966,7 +13997,14 @@ POSSIBILITY OF SUCH DAMAGE. */
       const c = frac > 0.5 ? new THREE.Color(0x3fd25a).lerp(new THREE.Color(0xffd23f), (1 - frac) * 2) : new THREE.Color(0xffd23f).lerp(new THREE.Color(0xe8382c), (0.5 - frac) * 2);
       arc.material.color.copy(c);
     }
-    function pokerShow(id, m) {   /* the engine's model of a table: board, each seat's two cards (down for the ones it keeps),
+    function pokerSpots(id, ref) {   /* [Claude 2026-10-14] where the board and a chair's two cards lie, in world space, for the HUD's boxes over them */
+      const T = POKER[id]; if (!T) return null;
+      const R = T.r || 0.95, y = T.oy + CARD_Y, w = (x, z) => T.group.localToWorld(new THREE.Vector3(x, y, z));
+      const s = T.spots[ref | 0]; let hole = null;
+      if (s) { const dx = s.x - T.ox, dz = s.z - T.oz, L = Math.hypot(dx, dz) || 1; hole = w(T.ox + dx / L * 0.66 * R, T.oz + dz / L * 0.66 * R); }
+      return { board: w(T.ox, T.oz - 0.07), hole };
+    }
+    function pokerShow(id, m, still) {   /* still: no dealing animation (the room built again around a hand in play). The engine's model of a table: board, each seat's two cards (down for the ones it keeps),
                                      the bets in front of each chair, who has the button, whose turn it is */
       PK_STATE[id] = m;
       const T = POKER[id]; if (!T) return;
@@ -13984,6 +14022,14 @@ POSSIBILITY OF SUCH DAMAGE. */
         want['h' + (h.ref | 0) + 1] = { face: h.down ? PBACK : (h.c && h.c[1] != null ? h.c[1] : PBACK), x: px - uz * 0.085, z: pz + ux * 0.085, ang: ang - 0.05, tilt: tl };
       }
       for (const k of Object.keys(T.cards)) if (!want[k]) { T.group.remove(T.cards[k].g); delete T.cards[k]; }
+      /* [Claude 2026-10-14] DEALING (the operator: "a short dealing animation where the cards get dealt around the table"): a card new to
+         the felt flies out from in front of the dealer - the hole cards one at a time round the table from the dealer's left,
+         twice round, then the board cards in turn */
+      let dox = T.ox, doz = T.oz; const ds = m.dealer != null ? T.spots[m.dealer | 0] : null;
+      if (ds) { const dx = ds.x - T.ox, dz = ds.z - T.oz, L = Math.hypot(dx, dz) || 1; dox = T.ox + dx / L * 0.5 * R; doz = T.oz + dz / L * 0.5 * R; }
+      const order = (m.hands || []).map(h => h.ref | 0).sort((a, b) => ((a - (m.dealer | 0) - 1 + 64) % 8) - ((b - (m.dealer | 0) - 1 + 64) % 8));
+      const dealAt = k => k[0] === 'h' ? (+k[k.length - 1]) * order.length + order.indexOf(+k.slice(1, -1)) : -1;
+      let newBoard = 0;
       for (const k of Object.keys(want)) {
         const w = want[k], c = T.cards[k], cy = top + CARD_Y + (w.tilt ? 0.03 : 0);
         if (c) {
@@ -13998,6 +14044,10 @@ POSSIBILITY OF SUCH DAMAGE. */
         holder.rotation.x = -Math.PI / 2 + (w.tilt || 0); g.add(holder); holder.add(mesh);
         g.position.set(w.x, cy, w.z); g.rotation.y = w.ang; g.userData.face = w.face;
         T.group.add(g); T.cards[k] = { g, m: mesh, h: holder };
+        if (!still) {
+          const n = k[0] === 'h' ? dealAt(k) : newBoard++;
+          if (n >= 0) { g.position.set(dox, cy, doz); TWEENS.push({ m: g, x0: dox, z0: doz, x: w.x, z: w.z, y: cy, t: 0, dur: 0.28, lift: 0.05, wait: n * (k[0] === 'h' ? 0.13 : 0.16), hide: true }); if (n > 0) g.visible = false; }
+        }
       }
       for (const s of T.spots) {   /* the pot in front of each chair: one chip to a big blind, stacked, capped */
         const ref = s.ref, n = (m.bets && m.bets[ref]) | 0, st = T.chips[ref] = T.chips[ref] || { n: -1, g: new THREE.Group() };
@@ -14511,10 +14561,19 @@ POSSIBILITY OF SUCH DAMAGE. */
           return a[((cy & 63) << 6) | (cx & 63)];
         };
       }
-      const floor = map._floor || (map._floor = new Float32Array(W * H).fill(NaN));
+      /* [Claude 2026-10-14] building floors, kept per 64 x 64 chunk and only where a floor is written: a W x H array spanned the bounding box
+         of every area loaded at the start, and with Ziibiing's land among them that box was ~24,000 tiles square - 591 million floats,
+         "Array buffer allocation failed" and a phone that could not open Ziibiing at all. get() is NaN where no floor was written. */
+      const floor = map._floor || (map._floor = (() => {
+        const C = new Map(); let lk = null, la = null;
+        const key = (cx, cy) => (cx + 32768) * 65536 + (cy + 32768);
+        const arr = (x, y, make) => { const k = key(x >> 6, y >> 6); if (k === lk) return la; let a = C.get(k); if (!a && make) { a = new Float32Array(4096).fill(NaN); C.set(k, a); } if (a) { lk = k; la = a; } return a || null; };
+        return { get: (x, y) => { const a = arr(x, y, false); return a ? a[((y & 63) << 6) | (x & 63)] : NaN; },
+                 set: (x, y, v) => { arr(x, y, true)[((y & 63) << 6) | (x & 63)] = v; } };
+      })());
       function heightAt(x, z) {
         if (!seeded && (x < 0 || z < 0 || x > W || z > H)) return -0.3;
-        if (x >= 0 && z >= 0 && x < W && z < H) { const fl = floor[Math.floor(z) * W + Math.floor(x)]; if (fl === fl) return fl; }
+        if (seeded || (x >= 0 && z >= 0 && x < W && z < H)) { const fl = floor.get(Math.floor(x), Math.floor(z)); if (fl === fl) return fl; }
         const xi = seeded ? Math.floor(x) : Math.min(W - 1, Math.floor(x)), zi = seeded ? Math.floor(z) : Math.min(H - 1, Math.floor(z)), fx = x - xi, fz = z - zi;
         const a = corner(xi, zi), b = corner(xi + 1, zi), c = corner(xi, zi + 1), d = corner(xi + 1, zi + 1);
         return a * (1 - fx) * (1 - fz) + b * fx * (1 - fz) + c * (1 - fx) * fz + d * fx * fz;
@@ -14752,7 +14811,7 @@ POSSIBILITY OF SUCH DAMAGE. */
         const x0 = o.x, z0 = o.y, x1 = o.x + o.w, z1 = o.y + o.h, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
         let base = -9; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) base = Math.max(base, hAt(x, y), hAt(x + 1, y + 1));
         base += 0.04;
-        for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) floor[y * W + x] = base;
+        for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) floor.set(x, y, base);
         const wall = parseInt((o.wall || '#d8c9a3').slice(1), 16), roof = parseInt((o.roof || '#7a3b2a').slice(1), 16), WH = o.lh || 1.8, TH = 0.16;
         const STONEK = o.k === 'ckeep' && CK && CK.keepStorey;   /* the castle's walk-in keep: stone storeys from src/castle.js instead of the house kit */
         const g = new THREE.Group(); group.add(g);
@@ -14897,7 +14956,7 @@ POSSIBILITY OF SUCH DAMAGE. */
         const g = new THREE.Group(); g.userData.dungeonLevel = lv; group.add(g);
         d = { g, b: Batcher(g) }; dungeonLayers.set(lv, d); return d;
       }
-      const floorY = (o, y) => { const f = floor[o.y * W + o.x]; return isNaN(f) ? y : f; };
+      const floorY = (o, y) => { const f = floor.get(o.x, o.y); return isNaN(f) ? y : f; };
       const siteObjs = chunk ? [].concat(...map.sitesIn(X0, Y0, X1 - 1, Y1 - 1).map(st => st.objects), ...(map.roadTorchesIn ? map.roadTorchesIn(X0, Y0, X1 - 1, Y1 - 1) : [])) : [];   /* tents, campfires, and lit posts along the town roads */
       const objs = (chunk ? siteObjs : map.objects.filter(o => inR(o.x, o.y))).sort((a, b) => (b.enter ? 1 : 0) - (a.enter ? 1 : 0));
       const pkSeats = new Set(); for (const o of objs) if (o.k === 'pokertable') for (const sq of o.seats || []) pkSeats.add(sq[0] + ',' + sq[1]);   /* [Claude] the seats a poker table furnishes itself */
@@ -15373,7 +15432,7 @@ POSSIBILITY OF SUCH DAMAGE. */
             POKER[id] = { ox: x, oy: top, oz: z, r: R, spots: (o.seats || []).map((s, i) => ({ x: s[0] + 0.5, z: s[1] + 0.5, ref: i })), cards: {}, chips: {}, group: gg, mat };
             const pk = new THREE.Mesh(new THREE.BoxGeometry(2 * R + 0.2, 0.9, 2 * R + 0.2), new THREE.MeshBasicMaterial({ visible: false }));
             pk.position.set(x, fl + 0.4, z); pk.userData.pick = { kind: 'pokertable', id, x: o.x, y: o.y, lv }; into.add(pk); pickables.push(pk);
-            pokerShow(id, PK_STATE[id]);
+            pokerShow(id, PK_STATE[id], true);
             break;
           }
           case 'chair': { if (pkSeats.has(o.x + ',' + o.y)) break;   /* [Claude] a poker table draws its own, turned to the felt */
@@ -15572,7 +15631,7 @@ POSSIBILITY OF SUCH DAMAGE. */
           if (waterMesh) waterMesh.material.emissive.setHSL(0.58, 0.6, 0.08 + 0.02 * Math.sin(time * 1.5));
           if (waterMesh) waterMesh.position.y = Math.sin(time * 0.55) * 0.014;   /* the whole sheet rides a slow swell, some water sits on it */
           for (const a of anim) if (a.bob) a.bob.position.y = a.y0 + 0.12 * Math.sin(time * 2.6);
-          for (let i = TWEENS.length - 1; i >= 0; i--) { const w = TWEENS[i]; w.t = Math.min(1, w.t + dt / w.dur); const e = w.t < 0.5 ? 2 * w.t * w.t : 1 - Math.pow(-2 * w.t + 2, 2) / 2; w.m.position.set(w.x0 + (w.x - w.x0) * e, w.y + Math.sin(w.t * Math.PI) * w.lift, w.z0 + (w.z - w.z0) * e); if (w.t >= 1) TWEENS.splice(i, 1); }
+          for (let i = TWEENS.length - 1; i >= 0; i--) { const w = TWEENS[i]; if (w.wait > 0) { w.wait -= dt; w.m.visible = false; continue; } if (w.hide) w.m.visible = true; w.t = Math.min(1, w.t + dt / w.dur); const e = w.t < 0.5 ? 2 * w.t * w.t : 1 - Math.pow(-2 * w.t + 2, 2) / 2; w.m.position.set(w.x0 + (w.x - w.x0) * e, w.y + Math.sin(w.t * Math.PI) * w.lift, w.z0 + (w.z - w.z0) * e); if (w.t >= 1) TWEENS.splice(i, 1); }
           for (const a of anim) if (a.smoke) {
             if ((!a.litIn || !FIREQ || FIREQ(a.tx, a.ty)) && a.parts.length < 8 && Math.random() < dt * 3) { const m = new THREE.Mesh(smokeGeo, smokeMat); m.position.set(a.x, a.y, a.z); m.userData.t = 0; group.add(m); a.parts.push(m); }
             for (let k = a.parts.length - 1; k >= 0; k--) { const m = a.parts[k]; m.userData.t += dt; m.position.y += dt * 0.5; m.position.x += dt * 0.15; m.scale.setScalar(1 + m.userData.t * 0.8); m.rotation.y += dt; if (m.userData.t > 2.4) { group.remove(m); a.parts.splice(k, 1); } }
@@ -15595,7 +15654,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, viewQuery: fn => { VIEWQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerTimer, cardAtlas: () => { const t = cardKit(); return t && t.image && t.image.toDataURL ? t.image.toDataURL('image/png') : null; }, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, viewQuery: fn => { VIEWQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerTimer, pokerSpots, cardAtlas: () => { const t = cardKit(); return t && t.image && t.image.toDataURL ? t.image.toDataURL('image/png') : null; }, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -16369,7 +16428,7 @@ POSSIBILITY OF SUCH DAMAGE. */
         const cyc = (k, lab) => '<div class="row"><span class="lab">' + lab + '</span><button class="arr" data-cy="' + k + '" data-d="-1">&#9664;</button><span class="val">' + esc(sty(k)) + '</span><button class="arr" data-cy="' + k + '" data-d="1">&#9654;</button></div>';
         const many = k => listOf(k).length > 1, bootsLab = (HC && HC.labels && HC.labels.boots) || 'Boots';
         cc.innerHTML = '<h3>' + (o.first ? esc((HC && HC.heading) || 'Create your adventurer') : esc(o.title || 'Wardrobe')) + '</h3>' +
-          (o.first ? '<div class="row"><span class="lab">Name</span><input maxlength="12" value="' + esc(name) + '" placeholder="Your name"></div>' : '') +
+          /* [Claude 2026-10-15] no name box: your @tag is your name (the operator: "Remove the adventure and the ability to create a name") */
           '<div class="row"><span class="lab">Body</span><button class="btn body ' + (L.body !== 'female' ? 'on' : '') + '" data-body="male" style="width:auto;flex:1;margin:0">Male</button><button class="btn body ' + (L.body === 'female' ? 'on' : '') + '" data-body="female" style="width:auto;flex:1;margin:0">Female</button></div>' +
           '<div class="row"><span class="lab">Skin</span>' + sw('skin', PA.skin) + '</div>' +
           cyc('hair', 'Hair') + '<div class="row"><span class="lab"></span>' + sw('hairColor', PA.hair) + '</div>' +
@@ -16493,39 +16552,54 @@ POSSIBILITY OF SUCH DAMAGE. */
   const CSS = `
 .ash .lay.poker > .ui:not(.pokerp):not(.chatw):not(.help){display:none !important}
 .ash .lay.poker .hover{display:none !important}
-.ash .lay.poker .chatw .chat:not(.big){max-height:54px}
-.ash .pokerp{position:absolute;right:8px;top:8px;width:216px;opacity:.94;max-width:calc(100vw - 20px);padding:8px 10px;font-size:13px;line-height:1.35;color:#eee;background:linear-gradient(#2b3a33,#1b241f);border:2px solid #12181a;border-radius:6px;box-shadow:0 4px 14px #0008;pointer-events:auto}
-.ash .pokerp h3{margin:0 0 6px;font:bold 15px Georgia,serif;color:#e9e2cf;letter-spacing:.5px}
-.ash .pokerp .pl{display:flex;justify-content:space-between;align-items:center;padding:3px 6px;border-radius:4px;margin:2px 0;background:#0003}
+.ash .lay.poker .chatw{top:calc(6px + env(safe-area-inset-top,0px));bottom:auto;left:8px;right:8px;width:auto;max-width:560px}
+.ash .lay.poker .chatw .chat:not(.big){max-height:calc(3*1.3em + 10px)}
+.ash .lay.poker .chatw .chatx{top:auto;bottom:-24px;border-radius:0 0 6px 6px}
+.ash .pokerp{position:absolute;color:#eee;font-size:13px;line-height:1.35;background:linear-gradient(#2b3a33f0,#1b241ff0);border:2px solid #12181a;border-radius:8px;box-shadow:0 4px 14px #0008;pointer-events:auto;box-sizing:border-box}
+.ash .pokerp.bar{display:flex;flex-direction:column;left:50%;transform:translateX(-50%);bottom:0;width:min(100vw,680px);border-radius:10px 10px 0 0;border-bottom:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));max-height:62vh;overflow-y:auto;touch-action:pan-y}
+.ash .pokerp.hole,.ash .pokerp.board{transform:translate(-50%,-50%);padding:5px 7px;white-space:nowrap;text-align:center;opacity:.97}
+.ash .pokerp.board{white-space:normal;width:max-content;max-width:min(92vw,420px)}
+.ash .pokerp.board .brd,.ash .pokerp.hole .cards{white-space:nowrap}   /* [Claude 2026-10-14] five cards in one row: a box placed by its centre was only given the width to the screen's edge (the operator: the river dropped below) */
+.ash .pokerp .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.ash .pokerp .stt{color:#ffd23f;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ash .pokerp .stt.wait{color:#9fc3ff}
+.ash .pokerp .pot{color:#c8c3b4;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;white-space:nowrap}
+.ash .pokerp .pls{display:flex;flex-shrink:0;gap:4px;overflow-x:auto;margin:4px 0 0;scrollbar-width:none}
+.ash .pokerp .pl{flex:0 0 auto;display:flex;gap:5px;align-items:center;padding:2px 7px;border-radius:12px;background:#0004;font-size:12px}
 .ash .pokerp .pl.turn{background:#ffd23f22;box-shadow:inset 0 0 0 1px #ffd23f88}
 .ash .pokerp .pl.out{opacity:.45}
 .ash .pokerp .pl b{font-weight:normal;color:#cbd6cd}
 .ash .pokerp .pl .ch{font-family:ui-monospace,Menlo,Consolas,monospace;color:#e8e2d0}
-.ash .pokerp .pl .bt{color:#ffd23f;margin-left:6px}
-.ash .pokerp .pl .d{display:inline-block;width:13px;height:13px;border-radius:50%;background:#f2eee0;color:#26302a;font-size:9px;font-weight:bold;text-align:center;line-height:13px;margin-right:5px;vertical-align:-1px}
-.ash .pokerp .stt{margin:7px 0 3px;color:#ffd23f;font-weight:bold}
-.ash .pokerp .stt.wait{color:#9fc3ff}
-.ash .pokerp .cards{margin:2px 0 5px;font-size:17px;letter-spacing:1px;min-height:20px}
-.ash .pokerp .cd{display:inline-block;min-width:20px;padding:1px 3px;margin-right:3px;background:#f4f1e8;color:#20202a;border-radius:3px;box-shadow:0 1px 2px #0007;font-size:14px;text-align:center}
+.ash .pokerp .pl .bt{color:#ffd23f}
+.ash .pokerp .pl .d{display:inline-block;width:13px;height:13px;border-radius:50%;background:#f2eee0;color:#26302a;font-size:9px;font-weight:bold;text-align:center;line-height:13px}
+.ash .pokerp .cd{display:inline-block;min-width:22px;padding:2px 4px;margin:0 2px;background:#f4f1e8;color:#20202a;border-radius:4px;box-shadow:0 1px 2px #0007;font-size:16px;font-weight:bold;text-align:center}
 .ash .pokerp .cd.r{color:#b23a30}
 .ash .pokerp .cd.b{background:repeating-linear-gradient(45deg,#3a5f86,#3a5f86 3px,#2b4a6b 3px,#2b4a6b 6px);color:transparent}
-.ash .pokerp .pot{color:#c8c3b4;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
-.ash .pokerp .lg{font-size:11px;color:#a9b3a6;max-height:30px;overflow:hidden;margin:4px 0}
-.ash .pokerp .btns{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
-.ash .pokerp .btn{margin:0;padding:6px 9px}
-.ash .pokerp .rz{display:none;margin-top:6px;padding:6px;background:#0005;border-radius:4px}
+.ash .pokerp.hole .cd{font-size:22px;min-width:30px;padding:4px 6px}
+.ash .pokerp .lab{font-size:10px;color:#9aa79c;letter-spacing:.5px}
+.ash .pokerp .btns{display:flex;gap:6px;margin-bottom:4px}
+.ash .pokerp.bar > .rz{order:0}.ash .pokerp.bar > .btns{order:1}.ash .pokerp.bar > .top{order:2}.ash .pokerp.bar > .pls{order:3}.ash .pokerp.bar > .away{order:4}   /* [Claude 2026-10-14] the operator: the buttons on top, the reading of the table under them */
+.ash .pokerp .btns .btn{flex:1 1 0;width:auto;margin:0;padding:9px 4px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ash .pokerp .btns .btn.sm{flex:0 0 auto;padding:9px 10px;opacity:.85}
+.ash .pokerp .rz{display:none;margin-bottom:4px;padding:6px;background:#0005;border-radius:6px}
 .ash .pokerp .rz.on{display:block}
-.ash .pokerp .win{margin:6px 0;padding:7px 9px;border-radius:5px;background:#ffd23f22;border:1px solid #ffd23f88;color:#ffe9a0;font:bold 14px Georgia,serif;line-height:1.3}
-.ash .pokerp .sd{margin:4px 0;padding:4px 6px;border-radius:4px;background:#0004;font-size:12px;color:#d9d3c2}
+.ash .pokerp .win{margin:2px 0;color:#ffe9a0;font:bold 14px Georgia,serif;line-height:1.3}
+.ash .pokerp .sd{margin:3px 0;font-size:12px;color:#d9d3c2}
 .ash .pokerp .sd .cd{font-size:13px;min-width:18px}
 .ash .pokerp .sd b{color:#ffd23f;font-weight:normal}
-.ash .pokerp .rz .amt{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-family:ui-monospace,Menlo,Consolas,monospace;color:#ffd23f}
+.ash .pokerp .away{color:#9fc3ff;font-size:12px;margin-top:3px}
+.ash .pokerp .rz .amt{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;font-family:ui-monospace,Menlo,Consolas,monospace;color:#ffd23f}
 .ash .pokerp .rz input[type=range]{width:100%;margin:4px 0;accent-color:#ffd23f}
-.ash .pokerp .rz .qk{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
-.ash .pokerp .rz .qk .btn{padding:4px 7px;font-size:12px}
-@media (max-width:600px){.ash .pokerp{left:6px;right:6px;top:6px;width:auto;max-width:none;max-height:50vh;overflow:auto;font-size:15px;padding:10px 12px}.ash .pokerp h3{font-size:18px}.ash .pokerp .lg{max-height:40px;font-size:13px}.ash .pokerp .cd{font-size:20px;min-width:30px;padding:3px 6px}.ash .pokerp .btn{padding:10px 14px;font-size:15px}.ash .pokerp .win{font-size:17px}.ash .pokerp .sd{font-size:14px}}`;
-/* [Claude 2026-10-11] the operator: on a phone the panel fills the top half of the screen; a slider from the least raise to all-in;
-   the showdown shows every hand face up with its name and says plainly who won what with which hand */
+.ash .pokerp .rz .qk{display:flex;gap:4px;flex-wrap:wrap}
+.ash .pokerp .rz .qk .btn{width:auto;padding:6px 8px;font-size:13px;margin:0}
+@media (pointer:coarse),(max-width:600px){.ash .pokerp{font-size:14px}.ash .pokerp .btns .btn{padding:12px 4px;font-size:15px}.ash .pokerp .btns .btn.sm{padding:12px 10px}.ash .pokerp .pl{font-size:13px}}
+@media (max-height:520px){.ash .pokerp .rz.on{display:flex;align-items:center;gap:8px;padding:4px 6px}.ash .pokerp .rz .amt{margin:0;gap:6px;white-space:nowrap}.ash .pokerp .rz input[type=range]{flex:1;min-width:80px;margin:0}.ash .pokerp .rz .qk{flex-wrap:nowrap}.ash .pokerp .rz .qk .btn[data-to]{margin-left:4px !important}.ash .pokerp.bar{padding-top:4px;max-height:70vh}.ash .pokerp .pls{margin:2px 0}.ash .pokerp .btns .btn{padding:8px 4px}.ash .pokerp.hole .cd{font-size:18px;min-width:24px;padding:2px 4px}.ash .lay.poker .chatw{right:auto;width:min(46vw,420px)}.ash .lay.poker .chatw .chat:not(.big){max-height:calc(2*1.3em + 10px)}}`;
+/* [Claude 2026-10-11] a slider from the least raise to all-in; the showdown shows every hand face up with its name and says
+   plainly who won what with which hand.
+   [Claude 2026-10-14] the operator, on a phone: "I have to scroll down to use [the controls]", and in landscape they could not be
+   reached at all. Now three pieces: the betting bar along the bottom (status, players, buttons - never scrolled to), your two
+   cards in a small box over where they lie on the felt (on the felt they stay face down), and the board in a box over the
+   middle of the felt; the chat moves to the top. The engine hands the felt's screen spots every frame (pokerAnchor). */
   const RANK = '23456789TJQKA', SUIT = ['♣', '♦', '♥', '♠'], RED = [0, 1, 1, 0];
   const STREET = { none: 'between hands', preflop: 'the first round', flop: 'the flop', turn: 'the turn', river: 'the river' };
   function cardTxt(id) { return id == null ? '<span class="cd b">•</span>' : '<span class="cd' + (RED[id & 3] ? ' r' : '') + '">' + RANK[(id >> 2) % 13] + SUIT[id & 3] + '</span>'; }
@@ -16558,6 +16632,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       const wins = v.winners || [];
       return v.shown.map(h => { const s = v.seats.find(x => x.ref === h.ref); return '<div class="sd">' + (wins.indexOf(h.ref) >= 0 ? '&#9733; ' : '') + esc(s ? s.name : 'seat ' + (h.ref + 1)) + ': ' + cardTxt(h.c[0]) + cardTxt(h.c[1]) + ' <b>' + esc(h.name) + '</b></div>'; }).join('');
     }
+    let hbox = null, bbox = null, anchor = null;
     function draw() {
       if (!box || !view) return;
       const v = view, you = (s) => s.id === v.me, pot = v.pot, st = statusOf(v);
@@ -16565,37 +16640,63 @@ POSSIBILITY OF SUCH DAMAGE. */
       const hi = v.bet + (mine ? mine.chips : 0), lo = Math.min(Math.max(v.min || (v.bet ? v.bet * 2 : 100), v.bet + 1), hi), potR = Math.min(hi, Math.max(lo, v.bet + pot));
       const canRaise = hi > v.bet && lo <= hi, amounts = canRaise ? [lo] : [];
       if (raiseTo == null || raiseTo < lo || raiseTo > hi) raiseTo = lo;
-      box.innerHTML = '<h3>Card table' + (v.buy ? ' <small style="font:12px system-ui,sans-serif;color:#ffd23f">buy-in ' + v.buy.toLocaleString() + ' GOLD</small>' : ' <small style="font:12px system-ui,sans-serif;color:#cbd6cd">free chips</small>') + '</h3>'   /* [Claude] the buy-in the first sitter set */
-        + v.seats.map(s => '<div class="pl' + (v.turn === s.ref && !v.open ? ' turn' : '') + (((s.folded || !s.dealt) && !v.open) ? ' out' : '') + '">'
-          + '<span>' + (v.dealer === s.ref ? '<i class="d">D</i>' : '') + '<b>' + esc(s.name) + (you(s) ? ' <span style="color:#9fc3ff">(you)</span>' : '') + (s.away ? ' <span style="color:#9aa79c">(away)</span>' : '') + '</b></span>'
-          + '<span><span class="ch">' + s.chips + '</span>' + (s.bet ? '<span class="bt">' + s.bet + '</span>' : '') + '</span></div>').join('')
-        + '<div class="stt ' + (st.cls || '') + '">' + st.text + '</div>'
-        + '<div class="cards">' + (v.hole ? cardTxt(v.hole[0]) + cardTxt(v.hole[1]) : (v.inHand ? cardTxt(null) + cardTxt(null) : '<span style="font-size:12px;color:#9aa79c">not in this hand</span>'))
-        + (v.board.length ? '<span style="margin:0 4px;color:#8fa08c">|</span>' + v.board.map(cardTxt).join('') : '') + '</div>'
-        + '<div class="pot">pot ' + pot + (v.inHand && v.call > 0 ? ' · you owe ' + Math.min(v.call, v.stack) : v.bet ? ' · bet ' + v.bet : ' · nobody to beat') + (mine ? ' · your chips ' + mine.chips : '') + '</div>'
-        + (winTxt(v) ? '<div class="win">' + winTxt(v) + '</div>' + showdownHtml(v) : '')
-        + (!winTxt(v) && v.last ? (() => { const L = Object.assign({}, v, v.last); const w = winTxt(L); return w ? '<div class="win" style="opacity:.8">Last hand: ' + w + '</div>' + showdownHtml(L) : ''; })() : '')   /* [Claude 2026-10-13] */
-        + (raise && amounts.length ? '' : '<div class="lg">' + v.log.map(esc).join('<br>') + '</div>')
-        + (v.away ? '<div class="stt wait">You are dealt out (a minute on your hand). Tap to come back.</div>' : '')   /* [Claude] */
+      const act = v.myTurn && !v.pending;
+      if (!act) raise = false;
+      box.innerHTML = '<div class="top"><span class="stt ' + (st.cls || '') + '">' + st.text + '</span>'
+        + '<span class="pot">' + (v.buy ? v.buy.toLocaleString() + ' buy-in · ' : 'free chips · ') + 'pot ' + pot + (v.inHand && v.call > 0 ? ' · owe ' + Math.min(v.call, v.stack) : '') + '</span></div>'
+        + '<div class="pls">' + v.seats.map(s => '<div class="pl' + (v.turn === s.ref && !v.open ? ' turn' : '') + (((s.folded || !s.dealt) && !v.open) ? ' out' : '') + '">'
+          + (v.dealer === s.ref ? '<i class="d">D</i>' : '') + '<b>' + esc(s.name) + (you(s) ? ' <span style="color:#9fc3ff">(you)</span>' : '') + (s.away ? ' <span style="color:#9aa79c">(away)</span>' : '') + '</b>'
+          + '<span class="ch">' + s.chips + '</span>' + (s.bet ? '<span class="bt">' + s.bet + '</span>' : '') + '</div>').join('') + '</div>'
+        + (v.away ? '<div class="away">You are dealt out (a minute on your hand). Tap I\'m back.</div>' : '')
         + '<div class="rz' + (raise && amounts.length ? ' on' : '') + '" data-rz><div class="amt"><span>raise to</span><span data-amt>' + raiseTo + '</span></div>'
         + '<input type="range" min="' + lo + '" max="' + hi + '" step="1" value="' + raiseTo + '" data-sl>'
         + '<div class="qk"><button class="btn" data-q="' + lo + '">min ' + lo + '</button>' + (potR > lo && potR < hi ? '<button class="btn" data-q="' + potR + '">pot ' + potR + '</button>' : '') + '<button class="btn" data-q="' + hi + '">all-in ' + hi + '</button>'
         + '<button class="btn" data-to style="margin-left:auto;background:#5a4a1c;color:#ffe2a8">Raise to <span data-amt2>' + raiseTo + '</span></button></div></div>'
-        + '<div class="btns">' + (v.away ? '<button class="btn" data-a="back">I\'m back</button>' : '') + (v.myTurn && !v.pending ? '<button class="btn" data-a="fold">Fold</button>'
+        + '<div class="btns">' + (v.away ? '<button class="btn" data-a="back">I\'m back</button>' : '') + (act ? '<button class="btn" data-a="fold">Fold</button>'
           + '<button class="btn" data-a="' + (v.call > 0 ? 'call' : 'check') + '">' + (v.call > 0 ? (v.call >= v.stack ? 'Call all-in ' + v.stack : 'Call ' + v.call) : 'Check') + '</button>'
-          + (amounts.length ? '<button class="btn" data-r>Raise</button><button class="btn" data-a="allin">All-in</button>' : '') : '')
-        + '<button class="btn" data-a="stand">' + (v.inHand && !v.open ? 'Fold & stand' : 'Stand up') + '</button></div>'
+          + (amounts.length ? '<button class="btn" data-r>' + (raise ? 'Cancel' : 'Raise') + '</button>' : '') : '')   /* [Claude 2026-10-14] no All-in here (the operator): slide to all-in, or its quick button, then the raise button */
+        + '<button class="btn' + (act || v.away ? ' sm' : '') + '" data-a="stand">' + (act || v.away ? 'Stand' : v.inHand && !v.open ? 'Fold & stand up' : 'Stand up') + '</button></div>';
       for (const b of box.querySelectorAll('[data-a]')) b.onclick = () => { const a = b.dataset.a; raise = false; if (a === 'stand') { if (cb && cb.stand) cb.stand(); } else if (cb && cb.act) cb.act(a); api.sfx && api.sfx('click'); };
       const r = box.querySelector('[data-r]'); if (r) r.onclick = () => { raise = !raise; draw(); };
       const sl = box.querySelector('[data-sl]'), amt = box.querySelector('[data-amt]'), amt2 = box.querySelector('[data-amt2]');
       if (sl) { sl.oninput = () => { raiseTo = sl.value | 0; if (amt) amt.textContent = raiseTo; if (amt2) amt2.textContent = raiseTo; }; sl.onpointerdown = (e) => e.stopPropagation(); }
       for (const b of box.querySelectorAll('[data-q]')) b.onclick = () => { raiseTo = b.dataset.q | 0; if (sl) sl.value = raiseTo; if (amt) amt.textContent = raiseTo; if (amt2) amt2.textContent = raiseTo; };
-      const go = box.querySelector('[data-to]'); if (go) go.onclick = () => { raise = false; if (cb && cb.act) cb.act('raise', raiseTo | 0); api.sfx && api.sfx('click'); };
+      const goTxt = () => (raiseTo | 0) >= hi ? 'All-in ' + hi : 'Raise to ' + raiseTo, go = box.querySelector('[data-to]');
+      const syncGo = () => { if (go) go.textContent = goTxt(); };
+      if (sl) sl.addEventListener('input', syncGo); for (const b of box.querySelectorAll('[data-q]')) b.addEventListener('click', syncGo); syncGo();
+      if (go) go.onclick = () => { raise = false; const all = (raiseTo | 0) >= hi; if (cb && cb.act) { if (all) cb.act('allin'); else cb.act('raise', raiseTo | 0); } api.sfx && api.sfx('click'); };   /* the slider at its end is all-in */
+      /* your two cards, over where they lie on the felt; the board (and between hands, who won) over the middle */
+      const holeHtml = v.hole ? '<div class="cards">' + cardTxt(v.hole[0]) + cardTxt(v.hole[1]) + '</div>' : '';
+      if (holeHtml) { if (!hbox) hbox = el('pokerp hole ui', ui); if (hbox.innerHTML !== holeHtml) hbox.innerHTML = holeHtml; } else if (hbox) { hbox.remove(); hbox = null; }
+      const w = v.open ? winTxt(v) : '';   /* a result only between hands: once the next hand is dealt it is gone (2026-10-14) */
+      const boardHtml = (v.board.length ? '<div class="brd">' + v.board.map(cardTxt).join('') + '</div>' : '') + (w ? '<div class="win">' + w + '</div>' + showdownHtml(v) : '');
+      if (boardHtml) { if (!bbox) bbox = el('pokerp board ui', ui); if (bbox.innerHTML !== boardHtml) bbox.innerHTML = boardHtml; } else if (bbox) { bbox.remove(); bbox = null; }
+      place();
     }
-    function pokerOpen(v, callbacks) { cb = callbacks || null; view = v; raise = false; if (!box) box = el('pokerp felt ui', ui); ui.classList.add('poker'); draw(); }
+    /* keep a floating box at its felt spot, inside the screen and clear of the chat (top) and the bar (bottom) */
+    function put(b, at, fx, fy) {
+      if (!b) return;
+      const W = ui.clientWidth || innerWidth, H = ui.clientHeight || innerHeight, bw = b.offsetWidth, bh = b.offsetHeight;
+      const ch = document.querySelector('.ash .lay.poker .chatw'), topMin = ch ? ch.getBoundingClientRect().bottom - ui.getBoundingClientRect().top + 4 : 0;
+      const botMax = box ? H - box.offsetHeight - 4 : H;
+      let x = at ? at.x : W * fx, y = at ? at.y : H * fy;
+      x = Math.max(bw / 2 + 4, Math.min(W - bw / 2 - 4, x));
+      y = Math.max(topMin + bh / 2, Math.min(botMax - bh / 2, y));
+      const L = Math.round(x) + 'px', T = Math.round(y) + 'px';
+      if (b.style.left !== L) b.style.left = L; if (b.style.top !== T) b.style.top = T;
+    }
+    function place() {
+      put(hbox, anchor && anchor.hole, 0.5, 0.7); put(bbox, anchor && anchor.board, 0.5, 0.45);
+      if (hbox && bbox) {   /* a low screen (landscape) squeezes the two together: the board goes up off your cards */
+        const ht = hbox.offsetTop - hbox.offsetHeight / 2, bb = bbox.offsetTop + bbox.offsetHeight / 2;
+        if (bb > ht - 4 && Math.abs(hbox.offsetLeft - bbox.offsetLeft) < (hbox.offsetWidth + bbox.offsetWidth) / 2) put(bbox, { x: bbox.offsetLeft, y: ht - 4 - bbox.offsetHeight / 2 }, 0.5, 0.45);
+      }
+    }
+    function pokerAnchor(a) { anchor = a || null; if (box) place(); }
+    function pokerOpen(v, callbacks) { cb = callbacks || null; view = v; raise = false; if (!box) box = el('pokerp bar ui', ui); ui.classList.add('poker'); draw(); }
     function pokerUpdate(v) { if (!box) return; view = v; draw(); }
-    function pokerClose() { ui.classList.remove('poker'); if (box) { box.remove(); box = null; } view = null; cb = null; raise = false; }
-    K.pokerOpen = pokerOpen; K.pokerUpdate = pokerUpdate; K.pokerClose = pokerClose;
+    function pokerClose() { ui.classList.remove('poker'); for (const b of [box, hbox, bbox]) if (b) b.remove(); box = hbox = bbox = null; view = null; cb = null; raise = false; anchor = null; }
+    K.pokerOpen = pokerOpen; K.pokerUpdate = pokerUpdate; K.pokerClose = pokerClose; K.pokerAnchor = pokerAnchor;
     /* [Claude 2026-10-13] SOLITAIRE at the card table (the operator: "if you right click or long tap on the table you should also have
        the option to play Solitaire"). Klondike, draw one, as many passes through the stock as you like; the cards are the
        felt's own (the scene's card atlas). One tap plays a card where it fits best - up to its foundation if it can go,
@@ -17010,7 +17111,7 @@ POSSIBILITY OF SUCH DAMAGE. */
     const K = { host, api, core, P, A, el, ui, layer, panel, st, shopEl, ccEl, slotHtml, longPress, menu, hideMenu, chatLine, examine, itemOptions, updateOrbs, showHelp, promptSay,
       refresh() { }, drawShop() { }, openShop() { }, closeShop() { }, openChest() { }, closeChest() { }, drawChest() { }, invPointer() { }, creator() { }, creatorOpen: () => false,
       chessOpen() { }, chessUpdate() { }, chessClose() { }, chessPromo: null,
-      pokerOpen() { }, pokerUpdate() { }, pokerClose() { } };
+      pokerOpen() { }, pokerUpdate() { }, pokerClose() { }, pokerAnchor() { } };
     for (const part of PARTS) part.install(K);
     K.onChestClose = () => { if (st.tabWas === undefined) return; const back = st.tabWas; st.tabWas = undefined; setTab(back); };
     /* a quest's story so far, in the words of the one who gave it (2026-10-06): every step you finished - what they
@@ -17038,7 +17139,7 @@ POSSIBILITY OF SUCH DAMAGE. */
       layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab(api.isPhone ? null : 'inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       chessOpen: (v, cb) => K.chessOpen(v, cb), chessUpdate: v => K.chessUpdate(v), chessClose: () => K.chessClose(), get chessPromo() { return K.chessPromo; },
-      pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(), solitaireOpen: o => K.solitaireOpen && K.solitaireOpen(o), solitaireClose: () => K.solitaireClose && K.solitaireClose(), _sol: () => K._sol && K._sol(),
+      pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(), pokerAnchor: a => K.pokerAnchor && K.pokerAnchor(a), solitaireOpen: o => K.solitaireOpen && K.solitaireOpen(o), solitaireClose: () => K.solitaireClose && K.solitaireClose(), _sol: () => K._sol && K._sol(),
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };
   }
@@ -20340,6 +20441,28 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
          Asked when the chest opens, every minute, and again just before a take. */
       const HOLDS = { o: {}, at: 0, wait: [], multi: false, sent: '' };   /* multi: the Bank knows another character on this wallet */
       function holdsHeard(d) { HOLDS.o = d.o && typeof d.o === 'object' ? d.o : {}; HOLDS.multi = !!d.multi; HOLDS.at = Date.now(); const w = HOLDS.wait; HOLDS.wait = []; for (const f of w) f(); hud.refresh && hud.refresh('chest'); }
+      /* [Claude 2026-10-14] ONE CHEST PER HOME (the operator: "if an item is deposited in ziibiing chest it is visible only in ziibiing chests ...
+         If something is deposited into your wallet from Dogecoin arcade, it should be visible in both games until it is put into a
+         players inventory ... If an item from ziibiing is brought to Ashvale and put into an Ashvale chest it should be visible in
+         Ashvale chest"). The Bank keeps, per wallet, what was put in each home's chests (cput / ctake, 'chests?' -> rows [h, k, n]);
+         a chest belongs to the home whose spawn is nearest (setChestHome). What no home's chest holds - from the arcade, or there
+         from before - shows in every chest. chestState().here = this chest: everything less what OTHER homes' chests hold. */
+      const CS = { by: {}, at: 0, home: K.HOME || 'ashvale', parts: {} };
+      function chestsHeard(d) {
+        const q = String(d.q || ''); const P = CS.parts[q] = CS.parts[q] || { rows: [], n: 0 };
+        P.rows.push(...(Array.isArray(d.rows) ? d.rows : [])); P.n++;
+        if (P.n < (d.of | 0)) return;
+        delete CS.parts[q]; if (+q.slice(1) < (CS.told || 0)) return;   /* asked before our last put/take: the Bank's answer is older than what we know */
+        const by = {};
+        for (const r of P.rows) if (Array.isArray(r) && typeof r[0] === 'string' && typeof r[1] === 'string' && r[2] > 0) (by[r[0]] = by[r[0]] || {})[r[1]] = r[2] | 0;
+        CS.by = by; CS.at = Date.now(); hud.refresh('wallet');
+      }
+      function chestsAsk() { bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'chests?', v: 1, q: 'c' + Date.now() }); }).catch(() => {}); }
+      function setChestHome(h) { CS.home = h || K.HOME || 'ashvale'; chestsAsk(); }
+      const otherChests = k => { let n = 0; for (const h in CS.by) if (h !== CS.home) n += (CS.by[h][k] | 0); return n; };
+      function chestTell(t, k, n) { if (n <= 0) return; CS.told = Date.now(); const by = CS.by[CS.home] = CS.by[CS.home] || {}; by[k] = Math.max(0, (by[k] | 0) + (t === 'cput' ? n : -n)); if (!by[k]) delete by[k];
+        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t, v: 1, h: CS.home, k, n }); }).catch(() => {}); }
+      setInterval(() => { if (walletState.address) chestsAsk(); }, 60000);
       function holdsAsk() { return new Promise(res => { HOLDS.wait.push(res); setTimeout(res, 3000); bankRoom().then(R => R && R.send(K.withHome({ t: 'holds?' }))).catch(() => res()); }); }
       function holdSend() { if (!ledger || !walletState.address) return; const b = {}; for (const k in ledger.bag) if (ledger.bag[k] > 0) b[k] = ledger.bag[k]; for (const k in ledger.pend) if (ledger.pend[k] > 0) b[k] = (b[k] || 0) + ledger.pend[k];
         const j = JSON.stringify(b); if (j === HOLDS.sent) return; HOLDS.sent = j;   /* only when what is carried changed: saves go out often (the mesh allows ~5 messages a second) */
@@ -20363,7 +20486,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         L.addr = addr; ledger = L; return L;
       }
       const ledgerDrop = () => { ledger = null; };   /* the tests' lost count */
-      const ledgerSnap = () => ledger && { addr: ledger.addr, bag: ledger.bag, spent: ledger.spent, pend: ledger.pend, pspent: ledger.pspent, out: ledger.out || {}, gone: ledger.gone || {}, autoTake: ledger.autoTake || {}, pchest: ledger.pchest || {}, lchest: ledger.lchest || {} };
+      const ledgerSnap = () => ledger && { addr: ledger.addr, bag: ledger.bag, spent: ledger.spent, pend: ledger.pend, pspent: ledger.pspent, out: ledger.out || {}, gone: ledger.gone || {}, autoTake: ledger.autoTake || {}, pchest: ledger.pchest || {}, lchest: ledger.lchest || {}, seen: ledger.seen || {}, pkb: ledger.pkb || [] };   /* seen, pkb [Claude 2026-10-14]: the wallet's last look, and card-table buy-ins still to send */
       const ledgerSave = () => { if (!ledger) return; try { G.localStorage.setItem(CKEY(ledger.addr), JSON.stringify(ledgerSnap())); } catch (e) { /* private window */ } };
       function chestState() {
         if (!walletState.data || !walletState.address) return { chest: {}, loose: {}, bank, arriving: bank.arriving };
@@ -20383,8 +20506,12 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
              your wallet, and not on its way back to @ashvale, is yours again - never a new deposit (2026-10-04) */
           if (x < 0) { const away = ((L.out && L.out[k]) || []).reduce((a, o) => a + o.n, 0), back = Math.min(-x, Math.max(0, spent - away)); spent -= back; bag += back; x += back;
             const bp = Math.min(-x, pspent); pspent -= bp; pend += bp; }
-          /* 2. arrived: wallet units beyond what is counted turn promises into deliveries */
-          let av = wk - bag - spent - gone;
+          /* 2. arrived: wallet units beyond what is counted turn promises into deliveries.
+             [Claude 2026-10-14] only what the wallet GAINED since the last look (L.seen) can be an arrival: "beyond what is counted"
+             also holds everything already in the chest, so with a full chest a promise was taken as delivered at once - 630 GOLD
+             still on its way, stored, and the chest showed 5,678 instead of 6,308 until the payout landed (the operator) */
+          const seenK = L.seen && L.seen[k] != null ? L.seen[k] : null;
+          let av = wk - bag - spent - gone; if (seenK != null) av = Math.min(av, Math.max(0, wk - seenK));
           if (av > 0) { const d = Math.min(av, pend); pend -= d; bag += d; av -= d; const e = Math.min(av, pspent); pspent -= e; spent += e; const f = Math.min(av, pch); pch -= f; }   /* stored-while-arriving units land in the chest */
           /* 2b. only when the Bank said this count does not add up (a stale count, one per device): the wallet's unclaimed
              units stand for what you carry. New loot never eats your chest (the operator: a second steel helmet is a new one). */
@@ -20400,6 +20527,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           /* traded in: the piece goes into your bag as soon as your wallet shows it (the operator: trade from and into your inventory) */
           const at = L.autoTake[k]; if (at && at.n > 0) { if (Date.now() > at.until) delete L.autoTake[k]; else { const free = wk - bag - spent - gone; const m = Math.min(at.n, free); if (m > 0) { core.grantItem(PID, k, m); bag += m; c += m; at.n -= m; if (at.n <= 0) delete L.autoTake[k]; } } }
           put(L.bag, k, bag); put(L.spent, k, spent); put(L.pend, k, pend); put(L.pspent, k, pspent); put(L.gone, k, gone); put(L.pchest, k, pch);
+          if (walletState.data && walletState.data.at) { L.seen = L.seen || {}; if (L.seen[k] !== wk) L.seen[k] = wk; }   /* the wallet as this look saw it */
           /* what you dropped and is still lying on the ground is not in the chest, whatever the count says (2026-10-07: everything
              he dropped "showed up in his chest" too) */
           const onGround = core.S.ground.reduce((a, q) => a + (q.id === k && q.from === PID ? q.n : 0), 0);
@@ -20412,7 +20540,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         }
         if (JSON.stringify([L.bag, L.spent, L.pend, L.pspent, L.gone, L.autoTake, L.pchest, L.lchest]) !== before) ledgerSave();
         bank.arriving = arriving;
-        return { chest, loose, bank, arriving, bag: Object.assign({}, L.bag), pend: Object.assign({}, L.pend) };
+        const here = {}; for (const k in chest) { const v = Math.max(0, chest[k] - otherChests(k)); if (v > 0) here[k] = v; }   /* this home's chest */
+        return { chest, here, home: CS.home, loose, bank, arriving, bag: Object.assign({}, L.bag), pend: Object.assign({}, L.pend) };
       }
       /* ---------- returns: what you used up goes back to @ashvale (2026-10-04: a dropped Hawk ring stayed in his wallet
          while a friend carried it). A spent unit is sent to @ashvale with the arcade's creator allowance (testnet, no card,
@@ -20581,11 +20710,12 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       }
       function chestTake(k, n) { if (HOLDS.multi && Date.now() - HOLDS.at > 5000) holdsAsk().then(() => chestTake0(k, n)); else chestTake0(k, n); }   /* with a second character on the wallet, ask the Bank first: it may have just taken it */
       function chestTake0(k, n, quiet) {
-        const C = chestState(); n = Math.min(n, C.chest[k] || 0); if (n <= 0) return 0;
+        const C = chestState(); n = Math.min(n, (C.here || C.chest)[k] || 0); if (n <= 0) return 0;
         const d = core.item(k), free = me.inv.filter(s => !s).length, room0 = d.stack ? (core.invCount(me, k) || free ? n : 0) : Math.min(n, free);
         if (room0 <= 0) { if (!quiet) hud.chat('Your bag is full.', 'warn'); return 0; }
         core.grantItem(PID, k, room0); const L = ledgerFor(walletState.address), real = Math.max(0, (C.chest[k] || 0) - (L.pchest[k] || 0) - (L.lchest[k] || 0)), fromReal = Math.min(room0, real), fromP = Math.min(room0 - fromReal, L.pchest[k] || 0), fromL = room0 - fromReal - fromP;
         L.bag[k] = (L.bag[k] || 0) + fromReal; L.pchest[k] = (L.pchest[k] || 0) - fromP; L.pend[k] = (L.pend[k] || 0) + fromP; L.lchest[k] = Math.max(0, (L.lchest[k] || 0) - fromL); ledgerSave();
+        chestTell('ctake', k, Math.min(room0, (CS.by[CS.home] || {})[k] | 0));   /* out of this home's chest first; the rest was shared */
         if (!quiet) hud.chat('You take ' + (room0 > 1 ? room0 + ' x ' : '') + d.name + ' from your chest.', 'info'); hud.refresh('all');
         return room0;
       }
@@ -20593,9 +20723,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (!walletState.address) { hud.chat('Sign in to use the chest.', 'warn'); return; }
         const go = () => {
           const C = chestState(); let n = 0;
-          for (const k of Object.keys(C.chest)) n += chestTake0(k, C.chest[k] || 0, true);
+          const H = C.here || C.chest; for (const k of Object.keys(H)) n += chestTake0(k, H[k] || 0, true);
           if (n) hud.chat('You take what you can carry from your chest.', 'info');
-          else if (Object.keys(C.chest).length) hud.chat('Your bag is full.', 'warn');
+          else if (Object.keys(C.here || C.chest).length) hud.chat('Your bag is full.', 'warn');
           hud.refresh('all');
         };
         if (HOLDS.multi && Date.now() - HOLDS.at > 5000) holdsAsk().then(go); else go();
@@ -20606,6 +20736,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         const fromBag = Math.min(n, L.bag[k] || 0, have), fromPend = Math.min(n - fromBag, L.pend[k] || 0, have - fromBag), fromNew = Math.min(n - fromBag - fromPend, have - fromBag - fromPend), m = fromBag + fromPend + fromNew;   /* settled or not, it can go in the chest (2026-10-05) */
         if (m <= 0) return 0;
         core.storeItem(PID, k, m); L.bag[k] = (L.bag[k] || 0) - fromBag; L.pend[k] = (L.pend[k] || 0) - fromPend; L.pchest[k] = (L.pchest[k] || 0) + fromPend; L.lchest[k] = (L.lchest[k] || 0) + fromNew; ledgerSave();
+        chestTell('cput', k, m);
         if (!quiet) hud.chat('You put ' + (m > 1 ? m + ' x ' : '') + core.item(k).name + ' in your chest.', 'info'); hud.refresh('all');
         return m;
       }
@@ -20627,6 +20758,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           L.bag[e.id] = (L.bag[e.id] || 0) - fromBag; if (!L.bag[e.id]) delete L.bag[e.id];
           if (fromPend) { L.pend[e.id] -= fromPend; if (!L.pend[e.id]) delete L.pend[e.id]; L.pchest[e.id] = (L.pchest[e.id] || 0) + fromPend; }
           if (rest) L.lchest[e.id] = (L.lchest[e.id] || 0) + rest;
+          chestTell('cput', e.id, e.n);
           n++;
         }
         ledgerSave(); if (n) { hud.chat('You put your worn equipment in your chest.', 'info'); netGear(); }
@@ -20809,7 +20941,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             if (data && data.t === 'carried' && bankFrom && R.me && data.to === R.me.address) { carriedHeard(data); return; }   /* carried in someone's canoe while away */
             if (data && data.t === 'marks' && bankFrom && R.me && data.to === R.me.address) { if (core.setMarks) core.setMarks(data.k, data.cells || []); return; }   /* maples tapped today, birches peeled this year */   /* trees others felled */
             if (data && data.t === 'scores' && bankFrom && R.me && data.to === R.me.address) { scoresHeard(data); return; }   /* the ruined keep's global dragon-killer board */
-            if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }   /* persisted drops near me */
+            if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }
+            if (data && data.t === 'pkok' && bankFrom && R.me && data.to === R.me.address) { pkHeard(data); return; }
+            if (data && data.t === 'chests' && bankFrom && R.me && data.to === R.me.address) { chestsHeard(data); return; }   /* [Claude 2026-10-14] what each home's chests hold */   /* [Claude 2026-10-14] the Bank has our card-table word */
+            if (data && data.t === 'pk' && bankFrom && R.me && data.to === R.me.address) { coreCall(() => core.pokerBankSeen && core.pokerBankSeen(PID, data.rows || [])); return; }   /* persisted drops near me */
             if (data && data.t === 'pals' && bankFrom && R.me && data.to === R.me.address) { palsHeard(data); return; }   /* the friends list */
             if (data && data.t === 'paid' && bankFrom && R.me && data.to === R.me.address) { const it = DATA.items && DATA.items.items && DATA.items.items[data.item]; hud.chat('The bank sent ' + (data.units | 0) + ' ' + (it && it.name ? it.name : String(data.item || '')) + ' to your wallet.', 'sys'); return; }   /* [Claude 2026-10-12] the Bank's word that a delivery went out (handoff/bank_rpc_plan.md 3b.4) */
             if (!data || data.t !== 'dep' || !bankFrom || !R.me || data.to !== R.me.address) return;   /* only @ashvale or @yourfirstname answers, only to me */
@@ -20854,7 +20989,71 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           R.send({ t: 'dep', v: 3, id, items, carried, chest, spent, reward, pend: pendOf(Object.keys(items)), from: fromAll(Object.keys(items)) });
         });
       }
-    return { CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
+      /* ---------- [Claude 2026-10-14] THE CARD TABLE'S GOLD, HELD BY @ashvale (the operator: "When the player buys in send that gold to the
+         Ashvale wallet; when they cash out or stand up or lose connection, send their remaining poker game balance back to them").
+         - pkbuy (our seat, its buy-in already out of the bag): the GOLD goes to @ashvale with the creator allowance (as returns do;
+           counted in L.out so returnNext never sends it again), then the Bank hears {pkbuy, s, n, tx}. Kept in L.pkb until done,
+           so a reload or a refused send tries again.
+         - pkout (the dealer's word on any seat): {pkout, s, who, n} - the Bank pays that seat home, the player online or not.
+         - pkcash (our own seat closed - the dealer's cashout seen, or the table gone): the coins are back in the bag and counted
+           as on their way (pend), and the Bank hears our own word {pkout, s, n}, which waits for the dealer's.
+         - at a load with a seat still open: 'pk?' - a seat the Bank already paid home closes (the GOLD is in the wallet, the chest).
+         Every word is sent again until the Bank answers 'pkok'. */
+      const PKQ = new Map();   /* s|kind -> {o, at, n} */
+      function pkSend(key, o) { PKQ.set(key, { o, at: 0, n: 0 }); pkFlush(); }
+      function pkFlush() {
+        const now = Date.now();
+        for (const [k, q] of PKQ) {
+          if (now - q.at < 15000) continue;
+          if (++q.n > 60) { PKQ.delete(k); console.warn('ASHVALE: the Bank never answered', k); continue; }
+          q.at = now; bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send(q.o); }).catch(() => {});
+        }
+      }
+      setInterval(pkFlush, 5000);
+      function pkHeard(d) { for (const k of Array.from(PKQ.keys())) if (k.split('|')[0] === d.s) PKQ.delete(k); }
+      let pkPaying = false;
+      async function pkPayNext() {
+        if (pkPaying || !walletState.address) return;
+        const L = ledgerFor(walletState.address); L.pkb = L.pkb || [];
+        const b = L.pkb.find(x => !x.tx && Date.now() >= (x.next || 0)); if (!b) return;
+        const W = walletState.data, pid = W && W.pids && W.pids.coins; if (!pid) return;
+        pkPaying = true; L.out = L.out || {};
+        const o = { id: 'pk:' + b.s, n: b.n, piece: null, st: 'pending', t: Date.now() };
+        if (!(L.out.coins || []).some(x => x.id === o.id)) { (L.out.coins = L.out.coins || []).push(o); ledgerSave(); }   /* returnNext: already on its way */
+        const oo = (L.out.coins || []).find(x => x.id === o.id);
+        const fail = () => { b.tries = (b.tries | 0) + 1; b.next = Date.now() + Math.min(600000, 30000 * b.tries); ledgerSave(); };   /* its L.out entry stays: returnNext must never send this GOLD without the Bank hearing which seat it was */
+        try {
+          const r = await fetch('/r/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+            body: JSON.stringify({ to: '@ashvale', label: 'ASHVALE', note: 'Card table buy-in', silent: true, kind: 'token', propertyid: pid, amount: String(b.n) }) });
+          const j = await r.json().catch(() => ({}));
+          if (r.status !== 202 || !j.id || j.status === 'failed') { fail(); return; }
+          let st = j;
+          for (let i = 0; i < 200 && st && st.status !== 'sent' && st.status !== 'failed'; i++) { await new Promise(ok => setTimeout(ok, 3000)); st = await fetch('/r/send/' + encodeURIComponent(j.id), { credentials: 'same-origin' }).then(x => x.json()).catch(() => null) || st; }
+          if (!st || st.status !== 'sent' || !st.txid) { fail(); return; }
+          b.tx = st.txid; if (oo) { oo.st = 'sent'; oo.t = Date.now(); } ledgerSave(); setTimeout(walletRefresh, 60000);
+          pkSend(b.s + '|buy', { t: 'pkbuy', v: 1, s: b.s, n: b.n, tx: b.tx });
+          L.pkb = L.pkb.filter(x => !(x.tx && Date.now() - (x.at || 0) > 7 * 86400000));
+        } catch (e) { fail(); }
+        finally { pkPaying = false; }
+      }
+      setInterval(pkPayNext, 4000);
+      function pkEvent(e, addrOf) {
+        if (e.e === 'pkout') {   /* the dealer: whose seat, by address */
+          const who = addrOf(e.p); if (!who) { console.warn('ASHVALE: no address for the card-table seat', e.p); return; }
+          pkSend(e.s + '|out', { t: 'pkout', v: 1, s: e.s, who, n: e.n | 0 }); return;
+        }
+        if (e.p !== PID || !walletState.address) return;
+        const L = ledgerFor(walletState.address);
+        if (e.e === 'pkbuy') { L.pkb = L.pkb || []; if (!L.pkb.some(x => x.s === e.s)) { L.pkb.push({ s: e.s, n: e.n | 0, at: Date.now() }); ledgerSave(); } setTimeout(pkPayNext, 300); return; }
+        if (e.e === 'pkcash') {
+          if (e.n > 0) { L.pend.coins = (L.pend.coins || 0) + (e.n | 0); ledgerSave(); }   /* back in the bag, paid by the Bank: on its way */
+          pkSend(e.s + '|cash', { t: 'pkout', v: 1, s: e.s, n: e.n | 0 });
+        }
+      }
+      let pkAskT = 0;
+      function pkAsk() { pkAskT = Date.now(); bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'pk?', v: 1 }); }).catch(() => {}); }
+      setInterval(() => { const P = core.S.players[PID]; if (P && P.pk && P.pk.sn && !(P.seat && P.seat.k === 'pk') && Date.now() - pkAskT > 30000) pkAsk(); }, 5000);
+    return { setChestHome, chestsAsk, chestsHeard, chestHomes: () => JSON.parse(JSON.stringify(CS.by)), pkEvent, pkAsk, CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engbank', { api: 1, v: 1, needs: {} }, () => ({ api: 1, install }));
   if (typeof module !== 'undefined' && module.exports) module.exports = { install };
@@ -21401,9 +21600,14 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
     /* before the world starts (behind the boot screen): the zones around where this character stands (a new one: the spawn) */
     async function preloadZones(st) {
       if (!ZINDEX) return;
-      let at = (ZINDEX.find(z => z.respawn) || {}).respawn || [0, 0];
+      /* [Claude 2026-10-14] the character of THIS home (the operator: "In ziibiing the character loads into the world before the assets ... a
+         blank world"): its own save ('ashvale3d.save.v1.ziibiing') and, for a new one, its home's spawn - the Ashvale save and spawn
+         loaded Ashvale's land behind the boot screen and Ziibiing's only after the world showed. (0.8.120 shipped this and crashed
+         phones: scene's building floors were one array over the bounding box of the loaded areas - now kept per chunk.) */
+      const homeSpawn = HOME && DATA.rules && DATA.rules.homes && DATA.rules.homes[HOME] && DATA.rules.homes[HOME].spawn;
+      let at = (Array.isArray(homeSpawn) && homeSpawn) || (ZINDEX.find(z => z.respawn) || {}).respawn || [0, 0];
       try {
-        const sv = JSON.parse(st.get('ashvale3d.save.v1') || 'null'), C = DATA.globecfg || {};
+        const sv = JSON.parse(st.get('ashvale3d.save.v1' + (HOME ? '.' + HOME : '')) || 'null'), C = DATA.globecfg || {};
         if (sv && (sv.v | 0) >= 2 && Array.isArray(sv.pos) && C.origin) at = [sv.pos[1] - C.origin[0], sv.pos[2] - C.origin[1]];
         else if (sv && Number.isInteger(sv.x) && Number.isInteger(sv.y)) at = [sv.x, sv.y];
         for (const r of [[-200, 16100, -80, 16184, 24200, 7900], [40, 16300, 253, 16313, 23960, 8100]]) if (at[0] >= r[0] && at[0] < r[2] && at[1] >= r[1] && at[1] < r[3]) { at = [at[0] + r[4], at[1] + r[5]]; break; }   /* the underground moved (core.underMove) */
@@ -21424,7 +21628,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       if (G.ASH_LOAD) { G.ASH_LOAD.claimed = true; G.ASH_LOAD.set(0.71, 'Opening your character…'); }   /* [Claude 2026-10-13] the launcher opens the save before it starts the game: the screen is the game's from here */
       /* while the wallet opens the save (that can take seconds), the zones around the spawn are already on their way: most
          characters stand there, and for the rest it is a few KB that warm the cache */
-      if (ZINDEX && !G.ASH3D_LAZY_DELAY) { const r0 = (ZINDEX.find(z => z.respawn) || {}).respawn; if (r0) for (const id of zonesNear(r0[0], r0[1])) fetchZone(id).catch(() => {}); }   /* (not on a playtest page that shows a slow arrival) */
+      if (ZINDEX && !G.ASH3D_LAZY_DELAY) { const hs = HOME && DATA.rules && DATA.rules.homes && DATA.rules.homes[HOME] && DATA.rules.homes[HOME].spawn, r0 = (Array.isArray(hs) && hs) || (ZINDEX.find(z => z.respawn) || {}).respawn;   /* this home's spawn */ if (r0) for (const id of zonesNear(r0[0], r0[1])) fetchZone(id).catch(() => {}); }   /* (not on a playtest page that shows a slow arrival) */
       const st = await openStoreOnly();
       try { await cloudLoad(st); } catch (e) { console.warn('ASHVALE: cloud save', e && e.message); }
       try { await preloadZones(st); } catch (e) { console.warn('ASHVALE: zones', e && e.message); } return st;
@@ -21436,6 +21640,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
        by the @ashvale Bank under your wallet address, in pieces small enough for a room message. Starting, the game asks the Bank
        first and takes its copy when it is newer than this device's; playing, it hands the Bank each new save (at most every 20 s,
        and as you leave). The Bank keeps the newest per address and never reads inside it. */
+    /* [Claude 2026-10-14] the operator: "we don't have a favicon, add one" - the launcher page is fixed on chain, so the game puts its icon
+       on whatever page it runs in (data/brand/favicon.svg; build.py also inlines it into the page head) */
+    try { if (typeof document !== 'undefined' && !document.querySelector('link[rel~="icon"]')) { const ic = document.createElement('link'); ic.rel = 'icon'; ic.type = 'image/svg+xml';
+      ic.href = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#1b241f"/><path d="M32 6 L54 14 V30 C54 44 44 53 32 58 C20 53 10 44 10 30 V14 Z" fill="#c9962e" stroke="#ffd23f" stroke-width="3"/><path d="M32 13 L47 18.5 V30 C47 40 40 47 32 51 C24 47 17 40 17 30 V18.5 Z" fill="#7a1f1f"/><rect x="29.5" y="16" width="5" height="26" rx="1.5" fill="#e8e6df"/><rect x="23" y="38" width="18" height="4" rx="2" fill="#ffd23f"/><rect x="30" y="42" width="4" height="7" rx="1" fill="#6b4a1e"/></svg>'); document.head.appendChild(ic); } } catch (e) { /* no document */ }
     const SAVE_KEY = 'ashvale3d.save.v1' + (HOME ? '.' + HOME : ''), CHUNK = 340;
     const slim = v => {   /* drop what a save does not need to say: nulls and empty objects (every value kept exactly) */
       if (Array.isArray(v)) return v.map(slim);
@@ -21547,6 +21755,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
          preview ?home=ziibiing does the same */
       if (HOME && core.setNewHome) core.setNewHome(HOME);
       const me = core.addPlayer(PID, save);
+      if (!/^@/.test(String(me.name || ''))) me.name = '@guest';   /* [Claude 2026-10-15] no chosen names any more: '@guest' until the arcade says your @tag (the operator: "There's no need for two names") */
       /* Purpose-built local playtest for The Heart Below. It never runs in the framed arcade and always starts from a fresh,
          disposable character: all combat and dungeon-check skills at 99, prerequisite stories complete, and top-tier kit. */
       if (q.has('dragonheart') && !(G.parent && G.parent !== G)) {
@@ -21554,7 +21763,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         for (const id of ['wayside_prayer', 'red_pyre', 'even_grove', 'even_guard', 'foolhardy_hero']) {
           const Q = D.quests.quests[id]; if (Q) me.quests[id] = { step: Q.steps.length + 1, n: 0 };
         }
-        me.name = 'Heart Tester'; me.x = -10; me.y = -78; me.hp = core.maxHp(me); me.pp = core.maxPp(me);
+        me.name = '@heart_tester'; me.x = -10; me.y = -78; me.hp = core.maxHp(me); me.pp = core.maxPp(me);
         me.inv = new Array(28).fill(null);
         [['bow_t5', 1], ['staff_t5', 1], ['arrows_t5', 500], ['pickaxe', 1], ['tinderbox', 1], ['potion', 8], ['prayer_potion', 8], ['antidote', 4], ['lobster', 10]].forEach(([id, n], i) => { if (core.item(id)) me.inv[i] = { id, n }; });
         me.eq = {};
@@ -22168,6 +22377,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
              the button, whose turn. The row itself carries everything the page draws. */
           case 'psit': if (mine) pokerEnter(e.t); break;
           case 'pstand': if (mine) pokerLeave(e.t); break;
+          case 'pkbuy': case 'pkout': case 'pkcash': if (Array.isArray(G.__pkEv)) G.__pkEv.push(Object.assign({}, e));   /* a test watches these */
+            ENGBANK.pkEvent(e, pid => pid === PID ? (walletState.address || null) : (((remotes.get(pid) || {}).from || {}).address || PK_ADDR.get(pid) || null)); break;   /* [Claude 2026-10-14] the card table's GOLD through @ashvale */
           case 'poker': {
             if (SCENE.pokerShow) SCENE.pokerShow(e.t, pokerModel(e.t));
             pokerChat(e.t);
@@ -22210,7 +22421,11 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           case 'boatland': boatShow(e.x, e.y, e.face); docksShow(); if (e.by === PID) { boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, face: e.face, on: 0 }); } break;
           case 'cross': if (e.p === PID) { place(myEnt, e.x, e.y); cam.yaw += e.turn || 0; cam.tyaw += e.turn || 0; cam.snap = true; streamRegions(); TN.key = ''; } break;   /* over a cut edge of the net: the same ground, new map coordinates, the view turned with them */
           case 'boatgone': boatHide(e.x, e.y); docksShow(); if (e.by === PID) boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, on: 1 }); break;
-          case 'chest': if (mine) { const c = ents.get('n:' + e.npc); if (c) c.H.play('open'); hud.openChest(); holdsAsk(); } break;   /* the town chest */
+          case 'chest': if (mine) { const c = ents.get('n:' + e.npc); if (c) c.H.play('open');
+            /* [Claude 2026-10-14] whose chest this is: the home whose spawn is nearest (within 3 km; otherwise Ashvale's) - one chest per home */
+            const nn = core.M.npcs.find(q => q.id === e.npc), HS = D.rules.homes || {}; let ch = 'ashvale', bd = 3000;
+            if (nn) for (const h in HS) { const sp = HS[h] && HS[h].spawn; if (Array.isArray(sp)) { const d = Math.max(Math.abs(sp[0] - nn.x), Math.abs(sp[1] - nn.y)); if (d < bd) { bd = d; ch = h; } } }
+            ENGBANK.setChestHome(ch); hud.openChest(); holdsAsk(); } break;   /* the town chest */
           case 'shopclose': if (mine) hud.closeShop(); break;
           case 'mobjump': { const t = ents.get('m:' + e.mob); if (t) { place(t, e.x, e.y); if (t.path) t.path = null; } break; }   /* came through a cave opening */
           case 'poison': if (mine) { hud.setPoison && hud.setPoison(e.on); if (e.on) sfx('miss'); } break;   /* the green Hitpoints orb (2026-10-07) */
@@ -22823,6 +23038,13 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           return [{ html: 'Read ' + nm, fn: () => { scoresAsk(true); core.scoreRead(sk).forEach(l => hud.chat(l, 'sys')); }, red: 1 },
                   { html: 'Examine ' + nm, fn: () => hud.chat(o.board === 'chess' ? 'An oak board on two posts by the tables. The names of those who have won games here are chalked on it, most wins first.' : 'A weathered oak board nailed to the ruin wall. Names of those who have slain the chained dragon are carved into it.', 'sys') }];
         }
+        /* [Claude 2026-10-15] A GOLD wager asks first (the operator: "There should be a confirmation button when joining a game
+           that has a gold wager"): joining a staked chess game or a card table with a buy-in, or sitting first and setting
+           the stake, opens a Yes/No box saying what it costs; only Yes sits. A friendly table sits straight away. */
+        const wagerSit = (line, act, gold, game) => gold > 0 ? { html: line, fn: () => hud.confirm('Play for ' + gold.toLocaleString() + ' GOLD?',
+            game === 'pk' ? 'This card table plays for real GOLD: sitting down buys in for ' + gold.toLocaleString() + ' GOLD from your pack. You keep what is in front of you when you stand up.'
+                          : 'This chess game is played for a stake of ' + gold.toLocaleString() + ' GOLD each: it comes out of your pack when you sit. The winner takes both stakes; a draw gives each their own back; standing up after a move has been played loses it.',
+            'Sit down', 'Not now', () => send(Object.assign({}, act, { run: !!settings.runToggle }))) } : { html: line, act };
         if (t.kind === 'chesstable' || t.kind === 'square') {   /* THE CHESS PARK (2026-10-10): a bench each side; seated, the board itself takes the taps */
           const T = core.tableById(t.id); if (!T) return [];
           if (t.kind === 'square' && me.seat && me.seat.t === t.id) { const sq = SCENE.chessSquare ? SCENE.chessSquare(t.id, t.pt) : null; return sq ? [{ html: 'Square ' + sq, fn: () => chessTap(sq) }] : []; }
@@ -22833,9 +23055,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             /* [Claude 2026-10-11] STAKES: at an empty table the first to sit sets them (the operator); at a table with someone the
                line says what the game is played for, and sitting is agreeing to it */
             const note = empty ? '' : stake ? ' <span class="y">(stake ' + stake.toLocaleString() + ' GOLD)</span>' : ' <span class="c">(friendly)</span>';
-            if (wFree) out.push({ html: 'Sit down as White <span class="c">(south bench)</span>' + note, act: { c: 'sit', table: t.id, seat: 1, stake: 0 }, red: 1 }); else taken.push({ html: 'White: <span class="y">' + esc(st.wn || 'someone') + '</span>', fn: () => hud.chat(esc(st.wn) + ' is playing White here.', 'sys') });
-            if (bFree) out.push({ html: 'Sit down as Black <span class="c">(north bench)</span>' + note, act: { c: 'sit', table: t.id, seat: 0, stake: 0 }, red: out.length ? 0 : 1 });
-            if (empty) for (const n of [100, 500, 1000]) out.push({ html: 'Sit as White for a stake of <span class="y">' + n.toLocaleString() + ' GOLD</span>', act: { c: 'sit', table: t.id, seat: 1, stake: n } }); else taken.push({ html: 'Black: <span class="y">' + esc(st.bn || 'someone') + '</span>', fn: () => hud.chat(esc(st.bn) + ' is playing Black here.', 'sys') });
+            if (wFree) out.push({ ...wagerSit('Sit down as White <span class="c">(south bench)</span>' + note, { c: 'sit', table: t.id, seat: 1, stake: 0 }, empty ? 0 : stake, 'ch'), red: 1 }); else taken.push({ html: 'White: <span class="y">' + esc(st.wn || 'someone') + '</span>', fn: () => hud.chat(esc(st.wn) + ' is playing White here.', 'sys') });
+            if (bFree) out.push({ ...wagerSit('Sit down as Black <span class="c">(north bench)</span>' + note, { c: 'sit', table: t.id, seat: 0, stake: 0 }, empty ? 0 : stake, 'ch'), red: out.length ? 0 : 1 });
+            if (empty) for (const n of [100, 500, 1000]) out.push(wagerSit('Sit as White for a stake of <span class="y">' + n.toLocaleString() + ' GOLD</span>', { c: 'sit', table: t.id, seat: 1, stake: n }, n, 'ch')); else taken.push({ html: 'Black: <span class="y">' + esc(st.bn || 'someone') + '</span>', fn: () => hud.chat(esc(st.bn) + ' is playing Black here.', 'sys') });
           }
           out.push(...taken, { html: 'Examine <span class="c">Chess table</span>', fn: () => hud.chat(chessExamine(st), 'sys') });
           return out;
@@ -22851,9 +23073,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           else (T.seats || []).forEach((s, i) => {
             const who = at[i];
             if (who && who !== PID) taken.push({ html: 'Chair ' + (i + 1) + ': <span class="y">' + pokerWho(who) + '</span>', fn: () => hud.chat(pokerWho(who) + ' is sitting there.', 'sys') });
-            else out.push({ html: 'Sit down <span class="c">(chair ' + (i + 1) + ')</span>' + pkNote, act: { c: 'sit', table: t.id, seat: i, buy: 0 }, red: out.length ? 0 : 1 });
+            else out.push({ ...wagerSit('Sit down <span class="c">(chair ' + (i + 1) + ')</span>' + pkNote, { c: 'sit', table: t.id, seat: i, buy: 0 }, pkEmpty ? 0 : buy, 'pk'), red: out.length ? 0 : 1 });
           });
-          if (pkEmpty && !(me.seat && me.seat.t === t.id)) { const free = (T.seats || []).findIndex((s, i) => !at[i]); if (free >= 0) for (const n of [100, 1000, 10000]) out.push({ html: 'Buy in for <span class="y">' + n.toLocaleString() + ' GOLD</span> <span class="c">(chair ' + (free + 1) + ', sets the table\'s stakes)</span>', act: { c: 'sit', table: t.id, seat: free, buy: n } }); }
+          if (pkEmpty && !(me.seat && me.seat.t === t.id)) { const free = (T.seats || []).findIndex((s, i) => !at[i]); if (free >= 0) for (const n of [100, 1000, 10000]) out.push(wagerSit('Buy in for <span class="y">' + n.toLocaleString() + ' GOLD</span> <span class="c">(chair ' + (free + 1) + ', sets the table\'s stakes)</span>', { c: 'sit', table: t.id, seat: free, buy: n }, n, 'pk')); }
           out.push(...taken, { html: 'Play <span class="y">Solitaire</span>', fn: openSolitaire }, { html: 'Examine <span class="c">Card table</span>', fn: () => hud.chat(pokerExamine(st), 'sys') });   /* Solitaire [Claude 2026-10-13]: the operator */
           return out;
         }
@@ -23045,7 +23267,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
          zone borders. Inside the room each AREA (a zone, or a 128 m square of seeded land) has its own host, elected among
          the members standing in it; monsters, loot, fires and weather of an area come only from its host. Players near a
          region border also VIEW the neighbour region's room (net.neighbours, below). Avatars are drawn 150 ms behind, interpolated. */
-      const remotes = new Map(); let room = null, roomZone = null, netT = 0, joining = false, retryAt = 0;
+      const remotes = new Map(), PK_ADDR = new Map(); let room = null, roomZone = null, netT = 0, joining = false, retryAt = 0;
       /* CONNECTION WATCH (2026-10-06: "When a player loses connection to the server, they should be notified so they
          don't continue to play on a broken server"). A room can die without ever saying 'closed' (the arcade node restarts
          and the page's link to it never comes back): then you play on alone and nobody sees you. Signs, all from what the
@@ -23066,7 +23288,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         else if (others && NW.heard && now - NW.heard > 45000 && now - NW.quiet > 180000) { NW.quiet = now; netDrop('', false); }
       }
       function zoneHere() { return core.zoneOf(me.x, me.y); }
-      const label = (name, from) => name + ' (' + (from.tag ? '@' + from.tag : 'guest') + ')';   /* @tag = stamped by the arcade node */
+      const label = (name, from) => from && from.tag ? '@' + from.tag : (/^@/.test(String(name || '')) ? name : '@guest');   /* [Claude 2026-10-15] the operator: "Their name should be there @handle only ... There's no need for two names" - the @tag the arcade node stamps */
       /* a player's total level above the name over their head (2026-10-05) */
       const setTag = (el, name, from, total) => { const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); el.innerHTML = (total ? '<span class="tl">Total level ' + total + '</span><br>' : '') + esc(label(name, from)); };
       /* A name is told once, in the gear message at a join or an equip. A remote that goes quiet for 12 s is dropped
@@ -23098,7 +23320,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (me.boat === 2) { coreCall(() => { me.boat = 1; me.ride = null; me.knock = false; me.path = []; }); hud.chat(nm + ' has dropped out of the game. You take the stern and steer; they ride on with you.', 'sys'); }
         else hud.chat(nm + ' has dropped out of the game. They stay in the bow and travel on with you.', 'sys');
         r.boat = 2; r.ride = myNetId; r.knock = false; r.anim = 'sit'; r.e.H.play('sit', { loop: true });
-        if (core.S.players[id] && core.S.players[id].puppet) core.removePlayer(id);
+        if (core.S.players[id] && core.S.players[id].puppet) coreCall(() => core.removePlayer(id));   /* [Claude 2026-10-14] through coreCall: a seat it stands up tells the Bank */
         carryTell(r, 1);
       }
       function ghostTick(id, r, now) {
@@ -23106,7 +23328,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (now - r.offline.told > 15000) { r.offline.told = now; carryTell(r, 1); }
       }
       function dropRemote(id, hard, keep) { const r = remotes.get(id);
-        if (!hard && r && !r.offline && ghostable(r, id)) { makeGhost(id, r); return; } if (r) { if (r.name && r.name !== 'Adventurer') knewName.set(id, r.name); removeEnt(r.e); remotes.delete(id); } if (core.S.players[id] && core.S.players[id].puppet) core.removePlayer(id, keep); }
+        if (!hard && r && !r.offline && ghostable(r, id)) { makeGhost(id, r); return; } if (r) { if (r.name && r.name !== 'Adventurer') knewName.set(id, r.name); removeEnt(r.e); remotes.delete(id); } if (core.S.players[id] && core.S.players[id].puppet) coreCall(() => core.removePlayer(id, keep)); }   /* [Claude 2026-10-14] coreCall: its events (a card-table cashout to the Bank) are handled, not lost */
       function dropRemotes(keep) { for (const id of Array.from(remotes.keys())) dropRemote(id, false, keep); }   /* keep [Claude 2026-10-12]: OUR room dropped - their chess seats wait for the host's word */
       /* fighting a monster of another area (the operator: attackers can be attacked back across borders): we tell the room which
          area we are fighting in, so that area gets a host even when nobody stands in it; 6 s after the last blow it ends */
@@ -23191,6 +23413,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             R.on('join', () => { if (room !== R) return; clearTimeout(gearT); gearT = setTimeout(() => { netGear(); if (hosted.size) fullSnap(); }, 600); });   /* newcomers missed our gear/outfit/name: send it again (one resend for a burst of joins) */
             R.on('rejoined', () => { if (room !== R) return; NW.heard = performance.now(); clearTimeout(gearT); gearT = setTimeout(() => { netGear(); if (hosted.size) fullSnap(); }, 600); });   /* [Claude 2026-10-13] the arcade seated us again after a drop: the others rebuilt us bare, so send our gear/outfit/name (and what we host) again */
             R.on('closed', why => { if (room !== R) return; room = null; core.setOnline(false); coreCall(() => core.chessLimbo(PID)); dropRemotes(true); hosts.clear(); passive = false; applyAuth(); hud.setOnline(false); NW.lost = true; NW.tries = 0; hud.netLost && hud.netLost(true, 'net', why || ''); hud.chat('Lost contact with other players' + (why ? ' (' + why + ')' : '') + '. Retrying soon.', 'sys'); retryAt = performance.now() + 15000; });
+            if (R.me && R.me.tag && me.name !== '@' + R.me.tag) { me.name = '@' + R.me.tag; hud.refresh('all'); }   /* [Claude 2026-10-15] your name is your @tag (the operator) */
             netGear();
             if (R.me && !R.me.guest && R.me.address && R.me.address !== walletState.address) { walletState.address = R.me.address; walletRefresh(); }
             if (!trade && deps.trade) trade = deps.trade.create({ host, toast: (t, k) => hud.chat(t, k || 'trade'), send: (to, obj) => netSend({ tr: obj, to }), offerable: tradeOfferable, onSettled: tradeSettled, onUndone: tradeUndone, onOffer: tellOffer, itemOf: p => { const j = p && p.json; if (!j || !allowedAsset(p)) return null; const k = j.key || ((j.attributes || []).find(a => a && a.trait_type === 'Key') || {}).value; const d = k && core.item(k); return d ? { key: k, name: d.name, icon: (() => { try { return MOD.icon(k, 64); } catch (e) { return null; } })() } : null; }, nameOf: id => { const r = remotes.get(id); return r ? label(r.name, r.from) : 'another player'; } });
@@ -23344,7 +23567,11 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       const TKEY = 'ashvale3d.trips', tripKeep = { load: () => { try { return JSON.parse(G.localStorage.getItem(TKEY) || '[]'); } catch (e) { return []; } },
         save: (L) => { try { G.localStorage.setItem(TKEY, JSON.stringify(L)); } catch (e) { /* private window */ } } };
       let tripSeen = 0;
-      const TRIP = deps.trip ? deps.trip.create({ core, pid: PID, ticks: (D.rules.trip || {}).ticks, bridge, keep: tripKeep, facts: () => { const w = walletState.data; return w ? { tokens: Object.assign({}, w.raw || {}), pieces: (w.pieces || []).slice() } : null; }, onChange: (st) => {
+      /* [Claude 2026-10-14] a referee seed is asked for only with a wallet: a guest's ask came back 400 from /account/referee/seed
+         (a console error on every guest's boot - check_live). Waits up to 10 s for the wallet to be known; without one, practice. */
+      const tripBridge = (msg, kind, ms) => kind !== 'seed' ? bridge(msg, kind, ms) : new Promise(ok => {
+        const t0 = Date.now(), look = () => { if (walletState.address) ok(bridge(msg, kind, ms)); else if ((room && room.me && room.me.guest) || Date.now() - t0 > 10000) ok({ error: 'no wallet: practice' }); else setTimeout(look, 500); }; look(); });
+      const TRIP = deps.trip ? deps.trip.create({ core, pid: PID, ticks: (D.rules.trip || {}).ticks, bridge: tripBridge, keep: tripKeep, facts: () => { const w = walletState.data; return w ? { tokens: Object.assign({}, w.raw || {}), pieces: (w.pieces || []).slice() } : null; }, onChange: (st) => {
         if (st.done.length > tripSeen) { const L = st.done[st.done.length - 1], k = L.rec.kills.length, g = Object.values(L.rec.gathered).reduce((a, b) => a + b, 0);
           void k; void g;   /* no chat line (2026-10-05: it said 'practice: no arcade seed', but rewards come from the @ashvale Bank as you play, not from these windows) */ }
         tripSeen = st.done.length;
@@ -23542,7 +23769,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         hud.chat('To @' + tag + ': ' + String(text).slice(0, 120), 'dm');
       }
       function speak(e, text) { if (e.bub) e.bub.el.remove(); e.bub = { el: hud.bubble(text), t: performance.now() }; }
-      const cleanName = n => String(n || '').replace(/[^\w -]/g, '').trim().slice(0, 12) || 'Adventurer';
+      const cleanName = n => String(n || '').replace(/[^\w@ -]/g, '').trim().slice(0, 17) || '@guest';
       function netPos(now) {
         if (!room) return;
         if (hosted.size && room) { hostSend(now); return; }
@@ -23585,7 +23812,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (d.tr) { if (d.to === myNetId && trade && !via) trade.onMessage(from, d.tr); return; }   /* a trade window message, for us only */
         if (!r && !d.p && !d.g && !d.n && !d.M && !d.E && !d.F) { /* first contact carries state soon */ }
         if (r) { r.heard = performance.now(); if (r.offline) { r.offline = null; hud.chat((r.name || 'Your partner') + ' is back.', 'sys'); } }
-        if (!r) { const e = makeEnt('r:' + id, MOD.humanoid({}), { kind: 'remote', id }); const nm = knewName.get(id) || 'Adventurer'; e.tag = hud.tag(label(nm, from)); r = { e, buf: [], anim: 'idle', name: nm, from, lastS: -1, heard: performance.now(), fullT: 0 }; remotes.set(id, r); e.root.visible = false; }
+        if (from && from.address && !from.guest) { PK_ADDR.set(id, from.address); if (PK_ADDR.size > 200) PK_ADDR.delete(PK_ADDR.keys().next().value); }   /* [Claude 2026-10-14] kept after they leave: the dealer still names a gone player's seat to the Bank */
+        if (!r) { const e = makeEnt('r:' + id, MOD.humanoid({}), { kind: 'remote', id }); const nm = (from && from.tag ? '@' + from.tag : null) || knewName.get(id) || '@guest'; e.tag = hud.tag(label(nm, from)); r = { e, buf: [], anim: 'idle', name: nm, from, lastS: -1, heard: performance.now(), fullT: 0 }; remotes.set(id, r); e.root.visible = false; }
         /* a VIEWER (neighbour region): drawn, never a puppet or a host. A full member of our room wins for 3 s after its last word */
         const view = !!via || d.nb === 1;
         if (!view) { r.fullT = r.heard; r.via = null; } else if (via && !r.via && performance.now() - r.fullT > 3000) r.via = via;
@@ -23599,7 +23827,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (Array.isArray(d.p) && typeof d.a === 'string') { r.boat = d.bt | 0; r.ride = d.rd || null; r.pole = !!d.pl; r.knock = !!d.kn; r.hl = isFinite(+d.hl) ? Math.max(-1.5, Math.min(1.5, +d.hl)) : 0; }
         if ('k' in d) { const tl = typeof d.k === 'string' && /^[a-z0-9_]{1,24}$/.test(d.k) ? d.k : null; if (tl !== r.tool) { r.tool = tl; r.e.H.setTool && r.e.H.setTool(tl); } }
         if (d.T != null) r.total = Math.max(0, Math.min(9999, d.T | 0));
-        if (d.n || d.T != null) { if (d.n) { r.name = cleanName(d.n); if (core.S.players[id]) core.setPuppet(id, { n: r.name }); } if (r.e.tag) setTag(r.e.tag, r.name, from, r.total); }
+        if (d.n || d.T != null) { if (d.n) { r.name = from && from.tag ? '@' + from.tag : cleanName(d.n);   /* the arcade's stamp, not what the game says */ if (core.S.players[id]) core.setPuppet(id, { n: r.name }); } if (r.e.tag) setTag(r.e.tag, r.name, from, r.total); }
         /* [Claude 2026-10-13] the operator: "when sitting at a poker table chat should be visible between those players at the table
            only. Not the whole town or next table": a word said at a card table reaches that table only, and a player sitting
            at one hears only it. The speaker's table is its own word (tb), or else where this game's rows seat it. */
@@ -23659,7 +23887,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             if (!SEALING.has(k)) { SEALING.add(k); sealCards(r.t, r.h | 0, ref, c1, c2, pk).then(b => { if (PH[r.t] === P && !P.items.some(i => i[0] === ref)) { P.items.push([ref, b]); if (P.items.length >= want.length) { P.done = true; phSend(r.t, true); } } }).catch(e => console.warn('seal', e)).finally(() => SEALING.delete(k)); }
           }
         } else delete PH[r.t];
-        return Object.assign({}, r, { se: (r.se || []).map(s => [s[0], toNet(s[1]), s[2], s[3], s[4]]), co: (r.co || []).map(c => [toNet(c[0]), c[1], c[2]]), hc: r.hc ? hc : r.hc });
+        return Object.assign({}, r, { se: (r.se || []).map(s => [s[0], toNet(s[1]), s[2], s[3], s[4], s[5] | 0]), co: (r.co || []).map(c => [toNet(c[0]), c[1], c[2]]), hc: r.hc ? hc : r.hc });
       };
       /* [Claude 2026-10-13] A TABLE ROW AS CHANGES (the operator: build "two" - fit more into each message). At eight players a full row is
          ~800 bytes, three or four pieces for every bet. The dealer now sends what changed since the row it last put on the wire
@@ -23668,13 +23896,14 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
          (PQ) and waits - the whole row also goes out every five seconds with the snapshot, and whenever a delta would not be
          much smaller. */
       const PKBASE = {}, PKIN = {}, PKQ = {};
+      const CHIN = {};   /* [Claude 2026-10-14] per chess table: who sent the newest row and its v */
       function pkDelta(base, full) {
         if (!base || base.t !== full.t || (base.gid | 0) !== (full.gid | 0) || base.v == null) return null;
         const d = { t: full.t, v: full.v, pv: base.v, D: 1 }, rm = [];
         for (const k in full) {
           if (k === 't' || k === 'v') continue;
           if (JSON.stringify(full[k]) === JSON.stringify(base[k])) continue;
-          if (k === 'se' && Array.isArray(base.se) && Array.isArray(full.se) && base.se.length === full.se.length && full.se.every((x, i) => x[0] === base.se[i][0] && x[1] === base.se[i][1])) {
+          if (k === 'se' && Array.isArray(base.se) && Array.isArray(full.se) && base.se.length === full.se.length && full.se.every((x, i) => x[0] === base.se[i][0] && x[1] === base.se[i][1] && (x[5] | 0) === (base.se[i][5] | 0))) {
             d.sd = []; full.se.forEach((x, i) => { if (JSON.stringify(x) !== JSON.stringify(base.se[i])) d.sd.push([i, x[2], x[3], x[4]]); }); continue;
           }
           if (k === 'lg' && Array.isArray(base.lg) && Array.isArray(full.lg) && (full.lc | 0) > (base.lc | 0)) {
@@ -23735,7 +23964,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       const pkLocal = r => {   /* the room hears everything, so a hole card is dropped here, on the way in: a replica
                                   keeps faces only for its own seat, and a shown-down hand is public anyway. It says
                                   nothing about the wire - see handoff/poker_plan.md decision 4. */
-        const se = (r.se || []).map(s => [s[0], fromNet(s[1]), s[2], s[3], s[4]]), co = (r.co || []).map(c => [fromNet(c[0]), c[1], c[2]]);   /* [Claude] the cashouts name players as this page knows them */
+        const se = (r.se || []).map(s => [s[0], fromNet(s[1]), s[2], s[3], s[4], s[5] | 0]), co = (r.co || []).map(c => [fromNet(c[0]), c[1], c[2]]);   /* [Claude] the cashouts name players as this page knows them */
         const mine = {};   /* my chair at that table, as the row names it - a room can hold two players both called "me" */
         for (const s of se) if (s[1] === PID || (me.seat && me.seat.k === 'pk' && me.seat.t === r.t && (s[0] | 0) === (me.seat.s | 0))) mine[s[0] | 0] = 1;
         return Object.assign({}, r, { se, co, hc: r.hc ? r.hc.map(h => mine[h[0] | 0] ? openOwn(r, h) : [h[0] | 0, null, null]) : r.hc });   /* [Claude 2026-10-12] mine opened, the rest were never readable */
@@ -23889,7 +24118,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
          table itself, 5 s; otherwise 20 s while the room is plainly alive (heard in the last 5 s) - then the last stack the dealer
          showed comes back. Offline time never counts: the dealer may still be holding the seat. The room id is handed to the core
          so a cashout written under it is still collected after a reload or a new connection. */
-      let pkAway = 0;
+      let pkAway = 0, pkAsked = 0;
       setInterval(() => {
         const P = core.S.players[PID]; if (!P || (!P.pk && !P.ch)) { pkAway = 0; return; }
         if (room && myNetId) { core.pokerNetId(PID, myNetId); core.chessNetId(PID, myNetId); }   /* the chess stake too (the operator: "make sure we don't have the same problem with the chess game") */
@@ -23900,7 +24129,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (!mineToDeal && now - NW.heard > 5000) { pkAway = 0; return; }
         if (!pkAway) { pkAway = now; return; }
         if (now - pkAway < (mineToDeal ? 5000 : 20000)) return;
-        pkAway = 0; let n = 0; coreCall(() => { n = K.pk ? core.pokerReclaim(PID) : core.chessReclaim(PID); }); persist('now');   /* saved at once: a page that died before saving would pay the same chips back twice */
+        if (K.pk && P.pk.sn && !pkAsked) { pkAsked = now; ENGBANK.pkAsk(); return; }   /* [Claude 2026-10-14] a Bank-held seat: the Bank may already have paid it home */
+        if (pkAsked && now - pkAsked < 4000) return;
+        if (!core.S.players[PID].pk) { pkAway = pkAsked = 0; return; }
+        pkAway = 0; pkAsked = 0; let n = 0; coreCall(() => { n = K.pk ? core.pokerReclaim(PID) : core.chessReclaim(PID); }); persist('now');   /* saved at once: a page that died before saving would pay the same chips back twice */
       }, 2000);
       function shared(id, r, d) {
         if (d.j != null) { const nj = +d.j; if (r.j !== nj) { r.j = nj; elect(); } }
@@ -23928,14 +24160,14 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           if (Number.isFinite(+d.s)) r.lastA = +d.s;
         }
         if (Object.keys(pst).length) core.setPuppet(id, pst);
-        if (d.C != null) { const g = core.S.ground.find(q => q.uid === +d.C); if (g && iHostAt(g.x, g.y)) coreCall(() => core.claim(id, +d.C)); }
+        if (d.C != null) { const g = core.groundBy ? core.groundBy(+d.C) : core.S.ground.find(q => q.uid === +d.C); if (g && iHostAt(g.x, g.y)) coreCall(() => core.claim(id, +d.C)); }   /* groundBy [Claude 2026-10-14]: a guest may name a Bank copy by the Bank's uid */
         if (Array.isArray(d.XF)) { const f = d.XF; if (iHostAt(f[0], f[1])) coreCall(() => core.hostFire(f[0] | 0, f[1] | 0, f[2] | 0, String(f[3] || 'logs'))); }
         /* the chess park: a replica asks the host of the table's area to seat it, stand it up or play its move; the host answers in Ch rows */
         if (Array.isArray(d.CS)) { const T = core.tableById(String(d.CS[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostSit(id, T.id, d.CS[1] | 0, d.CS[2] | 0)); }
         if (Array.isArray(d.CT)) { const T = core.tableById(String(d.CT[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostStand(id, T.id)); }
         if (Array.isArray(d.CX)) { const T = core.tableById(String(d.CX[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostSel(id, T.id, String(d.CX[1] || ''))); }   /* [Claude] */
         if (Array.isArray(d.CM)) { const T = core.tableById(String(d.CM[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostMove(id, T.id, String(d.CM[1] || ''), String(d.CM[2] || ''), d.CM[3] ? String(d.CM[3]) : null)); }
-        if (Array.isArray(d.Ch)) { const rows = d.Ch.filter(r => r && r.t).filter(r => { const T = core.tableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).map(r => Object.assign({}, r, { w: r.w ? fromNet(r.w) : null, b: r.b ? fromNet(r.b) : null, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [fromNet(k), v])) : null, co: Array.isArray(r.co) ? r.co.map(c => [fromNet(c[0]), c[1], c[2]]) : [] })); if (rows.length) coreCall(() => core.applyChess(rows)); }   /* [Claude] who is owed the stake, named as this page knows them */
+        if (Array.isArray(d.Ch)) { const rows = d.Ch.filter(r => r && r.t).filter(r => { const T = core.tableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).filter(r => { const h = CHIN[r.t]; if (h && h.from === id && (r.v | 0) < h.v) return false; CHIN[r.t] = { from: id, v: r.v | 0 }; return true; })   /* [Claude 2026-10-14] an OLDER row from the same host (the 5 s resend can land after a newer move) is not a step back (the operator: the piece popped back, then moved again) */.map(r => Object.assign({}, r, { w: r.w ? fromNet(r.w) : null, b: r.b ? fromNet(r.b) : null, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [fromNet(k), v])) : null, co: Array.isArray(r.co) ? r.co.map(c => [fromNet(c[0]), c[1], c[2]]) : [] })); if (rows.length) coreCall(() => core.applyChess(rows)); }   /* [Claude] who is owed the stake, named as this page knows them */
         /* the felt: a chair asked for, a player getting up, an action, or the host's word on a table. Same rules as the
            chess park: only the host of the area the table stands in answers, and a row only counts from that host. */
         pkMsg(id, d);   /* [Claude 2026-10-13] the card-table words (also heard in a table's own room: tblHeard) */
@@ -24317,7 +24549,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         return {
           core, pid: PID, isPhone, isTouch, theme: () => ((D.rules.homes || {})[core.homeOf(me)] || {}).hud || null,
           walletState: () => walletState, walletRefresh: () => walletRefresh(), pid: PID,
-          chestState: (...a) => chestState(...a), chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a), depositInv: () => depositInv(), depositWorn: () => depositWorn(), withdrawAll: () => withdrawAll(),   /* the Bank part installs after the HUD is made */
+          chestState: (...a) => { const C = chestState(...a); return C && C.here ? Object.assign({}, C, { chest: C.here }) : C; },   /* [Claude 2026-10-14] the chest window shows this home's chest */ chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a), depositInv: () => depositInv(), depositWorn: () => depositWorn(), withdrawAll: () => withdrawAll(),   /* the Bank part installs after the HUD is made */
           friends: () => ({ rows: PALS.rows.slice(), note: PALS.note }),
           friendsRefresh: () => { loadPals().then(() => { if (hud.tab === 'friends') hud.refresh('friends'); }); },
           walletTake: (id) => chestTake(id, 1),   /* the same ledger as the chest (it bypassed it and could duplicate an NFT) */
@@ -24430,13 +24662,12 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           if (!h) continue;   /* nothing in front of that chair - sitting it out, or the hand is folded and mucked */
           if (f & PKF[1]) continue;   /* [Claude 2026-10-12] a folded hand is mucked, face down and gone - never shown (the operator: "it shows the cards of people who folded") */
           const sd = show && st.r && st.r.sd ? st.r.sd.find(x => (x[0] | 0) === ref) : null;   /* [Claude 2026-10-11] at the showdown every shown hand lies face up, on every copy */
-          const c = sd ? [sd[1] | 0, sd[2] | 0] : typeof h[1] === 'number' ? [h[1] | 0, h[2] | 0] : null, up = !!c && (!!sd || ref === ms);   /* face up: a hand called to the showdown, or your own - not every hand this copy happens to know (the dealer knows them all) */
+          const c = sd ? [sd[1] | 0, sd[2] | 0] : typeof h[1] === 'number' ? [h[1] | 0, h[2] | 0] : null, up = !!c && !!sd;   /* face up: only a hand called to the showdown - not every hand this copy happens to know (the dealer knows them all); [Claude 2026-10-14] your own stay face down on the felt too, the HUD's box over them shows them to you (the operator) */
           hands.push({ ref, c: up ? c : null, down: up ? 0 : 1, tilt: up ? 1 : 0 });
           bets[ref] = s[3] | 0;
         }
         return { board: (st.bo || []).slice(), hands, bets, pot: st.p | 0, big: st.bg | 0, dealer: st.d >= 0 ? st.d : null, turn: st.a >= 0 && st.o === 'playing' && st.st !== 'none' ? st.a : null };
       }
-      const PK_LAST = {};
       /* [Claude 2026-10-13] the operator: "Add the poker game history to the chat box". The dealer's own game already hears the table
          (its core tells the players in the room); every other copy reads the row's last lines (lg) and their running count
          (lc) and writes the ones it has not written yet - for a player at that table, or anyone standing on its floor. */
@@ -24463,10 +24694,6 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           shown: st.r && st.r.sd ? st.r.sd.map(x => ({ ref: x[0] | 0, c: [x[1] | 0, x[2] | 0], name: String(x[3] || '') })) : [],   /* [Claude 2026-10-11] the showdown */
           min: Math.min((st.b | 0) + (st.mr | 0 || st.bg | 0 || 50), (st.b | 0) + ((mine && mine[2]) | 0)), big: st.bg | 0
         };
-        /* [Claude 2026-10-13] the last hand's result stays in the panel through the next hand (between hands it is up only
-           ~7 s, easy to miss on a phone - the operator: "not showing the results of the hand to all the players") */
-        if (st.r && st.st === 'none') PK_LAST[t] = { h: st.h | 0, result: v.result, shown: v.shown, winners: v.winners, seats: v.seats };
-        else if (PK_LAST[t] && PK_LAST[t].h === (st.h | 0) - 1) v.last = PK_LAST[t];
         return v;
       }
       function pokerFx(t, row) {   /* the small sound of the felt changing under your hands: a card going out, a new street */
@@ -24522,6 +24749,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (room) netDrop('the card table stopped answering', false);
       }
       function pokerClock(now) {
+        if (me.seat && me.seat.k === 'pk' && SCENE.pokerSpots && hud.pokerAnchor) {   /* [Claude 2026-10-14] the HUD's card boxes ride over their spots on the felt */
+          const sp = SCENE.pokerSpots(me.seat.t, me.seat.s | 0);
+          hud.pokerAnchor(sp ? { board: toScreen(sp.board, 0), hole: sp.hole ? toScreen(sp.hole, 0) : null } : null);
+        }
         if (!SCENE.pokerTimer) return;
         for (const T of core.pokerTables()) {
           const st = core.S.poker[T.id];
@@ -24555,7 +24786,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         const HC = ((D.rules.homes || {})[core.homeOf(me)] || {}).creator || null;   /* the home's own creator: styles, labels, defaults */
         hud.creator({ first, home: HC, title: who || 'Wardrobe', look: before, startPoints: first && core.START ? core.START.points : 0, startMax: core.START ? core.START.max : 5, name: first ? '' : me.name, styles: MOD.outfitStyles, palette: MOD.palette,
           onChange: look => myEnt.H.setOutfit(look), onTurn: () => { cam.spin = ((cam.spin || 0) + Math.PI / 2) % (2 * Math.PI); },   /* see the back of your hair and clothes */
-          onDone: (look, name, start) => { cam.spin = 0; send({ c: 'look', look, name }); if (start && Object.keys(start).length) send({ c: 'start', pts: start }); cam.mode = null; cam.tyaw = cam.save.yaw; cam.tpitch = cam.save.pitch; cam.tdist = cam.save.dist; if (first) { hud.showHelp(true); } } });
+          onDone: (look, name, start) => { cam.spin = 0; send({ c: 'look', look });   /* no name: the @tag is the name (2026-10-15) */ if (start && Object.keys(start).length) send({ c: 'start', pts: start }); cam.mode = null; cam.tyaw = cam.save.yaw; cam.tpitch = cam.save.pitch; cam.tdist = cam.save.dist; if (first) { hud.showHelp(true); } } });
       }
       { const HD = (D.rules.homes || {})[core.homeOf(me)] || {};
         hud.chat('Welcome to ' + (HD.name || 'Ashvale') + '.', 'sys');
@@ -24605,7 +24836,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         chestEventForTest: chestEvent,
         renderInfo: () => { let meshes = 0; scene.traverse(o => { if (o.isMesh) meshes++; }); return { geo: renderer.info.memory.geometries, tex: renderer.info.memory.textures, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, meshes, programs: (renderer.info.programs || []).length }; },   /* memory probes (2026-10-08: iPhone out-of-memory crashes) */
         showPals(rows, note) { PALS.rows = (rows || []).map(r => ({ tag: String(r.tag || '').replace(/^@/, ''), online: !!r.online })); PALS.note = note || ''; if (hud.tab === 'friends') hud.refresh('friends'); },
-        chest: { state: chestState, take: chestTake, store: chestStore, promise: paid => { const L = ledgerFor(walletState.address); for (const k in paid) L.pend[k] = (L.pend[k] || 0) + paid[k]; ledgerSave(); },
+        chest: { home: h => ENGBANK.setChestHome(h), homes: () => ENGBANK.chestHomes(), heard: rows => ENGBANK.chestsHeard({ q: 't', of: 1, rows }), state: chestState, take: chestTake, store: chestStore, promise: paid => { const L = ledgerFor(walletState.address); for (const k in paid) L.pend[k] = (L.pend[k] || 0) + paid[k]; ledgerSave(); },
           resetLedgerForTest: () => { if (!walletState.address) return; ledgerDrop(); save = null; try { G.localStorage.removeItem(CKEY(walletState.address)); } catch (e) { /* none */ } ledgerFor(walletState.address); },   /* a lost count: the tests' worst case */
           paidForTest: paid => { const L = ledgerFor(walletState.address); for (const k in paid) { const toChest = Math.min(paid[k], L.lchest[k] || 0); L.lchest[k] -= toChest; L.pchest[k] = (L.pchest[k] || 0) + toChest; L.pend[k] = (L.pend[k] || 0) + paid[k] - toChest; } ledgerSave(); } },   /* tests */ trip: () => TRIP && TRIP.state(), trade: () => trade, peers: () => Array.from(remotes.values()).map(r => r.from), _remIds: () => Array.from(remotes.keys()), optionsAt: (cx, cy) => { const L = []; for (const t of targetsAt(cx, cy)) for (const o of optionsFor(t)) L.push(o.html.replace(/<[^>]+>/g, '')); return L; }, _remAnim: () => JSON.stringify(Array.from(remotes.values()).map(r => [r.anim, r.buf.length, r.buf.length && r.buf[r.buf.length - 1].a])),
         stop() { stopped = true; },

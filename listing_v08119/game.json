@@ -1,0 +1,12 @@
+{
+  "game": {
+    "name": "ASHVALE",
+    "description": "New in 0.8.119: a new card table. Your two cards sit in a box over the felt, the board in its own box, and the buttons run along the bottom, in portrait or landscape. The cards are dealt round the table. The house takes 10% of a pot, at most one big blind. Your buy-in is held by the @ashvale Bank and your stack comes home to your wallet when you get up or drop out. Thanks to sadfrogltc for the Even Grove planting and steadier fights with friends. ASHVALE is free to play: knights, wizards and archers, the Saltmere Tap's card room upstairs, the Chess Park, and the Ojibwe village of Ziibiing on the far continent.",
+    "version": "0.8.119",
+    "players": "Solo or online",
+    "multiplayer": true,
+    "family": "ashvale",
+    "genre": "rpg",
+    "play": "c879bc1f5f3cfc1300b9f24252a47ce395028dc65fc78a0ab3004a9f272649f5"
+  }
+}

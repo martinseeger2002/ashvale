@@ -410,7 +410,7 @@
 
     // ---------------- players
     function newPlayer(id, save) {
-      const home = (save && typeof save.home === 'string' && HOMES[save.home]) ? save.home : (save ? 'ashvale' : NEWHOME), R0 = spawnOf({ home }), p = { id, home, name: 'Adventurer', kind: 'p', x: R0[0], y: R0[1], path: [], act: null, hp: 10, xp: {}, inv: new Array(28).fill(null), eq: {},
+      const home = (save && typeof save.home === 'string' && HOMES[save.home]) ? save.home : (save ? 'ashvale' : NEWHOME), R0 = spawnOf({ home }), p = { id, home, name: '@guest', kind: 'p', x: R0[0], y: R0[1], path: [], act: null, hp: 10, xp: {}, inv: new Array(28).fill(null), eq: {},
         styles: { melee: 0, ranged: 0, magic: 0 }, look: null, run: true, energy: 10000, retal: true, atk: 0, dead: 0, face: 2, quests: {}, kills: {}, skilling: null, gT: 0, shop: null, moved: 0, spawnT: 0, using: null };
       for (const s of SK) p.xp[s] = 0;
       p.xp.hitpoints = XP[RU.start.hitpoints] * 10;
@@ -464,7 +464,7 @@
         else { const c = cleanVal(v); if (c !== undefined) o[k] = c; } }
       return o;
     }
-    function cleanName(n) { n = String(n || '').replace(/[^\w -]/g, '').trim().slice(0, 12); return n.length >= 2 ? n : null; }
+    function cleanName(n) { n = String(n || '').replace(/[^\w@ -]/g, '').trim().slice(0, 17); return n.length >= 2 ? n : null; }   /* '@' and 17: the @tag is the name (2026-10-15) */
     /* starting points (the operator: "spend starting points"): once, on a fresh character; each point = +1 starting level */
     function validStart(pts) {
       if (!pts || typeof pts !== 'object') return null; const o = {}; let sum = 0;
@@ -906,7 +906,7 @@
         case 'pray': setPrayer(p, String(c.id || ''), !!c.on); break;
         case 'close': closeShop(p); break;
         case 'start': startPoints(p, c.pts); break;
-        case 'look': if (c.look) p.look = cleanLook(c.look); if (c.name) p.name = cleanName(c.name) || p.name; ev({ e: 'look', p: p.id }); break;
+        case 'look': if (c.look) p.look = cleanLook(c.look); ev({ e: 'look', p: p.id }); break   /* no name here any more: the @tag is the name (2026-10-15) */;
       }
     }
     /* inventory drag and drop (the operator): move into an empty slot or swap two slots; deterministic and replayed */
@@ -2654,6 +2654,7 @@
       const st = pokerOf(id), t = L.table({ id: String(id), small: PK_SB, big: PK_BB, rake: PK_RAKE, int: (n) => R.int(n), tell: (text, by) => { for (const pid of S.order) { const p = S.players[pid]; if (p.x != null && zoneOf(p.x, p.y) === zoneOf(pokerTableById(id).x, pokerTableById(id).y)) msg(p, text, by || 'info'); } } });
       if (st.g) { try { Object.assign(t, JSON.parse(st.g)); } catch (e) { return null; } }
       else if (st.se.length) return null;   /* taken over from another game mid-hand: there is no deck to carry, so it is dealt out below */
+      t.rakeCap = st.buy > 0 ? pkBlinds(st.buy | 0)[1] : 0;   /* [Claude 2026-10-14] the rake's top: one big blind */
       PKG[id] = t; return t;
     }
     /* [Claude 2026-10-13] A NEW DEALER BETWEEN HANDS takes the table over as it stands: no card is out, so the row holds all of it
@@ -2662,10 +2663,11 @@
        table changed dealer sends its sit once more, and hostPokerSit keeps the chair and takes the key). */
     function pokerAdopt(id) {
       const st = pokerOf(id), se = (st.se || []).slice();
+      st.sns = {}; for (const x of se) if (x && x[1] != null && x[5]) st.sns[x[1]] = x[5] | 0;   /* [Claude 2026-10-14] the seats' sessions go on with the table */
       delete PKG[id]; st.g = null; st.se = [];
       const t = pokerGame(id); st.se = se;
       if (!t) return pokerAbandon(id);
-      const bl = pkBlinds(st.buy | 0); t.small = bl[0]; t.big = bl[1]; t.hand = st.h | 0; t.dealer = st.d == null ? -1 : st.d | 0; t.raked = st.rk | 0;
+      const bl = pkBlinds(st.buy | 0); t.small = bl[0]; t.big = bl[1]; t.rakeCap = st.buy > 0 ? bl[1] : 0; t.hand = st.h | 0; t.dealer = st.d == null ? -1 : st.d | 0; t.raked = st.rk | 0;
       for (const x of se) {
         if (!x || x[1] == null) continue;
         if (!S.players[x[1]]) { pokerCashout(st, x[1], x[2] | 0); continue; }   /* gone from the game: their stack goes home now, as at an abandoned table */
@@ -2689,7 +2691,7 @@
       st.v = (st.v | 0) + 1; st.mine = 1; st.o = t.status; st.st = t.street; st.d = t.dealer; st.sb = t.sbSeat; st.bb = t.bbSeat;
       st.p = t.pot | 0; st.b = t.bet | 0; st.a = t.toAct; st.h = t.hand | 0; st.bo = t.board.slice();
       st.se = t.seats.filter(s => s && s.id != null).map(s => [s.ref | 0, s.id, s.chips | 0, s.bet | 0,
-        (s.in ? PK_IN : 0) | (s.folded ? PK_FOLD : 0) | (s.allin ? PK_ALLIN : 0) | ((s.hole && !s.out) ? PK_CARD : 0) | (s.acted ? PK_ACTED : 0) | (s.away ? PK_AWAY : 0)]);
+        (s.in ? PK_IN : 0) | (s.folded ? PK_FOLD : 0) | (s.allin ? PK_ALLIN : 0) | ((s.hole && !s.out) ? PK_CARD : 0) | (s.acted ? PK_ACTED : 0) | (s.away ? PK_AWAY : 0), (st.sns && st.sns[s.id]) | 0]);   /* [Claude 2026-10-14] se[5]: the seat's session number - the @ashvale Bank holds its GOLD under '<table>:<gid>:<sn>' */
       st.lg = t.log.slice(-6).map(l => String(l.t || '').slice(0, 90)); st.lc = (t.logBase | 0) + t.log.length;   /* [Claude 2026-10-13] the last six lines and how many there have been: every copy writes the table's play into its chat (the operator) */
       st.r = t.result ? { p: t.result.pots.map(q => [q.amount | 0, (q.win || []).map(x => x | 0)]), c: t.result.contested ? 1 : 0, rk: t.result.raked | 0, sd: (t.result.shown || []).slice(0, 8) } : null;   /* sd [Claude]: the showdown, every hand shown face up with its name */
       st.mr = t.minRaise | 0; st.bg = t.big | 0;   /* [Claude] the least a raise can be, and the big blind: the panel's slider runs from the one to all-in */
@@ -2701,7 +2703,7 @@
       st.tt = t.toAct >= 0 ? S.t : null;
       return st;
     }
-    function pokerRow(id) { const st = pokerOf(id), r = {}; for (const k in st) if (k !== 'g' && k !== 'mine' && k !== 'wt' && k !== 'tt') r[k] = st[k]; return r; }
+    function pokerRow(id) { const st = pokerOf(id), r = {}; for (const k in st) if (k !== 'g' && k !== 'mine' && k !== 'wt' && k !== 'tt' && k !== 'sns') r[k] = st[k]; return r; }
     function pokerRows(keep) { const out = []; for (const T of pokerTables()) { if (keep && !keep(T.x, T.y)) continue; const st = S.poker[T.id]; if (st && ((st.se && st.se.length) || st.mine === 1)) out.push(pokerRow(T.id)); } return out; }   /* [Claude 2026-10-13] a table this game deals goes out EMPTY too: a new dealer that opens the table it took over sent that word once, while the others still heard the old dealer as the host, and they sat on at a table that no longer had them (the operator: the game gets stuck when someone leaves) */
     function emitPoker(id, extra) { pokerSettle(id); ev(Object.assign({ e: 'poker', t: id }, pokerRow(id), extra || {})); }
     function pokerSeatName(p) { return String((p && p.name) || 'Someone').slice(0, 16); }
@@ -2724,6 +2726,7 @@
     function pkOpen(p, id) { return !!(p.pk && p.pk.t === id); }
     function pkClose(p, n, how) {
       const k = p.pk; p.pk = null; p.pkDone = k ? k.key : null;
+      if (k && k.sn) ev({ e: 'pkcash', p: p.id, s: k.key + ':' + k.sn, n: Math.max(0, n | 0) });   /* [Claude 2026-10-14] a Bank-held seat: the Bank pays it home (the engine counts it as on its way) */
       if (n > 0) { if (addItem(p, 'coins', n)) dropGround('coins', n, p.x, p.y, p.id, 600); msg(p, how === 'back' ? 'The card table is gone: your ' + n + ' GOLD on it comes back to you.' : 'You cash out ' + n + ' GOLD.', 'trade'); ev({ e: 'inv', p: p.id }); }
       else msg(p, 'You leave the table with nothing.', 'info');
     }
@@ -2743,7 +2746,8 @@
           if (invCount(p, 'coins') < st.buy) { msg(p, 'You cannot cover the buy-in of ' + st.buy + ' GOLD - you get up again.', 'warn'); pokerLeave(p, 'short'); continue; }
           if (p.pk && p.pk.t !== id) pokerReclaim(p.id, true);   /* a seat at another table still open: home first */
           removeItem(p, 'coins', st.buy); p.pkPaid = { key }; msg(p, 'You buy in for ' + st.buy + ' GOLD.', 'trade'); ev({ e: 'inv', p: p.id });
-          p.pk = { t: id, key, cs: st.cseq | 0, n: st.buy | 0, ids: [], at: S.t };
+          p.pk = { t: id, key, cs: st.cseq | 0, n: st.buy | 0, ids: [], at: S.t, sn: at[p.id][5] | 0 };
+          if (p.pk.sn) ev({ e: 'pkbuy', p: p.id, s: key + ':' + p.pk.sn, n: st.buy | 0 });   /* [Claude 2026-10-14] the engine sends it to @ashvale and tells the Bank */
         }
         if (at[p.id] && pkOpen(p, id)) p.pk.n = Math.max(0, at[p.id][2] | 0);   /* the stack as the dealer last showed it */
         p.pkGot = p.pkGot || {};
@@ -2766,17 +2770,34 @@
       if (p.seat && p.seat.k === 'pk' && p.seat.t === p.pk.t) return 0;
       const n = Math.max(0, p.pk.n | 0); pkClose(p, n, 'back'); return n;
     }
+    function pokerBankSeen(pid, rows) {   /* [Claude 2026-10-14] the Bank's 'pk' rows [s, buy, out, state] for this player */
+      const p = S.players[pid]; if (!p || p.puppet || !p.pk || !p.pk.sn) return 0;
+      const s = p.pk.key + ':' + p.pk.sn, r = (rows || []).find(x => x && x[0] === s);
+      if (!r || (r[3] !== 'paid' && r[3] !== 'held')) return 0;
+      if (p.seat && p.seat.k === 'pk' && p.seat.t === p.pk.t) return 0;
+      const n = r[2] | 0; p.pkDone = p.pk.key; p.pk = null;
+      msg(p, r[3] === 'paid' ? 'Your ' + n + ' GOLD from the card table went home to your wallet (open your chest).' : 'Your ' + n + ' GOLD from the card table is waiting for the Bank to check it.', 'trade');
+      return n;
+    }
     function pokerNetId(pid, netId) {   /* the room id this game plays under now: kept with an open seat, so a cashout written under it is still ours later */
       const p = S.players[pid]; if (!p || !p.pk || typeof netId !== 'string' || !netId) return;
       const ids = p.pk.ids || (p.pk.ids = []); if (ids.indexOf(netId) < 0) { ids.push(netId); if (ids.length > 8) ids.splice(0, ids.length - 8); }
     }
-    function pokerCashout(st, pid, chips) { if (!(st.buy > 0)) return; st.cseq = (st.cseq | 0) + 1; st.co = (st.co || []).concat([[pid, chips | 0, st.cseq]]).slice(-12); }
+    function pokerCashout(st, pid, chips) {
+      if (!(st.buy > 0)) return; st.cseq = (st.cseq | 0) + 1; st.co = (st.co || []).concat([[pid, chips | 0, st.cseq]]).slice(-12);
+      /* [Claude 2026-10-14] THE TABLE'S GOLD IS HELD BY @ashvale (the operator: "When the player buys in send that gold to the Ashvale wallet;
+         when they cash out or stand up or lose connection, send their remaining poker game balance back to them"): the dealer
+         tells the Bank what this seat leaves with; the Bank pays it home to the player's wallet, online or not */
+      const id = Object.keys(S.poker).find(k => S.poker[k] === st), x = (st.se || []).find(q => q && q[1] === pid), sn = ((st.sns || {})[pid]) || (x && x[5]) | 0;
+      if (id && sn) ev({ e: 'pkout', p: pid, s: id + ':' + (st.gid | 0) + ':' + sn, n: chips | 0 });
+      if (st.sns) delete st.sns[pid];
+    }
     function pokerSitAt(p, T, si, buy, pk) {   /* p has walked onto the chair: take it. Two who can play and the hand is dealt */
       si = si | 0;
       const t = pokerGame(T.id);
       if (t && !pokerSeated(T.id) && !t.seats.some(s => s && s.id != null)) {   /* [Claude] the first to sit sets the buy-in and the blinds */
         const st0 = pokerOf(T.id); st0.buy = Math.max(0, Math.min(1000000, buy | 0)); st0.gid = (st0.gid | 0) + 1;
-        const bl = pkBlinds(st0.buy | 0); t.small = bl[0]; t.big = bl[1];
+        const bl = pkBlinds(st0.buy | 0); t.small = bl[0]; t.big = bl[1]; t.rakeCap = st0.buy > 0 ? bl[1] : 0;   /* [Claude 2026-10-14] the rake tops out at one big blind: 2 / 20 / 200 (the operator) */
       }
       if (!t && tAuth(T) && pokerOf(T.id).mine === 0) { if (pokerOf(T.id).st === 'none') pokerAdopt(T.id); else pokerAbandon(T.id); if (!pokerGame(T.id)) return false; return pokerSitAt(p, T, si, buy, pk); }   /* [Claude 2026-10-12] a table left over from another dealer: open it now, then sit */
       if (!t) { msg(p, 'This table is being dealt out and will take players again in a moment.', 'warn'); return false; }
@@ -2789,7 +2810,8 @@
       const buyIn = pokerOf(T.id).buy > 0 ? pokerOf(T.id).buy | 0 : PK_BUY;   /* [Claude] a stack of as many chips as the buy-in */
       let chips = same ? here.chips : buyIn;
       if (chips <= 0) chips = buyIn;
-      t.addSeat(si, { id: p.id, name: pokerSeatName(p), chips }).pk = typeof pk === 'string' ? pk.slice(0, 160) : ''; p.seatAct = S.t;   /* [Claude 2026-10-12] their sealing key, kept with the dealer's seat */
+      t.addSeat(si, { id: p.id, name: pokerSeatName(p), chips }).pk = typeof pk === 'string' ? pk.slice(0, 160) : ''; p.seatAct = S.t;
+      if (!same || !((pokerOf(T.id).sns || {})[p.id])) (pokerOf(T.id).sns = pokerOf(T.id).sns || {})[p.id] = 1 + Math.floor(Math.random() * 999998);   /* [Claude 2026-10-14] a new seat, a new session */   /* [Claude 2026-10-12] their sealing key, kept with the dealer's seat */
       const seat = T.seats[si];
       p.x = seat[0]; p.y = seat[1]; p.path = []; p.act = null; p.skilling = null; p.seat = { t: T.id, s: si, k: 'pk' }; p.seatWait = null;
       p.face = faceTo(p.x, p.y, T.x, T.y); closeShop(p);
@@ -3919,8 +3941,11 @@
       if (typeof st.n === 'string') { const nm = cleanName(st.n); if (nm) p.name = nm; }
       if (st.act !== undefined) p.act = st.act && st.act.k === 'attack' && mobByUid(st.act.uid) ? { k: 'attack', uid: st.act.uid } : null;
     }
+    /* [Claude 2026-10-14] a pile item by any of its names: its uid, the host's uid for a Bank copy (huid), or the Bank's uid for a
+       host copy that took the Bank's word (bank) - a guest that picked up the Bank's copy asks by the Bank's uid */
+    function groundBy(uid) { uid = +uid; return S.ground.find(q => q.uid === uid || q.huid === uid || (uid >= BANK_UID && q.bank === uid - BANK_UID)) || null; }
     function claim(pid, uid) {   /* first claim wins; the picker's own game adds the item when it hears the 'take' */
-      const g = S.ground.find(q => q.uid === uid), p = S.players[pid];
+      const g = groundBy(uid), p = S.players[pid];
       if (!g || !p || p.dead || GROUND_GONE.has(uid) || (g.lv | 0) !== (p.lv | 0) || !isAuth(zoneOf(g.x, g.y)) || cheb(p.x, p.y, g.x, g.y) > 3) return false;
       GROUND_GONE.add(uid);
       if (g.bank != null) BANK_GONE.add(g.bank);
@@ -3942,14 +3967,19 @@
       if (S.took.has(uid) || GROUND_GONE.has(uid)) return;   /* consumed on any client: stale snapshots cannot restore it */
       const did = uid >= BANK_UID ? uid - BANK_UID : null;   /* a persisted drop (its uid says so), even from a host too old to say */
       if (did != null && BANK_GONE.has(did)) return;         /* the Bank already told us somebody took it: an old host's copy stays gone */
-      const g = S.ground.find(q => q.uid === uid); if (g) { g.n = n; return; }
+      const g = S.ground.find(q => q.uid === uid || q.huid === uid); if (g) { g.n = n; return; }
+      /* [Claude 2026-10-14] THE SAME THING TWICE (the operator: "Each time I died a lot of my items were duplicated ... all lying in a pile
+         where I died"): dying in an area another game hosts, the Bank's copy of a persisted drop (its own uid) can reach this game
+         before the host's row (the host's uid) - and the host's row was laid down beside it. It is one thing: the host's uid joins
+         the Bank's copy already lying there */
+      if (did == null) { const b = S.ground.find(q => q.bank != null && q.huid == null && q.id === id && q.x === x && q.y === y && (q.sunk || 0) === (sunk || 0) && (q.lv | 0) === (lv | 0)); if (b) { b.huid = uid; b.n = n; return; } }
       S.ground.push({ uid, id, n, x, y, owner: null, until: S.t + 1e9, from: from || null, bank: did, sunk: sunk || 0, lv: lv | 0 }); ev({ e: 'drop', g: uid, id, n, x, y, sunk: sunk || 0, lv: lv | 0 });
     }
     function groundRemove(uid) {
       GROUND_GONE.add(uid);
       if (uid >= BANK_UID) BANK_GONE.add(uid - BANK_UID);
-      const i = S.ground.findIndex(q => q.uid === uid);
-      if (i >= 0) { const g = S.ground[i]; if (g.bank != null) BANK_GONE.add(g.bank); S.ground.splice(i, 1); ev({ e: 'vanish', g: uid }); }
+      const i = S.ground.findIndex(q => q.uid === uid || q.huid === uid);   /* huid [Claude 2026-10-14]: the host's name for a Bank copy */
+      if (i >= 0) { const g = S.ground[i]; if (g.bank != null) BANK_GONE.add(g.bank); if (g.huid != null) GROUND_GONE.add(g.huid); S.ground.splice(i, 1); ev({ e: 'vanish', g: uid }); }
     }
     /* PERSISTED DROPS (2026-10-06): what the @ashvale Bank holds on the ground (Gold, stones, magical things, anything
        worth 100+ GOLD that a player dropped), listed for a rectangle. Every game puts them down itself - the area's host may be
@@ -3967,7 +3997,7 @@
         const g = S.ground.find(q => q.uid === uid || q.bank === did);
         if (g) { g.n = n; g.until = 1e15; if (sunk) g.sunk = sunk; continue; }
         const live = S.ground.find(q => q.bank == null && q.id === id && q.x === x && q.y === y);
-        if (live) { GROUND_GONE.add(live.uid); live.uid = uid; live.bank = did; live.until = 1e15; if (sunk) live.sunk = sunk; continue; }
+        if (live) { live.huid = live.uid; live.uid = uid; live.bank = did; live.until = 1e15; if (sunk) live.sunk = sunk; continue; }
         S.ground.push({ uid, id, n, x, y, owner: null, until: 1e15, bank: did, sunk }); ev({ e: 'drop', g: uid, id, n, x, y, bank: 1, sunk });
       }
       const [x0, y0, x1, y1] = box || [0, 0, -1, -1];
@@ -4033,7 +4063,7 @@
       API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, trapOf, offerOf, isBlessed: (pid, x, y) => !!(S.players[pid] && blessed(S.players[pid], x, y)), setNature, natureHours, setNatureTell, seasonOn, dayHour, fireLit, steamFor, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       tableAt, tableById, tables, chessOf, chessRow, chessRows, chessGame, chessTurn, chessMoves, applyChess, hostSit, hostStand, hostMove, hostSel, standUp,
       setTableAuth: (id, v) => { if (v == null) delete TAUTH[id]; else TAUTH[id] = !!v; }, tableAuth: id => tAuth(pokerTableById(id)),
-      pokerTableAt, pokerTableById, pokerTables, pokerSeatKeys, pokerOpen, pokerOf, pokerRow, pokerRows, pokerGame, applyPoker, pokerClockTicks: () => PK_CLOCK, pokerReclaim, pokerNetId, chessReclaim, chessNetId, chessLimbo, seatHeld, setOnline: (b) => { S.online = !!b; }, hostPokerSit, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED, PK_AWAY], hostPokerStand, hostPokerAct, pokerLeave, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED],
+      pokerTableAt, pokerTableById, pokerTables, pokerSeatKeys, pokerOpen, pokerOf, pokerRow, pokerRows, pokerGame, applyPoker, pokerClockTicks: () => PK_CLOCK, pokerReclaim, pokerNetId, pokerBankSeen, chessReclaim, chessNetId, chessLimbo, seatHeld, setOnline: (b) => { S.online = !!b; }, hostPokerSit, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED, PK_AWAY], hostPokerStand, hostPokerAct, pokerLeave, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED],
       get rngState() { return R.state; },
       prayers: () => PRAY.list || [], prayer: (id) => PRAYERS[id] || null, maxPp, overhead, protects, boostOf,
       /* ticks the points last: with what is on now (null when nothing drains), or from `pts` points at `drain` per tick */
@@ -4043,7 +4073,7 @@
       priceBuy, priceSell, carried, capacity, burden, speechPct: (p) => speechPermille(p) / 10, START: { points: START.points || 10, max: START.maxPerSkill || 5, skills: START.skills || [] }, validStart,
       reqFail, EQ_SLOTS, idx, inReach,
       setAuth, isAuth, zoneOf, areaOf: zoneOf, regionOf: M.regionOf, uidSpace, setWeather, setSeason, weatherOf: (z) => S.weather[weatherZone(z)] || null, weatherZone, wx, hostFire, fireAdd, fireOut, nodeAt, isSapling, saplingKind, canPlant, plantYoung, plantHour: PLANT_HOUR, plantSnap, acceptPlant, acceptUnplant, hostPlant, hostUnplant, EFFECTS: Object.keys(EFFECTS), watchPhase, lampLit, guardCb: GSTAT.cb,
-      applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, takeOff: (pid, k) => { const p = S.players[pid]; return p ? takeOff(p, k) : null; }, setFelled,
+      applyFx: (uid, kind, ticks) => { const m = mobByUid(uid); if (!m || isAuth(m.zone) || !EFFECTS[kind]) return; m.fx = m.fx || {}; m.fx[kind] = { until: S.t + ticks, dmg: 0, src: null, next: 1e12 }; ev({ e: 'fx', mob: uid, fx: kind, ticks }); }, addPuppet, setPuppet, claim, hostDrop, applyMobs, groundBy, groundAdd, groundRemove, groundFull, applyHit, grantItem, storeItem, takeOff: (pid, k) => { const p = S.players[pid]; return p ? takeOff(p, k) : null; }, setFelled,
       hitXp: (pid, cls, dmg, dex) => { const p = S.players[pid]; if (p && !p.puppet) hitXp(p, cls, dmg, null, dex); },
       creditKill: (pid, key, x, y) => { const p = S.players[pid]; if (p && !p.puppet) creditKill(p, key, x, y); }
     };

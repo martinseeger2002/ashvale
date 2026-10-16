@@ -1079,3 +1079,78 @@ the walk here feature".
   follow the DRAWN body (r.vs, smoothed speed): walk/run while it moves (paced to speed, 1 tile/600 ms walk, 2 run), idle
   only once it is still; a 'walk' sample with a still body turns idle after 0.25 s. Canoes and non-locomotion anims untouched.
   ASH.remoteView(id) for tests. tests/remote_walk_pw.py (2 windows): slide with still legs 0.6-1.4 m before, <=0.14 m after.
+
+## 0.8.119 - 2026-10-14 (Claude + sadfrogltc): the card table redone, its GOLD held by @ashvale, death piles once - RELEASED (v146; cards 0ce536ff ASHVALE, ac80cea6 Ziibiing)
+- Card table HUD (the operator, on a phone): the betting bar along the bottom (buttons on top of it, status/pot/players under them),
+  your two cards in a box over their spot on the felt (on the felt they stay face down), the board in a box over the middle,
+  the chat at the top; the table's play only in the chat; the last hand's result only between hands; no All-in button on the
+  bar (slide to the end - the raise button then says "All-in N"); landscape: the slider on one row. Dealing animation: cards
+  fly from in front of the dealer, round the table twice, then the board. scene pokerSpots + engine pokerClock -> hud.pokerAnchor.
+- Rake: 10% of a pot, at most one big blind a hand (2 / 20 / 200 at the 100 / 1,000 / 10,000 tables). holdemlib T.rakeCap,
+  tests/sidepot_test.js checks it against the reference.
+- THE TABLE'S GOLD IS HELD BY @ashvale (the operator: "When the player buys in send that gold to the Ashvale wallet; when they cash
+  out or stand up or lose connection, send their remaining poker game balance back to them"). A seat is a session
+  '<table>:<gid>:<sn>' (se[5]). The player's game sends the buy-in to @ashvale (creator allowance, L.pkb, retried, never
+  doubled by returns) and tells the Bank (pkbuy + tx); the dealer tells the Bank each seat's cashout (pkout, by address, also
+  for a player whose page closed); the player's own word (pkout without who) waits 60 s for the dealer's. The Bank pays only a
+  buy-in the chain proves (arcade test-ledger: GOLD 26 from that address to @ashvale, exact amount), never more out of a table
+  game than its proven buy-ins (else HELD), in jobs of <= 10,000. At a load a seat the Bank already paid closes without coins
+  (they are in the wallet: the chest). Bank: .25 bank-rpc 590d997 (tests/bank_pk_test.py). Game: tests/poker_bank_pw.py.
+- Death piles (the operator: "Each time I died a lot of my items were duplicated ... all lying in a pile"): dying in an area another
+  game hosts, the Bank's copy of a persisted drop could arrive before the host's row and both were laid down. groundAdd joins
+  the host's uid to the Bank copy (huid); claim/groundRemove find a pile item by any of its names (core.groundBy).
+  tests/death_pile_once_test.js (fails on 0.8.118: every item twice). The chain never held duplicates.
+- sadfrogltc (GitHub 4722e98): Even Grove planting - a quest shoot in the wrong place is kept and says where it belongs, every
+  sapling kind plants; multiplayer attack sync - the attack target repeats in presence, stale monster rows superseded in the
+  send queue. tests/even_grove_pw.py, sapling_place_test, balance_test, shared_pw updates.
+- Gate: core_test ALL OK; 47 headless tests pass (balance_test 3, dragon_focus_test 1, worldgen_test 1 fail the same on the tree
+  before these changes); browser: even_grove_pw, combat_many_pw, poker_bank_pw, poker_leave_pw, poker_stakes_pw (nothing made
+  or lost, rake capped), remote_walk_pw ALL OK; poker_flow_pw only the old /r/inscriptions 404; shared_pw and poker_cases_pw
+  time out opening a page on this box (shared_pw the same on the old tree); candidate_live boots, no console errors.
+
+## 0.8.120 - 2026-10-14 (Claude): one chest per home, Gold on its way, chess, Ziibiing arrival, favicon, the failing tests - RELEASED (v147; cards 6796addf ASHVALE, 76ce65f6 Ziibiing)
+- ONE CHEST PER HOME (the operator: deposited in Ziibiing's chest -> only Ziibiing's chests; Ashvale's -> only Ashvale's; arcade deposits
+  visible in both until taken; carried across and stored -> that chest's home). The Bank keeps, per wallet, what each home's chests
+  hold (bank.py chests table, cput/ctake/chests?, .25 ae00cb0, tests/bank_chests_test.py). A chest belongs to the home whose spawn
+  is nearest (3 km, else Ashvale). chestState().here = the full chest less what OTHER homes hold; the chest window, take and
+  withdraw-all use it; the Bank's deposit checks still see the full count. Chests there before today count as shared.
+  tests/chest_homes_pw.py (8 checks).
+- The chest counts Gold still on its way: arrivals are wallet GAINS since the last look (L.seen), not "beyond what is counted" (that
+  held the chest's own Gold, so a promise was taken as delivered at once - the operator's 630 GOLD from mithril showed 5,678 until it
+  landed). L.seen and L.pkb (card-table buy-ins to send) now saved with the ledger. chest_ledger_pw new case.
+- Chess: an older row from the same host (the 5 s resend after a newer move) is ignored (engine CHIN) - the piece popped back.
+- Card table: the board's five cards on one row (the operator: the river dropped below).
+- Ziibiing arrival: preloadZones reads the home's own save ('ashvale3d.save.v1.ziibiing') and, for a new one, the home's spawn -
+  it had loaded Ashvale's land behind the boot screen (the operator: "loaded into a blank world"). Not verified on the live launcher
+  (the test browser ran out of memory building the terrain on this busy box).
+- Favicon (the operator): data/brand/favicon.svg, inlined by build.py and set by the engine on the launcher page.
+- No referee seed asked without a wallet (a guest's 400 on every boot).
+- Tests fixed: balance_test (sadfrog's chapel wording, 13 guard remarks), dragon_focus_test (turn-taking since 0.8.116),
+  worldgen golden re-cut (moved globe), shared_pw (A's trail ten times a second), tests/serve.py (registry poll + favicon only).
+  Browser tests run in visible windows on the desktop now (headless + software GL cannot load a second page). poker_cases_pw
+  fails case 1 the same way on the 0.8.117 build on this loaded box (eight game windows + vLLM + the operator's Firefox): load, not code.
+- Gate: core_test ALL OK; 48 headless ALL OK; chest_homes_pw, chest_ledger_pw, chess_pw, poker_flow_pw ALL OK; candidate_live
+  boots, no console errors.
+
+## 0.8.121 - 2026-10-14 (Claude): Ziibiing opens on phones again - RELEASED (v148; cards a45ac583 ASHVALE, 3179691b Ziibiing)
+- 0.8.120's Ziibiing preload (the home's own save and spawn) crashed the Ziibiing launcher on a phone ("A problem repeatedly
+  occurred"; candidate_live on the Ziibiing launcher: "Array buffer allocation failed" in scene heightsOf - a non-seeded map's
+  (W+1)(H+1) Float32Array over a huge bounding box). Reverted to the 0.8.119 preload; candidate_live on the Ziibiing launcher boots
+  in 14.8 s, no console errors. The blank-world-on-arrival fix needs redoing WITH a live Ziibiing-launcher boot test.
+
+## 0.8.122 - 2026-10-14 (Claude): Ziibiing's land is there when you arrive - RELEASED (v149; cards 936e3364 ASHVALE, bcc8ed68 Ziibiing)
+- The real cause of 0.8.120's crash: scene heightsOf kept building floors in ONE Float32Array of map.W x map.H, and map.W/H is the
+  bounding box of the areas loaded at the start - with Ziibiing's land among them ~24,213 x 24,413 (591 million floats). Floors are
+  now kept per 64 x 64 chunk, only where a floor is written (scene floor.get/set). No typed array over 5M elements on either
+  launcher (a constructor trap in candidate_live).
+- With that, the Ziibiing preload is back: its own save ('ashvale3d.save.v1.ziibiing') and spawn. Live Ziibiing launcher +
+  candidate: in the world in 16.7 s, the area under the character ('lodges') loaded at the first look, no console errors.
+  ASHVALE launcher unchanged (village loaded, 537 x 88). poker_bank_pw (upstairs floors) ALL OK, globe_roam_pw all passed.
+
+## 0.8.123 - 2026-10-15 (Claude): your @tag is your only name - RELEASED (v150; cards fd2cc598 ASHVALE, 33b784e8 Ziibiing)
+- the operator: "wherever it says your name where it was adventure. Remove the adventure and the ability to create a name. Their name
+  should be there @handle only ... There's no need for two names" and "Same for ziibiing". Own name = '@' + the arcade room's
+  tag (set on join), '@guest' until then / with no account; a save's old chosen name is dropped; the creator has no name box;
+  core 'look' no longer takes a name; others are labelled with the @tag the arcade node stamps (never what the game says).
+  Quest lines, card-table lines and every {name} read p.name, so they say the @tag. Checked in two visible windows: own
+  '@dev_...', a 'look' name 'Ann' ignored, the other labelled '@dev_...'. 49 headless ALL OK; candidate_live boots clean.

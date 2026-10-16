@@ -23,6 +23,28 @@
          Asked when the chest opens, every minute, and again just before a take. */
       const HOLDS = { o: {}, at: 0, wait: [], multi: false, sent: '' };   /* multi: the Bank knows another character on this wallet */
       function holdsHeard(d) { HOLDS.o = d.o && typeof d.o === 'object' ? d.o : {}; HOLDS.multi = !!d.multi; HOLDS.at = Date.now(); const w = HOLDS.wait; HOLDS.wait = []; for (const f of w) f(); hud.refresh && hud.refresh('chest'); }
+      /* [Claude 2026-10-14] ONE CHEST PER HOME (the operator: "if an item is deposited in ziibiing chest it is visible only in ziibiing chests ...
+         If something is deposited into your wallet from Dogecoin arcade, it should be visible in both games until it is put into a
+         players inventory ... If an item from ziibiing is brought to Ashvale and put into an Ashvale chest it should be visible in
+         Ashvale chest"). The Bank keeps, per wallet, what was put in each home's chests (cput / ctake, 'chests?' -> rows [h, k, n]);
+         a chest belongs to the home whose spawn is nearest (setChestHome). What no home's chest holds - from the arcade, or there
+         from before - shows in every chest. chestState().here = this chest: everything less what OTHER homes' chests hold. */
+      const CS = { by: {}, at: 0, home: K.HOME || 'ashvale', parts: {} };
+      function chestsHeard(d) {
+        const q = String(d.q || ''); const P = CS.parts[q] = CS.parts[q] || { rows: [], n: 0 };
+        P.rows.push(...(Array.isArray(d.rows) ? d.rows : [])); P.n++;
+        if (P.n < (d.of | 0)) return;
+        delete CS.parts[q]; if (+q.slice(1) < (CS.told || 0)) return;   /* asked before our last put/take: the Bank's answer is older than what we know */
+        const by = {};
+        for (const r of P.rows) if (Array.isArray(r) && typeof r[0] === 'string' && typeof r[1] === 'string' && r[2] > 0) (by[r[0]] = by[r[0]] || {})[r[1]] = r[2] | 0;
+        CS.by = by; CS.at = Date.now(); hud.refresh('wallet');
+      }
+      function chestsAsk() { bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'chests?', v: 1, q: 'c' + Date.now() }); }).catch(() => {}); }
+      function setChestHome(h) { CS.home = h || K.HOME || 'ashvale'; chestsAsk(); }
+      const otherChests = k => { let n = 0; for (const h in CS.by) if (h !== CS.home) n += (CS.by[h][k] | 0); return n; };
+      function chestTell(t, k, n) { if (n <= 0) return; CS.told = Date.now(); const by = CS.by[CS.home] = CS.by[CS.home] || {}; by[k] = Math.max(0, (by[k] | 0) + (t === 'cput' ? n : -n)); if (!by[k]) delete by[k];
+        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t, v: 1, h: CS.home, k, n }); }).catch(() => {}); }
+      setInterval(() => { if (walletState.address) chestsAsk(); }, 60000);
       function holdsAsk() { return new Promise(res => { HOLDS.wait.push(res); setTimeout(res, 3000); bankRoom().then(R => R && R.send(K.withHome({ t: 'holds?' }))).catch(() => res()); }); }
       function holdSend() { if (!ledger || !walletState.address) return; const b = {}; for (const k in ledger.bag) if (ledger.bag[k] > 0) b[k] = ledger.bag[k]; for (const k in ledger.pend) if (ledger.pend[k] > 0) b[k] = (b[k] || 0) + ledger.pend[k];
         const j = JSON.stringify(b); if (j === HOLDS.sent) return; HOLDS.sent = j;   /* only when what is carried changed: saves go out often (the mesh allows ~5 messages a second) */
@@ -46,7 +68,7 @@
         L.addr = addr; ledger = L; return L;
       }
       const ledgerDrop = () => { ledger = null; };   /* the tests' lost count */
-      const ledgerSnap = () => ledger && { addr: ledger.addr, bag: ledger.bag, spent: ledger.spent, pend: ledger.pend, pspent: ledger.pspent, out: ledger.out || {}, gone: ledger.gone || {}, autoTake: ledger.autoTake || {}, pchest: ledger.pchest || {}, lchest: ledger.lchest || {} };
+      const ledgerSnap = () => ledger && { addr: ledger.addr, bag: ledger.bag, spent: ledger.spent, pend: ledger.pend, pspent: ledger.pspent, out: ledger.out || {}, gone: ledger.gone || {}, autoTake: ledger.autoTake || {}, pchest: ledger.pchest || {}, lchest: ledger.lchest || {}, seen: ledger.seen || {}, pkb: ledger.pkb || [] };   /* seen, pkb [Claude 2026-10-14]: the wallet's last look, and card-table buy-ins still to send */
       const ledgerSave = () => { if (!ledger) return; try { G.localStorage.setItem(CKEY(ledger.addr), JSON.stringify(ledgerSnap())); } catch (e) { /* private window */ } };
       function chestState() {
         if (!walletState.data || !walletState.address) return { chest: {}, loose: {}, bank, arriving: bank.arriving };
@@ -66,8 +88,12 @@
              your wallet, and not on its way back to @ashvale, is yours again - never a new deposit (2026-10-04) */
           if (x < 0) { const away = ((L.out && L.out[k]) || []).reduce((a, o) => a + o.n, 0), back = Math.min(-x, Math.max(0, spent - away)); spent -= back; bag += back; x += back;
             const bp = Math.min(-x, pspent); pspent -= bp; pend += bp; }
-          /* 2. arrived: wallet units beyond what is counted turn promises into deliveries */
-          let av = wk - bag - spent - gone;
+          /* 2. arrived: wallet units beyond what is counted turn promises into deliveries.
+             [Claude 2026-10-14] only what the wallet GAINED since the last look (L.seen) can be an arrival: "beyond what is counted"
+             also holds everything already in the chest, so with a full chest a promise was taken as delivered at once - 630 GOLD
+             still on its way, stored, and the chest showed 5,678 instead of 6,308 until the payout landed (the operator) */
+          const seenK = L.seen && L.seen[k] != null ? L.seen[k] : null;
+          let av = wk - bag - spent - gone; if (seenK != null) av = Math.min(av, Math.max(0, wk - seenK));
           if (av > 0) { const d = Math.min(av, pend); pend -= d; bag += d; av -= d; const e = Math.min(av, pspent); pspent -= e; spent += e; const f = Math.min(av, pch); pch -= f; }   /* stored-while-arriving units land in the chest */
           /* 2b. only when the Bank said this count does not add up (a stale count, one per device): the wallet's unclaimed
              units stand for what you carry. New loot never eats your chest (the operator: a second steel helmet is a new one). */
@@ -83,6 +109,7 @@
           /* traded in: the piece goes into your bag as soon as your wallet shows it (the operator: trade from and into your inventory) */
           const at = L.autoTake[k]; if (at && at.n > 0) { if (Date.now() > at.until) delete L.autoTake[k]; else { const free = wk - bag - spent - gone; const m = Math.min(at.n, free); if (m > 0) { core.grantItem(PID, k, m); bag += m; c += m; at.n -= m; if (at.n <= 0) delete L.autoTake[k]; } } }
           put(L.bag, k, bag); put(L.spent, k, spent); put(L.pend, k, pend); put(L.pspent, k, pspent); put(L.gone, k, gone); put(L.pchest, k, pch);
+          if (walletState.data && walletState.data.at) { L.seen = L.seen || {}; if (L.seen[k] !== wk) L.seen[k] = wk; }   /* the wallet as this look saw it */
           /* what you dropped and is still lying on the ground is not in the chest, whatever the count says (2026-10-07: everything
              he dropped "showed up in his chest" too) */
           const onGround = core.S.ground.reduce((a, q) => a + (q.id === k && q.from === PID ? q.n : 0), 0);
@@ -95,7 +122,8 @@
         }
         if (JSON.stringify([L.bag, L.spent, L.pend, L.pspent, L.gone, L.autoTake, L.pchest, L.lchest]) !== before) ledgerSave();
         bank.arriving = arriving;
-        return { chest, loose, bank, arriving, bag: Object.assign({}, L.bag), pend: Object.assign({}, L.pend) };
+        const here = {}; for (const k in chest) { const v = Math.max(0, chest[k] - otherChests(k)); if (v > 0) here[k] = v; }   /* this home's chest */
+        return { chest, here, home: CS.home, loose, bank, arriving, bag: Object.assign({}, L.bag), pend: Object.assign({}, L.pend) };
       }
       /* ---------- returns: what you used up goes back to @ashvale (2026-10-04: a dropped Hawk ring stayed in his wallet
          while a friend carried it). A spent unit is sent to @ashvale with the arcade's creator allowance (testnet, no card,
@@ -264,11 +292,12 @@
       }
       function chestTake(k, n) { if (HOLDS.multi && Date.now() - HOLDS.at > 5000) holdsAsk().then(() => chestTake0(k, n)); else chestTake0(k, n); }   /* with a second character on the wallet, ask the Bank first: it may have just taken it */
       function chestTake0(k, n, quiet) {
-        const C = chestState(); n = Math.min(n, C.chest[k] || 0); if (n <= 0) return 0;
+        const C = chestState(); n = Math.min(n, (C.here || C.chest)[k] || 0); if (n <= 0) return 0;
         const d = core.item(k), free = me.inv.filter(s => !s).length, room0 = d.stack ? (core.invCount(me, k) || free ? n : 0) : Math.min(n, free);
         if (room0 <= 0) { if (!quiet) hud.chat('Your bag is full.', 'warn'); return 0; }
         core.grantItem(PID, k, room0); const L = ledgerFor(walletState.address), real = Math.max(0, (C.chest[k] || 0) - (L.pchest[k] || 0) - (L.lchest[k] || 0)), fromReal = Math.min(room0, real), fromP = Math.min(room0 - fromReal, L.pchest[k] || 0), fromL = room0 - fromReal - fromP;
         L.bag[k] = (L.bag[k] || 0) + fromReal; L.pchest[k] = (L.pchest[k] || 0) - fromP; L.pend[k] = (L.pend[k] || 0) + fromP; L.lchest[k] = Math.max(0, (L.lchest[k] || 0) - fromL); ledgerSave();
+        chestTell('ctake', k, Math.min(room0, (CS.by[CS.home] || {})[k] | 0));   /* out of this home's chest first; the rest was shared */
         if (!quiet) hud.chat('You take ' + (room0 > 1 ? room0 + ' x ' : '') + d.name + ' from your chest.', 'info'); hud.refresh('all');
         return room0;
       }
@@ -276,9 +305,9 @@
         if (!walletState.address) { hud.chat('Sign in to use the chest.', 'warn'); return; }
         const go = () => {
           const C = chestState(); let n = 0;
-          for (const k of Object.keys(C.chest)) n += chestTake0(k, C.chest[k] || 0, true);
+          const H = C.here || C.chest; for (const k of Object.keys(H)) n += chestTake0(k, H[k] || 0, true);
           if (n) hud.chat('You take what you can carry from your chest.', 'info');
-          else if (Object.keys(C.chest).length) hud.chat('Your bag is full.', 'warn');
+          else if (Object.keys(C.here || C.chest).length) hud.chat('Your bag is full.', 'warn');
           hud.refresh('all');
         };
         if (HOLDS.multi && Date.now() - HOLDS.at > 5000) holdsAsk().then(go); else go();
@@ -289,6 +318,7 @@
         const fromBag = Math.min(n, L.bag[k] || 0, have), fromPend = Math.min(n - fromBag, L.pend[k] || 0, have - fromBag), fromNew = Math.min(n - fromBag - fromPend, have - fromBag - fromPend), m = fromBag + fromPend + fromNew;   /* settled or not, it can go in the chest (2026-10-05) */
         if (m <= 0) return 0;
         core.storeItem(PID, k, m); L.bag[k] = (L.bag[k] || 0) - fromBag; L.pend[k] = (L.pend[k] || 0) - fromPend; L.pchest[k] = (L.pchest[k] || 0) + fromPend; L.lchest[k] = (L.lchest[k] || 0) + fromNew; ledgerSave();
+        chestTell('cput', k, m);
         if (!quiet) hud.chat('You put ' + (m > 1 ? m + ' x ' : '') + core.item(k).name + ' in your chest.', 'info'); hud.refresh('all');
         return m;
       }
@@ -310,6 +340,7 @@
           L.bag[e.id] = (L.bag[e.id] || 0) - fromBag; if (!L.bag[e.id]) delete L.bag[e.id];
           if (fromPend) { L.pend[e.id] -= fromPend; if (!L.pend[e.id]) delete L.pend[e.id]; L.pchest[e.id] = (L.pchest[e.id] || 0) + fromPend; }
           if (rest) L.lchest[e.id] = (L.lchest[e.id] || 0) + rest;
+          chestTell('cput', e.id, e.n);
           n++;
         }
         ledgerSave(); if (n) { hud.chat('You put your worn equipment in your chest.', 'info'); netGear(); }
@@ -492,7 +523,10 @@
             if (data && data.t === 'carried' && bankFrom && R.me && data.to === R.me.address) { carriedHeard(data); return; }   /* carried in someone's canoe while away */
             if (data && data.t === 'marks' && bankFrom && R.me && data.to === R.me.address) { if (core.setMarks) core.setMarks(data.k, data.cells || []); return; }   /* maples tapped today, birches peeled this year */   /* trees others felled */
             if (data && data.t === 'scores' && bankFrom && R.me && data.to === R.me.address) { scoresHeard(data); return; }   /* the ruined keep's global dragon-killer board */
-            if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }   /* persisted drops near me */
+            if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }
+            if (data && data.t === 'pkok' && bankFrom && R.me && data.to === R.me.address) { pkHeard(data); return; }
+            if (data && data.t === 'chests' && bankFrom && R.me && data.to === R.me.address) { chestsHeard(data); return; }   /* [Claude 2026-10-14] what each home's chests hold */   /* [Claude 2026-10-14] the Bank has our card-table word */
+            if (data && data.t === 'pk' && bankFrom && R.me && data.to === R.me.address) { coreCall(() => core.pokerBankSeen && core.pokerBankSeen(PID, data.rows || [])); return; }   /* persisted drops near me */
             if (data && data.t === 'pals' && bankFrom && R.me && data.to === R.me.address) { palsHeard(data); return; }   /* the friends list */
             if (data && data.t === 'paid' && bankFrom && R.me && data.to === R.me.address) { const it = DATA.items && DATA.items.items && DATA.items.items[data.item]; hud.chat('The bank sent ' + (data.units | 0) + ' ' + (it && it.name ? it.name : String(data.item || '')) + ' to your wallet.', 'sys'); return; }   /* [Claude 2026-10-12] the Bank's word that a delivery went out (handoff/bank_rpc_plan.md 3b.4) */
             if (!data || data.t !== 'dep' || !bankFrom || !R.me || data.to !== R.me.address) return;   /* only @ashvale or @yourfirstname answers, only to me */
@@ -537,7 +571,71 @@
           R.send({ t: 'dep', v: 3, id, items, carried, chest, spent, reward, pend: pendOf(Object.keys(items)), from: fromAll(Object.keys(items)) });
         });
       }
-    return { CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
+      /* ---------- [Claude 2026-10-14] THE CARD TABLE'S GOLD, HELD BY @ashvale (the operator: "When the player buys in send that gold to the
+         Ashvale wallet; when they cash out or stand up or lose connection, send their remaining poker game balance back to them").
+         - pkbuy (our seat, its buy-in already out of the bag): the GOLD goes to @ashvale with the creator allowance (as returns do;
+           counted in L.out so returnNext never sends it again), then the Bank hears {pkbuy, s, n, tx}. Kept in L.pkb until done,
+           so a reload or a refused send tries again.
+         - pkout (the dealer's word on any seat): {pkout, s, who, n} - the Bank pays that seat home, the player online or not.
+         - pkcash (our own seat closed - the dealer's cashout seen, or the table gone): the coins are back in the bag and counted
+           as on their way (pend), and the Bank hears our own word {pkout, s, n}, which waits for the dealer's.
+         - at a load with a seat still open: 'pk?' - a seat the Bank already paid home closes (the GOLD is in the wallet, the chest).
+         Every word is sent again until the Bank answers 'pkok'. */
+      const PKQ = new Map();   /* s|kind -> {o, at, n} */
+      function pkSend(key, o) { PKQ.set(key, { o, at: 0, n: 0 }); pkFlush(); }
+      function pkFlush() {
+        const now = Date.now();
+        for (const [k, q] of PKQ) {
+          if (now - q.at < 15000) continue;
+          if (++q.n > 60) { PKQ.delete(k); console.warn('ASHVALE: the Bank never answered', k); continue; }
+          q.at = now; bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send(q.o); }).catch(() => {});
+        }
+      }
+      setInterval(pkFlush, 5000);
+      function pkHeard(d) { for (const k of Array.from(PKQ.keys())) if (k.split('|')[0] === d.s) PKQ.delete(k); }
+      let pkPaying = false;
+      async function pkPayNext() {
+        if (pkPaying || !walletState.address) return;
+        const L = ledgerFor(walletState.address); L.pkb = L.pkb || [];
+        const b = L.pkb.find(x => !x.tx && Date.now() >= (x.next || 0)); if (!b) return;
+        const W = walletState.data, pid = W && W.pids && W.pids.coins; if (!pid) return;
+        pkPaying = true; L.out = L.out || {};
+        const o = { id: 'pk:' + b.s, n: b.n, piece: null, st: 'pending', t: Date.now() };
+        if (!(L.out.coins || []).some(x => x.id === o.id)) { (L.out.coins = L.out.coins || []).push(o); ledgerSave(); }   /* returnNext: already on its way */
+        const oo = (L.out.coins || []).find(x => x.id === o.id);
+        const fail = () => { b.tries = (b.tries | 0) + 1; b.next = Date.now() + Math.min(600000, 30000 * b.tries); ledgerSave(); };   /* its L.out entry stays: returnNext must never send this GOLD without the Bank hearing which seat it was */
+        try {
+          const r = await fetch('/r/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+            body: JSON.stringify({ to: '@ashvale', label: 'ASHVALE', note: 'Card table buy-in', silent: true, kind: 'token', propertyid: pid, amount: String(b.n) }) });
+          const j = await r.json().catch(() => ({}));
+          if (r.status !== 202 || !j.id || j.status === 'failed') { fail(); return; }
+          let st = j;
+          for (let i = 0; i < 200 && st && st.status !== 'sent' && st.status !== 'failed'; i++) { await new Promise(ok => setTimeout(ok, 3000)); st = await fetch('/r/send/' + encodeURIComponent(j.id), { credentials: 'same-origin' }).then(x => x.json()).catch(() => null) || st; }
+          if (!st || st.status !== 'sent' || !st.txid) { fail(); return; }
+          b.tx = st.txid; if (oo) { oo.st = 'sent'; oo.t = Date.now(); } ledgerSave(); setTimeout(walletRefresh, 60000);
+          pkSend(b.s + '|buy', { t: 'pkbuy', v: 1, s: b.s, n: b.n, tx: b.tx });
+          L.pkb = L.pkb.filter(x => !(x.tx && Date.now() - (x.at || 0) > 7 * 86400000));
+        } catch (e) { fail(); }
+        finally { pkPaying = false; }
+      }
+      setInterval(pkPayNext, 4000);
+      function pkEvent(e, addrOf) {
+        if (e.e === 'pkout') {   /* the dealer: whose seat, by address */
+          const who = addrOf(e.p); if (!who) { console.warn('ASHVALE: no address for the card-table seat', e.p); return; }
+          pkSend(e.s + '|out', { t: 'pkout', v: 1, s: e.s, who, n: e.n | 0 }); return;
+        }
+        if (e.p !== PID || !walletState.address) return;
+        const L = ledgerFor(walletState.address);
+        if (e.e === 'pkbuy') { L.pkb = L.pkb || []; if (!L.pkb.some(x => x.s === e.s)) { L.pkb.push({ s: e.s, n: e.n | 0, at: Date.now() }); ledgerSave(); } setTimeout(pkPayNext, 300); return; }
+        if (e.e === 'pkcash') {
+          if (e.n > 0) { L.pend.coins = (L.pend.coins || 0) + (e.n | 0); ledgerSave(); }   /* back in the bag, paid by the Bank: on its way */
+          pkSend(e.s + '|cash', { t: 'pkout', v: 1, s: e.s, n: e.n | 0 });
+        }
+      }
+      let pkAskT = 0;
+      function pkAsk() { pkAskT = Date.now(); bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'pk?', v: 1 }); }).catch(() => {}); }
+      setInterval(() => { const P = core.S.players[PID]; if (P && P.pk && P.pk.sn && !(P.seat && P.seat.k === 'pk') && Date.now() - pkAskT > 30000) pkAsk(); }, 5000);
+    return { setChestHome, chestsAsk, chestsHeard, chestHomes: () => JSON.parse(JSON.stringify(CS.by)), pkEvent, pkAsk, CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engbank', { api: 1, v: 1, needs: {} }, () => ({ api: 1, install }));
   if (typeof module !== 'undefined' && module.exports) module.exports = { install };

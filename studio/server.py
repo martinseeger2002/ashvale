@@ -11,6 +11,7 @@ DRAFTS = os.path.join(STU, 'drafts')
 PARTS = os.path.join(ROOT, 'data', 'parts')
 os.makedirs(DRAFTS, exist_ok=True)
 
+PUBLIC = os.environ.get('STUDIO_PUBLIC') == '1'   # behind a public tunnel: GET only, / opens the workshop
 ID_RE = re.compile(r'^[a-z][a-z0-9_]{1,40}$')
 CLASS_RE = re.compile(r'^(item|npc|building):[a-z][a-z0-9_]*$')
 HEX = re.compile(r'^#[0-9a-fA-F]{6}$')
@@ -401,6 +402,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         if path == '/api/catalog':
             return send(self, 200, catalog())
+        if path == '/api/allparts':   # every part in one response (the workshop courtyard builds characters with them)
+            out = {}
+            for fn in sorted(os.listdir(PARTS)):
+                if fn.endswith('.json'):
+                    j = jload(os.path.join(PARTS, fn))
+                    if isinstance(j, dict) and j.get('ashvale3d') == 'module' and j.get('data'):
+                        j = j['data']
+                    if isinstance(j, dict) and j.get('id'):
+                        out[j['id']] = j
+            return send(self, 200, out)
         if path == '/api/parts':
             return send(self, 200, sorted(fn[:-5] for fn in os.listdir(PARTS) if fn.endswith('.json')))
         if path == '/api/designs':
@@ -421,6 +432,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_PUT(self):
         path = urllib.parse.urlparse(self.path).path
+        if PUBLIC:
+            return send(self, 403, {'error': 'read-only preview'})
         m = re.match(r'^/api/designs/([a-z][a-z0-9_]{1,40})$', path)
         if not m:
             return send(self, 404, {'error': 'nope'})
@@ -436,6 +449,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
+        if PUBLIC:
+            return send(self, 403, {'error': 'read-only preview'})
         m = re.match(r'^/api/suggest/([a-z][a-z0-9_]{1,40})$', path)
         if m:
             try:
@@ -480,7 +495,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def static(self, path):
         if path == '/':
-            path = '/studio/index.html'
+            path = '/studio/workshop.html' if PUBLIC else '/studio/index.html'
+        if path == '/workshop':
+            path = '/studio/workshop.html'
         if path.startswith('/studio/'):
             fs = os.path.join(STU, path[len('/studio/'):])
         elif path.startswith('/src/') or path.startswith('/data/') or path.startswith('/vendor/') or path.startswith('/dist/'):
@@ -491,7 +508,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not (fs.startswith(os.path.realpath(STU)) or fs.startswith(os.path.realpath(ROOT))) or not os.path.isfile(fs):
             return send(self, 404, 'not found', 'text/plain')
         ext = os.path.splitext(fs)[1]
-        ctype = {'.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml'}.get(ext, 'application/octet-stream')
+        ctype = {'.webp': 'image/webp', '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml'}.get(ext, 'application/octet-stream')
         with open(fs, 'rb') as f:
             return send(self, 200, f.read(), ctype)
 

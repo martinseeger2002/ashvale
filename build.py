@@ -12,6 +12,7 @@ Modules (each one replaceable on its own, see DESIGN.md "Upgrade recipe"):
   zones: village whisperwood (json, one per region)
 Rule: never append // comments mid-line in JS; use /* */ (a // once swallowed code in a minified page).
 """
+import urllib.parse
 import gzip, json, os, re, subprocess, sys
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -236,9 +237,11 @@ def main():
     errhook = "window.__ashErrors=[];window.addEventListener('error',function(e){window.__ashErrors.push(String(e.message||e))});(function(){var ce=console.error;console.error=function(){try{window.__ashErrors.push(Array.prototype.map.call(arguments,String).join(' '))}catch(x){}return ce.apply(console,arguments)}})();"
     scripts = [errhook, loader, three_js] + [mods[n] for n in JS_MODULES] + [mods[n] for n in DATA_MODULES + ['zoneindex'] + ['zone.' + z for z in ZONES]] + [mods['part.' + pid] for pid, _ in parts] + [boot]
     body = '<div id="ash"></div>\n' + ''.join('<script>\n' + s.replace('</script', '<\\/script') + '\n</script>\n' for s in scripts)
+    # [Claude 2026-10-14] the operator: "we don't have a favicon, add one" - data/brand/favicon.svg, inlined (an inscription has no /favicon.ico)
+    ICON_LINK = '<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,' + urllib.parse.quote(open(os.path.join(ROOT, 'data', 'brand', 'favicon.svg')).read().strip(), safe=":/=' ") + '">\n'
     head = ('<title>ASHVALE</title>\n<meta charset="utf-8">\n'
             '<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">\n'
-            '<meta name="apple-mobile-web-app-capable" content="yes">\n<style>' + css + '</style>\n')
+            '<meta name="apple-mobile-web-app-capable" content="yes">\n' + ICON_LINK + '<style>' + css + '</style>\n')
     full = '<!doctype html>\n<html lang="en"><head>\n' + head + '</head><body>\n' + body + '</body></html>\n'
     frag = head + body
     with open(os.path.join(DIST, 'ashvale3d.html'), 'w') as f:

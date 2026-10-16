@@ -123,9 +123,14 @@
     /* before the world starts (behind the boot screen): the zones around where this character stands (a new one: the spawn) */
     async function preloadZones(st) {
       if (!ZINDEX) return;
-      let at = (ZINDEX.find(z => z.respawn) || {}).respawn || [0, 0];
+      /* [Claude 2026-10-14] the character of THIS home (the operator: "In ziibiing the character loads into the world before the assets ... a
+         blank world"): its own save ('ashvale3d.save.v1.ziibiing') and, for a new one, its home's spawn - the Ashvale save and spawn
+         loaded Ashvale's land behind the boot screen and Ziibiing's only after the world showed. (0.8.120 shipped this and crashed
+         phones: scene's building floors were one array over the bounding box of the loaded areas - now kept per chunk.) */
+      const homeSpawn = HOME && DATA.rules && DATA.rules.homes && DATA.rules.homes[HOME] && DATA.rules.homes[HOME].spawn;
+      let at = (Array.isArray(homeSpawn) && homeSpawn) || (ZINDEX.find(z => z.respawn) || {}).respawn || [0, 0];
       try {
-        const sv = JSON.parse(st.get('ashvale3d.save.v1') || 'null'), C = DATA.globecfg || {};
+        const sv = JSON.parse(st.get('ashvale3d.save.v1' + (HOME ? '.' + HOME : '')) || 'null'), C = DATA.globecfg || {};
         if (sv && (sv.v | 0) >= 2 && Array.isArray(sv.pos) && C.origin) at = [sv.pos[1] - C.origin[0], sv.pos[2] - C.origin[1]];
         else if (sv && Number.isInteger(sv.x) && Number.isInteger(sv.y)) at = [sv.x, sv.y];
         for (const r of [[-200, 16100, -80, 16184, 24200, 7900], [40, 16300, 253, 16313, 23960, 8100]]) if (at[0] >= r[0] && at[0] < r[2] && at[1] >= r[1] && at[1] < r[3]) { at = [at[0] + r[4], at[1] + r[5]]; break; }   /* the underground moved (core.underMove) */
@@ -146,7 +151,7 @@
       if (G.ASH_LOAD) { G.ASH_LOAD.claimed = true; G.ASH_LOAD.set(0.71, 'Opening your character…'); }   /* [Claude 2026-10-13] the launcher opens the save before it starts the game: the screen is the game's from here */
       /* while the wallet opens the save (that can take seconds), the zones around the spawn are already on their way: most
          characters stand there, and for the rest it is a few KB that warm the cache */
-      if (ZINDEX && !G.ASH3D_LAZY_DELAY) { const r0 = (ZINDEX.find(z => z.respawn) || {}).respawn; if (r0) for (const id of zonesNear(r0[0], r0[1])) fetchZone(id).catch(() => {}); }   /* (not on a playtest page that shows a slow arrival) */
+      if (ZINDEX && !G.ASH3D_LAZY_DELAY) { const hs = HOME && DATA.rules && DATA.rules.homes && DATA.rules.homes[HOME] && DATA.rules.homes[HOME].spawn, r0 = (Array.isArray(hs) && hs) || (ZINDEX.find(z => z.respawn) || {}).respawn;   /* this home's spawn */ if (r0) for (const id of zonesNear(r0[0], r0[1])) fetchZone(id).catch(() => {}); }   /* (not on a playtest page that shows a slow arrival) */
       const st = await openStoreOnly();
       try { await cloudLoad(st); } catch (e) { console.warn('ASHVALE: cloud save', e && e.message); }
       try { await preloadZones(st); } catch (e) { console.warn('ASHVALE: zones', e && e.message); } return st;
@@ -158,6 +163,10 @@
        by the @ashvale Bank under your wallet address, in pieces small enough for a room message. Starting, the game asks the Bank
        first and takes its copy when it is newer than this device's; playing, it hands the Bank each new save (at most every 20 s,
        and as you leave). The Bank keeps the newest per address and never reads inside it. */
+    /* [Claude 2026-10-14] the operator: "we don't have a favicon, add one" - the launcher page is fixed on chain, so the game puts its icon
+       on whatever page it runs in (data/brand/favicon.svg; build.py also inlines it into the page head) */
+    try { if (typeof document !== 'undefined' && !document.querySelector('link[rel~="icon"]')) { const ic = document.createElement('link'); ic.rel = 'icon'; ic.type = 'image/svg+xml';
+      ic.href = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#1b241f"/><path d="M32 6 L54 14 V30 C54 44 44 53 32 58 C20 53 10 44 10 30 V14 Z" fill="#c9962e" stroke="#ffd23f" stroke-width="3"/><path d="M32 13 L47 18.5 V30 C47 40 40 47 32 51 C24 47 17 40 17 30 V18.5 Z" fill="#7a1f1f"/><rect x="29.5" y="16" width="5" height="26" rx="1.5" fill="#e8e6df"/><rect x="23" y="38" width="18" height="4" rx="2" fill="#ffd23f"/><rect x="30" y="42" width="4" height="7" rx="1" fill="#6b4a1e"/></svg>'); document.head.appendChild(ic); } } catch (e) { /* no document */ }
     const SAVE_KEY = 'ashvale3d.save.v1' + (HOME ? '.' + HOME : ''), CHUNK = 340;
     const slim = v => {   /* drop what a save does not need to say: nulls and empty objects (every value kept exactly) */
       if (Array.isArray(v)) return v.map(slim);
@@ -269,6 +278,7 @@
          preview ?home=ziibiing does the same */
       if (HOME && core.setNewHome) core.setNewHome(HOME);
       const me = core.addPlayer(PID, save);
+      if (!/^@/.test(String(me.name || ''))) me.name = '@guest';   /* [Claude 2026-10-15] no chosen names any more: '@guest' until the arcade says your @tag (the operator: "There's no need for two names") */
       /* Purpose-built local playtest for The Heart Below. It never runs in the framed arcade and always starts from a fresh,
          disposable character: all combat and dungeon-check skills at 99, prerequisite stories complete, and top-tier kit. */
       if (q.has('dragonheart') && !(G.parent && G.parent !== G)) {
@@ -276,7 +286,7 @@
         for (const id of ['wayside_prayer', 'red_pyre', 'even_grove', 'even_guard', 'foolhardy_hero']) {
           const Q = D.quests.quests[id]; if (Q) me.quests[id] = { step: Q.steps.length + 1, n: 0 };
         }
-        me.name = 'Heart Tester'; me.x = -10; me.y = -78; me.hp = core.maxHp(me); me.pp = core.maxPp(me);
+        me.name = '@heart_tester'; me.x = -10; me.y = -78; me.hp = core.maxHp(me); me.pp = core.maxPp(me);
         me.inv = new Array(28).fill(null);
         [['bow_t5', 1], ['staff_t5', 1], ['arrows_t5', 500], ['pickaxe', 1], ['tinderbox', 1], ['potion', 8], ['prayer_potion', 8], ['antidote', 4], ['lobster', 10]].forEach(([id, n], i) => { if (core.item(id)) me.inv[i] = { id, n }; });
         me.eq = {};
@@ -890,6 +900,8 @@
              the button, whose turn. The row itself carries everything the page draws. */
           case 'psit': if (mine) pokerEnter(e.t); break;
           case 'pstand': if (mine) pokerLeave(e.t); break;
+          case 'pkbuy': case 'pkout': case 'pkcash': if (Array.isArray(G.__pkEv)) G.__pkEv.push(Object.assign({}, e));   /* a test watches these */
+            ENGBANK.pkEvent(e, pid => pid === PID ? (walletState.address || null) : (((remotes.get(pid) || {}).from || {}).address || PK_ADDR.get(pid) || null)); break;   /* [Claude 2026-10-14] the card table's GOLD through @ashvale */
           case 'poker': {
             if (SCENE.pokerShow) SCENE.pokerShow(e.t, pokerModel(e.t));
             pokerChat(e.t);
@@ -932,7 +944,11 @@
           case 'boatland': boatShow(e.x, e.y, e.face); docksShow(); if (e.by === PID) { boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, face: e.face, on: 0 }); } break;
           case 'cross': if (e.p === PID) { place(myEnt, e.x, e.y); cam.yaw += e.turn || 0; cam.tyaw += e.turn || 0; cam.snap = true; streamRegions(); TN.key = ''; } break;   /* over a cut edge of the net: the same ground, new map coordinates, the view turned with them */
           case 'boatgone': boatHide(e.x, e.y); docksShow(); if (e.by === PID) boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, on: 1 }); break;
-          case 'chest': if (mine) { const c = ents.get('n:' + e.npc); if (c) c.H.play('open'); hud.openChest(); holdsAsk(); } break;   /* the town chest */
+          case 'chest': if (mine) { const c = ents.get('n:' + e.npc); if (c) c.H.play('open');
+            /* [Claude 2026-10-14] whose chest this is: the home whose spawn is nearest (within 3 km; otherwise Ashvale's) - one chest per home */
+            const nn = core.M.npcs.find(q => q.id === e.npc), HS = D.rules.homes || {}; let ch = 'ashvale', bd = 3000;
+            if (nn) for (const h in HS) { const sp = HS[h] && HS[h].spawn; if (Array.isArray(sp)) { const d = Math.max(Math.abs(sp[0] - nn.x), Math.abs(sp[1] - nn.y)); if (d < bd) { bd = d; ch = h; } } }
+            ENGBANK.setChestHome(ch); hud.openChest(); holdsAsk(); } break;   /* the town chest */
           case 'shopclose': if (mine) hud.closeShop(); break;
           case 'mobjump': { const t = ents.get('m:' + e.mob); if (t) { place(t, e.x, e.y); if (t.path) t.path = null; } break; }   /* came through a cave opening */
           case 'poison': if (mine) { hud.setPoison && hud.setPoison(e.on); if (e.on) sfx('miss'); } break;   /* the green Hitpoints orb (2026-10-07) */
@@ -1545,6 +1561,13 @@
           return [{ html: 'Read ' + nm, fn: () => { scoresAsk(true); core.scoreRead(sk).forEach(l => hud.chat(l, 'sys')); }, red: 1 },
                   { html: 'Examine ' + nm, fn: () => hud.chat(o.board === 'chess' ? 'An oak board on two posts by the tables. The names of those who have won games here are chalked on it, most wins first.' : 'A weathered oak board nailed to the ruin wall. Names of those who have slain the chained dragon are carved into it.', 'sys') }];
         }
+        /* [Claude 2026-10-15] A GOLD wager asks first (the operator: "There should be a confirmation button when joining a game
+           that has a gold wager"): joining a staked chess game or a card table with a buy-in, or sitting first and setting
+           the stake, opens a Yes/No box saying what it costs; only Yes sits. A friendly table sits straight away. */
+        const wagerSit = (line, act, gold, game) => gold > 0 ? { html: line, fn: () => hud.confirm('Play for ' + gold.toLocaleString() + ' GOLD?',
+            game === 'pk' ? 'This card table plays for real GOLD: sitting down buys in for ' + gold.toLocaleString() + ' GOLD from your pack. You keep what is in front of you when you stand up.'
+                          : 'This chess game is played for a stake of ' + gold.toLocaleString() + ' GOLD each: it comes out of your pack when you sit. The winner takes both stakes; a draw gives each their own back; standing up after a move has been played loses it.',
+            'Sit down', 'Not now', () => send(Object.assign({}, act, { run: !!settings.runToggle }))) } : { html: line, act };
         if (t.kind === 'chesstable' || t.kind === 'square') {   /* THE CHESS PARK (2026-10-10): a bench each side; seated, the board itself takes the taps */
           const T = core.tableById(t.id); if (!T) return [];
           if (t.kind === 'square' && me.seat && me.seat.t === t.id) { const sq = SCENE.chessSquare ? SCENE.chessSquare(t.id, t.pt) : null; return sq ? [{ html: 'Square ' + sq, fn: () => chessTap(sq) }] : []; }
@@ -1555,9 +1578,9 @@
             /* [Claude 2026-10-11] STAKES: at an empty table the first to sit sets them (the operator); at a table with someone the
                line says what the game is played for, and sitting is agreeing to it */
             const note = empty ? '' : stake ? ' <span class="y">(stake ' + stake.toLocaleString() + ' GOLD)</span>' : ' <span class="c">(friendly)</span>';
-            if (wFree) out.push({ html: 'Sit down as White <span class="c">(south bench)</span>' + note, act: { c: 'sit', table: t.id, seat: 1, stake: 0 }, red: 1 }); else taken.push({ html: 'White: <span class="y">' + esc(st.wn || 'someone') + '</span>', fn: () => hud.chat(esc(st.wn) + ' is playing White here.', 'sys') });
-            if (bFree) out.push({ html: 'Sit down as Black <span class="c">(north bench)</span>' + note, act: { c: 'sit', table: t.id, seat: 0, stake: 0 }, red: out.length ? 0 : 1 });
-            if (empty) for (const n of [100, 500, 1000]) out.push({ html: 'Sit as White for a stake of <span class="y">' + n.toLocaleString() + ' GOLD</span>', act: { c: 'sit', table: t.id, seat: 1, stake: n } }); else taken.push({ html: 'Black: <span class="y">' + esc(st.bn || 'someone') + '</span>', fn: () => hud.chat(esc(st.bn) + ' is playing Black here.', 'sys') });
+            if (wFree) out.push({ ...wagerSit('Sit down as White <span class="c">(south bench)</span>' + note, { c: 'sit', table: t.id, seat: 1, stake: 0 }, empty ? 0 : stake, 'ch'), red: 1 }); else taken.push({ html: 'White: <span class="y">' + esc(st.wn || 'someone') + '</span>', fn: () => hud.chat(esc(st.wn) + ' is playing White here.', 'sys') });
+            if (bFree) out.push({ ...wagerSit('Sit down as Black <span class="c">(north bench)</span>' + note, { c: 'sit', table: t.id, seat: 0, stake: 0 }, empty ? 0 : stake, 'ch'), red: out.length ? 0 : 1 });
+            if (empty) for (const n of [100, 500, 1000]) out.push(wagerSit('Sit as White for a stake of <span class="y">' + n.toLocaleString() + ' GOLD</span>', { c: 'sit', table: t.id, seat: 1, stake: n }, n, 'ch')); else taken.push({ html: 'Black: <span class="y">' + esc(st.bn || 'someone') + '</span>', fn: () => hud.chat(esc(st.bn) + ' is playing Black here.', 'sys') });
           }
           out.push(...taken, { html: 'Examine <span class="c">Chess table</span>', fn: () => hud.chat(chessExamine(st), 'sys') });
           return out;
@@ -1573,9 +1596,9 @@
           else (T.seats || []).forEach((s, i) => {
             const who = at[i];
             if (who && who !== PID) taken.push({ html: 'Chair ' + (i + 1) + ': <span class="y">' + pokerWho(who) + '</span>', fn: () => hud.chat(pokerWho(who) + ' is sitting there.', 'sys') });
-            else out.push({ html: 'Sit down <span class="c">(chair ' + (i + 1) + ')</span>' + pkNote, act: { c: 'sit', table: t.id, seat: i, buy: 0 }, red: out.length ? 0 : 1 });
+            else out.push({ ...wagerSit('Sit down <span class="c">(chair ' + (i + 1) + ')</span>' + pkNote, { c: 'sit', table: t.id, seat: i, buy: 0 }, pkEmpty ? 0 : buy, 'pk'), red: out.length ? 0 : 1 });
           });
-          if (pkEmpty && !(me.seat && me.seat.t === t.id)) { const free = (T.seats || []).findIndex((s, i) => !at[i]); if (free >= 0) for (const n of [100, 1000, 10000]) out.push({ html: 'Buy in for <span class="y">' + n.toLocaleString() + ' GOLD</span> <span class="c">(chair ' + (free + 1) + ', sets the table\'s stakes)</span>', act: { c: 'sit', table: t.id, seat: free, buy: n } }); }
+          if (pkEmpty && !(me.seat && me.seat.t === t.id)) { const free = (T.seats || []).findIndex((s, i) => !at[i]); if (free >= 0) for (const n of [100, 1000, 10000]) out.push(wagerSit('Buy in for <span class="y">' + n.toLocaleString() + ' GOLD</span> <span class="c">(chair ' + (free + 1) + ', sets the table\'s stakes)</span>', { c: 'sit', table: t.id, seat: free, buy: n }, n, 'pk')); }
           out.push(...taken, { html: 'Play <span class="y">Solitaire</span>', fn: openSolitaire }, { html: 'Examine <span class="c">Card table</span>', fn: () => hud.chat(pokerExamine(st), 'sys') });   /* Solitaire [Claude 2026-10-13]: the operator */
           return out;
         }
@@ -1767,7 +1790,7 @@
          zone borders. Inside the room each AREA (a zone, or a 128 m square of seeded land) has its own host, elected among
          the members standing in it; monsters, loot, fires and weather of an area come only from its host. Players near a
          region border also VIEW the neighbour region's room (net.neighbours, below). Avatars are drawn 150 ms behind, interpolated. */
-      const remotes = new Map(); let room = null, roomZone = null, netT = 0, joining = false, retryAt = 0;
+      const remotes = new Map(), PK_ADDR = new Map(); let room = null, roomZone = null, netT = 0, joining = false, retryAt = 0;
       /* CONNECTION WATCH (2026-10-06: "When a player loses connection to the server, they should be notified so they
          don't continue to play on a broken server"). A room can die without ever saying 'closed' (the arcade node restarts
          and the page's link to it never comes back): then you play on alone and nobody sees you. Signs, all from what the
@@ -1788,7 +1811,7 @@
         else if (others && NW.heard && now - NW.heard > 45000 && now - NW.quiet > 180000) { NW.quiet = now; netDrop('', false); }
       }
       function zoneHere() { return core.zoneOf(me.x, me.y); }
-      const label = (name, from) => name + ' (' + (from.tag ? '@' + from.tag : 'guest') + ')';   /* @tag = stamped by the arcade node */
+      const label = (name, from) => from && from.tag ? '@' + from.tag : (/^@/.test(String(name || '')) ? name : '@guest');   /* [Claude 2026-10-15] the operator: "Their name should be there @handle only ... There's no need for two names" - the @tag the arcade node stamps */
       /* a player's total level above the name over their head (2026-10-05) */
       const setTag = (el, name, from, total) => { const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); el.innerHTML = (total ? '<span class="tl">Total level ' + total + '</span><br>' : '') + esc(label(name, from)); };
       /* A name is told once, in the gear message at a join or an equip. A remote that goes quiet for 12 s is dropped
@@ -1820,7 +1843,7 @@
         if (me.boat === 2) { coreCall(() => { me.boat = 1; me.ride = null; me.knock = false; me.path = []; }); hud.chat(nm + ' has dropped out of the game. You take the stern and steer; they ride on with you.', 'sys'); }
         else hud.chat(nm + ' has dropped out of the game. They stay in the bow and travel on with you.', 'sys');
         r.boat = 2; r.ride = myNetId; r.knock = false; r.anim = 'sit'; r.e.H.play('sit', { loop: true });
-        if (core.S.players[id] && core.S.players[id].puppet) core.removePlayer(id);
+        if (core.S.players[id] && core.S.players[id].puppet) coreCall(() => core.removePlayer(id));   /* [Claude 2026-10-14] through coreCall: a seat it stands up tells the Bank */
         carryTell(r, 1);
       }
       function ghostTick(id, r, now) {
@@ -1828,7 +1851,7 @@
         if (now - r.offline.told > 15000) { r.offline.told = now; carryTell(r, 1); }
       }
       function dropRemote(id, hard, keep) { const r = remotes.get(id);
-        if (!hard && r && !r.offline && ghostable(r, id)) { makeGhost(id, r); return; } if (r) { if (r.name && r.name !== 'Adventurer') knewName.set(id, r.name); removeEnt(r.e); remotes.delete(id); } if (core.S.players[id] && core.S.players[id].puppet) core.removePlayer(id, keep); }
+        if (!hard && r && !r.offline && ghostable(r, id)) { makeGhost(id, r); return; } if (r) { if (r.name && r.name !== 'Adventurer') knewName.set(id, r.name); removeEnt(r.e); remotes.delete(id); } if (core.S.players[id] && core.S.players[id].puppet) coreCall(() => core.removePlayer(id, keep)); }   /* [Claude 2026-10-14] coreCall: its events (a card-table cashout to the Bank) are handled, not lost */
       function dropRemotes(keep) { for (const id of Array.from(remotes.keys())) dropRemote(id, false, keep); }   /* keep [Claude 2026-10-12]: OUR room dropped - their chess seats wait for the host's word */
       /* fighting a monster of another area (the operator: attackers can be attacked back across borders): we tell the room which
          area we are fighting in, so that area gets a host even when nobody stands in it; 6 s after the last blow it ends */
@@ -1913,6 +1936,7 @@
             R.on('join', () => { if (room !== R) return; clearTimeout(gearT); gearT = setTimeout(() => { netGear(); if (hosted.size) fullSnap(); }, 600); });   /* newcomers missed our gear/outfit/name: send it again (one resend for a burst of joins) */
             R.on('rejoined', () => { if (room !== R) return; NW.heard = performance.now(); clearTimeout(gearT); gearT = setTimeout(() => { netGear(); if (hosted.size) fullSnap(); }, 600); });   /* [Claude 2026-10-13] the arcade seated us again after a drop: the others rebuilt us bare, so send our gear/outfit/name (and what we host) again */
             R.on('closed', why => { if (room !== R) return; room = null; core.setOnline(false); coreCall(() => core.chessLimbo(PID)); dropRemotes(true); hosts.clear(); passive = false; applyAuth(); hud.setOnline(false); NW.lost = true; NW.tries = 0; hud.netLost && hud.netLost(true, 'net', why || ''); hud.chat('Lost contact with other players' + (why ? ' (' + why + ')' : '') + '. Retrying soon.', 'sys'); retryAt = performance.now() + 15000; });
+            if (R.me && R.me.tag && me.name !== '@' + R.me.tag) { me.name = '@' + R.me.tag; hud.refresh('all'); }   /* [Claude 2026-10-15] your name is your @tag (the operator) */
             netGear();
             if (R.me && !R.me.guest && R.me.address && R.me.address !== walletState.address) { walletState.address = R.me.address; walletRefresh(); }
             if (!trade && deps.trade) trade = deps.trade.create({ host, toast: (t, k) => hud.chat(t, k || 'trade'), send: (to, obj) => netSend({ tr: obj, to }), offerable: tradeOfferable, onSettled: tradeSettled, onUndone: tradeUndone, onOffer: tellOffer, itemOf: p => { const j = p && p.json; if (!j || !allowedAsset(p)) return null; const k = j.key || ((j.attributes || []).find(a => a && a.trait_type === 'Key') || {}).value; const d = k && core.item(k); return d ? { key: k, name: d.name, icon: (() => { try { return MOD.icon(k, 64); } catch (e) { return null; } })() } : null; }, nameOf: id => { const r = remotes.get(id); return r ? label(r.name, r.from) : 'another player'; } });
@@ -2066,7 +2090,11 @@
       const TKEY = 'ashvale3d.trips', tripKeep = { load: () => { try { return JSON.parse(G.localStorage.getItem(TKEY) || '[]'); } catch (e) { return []; } },
         save: (L) => { try { G.localStorage.setItem(TKEY, JSON.stringify(L)); } catch (e) { /* private window */ } } };
       let tripSeen = 0;
-      const TRIP = deps.trip ? deps.trip.create({ core, pid: PID, ticks: (D.rules.trip || {}).ticks, bridge, keep: tripKeep, facts: () => { const w = walletState.data; return w ? { tokens: Object.assign({}, w.raw || {}), pieces: (w.pieces || []).slice() } : null; }, onChange: (st) => {
+      /* [Claude 2026-10-14] a referee seed is asked for only with a wallet: a guest's ask came back 400 from /account/referee/seed
+         (a console error on every guest's boot - check_live). Waits up to 10 s for the wallet to be known; without one, practice. */
+      const tripBridge = (msg, kind, ms) => kind !== 'seed' ? bridge(msg, kind, ms) : new Promise(ok => {
+        const t0 = Date.now(), look = () => { if (walletState.address) ok(bridge(msg, kind, ms)); else if ((room && room.me && room.me.guest) || Date.now() - t0 > 10000) ok({ error: 'no wallet: practice' }); else setTimeout(look, 500); }; look(); });
+      const TRIP = deps.trip ? deps.trip.create({ core, pid: PID, ticks: (D.rules.trip || {}).ticks, bridge: tripBridge, keep: tripKeep, facts: () => { const w = walletState.data; return w ? { tokens: Object.assign({}, w.raw || {}), pieces: (w.pieces || []).slice() } : null; }, onChange: (st) => {
         if (st.done.length > tripSeen) { const L = st.done[st.done.length - 1], k = L.rec.kills.length, g = Object.values(L.rec.gathered).reduce((a, b) => a + b, 0);
           void k; void g;   /* no chat line (2026-10-05: it said 'practice: no arcade seed', but rewards come from the @ashvale Bank as you play, not from these windows) */ }
         tripSeen = st.done.length;
@@ -2264,7 +2292,7 @@
         hud.chat('To @' + tag + ': ' + String(text).slice(0, 120), 'dm');
       }
       function speak(e, text) { if (e.bub) e.bub.el.remove(); e.bub = { el: hud.bubble(text), t: performance.now() }; }
-      const cleanName = n => String(n || '').replace(/[^\w -]/g, '').trim().slice(0, 12) || 'Adventurer';
+      const cleanName = n => String(n || '').replace(/[^\w@ -]/g, '').trim().slice(0, 17) || '@guest';
       function netPos(now) {
         if (!room) return;
         if (hosted.size && room) { hostSend(now); return; }
@@ -2307,7 +2335,8 @@
         if (d.tr) { if (d.to === myNetId && trade && !via) trade.onMessage(from, d.tr); return; }   /* a trade window message, for us only */
         if (!r && !d.p && !d.g && !d.n && !d.M && !d.E && !d.F) { /* first contact carries state soon */ }
         if (r) { r.heard = performance.now(); if (r.offline) { r.offline = null; hud.chat((r.name || 'Your partner') + ' is back.', 'sys'); } }
-        if (!r) { const e = makeEnt('r:' + id, MOD.humanoid({}), { kind: 'remote', id }); const nm = knewName.get(id) || 'Adventurer'; e.tag = hud.tag(label(nm, from)); r = { e, buf: [], anim: 'idle', name: nm, from, lastS: -1, heard: performance.now(), fullT: 0 }; remotes.set(id, r); e.root.visible = false; }
+        if (from && from.address && !from.guest) { PK_ADDR.set(id, from.address); if (PK_ADDR.size > 200) PK_ADDR.delete(PK_ADDR.keys().next().value); }   /* [Claude 2026-10-14] kept after they leave: the dealer still names a gone player's seat to the Bank */
+        if (!r) { const e = makeEnt('r:' + id, MOD.humanoid({}), { kind: 'remote', id }); const nm = (from && from.tag ? '@' + from.tag : null) || knewName.get(id) || '@guest'; e.tag = hud.tag(label(nm, from)); r = { e, buf: [], anim: 'idle', name: nm, from, lastS: -1, heard: performance.now(), fullT: 0 }; remotes.set(id, r); e.root.visible = false; }
         /* a VIEWER (neighbour region): drawn, never a puppet or a host. A full member of our room wins for 3 s after its last word */
         const view = !!via || d.nb === 1;
         if (!view) { r.fullT = r.heard; r.via = null; } else if (via && !r.via && performance.now() - r.fullT > 3000) r.via = via;
@@ -2321,7 +2350,7 @@
         if (Array.isArray(d.p) && typeof d.a === 'string') { r.boat = d.bt | 0; r.ride = d.rd || null; r.pole = !!d.pl; r.knock = !!d.kn; r.hl = isFinite(+d.hl) ? Math.max(-1.5, Math.min(1.5, +d.hl)) : 0; }
         if ('k' in d) { const tl = typeof d.k === 'string' && /^[a-z0-9_]{1,24}$/.test(d.k) ? d.k : null; if (tl !== r.tool) { r.tool = tl; r.e.H.setTool && r.e.H.setTool(tl); } }
         if (d.T != null) r.total = Math.max(0, Math.min(9999, d.T | 0));
-        if (d.n || d.T != null) { if (d.n) { r.name = cleanName(d.n); if (core.S.players[id]) core.setPuppet(id, { n: r.name }); } if (r.e.tag) setTag(r.e.tag, r.name, from, r.total); }
+        if (d.n || d.T != null) { if (d.n) { r.name = from && from.tag ? '@' + from.tag : cleanName(d.n);   /* the arcade's stamp, not what the game says */ if (core.S.players[id]) core.setPuppet(id, { n: r.name }); } if (r.e.tag) setTag(r.e.tag, r.name, from, r.total); }
         /* [Claude 2026-10-13] the operator: "when sitting at a poker table chat should be visible between those players at the table
            only. Not the whole town or next table": a word said at a card table reaches that table only, and a player sitting
            at one hears only it. The speaker's table is its own word (tb), or else where this game's rows seat it. */
@@ -2381,7 +2410,7 @@
             if (!SEALING.has(k)) { SEALING.add(k); sealCards(r.t, r.h | 0, ref, c1, c2, pk).then(b => { if (PH[r.t] === P && !P.items.some(i => i[0] === ref)) { P.items.push([ref, b]); if (P.items.length >= want.length) { P.done = true; phSend(r.t, true); } } }).catch(e => console.warn('seal', e)).finally(() => SEALING.delete(k)); }
           }
         } else delete PH[r.t];
-        return Object.assign({}, r, { se: (r.se || []).map(s => [s[0], toNet(s[1]), s[2], s[3], s[4]]), co: (r.co || []).map(c => [toNet(c[0]), c[1], c[2]]), hc: r.hc ? hc : r.hc });
+        return Object.assign({}, r, { se: (r.se || []).map(s => [s[0], toNet(s[1]), s[2], s[3], s[4], s[5] | 0]), co: (r.co || []).map(c => [toNet(c[0]), c[1], c[2]]), hc: r.hc ? hc : r.hc });
       };
       /* [Claude 2026-10-13] A TABLE ROW AS CHANGES (the operator: build "two" - fit more into each message). At eight players a full row is
          ~800 bytes, three or four pieces for every bet. The dealer now sends what changed since the row it last put on the wire
@@ -2390,13 +2419,14 @@
          (PQ) and waits - the whole row also goes out every five seconds with the snapshot, and whenever a delta would not be
          much smaller. */
       const PKBASE = {}, PKIN = {}, PKQ = {};
+      const CHIN = {};   /* [Claude 2026-10-14] per chess table: who sent the newest row and its v */
       function pkDelta(base, full) {
         if (!base || base.t !== full.t || (base.gid | 0) !== (full.gid | 0) || base.v == null) return null;
         const d = { t: full.t, v: full.v, pv: base.v, D: 1 }, rm = [];
         for (const k in full) {
           if (k === 't' || k === 'v') continue;
           if (JSON.stringify(full[k]) === JSON.stringify(base[k])) continue;
-          if (k === 'se' && Array.isArray(base.se) && Array.isArray(full.se) && base.se.length === full.se.length && full.se.every((x, i) => x[0] === base.se[i][0] && x[1] === base.se[i][1])) {
+          if (k === 'se' && Array.isArray(base.se) && Array.isArray(full.se) && base.se.length === full.se.length && full.se.every((x, i) => x[0] === base.se[i][0] && x[1] === base.se[i][1] && (x[5] | 0) === (base.se[i][5] | 0))) {
             d.sd = []; full.se.forEach((x, i) => { if (JSON.stringify(x) !== JSON.stringify(base.se[i])) d.sd.push([i, x[2], x[3], x[4]]); }); continue;
           }
           if (k === 'lg' && Array.isArray(base.lg) && Array.isArray(full.lg) && (full.lc | 0) > (base.lc | 0)) {
@@ -2457,7 +2487,7 @@
       const pkLocal = r => {   /* the room hears everything, so a hole card is dropped here, on the way in: a replica
                                   keeps faces only for its own seat, and a shown-down hand is public anyway. It says
                                   nothing about the wire - see handoff/poker_plan.md decision 4. */
-        const se = (r.se || []).map(s => [s[0], fromNet(s[1]), s[2], s[3], s[4]]), co = (r.co || []).map(c => [fromNet(c[0]), c[1], c[2]]);   /* [Claude] the cashouts name players as this page knows them */
+        const se = (r.se || []).map(s => [s[0], fromNet(s[1]), s[2], s[3], s[4], s[5] | 0]), co = (r.co || []).map(c => [fromNet(c[0]), c[1], c[2]]);   /* [Claude] the cashouts name players as this page knows them */
         const mine = {};   /* my chair at that table, as the row names it - a room can hold two players both called "me" */
         for (const s of se) if (s[1] === PID || (me.seat && me.seat.k === 'pk' && me.seat.t === r.t && (s[0] | 0) === (me.seat.s | 0))) mine[s[0] | 0] = 1;
         return Object.assign({}, r, { se, co, hc: r.hc ? r.hc.map(h => mine[h[0] | 0] ? openOwn(r, h) : [h[0] | 0, null, null]) : r.hc });   /* [Claude 2026-10-12] mine opened, the rest were never readable */
@@ -2611,7 +2641,7 @@
          table itself, 5 s; otherwise 20 s while the room is plainly alive (heard in the last 5 s) - then the last stack the dealer
          showed comes back. Offline time never counts: the dealer may still be holding the seat. The room id is handed to the core
          so a cashout written under it is still collected after a reload or a new connection. */
-      let pkAway = 0;
+      let pkAway = 0, pkAsked = 0;
       setInterval(() => {
         const P = core.S.players[PID]; if (!P || (!P.pk && !P.ch)) { pkAway = 0; return; }
         if (room && myNetId) { core.pokerNetId(PID, myNetId); core.chessNetId(PID, myNetId); }   /* the chess stake too (the operator: "make sure we don't have the same problem with the chess game") */
@@ -2622,7 +2652,10 @@
         if (!mineToDeal && now - NW.heard > 5000) { pkAway = 0; return; }
         if (!pkAway) { pkAway = now; return; }
         if (now - pkAway < (mineToDeal ? 5000 : 20000)) return;
-        pkAway = 0; let n = 0; coreCall(() => { n = K.pk ? core.pokerReclaim(PID) : core.chessReclaim(PID); }); persist('now');   /* saved at once: a page that died before saving would pay the same chips back twice */
+        if (K.pk && P.pk.sn && !pkAsked) { pkAsked = now; ENGBANK.pkAsk(); return; }   /* [Claude 2026-10-14] a Bank-held seat: the Bank may already have paid it home */
+        if (pkAsked && now - pkAsked < 4000) return;
+        if (!core.S.players[PID].pk) { pkAway = pkAsked = 0; return; }
+        pkAway = 0; pkAsked = 0; let n = 0; coreCall(() => { n = K.pk ? core.pokerReclaim(PID) : core.chessReclaim(PID); }); persist('now');   /* saved at once: a page that died before saving would pay the same chips back twice */
       }, 2000);
       function shared(id, r, d) {
         if (d.j != null) { const nj = +d.j; if (r.j !== nj) { r.j = nj; elect(); } }
@@ -2650,14 +2683,14 @@
           if (Number.isFinite(+d.s)) r.lastA = +d.s;
         }
         if (Object.keys(pst).length) core.setPuppet(id, pst);
-        if (d.C != null) { const g = core.S.ground.find(q => q.uid === +d.C); if (g && iHostAt(g.x, g.y)) coreCall(() => core.claim(id, +d.C)); }
+        if (d.C != null) { const g = core.groundBy ? core.groundBy(+d.C) : core.S.ground.find(q => q.uid === +d.C); if (g && iHostAt(g.x, g.y)) coreCall(() => core.claim(id, +d.C)); }   /* groundBy [Claude 2026-10-14]: a guest may name a Bank copy by the Bank's uid */
         if (Array.isArray(d.XF)) { const f = d.XF; if (iHostAt(f[0], f[1])) coreCall(() => core.hostFire(f[0] | 0, f[1] | 0, f[2] | 0, String(f[3] || 'logs'))); }
         /* the chess park: a replica asks the host of the table's area to seat it, stand it up or play its move; the host answers in Ch rows */
         if (Array.isArray(d.CS)) { const T = core.tableById(String(d.CS[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostSit(id, T.id, d.CS[1] | 0, d.CS[2] | 0)); }
         if (Array.isArray(d.CT)) { const T = core.tableById(String(d.CT[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostStand(id, T.id)); }
         if (Array.isArray(d.CX)) { const T = core.tableById(String(d.CX[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostSel(id, T.id, String(d.CX[1] || ''))); }   /* [Claude] */
         if (Array.isArray(d.CM)) { const T = core.tableById(String(d.CM[0])); if (T && iHostAt(T.x, T.y)) coreCall(() => core.hostMove(id, T.id, String(d.CM[1] || ''), String(d.CM[2] || ''), d.CM[3] ? String(d.CM[3]) : null)); }
-        if (Array.isArray(d.Ch)) { const rows = d.Ch.filter(r => r && r.t).filter(r => { const T = core.tableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).map(r => Object.assign({}, r, { w: r.w ? fromNet(r.w) : null, b: r.b ? fromNet(r.b) : null, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [fromNet(k), v])) : null, co: Array.isArray(r.co) ? r.co.map(c => [fromNet(c[0]), c[1], c[2]]) : [] })); if (rows.length) coreCall(() => core.applyChess(rows)); }   /* [Claude] who is owed the stake, named as this page knows them */
+        if (Array.isArray(d.Ch)) { const rows = d.Ch.filter(r => r && r.t).filter(r => { const T = core.tableById(String(r.t)); return T && fromHostOf(id, areaAt(T.x, T.y)); }).filter(r => { const h = CHIN[r.t]; if (h && h.from === id && (r.v | 0) < h.v) return false; CHIN[r.t] = { from: id, v: r.v | 0 }; return true; })   /* [Claude 2026-10-14] an OLDER row from the same host (the 5 s resend can land after a newer move) is not a step back (the operator: the piece popped back, then moved again) */.map(r => Object.assign({}, r, { w: r.w ? fromNet(r.w) : null, b: r.b ? fromNet(r.b) : null, paid: r.paid ? Object.fromEntries(Object.entries(r.paid).map(([k, v]) => [fromNet(k), v])) : null, co: Array.isArray(r.co) ? r.co.map(c => [fromNet(c[0]), c[1], c[2]]) : [] })); if (rows.length) coreCall(() => core.applyChess(rows)); }   /* [Claude] who is owed the stake, named as this page knows them */
         /* the felt: a chair asked for, a player getting up, an action, or the host's word on a table. Same rules as the
            chess park: only the host of the area the table stands in answers, and a row only counts from that host. */
         pkMsg(id, d);   /* [Claude 2026-10-13] the card-table words (also heard in a table's own room: tblHeard) */
@@ -3039,7 +3072,7 @@
         return {
           core, pid: PID, isPhone, isTouch, theme: () => ((D.rules.homes || {})[core.homeOf(me)] || {}).hud || null,
           walletState: () => walletState, walletRefresh: () => walletRefresh(), pid: PID,
-          chestState: (...a) => chestState(...a), chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a), depositInv: () => depositInv(), depositWorn: () => depositWorn(), withdrawAll: () => withdrawAll(),   /* the Bank part installs after the HUD is made */
+          chestState: (...a) => { const C = chestState(...a); return C && C.here ? Object.assign({}, C, { chest: C.here }) : C; },   /* [Claude 2026-10-14] the chest window shows this home's chest */ chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a), depositInv: () => depositInv(), depositWorn: () => depositWorn(), withdrawAll: () => withdrawAll(),   /* the Bank part installs after the HUD is made */
           friends: () => ({ rows: PALS.rows.slice(), note: PALS.note }),
           friendsRefresh: () => { loadPals().then(() => { if (hud.tab === 'friends') hud.refresh('friends'); }); },
           walletTake: (id) => chestTake(id, 1),   /* the same ledger as the chest (it bypassed it and could duplicate an NFT) */
@@ -3152,13 +3185,12 @@
           if (!h) continue;   /* nothing in front of that chair - sitting it out, or the hand is folded and mucked */
           if (f & PKF[1]) continue;   /* [Claude 2026-10-12] a folded hand is mucked, face down and gone - never shown (the operator: "it shows the cards of people who folded") */
           const sd = show && st.r && st.r.sd ? st.r.sd.find(x => (x[0] | 0) === ref) : null;   /* [Claude 2026-10-11] at the showdown every shown hand lies face up, on every copy */
-          const c = sd ? [sd[1] | 0, sd[2] | 0] : typeof h[1] === 'number' ? [h[1] | 0, h[2] | 0] : null, up = !!c && (!!sd || ref === ms);   /* face up: a hand called to the showdown, or your own - not every hand this copy happens to know (the dealer knows them all) */
+          const c = sd ? [sd[1] | 0, sd[2] | 0] : typeof h[1] === 'number' ? [h[1] | 0, h[2] | 0] : null, up = !!c && !!sd;   /* face up: only a hand called to the showdown - not every hand this copy happens to know (the dealer knows them all); [Claude 2026-10-14] your own stay face down on the felt too, the HUD's box over them shows them to you (the operator) */
           hands.push({ ref, c: up ? c : null, down: up ? 0 : 1, tilt: up ? 1 : 0 });
           bets[ref] = s[3] | 0;
         }
         return { board: (st.bo || []).slice(), hands, bets, pot: st.p | 0, big: st.bg | 0, dealer: st.d >= 0 ? st.d : null, turn: st.a >= 0 && st.o === 'playing' && st.st !== 'none' ? st.a : null };
       }
-      const PK_LAST = {};
       /* [Claude 2026-10-13] the operator: "Add the poker game history to the chat box". The dealer's own game already hears the table
          (its core tells the players in the room); every other copy reads the row's last lines (lg) and their running count
          (lc) and writes the ones it has not written yet - for a player at that table, or anyone standing on its floor. */
@@ -3185,10 +3217,6 @@
           shown: st.r && st.r.sd ? st.r.sd.map(x => ({ ref: x[0] | 0, c: [x[1] | 0, x[2] | 0], name: String(x[3] || '') })) : [],   /* [Claude 2026-10-11] the showdown */
           min: Math.min((st.b | 0) + (st.mr | 0 || st.bg | 0 || 50), (st.b | 0) + ((mine && mine[2]) | 0)), big: st.bg | 0
         };
-        /* [Claude 2026-10-13] the last hand's result stays in the panel through the next hand (between hands it is up only
-           ~7 s, easy to miss on a phone - the operator: "not showing the results of the hand to all the players") */
-        if (st.r && st.st === 'none') PK_LAST[t] = { h: st.h | 0, result: v.result, shown: v.shown, winners: v.winners, seats: v.seats };
-        else if (PK_LAST[t] && PK_LAST[t].h === (st.h | 0) - 1) v.last = PK_LAST[t];
         return v;
       }
       function pokerFx(t, row) {   /* the small sound of the felt changing under your hands: a card going out, a new street */
@@ -3244,6 +3272,10 @@
         if (room) netDrop('the card table stopped answering', false);
       }
       function pokerClock(now) {
+        if (me.seat && me.seat.k === 'pk' && SCENE.pokerSpots && hud.pokerAnchor) {   /* [Claude 2026-10-14] the HUD's card boxes ride over their spots on the felt */
+          const sp = SCENE.pokerSpots(me.seat.t, me.seat.s | 0);
+          hud.pokerAnchor(sp ? { board: toScreen(sp.board, 0), hole: sp.hole ? toScreen(sp.hole, 0) : null } : null);
+        }
         if (!SCENE.pokerTimer) return;
         for (const T of core.pokerTables()) {
           const st = core.S.poker[T.id];
@@ -3277,7 +3309,7 @@
         const HC = ((D.rules.homes || {})[core.homeOf(me)] || {}).creator || null;   /* the home's own creator: styles, labels, defaults */
         hud.creator({ first, home: HC, title: who || 'Wardrobe', look: before, startPoints: first && core.START ? core.START.points : 0, startMax: core.START ? core.START.max : 5, name: first ? '' : me.name, styles: MOD.outfitStyles, palette: MOD.palette,
           onChange: look => myEnt.H.setOutfit(look), onTurn: () => { cam.spin = ((cam.spin || 0) + Math.PI / 2) % (2 * Math.PI); },   /* see the back of your hair and clothes */
-          onDone: (look, name, start) => { cam.spin = 0; send({ c: 'look', look, name }); if (start && Object.keys(start).length) send({ c: 'start', pts: start }); cam.mode = null; cam.tyaw = cam.save.yaw; cam.tpitch = cam.save.pitch; cam.tdist = cam.save.dist; if (first) { hud.showHelp(true); } } });
+          onDone: (look, name, start) => { cam.spin = 0; send({ c: 'look', look });   /* no name: the @tag is the name (2026-10-15) */ if (start && Object.keys(start).length) send({ c: 'start', pts: start }); cam.mode = null; cam.tyaw = cam.save.yaw; cam.tpitch = cam.save.pitch; cam.tdist = cam.save.dist; if (first) { hud.showHelp(true); } } });
       }
       { const HD = (D.rules.homes || {})[core.homeOf(me)] || {};
         hud.chat('Welcome to ' + (HD.name || 'Ashvale') + '.', 'sys');
@@ -3327,7 +3359,7 @@
         chestEventForTest: chestEvent,
         renderInfo: () => { let meshes = 0; scene.traverse(o => { if (o.isMesh) meshes++; }); return { geo: renderer.info.memory.geometries, tex: renderer.info.memory.textures, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, meshes, programs: (renderer.info.programs || []).length }; },   /* memory probes (2026-10-08: iPhone out-of-memory crashes) */
         showPals(rows, note) { PALS.rows = (rows || []).map(r => ({ tag: String(r.tag || '').replace(/^@/, ''), online: !!r.online })); PALS.note = note || ''; if (hud.tab === 'friends') hud.refresh('friends'); },
-        chest: { state: chestState, take: chestTake, store: chestStore, promise: paid => { const L = ledgerFor(walletState.address); for (const k in paid) L.pend[k] = (L.pend[k] || 0) + paid[k]; ledgerSave(); },
+        chest: { home: h => ENGBANK.setChestHome(h), homes: () => ENGBANK.chestHomes(), heard: rows => ENGBANK.chestsHeard({ q: 't', of: 1, rows }), state: chestState, take: chestTake, store: chestStore, promise: paid => { const L = ledgerFor(walletState.address); for (const k in paid) L.pend[k] = (L.pend[k] || 0) + paid[k]; ledgerSave(); },
           resetLedgerForTest: () => { if (!walletState.address) return; ledgerDrop(); save = null; try { G.localStorage.removeItem(CKEY(walletState.address)); } catch (e) { /* none */ } ledgerFor(walletState.address); },   /* a lost count: the tests' worst case */
           paidForTest: paid => { const L = ledgerFor(walletState.address); for (const k in paid) { const toChest = Math.min(paid[k], L.lchest[k] || 0); L.lchest[k] -= toChest; L.pchest[k] = (L.pchest[k] || 0) + toChest; L.pend[k] = (L.pend[k] || 0) + paid[k] - toChest; } ledgerSave(); } },   /* tests */ trip: () => TRIP && TRIP.state(), trade: () => trade, peers: () => Array.from(remotes.values()).map(r => r.from), _remIds: () => Array.from(remotes.keys()), optionsAt: (cx, cy) => { const L = []; for (const t of targetsAt(cx, cy)) for (const o of optionsFor(t)) L.push(o.html.replace(/<[^>]+>/g, '')); return L; }, _remAnim: () => JSON.stringify(Array.from(remotes.values()).map(r => [r.anim, r.buf.length, r.buf.length && r.buf[r.buf.length - 1].a])),
         stop() { stopped = true; },
