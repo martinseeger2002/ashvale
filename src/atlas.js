@@ -30,7 +30,7 @@
       const G = V.G, CL = G.classes();
       const W = W0 || deps.worldgen.createWorldgen(G, { seed: q.get('wgseed') || seed });
       let start0 = null;
-      const zones = Object.keys(DATA).filter(k => k.indexOf('zone.') === 0).map(k => Object.assign({ id: k.slice(5) }, DATA[k]));
+      const zones = Object.keys(DATA).filter(k => k.indexOf('zone.') === 0).map(k => Object.assign({ id: k.slice(5) }, DATA[k])).filter(z => z.setPiece !== false);   /* [Claude 2026-10-16] a spot zone is no set piece (world.js pieceZones) */
       if (zones.length && !q.has('nopieces')) {
         const sp = W.coreSpawn(), maxX = Math.max(...zones.map(z => z.origin[0] + z.size[0])), maxY = Math.max(...zones.map(z => z.origin[1] + z.size[1]));
         const gx = Math.floor(sp.x) - (maxX >> 1), gy = Math.floor(-sp.y) - (maxY >> 1);

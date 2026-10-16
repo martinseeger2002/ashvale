@@ -402,14 +402,18 @@
      index, each as its full zone when it is loaded and as its stub (edge band + building pads) when not - worldgen reads
      nothing else outside a town, so the land around it is the same either way; without an index, the zones given */
   function pieceZones(D) {
-    const ZI = D.zoneIndex && D.zoneIndex.zones; if (!ZI) return (D.zones || []).filter(z => !z.under);
+    /* [Claude 2026-10-16] setPiece: false - a spot zone (dragonapproach: Squire Elian's one tile at -11,-78) is laid like any
+       zone but is no set piece: it does not flatten land, carve trails or push wild herds out of its keepFromPieces ring.
+       It had erased the deer site north of the village that Cinder's Kitchen Range sends players to. */
+    const onLand = z => !z.under && z.setPiece !== false;
+    const ZI = D.zoneIndex && D.zoneIndex.zones; if (!ZI) return (D.zones || []).filter(onLand);
     const have = new Map((D.zones || []).map(z => [z.id, z]));
-    return ZI.filter(e => !e.under).map(e => have.get(e.id) || stubZone(e));   /* an underground area is not on the land */
+    return ZI.filter(onLand).map(e => have.get(e.id) || stubZone(e));   /* an underground area is not on the land */
   }
   function stubZone(e) { return { id: e.id, origin: e.origin, size: e.size, tiles: e.stub, objects: e.pads || [] }; }
   /* a zone that arrived after the world was made: worldgen gets its real inside (the stub's place in the list is kept) */
   function arriveWorldgen(W, D, z) {
-    if (z && z.under) return false;   /* an underground area is not on the land */
+    if (z && (z.under || z.setPiece === false)) return false;   /* an underground area is not on the land; nor is a spot zone (setPiece: false) */
     const C = Object.assign({}, DEF_CFG, D.globecfg || {});
     const sp = W.piecesFromZones([z], C.face, C.origin[0], C.origin[1], { belt: C.belt || {}, links: C.links || [], groves: C.groves || [], walls: C.walls || [] })[0];
     return W.replacePiece ? W.replacePiece(sp) : false;

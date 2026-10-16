@@ -107,7 +107,7 @@ def zone_index(zones):
                 and ox <= o['x'] < ox + w and oy <= o['y'] < oy + h]
         e = {'id': zid, 'name': z.get('name', zid), 'origin': z['origin'], 'size': z['size'], 'stub': zone_stub_tiles(z), 'pads': pads,
              'npcs': [{'id': n['id'], 'name': n.get('name', n['id']), 'x': n['x'], 'y': n['y']} for n in z.get('npcs') or []]}
-        for k in ('level', 'ground', 'respawn', 'weather', 'under', 'style', 'surface', 'surfaceOffset'):   # under: a cave area outside the land (surface = its entrance up top)
+        for k in ('level', 'ground', 'respawn', 'weather', 'under', 'setPiece', 'style', 'surface', 'surfaceOffset'):   # setPiece: false keeps a zone off worldgen (Claude 2026-10-16)   # under: a cave area outside the land (surface = its entrance up top)
             if k in z: e[k] = z[k]
         out.append(e)
     return {"ashvale3d": "module", "name": "zoneindex", "api": 1, "v": 1, "data": {"zones": out}}

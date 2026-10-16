@@ -21,7 +21,7 @@
       const PAL = DATA.atlas_palette;
       const G = deps.globe.createGlobe({ n: CFG.n, radius_m: CFG.radius_m, seed: CFG.seed });
       const W = deps.worldgen.createWorldgen(G, { seed: CFG.seed });
-      const zones = Object.keys(DATA).filter(k => k.indexOf('zone.') === 0).map(k => Object.assign({ id: k.slice(5) }, DATA[k])).filter(z => !z.under);   /* an underground area (the Spider Cave) is not on the land */
+      const zones = Object.keys(DATA).filter(k => k.indexOf('zone.') === 0).map(k => Object.assign({ id: k.slice(5) }, DATA[k])).filter(z => !z.under && z.setPiece !== false);   /* [Claude 2026-10-16] setPiece: false - a spot zone is no set piece (world.js pieceZones) */   /* an underground area (the Spider Cave) is not on the land */
       const setPieces = () => { if (zones.length && CFG.origin) W.setSetPieces(W.piecesFromZones(zones, CFG.face, CFG.origin[0], CFG.origin[1], { belt: CFG.belt || {}, links: CFG.links || [], groves: CFG.groves || [], walls: CFG.walls || [] })); };
       setPieces();
       /* THE GAME'S OWN ZONES (2026-10-11: "a better way for the Atlas to render so that it always automatically
