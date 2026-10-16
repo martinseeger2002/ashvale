@@ -1,5 +1,6 @@
 """Two-player check shared by play_pw.py (?loopback, BroadcastChannel) and arcade_pw.py (the arcade page + mock SDKs):
-each player sees the other with the right "Name (@tag)" tag, and a chat line typed by one arrives at the other."""
+each player sees the other by the other's own name - its @tag, '@guest' without an account (0.8.123: "Their name should be
+there @handle only") - and a chat line typed by one arrives at the other."""
 import os, time
 
 def two_players(browser, url_a, url_b, shot_path, check, sandbox=False, ctx_opts=None):
@@ -22,7 +23,8 @@ def two_players(browser, url_a, url_b, shot_path, check, sandbox=False, ctx_opts
     t0 = time.time(); ok = False
     while time.time() - t0 < 20:
         na, nb = pa.evaluate('ASH.net().names'), pb.evaluate('ASH.net().names')
-        if any(n and n.startswith('Bob (') for n in na) and any(n and n.startswith('Alice (@') for n in nb): ok = True; break
+        own_a, own_b = pa.evaluate('ASH.me.name'), pb.evaluate('ASH.me.name')
+        if own_a and own_b and own_a.startswith('@') and own_b.startswith('@') and own_b in na and own_a in nb: ok = True; break
         time.sleep(0.5)
     pb.evaluate('ASH.core.cmd("me", {c: "look", look: Object.assign({}, ASH.ents.get("p:me").H.outfit, {body: "female", hair: "long"})})')
     fem = False; t1 = time.time()

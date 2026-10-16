@@ -223,6 +223,30 @@ ok(t.act(at, { a: 'check' }).ok !== false || true, 'the table answers the seat i
   ok(allin > 20, 'and it saw all-ins: ' + allin);
 })();
 
+/* ---- [Claude 2026-10-16] the turn goes round from the seat that acted (the operator: "when playing poker three handed, and the
+   person who is the dealer raises, the order ... goes backwards ... The place should always go to the next person on the
+   right of the last person who acted") ------------------------------------------------------------------------------- */
+{
+  const who = (t3, r) => r === t3.dealer ? 'BTN' : r === t3.sbSeat ? 'SB' : r === t3.bbSeat ? 'BB' : r;
+  const three = () => { const t3 = LIB.table({ id: 't3', small: 10, big: 20 }); [3, 4, 5].forEach(r => t3.addSeat(r, { id: 'p' + r, name: 'S' + r, chips: 1000 })); t3.newHand(); return t3; };
+  let t3 = three();
+  ok(who(t3, t3.toAct) === 'BTN', 'three-handed: the button acts first before the flop');
+  t3.act(t3.toAct, { a: 'call' }); t3.act(t3.toAct, { a: 'raise', to: 60 });
+  ok(who(t3, t3.toAct) === 'BB', 'the button calls, the small blind raises: the big blind is next, not the button (' + who(t3, t3.toAct) + ')');
+  t3.act(t3.toAct, { a: 'call' });
+  ok(who(t3, t3.toAct) === 'BTN', 'then the button');
+  t3 = three(); t3.act(t3.toAct, { a: 'raise', to: 60 });
+  ok(who(t3, t3.toAct) === 'SB', 'the button raises: the small blind is next');
+  t3.act(t3.toAct, { a: 'raise', to: 140 });
+  ok(who(t3, t3.toAct) === 'BB', 'the small blind re-raises: the big blind, then the button (' + who(t3, t3.toAct) + ')');
+  t3.act(t3.toAct, { a: 'call' }); ok(who(t3, t3.toAct) === 'BTN', 'and the button answers last');
+  t3.act(t3.toAct, { a: 'call' });
+  ok(t3.street === 'flop' && who(t3, t3.toAct) === 'SB', 'after the flop the small blind starts');
+  t3.act(t3.toAct, { a: 'check' }); t3.act(t3.toAct, { a: 'check' }); t3.act(t3.toAct, { a: 'raise', to: 40 });
+  ok(who(t3, t3.toAct) === 'SB', 'the button bets on the flop: the small blind answers first, then the big blind (' + who(t3, t3.toAct) + ')');
+  t3.act(t3.toAct, { a: 'call' }); ok(who(t3, t3.toAct) === 'BB', 'then the big blind');
+}
+
 console.log((fails ? fails + ' FAIL of ' : 'all ') + checks + (fails ? ' checks failed' : ' checks passed') +
   ' — holdemlib v' + LIB.v);
 process.exit(fails ? 1 : 0);

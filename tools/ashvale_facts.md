@@ -15,7 +15,12 @@
 - Saves from the old one-page playtest builds (before the launcher) do not carry over.
 - Fixes are small: one or two module inscriptions, not a whole new game.
 
-## In the current release (v0.8.95)
+## In the current release (v0.8.128)
+- 0.8.128 (2026-10-16): four Fortune Engines stand along the north wall of the Saltmere Tap's card room upstairs. Sit on
+  the bench, put any amount of GOLD in the coin slot, pick a wager (1, 2 or 3; 10, 20 or 30; 100, 200 or 300 GOLD) and
+  pull the lever or tap the reels. Three Crowns pay 5,000 times the wager; a Ruby anywhere on the line pays. The @ashvale
+  Bank keeps the credit and turns every reel; cash out, stand up or lose the connection and what is left comes back.
+  Each machine shows its credit and wager on a spell-lit counter. Never call them by any other name than Fortune Engines.
 - 0.8.95 (2026-10-12): GOLD on a table always comes home. A closed tab, a dead phone or a lost connection at the card
   tables or the Chess Park gives your GOLD back by itself. Chess: walking out of a begun game loses the wager; if the
   whole room drops, both players get their stake back.

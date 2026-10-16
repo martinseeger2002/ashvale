@@ -525,6 +525,7 @@
             if (data && data.t === 'scores' && bankFrom && R.me && data.to === R.me.address) { scoresHeard(data); return; }   /* the ruined keep's global dragon-killer board */
             if (data && data.t === 'ground' && bankFrom && R.me && data.to === R.me.address) { groundHeard(data); return; }
             if (data && data.t === 'pkok' && bankFrom && R.me && data.to === R.me.address) { pkHeard(data); return; }
+            if (data && (data.t === 'fe' || data.t === 'fes') && bankFrom && R.me && data.to === R.me.address) { if (FE_HEAR) FE_HEAR(data); return; }   /* [Claude 2026-10-16] a Fortune Engine sitting (engfortune.js) */
             if (data && data.t === 'chests' && bankFrom && R.me && data.to === R.me.address) { chestsHeard(data); return; }   /* [Claude 2026-10-14] what each home's chests hold */   /* [Claude 2026-10-14] the Bank has our card-table word */
             if (data && data.t === 'pk' && bankFrom && R.me && data.to === R.me.address) { coreCall(() => core.pokerBankSeen && core.pokerBankSeen(PID, data.rows || [])); return; }   /* persisted drops near me */
             if (data && data.t === 'pals' && bankFrom && R.me && data.to === R.me.address) { palsHeard(data); return; }   /* the friends list */
@@ -581,6 +582,7 @@
            as on their way (pend), and the Bank hears our own word {pkout, s, n}, which waits for the dealer's.
          - at a load with a seat still open: 'pk?' - a seat the Bank already paid home closes (the GOLD is in the wallet, the chest).
          Every word is sent again until the Bank answers 'pkok'. */
+      let FE_HEAR = null;   /* [Claude 2026-10-16] the Fortune Engines' listener (engfortune.js): the Bank's 'fe' / 'fes' words */
       const PKQ = new Map();   /* s|kind -> {o, at, n} */
       function pkSend(key, o) { PKQ.set(key, { o, at: 0, n: 0 }); pkFlush(); }
       function pkFlush() {
@@ -635,8 +637,8 @@
       let pkAskT = 0;
       function pkAsk() { pkAskT = Date.now(); bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'pk?', v: 1 }); }).catch(() => {}); }
       setInterval(() => { const P = core.S.players[PID]; if (P && P.pk && P.pk.sn && !(P.seat && P.seat.k === 'pk') && Date.now() - pkAskT > 30000) pkAsk(); }, 5000);
-    return { setChestHome, chestsAsk, chestsHeard, chestHomes: () => JSON.parse(JSON.stringify(CS.by)), pkEvent, pkAsk, CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
+    return { feHear: fn => { FE_HEAR = fn; }, setChestHome, chestsAsk, chestsHeard, chestHomes: () => JSON.parse(JSON.stringify(CS.by)), pkEvent, pkAsk, CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
   }
-  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engbank', { api: 1, v: 1, needs: {} }, () => ({ api: 1, install }));
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engbank', { api: 1, v: 2, needs: {} }, () => ({ api: 1, install }));
   if (typeof module !== 'undefined' && module.exports) module.exports = { install };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

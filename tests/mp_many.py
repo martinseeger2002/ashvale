@@ -1,5 +1,5 @@
 """N-player multiplayer check (default 4), used for the arcade mock and for ?loopback.
-Each player must see all others with the right "Name (@tag)" tags; gear and outfit changes propagate; chat reaches
+Each player must see all others by their own names (the @tag, '@guest' without an account: 0.8.123); gear and outfit changes propagate; chat reaches
 everyone; a player in the next zone stays visible, one in another region disappears and reappears; a closed tab disappears; every client stays inside the
 mesh send budget (~5 msgs/s sustained, burst 10). Prints the send rate per client."""
 import json, time
@@ -16,9 +16,12 @@ def many_players(browser, url_for, check, n=4, sandbox=False, shot=None, trade_c
     t0 = time.time()
     while time.time() - t0 < 90 and not all(pg.evaluate('!!(window.ASH && ASH.core)') for pg in pages): time.sleep(1)
     for pg, nm in zip(pages, names): pg.evaluate('ASH.hud.showHelp(false); ASH.core.cmd("me", {c: "look", name: "%s"})' % nm)
+    t0 = time.time()   # 0.8.123: a player's only name is its @tag (set once it joins the room) or '@guest'
+    while time.time() - t0 < 60 and not all((pg.evaluate('ASH.me.name') or '').startswith('@') for pg in pages): time.sleep(0.5)
+    names = [pg.evaluate('ASH.me.name') for pg in pages]
     def seen_ok(active):
         for i in active:
-            got = sorted((x or '').split(' (')[0] for x in pages[i].evaluate('ASH.net().names'))
+            got = sorted((x or '') for x in pages[i].evaluate('ASH.net().names'))
             if got != sorted(names[j] for j in active if j != i): return False
         return True
     def wait_for(fn, t=25):
@@ -29,15 +32,19 @@ def many_players(browser, url_for, check, n=4, sandbox=False, shot=None, trade_c
         return False
     allp = list(range(n))
     check(wait_for(lambda: seen_ok(allp)), '%d players: everyone sees everyone else by name' % n)
-    tags_ok = all(all(x and x.endswith(')') and ('(@' in x or '(guest)' in x) for x in pg.evaluate('ASH.net().names')) for pg in pages)
-    check(tags_ok, 'all name tags are "Name (@tag)" or "Name (guest)": %s' % pages[0].evaluate('ASH.net().names'))
+    tags_ok = all(all(x and x.startswith('@') and ' ' not in x for x in pg.evaluate('ASH.net().names')) for pg in pages)
+    check(tags_ok, 'all name tags are the @tag alone (or @guest): %s' % pages[0].evaluate('ASH.net().names'))
     if trade_check:   # "Trade with" appears on signed-in players only, and only when arcade.swap is there
-        opts = []
-        for rid in pages[0].evaluate('ASH.net().ids'):
-            pos = pages[0].evaluate('ASH.screenOf("remote", %s)' % json.dumps(rid))
-            if pos: opts += pages[0].evaluate('ASH.optionsAt(%f, %f)' % (pos['x'], pos['y']))
-        tr = sorted(set(o for o in opts if o.startswith('Trade with')))
-        check(any(o.startswith('Trade with Ben (@') for o in tr) and not any('(guest)' in o for o in tr), 'options menu offers "Trade with" signed-in players, never guests: %s' % tr)
+        pages[0].evaluate('ASH.setCam(0.3, 0.6, 9)')   # a wide view: the others must be on screen to be tapped
+        tr, t0 = [], time.time()
+        while time.time() - t0 < 12 and not tr:
+            pages[0].wait_for_timeout(800); opts = []
+            for rid in pages[0].evaluate('ASH.net().ids'):
+                pos = pages[0].evaluate('ASH.screenOf("remote", %s)' % json.dumps(rid))
+                if pos: opts += pages[0].evaluate('ASH.optionsAt(%f, %f)' % (pos['x'], pos['y']))
+            tr = sorted(set(o for o in opts if o.startswith('Trade with')))
+        signed = [nm for nm in names[1:] if nm != '@guest']   # the players on A's screen, by their @tag
+        check(any(o.startswith('Trade with ' + nm + ' ') for o in tr for nm in signed) and not any('@guest' in o for o in tr), 'options menu offers "Trade with" signed-in players, never guests: %s' % tr)
     # gear + outfit change on player 0
     pages[0].evaluate('ASH.give("hat_wizard", 1); ASH.core.cmd("me", {c: "equip", slot: ASH.me.inv.findIndex(s => s && s.id === "hat_wizard")}); ASH.core.cmd("me", {c: "look", look: Object.assign({}, ASH.me.look || {}, {hairColor: "#c8c8cc"})})')
     check(wait_for(lambda: all(any(g[0] == names[0] and g[1] and g[1].get('head') == 'hat_wizard' for g in pg.evaluate('ASH.net().gear')) for pg in pages[1:]), 15), 'a gear change (wizard hat) reaches every other player')

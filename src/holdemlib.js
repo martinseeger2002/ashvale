@@ -124,7 +124,7 @@
       const name = s.name;
       if (T.street !== 'none' && s.hole && !s.out && !s.folded) {
         T.say((name || 'A player') + ' gets up - their hand is folded.', 'sys');
-        s.folded = true; afterAction();
+        s.folded = true; afterAction(ref === T.toAct ? ref : null, ref === T.toAct ? null : T.toAct);   /* [Claude 2026-10-16] whoever was to act still is */
       }
       s.in = false; s.id = null; s.name = null; s.hole = null; s.bet = 0; s.folded = false; s.allin = false; s.out = false; s.pk = null;
       return T;
@@ -194,17 +194,17 @@
       if (s.folded) return { error: 'Your hand is folded.' };
       if (s.allin) return { error: 'You are already all-in.' };
       const need = Math.max(0, T.bet - s.bet), kind = (m && m.a) || 'check';
-      if (kind === 'fold') { T.say((s.name || 'A player') + ' folds.', 'sys'); s.folded = true; return afterAction(); }
+      if (kind === 'fold') { T.say((s.name || 'A player') + ' folds.', 'sys'); s.folded = true; return afterAction(ref); }
       if (kind === 'check') {
         if (need > 0) return { error: 'You owe ' + need + ' - call or fold.' };
-        s.acted = true; T.say((s.name || 'A player') + ' checks.', 'sys'); return afterAction();
+        s.acted = true; T.say((s.name || 'A player') + ' checks.', 'sys'); return afterAction(ref);
       }
       if (kind === 'call') {
         const n = Math.min(need, s.chips); s.chips -= n; s.bet += n; s.committed += n; T.pot += n;
         if (s.chips === 0) s.allin = true;
         s.acted = true;
         T.say((s.name || 'A player') + (s.allin ? ' calls all-in (' + s.bet + ').' : ' calls ' + n + '.'), 'sys');
-        return afterAction();
+        return afterAction(ref);
       }
       const upTo = s.bet + s.chips;
       if (kind !== 'raise' && kind !== 'allin') return { error: 'What do you want to do?' };
@@ -215,7 +215,7 @@
         const rest = upTo - s.bet; s.chips = 0; s.bet += rest; s.committed += rest; T.pot += rest;
         s.allin = true; s.acted = true;
         T.say((s.name || 'A player') + ' calls all-in (' + s.bet + ').', 'sys');
-        return afterAction();
+        return afterAction(ref);
       }
       if (to !== upTo && to < T.bet + T.minRaise) return { error: 'The smallest raise just now is to ' + (T.bet + T.minRaise) + ' - or all-in.' };
       const n = to - s.bet;
@@ -224,18 +224,25 @@
       s.chips -= n; s.bet += n; s.committed += n; T.pot += n;
       if (s.chips === 0) s.allin = true;
       T.say((s.name || 'A player') + (s.allin ? ' raises all-in (' + to + ').' : ' raises to ' + to + '.'), 'sys');
-      return afterAction();
+      return afterAction(ref);
     };
 
-    function nextActor() {   /* someone still owing a chip, or one that has not answered since the last raise */
+    function nextActor(after, keep) {   /* someone still owing a chip, or one that has not answered since the last raise */
+      /* [Claude 2026-10-16] the operator: "The place should always go to the next person on the right of the last person who acted" -
+         after an action the turn goes round the table from the seat that acted, to the first one still owing or not yet
+         answered. Scanning from the start of the betting round instead sent it back past the raiser (three-handed: the button
+         calls, the small blind raises, and the button was asked again before the big blind). */
+      const owes = s => s.bet < T.bet || !s.acted;
+      if (keep != null) { const k = able().find(s => s.ref === keep && owes(s)); if (k) return k.ref; }
+      if (after != null) { const n = able().slice().sort((a, b) => rel(a, after) - rel(b, after)).find(owes); return n ? n.ref : null; }
       const l = able().slice().sort(byTurn);
       const owing = l.find(s => s.bet < T.bet); if (owing) return owing.ref;
       const next = l.find(s => !s.acted); if (next) return next.ref;
       return null;
     }
-    function afterAction() {
+    function afterAction(after, keep) {
       if (live().length <= 1) return settle();
-      const a = nextActor();
+      const a = nextActor(after, keep);
       if (a !== null) { T.toAct = a; return { ok: true, toAct: a }; }
       /* nothing is owed anywhere and only one seat still has coins in front of them: whatever they would bet cannot be
          called, so the rest of the board is dealt and the money is already in the middle */
@@ -331,7 +338,7 @@
   }
 
   const LIB = { api: 1, v: 1, table, score5, score7, best, cname, cparse, CATS, STREETS, describe };
-  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('holdemlib', { api: 1, v: 1 }, () => LIB);
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('holdemlib', { api: 1, v: 2 }, () => LIB);
   if (typeof module !== 'undefined' && module.exports) module.exports = LIB;
   G.AshHoldemLib = LIB;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

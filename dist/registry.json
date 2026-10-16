@@ -95,7 +95,7 @@
   },
   "holdemlib": {
    "id": null,
-   "v": "1",
+   "v": "2",
    "api": 1,
    "kind": "js"
   },
@@ -117,9 +117,15 @@
    "api": 1,
    "kind": "js"
   },
-  "scene": {
+  "fortune": {
    "id": null,
    "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "scene": {
+   "id": null,
+   "v": "2",
    "api": 2,
    "kind": "js"
   },
@@ -171,9 +177,15 @@
    "api": 1,
    "kind": "js"
   },
+  "hudfortune": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
   "hud": {
    "id": null,
-   "v": "3",
+   "v": "4",
    "api": 1,
    "kind": "js"
   },
@@ -226,6 +238,12 @@
    "kind": "js"
   },
   "engbank": {
+   "id": null,
+   "v": "2",
+   "api": 1,
+   "kind": "js"
+  },
+  "engfortune": {
    "id": null,
    "v": "1",
    "api": 1,

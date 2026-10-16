@@ -20,7 +20,7 @@ SRC, DATA, DIST = os.path.join(ROOT, 'src'), os.path.join(ROOT, 'data'), os.path
 ESB = os.path.join(ROOT, 'tools', 'esb')
 THREE_V = '0.160.0'
 THREE_ARCADE_ID = '374cfd2b2f114e9da4ade8add495fe8aa0b2b996a710fb538759a956f15f9539'   # Pip's on-chain three.module.min.js r160 (official, unmodified)
-JS_MODULES = ['netretry', 'net', 'trade', 'wallet', 'trip', 'world', 'chesslib', 'holdemlib', 'core', 'audit', 'castle', 'scene', 'hudart', 'hudpanels', 'hudshop', 'hudchest', 'huddrag', 'hudcreator', 'hudchess', 'hudpoker', 'hud', 'models', 'gamepad', 'engine']   # the HUD is split in parts (2026-10-02)
+JS_MODULES = ['netretry', 'net', 'trade', 'wallet', 'trip', 'world', 'chesslib', 'holdemlib', 'core', 'audit', 'castle', 'fortune', 'scene', 'hudart', 'hudpanels', 'hudshop', 'hudchest', 'huddrag', 'hudcreator', 'hudchess', 'hudpoker', 'hudfortune', 'hud', 'models', 'gamepad', 'engine']   # the HUD is split in parts (2026-10-02)
 if os.environ.get('ASH_NO_CASTLE') == '1': JS_MODULES = [m for m in JS_MODULES if m != 'castle']
 if os.path.exists(os.path.join(SRC, 'weather.js')):   # weather visuals (local agent, task 6): its own module/inscription
     JS_MODULES.insert(JS_MODULES.index('engine'), 'weather')      # load order does not matter (factories), kept stable
@@ -28,7 +28,8 @@ if os.path.exists(os.path.join(SRC, 'seasons.js')):   # the year and its seasons
     JS_MODULES.insert(JS_MODULES.index('engine'), 'seasons')
 for _m in ('atlas_shapes', 'atlas_chunk', 'earth'): JS_MODULES.insert(JS_MODULES.index('engine'), _m)   # the Atlas (src/earth.js) is a game module since 2026-10-11: it boots from the game's registry, so every release updates it
 JS_MODULES.insert(JS_MODULES.index('engine'), 'engsky')
-JS_MODULES.insert(JS_MODULES.index('engine'), 'engbank')   # the chest and the @ashvale Bank client   # the engine's sky, its own inscription (2026-10-08: the engine split into parts)
+JS_MODULES.insert(JS_MODULES.index('engine'), 'engbank')
+JS_MODULES.insert(JS_MODULES.index('engine'), 'engfortune')   # [Claude 2026-10-16] the Fortune Engines' controller (seat, view, the Bank's words)   # the chest and the @ashvale Bank client   # the engine's sky, its own inscription (2026-10-08: the engine split into parts)
 if os.path.exists(os.path.join(SRC, 'sky.js')):
     JS_MODULES.insert(JS_MODULES.index('engine'), 'sky')
 if os.path.exists(os.path.join(SRC, 'skyview.js')):   # the sky drawn as a 3D scene of its own: sun, moon, stars (2026-10-07)

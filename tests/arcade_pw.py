@@ -20,7 +20,7 @@ with sync_playwright() as p:
     b = p.chromium.launch(args=ARGS)
     r = two_players(b, BASE + '?nocreator&seed=a', BASE + '?nocreator&seed=b&guest', os.path.join(OUT, 'arcade_two_players.png'), check, sandbox=True)
     pa = r['pa']
-    check(any(n and n.startswith('Bob (guest)') for n in pa.evaluate('ASH.net().names')), 'a signed-out player shows as "Bob (guest)": %s' % pa.evaluate('ASH.net().names'))
+    check('@guest' in pa.evaluate('ASH.net().names'), 'a signed-out player shows as "@guest" (0.8.123: the @tag is the only name): %s' % pa.evaluate('ASH.net().names'))
     print('     room.me on A:', pa.evaluate('JSON.stringify(ASH.net().me)'), '| status:', pa.evaluate('ASH.net().status'))
     rows = json.load(open(os.path.join(ROOT, 'tests', 'fixtures', 'tokens_live.json')))
     cls = pa.evaluate('(rows) => rows.map(r => ASH.wallet.classifyToken(r))', rows)

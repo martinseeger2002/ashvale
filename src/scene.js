@@ -86,6 +86,7 @@
        the bets and the button, and a card travels out to its seat on a TWEEN, as a chess piece slides. The last model
        a table was shown is kept in PK_STATE, so rebuilding the region puts the hand back on the felt. */
     const POKER = Object.create(null), PK_STATE = Object.create(null);
+    const FORTUNE = Object.create(null);   /* [Claude 2026-10-16] the Fortune Engines by id (src/fortune.js builds each; the engine drives them) */
     const CARD_W = 0.15, CARD_H = 0.212, PW = 96, PH = 144, PBACK = 63, CARD_Y = 0.007;
     const PRANKS = '23456789TJQKA', PINK = ['#20202a', '#b23a30', '#b23a30', '#20202a'];
     /* [Claude 2026-10-11] the operator: "It shouldn't be chips. It should be gold coins" - a bet is a pile of coins toward the middle
@@ -1159,7 +1160,7 @@
       let CK = null; try { const CM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('castle'); if (CM && CM.create) CK = CM.create({ THREE, B, Batcher, KitBatch, kitData, heightAt, group, pickables }); } catch (e) { console.warn('castle module', e && e.message); }
       const surfOfMap = (tx, ty) => { const Hh = heightsOf(map); return Hh.surf ? Hh.surf(tx, ty) : heightAt(tx + 0.5, ty + 0.5); };
       const mounts = [];   /* items hung on walls: {obj, item, quest, untilStep} */
-      const torches = [], street = [];
+      const torches = [], street = [], fortunes = [];
       const dungeonLayers = new Map();
       function dungeonLayer(lv) {
         lv |= 0; let d = dungeonLayers.get(lv); if (d) return d;
@@ -1595,6 +1596,30 @@
             const bd = new THREE.Mesh(new THREE.BoxGeometry(8 * SQ, 0.06, 8 * SQ), new THREE.MeshBasicMaterial({ visible: false })); bd.position.set(x, top + 0.03, z); bd.userData.pick = { kind: 'square', id, x: o.x, y: o.y }; group.add(bd); pickables.push(bd);
             break;
           }
+          case 'fortune': {   /* [Claude 2026-10-16] A FORTUNE ENGINE (the operator: "a bank of four machines" on the card room's north wall, "a bench like
+               that is on the chess game in front of each machine"): cabinet and bench come whole from src/fortune.js, into the storey they
+               stand on, as a card table's. The cabinet is the tap target from the room; seated, the engine taps its reels, lever and slot. */
+            const FM = deps.fortune; if (!FM || !FM.build) break;
+            const lv = o.lv | 0, rfUp = lv > 0 ? roofs.find(r => o.x >= r.x0 && o.x <= r.x1 && o.y >= r.y0 && o.y <= r.y1) : null;
+            const into = rfUp && rfUp.storeys && rfUp.storeys[lv - 1] ? rfUp.storeys[lv - 1] : group;
+            const fl = floorY(o, y) + 1.8 * lv, id = o.id || ('f' + o.x + ',' + o.y);
+            const m = FM.build(THREE, { wrap: seeThrough });
+            m.group.position.set(x, fl, z); m.group.rotation.y = ({ s: 0, n: Math.PI, e: Math.PI / 2, w: -Math.PI / 2 })[o.face || 's'] || 0;
+            into.add(m.group);
+            m.body.userData.pick = { kind: 'fortune', id, x: o.x, y: o.y, lv }; pickables.push(m.body);
+            for (const h of m.hot) h.userData.pick = { kind: 'fehot', id, act: h.userData.fe.act, i: h.userData.fe.i, x: o.x, y: o.y, lv };
+            /* the storey above, seen from below (the operator: look up 65 degrees from the bench) - the engine hides upper storeys while you
+               are inside, so a seated player would look into the sky: planks on beams over the room, shown only while you sit here */
+            if (rfUp && !rfUp.feCeil) {
+              const cg = new THREE.Group(), w = rfUp.x1 - rfUp.x0 + 1, d = rfUp.y1 - rfUp.y0 + 1, cz = rfUp.y0 + d / 2; cg.visible = false;
+              cg.add(mesh(new THREE.BoxGeometry(w, 0.04, d), 0x7a5634, rfUp.x0 + w / 2, fl + 1.68, cz));
+              for (let i = 0; i <= w; i++) cg.add(mesh(new THREE.BoxGeometry(0.14, 0.14, d), 0x5a3a1e, rfUp.x0 + Math.min(w - 0.07, Math.max(0.07, i)), fl + 1.59, cz));
+              into.add(cg); rfUp.feCeil = cg;
+            }
+            m.ceil = rfUp ? rfUp.feCeil : null;
+            m.id = id; FORTUNE[id] = m; fortunes.push(m);
+            break;
+          }
           case 'pokertable': {   /* the felt, the rail and the eight chairs; pokerShow (called by the engine, and again
                here after a rebuild) lays the cards, the bets and the button on it. Seats are tile pairs beside the table.
                [Claude 2026-10-11] `lv`: the storey the table stands on (the operator: "on the second story where there's plenty of
@@ -1823,6 +1848,7 @@
           const r = rockAt.get(i); if (r) r.ore.visible = !on;
         },
         update(dt, time) {
+          for (const m of fortunes) m.update(dt, time);   /* [Claude 2026-10-16] the Fortune Engines' reels, lever, orb and counter */
           for (const t of torches) {
             const s = 0.85 + 0.15 * Math.sin(time * 13 + t.ph) + 0.08 * Math.sin(time * 31 + t.ph * 2);
             if (t.tend) { const on = LAMPQ ? !!LAMPQ(t.tx, t.ty) : true; t.f.visible = on; if (t.f2) t.f2.visible = on; }
@@ -1864,7 +1890,7 @@
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, viewQuery: fn => { VIEWQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerTimer, pokerSpots, cardAtlas: () => { const t = cardKit(); return t && t.image && t.image.toDataURL ? t.image.toDataURL('image/png') : null; }, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, viewQuery: fn => { VIEWQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerTimer, pokerSpots, cardAtlas: () => { const t = cardKit(); return t && t.image && t.image.toDataURL ? t.image.toDataURL('image/png') : null; }, fortuneAt: id => { const m = FORTUNE[id]; return m && m.group.parent ? m : null; }, fortuneLib: () => deps.fortune || null, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
-  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 1, needs: { three: 160 } }, sceneFactory);
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 2, needs: { three: 160, fortune: 1 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

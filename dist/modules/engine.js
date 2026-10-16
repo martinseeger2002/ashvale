@@ -278,6 +278,7 @@
          preview ?home=ziibiing does the same */
       if (HOME && core.setNewHome) core.setNewHome(HOME);
       const me = core.addPlayer(PID, save);
+      let FE = null;   /* [Claude 2026-10-16] the Fortune Engines' part (engfortune.js), installed with the Bank client below */
       if (!/^@/.test(String(me.name || ''))) me.name = '@guest';   /* [Claude 2026-10-15] no chosen names any more: '@guest' until the arcade says your @tag (the operator: "There's no need for two names") */
       /* Purpose-built local playtest for The Heart Below. It never runs in the framed arcade and always starts from a fresh,
          disposable character: all combat and dungeon-check skills at 99, prerequisite stories complete, and top-tier kit. */
@@ -898,6 +899,7 @@
           /* THE POKER TABLE (handoff/poker_plan.md): psit/pstand is "you are (no longer) in a chair at the felt", said
              the same way whether the table seated you or a host's row did; poker is the felt changing - cards, chips,
              the button, whose turn. The row itself carries everything the page draws. */
+          case 'fein': case 'feback': if (FE) FE.event(e); break;   /* [Claude 2026-10-16] a Fortune Engine's GOLD in and back */
           case 'psit': if (mine) pokerEnter(e.t); break;
           case 'pstand': if (mine) pokerLeave(e.t); break;
           case 'pkbuy': case 'pkout': case 'pkcash': if (Array.isArray(G.__pkEv)) G.__pkEv.push(Object.assign({}, e));   /* a test watches these */
@@ -1407,6 +1409,7 @@
           const side = host.clientWidth > 500 ? 0.55 : 0.4; tg.x -= Math.cos(cam.yaw) * side; tg.z += Math.sin(cam.yaw) * side;
         }
         if (cam.mode === 'chess' && CHESSV) { tg.set(CHESSV.x, CHESSV.y, CHESSV.z); cam.tyaw = CHESSV.yaw + CHESS_TURN; cam.tpitch = isPhone ? 1.32 : 1.22; cam.tdist = isPhone ? 1.9 : 1.55; }   /* seated at a chess table: close over the board, your side nearest */
+        if (cam.mode === 'fortune' && FE) FE.target(tg);   /* [Claude 2026-10-16] */
         if (cam.mode === 'poker' && POKERV) { tg.set(POKERV.x, POKERV.y, POKERV.z); cam.tyaw = POKERV.yaw; cam.tpitch = 1.2; cam.tdist = 1.4; }   /* seated at the felt: the light centre is the middle of the table */
         if (cam.snap || cam.film) camT.copy(tg); else camT.lerp(tg, Math.min(1, dt * 12));
         cam.snap = false;
@@ -1454,6 +1457,7 @@
           if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
           if (myEnt.root.visible) { myEnt.root.visible = false; FPV.hid = true; }   /* your own head would fill the view */
         }
+        if (cam.mode === 'fortune' && FE) FE.camera(camera, dt);   /* [Claude 2026-10-16] THE FORTUNE ENGINE: first person on the bench, the head turned by a drag */
         if (cam.mode === 'poker' && POKERV && POKERV.eye) {   /* THE POKER TABLE: first person at the felt, leaning a little over your own side of it */
           const E = POKERV.eye, L = POKERV.look; camera.position.set(E.x, E.y, E.z); camera.lookAt(L.x, L.y, L.z);
           const aspect = (host.clientWidth || 1) / (host.clientHeight || 1), d = Math.hypot(L.x - E.x, L.y - E.y, L.z - E.z), half = 0.66;
@@ -1585,6 +1589,7 @@
           out.push(...taken, { html: 'Examine <span class="c">Chess table</span>', fn: () => hud.chat(chessExamine(st), 'sys') });
           return out;
         }
+        if ((t.kind === 'fortune' || t.kind === 'fehot') && FE) return FE.menu(t);   /* [Claude 2026-10-16] a Fortune Engine */
         if (t.kind === 'pokertable') {   /* THE POKER TABLE: six chairs round one felt in the Saltmere tap room; once you are sitting, the panel in front of you does the talking */
           const T = core.pokerTableById(t.id); if (!T) return [];
           if ((T.lv | 0) !== (me.lv | 0)) return [{ html: 'Card table <span class="c">(' + ((T.lv | 0) > (me.lv | 0) ? 'up the stairs' : 'downstairs') + ')</span>', fn: () => hud.chat('The poker table is ' + ((T.lv | 0) > (me.lv | 0) ? 'up the tavern stairs.' : 'downstairs.'), 'sys') }];   /* [Claude] */
@@ -1702,6 +1707,7 @@
       let lastTap = null, shiftHeld = false;
       const runFor = (base) => shiftHeld ? !base : base;   /* Shift inverts whatever the click would otherwise do */
       function tapAt(cx, cy) {
+        if (FE && FE.tap(cx, cy)) return;   /* [Claude 2026-10-16] seated at a Fortune Engine: only its reels, lever, slot and knobs */
         const now = performance.now();
         if (lastTap && now - lastTap.t < 300 && Math.hypot(cx - lastTap.x, cy - lastTap.y) < 40 && lastTap.act) {
           const up = Object.assign({}, lastTap.act, { run: runFor(true) }); lastTap = null; send(up); hud.hideMenu(); return;
@@ -1758,7 +1764,7 @@
           cam.tyaw = pinch.yaw - da; cam.tpitch = pinch.pitch + (my - pinch.my) * 0.005; return;
         }
         const rotating = p.b === 1 || (p.moved > (p.type === 'mouse' ? 5 : 9));
-        if (rotating) { clearTimeout(lpTimer); if (cam.mode === 'chess' && CHESSV) CHESS_TURN = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, CHESS_TURN - dx * 0.006));   /* [Claude] seated at chess: press and drag turns the view round the board, a quarter turn each way (the operator) */
+        if (rotating) { clearTimeout(lpTimer); if (cam.mode === 'fortune' && FE && FE.look(dx, dy)) { /* [Claude 2026-10-16] seated at a Fortune Engine: the head turns */ } else if (cam.mode === 'chess' && CHESSV) CHESS_TURN = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, CHESS_TURN - dx * 0.006));   /* [Claude] seated at chess: press and drag turns the view round the board, a quarter turn each way (the operator) */
           else { cam.tyaw -= dx * 0.0085; cam.tpitch += dy * 0.006; } }
       });
       const endPtr = e => {
@@ -2152,6 +2158,8 @@
         get save() { return save; }, paintScores });
       const { CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer } = ENGBANK;
       scoreTell = ENGBANK.scoreTell; scoresAsk = ENGBANK.scoresAsk;
+      /* [Claude 2026-10-16] THE FORTUNE ENGINES (src/engfortune.js): seat, first-person view, the machine's taps and the Bank's words */
+      FE = deps.engfortune ? deps.engfortune.install({ THREE, SCENE, core, hud, PID, ENGBANK, cam, camera, canvas, host, FPV, myEnt, send, netSend, walletRefresh, walletState, get me() { return me; }, get settings() { return settings; } }) : null;
       function boardWho() {   /* the keep board is the arcade @tag, not the default Adventurer (2026-10-10) */
         const t = (room && room.me && room.me.tag) || hintedTag || me.tag;
         if (t) { const h = String(t).replace(/^@/, '').replace(/[^\w]/g, '').slice(0, 16); if (h.length >= 2 && !/^adventurer$/i.test(h)) return '@' + h; }
@@ -2694,6 +2702,7 @@
         /* the felt: a chair asked for, a player getting up, an action, or the host's word on a table. Same rules as the
            chess park: only the host of the area the table stands in answers, and a row only counts from that host. */
         pkMsg(id, d);   /* [Claude 2026-10-13] the card-table words (also heard in a table's own room: tblHeard) */
+        if (FE && Array.isArray(d.FE)) FE.net(id, d.FE);   /* [Claude 2026-10-16] a Fortune Engine's counter and spins */
         if (Array.isArray(d.X)) { const x = d.X; if (core.item(x[0]) && iHostAt(x[2], x[3])) coreCall(() => core.hostDrop({ id: x[0], n: Math.max(1, x[1] | 0), x: x[2] | 0, y: x[3] | 0, life: x[4] | 0, from: x[5] ? fromNet(x[5]) : null, diedAt: x[6] | 0, lv: x[7] | 0 })); }
         /* below: only the word of the host of the area concerned counts */
         if (Array.isArray(d.M)) { const rows = d.M.filter(w => Array.isArray(w) && fromHostOf(id, mobArea(w[0]))); if (rows.length) coreCall(() => core.applyMobs(rows)); }
@@ -2856,7 +2865,7 @@
         for (const g of fires.values()) { const u = g.userData, sc = 0.8 + 0.25 * Math.sin(now / 70 + u.ph) + 0.1 * Math.sin(now / 23 + u.ph); u.f1.scale.set(1, sc, 1); u.f2.scale.set(1, 1.1 * sc, 1); }
         if (wxMod && wxMod.update && !CAVE.on) wxMod.update(elapsed);
         if (!CAVE.on) dayTick(); else { if (STARS.pts) STARS.pts.visible = false; underSeason(); }   /* day and night on top of the weather's sky */   /* underground the cave sets the fog and the sky */
-        updateRemotes(now, dt); pokerClock(now);
+        updateRemotes(now, dt); pokerClock(now); if (FE) FE.frame(now, dt);
         for (let i = projs.length - 1; i >= 0; i--) {
           const p = projs[i]; p.t += dt; const k = Math.min(1, p.t / p.dur);
           const to = p.tgt.root.position.clone(); to.y += p.tgt.hawk ? 0.25 : (p.tgt.H.height || 1.2) * p.tgt.scale * 0.55;   /* up at the hawk itself in the sky */
@@ -3102,6 +3111,7 @@
       let PKTABLES_CACHE = { n: -1, list: [] };
       function pkTablesCached() { const O = core.M.objects || []; if (O.length !== PKTABLES_CACHE.n) PKTABLES_CACHE = { n: O.length, list: core.pokerTables() }; return PKTABLES_CACHE.list; }
       function seatLift(e) {   /* a seated player sits on the bench or the chair, not on the ground: you by your seat, a remote by the table rows */
+        if (FE) { const l = FE.lift(e); if (l != null) return l; }   /* [Claude 2026-10-16] a Fortune Engine's bench */
         if (e === myEnt) return me.seat ? (me.seat.k === 'pk' ? CHAIR_SEAT : BENCH_SEAT) : 0;
         if (!e.key || e.key.charCodeAt(0) !== 114) return 0;   /* 'r:' remotes: seated when a table's row names them (their anim lives on the remote record, not here) */
         const id = e.key.slice(2);
@@ -3353,6 +3363,7 @@
         wx: () => Object.assign({ season: SEASON.name, snowy: SEASON.snowy }, wxMod && wxMod.state ? wxMod.state() : {}),
         progInfo: () => { const P = renderer.info.programs || [], I = renderer.info; return { n: P.length, calls: I.render.calls, tris: I.render.triangles, geos: I.memory.geometries, tex: I.memory.textures, applyMs: SEASON.applyMs, applies: SEASON.applies }; },
         tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },
+        fortune: () => FE,   /* [Claude 2026-10-16] tests: the Fortune Engines' part */
         pokerNetRow: t => pkNet(core.pokerRow(t)), _pokerModel: t => pokerModel(t), _pokerView: t => pokerView(t), _pokerClock: () => JSON.parse(JSON.stringify(PKT)), solitaire: () => openSolitaire(), _dropNext: k => { DROP_NEXT = k; }, pokerKey: () => MYPK, pokerSealed: t => PH[t] || null,   /* [Claude 2026-10-12] tests: the row as it leaves this dealer */   /* a test taps a thing as a player would (first option) */
         travelShown: () => { const el = host.querySelector('.travel'); return el && el.style.display !== 'none' ? el.className + ' | ' + el.querySelector('.tt').textContent : null; },
         say, store, models: MOD, allowedAsset, wallet: walletApi(DATA.items.items), walletState: () => walletState, walletRefresh,
@@ -3371,5 +3382,5 @@
     }
     return { api: 1, start, openStore };
   }
-  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engine', { api: 1, v: 2, needs: { three: 160, core: 2, models: 1, scene: 2, hud: 1, net: 2, trade: 1, wallet: 1, trip: 2, audit: 1, gamepad: 1, data: 1, engsky: 1, engbank: 1 } }, engineFactory);
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engine', { api: 1, v: 2, needs: { three: 160, core: 2, models: 1, scene: 2, hud: 1, net: 2, trade: 1, wallet: 1, trip: 2, audit: 1, gamepad: 1, data: 1, engsky: 1, engbank: 1, engfortune: 1 } }, engineFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

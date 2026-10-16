@@ -1154,3 +1154,17 @@ the walk here feature".
   core 'look' no longer takes a name; others are labelled with the @tag the arcade node stamps (never what the game says).
   Quest lines, card-table lines and every {name} read p.name, so they say the @tag. Checked in two visible windows: own
   '@dev_...', a 'look' name 'Ann' ignored, the other labelled '@dev_...'. 49 headless ALL OK; candidate_live boots clean.
+
+## 0.8.128 - 2026-10-16 (Claude): the Fortune Engines - RELEASED (v155 4dafded7; cards ca8221c6 ASHVALE, 3b505a5e Ziibiing)
+- the operator: four machines on the card room's north wall (453-456,25, lv 1), a chess-park bench before each, first person with a
+  look round (90 / 65), only the reels / lever / Spin spin, a coin slot for any amount of GOLD held by the @ashvale Bank until
+  cash out / stand up / a lost connection, wagers 1-3 / 10-30 / 100-300, a spell-lit CREDIT / WAGER counter, no seal on screen.
+- Modules: fortune (new: model + reels, Wizard of Odds 64-stop 94.54%), engfortune (new), hudfortune (new), core (fortune tiles
+  block; cmds fein / feback), scene (case 'fortune', seated ceiling), engine / hud / engbank (hooks), zones/saltmere
+  (tools/add_fortune_props.py). Bank: fein/fespin/feout/fe? on bank-rpc fd03cb5 (applied by the local agent).
+- Tests: 51 headless ALL OK; tests/fortune_pw.py ALL OK desktop + phone; poker_flow/bank/leave, chess, wager_confirm ALL OK;
+  arcade_pw's 9 failures were old checks for "Name (@tag)" names (0.8.123) - tests fixed in a2e4483, ALL OK.
+- Follow-up (the operator on his phone): credit must be instant like the card table -> Bank v3 (credit at once; a deposit voided
+  after it was played holds the sitting - the local agent found the v2 hole) + engfortune; the card table's turn order after a
+  raise (holdemlib nextActor from the seat that acted). Both go out as 0.8.129 once Bank v3 is live.
+
