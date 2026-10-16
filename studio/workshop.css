@@ -1,0 +1,85 @@
+:root {
+  --bg: #17140f; --panel: #221d16; --line: #3a3226; --ink: #eadfc8; --dim: #a39579;
+  --gold: #d8a640; --gold2: #f0c860; --red: #c0503a; --ok: #6aa84f;
+  font: 14px/1.4 system-ui, -apple-system, Segoe UI, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); }
+body { display: flex; flex-direction: column; overflow: hidden; }
+header { display: flex; align-items: center; gap: 14px; padding: 8px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+h1 { margin: 0; font: 700 18px Georgia, serif; color: var(--gold2); letter-spacing: .04em; }
+h1 span { color: var(--ink); font-weight: 400; }
+.sub { color: var(--dim); font-size: 12px; flex: 1; min-width: 160px; }
+.files { display: flex; gap: 6px; flex-wrap: wrap; }
+button, select, input, textarea {
+  font: inherit; color: var(--ink); background: #2c261d; border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px;
+}
+button { cursor: pointer; }
+button:hover { border-color: var(--gold); }
+button.on { background: var(--gold); color: #1b150c; border-color: var(--gold); font-weight: 600; }
+button.primary { background: var(--gold); color: #1b150c; font-weight: 700; border-color: var(--gold); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+input[type=number] { width: 100%; }
+input[type=color] { padding: 0; width: 40px; height: 30px; }
+textarea { width: 100%; resize: vertical; }
+#tools { display: flex; gap: 14px; padding: 6px 14px; border-bottom: 1px solid var(--line); overflow-x: auto; white-space: nowrap; }
+.grp { display: flex; align-items: center; gap: 5px; }
+.grp b { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; margin-right: 2px; }
+.chk { display: flex; align-items: center; gap: 4px; color: var(--dim); font-size: 13px; }
+main { flex: 1; display: flex; min-height: 0; }
+#stage { flex: 1; position: relative; min-width: 0; }
+#stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+#stageHint { position: absolute; left: 10px; bottom: 8px; right: 10px; color: var(--dim); font-size: 12px; pointer-events: none; }
+#panel { width: 340px; border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; }
+#tabs { display: flex; position: sticky; top: 0; background: var(--panel); border-bottom: 1px solid var(--line); z-index: 1; }
+#tabs button { flex: 1; border: 0; border-radius: 0; background: none; padding: 10px; color: var(--dim); }
+#tabs button.on { color: var(--gold2); box-shadow: inset 0 -2px var(--gold); font-weight: 600; }
+section { padding: 12px 14px 20px; }
+section h3 { margin: 14px 0 6px; font: 600 12px system-ui; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; }
+section h3:first-child { margin-top: 0; }
+label.f { display: block; color: var(--dim); font-size: 12px; margin: 8px 0 3px; }
+.row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.row label { color: var(--dim); font-size: 11px; display: block; }
+.swatches { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.swatches i { width: 20px; height: 20px; border-radius: 4px; cursor: pointer; border: 1px solid #0006; }
+.swatches i:hover { outline: 2px solid var(--gold2); }
+.shapeList { display: flex; flex-direction: column; gap: 3px; max-height: 180px; overflow-y: auto; margin-bottom: 8px; }
+.shapeList div { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 5px; cursor: pointer; }
+.shapeList div:hover { background: #2c261d; }
+.shapeList div.on { background: #3a3020; outline: 1px solid var(--gold); }
+.shapeList i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.muted { color: var(--dim); font-size: 12px; }
+.props .prop { display: grid; grid-template-columns: 1fr 1.4fr 26px; gap: 5px; margin-bottom: 5px; }
+.props .prop button { padding: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.chips button { font-size: 12px; padding: 2px 8px; border-radius: 12px; }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin: 10px 0; background: #1c1812; }
+.card .big { font-size: 20px; color: var(--gold2); font-weight: 700; }
+.steps { margin: 6px 0 0; padding-left: 18px; color: var(--dim); font-size: 13px; }
+.steps li { margin: 3px 0; }
+#thumb { width: 128px; height: 128px; border: 1px solid var(--line); border-radius: 8px; background: #0e0c09; display: block; }
+pre { white-space: pre-wrap; word-break: break-all; font-size: 11px; color: var(--dim); max-height: 200px; overflow: auto; background: #120f0b; padding: 8px; border-radius: 6px; }
+#toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--gold); color: #1b150c; padding: 8px 14px; border-radius: 8px; font-weight: 600; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 10; }
+#toast.show { opacity: 1; }
+@media (max-width: 760px) {
+  main { flex-direction: column; }
+  #stage { flex: none; height: 52vh; }
+  #panel { width: auto; flex: 1; border-left: 0; border-top: 1px solid var(--line); }
+  header { padding: 6px 10px; gap: 8px; }
+  .sub { display: none; }
+  #tools { padding: 6px 10px; gap: 10px; }
+}
+/* the courtyard (courtyard.js) */
+.court { position: fixed; inset: 0; z-index: 20; background: #9cc4e4; }
+.court canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.courtBar { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; background: #17140fd9; }
+.courtBar b { color: var(--gold2); font: 700 15px Georgia, serif; }
+.courtSize { color: var(--ink); font-size: 12px; flex: 1; min-width: 160px; }
+.courtBtns { display: flex; gap: 6px; }
+.courtHelp { position: absolute; left: 12px; right: 12px; bottom: 10px; color: #1b150c; font-size: 12px; text-shadow: 0 1px 0 #fff8; pointer-events: none; }
+.courtLook { position: absolute; top: 56px; right: 10px; width: 300px; max-height: calc(100% - 80px); overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.courtLook h3 { margin: 4px 0 8px; font: 600 12px system-ui; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; }
+.courtLook .lk { margin-bottom: 8px; }
+.courtLook .lk > span { display: block; color: var(--dim); font-size: 12px; margin-bottom: 3px; }
+.courtLook select { width: 100%; }
+@media (max-width: 760px) { .courtLook { left: 10px; right: 10px; width: auto; } .courtHelp { display: none; } }
