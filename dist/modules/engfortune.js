@@ -176,11 +176,25 @@
       finally { paying = false; setTimeout(payNext, 500); }
     }
     setInterval(payNext, 4000);
-    setInterval(() => {   /* a deposit's 'gone' is settled 15 minutes after its send went (the wallet has shown the drop by then) */
+    /* [Claude 2026-10-16] a deposit's 'gone' is settled the moment the wallet count shows its block (the operator: 65,609 - 609 + 500 showed
+       64,891 - the deposit was counted out twice for the 15 minutes the old timer waited). The count is the arcade's confirmed
+       balance: once /r/tx says the send is in a block, the wallet is read again, and the first count read after that holds it. */
+    async function settleGone() {
       const L = ledger(); if (!L || !L.feb) return; let ch = false;
-      for (const b of L.feb) if (b.gone && b.tx && !b.goneOff && Date.now() - (b.sentAt || b.at || 0) > 900000) { L.gone = L.gone || {}; L.gone.coins = Math.max(0, (L.gone.coins | 0) - b.n); if (!L.gone.coins) delete L.gone.coins; b.goneOff = true; ch = true; }
-      if (ch) ENGBANK.ledgerSave();
-    }, 30000);
+      for (const b of L.feb) {
+        if (!b.gone || !b.tx || b.goneOff) continue;
+        if (!b.conf) {
+          const t = await fetch('/r/tx/' + b.tx, { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null).catch(() => null);
+          if (t && (t.confirmations | 0) >= 1) { b.conf = Date.now(); ch = true; if (K.walletRefresh) K.walletRefresh(); }
+          else if (Date.now() - (b.sentAt || b.at || 0) > 3600000) { b.conf = Date.now(); ch = true; }   /* never seen in a block in an hour: let the count decide */
+          continue;
+        }
+        const at = K.walletState.data && K.walletState.data.at;
+        if (at && at > b.conf) { L.gone = L.gone || {}; L.gone.coins = Math.max(0, (L.gone.coins | 0) - b.n); if (!L.gone.coins) delete L.gone.coins; b.goneOff = true; ch = true; }
+      }
+      if (ch) { ENGBANK.ledgerSave(); if (hud.refresh) hud.refresh('all'); }
+    }
+    setInterval(settleGone, 5000);
 
     /* ---------- seated */
     const stake = () => FEV ? FEV.tier * FEV.k : 1;
