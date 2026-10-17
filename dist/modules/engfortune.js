@@ -74,12 +74,30 @@
       /* [Claude 2026-10-16] the operator: "When you stand up from a slot machine, your Gold should automatically cash out to your inventory" -
          the moment the Bank closes the sitting (cash out, stand up, gone quiet) its credit is back in the pack, as a card table's
          stack is; the Bank's own payout to the wallet follows and is counted as on its way (payBack never gives the same GOLD twice) */
-      if (d.st === 'paid' || d.st === 'closing') payBack(s, (d.paid | 0) + (d.st === 'closing' ? d.credit | 0 : 0));
+      if (d.st === 'paid') payBack(s, d.paid | 0);
+      else if (d.st === 'closing' && allSent(s)) payBack(s, (d.paid | 0) + (d.credit | 0));   /* at once only when every deposit of it really went to @ashvale */
       if (d.st === 'held') hud.chat('The @ashvale Bank is holding a Fortune Engine sitting for a person to check: a deposit never showed on the chain.', 'warn');
       if (FEV && FEV.s === s) seatedHeard(d);
     }
     if (ENGBANK.feHear) ENGBANK.feHear(heard);
     /* the Bank paid a sitting home: that GOLD back in the pack (once per sitting and amount; the wallet catches up) */
+    /* [Claude 2026-10-16] a deposit whose send never went is still in the wallet: it always comes back to the pack, so the pack and
+       chest add up to the wallet (the operator: "Make sure that all players gold matches their gold in their wallet"). A sitting with an
+       unsent deposit is never cashed out to the pack early (allSent), so this never counts the same GOLD twice. */
+    function refund(b) {
+      const L = ledger(); if (!L || b.refunded) return;
+      const cashed = L.fes && L.fes[b.s] && (L.fes[b.s].back | 0) > 0 && !L.fes[b.s].early;
+      b.refunded = true;
+      if (b.gone && !cashed) { L.gone = L.gone || {}; L.bag = L.bag || {}; const d = Math.min(b.n, L.gone.coins | 0); L.gone.coins = (L.gone.coins | 0) - d; L.bag.coins = (L.bag.coins | 0) + d; }   /* it never left the wallet: back in the bag, not new loot */
+      ENGBANK.ledgerSave(); if (cashed) return;
+      FEB_LOCAL.add(b.s + ':' + b.id); K.send({ c: 'feback', s: b.s, n: b.n, local: b.id });
+      hud.chat('The ' + fmt(b.n) + ' GOLD that never left your wallet is back in your pack.', 'sys');
+    }
+    setTimeout(function back() {   /* deposits that failed before this release and were not handed back */
+      const L = ledger(); if (!L) { setTimeout(back, 5000); return; }
+      for (const b of (L.feb || [])) if (b.failed && !b.refunded) refund(b);
+    }, 9000);
+    function allSent(s) { const L = ledger(); return !!L && !(L.feb || []).some(b => b.s === s && !b.tx); }
     function payBack(s, paid) {
       const L = ledger(); if (!L) return; L.fes = L.fes || {}; const rec = L.fes[s]; if (!rec) return;
       const n = paid - (rec.back | 0); if (n <= 0) return;
@@ -97,6 +115,21 @@
       }
       const old = Date.now() - 7 * 86400000; for (const s in L.fes) if ((L.fes[s].at || 0) < old) delete L.fes[s];
     }
+    /* [Claude 2026-10-16] the operator: "If the cash out is more than 10,000 gold, it should go directly to the players chest" - he won
+       102,000 and could not move under it. A cash-out over BIG goes from the pack straight into the chest (engbank chestStore, so the
+       wallet ledger stays right); one already in a pack (a cash-out before this) is moved the next time the game loads. */
+    const BIG = 10000;
+    function storeBig(s, n) {
+      const L = ledger(); if (!L || !ENGBANK.chestStore) return;
+      L.fes = L.fes || {}; const rec = L.fes[s]; if (rec && rec.stored) return;
+      const m = ENGBANK.chestStore('coins', Math.min(n, packGold()), true);
+      if (rec) { rec.stored = true; ENGBANK.ledgerSave(); }
+      if (m > 0) hud.chat(fmt(m) + ' GOLD from the Fortune Engine goes straight to your chest.', 'sys');
+    }
+    setTimeout(function sweep() {   /* a big cash-out still in the pack from before: once, when the wallet is known */
+      const L = ledger(); if (!L) { setTimeout(sweep, 5000); return; }
+      for (const s in (L.fes || {})) { const rec = L.fes[s]; if ((rec.back | 0) > BIG && !rec.stored && packGold() > 0) storeBig(s, rec.back | 0); }
+    }, 8000);
     let askT = 0;
     setInterval(() => {   /* a sitting of ours not yet home: ask about our sittings every minute (and once soon after a load) */
       const L = ledger(); if (!L || !L.fes) return;
@@ -123,9 +156,8 @@
           bankSend(b.s + '|x|' + b.id, { t: 'feinx', v: 1, s: b.s, id: b.id });   /* the Bank takes that credit back (or holds the sitting if it was played) */
           /* [Claude 2026-10-16] back in the pack only if the machine was not played on it: a played deposit's sitting is held by the
              Bank for a person to check, and giving it back here as well as the cash-out made GOLD appear twice (the operator's phone) */
-          const cashed = L.fes && L.fes[b.s] && (L.fes[b.s].back | 0) > 0;   /* its sitting already came back to the pack at the cash-out */
-          if (!b.played && !cashed) { FEB_LOCAL.add(b.s + ':' + b.id); K.send({ c: 'feback', s: b.s, n: b.n, local: b.id }); }
-          if (FEV && FEV.s === b.s) { FEV.busy = false; say(b.played ? 'The GOLD never left your wallet. The Bank holds this sitting for a person to check.' : 'The GOLD could not be sent to the Bank. It is back in your pack.'); }
+          refund(b);
+          if (FEV && FEV.s === b.s) { FEV.busy = false; say('The GOLD could not be sent to the Bank. It is back in your pack.' + (b.played ? ' The Bank holds what was played on it for a person to check.' : '')); }
         }
         ENGBANK.ledgerSave();
       };
@@ -137,13 +169,18 @@
         let st = j;
         for (let i = 0; i < 200 && st && st.status !== 'sent' && st.status !== 'failed'; i++) { await new Promise(ok => setTimeout(ok, 3000)); st = await fetch('/r/send/' + encodeURIComponent(j.id), { credentials: 'same-origin' }).then(x => x.json()).catch(() => null) || st; }
         if (!st || st.status !== 'sent' || !st.txid) { fail((st && (st.error || st.status)) || 'no answer from the wallet'); return; }
-        b.tx = st.txid; if (oo) { oo.st = 'sent'; oo.t = Date.now(); } ENGBANK.ledgerSave(); setTimeout(K.walletRefresh, 60000);
+        b.tx = st.txid; b.sentAt = Date.now(); if (oo) { oo.st = 'sent'; oo.t = Date.now(); } ENGBANK.ledgerSave(); setTimeout(K.walletRefresh, 60000);
         bankSend(b.s + '|tx|' + b.id, { t: 'fein', v: 1, s: b.s, n: b.n, id: b.id, tx: b.tx });   /* the proof of a deposit the Bank already credited */
         L.feb = L.feb.filter(x => !((x.tx || x.failed) && Date.now() - (x.at || 0) > 7 * 86400000));
       } catch (e) { fail(e && e.message); }
       finally { paying = false; setTimeout(payNext, 500); }
     }
     setInterval(payNext, 4000);
+    setInterval(() => {   /* a deposit's 'gone' is settled 15 minutes after its send went (the wallet has shown the drop by then) */
+      const L = ledger(); if (!L || !L.feb) return; let ch = false;
+      for (const b of L.feb) if (b.gone && b.tx && !b.goneOff && Date.now() - (b.sentAt || b.at || 0) > 900000) { L.gone = L.gone || {}; L.gone.coins = Math.max(0, (L.gone.coins | 0) - b.n); if (!L.gone.coins) delete L.gone.coins; b.goneOff = true; ch = true; }
+      if (ch) ENGBANK.ledgerSave();
+    }, 30000);
 
     /* ---------- seated */
     const stake = () => FEV ? FEV.tier * FEV.k : 1;
@@ -326,7 +363,13 @@
       if (e.e === 'fein') {
         if (!L) return; L.feb = L.feb || []; L.fes = L.fes || {};
         const id = Date.now().toString(36) + randHex(2);
-        L.feb.push({ s: e.s, n: e.n | 0, id, at: Date.now() });
+        /* [Claude 2026-10-16] the chest ledger (engbank): these coins leave the wallet by our own send, like a trade - so they are
+           'gone', never 'spent'. Counted as spent (or as used-up promises while a payout was on its way), the wallet's own
+           returns sent the same GOLD to @ashvale a second time once sends worked: the operator's @apple lost ~48,000 that way. */
+        { const n = e.n | 0; L.bag = L.bag || {}; L.pend = L.pend || {}; L.gone = L.gone || {};
+          const fb = Math.min(n, L.bag.coins | 0), fp = Math.min(n - fb, L.pend.coins | 0);
+          L.bag.coins = (L.bag.coins | 0) - fb; L.pend.coins = (L.pend.coins | 0) - fp; L.gone.coins = (L.gone.coins | 0) + fb + fp; }
+        L.feb.push({ s: e.s, n: e.n | 0, id, at: Date.now(), gone: true });
         if (!L.fes[e.s]) L.fes[e.s] = { at: Date.now(), m: e.m, back: 0 };
         ENGBANK.ledgerSave();
         /* [Claude 2026-10-16] the operator: "The credits should be available instantly. Just like wagers on the poker table or chess game" -
@@ -340,6 +383,7 @@
         const key = Array.from(FEB_LOCAL).find(k => k.startsWith(e.s + ':'));
         if (key) { FEB_LOCAL.delete(key); return; }   /* a send that never left: nothing on its way */
         if (L && e.n > 0) { L.pend = L.pend || {}; L.pend.coins = (L.pend.coins || 0) + (e.n | 0); ENGBANK.ledgerSave(); }   /* paid by the Bank: on its way to the wallet */
+        if ((e.n | 0) > BIG) storeBig(e.s, e.n | 0);
         if (FEV) draw();
       }
     }

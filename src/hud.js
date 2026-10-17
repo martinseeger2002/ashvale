@@ -100,7 +100,7 @@
       else if (d.teleport && d.eq !== 'ring') o.push({ html: 'Use ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
       else if (!d.eq && !d.edible) o.push({ html: 'Use ' + nm, fn: () => api.cmd({ c: 'use', slot }) });
       if (d.arms) { o.push({ html: 'Call to arms <span class="c">castle guard</span>', fn: () => api.cmd({ c: 'arms', on: true }) }); o.push({ html: 'Stand down <span class="c">castle guard</span>', fn: () => api.cmd({ c: 'arms', on: false }) }); }   /* the Lake Castle stone (2026-10-05) */
-      if (!d.bound) o.push({ html: 'Drop ' + nm, fn: () => api.cmd({ c: 'drop', slot }) });
+      if (!d.bound) o.push({ html: 'Drop ' + nm, fn: () => it.id === 'coins' ? askAmount('Drop how much GOLD?', it.n, 'Drop', n => api.cmd({ c: 'drop', slot, n })) : api.cmd({ c: 'drop', slot }) });   /* GOLD asks how much [Claude 2026-10-16] */
       o.push({ html: 'Examine ' + nm, fn: () => chatLine(examine(it.id, it.n), 'sys') });
       return o;
     }
@@ -191,6 +191,22 @@
         '<button class="btn" data-a="no">' + A.esc(noLabel || 'No') + '</button>';
       help.style.display = 'block';
       help.querySelector('[data-a=yes]').onclick = () => { help.style.display = 'none'; onYes && onYes(); };
+      help.querySelector('[data-a=no]').onclick = () => { help.style.display = 'none'; };
+    }
+    /* [Claude 2026-10-16] the operator: "When you drop Gold, it should always ask you how much Gold do you want to drop and give you the
+       number keypad" - a number box (inputmode numeric: the phone's keypad) with All, then cb(n) */
+    function askAmount(title, max, yesLabel, cb) {
+      if (K.numpad) return K.numpad(title, max, cb);   /* the operator: "the same keypad as the shop and chest inventory" */
+      help.innerHTML = '<h3>' + A.esc(title) + '</h3><p style="margin:0 0 8px">You carry ' + max.toLocaleString() + '.</p>' +
+        '<input type="number" inputmode="numeric" pattern="[0-9]*" min="1" max="' + max + '" step="1" value="' + max + '" style="font-size:18px;width:9em;padding:6px 8px;margin:0 6px 10px 0">' +
+        '<button class="btn" data-a="all" style="display:inline-block;width:auto;padding:6px 10px">All</button>' +
+        '<button class="btn" data-a="yes">' + A.esc(yesLabel || 'OK') + '</button><button class="btn" data-a="no">Cancel</button>';
+      help.style.display = 'block';
+      const inp = help.querySelector('input'); try { inp.focus(); inp.select(); } catch (e) { /* keypad */ }
+      const go = () => { const n = Math.floor(Number(inp.value)); if (!(n >= 1)) { inp.focus(); return; } help.style.display = 'none'; cb(Math.min(n, max)); };
+      inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') go(); if (e.key === 'Escape') help.style.display = 'none'; });
+      help.querySelector('[data-a=all]').onclick = () => { inp.value = max; inp.focus(); };
+      help.querySelector('[data-a=yes]').onclick = go;
       help.querySelector('[data-a=no]').onclick = () => { help.style.display = 'none'; };
     }
     function playerStats(name, sk, cb, story) {
@@ -319,7 +335,7 @@
     });
 
     /* ---------- the parts (each its own module/inscription): they get this kit and add their functions to it */
-    const K = { host, api, core, P, A, el, ui, layer, panel, st, shopEl, ccEl, slotHtml, longPress, menu, hideMenu, chatLine, examine, itemOptions, updateOrbs, showHelp, promptSay,
+    const K = { host, api, core, P, A, el, ui, layer, panel, st, shopEl, ccEl, slotHtml, longPress, menu, hideMenu, chatLine, examine, itemOptions, askAmount, updateOrbs, showHelp, promptSay,
       refresh() { }, drawShop() { }, openShop() { }, closeShop() { }, openChest() { }, closeChest() { }, drawChest() { }, invPointer() { }, creator() { }, creatorOpen: () => false,
       chessOpen() { }, chessUpdate() { }, chessClose() { }, chessPromo: null,
       pokerOpen() { }, pokerUpdate() { }, pokerClose() { }, pokerAnchor() { },

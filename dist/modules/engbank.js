@@ -138,7 +138,15 @@
         chestState();   /* count what was used up since the last look */
         const L = ledgerFor(walletState.address); L.out = L.out || {};
         const W = walletState.data, now = Date.now();
-        for (const k of Object.keys(L.out)) L.out[k] = L.out[k].filter(o => !(o.st === 'sent' && now - o.t > 900000));   /* reflected long ago */
+        for (const k of Object.keys(L.out)) L.out[k] = L.out[k].filter(o => {   /* reflected long ago */
+          if (!(o.st === 'sent' && now - o.t > 900000)) return true;
+          /* [Claude 2026-10-16] and so no longer owed: the spent units it carried are settled here. Left to the wallet count alone
+             (step 3 of chestState) they were only settled when the wallet held LESS than the bag counts - never with GOLD in the
+             chest - so 15 minutes on the same GOLD was sent back again, and again (the operator's @apple: 25,000, 24,900, 20,000 ...).
+             A Fortune Engine deposit ('fe:') is never counted as spent (engfortune books it as gone). */
+          if (!String(o.id || '').startsWith('fe:') && L.spent && L.spent[k]) { L.spent[k] = Math.max(0, L.spent[k] - (o.n | 0)); if (!L.spent[k]) delete L.spent[k]; }
+          return false;
+        });
         let pick = null;
         for (const k in L.spent) {
           const away = (L.out[k] || []).reduce((a, o) => a + o.n, 0), n = (L.spent[k] || 0) - away - holdOf(L, k);   /* a fresh drop waits 90 s */

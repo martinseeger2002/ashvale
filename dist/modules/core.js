@@ -911,7 +911,7 @@
           if (!airborne(p)) break; const n = nodeAt(idx(c.x | 0, c.y | 0)); if (!n || nodeDef(n).skill !== 'woodcutting') break;
           p.path = findPath(p.x, p.y, (x, y) => x === n.x && y === n.y, n.x, n.y, 80); p.act = null; p.skilling = null;
           p.perch = { x: n.x, y: n.y, sx: Math.sign(c.sx | 0), sy: Math.sign(c.sy | 0) }; ev({ e: 'perch', p: p.id, x: n.x, y: n.y }); break; }
-        case 'drop': { const s = p.inv[c.slot | 0], d = s && IT[s.id]; if (d && d.bound) { msg(p, d.quest ? d.name + ' is a quest item. You keep it safe.' : d.name + ' was made for you. You keep it.', 'warn'); break; } if (s) { p.inv[c.slot | 0] = null; dropGround(s.id, s.n, p.x, p.y, p.id, 300, { lv: p.lv | 0 }); ev({ e: 'inv', p: p.id }); } break; }
+        case 'drop': { const s = p.inv[c.slot | 0], d = s && IT[s.id]; if (d && d.bound) { msg(p, d.quest ? d.name + ' is a quest item. You keep it safe.' : d.name + ' was made for you. You keep it.', 'warn'); break; } if (s) { const n = c.n > 0 && (c.n | 0) < s.n ? c.n | 0 : s.n; if (n < s.n) s.n -= n; else p.inv[c.slot | 0] = null; dropGround(s.id, n, p.x, p.y, p.id, 300, { lv: p.lv | 0 }); ev({ e: 'inv', p: p.id }); } break; }   /* n [Claude 2026-10-16]: part of a stack (GOLD asks how much) */
         case 'buy': buy(p, c.shop, c.item, Math.max(1, Math.min(1000, c.n | 0))); break;
         case 'sell': sell(p, c.shop, c.slot | 0, Math.max(1, c.n | 0)); break;
         case 'style': { const cl = wclass(p); p.styles[cl] = Math.max(0, Math.min(STYLES[cl].length - 1, c.i | 0)); ev({ e: 'style', p: p.id }); break; }

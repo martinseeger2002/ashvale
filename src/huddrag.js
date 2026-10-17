@@ -22,6 +22,7 @@
       if (slot && panel.contains(slot)) { const j = +slot.dataset.i; if (j !== i) { api.cmd({ c: 'move', from: i, to: j }); api.sfx && api.sfx('click'); } return 'move'; }
       if (eqs) { const d = core.item(P().inv[i].id); if (d.eq) api.cmd({ c: 'equip', slot: i }); return 'equip'; }
       if (t && ui.contains(t) && !t.classList.contains('lay')) return 'none';   /* dropped on some other piece of interface: nothing */
+      { const s = P().inv[i]; if (s && s.id === 'coins' && K.askAmount) { K.askAmount('Drop how much GOLD?', s.n, 'Drop', n => api.cmd({ c: 'drop', slot: i, n })); return 'drop'; } }   /* GOLD asks how much [Claude 2026-10-16] */
       api.cmd({ c: 'drop', slot: i }); return 'drop';
     }
     function invPointer(node, i) {

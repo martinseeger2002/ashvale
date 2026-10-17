@@ -60,6 +60,7 @@
       pad.querySelector('small').textContent = 'of ' + have.toLocaleString() + (max < have ? ' \u00b7 ' + max + ' fit in your bag' : ''); pad.style.display = 'flex'; npShow();
     }
     function npClose() { pad.style.display = 'none'; NP.fn = null; }
+    K.numpad = numpad;   /* [Claude 2026-10-16] the same pad for dropping GOLD (the operator: "the same keypad as the shop and chest") */
     for (const b of pad.querySelectorAll('[data-k]')) b.onclick = e => { e.stopPropagation(); npKey(b.dataset.k); };
     pad.addEventListener('pointerdown', e => { if (e.target === pad) npClose(); });
     G.addEventListener('keydown', e => {   /* on a computer the number keys work too */

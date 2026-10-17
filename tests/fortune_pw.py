@@ -158,6 +158,10 @@ with sync_playwright() as p:
     check(wait(pa, 'ASH.me.inv.filter(s => s && s.id === "coins").reduce((n, s) => n + s.n, 0) >= %d' % (p2 + 200), 10) or pack(pa) >= p2, 'a sitting the Bank paid comes back to the pack once (%d -> %d)' % (p2, pack(pa)))
     p3 = pack(pa); ev(pa, '__bankHeard({t: "fes", to: "x", rows: [[%s, "paid", 0, 200]]})' % json.dumps(s2)); time.sleep(1.5)
     check(pack(pa) == p3, 'told twice: paid once')
+    # The operator: "If the cash out is more than 10,000 gold, it should go directly to the players chest"
+    p4 = pack(pa); ev(pa, '__bankHeard({t: "fe", to: "x", s: %s, st: "paid", credit: 0, q: 0, paid: 15200})' % json.dumps(s2))
+    check(wait(pa, 'document.body.innerText.includes("15,000 GOLD from the Fortune Engine goes straight to your chest")', 10), 'a 15,000 GOLD cash-out goes straight to the chest')
+    check(pack(pa) == p4, 'and not into the pack (%d -> %d)' % (p4, pack(pa)))
     check(not errs, 'no page errors %s' % errs[:3])
     b.close()
 print(('%d FAILED' % len(fails)) if fails else 'ALL OK')
