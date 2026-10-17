@@ -55,7 +55,9 @@ BANK = r"""(() => {
     if (o.t === 'feinx') return r && state(r, { id: o.id });
     if (!r) return { t: 'fe', to: me, s, st: 'none', credit: 0, q: 0 };
     if (o.t === 'fe?') return state(r);
-    if (o.t === 'feout') { if (r.st === 'open' || r.st === 'closing') { r.paid = (r.paid || 0) + r.credit; r.credit = 0; r.st = 'paid'; } return state(r); }
+    if (o.t === 'feout') {   /* as the real Bank: closing at once, paid only once the chain shows the deposits (here 3 s later) */
+      if (r.st === 'open') { r.st = 'closing'; setTimeout(async () => { r.paid = (r.paid || 0) + r.credit; r.credit = 0; r.st = 'paid'; window.__bankHeard(await state(r)); }, 3000); }
+      return state(r); }
     if (o.t === 'fespin') {
       if (o.q === r.q && r.res) return r.res;
       if (r.st !== 'open') return state(r, { err: 'closed' }); if (o.q !== r.q + 1) return state(r, { err: 'order' });
@@ -144,7 +146,8 @@ with sync_playwright() as p:
     # stand up: the Bank pays the credit home, it comes back to the pack and is on its way to the wallet
     p1 = pack(pa); pa.click('.fortp [data-a="stand"]')
     check(wait(pa, '!ASH.fortune().seated() && !document.querySelector(".fortp.bar")', 10), 'Stand up leaves the machine')
-    check(wait(pa, '__bankLog.some(o => o.t === "feout")', 10) and wait(pa, 'ASH.me.inv.filter(s => s && s.id === "coins").reduce((n, s) => n + s.n, 0) === %d' % (p1 + cr), 20), 'the %d GOLD credit is back in the pack (%d -> %d)' % (cr, p1, pack(pa)))
+    check(wait(pa, '__bankLog.some(o => o.t === "feout")', 10) and wait(pa, 'ASH.me.inv.filter(s => s && s.id === "coins").reduce((n, s) => n + s.n, 0) === %d' % (p1 + cr), 2.5), 'standing up cashes the %d GOLD credit out to the pack at once, before the Bank pays (%d -> %d)' % (cr, p1, pack(pa)))
+    time.sleep(4); check(pack(pa) == p1 + cr, 'the Bank paying it later does not add it twice (%d)' % pack(pa))
     # a sitting paid while the game was away: back at the next 'fes' answer
     ev(pa, 'ASH.fortune().menu({kind: "fortune", id: "fe2"})[0].fn()'); wait(pa, 'ASH.fortune().seated()', 20)
     pa.click('.fortp [data-a="dep"]'); pa.fill('.fortp.dep input', '200'); pa.click('.fortp.dep [data-a="go"]')

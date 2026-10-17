@@ -1168,3 +1168,17 @@ the walk here feature".
   after it was played holds the sitting - the local agent found the v2 hole) + engfortune; the card table's turn order after a
   raise (holdemlib nextActor from the seat that acted). Both go out as 0.8.129 once Bank v3 is live.
 
+
+## 0.8.129 - 2026-10-16 (Claude): Fortune Engine credit at once; card table turn order - RELEASED (v156 34a4754a; cards fc113a2a ASHVALE, fb6f89f9 Ziibiing)
+- the operator (phone): "The credits should be available instantly. Just like wagers on the poker table or chess game" -> engfortune
+  tells the Bank {fein, s, n, id} at once; the send's tx follows; a failed send {feinx}. Bank v3 c5ae4b9 on .25 (local agent):
+  credit at once, payout only once every live deposit is proven; a deposit voided after it was played HOLDS the sitting
+  (the agent caught the v2 hole: claim, play, void, keep the winnings). bank_fe_test ALL OK on .25.
+- the operator: three-handed, after a raise the turn went backwards -> holdemlib nextActor goes round from the seat that acted
+  (holdemlib v2); 9 checks in poker_test.js, a 37,408-turn fuzz 0 out of order; poker_flow/bank/leave ALL OK.
+- Modules: holdemlib, engfortune. check_live: v156, no console errors. Feed note posted.
+
+## 0.8.130 - 2026-10-16 (Claude): standing up cashes out to the pack - RELEASED (v157 235931d6; cards 5874b725 ASHVALE, 1735b1f3 Ziibiing)
+- the operator: "When you stand up from a slot machine, your Gold should automatically cash out to your inventory" -> engfortune: the
+  moment the Bank closes a sitting ('closing' or 'paid') its credit goes back in the pack (payBack, counted as on its way);
+  the Bank's later payout never adds it twice. fortune_pw ALL OK (stand-in Bank now closes first, pays 3 s later).

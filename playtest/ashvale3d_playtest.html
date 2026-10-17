@@ -21894,7 +21894,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       if (d.id) { Q.delete(s + '|in|' + d.id); Q.delete(s + '|x|' + d.id); if (d.tx) Q.delete(s + '|tx|' + d.id); }
       if (d.pos || d.err) for (const k of Array.from(Q.keys())) if (k.startsWith(s + '|spin|')) Q.delete(k);
       if (d.st === 'paid' || d.st === 'held' || d.st === 'none') Q.delete(s + '|out');
-      if (d.st === 'paid') payBack(s, d.paid | 0);
+      /* [Claude 2026-10-16] the operator: "When you stand up from a slot machine, your Gold should automatically cash out to your inventory" -
+         the moment the Bank closes the sitting (cash out, stand up, gone quiet) its credit is back in the pack, as a card table's
+         stack is; the Bank's own payout to the wallet follows and is counted as on its way (payBack never gives the same GOLD twice) */
+      if (d.st === 'paid' || d.st === 'closing') payBack(s, (d.paid | 0) + (d.st === 'closing' ? d.credit | 0 : 0));
       if (d.st === 'held') hud.chat('The @ashvale Bank is holding a Fortune Engine sitting for a person to check: a deposit never showed on the chain.', 'warn');
       if (FEV && FEV.s === s) seatedHeard(d);
     }
@@ -21935,28 +21938,32 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       const id = 'fe:' + b.id;
       if (!(L.out.coins || []).some(x => x.id === id)) { (L.out.coins = L.out.coins || []).push({ id, n: b.n, piece: null, st: 'pending', t: Date.now() }); ENGBANK.ledgerSave(); }
       const oo = (L.out.coins || []).find(x => x.id === id);
-      const fail = () => {
+      const fail = why => {
         b.tries = (b.tries | 0) + 1; b.next = Date.now() + 15000 * b.tries;
-        if (b.tries >= 3) {   /* it never left the wallet: back in the pack, and nothing on its way */
-          b.failed = true; L.out.coins = (L.out.coins || []).filter(x => x.id !== id); FEB_LOCAL.add(b.s + ':' + b.id);
-          K.send({ c: 'feback', s: b.s, n: b.n, local: b.id });
-          bankSend(b.s + '|x|' + b.id, { t: 'feinx', v: 1, s: b.s, id: b.id });   /* and the Bank takes that credit back */
-          if (FEV && FEV.s === b.s) { FEV.busy = false; say('The GOLD could not be sent to the Bank. It is back in your pack.'); }
+        if (why) { console.warn('ASHVALE: the Fortune Engine send to @ashvale failed:', why); if (b.tries === 1) hud.chat('Your wallet did not send the ' + fmt(b.n) + ' GOLD to the @ashvale Bank yet: ' + String(why).slice(0, 120), 'warn'); }
+        if (b.tries >= 3) {   /* it never left the wallet */
+          b.failed = true; L.out.coins = (L.out.coins || []).filter(x => x.id !== id);
+          bankSend(b.s + '|x|' + b.id, { t: 'feinx', v: 1, s: b.s, id: b.id });   /* the Bank takes that credit back (or holds the sitting if it was played) */
+          /* [Claude 2026-10-16] back in the pack only if the machine was not played on it: a played deposit's sitting is held by the
+             Bank for a person to check, and giving it back here as well as the cash-out made GOLD appear twice (the operator's phone) */
+          const cashed = L.fes && L.fes[b.s] && (L.fes[b.s].back | 0) > 0;   /* its sitting already came back to the pack at the cash-out */
+          if (!b.played && !cashed) { FEB_LOCAL.add(b.s + ':' + b.id); K.send({ c: 'feback', s: b.s, n: b.n, local: b.id }); }
+          if (FEV && FEV.s === b.s) { FEV.busy = false; say(b.played ? 'The GOLD never left your wallet. The Bank holds this sitting for a person to check.' : 'The GOLD could not be sent to the Bank. It is back in your pack.'); }
         }
         ENGBANK.ledgerSave();
       };
       try {
         const r = await fetch('/r/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-          body: JSON.stringify({ to: '@ashvale', label: 'ASHVALE', note: 'Fortune Engine', silent: true, kind: 'token', propertyid: pid, amount: String(b.n) }) });
+          body: JSON.stringify({ to: '@ashvale', label: 'ASHVALE', note: 'Fortune Engine', silent: true, kind: 'token', propertyid: pid, amount: String(b.n) }) });   /* [Claude 2026-10-16] the operator: "We're not supposed to have these prompts in the game all transactions should happen automatically" - silent: the arcade signs a game's own GOLD back to it with no card */
         const j = await r.json().catch(() => ({}));
-        if (r.status !== 202 || !j.id || j.status === 'failed') { fail(); return; }
+        if (r.status !== 202 || !j.id || j.status === 'failed') { fail(j.error || ('the arcade said ' + r.status)); return; }
         let st = j;
         for (let i = 0; i < 200 && st && st.status !== 'sent' && st.status !== 'failed'; i++) { await new Promise(ok => setTimeout(ok, 3000)); st = await fetch('/r/send/' + encodeURIComponent(j.id), { credentials: 'same-origin' }).then(x => x.json()).catch(() => null) || st; }
-        if (!st || st.status !== 'sent' || !st.txid) { fail(); return; }
+        if (!st || st.status !== 'sent' || !st.txid) { fail((st && (st.error || st.status)) || 'no answer from the wallet'); return; }
         b.tx = st.txid; if (oo) { oo.st = 'sent'; oo.t = Date.now(); } ENGBANK.ledgerSave(); setTimeout(K.walletRefresh, 60000);
         bankSend(b.s + '|tx|' + b.id, { t: 'fein', v: 1, s: b.s, n: b.n, id: b.id, tx: b.tx });   /* the proof of a deposit the Bank already credited */
         L.feb = L.feb.filter(x => !((x.tx || x.failed) && Date.now() - (x.at || 0) > 7 * 86400000));
-      } catch (e) { fail(); }
+      } catch (e) { fail(e && e.message); }
       finally { paying = false; setTimeout(payNext, 500); }
     }
     setInterval(payNext, 4000);
@@ -22004,7 +22011,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
     function standUp() {
       if (!FEV) return; const F = FEV, m = machine(F.id);
       if (F.credit > 0 || (ledger() && ledger().fes && ledger().fes[F.s] && !ledger().fes[F.s].done)) bankSend(F.s + '|out', { t: 'feout', v: 1, s: F.s }, 15000);
-      if (F.credit > 0) hud.chat('You stand up from the Fortune Engine. The Bank sends your ' + fmt(F.credit) + ' GOLD credit back to you.', 'sys');
+      if (F.credit > 0) hud.chat('You stand up from the Fortune Engine and cash out ' + fmt(F.credit) + ' GOLD.', 'sys');
       if (m) { if (m.ceil) m.ceil.visible = false; m.mood({ mine: false, win: false, low: false }); m.show(0, stake()); m.knobs(0); }
       if (K.netSend) K.netSend({ FE: [F.id, 0, stake(), 0, 0] });
       FEV = null; leaveView();
@@ -22023,6 +22030,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       if (!FEV.h) { say('The Bank has not opened this machine for you yet. Put in GOLD first.'); return; }
       const m = machine(FEV.id); audio();
       FEV.busy = true; FEV.pendSpin = { q: FEV.q + 1, cs: randHex(8), h: FEV.h, w, at: Date.now() }; FEV.credit -= w;
+      { const L = ledger(); if (L && L.feb) { let ch = false; for (const b of L.feb) if (b.s === FEV.s && !b.tx && !b.played) { b.played = true; ch = true; } if (ch) ENGBANK.ledgerSave(); } }   /* played on before its send went: never handed back */
       if (m) { m.clearCoins(); m.mood({ win: false }); m.pullLever(); } SND.ratchet(); LOOK.tyaw = LOOK.tpitch = 0;
       say('The engine turns…');
       bankSend(FEV.s + '|spin|' + FEV.pendSpin.q, { t: 'fespin', v: 1, s: FEV.s, q: FEV.pendSpin.q, w, cs: FEV.pendSpin.cs });
@@ -22067,7 +22075,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (!F.pendSpin) { F.credit = d.credit | 0; F.h = d.h || F.h; F.q = d.q | 0; }
         if (mine) say(fmt(d.credit) + ' GOLD of credit. Pick a wager and spin.'); else draw(); return; }
       if (d.st === 'paid' && F.cashing) { F.cashing = false; F.busy = false; newSitting(); say('Cashed out. The GOLD is back in your pack.'); return; }
-      if (d.st === 'closing' && F.cashing) { F.cashing = false; F.busy = false; newSitting(); say('Cashed out. It comes back to you once the chain shows your deposit (about a minute).'); return; }
+      if (d.st === 'closing' && F.cashing) { F.cashing = false; F.busy = false; newSitting(); say('Cashed out. The GOLD is back in your pack.'); return; }
       if (d.st === 'open' && !F.pendSpin && !F.busy) { F.credit = d.credit | 0; F.h = d.h || F.h; F.q = d.q | 0; draw(); }
     }
     function pays() {

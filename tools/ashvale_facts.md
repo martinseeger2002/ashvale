@@ -15,7 +15,10 @@
 - Saves from the old one-page playtest builds (before the launcher) do not carry over.
 - Fixes are small: one or two module inscriptions, not a whole new game.
 
-## In the current release (v0.8.128)
+## In the current release (v0.8.130)
+- 0.8.130 (2026-10-16): standing up from a Fortune Engine (or Cash out) puts the GOLD left on it straight back in your pack.
+- 0.8.129 (2026-10-16): Fortune Engine credit shows the moment GOLD goes in the slot; at the card tables the turn
+  always passes to the next player round from the one who just acted, also after a raise.
 - 0.8.128 (2026-10-16): four Fortune Engines stand along the north wall of the Saltmere Tap's card room upstairs. Sit on
   the bench, put any amount of GOLD in the coin slot, pick a wager (1, 2 or 3; 10, 20 or 30; 100, 200 or 300 GOLD) and
   pull the lever or tap the reels. Three Crowns pay 5,000 times the wager; a Ruby anywhere on the line pays. The @ashvale
