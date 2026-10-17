@@ -107,9 +107,10 @@ with sync_playwright() as p:
     pa.fill('.fortp.dep input', '1000'); pa.click('.fortp.dep [data-a="go"]')
     check(wait(pa, 'ASH.fortune()._state() && ASH.fortune()._state().credit === 1000 && !ASH.fortune()._state().busy', 30), 'the Bank counts 1,000 GOLD of credit')
     check(pack(pa) == p0 - 1000, '1,000 GOLD left the pack (%d -> %d)' % (p0, pack(pa)))
-    snd = ev(pa, 'window.__sends || []')
+    wait(pa, '(window.__sends || []).length >= 1', 20); snd = ev(pa, 'window.__sends || []')
     check(len(snd) == 1 and snd[0]['to'] == '@ashvale' and snd[0]['amount'] == '1000' and snd[0]['kind'] == 'token', 'it went to @ashvale as GOLD: %s' % snd)
     fein = [o for o in ev(pa, '__bankLog') if o['t'] == 'fein']
+    wait(pa, '__bankLog.some(o => o.t === "fein")', 10); fein = [o for o in ev(pa, '__bankLog') if o['t'] == 'fein']
     check(len(fein) >= 1 and fein[0]['n'] == 1000 and not fein[0].get('tx') and fein[0].get('id'), 'the Bank heard the deposit at once, before its send (credit at once, as at the card table)')
     check(wait(pa, '__bankLog.some(o => o.t === "fein" && o.tx && o.tx.length === 64 && o.id === %s)' % json.dumps(fein[0].get('id')), 20), 'then the send to @ashvale, with its tx, for that same deposit')
     check(ev(pa, 'ASH.fortune()._machine("fe2").disp.credit') == 1000, 'the counter on the machine says CREDIT 1,000')
@@ -159,9 +160,9 @@ with sync_playwright() as p:
     p3 = pack(pa); ev(pa, '__bankHeard({t: "fes", to: "x", rows: [[%s, "paid", 0, 200]]})' % json.dumps(s2)); time.sleep(1.5)
     check(pack(pa) == p3, 'told twice: paid once')
     # The operator: "If the cash out is more than 10,000 gold, it should go directly to the players chest"
-    p4 = pack(pa); ev(pa, '__bankHeard({t: "fe", to: "x", s: %s, st: "paid", credit: 0, q: 0, paid: 15200})' % json.dumps(s2))
-    check(wait(pa, 'document.body.innerText.includes("15,000 GOLD from the Fortune Engine goes straight to your chest")', 10), 'a 15,000 GOLD cash-out goes straight to the chest')
-    check(pack(pa) == p4, 'and not into the pack (%d -> %d)' % (p4, pack(pa)))
+    p4 = pack(pa); ev(pa, '__bankHeard({t: "fe", to: "x", s: %s, st: "paid", credit: 0, q: 0, paid: 25200})' % json.dumps(s2))
+    check(wait(pa, 'document.body.innerText.includes("5,000 GOLD from the Fortune Engine goes straight to your chest; 20,000 stays in your pack")', 10), 'a 25,000 GOLD cash-out: 20,000 to the pack, 5,000 to the chest')
+    check(pack(pa) == p4 + 20000, 'the pack gains exactly 20,000 (%d -> %d)' % (p4, pack(pa)))
     check(not errs, 'no page errors %s' % errs[:3])
     b.close()
 print(('%d FAILED' % len(fails)) if fails else 'ALL OK')

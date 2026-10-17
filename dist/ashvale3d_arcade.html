@@ -18244,7 +18244,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
          the moment the Bank closes the sitting (cash out, stand up, gone quiet) its credit is back in the pack, as a card table's
          stack is; the Bank's own payout to the wallet follows and is counted as on its way (payBack never gives the same GOLD twice) */
       if (d.st === 'paid') payBack(s, d.paid | 0);
-      else if (d.st === 'closing' && allSent(s)) payBack(s, (d.paid | 0) + (d.credit | 0));   /* at once only when every deposit of it really went to @ashvale */
+      else if (d.st === 'closing') payBack(s, (d.paid | 0) + (d.credit | 0));
       if (d.st === 'held') hud.chat('The @ashvale Bank is holding a Fortune Engine sitting for a person to check: a deposit never showed on the chain.', 'warn');
       if (FEV && FEV.s === s) seatedHeard(d);
     }
@@ -18287,13 +18287,13 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
     /* [Claude 2026-10-16] the operator: "If the cash out is more than 10,000 gold, it should go directly to the players chest" - he won
        102,000 and could not move under it. A cash-out over BIG goes from the pack straight into the chest (engbank chestStore, so the
        wallet ledger stays right); one already in a pack (a cash-out before this) is moved the next time the game loads. */
-    const BIG = 10000;
+    const BIG = 20000;   /* the operator: "Change the directly to chest cash out limit to 20,000 gold. And 20,000 should go into your inventory and the remainder should go into your chest" */
     function storeBig(s, n) {
       const L = ledger(); if (!L || !ENGBANK.chestStore) return;
       L.fes = L.fes || {}; const rec = L.fes[s]; if (rec && rec.stored) return;
-      const m = ENGBANK.chestStore('coins', Math.min(n, packGold()), true);
+      const m = ENGBANK.chestStore('coins', Math.min(n - BIG, packGold()), true);   /* the first BIG stays in the pack */
       if (rec) { rec.stored = true; ENGBANK.ledgerSave(); }
-      if (m > 0) hud.chat(fmt(m) + ' GOLD from the Fortune Engine goes straight to your chest.', 'sys');
+      if (m > 0) hud.chat(fmt(m) + ' GOLD from the Fortune Engine goes straight to your chest; ' + fmt(BIG) + ' stays in your pack.', 'sys');
     }
     setTimeout(function sweep() {   /* a big cash-out still in the pack from before: once, when the wallet is known */
       const L = ledger(); if (!L) { setTimeout(sweep, 5000); return; }
@@ -18393,8 +18393,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
     /* stand up (the button, walking off, a fall): what is on the machine goes home; the view comes back at once */
     function standUp() {
       if (!FEV) return; const F = FEV, m = machine(F.id);
-      if (F.credit > 0 || (ledger() && ledger().fes && ledger().fes[F.s] && !ledger().fes[F.s].done)) bankSend(F.s + '|out', { t: 'feout', v: 1, s: F.s }, 15000);
+      if (F.pendSpin) { if (!F.standAfter) { F.standAfter = true; say('Standing up when the reels stop…'); } return; }   /* the Bank is settling a spin: its result first */
       if (F.credit > 0) hud.chat('You stand up from the Fortune Engine and cash out ' + fmt(F.credit) + ' GOLD.', 'sys');
+      if (F.credit > 0 || (ledger() && ledger().fes && ledger().fes[F.s] && !ledger().fes[F.s].done)) cashNow(F);
       if (m) { if (m.ceil) m.ceil.visible = false; m.mood({ mine: false, win: false, low: false }); m.show(0, stake()); m.knobs(0); }
       if (K.netSend) K.netSend({ FE: [F.id, 0, stake(), 0, 0] });
       FEV = null; leaveView();
@@ -18410,7 +18411,6 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
     async function spin() {
       if (!FEV || FEV.busy) return; const w = stake();
       if (FEV.credit < w) { say(FEV.credit > 0 ? 'Not enough credit for this wager' : 'Tap the coin slot to put in GOLD'); return; }
-      if (!FEV.h) { say('The Bank has not opened this machine for you yet. Put in GOLD first.'); return; }
       const m = machine(FEV.id); audio();
       FEV.busy = true; FEV.pendSpin = { q: FEV.q + 1, cs: randHex(8), h: FEV.h, w, at: Date.now() }; FEV.credit -= w;
       { const L = ledger(); if (L && L.feb) { let ch = false; for (const b of L.feb) if (b.s === FEV.s && !b.tx && !b.played) { b.played = true; ch = true; } if (ch) ENGBANK.ledgerSave(); } }   /* played on before its send went: never handed back */
@@ -18418,17 +18418,23 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       say('The engine turns…');
       bankSend(FEV.s + '|spin|' + FEV.pendSpin.q, { t: 'fespin', v: 1, s: FEV.s, q: FEV.pendSpin.q, w, cs: FEV.pendSpin.cs });
     }
+    /* the credit back in the pack (or the chest, over 10,000) at once; the Bank pays the wallet behind it (payBack never twice) */
+    function cashNow(F) {
+      const n = Math.max(0, F.credit | 0), L = ledger();
+      bankSend(F.s + '|out', { t: 'feout', v: 1, s: F.s }, 15000);
+      if (n > 0 && L) { L.fes = L.fes || {}; const rec = L.fes[F.s] || (L.fes[F.s] = { at: Date.now(), m: F.id, back: 0 }); rec.back = (rec.back | 0) + n; ENGBANK.ledgerSave(); K.send({ c: 'feback', s: F.s, n }); }
+      F.credit = 0; return n;
+    }
     function cashOut(quiet) {
       if (!FEV || FEV.busy) return; if (FEV.credit <= 0) { say('Nothing to cash out.'); return; }
-      FEV.busy = true; FEV.cashing = true; say('The Bank is paying out…');
-      bankSend(FEV.s + '|out', { t: 'feout', v: 1, s: FEV.s }, 15000);
+      const n = cashNow(FEV); newSitting(); say('Cashed out ' + fmt(n) + ' GOLD.');
     }
     function newSitting() { FEV.s = 'fe:' + FEV.id + ':' + randHex(8); FEV.credit = 0; FEV.q = 0; FEV.h = null; }
     async function seatedHeard(d) {
       const F = FEV;
       if (d.pos && F.pendSpin && d.q === F.pendSpin.q) {
         const P = F.pendSpin; F.pendSpin = null; F.q = d.q; F.h = d.h || null;
-        try { const ok = (await sha256(String(d.sec || ''))) === P.h && (await stopsOf(String(d.sec), P.cs, P.q)).every((p, r) => p === d.pos[r]);
+        try { const ok = (!P.h || (await sha256(String(d.sec || ''))) === P.h) && (await stopsOf(String(d.sec), P.cs, P.q)).every((p, r) => p === d.pos[r]);
           if (!ok) console.warn('ASHVALE: a Fortune Engine spin did not match its seal', d.s, d.q); } catch (e) { console.warn('ASHVALE: the seal check failed', e && e.message); }
         const m = machine(F.id), L = LIB(), done = () => {
           if (FEV !== F) return;
@@ -18440,6 +18446,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
             if (machine(F.id)) { machine(F.id).mood({ win: true }); machine(F.id).dropCoins(n); } SND.coins(n);
           } else say(F.credit >= stake() ? 'No luck this time' : F.credit > 0 ? 'No luck. Your credit is below this wager' : 'No luck. Put in more GOLD to keep playing');
           draw();
+          if (F.standAfter) { F.standAfter = false; standUp(); }
         };
         tell(d.pos);
         if (m) m.spinTo(d.pos, done); else done();
@@ -18454,9 +18461,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         else say('The Bank refused that spin. Try again.');
         draw(); return;
       }
-      if (d.id && !d.err && !d.pos) { const mine = F.pendIn === d.id; if (mine) { F.pendIn = null; F.inFlight = false; F.busy = false; }
-        if (!F.pendSpin) { F.credit = d.credit | 0; F.h = d.h || F.h; F.q = d.q | 0; }
-        if (mine) say(fmt(d.credit) + ' GOLD of credit. Pick a wager and spin.'); else draw(); return; }
+      if (d.id && !d.err && !d.pos) { if (!d.tx && F.ins > 0) F.ins--;
+        F.h = d.h || F.h; if (!F.pendSpin && !F.ins && !F.busy) { F.credit = d.credit | 0; F.q = d.q | 0; }   /* the Bank's count, once nothing of ours is still on its way */
+        draw(); return; }
       if (d.st === 'paid' && F.cashing) { F.cashing = false; F.busy = false; newSitting(); say('Cashed out. The GOLD is back in your pack.'); return; }
       if (d.st === 'closing' && F.cashing) { F.cashing = false; F.busy = false; newSitting(); say('Cashed out. The GOLD is back in your pack.'); return; }
       if (d.st === 'open' && !F.pendSpin && !F.busy) { F.credit = d.credit | 0; F.h = d.h || F.h; F.q = d.q | 0; draw(); }
@@ -18544,8 +18551,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         /* [Claude 2026-10-16] the operator: "The credits should be available instantly. Just like wagers on the poker table or chess game" -
            the Bank credits the deposit at once; the send to @ashvale follows (payNext) and proves it before anything goes home */
         bankSend(e.s + '|in|' + id, { t: 'fein', v: 1, s: e.s, n: e.n | 0, id }, 4000);
-        if (FEV && FEV.s === e.s) { FEV.inFlight = true; FEV.pendIn = id; FEV.waitIn = 0; const m = machine(FEV.id); if (m) m.feed(); say('Putting ' + fmt(e.n) + ' GOLD in…');
-          const F = FEV; setTimeout(() => { if (FEV === F && F.pendIn === id) { F.busy = false; F.inFlight = false; say('The Bank is slow to answer; your GOLD shows as soon as it does.'); } }, 15000); }
+        /* [Claude 2026-10-16] the operator: "The gold should transfer fluidly from inventory to a slot game or table game and chest" - the
+           credit shows at once and can be played at once; the Bank hears the deposit before any spin (one queue, in order) */
+        if (FEV && FEV.s === e.s) { FEV.inFlight = false; FEV.waitIn = 0; FEV.busy = false; FEV.ins = (FEV.ins || 0) + 1; FEV.credit += e.n | 0;
+          const m = machine(FEV.id); if (m) m.feed(); say(fmt(e.n) + ' GOLD in. Pick a wager and spin.'); }
         setTimeout(payNext, 200); return;
       }
       if (e.e === 'feback') {
