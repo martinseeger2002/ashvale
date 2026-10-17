@@ -68,10 +68,10 @@ def start(pg, name):
         g = game(pg)
         if g: break
         pg.wait_for_timeout(1500)
-    g.wait_for_selector('.cc input', timeout=30000)
+    g.wait_for_selector('.cc, .ash canvas', timeout=60000)   # [Claude 2026-10-17] 0.8.123: the creator has no name box (the @tag is the name)
     answer_cards(g)
-    g.fill('.cc input', name)
-    if not leave_creator(g): raise Exception('the character creator never closed')
+    if g.query_selector('.cc') and g.query_selector('.cc').is_visible():
+        if not leave_creator(g): raise Exception('the character creator never closed')
     pg.wait_for_timeout(500)
     try: g.click('.help .btn', timeout=5000)
     except Exception: pass
