@@ -1,0 +1,67 @@
+{
+ "name": "Rough Stone Bench",
+ "examine": "Hard enough to teach a cat to sit still, soft enough to ruin your knees in a week.",
+ "parts": [
+  [
+   "box",
+   "stone",
+   0,
+   0.08,
+   0,
+   1.0,
+   0.2,
+   0.4
+  ],
+  [
+   "box",
+   "stone",
+   0,
+   0.08,
+   0,
+   1.0,
+   0.2,
+   0.4
+  ],
+  [
+   "box",
+   "stone",
+   0,
+   0.45,
+   0,
+   1.0,
+   0.15,
+   0.4
+  ],
+  [
+   "box",
+   "moss",
+   0.2,
+   0.1,
+   0.1,
+   0.2,
+   0.12,
+   0.15
+  ],
+  [
+   "box",
+   "moss",
+   -0.2,
+   0.1,
+   0.1,
+   0.2,
+   0.12,
+   0.15
+  ],
+  [
+   "box",
+   "moss",
+   0,
+   0.1,
+   0.2,
+   0.15,
+   0.12,
+   0.15
+  ]
+ ],
+ "snow": []
+}

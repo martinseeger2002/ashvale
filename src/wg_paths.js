@@ -428,6 +428,40 @@
           const hq = Math.atan2(Q.y - P.y, Q.x - P.x); if (Math.hypot(Q.x - P.x, Q.y - P.y) > 2) P.arms.push({ t: ar.t, a: +hq.toFixed(3) });
         }
         for (const P of posts) { delete P.by; ROAD.push(P); }
+        /* FENCES (2026-10-18, the operator: "fences are good to add in a lot of places along paths and roads - for short times, long times,
+           medium times, all varies"): rail fences (data/decor.json rail_fence, a 2.9 m section) in runs along the roads between towns and the
+           hand-laid trails - a run of 1-2, 3-6 or 8-16 sections, then a gap of 25-90 m - on the side away from the lamps, now and then both
+           sides, following the road round its bends (each section sits exactly where it falls: dx/dz carry it off its tile's centre). Seeded
+           by the road, so every node lays the same; none over water or rock, none in a town. */
+        {
+          const SEG = 2.9, lines = ROADS_L.map(r => [r.A.face, r.pts, r.w0, g.hashStr(r.A.id + '>' + r.B.id), true]);
+          for (const tr of (T.trails || [])) lines.push([tr.face == null ? (PIECES[0] ? PIECES[0].face : 0) : tr.face, (tr.pts || []).map(([vx, vy]) => [vx + 0.5, -(vy + 0.5)]), tr.w || 1.3, g.hashStr(String(tr.id)), false]);
+          for (const [face, pts, w0, seed, road] of lines) {
+            if (pts.length < 2) continue;
+            let n = 0; const R = () => g.u01(g.mix32(seed + (n++) * 7919));
+            const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+            const L = cum[cum.length - 1];
+            const pt = d => { let i = 1; while (i < pts.length - 1 && cum[i] < d) i++; const l = cum[i] - cum[i - 1] || 1, k = Math.max(0, Math.min(1, (d - cum[i - 1]) / l)); return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * k, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * k]; };
+            for (let d = 15 + R() * 40; d < L - 10;) {
+              const u = R(), cnt = u < 0.45 ? 1 + (R() < 0.5 ? 1 : 0) : u < 0.8 ? 3 + Math.floor(R() * 4) : 8 + Math.floor(R() * 9);
+              const sides = R() < 0.22 ? [-1, 1] : [road || R() < 0.5 ? -1 : 1], off = w0 + 1.5;
+              for (let i = 0; i < cnt && d < L - 5; i++, d += SEG) {
+                const a = pt(d), b = pt(d + SEG), l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, tx = (b[0] - a[0]) / l, ty = (b[1] - a[1]) / l;
+                for (const sd of sides) {
+                  const px = (a[0] + b[0]) / 2 - ty * sd * off, py = (a[1] + b[1]) / 2 + tx * sd * off;   /* the left of the way on (sd -1: the right), the lamps stand on the left */
+                  const gx = Math.floor(px), gy = Math.floor(-py);
+                  if (inPiece(face, gx, gy)) continue;
+                  ctx.foldInto(face, px, py, SB);
+                  const s0 = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false);
+                  if (s0.h < ctx.WATER + 0.2 || s0.peakS > 0.08) continue;
+                  ROAD.push({ k: 'rail_fence', x: gx, y: gy, w: 1, h: 1, face, ry: +Math.atan2(ty, tx).toFixed(3), pal: s0.h > 75 ? 'snow' : 'temperate', dx: +(px - gx - 0.5).toFixed(2), dz: +(-py - gy - 0.5).toFixed(2) });
+                }
+              }
+              d += 25 + R() * 65;
+            }
+          }
+        }
+        for (const S of (T.decor || [])) ROAD.push({ k: S.k, x: S.x, y: S.y, w: 1, h: 1, face: S.face, ry: S.ry || 0, pal: S.pal, s: S.s });   /* scenery out in the world (data/decor.json kinds; tools/decor/place_trail_decor.js) */
         for (const S of (T.trailSigns || [])) ROAD.push({ k: 'signpost', x: S.x, y: S.y, w: 1, h: 1, face: S.face, arms: S.arms });   /* the great mountain's trails (tools/mountain/make_signs.js) */
       }
       /* hand-laid trails (T.trails, tools/mountain/make_trails.js: the great mountain's safe road, its dangerous climb and the way to it

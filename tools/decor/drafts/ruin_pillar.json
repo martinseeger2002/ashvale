@@ -1,0 +1,67 @@
+{
+ "name": "Broken Column",
+ "examine": "It stands as a testament to the structural integrity of the past and the chaotic whimsy of the present.",
+ "parts": [
+  [
+   "box",
+   "darkstone",
+   0,
+   0.08,
+   0,
+   0.6,
+   0.16,
+   0.6
+  ],
+  [
+   "box",
+   "stone",
+   0,
+   0.58,
+   0,
+   0.48,
+   0.7,
+   0.48
+  ],
+  [
+   "box",
+   "stone",
+   0,
+   0.08,
+   0,
+   0.6,
+   0.16,
+   0.6
+  ],
+  [
+   "box",
+   "stone",
+   0,
+   0.08,
+   1.2,
+   0.6,
+   0.16,
+   0.6
+  ],
+  [
+   "box",
+   "stone",
+   0,
+   0.08,
+   -1.2,
+   0.6,
+   0.16,
+   0.6
+  ],
+  [
+   "box",
+   "accent",
+   0,
+   0.63,
+   0,
+   0.48,
+   0.08,
+   0.48
+  ]
+ ],
+ "snow": []
+}

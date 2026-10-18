@@ -1,0 +1,69 @@
+{
+ "name": "Rustic Rail Fence",
+ "examine": "Three posts hold up two rails, one of which has given up on gravity and decided to nap.",
+ "parts": [
+  [
+   "box",
+   "darkwood",
+   -1.5,
+   0.05,
+   0,
+   0.15,
+   1.8,
+   0.15
+  ],
+  [
+   "box",
+   "darkwood",
+   0,
+   0.05,
+   0,
+   0.15,
+   1.8,
+   0.15
+  ],
+  [
+   "box",
+   "darkwood",
+   1.5,
+   0.05,
+   0,
+   0.15,
+   1.8,
+   0.15
+  ],
+  [
+   "box",
+   "wood",
+   -0.75,
+   1.2,
+   0,
+   0.05,
+   0.1,
+   3.0
+  ],
+  [
+   "box",
+   "wood",
+   -0.75,
+   0.6,
+   0,
+   0.05,
+   0.1,
+   3.0,
+   0
+  ],
+  [
+   "box",
+   "wood",
+   -0.75,
+   0.6,
+   0.0,
+   0.05,
+   0.1,
+   3.0,
+   0.52
+  ]
+ ],
+ "snow": []
+}

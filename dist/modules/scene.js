@@ -1122,6 +1122,29 @@
         }
         return { keepStorey, keepTop };
       })();
+      /* DECOR (2026-10-18): reusable scenery from data/decor.json (tools/decor/make_decor_data.py) - a kind is a list of primitive parts
+         [shape, colour, x, y, z, sx, sy, sz, ry, rx, rz] round the object's tile centre, turned by o.ry and scaled by o.s; colours are names
+         looked up in the palette o.pal names (temperate, forest, snow, desert, swamp), and a snowy palette lays the kind's snow parts too */
+      let DECOR;
+      const decorKinds = () => { if (DECOR === undefined) { try { DECOR = (G.ASH3D && G.ASH3D.get && G.ASH3D.get('decor')) || null; } catch (e) { DECOR = null; } } return DECOR && DECOR.kinds; };
+      function decor(o, x, y, z) {
+        if (o.dx || o.dz) { x += o.dx || 0; z += o.dz || 0; y = heightAt(x, z); }   /* a fence section where it falls along its road (wg_paths FENCES) */
+        const D = DECOR, K = D.kinds[o.k], P = D.palettes[o.pal] || D.palettes.temperate, ry = o.ry || 0, sc = o.s || 1, c = Math.cos(ry), s = Math.sin(ry);
+        const col = t => parseInt((t[0] === '#' ? t : P[t] || '#ff00ff').slice(1), 16);
+        const put = p => {
+          const px = p[2], pz = p[4], wx = x + (px * c + pz * s) * sc, wz = z + (-px * s + pz * c) * sc, wy = y + p[3] * sc;
+          if (p[0] === 'glow') { const m = new THREE.Mesh(new THREE.SphereGeometry(p[5] * sc, 8, 6), new THREE.MeshBasicMaterial({ color: col(p[1]) })); m.position.set(wx, wy, wz); group.add(m); return; }
+          B.add(p[0], col(p[1]), wx, wy, wz, p[5] * sc, p[6] * sc, p[7] * sc, (p[8] || 0) + ry, p[9] || 0, p[10] || 0);
+        };
+        for (const p of K.parts) put(p);
+        if (P.snow) for (const p of K.snow || []) put(p);
+        /* a pick box over it, so every piece can be examined (engine: right-click; a left-click goes through to the ground) */
+        let x0 = 9, x1 = -9, z0 = 9, z1 = -9, top = 0.3;
+        for (const p of K.parts) { const r = p[0] === 'glow' ? p[5] : Math.max(p[5], p[7]) / 2; x0 = Math.min(x0, p[2] - r); x1 = Math.max(x1, p[2] + r); z0 = Math.min(z0, p[4] - r); z1 = Math.max(z1, p[4] + r); top = Math.max(top, p[3] + (p[0] === 'glow' ? p[5] : p[6] / 2)); }
+        const pk = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.6, x1 - x0) * sc, top * sc, Math.max(0.6, z1 - z0) * sc), new THREE.MeshBasicMaterial({ visible: false }));
+        const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2; pk.position.set(x + (mx * c + mz * s) * sc, y + top * sc / 2, z + (-mx * s + mz * c) * sc); pk.rotation.y = ry;
+        pk.userData.pick = { kind: 'decor', k: o.k, x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
+      }
       const storeyH = (o, lv) => { const bi = map.buildingAt ? map.buildingAt(o.x, o.y, lv) : -1, Bd = bi >= 0 && map.buildings ? map.buildings[bi] : null; return Bd && Bd.lh ? Bd.lh : 1.8; };
       function building(o) {
         const x0 = o.x, z0 = o.y, x1 = o.x + o.w, z1 = o.y + o.h, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
@@ -1276,8 +1299,10 @@
       const siteObjs = chunk ? [].concat(...map.sitesIn(X0, Y0, X1 - 1, Y1 - 1).map(st => st.objects), ...(map.roadTorchesIn ? map.roadTorchesIn(X0, Y0, X1 - 1, Y1 - 1) : [])) : [];   /* tents, campfires, and lit posts along the town roads */
       const objs = (chunk ? siteObjs : map.objects.filter(o => inR(o.x, o.y))).sort((a, b) => ((b.k === 'wbridge') - (a.k === 'wbridge')) || ((b.enter ? 1 : 0) - (a.enter ? 1 : 0)));   /* a bridge first: its deck is the ground for the torches on it */
       const pkSeats = new Set(); for (const o of objs) if (o.k === 'pokertable') for (const sq of o.seats || []) pkSeats.add(sq[0] + ',' + sq[1]);   /* [Claude] the seats a poker table furnishes itself */
+      const DK = decorKinds();
       for (const o of objs) {
         const x = o.x + (o.w || 1) / 2, z = o.y + (o.h || 1) / 2; let y = heightAt(x, z);
+        if (DK && DK[o.k]) { decor(o, x, y, z); continue; }   /* reusable scenery (DECOR) */
         switch (o.k) {
           case 'house': case 'shop': case 'smithy': case 'church': building(o); break;
           case 'truins': {   /* a tall ruined keep: broken towers, no roof, a pole in the yard */

@@ -340,6 +340,12 @@
     "api": 1,
     "kind": "json"
    },
+   "decor": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "starmap": {
     "id": null,
     "v": 1,

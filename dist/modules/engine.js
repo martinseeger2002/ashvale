@@ -1576,6 +1576,10 @@
         if (t.kind === 'canoe') { const nm = '<span class="c">Birch bark canoe</span>';
           return [{ html: 'Get into the ' + nm, act: { c: 'board', x: t.x, y: t.y }, red: 1 },
                   { html: 'Examine ' + nm, fn: () => hud.chat('A canoe of birch bark over cedar ribs, sewn with spruce root and sealed with pitch. It floats light as a leaf.', 'sys') }]; }
+        if (t.kind === 'decor') {   /* scenery (data/decor.json, 2026-10-18: "they should all have examine text as well") */
+          const K = DATA.decor && DATA.decor.kinds && DATA.decor.kinds[t.k]; if (!K) return [];
+          return [{ html: 'Examine <span class="c">' + esc(K.name) + '</span>', fn: () => hud.chat(K.examine, 'sys') }];
+        }
         if (t.kind === 'sign') {
           const o = core.signAt(t.x, t.y); if (!o) return [];
           const nm = '<span class="c">' + (o.board === 'chess' ? 'Champions board' : 'Wooden sign') + '</span>', sk = o.board === 'chess' ? 'chess_wins' : 'chain_dragon';
@@ -1729,7 +1733,7 @@
         if (lastTap && now - lastTap.t < 300 && Math.hypot(cx - lastTap.x, cy - lastTap.y) < 40 && lastTap.act) {
           const up = Object.assign({}, lastTap.act, { run: runFor(true) }); lastTap = null; send(up); hud.hideMenu(); return;
         }
-        const ts = targetsAt(cx, cy).filter(t => t.kind !== 'remote'); if (!ts.length) { const g = groundAt(cx, cy); if (g) ts.push({ kind: 'ground', x: g.x, y: g.y }); else return; }
+        const ts = targetsAt(cx, cy).filter(t => t.kind !== 'remote' && t.kind !== 'decor'); if (!ts.length) {   /* scenery is examined from the menu; a click on it walks you there */ const g = groundAt(cx, cy); if (g) ts.push({ kind: 'ground', x: g.x, y: g.y }); else return; }
         const o = optionsFor(ts[0])[0];
         if (o) { if (o.act) o.act = Object.assign({}, o.act, { run: runFor(!!settings.runToggle) }); doAct(o, cx, cy); lastTap = { t: now, x: cx, y: cy, act: o.act || null }; }
         hud.hideMenu();

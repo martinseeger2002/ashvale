@@ -1,0 +1,57 @@
+{
+ "name": "Mossy Boulder Cluster",
+ "examine": "A pile of stones that argues about which one is the biggest, mostly just to be heard.",
+ "parts": [
+  [
+   "rock",
+   "stone",
+   0,
+   0.05,
+   0,
+   1.2,
+   0.8,
+   1.0
+  ],
+  [
+   "rock",
+   "stone",
+   0.6,
+   0.08,
+   0.4,
+   0.9,
+   0.7,
+   0.8
+  ],
+  [
+   "rock",
+   "stone",
+   -0.4,
+   0.12,
+   -0.3,
+   0.7,
+   0.6,
+   0.6
+  ],
+  [
+   "box",
+   "moss",
+   0.2,
+   0.35,
+   0.1,
+   0.4,
+   0.15,
+   0.2
+  ],
+  [
+   "box",
+   "moss",
+   -0.5,
+   0.25,
+   -0.2,
+   0.3,
+   0.1,
+   0.15
+  ]
+ ],
+ "snow": []
+}
