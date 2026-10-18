@@ -1788,7 +1788,7 @@
       if ((n.trade || n.craft) && !ends && !nextOffered(n, p) && tradeTalk(p, n)) return;   /* a quest of theirs comes first (Ma'iingan's deer hunt before his sinew trade) */
       const idle = npcIdleLines(n, p), offered = nextOffered(n, p);
       const hadQuest = (n.quests || []).concat(n.quest ? [n.quest] : []).some(id => p.quests[id]);
-      if (n.watch && !ends && !offered && !hadQuest) { ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: watchSay(p) }); return; }
+      if (n.watch && !n.ownLines && !ends && !offered && !hadQuest) { ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: watchSay(p) }); return; }   /* npc.ownLines: a watchman who keeps his own lines (the Lake Castle's gate guard) */
       if (idle && idle.length && !ends && !offered && !hadQuest) { let tell = null; if (n.sky && SKYTELL) try { tell = SKYTELL(p); } catch (e) { tell = null; } let nat = null; if (n.nature && NATTELL) try { nat = NATTELL(n.nature, p); } catch (e) { nat = null; } ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines: idle.concat(nat ? [nat] : [], tell ? [tell] : []) }); return; }   /* the sky-watchers end with the next eclipses */   /* dialogue straight off the zone data, checked after shop and quest */
       /* an NPC may offer the next quest only after the one before it is finished (Iria's supper, then the Gift of Angels) */
       let qid = ends || offered || n.quest;

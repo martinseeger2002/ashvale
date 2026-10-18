@@ -1387,6 +1387,240 @@
    "done": [
     "The road is lit, the bridge is held, and the market comes in the morning. That's a castle."
    ]
+  },
+  "kings_seal": {
+   "name": "The King's Seal",
+   "giver": "king_osric",
+   "after": "castellans_bridge",
+   "story": 2,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "saltmere",
+     "goal": {
+      "talk": "calder"
+     },
+     "reward": "xp:speechcraft:400",
+     "talk": [
+      "The castellan tells me the road is lit and the bridge is held. Then it is time the castle had friends at the end of it.",
+      "Take my seal to Mayor Calder in Saltmere. A castle with a harbour for a friend is a castle with a future."
+     ],
+     "progress": [
+      "Mayor Calder keeps the town hall in Saltmere, past the docks."
+     ],
+     "complete": [
+      "He took the seal and kept it. That is as good as a yes from a mayor."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "ziibiing",
+     "goal": {
+      "talk": "nookomis"
+     },
+     "reward": "xp:speechcraft:600",
+     "talk": [
+      "Now the people of Ziibiing, on the river far to the west. They were here before the castle and they will be here after it.",
+      "Go to Nookomis. Do not take the seal - take my word, and listen to hers."
+     ],
+     "progress": [
+      "Ziibiing is a long road. Nookomis will be by the fire, or the river, or wherever she likes."
+     ],
+     "complete": [
+      "She said we may visit, if we come to learn. I think that is the best treaty I will ever sign."
+     ]
+    }
+   ],
+   "done": [
+    "The seal is in Saltmere and my word is in Ziibiing. The valley is larger than it was this morning."
+   ]
+  },
+  "lodge_gifts": {
+   "name": "Gifts for the Lodges",
+   "giver": "queen_maelis",
+   "story": 2,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "lodges",
+     "goal": {
+      "talk": "mishoomis"
+     },
+     "reward": "xp:speechcraft:350",
+     "talk": [
+      "The king sends seals. I prefer to send someone who will sit down and ask what is wanted.",
+      "Go to the lodges by Ziibiing and ask Mishoomis what a gift from the castle ought to be. Then come back and tell me before the king guesses."
+     ],
+     "progress": [
+      "The lodges are beside Ziibiing. Mishoomis is the one people go to first."
+     ],
+     "complete": [
+      "Hides, he said, good ones, for the winter. Sensible. The king would have sent silver spoons."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "castle",
+     "goal": {
+      "bring": "deer_hide",
+      "n": 3
+     },
+     "reward": "xp:ranged:500",
+     "talk": [
+      "Three deer hides, then. The deer keep to the open woods; a bow helps, patience helps more.",
+      "Bring them to me, not the king. He will want to add a letter, and the letter will be about himself."
+     ],
+     "progress": [
+      "Three deer hides. Not goat, not boar - the lodges will know the difference, and so will I."
+     ],
+     "complete": [
+      "These will go west with the next drover. A gift that is wanted is worth ten that are admired."
+     ]
+    }
+   ],
+   "done": [
+    "The hides went west. A letter came back, and the king was not allowed to read it first."
+   ]
+  },
+  "princes_hunt": {
+   "name": "The Prince's Hunt",
+   "giver": "prince_edric",
+   "story": 2,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "wolfden",
+     "goal": {
+      "kill": "timber_wolf",
+      "n": 4
+     },
+     "reward": "xp:attack:700",
+     "talk": [
+      "My father says a prince does not go wolf hunting. My father says a great many things.",
+      "There is a den of timber wolves north of Ashvale - real wolves, not Whisperwood's greys. Four of them. Then tell me how it went, in detail."
+     ],
+     "progress": [
+      "The Timber Wolf Den is north of Ashvale, past the dragon road. Bring a bigger weapon than you think."
+     ],
+     "complete": [
+      "Four! And you came back with all your fingers. I am going to tell everyone it was my idea."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "castle",
+     "goal": {
+      "bring": "timber_wolf_pelt",
+      "n": 2
+     },
+     "reward": "xp:strength:500",
+     "talk": [
+      "Two pelts, for a cloak. If I cannot hunt, I can at least look as though I did.",
+      "The tailor in Ashvale can sew it, if Mother asks her. Mother will ask; she likes a story as much as I do."
+     ],
+     "progress": [
+      "Two timber wolf pelts. The greys' pelts are too thin; a prince has standards."
+     ],
+     "complete": [
+      "Look at that. Nobody will believe a word of it, and that is the best part."
+     ]
+    }
+   ],
+   "done": [
+    "The cloak is finished. He wears it to dinner. The king pretends not to notice."
+   ]
+  },
+  "even_ground_visit": {
+   "name": "The Even Ground",
+   "giver": "princess_liane",
+   "story": 1,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "evengrove",
+     "goal": {
+      "talk": "vael"
+     },
+     "reward": "xp:magic:350",
+     "talk": [
+      "Every map in the keep has a blank where the Even Ground should be. Somebody drew it once and somebody else scraped it off.",
+      "Go and see it for me. There is someone there called Vael. Ask what the blank is for."
+     ],
+     "progress": [
+      "The Even Ground is east of Ashvale, through the woods. Mind where you step; the maps did."
+     ],
+     "complete": [
+      "Vael said it is kept blank on purpose. That is the most interesting thing anyone has said to me all year."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "dragonapproach",
+     "goal": {
+      "talk": "squire_elian"
+     },
+     "reward": "xp:defence:350",
+     "talk": [
+      "One more blank: the dragon road. The squire who keeps it writes to nobody, which is suspicious in a squire.",
+      "Go and say the castle asks after him. Then come and tell me everything he did not say."
+     ],
+     "progress": [
+      "Squire Elian keeps the dragon road, north of the village. He will be standing as though he is guarding something."
+     ],
+     "complete": [
+      "He asked for nothing and said less. I shall draw him on the map as a very small question mark."
+     ]
+    }
+   ],
+   "done": [
+    "Two blanks fewer. She has started a new map, and it has room at the edges."
+   ]
+  },
+  "realm_accounts": {
+   "name": "Accounts of the Realm",
+   "giver": "steward_harlan",
+   "story": 1,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "village",
+     "goal": {
+      "talk": "odric"
+     },
+     "reward": "xp:speechcraft:300",
+     "talk": [
+      "A castle runs on bread, iron and accounts, and I am short of accounts.",
+      "Odric the merchant passes through Ashvale. Ask him what goods move on the road and what they fetch. Write nothing down; merchants lie less to people who are not writing."
+     ],
+     "progress": [
+      "Odric trades in Ashvale. He will have a wagon, or a story about where it went."
+     ],
+     "complete": [
+      "Salt, hides and gossip, and the gossip sells best. Noted."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "saltmere",
+     "goal": {
+      "talk": "hollis"
+     },
+     "reward": "xp:speechcraft:400",
+     "talk": [
+      "Now Hollis at the Saltmere tap. Every price in the valley is argued about in a tavern before it is agreed anywhere else.",
+      "Ask him what a barrel of salt fish fetches this month, and what it fetched last. The difference is the news."
+     ],
+     "progress": [
+      "Hollis keeps the Tap in Saltmere. Buy something; it loosens the numbers."
+     ],
+     "complete": [
+      "Excellent. Now I know what everything costs, and I can complain about it properly."
+     ]
+    }
+   ],
+   "done": [
+    "The ledgers balance, for once. He has asked to be left alone with them."
+   ]
   }
  }
 }

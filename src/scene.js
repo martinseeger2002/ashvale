@@ -1379,6 +1379,54 @@
             }
             break;
           }
+          case 'fountain': {   /* a courtyard fountain (the Lake Castle, 2026-10-17): a round stone basin, a pillar with a bowl, water in both */
+            const r = Math.min(o.w || 3, o.h || 3) / 2, ST = 0xb8b2a6, WAT = 0x4a8ab8;
+            B.add('cyl', ST, x, y + 0.3, z, r * 2, 0.6, r * 2);
+            const wt = new THREE.Mesh(new THREE.CylinderGeometry(r - 0.18, r - 0.18, 0.05, 20), new THREE.MeshLambertMaterial({ color: WAT, transparent: true, opacity: 0.85 })); wt.position.set(x, y + 0.55, z); group.add(wt);
+            B.add('cyl', ST, x, y + 1.0, z, 0.36, 1.2, 0.36);
+            B.add('cyl', ST, x, y + 1.62, z, 1.1, 0.16, 1.1);
+            const w2 = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.04, 14), new THREE.MeshLambertMaterial({ color: WAT, transparent: true, opacity: 0.85 })); w2.position.set(x, y + 1.7, z); group.add(w2);
+            const jet = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.5, 6), new THREE.MeshBasicMaterial({ color: 0xcfe6f5, transparent: true, opacity: 0.7 })); jet.position.set(x, y + 1.98, z); group.add(jet);
+            break;
+          }
+          case 'throne': {   /* the king's seat on its dais: a stepped plinth, a high-backed gilt chair, red cushions */
+            const w = o.w || 3, GOLD = 0xc8a040, RED = 0x8a1f24, f = o.face || 'n', back = { n: [0, 1], s: [0, -1], e: [-1, 0], w: [1, 0] }[f];
+            B.add('box', 0x9a948a, x, y + 0.12, z, w, 0.24, 1.0); B.add('box', 0x9a948a, x - back[0] * 0.55, y + 0.06, z - back[1] * 0.55, w, 0.12, 0.5);
+            B.add('box', GOLD, x, y + 0.55, z, 0.9, 0.6, 0.8); B.add('box', RED, x, y + 0.88, z, 0.8, 0.08, 0.7);
+            B.add('box', GOLD, x + back[0] * 0.35, y + 1.45, z + back[1] * 0.35, back[0] ? 0.12 : 0.9, 1.5, back[1] ? 0.12 : 0.9);
+            for (const s of [-1, 1]) B.add('box', GOLD, x + (back[1] ? s * 0.42 : 0), y + 1.05, z + (back[0] ? s * 0.42 : 0), back[1] ? 0.1 : 0.7, 0.3, back[0] ? 0.1 : 0.7);
+            B.add('box', GOLD, x + back[0] * 0.35, y + 2.28, z + back[1] * 0.35, back[0] ? 0.14 : 0.5, 0.25, back[1] ? 0.14 : 0.5);
+            break;
+          }
+          case 'carpet': {   /* a runner on the floor (the throne room's, from the inner door to the dais) */
+            const fl = floorY(o, y), c = parseInt(String(o.color || '#7a1f24').slice(1), 16);
+            B.add('box', c, x, fl + 0.02, z, (o.w || 1) - 0.1, 0.02, (o.h || 1) - 0.1); B.add('box', 0xc8a040, x, fl + 0.025, z, (o.w || 1) - 0.5, 0.02, (o.h || 1) - 0.5);
+            B.add('box', c, x, fl + 0.03, z, (o.w || 1) - 0.7, 0.02, (o.h || 1) - 0.7);
+            break;
+          }
+          case 'banner': {   /* a hanging banner on a wall: a pole, the cloth, a gold device */
+            const F = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] }[o.face || 's'], wx = x + F[0] * 0.44, wz = z + F[1] * 0.44, c = parseInt(String(o.color || '#1f3a6a').slice(1), 16);
+            B.add('box', 0x3a2a1a, wx, y + 3.0, wz, F[0] ? 0.08 : 1.1, 0.06, F[1] ? 0.08 : 1.1);
+            B.add('box', c, wx - F[0] * 0.03, y + 2.0, wz - F[1] * 0.03, F[0] ? 0.04 : 0.9, 2.0, F[1] ? 0.04 : 0.9);
+            B.add('box', 0xc8a040, wx - F[0] * 0.06, y + 2.3, wz - F[1] * 0.06, F[0] ? 0.04 : 0.36, 0.36, F[1] ? 0.04 : 0.36);
+            break;
+          }
+          case 'bush': {   /* a clipped garden bush */
+            const g = 0x3f6e34 + ((hash2(o.x, o.y) * 4) | 0) * 0x020300;
+            const b1 = mesh(new THREE.IcosahedronGeometry(0.55, 0), g, x, y + 0.5, z); b1.scale.set(1, 0.85, 1); group.add(b1);
+            break;
+          }
+          case 'gallows': {   /* the gallows: a timber platform with steps, two posts, the beam, a rope */
+            const W0 = o.w || 3, H0 = 1.3, TM = 0x5a3c24, DK = 0x3a2616, face = o.face || 'w', F = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] }[face];
+            B.add('box', TM, x, y + H0, z, W0, 0.12, W0);
+            for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) B.add('box', DK, x + dx * (W0 / 2 - 0.15), y + H0 / 2, z + dz * (W0 / 2 - 0.15), 0.2, H0, 0.2);
+            for (let k = 0; k < 4; k++) B.add('box', TM, x + F[0] * (W0 / 2 + 0.3 + k * 0.3), y + H0 - (k + 1) * 0.3, z + F[1] * (W0 / 2 + 0.3 + k * 0.3), F[0] ? 0.3 : 1.0, 0.08, F[1] ? 0.3 : 1.0);   /* the steps up */
+            for (const s of [-1, 1]) B.add('box', DK, x - F[1] * s * 0.9, y + H0 + 1.3, z + F[0] * s * 0.9, 0.18, 2.6, 0.18);
+            B.add('box', DK, x, y + H0 + 2.55, z, F[0] ? 0.18 : 2.1, 0.18, F[1] ? 0.18 : 2.1);
+            B.add('box', 0xb8a070, x, y + H0 + 2.0, z, 0.04, 1.0, 0.04); B.add('box', 0xb8a070, x, y + H0 + 1.45, z, 0.22, 0.2, 0.06);
+            B.add('box', 0x4a3a2a, x, y + H0 + 0.07, z, 0.8, 0.04, 0.8);   /* the trapdoor */
+            break;
+          }
           case 'windmill': {   /* a tower mill (the Lake Castle's, 2026-10-17): a tapered stone tower, a boarded cap, four sails that turn
              in the wind (update below); face = the side the sails look out over, and the door is on that side */
             const W0 = o.w || 4, ST = 0xcfc4ad, DK = 0x7a6a58, face = o.face || 'e';

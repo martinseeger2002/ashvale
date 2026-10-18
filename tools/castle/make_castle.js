@@ -64,7 +64,8 @@ wall(B.x1, A.y1, A.x1, A.y1, null, [0, 1]);                     /* east of the w
 wall(A.x0, A.y0, A.x0, A.y1, null, [-1, 0]);
 wall(B.x0, B.y1, B.x1, B.y1, null, [0, 1]);
 wall(B.x0, A.y1, B.x0, B.y1, null, [-1, 0]);
-wall(B.x1, A.y1, B.x1, B.y1, null, [1, 0]);
+const POSTERN = { x: B.x1, y: -1634 };   /* the back gate: out of the gardens towards the farm (2026-10-17) */
+wall(B.x1, A.y1, B.x1, B.y1, [[POSTERN.x, POSTERN.y]], [1, 0]);
 for (const [x, y] of [[A.x0, A.y0], [A.x1, A.y0], [A.x1, A.y1], [A.x0, A.y1]]) tower(x, y, 3.2, 14.5);
 for (const [x, y] of [[4058, A.y0], [4078, A.y0], [4096, A.y0], [A.x0, -1685], [A.x1, -1685], [4028 + 0, A.y1], [4103, A.y1]]) tower(x, y, 2.3, 8.5);
 for (const [x, y] of [[B.x0, B.y1], [B.x1, B.y1]]) tower(x, y, 3.4, 16.5);
@@ -128,7 +129,7 @@ npcs.push({ id: 'castle_armourer', name: 'Armourer Voss', look: 'voss', x: ARM.x
 /* fishing off the shore outside the walls (the lake around the castle) */
 const fishing = [];
 {
-  const ok = c => '.pdiq,f'.indexOf(c) >= 0, seen = new Set([[GATE.x, GATE.y - 3].join(',')]), q = [[GATE.x, GATE.y - 3]];
+  const ok = c => '.pdiqc,f'.indexOf(c) >= 0, seen = new Set([[GATE.x, GATE.y - 3].join(',')]), q = [[GATE.x, GATE.y - 3]];
   while (q.length) { const [x, y] = q.shift(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, k = nx + ',' + ny; if (!seen.has(k) && ok(at(nx, ny)) && !(nx > A.x0 && nx < A.x1 && ny > A.y0 && ny < B.y1)) { seen.add(k); q.push([nx, ny]); } } }
   const spots = [];
   for (const k of seen) { const [x, y] = k.split(',').map(Number); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (at(x + dx, y + dy) === '~' && at(x + 2 * dx, y + 2 * dy) === '~') spots.push([x + dx, y + dy]); }
@@ -138,7 +139,8 @@ const fishing = [];
 }
 npcs.push({ id: 'castellan', name: 'Castellan Brannoc', look: 'brannoc', guard: true, talk: 'quest', quest: 'castellans_bridge', quests: ['castellans_bridge'], maxHit: 10, gear: { weapon: 'longsword_t2' }, x: INNER.x + 2, y: K.y - 2, examine: 'Castellan Brannoc, keeper of the lake castle. He has the keys, and he has had them for a long time.',
   lines: ['The lake keeps our back and the river keeps the road. The walls only have to argue with the bridge.', 'Walk the walls if you like; the steps are by the corners and either side of the gate.'] });
-npcs.push({ id: 'gate_guard', name: 'Gate guard', look: 'ash_knight', guard: true, maxHit: 8, gear: { weapon: 'sword_t3', shield: 'shield_t2', head: 'helmet_t2' }, x: GATE.x + 2, y: GATE.y - 2, examine: 'A guard at the castle gate, leaning on a spear he has not needed in years.',
+/* the gate guard stands out on the road, nine paces before the barbican: closer in, its towers stand between him and the camera and take every tap */
+npcs.push({ id: 'gate_guard', name: 'Gate guard', look: 'ash_knight', guard: true, watch: 'castle_gate', ownLines: true, maxHit: 8, gear: { weapon: 'sword_t3', shield: 'shield_t2', head: 'helmet_t2' }, x: GATE.x + 3, y: BAR.y - 9, examine: 'A guard at the castle gate, leaning on a spear he has not needed in years.',
   lines: ['Welcome to the lake castle. Ashvale is back down the road, over the river bridge, south-west.', 'Mind the gatehouse, the portcullis sticks.'] });
 /* steps up the inside of the walls: a flight of 4 rising along the wall; foot = the yard tile where it starts, top = the wall tile it reaches */
 /* --- the castle's folk outside the walls and its market (2026-10-17, the operator: "a farmer outside with sheep cows, a granary
@@ -152,7 +154,7 @@ const pathLine = (pts) => { for (let k = 0; k + 1 < pts.length; k++) { const [ax
 { const CH = byName('Castle Chapel');
   objects.push({ k: 'altar', x: CH.x + 4, y: CH.y + 1, w: 1, h: 1 }); set(CH.x + 4, CH.y + 1, 'X');
   for (const [px, py] of [[CH.x + 1, CH.y + 4], [CH.x + 6, CH.y + 4], [CH.x + 1, CH.y + 3], [CH.x + 6, CH.y + 3]]) objects.push({ k: 'pew', x: px, y: py, w: 2, h: 1 });
-  objects.push({ k: 'sconce', x: CH.x + 5, y: CH.y + CH.h - 2, w: 1, h: 1, face: 's', night: true });
+  objects.push({ k: 'sconce', x: CH.x + 6, y: CH.y + CH.h - 1, w: 1, h: 1, face: 's', night: true });   /* on the door wall's row, as Ashvale's church has it: one tile in, it hung in the air */
   npcs.push({ id: 'aldith', name: 'Sister Aldith', look: 'aldith', x: CH.x + 3, y: CH.y + 2, talk: 'quest', quest: 'vespers', quests: ['vespers'],
     examine: 'Sister Aldith, chaplain of the Lake Castle, who rang the bell on her first evening and has not let it rest since.' }); }
 /* the market: stalls along the road through the bailey, between the gatehouse and the inner gate, and a trader to keep them */
@@ -188,6 +190,59 @@ npcs.push({ id: 'tobin', name: 'Farmer Tobin', look: 'tobin', x: 4107, y: -1652,
   examine: 'Farmer Tobin, who keeps the castle in mutton, milk and complaints about fences.' });
 objects.push({ k: 'torch', x: 4107, y: -1654, w: 1, h: 1 }, { k: 'well', x: 4100, y: -1657, w: 2, h: 2 }); for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) set(4100 + dx, -1657 + dy, 'X');
 pathLine([[GATE.x + 3, BAR.y - 4], [4120, BAR.y - 4], [4120, -1653], [4102, -1653], [4102, -1651]]);
+/* --- the court (2026-10-17, the operator: "cobble stone pathing and fountains and a gallows in the courtyard - the main castle
+   center should have a throne room with banquet halls and royal npcs walking around all with place holder quests ... the back
+   of the castle needs an exit towards the farm - the outside of the main castle within the walls should be gardens") */
+const inBailey = (x, y) => x > A.x0 && x < A.x1 && y > A.y0 && y < A.y1, inWard = (x, y) => x > B.x0 && x < B.x1 && y > A.y1 && y < B.y1;
+const inKeep = (x, y) => x >= K.x && x < K.x + K.w && y >= K.y && y < K.y + K.h;
+/* the gardens: the inner ward round the keep is lawn with flower beds, bushes and a few trees, and a cobbled walk round the keep */
+for (let y = A.y1 + 1; y < B.y1; y++) for (let x = B.x0 + 1; x < B.x1; x++) if (!inKeep(x, y) && at(x, y) === 'd') set(x, y, '.');
+const beds = [[B.x0 + 4, A.y1 + 4, 9, 3], [B.x1 - 12, A.y1 + 4, 9, 3], [B.x0 + 4, B.y1 - 8, 8, 4], [B.x1 - 12, B.y1 - 8, 8, 4], [B.x0 + 4, -1652, 3, 6], [B.x1 - 7, -1652, 3, 6]];
+for (const [x0, y0, w, h] of beds) for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (at(x, y) === '.') set(x, y, 'f');
+for (const [x0, y0, w, h] of beds) for (const [bx, by] of [[x0 - 1, y0 - 1], [x0 + w, y0 - 1], [x0 - 1, y0 + h], [x0 + w, y0 + h]]) if (at(bx, by) === '.') { objects.push({ k: 'bush', x: bx, y: by, w: 1, h: 1 }); set(bx, by, 'X'); }
+for (const [tx, ty] of [[B.x0 + 2, B.y1 - 2], [B.x1 - 2, B.y1 - 2], [B.x0 + 16, B.y1 - 3], [B.x1 - 16, B.y1 - 3]]) if (at(tx, ty) === '.') set(tx, ty, 'O');
+for (let x = K.x - 1; x <= K.x + K.w; x++) for (const y of [K.y - 1, K.y + K.h]) if ('.fd'.indexOf(at(x, y)) >= 0) set(x, y, 'c');
+for (let y = K.y - 1; y <= K.y + K.h; y++) for (const x of [K.x - 1, K.x + K.w]) if ('.fd'.indexOf(at(x, y)) >= 0) set(x, y, 'c');
+for (let x = K.x + K.w; x < POSTERN.x; x++) for (const y of [POSTERN.y, POSTERN.y + 1]) if ('.fd'.indexOf(at(x, y)) >= 0) set(x, y, 'c');   /* to the postern */
+for (let y = K.y + K.h; y <= POSTERN.y + 1; y++) if ('.fd'.indexOf(at(K.x + K.w, y)) >= 0) set(K.x + K.w, y, 'c');
+objects.push({ k: 'cgate', x: POSTERN.x, y: POSTERN.y, dir: 'e', small: true });
+for (const dy of [-4, 4]) objects.push({ k: 'torch', x: POSTERN.x + 2, y: POSTERN.y + dy, w: 1, h: 1 });
+pathLine([[POSTERN.x + 1, POSTERN.y], [4096, POSTERN.y], [4096, -1653], [4102, -1653]]);   /* out of the postern, round the fold, into the farmyard */
+/* the courtyard: cobbled ways (every path inside the walls), a cobbled square round each fountain, and the gallows */
+for (let y = A.y0 + 1; y < B.y1; y++) for (let x = A.x0 + 1; x < A.x1; x++) if ((inBailey(x, y) || inWard(x, y)) && at(x, y) === 'p') set(x, y, 'c');
+const FOUNT = [{ x: 4074, y: -1690 }, { x: 4030, y: -1692 }];
+for (const f of FOUNT) {
+  for (let y = f.y - 2; y <= f.y + 4; y++) for (let x = f.x - 2; x <= f.x + 4; x++) if (at(x, y) === 'd') set(x, y, 'c');
+  objects.push({ k: 'fountain', x: f.x, y: f.y, w: 3, h: 3 }); for (let y = f.y; y < f.y + 3; y++) for (let x = f.x; x < f.x + 3; x++) set(x, y, 'X');
+}
+{ const GW = { x: 4089, y: -1673, w: 3, h: 3 };   /* the gallows, by the east wall where the market cannot see it */
+  for (let y = GW.y; y < GW.y + GW.h; y++) for (let x = GW.x; x < GW.x + GW.w; x++) { if (at(x, y) !== 'd') { console.error('BLOCKED - the gallows would stand on', at(x, y), 'at', x, y); process.exit(1); } set(x, y, 'X'); }
+  objects.push({ k: 'gallows', x: GW.x, y: GW.y, w: GW.w, h: GW.h, face: 'w' }); }
+/* the keep's ground floor: the banquet hall by the door, the throne room behind an inner wall (door in its middle) */
+const HALL_Y = -1647;
+objects.push({ k: 'iwall', x: K.x + 1, y: HALL_Y, w: K.w - 2, h: 1, face: 'n', door: [INNER.x, HALL_Y] });
+for (const [tx, tw] of [[K.x + 3, 6], [K.x + 13, 5]]) {
+  objects.push({ k: 'table', x: tx, y: -1652, w: tw, h: 1 });
+  for (let x = tx; x < tx + tw; x++) objects.push({ k: 'bench', x, y: -1653, w: 1, h: 1 }, { k: 'bench', x, y: -1651, w: 1, h: 1 });
+}
+objects.push({ k: 'fireplace', x: K.x + 1, y: -1651, w: 1, h: 2, face: 'w' });
+objects.push({ k: 'carpet', x: INNER.x - 1, y: HALL_Y, w: 3, h: K.y + K.h - 1 - HALL_Y - 1, color: '#7a1f24' });
+objects.push({ k: 'throne', x: INNER.x - 1, y: K.y + K.h - 3, w: 3, h: 1, face: 'n' });
+for (const bx of [K.x + 3, K.x + K.w - 4]) objects.push({ k: 'banner', x: bx, y: K.y + K.h - 2, w: 1, h: 1, face: 's', color: '#1f3a6a' });
+for (const [sx, sy, f] of [[K.x + 1, -1645, 'w'], [K.x + K.w - 2, -1645, 'e'], [K.x + 1, -1654, 'w'], [K.x + K.w - 2, -1650, 'e']]) objects.push({ k: 'sconce', x: sx, y: sy, w: 1, h: 1, face: f, night: false });
+/* the royal court, walking their rooms and gardens; each has a quest that reaches out into the world (data/extra/quests.json) */
+const route = (pts) => { const r = []; for (let k = 0; k + 1 < pts.length; k++) { const [ax, ay] = pts[k], [bx, by] = pts[k + 1], n = Math.max(Math.abs(bx - ax), Math.abs(by - ay)); for (let i = 0; i < n; i++) r.push([ax + Math.sign(bx - ax) * i, ay + Math.sign(by - ay) * i]); } r.push(pts[pts.length - 1]); return r; };
+const ROYALS = [
+  { id: 'king_osric', name: 'King Osric', look: 'king_osric', x: INNER.x, y: K.y + K.h - 4, quest: 'kings_seal', examine: 'King Osric, who holds the lake and the road and would like, before he is old, to hold a little more.' },
+  { id: 'queen_maelis', name: 'Queen Maelis', look: 'queen_maelis', x: INNER.x + 3, y: K.y + K.h - 4, quest: 'lodge_gifts', patrol: route([[INNER.x + 3, K.y + K.h - 4], [K.x + K.w - 3, K.y + K.h - 4], [K.x + K.w - 3, HALL_Y + 1], [INNER.x + 3, HALL_Y + 1], [INNER.x + 3, K.y + K.h - 4]]), examine: 'Queen Maelis, who reads every letter that comes over the bridge, including the ones addressed to the king.' },
+  { id: 'prince_edric', name: 'Prince Edric', look: 'prince_edric', x: K.x + 2, y: -1654, quest: 'princes_hunt', patrol: route([[K.x + 2, -1654], [K.x + 11, -1654], [K.x + 11, -1649], [K.x + 2, -1649], [K.x + 2, -1654]]), examine: 'Prince Edric, who would rather be hunting and wants everyone to know it.' },
+  { id: 'princess_liane', name: 'Princess Liane', look: 'princess_liane', x: B.x0 + 4, y: A.y1 + 2, quest: 'even_ground_visit', patrol: route([[B.x0 + 4, A.y1 + 2], [K.x - 2, A.y1 + 2], [K.x - 2, -1645], [B.x0 + 6, -1645], [B.x0 + 6, A.y1 + 2], [B.x0 + 4, A.y1 + 2]]),   /* round the west beds */ examine: 'Princess Liane, who walks the gardens with a book and has read every map in the keep twice.' },
+  { id: 'steward_harlan', name: 'Steward Harlan', look: 'steward_harlan', x: INNER.x + 1, y: K.y - 2, quest: 'realm_accounts', patrol: route([[INNER.x + 1, K.y - 2], [INNER.x + 1, K.y - 4], [INNER.x - 7, K.y - 4], [INNER.x - 7, K.y - 2], [INNER.x + 1, K.y - 2]]),   /* the lawn before the keep door, clear of the inner gate's towers */ examine: 'Steward Harlan, who knows what everything in the castle costs, and says so.' },
+];
+for (const R of ROYALS) {
+  for (const [x, y] of [[R.x, R.y]].concat(R.patrol || [])) { const c = at(x, y); if ('X~TPOMWY'.indexOf(c) >= 0) { console.error('BLOCKED - %s would walk into %s at %d,%d', R.id, c, x, y); process.exit(1); } }
+  npcs.push(Object.assign({ id: R.id, name: R.name, look: R.look, x: R.x, y: R.y, talk: 'quest', quest: R.quest, quests: [R.quest], examine: R.examine }, R.patrol ? { patrol: R.patrol } : {}));
+}
 /* --- stairs you walk up (Martin: "they should be staircases like the terrain and I just walk up them"): raised ground,
    0.6 m a tile; ramps = [x, y, metres] (src/world.js liftAt); the wall walk and tower tops stand at LH */
 const LH = 4.2, ramps = new Map();
@@ -195,7 +250,7 @@ const RISE = (k, n) => +((k + 1) * LH / (n + 1)).toFixed(2);
 /* a broad staircase against a wall: `len` tiles rising along (ax, ay) from the foot at (x, y), `wide` tiles out into the yard along (px, py) */
 function stair(x, y, ax, ay, px, py, len, wide) {
   const cells = [];
-  for (let k = 0; k < len; k++) for (let w = 0; w < wide; w++) { const cx = x + ax * k + px * w, cy = y + ay * k + py * w; if (deckCells.has(cx + ',' + cy) || ramps.has(cx + ',' + cy) || 'dpq.,f'.indexOf(at(cx, cy)) < 0) { console.error('BLOCKED - a staircase runs into a tower, a wall or a building at', cx, cy); process.exit(1); } ramps.set(cx + ',' + cy, RISE(k, len)); set(cx, cy, 'X'); cells.push([cx, cy, RISE(k, len), w === wide - 1 ? 1 : 0]); }
+  for (let k = 0; k < len; k++) for (let w = 0; w < wide; w++) { const cx = x + ax * k + px * w, cy = y + ay * k + py * w; if (deckCells.has(cx + ',' + cy) || ramps.has(cx + ',' + cy) || 'dpq.c,f'.indexOf(at(cx, cy)) < 0) { console.error('BLOCKED - a staircase runs into a tower, a wall or a building at', cx, cy); process.exit(1); } ramps.set(cx + ',' + cy, RISE(k, len)); set(cx, cy, 'X'); cells.push([cx, cy, RISE(k, len), w === wide - 1 ? 1 : 0]); }
   objects.push({ k: 'cstair', cells, ax, ay, px, py });
 }
 stair(GATE.x - 12, A.y0 + 1, 1, 0, 0, 1, 6, 2);     /* either side of the gate, rising towards it along the north wall */
@@ -207,7 +262,7 @@ stair(B.x0 + 1, B.y1 - 10, 0, -1, 1, 0, 6, 2);      /* the ward: up its west wal
 stair(B.x1 - 1, B.y1 - 10, 0, -1, -1, 0, 6, 2);
 /* spiral stairs inside the great towers: a door at the foot on the yard side, two steps up inside, out onto the top */
 const CX0 = (A.x0 + A.x1) / 2, CY0 = (A.y0 + B.y1) / 2;
-const isGround = (x, y) => 'dpq.,f'.indexOf(at(x, y)) >= 0 && !ramps.has(x + ',' + y);
+const isGround = (x, y) => 'dpq.c,f'.indexOf(at(x, y)) >= 0 && !ramps.has(x + ',' + y);
 for (const t of TOWERS) {
   if (t.r < 2.5) continue;
   const o = objects.find(q => q.k === 'ctower' && q.x === t.x && q.y === t.y);
@@ -229,7 +284,7 @@ const liftAt = (x, y) => deckCells.has(x + ',' + y) ? LH : (ramps.get(x + ',' + 
 /* the walk itself must work: from the road outside the gate, every tile of the wall walk can be reached on foot over the
    stairs, with the game's own rule (src/core.js canStep: heights differ by 2.3 m or less; ground tiles must be open) */
 {
-  const STEP = 2.3, open = (x, y) => liftAt(x, y) > 0 || '.pdiq,f'.indexOf(at(x, y)) >= 0;
+  const STEP = 2.3, open = (x, y) => liftAt(x, y) > 0 || '.pdiqc,f'.indexOf(at(x, y)) >= 0;
   const can = (x, y, dx, dy) => { const nx = x + dx, ny = y + dy, la = liftAt(x, y), ok1 = (a, b) => open(a, b) && Math.abs(liftAt(a, b) - la) <= STEP; return ok1(nx, ny) && (!dx || !dy || (ok1(x + dx, y) && ok1(x, y + dy))); };
   const seen = new Set([[GATE.x, GATE.y - 12].join(',')]), q = [[GATE.x, GATE.y - 12]];
   while (q.length) { const [x, y] = q.shift(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) { const k = (x + dx) + ',' + (y + dy); if (!seen.has(k) && can(x, y, dx, dy)) { seen.add(k); q.push([x + dx, y + dy]); } } }
@@ -255,7 +310,7 @@ for (const [x, y, id] of watch) {
 
 /* check, in the Atlas frame before the mirror: every door, step foot and the keep's door must be reachable on foot from the road outside the gate */
 {
-  const ok = c => '.pdiq,f'.indexOf(c) >= 0, seen = new Set(), q = [[GATE.x, GATE.y - 3]], K2 = (x, y) => x + ',' + y;
+  const ok = c => '.pdiqc,f'.indexOf(c) >= 0, seen = new Set(), q = [[GATE.x, GATE.y - 3]], K2 = (x, y) => x + ',' + y;
   seen.add(K2(...q[0]));
   while (q.length) { const [x, y] = q.shift(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, k = K2(nx, ny); if (!seen.has(k) && ok(at(nx, ny))) { seen.add(k); q.push([nx, ny]); } } }
   const want = [['keep door (from the yard)', INNER.x, K.y - 1], ['portal', PORTAL.to[0], PORTAL.to[1]], ['chest side', 4052, -1683]].concat(objects.filter(o => o.door && o.k !== 'ckeep' && o.k !== 'ctower').map(o => [o.sign || o.k, o.door[0], o.door[1]]));

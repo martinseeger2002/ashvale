@@ -1472,6 +1472,7 @@
       /* ---------- picking: what is under a screen point */
       const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
       const _seeV = new THREE.Vector3(), _seeS = new THREE.Vector2();
+      const WPOS = new THREE.Vector3();
       function targetsAt(cx, cy) {
         const r = canvas.getBoundingClientRect(); ndc.set((cx - r.left) / r.width * 2 - 1, -(cy - r.top) / r.height * 2 + 1);
         ray.setFromCamera(ndc, camera);
@@ -1480,6 +1481,13 @@
         const hits = ray.intersectObjects(objs, false), out = [], seen = new Set();
         for (const h of hits) {
           let t = h.object.userData.pick; if (!t) continue;
+          /* a castle wall's face is not a way up it (2026-10-17, the operator: "I'm trying to click on the ground I can see - it tries to walk my
+             character up those walls"): standing on the ground, a tap counts on a wall, tower or stair only on its walkway, the top 0.9 m of
+             its pick box; lower down, the tap goes on through to what lies behind it. Up on the walls, every tap counts as before. */
+          if (t.kind === 'deckpick' && (me.lv | 0) === 0 && !(core.M.lifts && core.M.liftAt(me.x, me.y) > 0)) {
+            const gp = h.object.geometry && h.object.geometry.parameters; WPOS.setFromMatrixPosition(h.object.matrixWorld);
+            if (gp && gp.height && h.point.y < WPOS.y + gp.height / 2 - 0.9) continue;
+          }
           if (t.kind === 'tree' || t.kind === 'ground' || t.kind === 'deckpick') { const reg = regions.find(r2 => r2.built && (r2.built.pickables.indexOf(h.object) >= 0)); t = reg ? reg.built.pickInfo(h) : null; if (!t) continue; }
           if (t.kind === 'ground') { const x = Math.floor(t.point.x), y = Math.floor(t.point.z); t = { kind: 'ground', x, y }; }
           if (t.kind === 'self') continue;

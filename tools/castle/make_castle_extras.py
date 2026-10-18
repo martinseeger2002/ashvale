@@ -74,6 +74,11 @@ PART_CHARS = {
     "char.tobin": {"role": "npc", "name": "Farmer Tobin", "body": "humanoid", "build": "big", "outfit": {"skin": "#d09a6a", "hair": "short", "hairColor": "#6a4a2a", "beard": "full", "beardColor": "#6a4a2a", "shirt": {"style": "tunic", "color": "#8a7a4a"}, "pants": {"style": "trousers", "color": "#4a3a2a"}, "boots": "#3a2a1a", "belt": "#5a3c22", "hat": {"style": "cap", "color": "#c8a860"}}},
     "char.edda": {"role": "npc", "name": "Miller Edda", "body": "humanoid", "build": "normal", "outfit": {"skin": "#e0b088", "hair": "bun", "hairColor": "#b8b0a0", "shirt": {"style": "shirt", "color": "#c8c0b0"}, "pants": {"style": "skirt", "color": "#8a7a6a"}, "boots": "#4a3a2a", "belt": "#e8e0d0"}},
     "char.aldith": {"role": "npc", "name": "Sister Aldith", "body": "humanoid", "build": "slim", "outfit": {"skin": "#e4b894", "hair": "long", "hairColor": "#4a4a50", "shirt": {"style": "robe", "color": "#3e4a5a"}, "pants": {"style": "robe", "color": "#3e4a5a"}, "boots": "#2a2a2a", "belt": "#c8b070", "hat": {"style": "hood", "color": "#2e3a4a"}}},
+    "char.king_osric": {"role": "npc", "name": "King Osric", "body": "humanoid", "build": "big", "outfit": {"skin": "#d8a878", "hair": "short", "hairColor": "#b8b0a0", "beard": "full", "beardColor": "#b8b0a0", "shirt": {"style": "robe", "color": "#5a1a2a"}, "pants": {"style": "robe", "color": "#5a1a2a"}, "boots": "#2a2018", "belt": "#c8a040", "hat": {"style": "crown", "color": "#d4af37"}, "cape": "#7a1f24"}},
+    "char.queen_maelis": {"role": "npc", "name": "Queen Maelis", "body": "humanoid", "build": "slim", "outfit": {"skin": "#e4b894", "hair": "long", "hairColor": "#3a2418", "shirt": {"style": "robe", "color": "#1f3a6a"}, "pants": {"style": "robe", "color": "#1f3a6a"}, "boots": "#2a2018", "belt": "#c8a040", "hat": {"style": "crown", "color": "#d4af37"}, "cape": "#2a4a7a"}},
+    "char.prince_edric": {"role": "npc", "name": "Prince Edric", "body": "humanoid", "build": "normal", "outfit": {"skin": "#e0b088", "hair": "curly", "hairColor": "#3a2418", "shirt": {"style": "tunic", "color": "#2f5a3a"}, "pants": {"style": "trousers", "color": "#3a3a2a"}, "boots": "#3a2a1a", "belt": "#c8a040", "hat": {"style": "crown", "color": "#d4af37"}, "cape": "#2f5a3a"}},
+    "char.princess_liane": {"role": "npc", "name": "Princess Liane", "body": "humanoid", "build": "slim", "outfit": {"skin": "#e8c0a0", "hair": "braids", "hairColor": "#a86a3a", "shirt": {"style": "shirt", "color": "#6a3a7a"}, "pants": {"style": "skirt", "color": "#4a2a5a"}, "boots": "#3a2a1a", "belt": "#c8a040", "hat": {"style": "crown", "color": "#d4af37"}}},
+    "char.steward_harlan": {"role": "npc", "name": "Steward Harlan", "body": "humanoid", "build": "normal", "outfit": {"skin": "#d8a878", "hair": "bald", "hairColor": "#6a6a6a", "beard": "goatee", "beardColor": "#6a6a6a", "shirt": {"style": "vest", "color": "#3a3a4a"}, "pants": {"style": "trousers", "color": "#2a2a3a"}, "boots": "#1a1a1a", "belt": "#7a6a3f"}},
     "char.cressa": {"role": "npc", "name": "Cressa the trader", "body": "humanoid", "build": "normal", "outfit": {"skin": "#c89068", "hair": "long", "hairColor": "#2a1a10", "shirt": {"style": "vest", "color": "#7a3a3a"}, "pants": {"style": "skirt", "color": "#4a3a5a"}, "boots": "#3a2a1a", "belt": "#c8a040"}},
 }
 
@@ -127,6 +132,80 @@ QUESTS = {
              "complete": ["Three. That's supper for the gate and a reason to come back to the chapel.", "The castellan has been asking who brought the bell back. You'd better go and tell him."]},
         ],
         "done": ["The bell rings at dusk now. The watch say it makes the walls feel shorter."]},
+    # the royal court's errands (2026-10-17, the operator: "royal npcs walking around all with place holder quests we can use to expand
+    # out ward into the world"): each sends the player out to another part of the valley and back, for the next quests to build on
+    "kings_seal": {
+        "name": "The King's Seal", "giver": "king_osric", "after": "castellans_bridge", "story": 2,
+        "steps": [
+            {"id": 1, "zone": "saltmere", "goal": {"talk": "calder"}, "reward": "xp:speechcraft:400",
+             "talk": ["The castellan tells me the road is lit and the bridge is held. Then it is time the castle had friends at the end of it.",
+                      "Take my seal to Mayor Calder in Saltmere. A castle with a harbour for a friend is a castle with a future."],
+             "progress": ["Mayor Calder keeps the town hall in Saltmere, past the docks."],
+             "complete": ["He took the seal and kept it. That is as good as a yes from a mayor."]},
+            {"id": 2, "zone": "ziibiing", "goal": {"talk": "nookomis"}, "reward": "xp:speechcraft:600",
+             "talk": ["Now the people of Ziibiing, on the river far to the west. They were here before the castle and they will be here after it.",
+                      "Go to Nookomis. Do not take the seal - take my word, and listen to hers."],
+             "progress": ["Ziibiing is a long road. Nookomis will be by the fire, or the river, or wherever she likes."],
+             "complete": ["She said we may visit, if we come to learn. I think that is the best treaty I will ever sign."]},
+        ],
+        "done": ["The seal is in Saltmere and my word is in Ziibiing. The valley is larger than it was this morning."]},
+    "lodge_gifts": {
+        "name": "Gifts for the Lodges", "giver": "queen_maelis", "story": 2,
+        "steps": [
+            {"id": 1, "zone": "lodges", "goal": {"talk": "mishoomis"}, "reward": "xp:speechcraft:350",
+             "talk": ["The king sends seals. I prefer to send someone who will sit down and ask what is wanted.",
+                      "Go to the lodges by Ziibiing and ask Mishoomis what a gift from the castle ought to be. Then come back and tell me before the king guesses."],
+             "progress": ["The lodges are beside Ziibiing. Mishoomis is the one people go to first."],
+             "complete": ["Hides, he said, good ones, for the winter. Sensible. The king would have sent silver spoons."]},
+            {"id": 2, "zone": "castle", "goal": {"bring": "deer_hide", "n": 3}, "reward": "xp:ranged:500",
+             "talk": ["Three deer hides, then. The deer keep to the open woods; a bow helps, patience helps more.", "Bring them to me, not the king. He will want to add a letter, and the letter will be about himself."],
+             "progress": ["Three deer hides. Not goat, not boar - the lodges will know the difference, and so will I."],
+             "complete": ["These will go west with the next drover. A gift that is wanted is worth ten that are admired."]},
+        ],
+        "done": ["The hides went west. A letter came back, and the king was not allowed to read it first."]},
+    "princes_hunt": {
+        "name": "The Prince's Hunt", "giver": "prince_edric", "story": 2,
+        "steps": [
+            {"id": 1, "zone": "wolfden", "goal": {"kill": "timber_wolf", "n": 4}, "reward": "xp:attack:700",
+             "talk": ["My father says a prince does not go wolf hunting. My father says a great many things.",
+                      "There is a den of timber wolves north of Ashvale - real wolves, not Whisperwood's greys. Four of them. Then tell me how it went, in detail."],
+             "progress": ["The Timber Wolf Den is north of Ashvale, past the dragon road. Bring a bigger weapon than you think."],
+             "complete": ["Four! And you came back with all your fingers. I am going to tell everyone it was my idea."]},
+            {"id": 2, "zone": "castle", "goal": {"bring": "timber_wolf_pelt", "n": 2}, "reward": "xp:strength:500",
+             "talk": ["Two pelts, for a cloak. If I cannot hunt, I can at least look as though I did.", "The tailor in Ashvale can sew it, if Mother asks her. Mother will ask; she likes a story as much as I do."],
+             "progress": ["Two timber wolf pelts. The greys' pelts are too thin; a prince has standards."],
+             "complete": ["Look at that. Nobody will believe a word of it, and that is the best part."]},
+        ],
+        "done": ["The cloak is finished. He wears it to dinner. The king pretends not to notice."]},
+    "even_ground_visit": {
+        "name": "The Even Ground", "giver": "princess_liane", "story": 1,
+        "steps": [
+            {"id": 1, "zone": "evengrove", "goal": {"talk": "vael"}, "reward": "xp:magic:350",
+             "talk": ["Every map in the keep has a blank where the Even Ground should be. Somebody drew it once and somebody else scraped it off.",
+                      "Go and see it for me. There is someone there called Vael. Ask what the blank is for."],
+             "progress": ["The Even Ground is east of Ashvale, through the woods. Mind where you step; the maps did."],
+             "complete": ["Vael said it is kept blank on purpose. That is the most interesting thing anyone has said to me all year."]},
+            {"id": 2, "zone": "dragonapproach", "goal": {"talk": "squire_elian"}, "reward": "xp:defence:350",
+             "talk": ["One more blank: the dragon road. The squire who keeps it writes to nobody, which is suspicious in a squire.",
+                      "Go and say the castle asks after him. Then come and tell me everything he did not say."],
+             "progress": ["Squire Elian keeps the dragon road, north of the village. He will be standing as though he is guarding something."],
+             "complete": ["He asked for nothing and said less. I shall draw him on the map as a very small question mark."]},
+        ],
+        "done": ["Two blanks fewer. She has started a new map, and it has room at the edges."]},
+    "realm_accounts": {
+        "name": "Accounts of the Realm", "giver": "steward_harlan", "story": 1,
+        "steps": [
+            {"id": 1, "zone": "village", "goal": {"talk": "odric"}, "reward": "xp:speechcraft:300",
+             "talk": ["A castle runs on bread, iron and accounts, and I am short of accounts.",
+                      "Odric the merchant passes through Ashvale. Ask him what goods move on the road and what they fetch. Write nothing down; merchants lie less to people who are not writing."],
+             "progress": ["Odric trades in Ashvale. He will have a wagon, or a story about where it went."],
+             "complete": ["Salt, hides and gossip, and the gossip sells best. Noted."]},
+            {"id": 2, "zone": "saltmere", "goal": {"talk": "hollis"}, "reward": "xp:speechcraft:400",
+             "talk": ["Now Hollis at the Saltmere tap. Every price in the valley is argued about in a tavern before it is agreed anywhere else.", "Ask him what a barrel of salt fish fetches this month, and what it fetched last. The difference is the news."],
+             "progress": ["Hollis keeps the Tap in Saltmere. Buy something; it loosens the numbers."],
+             "complete": ["Excellent. Now I know what everything costs, and I can complain about it properly."]},
+        ],
+        "done": ["The ledgers balance, for once. He has asked to be left alone with them."]},
     "castellans_bridge": {
         "name": "The Castellan's Bridge", "giver": "castellan", "after": "vespers", "story": 4,
         "steps": [

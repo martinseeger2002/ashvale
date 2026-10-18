@@ -588,6 +588,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.king_osric": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.latency": {
     "id": null,
     "v": 1,
@@ -726,6 +732,24 @@
     "api": 1,
     "kind": "json"
    },
+   "char.prince_edric": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.princess_liane": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.queen_maelis": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.rat": {
     "id": null,
     "v": 1,
@@ -775,6 +799,12 @@
     "kind": "json"
    },
    "char.squire_elian": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.steward_harlan": {
     "id": null,
     "v": 1,
     "api": 1,
