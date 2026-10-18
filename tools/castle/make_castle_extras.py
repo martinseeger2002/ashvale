@@ -69,7 +69,7 @@ MONSTERS = {   # the farm's stock: animals like the goat - they wander their pen
 }
 
 PART_CHARS = {
-    "char.sheep": {"role": "monster", "name": "Sheep", "body": "beast", "beast": {"size": 0.85, "legLen": 0.8, "color": "#ece6d8", "snout": "#3a3430", "tail": "#e4ddcd", "tailLen": 0.08, "mane": True, "ears": "#3a3430", "eyes": "#1a1612"}},
+    "char.sheep": {"role": "monster", "name": "Sheep", "body": "beast", "beast": {"size": 0.85, "legLen": 0.8, "color": "#e4ddcd", "wool": "#f3eee3", "face": "#2a2420", "snout": "#2a2420", "legs": "#2a2420", "ears": "side", "tail": "#e4ddcd", "tailLen": 0.06, "eyes": "#d8c070"}},
     "char.cow": {"role": "monster", "name": "Cow", "body": "beast", "beast": {"size": 1.35, "legLen": 1.0, "color": "#7a4a2a", "snout": "#d8c8b0", "tail": "#5a3420", "tailLen": 0.32, "tailTip": "#2a1a10", "horns": "#e0d8c0", "ears": "#6a3e22", "eyes": "#1a1612"}},
     "char.tobin": {"role": "npc", "name": "Farmer Tobin", "body": "humanoid", "build": "big", "outfit": {"skin": "#d09a6a", "hair": "short", "hairColor": "#6a4a2a", "beard": "full", "beardColor": "#6a4a2a", "shirt": {"style": "tunic", "color": "#8a7a4a"}, "pants": {"style": "trousers", "color": "#4a3a2a"}, "boots": "#3a2a1a", "belt": "#5a3c22", "hat": {"style": "cap", "color": "#c8a860"}}},
     "char.edda": {"role": "npc", "name": "Miller Edda", "body": "humanoid", "build": "normal", "outfit": {"skin": "#e0b088", "hair": "bun", "hairColor": "#b8b0a0", "shirt": {"style": "shirt", "color": "#c8c0b0"}, "pants": {"style": "skirt", "color": "#8a7a6a"}, "boots": "#4a3a2a", "belt": "#e8e0d0"}},

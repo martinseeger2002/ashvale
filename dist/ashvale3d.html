@@ -18647,9 +18647,15 @@ function createModels(THREE, opts) {
     const hipY = 0.32 * S * (o.legLen || 1); body.position.y = hipY;   /* legLen: deer stand tall, boars low */
     const trunk = group(); body.add(trunk);
     trunk.add(box(0.32 * S, 0.28 * S, 0.7 * S, c, 0, 0.02 * S, 0));
+    if (o.wool) {   /* a fleece (the Lake Castle's sheep, 2026-10-17: "make the sheep look like sheep"): rounded tufts over the back and flanks, standing proud of the body */
+      for (const zz of [-0.24, -0.08, 0.08, 0.22]) for (const xx of [-0.13, 0, 0.13]) trunk.add(ball((xx ? 0.12 : 0.14) * S, o.wool, xx * S, (xx ? 0.03 : 0.12) * S, zz * S, 1));
+      for (const zz of [-0.16, 0, 0.16]) for (const sd of [-1, 1]) trunk.add(ball(0.11 * S, shade(o.wool, 0.94), sd * 0.16 * S, -0.06 * S, zz * S, 1));
+      trunk.add(ball(0.12 * S, o.wool, 0, 0.0, -0.3 * S, 1));   /* the rump */
+    }
     if (o.mane) trunk.add(box(0.36 * S, 0.3 * S, 0.24 * S, dk, 0, 0.06 * S, 0.22 * S));
     const neck = group(0, 0.1 * S, 0.34 * S); trunk.add(neck);
-    neck.add(box(0.24 * S, 0.22 * S, 0.24 * S, c, 0, 0.04 * S, 0.1 * S));
+    neck.add(box(0.24 * S, 0.22 * S, 0.24 * S, o.face || c, 0, 0.04 * S, 0.1 * S));   /* face: a head of its own colour (a sheep's dark face) */
+    if (o.wool) neck.add(ball(0.09 * S, o.wool, 0, 0.17 * S, 0.06 * S, 1));   /* the topknot */
     neck.add(box(0.13 * S, 0.11 * S, 0.2 * S, o.snout || dk, 0, -0.01 * S, 0.29 * S));
     neck.add(box(0.06 * S, 0.04 * S, 0.04 * S, DARK, 0, 0.02 * S, 0.4 * S));
     neck.add(box(0.035 * S, 0.035 * S, 0.01 * S, o.eyes || '#e8d040', -0.07 * S, 0.09 * S, 0.221 * S), box(0.035 * S, 0.035 * S, 0.01 * S, o.eyes || '#e8d040', 0.07 * S, 0.09 * S, 0.221 * S));
@@ -18659,7 +18665,8 @@ function createModels(THREE, opts) {
       ab.add(box(0.025 * S, 0.3 * S, 0.025 * S, o.antlers, 0, 0.15 * S, 0));
       ab.add(box(0.02 * S, 0.12 * S, 0.02 * S, o.antlers, 0, 0.14 * S, 0.05 * S), box(0.02 * S, 0.1 * S, 0.02 * S, o.antlers, 0, 0.26 * S, -0.04 * S));
     }
-    if (o.ears === 'round') { neck.add(ball(0.05 * S, o.inner || dk, -0.1 * S, 0.17 * S, 0.06 * S)); neck.add(ball(0.05 * S, o.inner || dk, 0.1 * S, 0.17 * S, 0.06 * S)); }
+    if (o.ears === 'side') for (const sd of [-1, 1]) { const ea = box(0.12 * S, 0.035 * S, 0.06 * S, o.face || dk, sd * 0.17 * S, 0.1 * S, 0.08 * S); ea.rotation.z = sd * -0.25; neck.add(ea); }   /* ears out to the side, a little drooped */
+    else if (o.ears === 'round') { neck.add(ball(0.05 * S, o.inner || dk, -0.1 * S, 0.17 * S, 0.06 * S)); neck.add(ball(0.05 * S, o.inner || dk, 0.1 * S, 0.17 * S, 0.06 * S)); }
     else if (o.ears !== 'none') { neck.add(cone(0.05 * S, 0.12 * S, dk, -0.08 * S, 0.21 * S, 0.06 * S, 4)); neck.add(cone(0.05 * S, 0.12 * S, dk, 0.08 * S, 0.21 * S, 0.06 * S, 4)); }
     if (o.horns) for (const sd of [-1, 1]) { const hn = cone(0.045 * S, 0.28 * S, o.horns, sd * 0.08 * S, 0.22 * S, 0.02 * S, 5); hn.rotation.z = -sd * 0.35; hn.rotation.x = -0.4; neck.add(hn); }
     if (o.sad) neck.rotation.x = 0.42;   /* head hung, the chain has been on a long time */
@@ -18680,8 +18687,8 @@ function createModels(THREE, opts) {
     function leg(x, z) {
       const g = group(x * S, -0.08 * S, z * S); trunk.add(g);
       const fh = 0.04 * S, joint = hipY - 0.08 * S, shinH = Math.max(0.08 * S, joint - fh);
-      g.add(box(0.09 * S, shinH, 0.1 * S, dk, 0, -shinH / 2, 0));
-      g.add(box(0.1 * S, fh, 0.12 * S, shade(c, 0.55), 0, fh / 2 - joint, 0.01 * S));   /* soles on the ground, not through it */
+      g.add(box(0.09 * S, shinH, 0.1 * S, o.legs || dk, 0, -shinH / 2, 0));
+      g.add(box(0.1 * S, fh, 0.12 * S, shade(o.legs || c, 0.55), 0, fh / 2 - joint, 0.01 * S));   /* soles on the ground, not through it */
       return g;
     }
     const FL = leg(-0.11, 0.25), FR = leg(0.11, 0.25), BL = leg(-0.11, -0.25), BR = leg(0.11, -0.25);
@@ -26661,7 +26668,7 @@ ASH3D.defineData({"ashvale3d":"module","name":"part.char.sela","api":1,"v":1,"da
 
 </script>
 <script>
-ASH3D.defineData({"ashvale3d":"module","name":"part.char.sheep","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"char.sheep","kind":"char","role":"monster","name":"Sheep","body":"beast","beast":{"size":0.85,"legLen":0.8,"color":"#ece6d8","snout":"#3a3430","tail":"#e4ddcd","tailLen":0.08,"mane":true,"ears":"#3a3430","eyes":"#1a1612"}}});
+ASH3D.defineData({"ashvale3d":"module","name":"part.char.sheep","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"char.sheep","kind":"char","role":"monster","name":"Sheep","body":"beast","beast":{"size":0.85,"legLen":0.8,"color":"#e4ddcd","wool":"#f3eee3","face":"#2a2420","snout":"#2a2420","legs":"#2a2420","ears":"side","tail":"#e4ddcd","tailLen":0.06,"eyes":"#d8c070"}}});
 
 </script>
 <script>
