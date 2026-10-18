@@ -18813,12 +18813,23 @@ function createModels(THREE, opts) {
       trunk.add(ball(0.12 * S, o.wool, 0, 0.0, -0.3 * S, 1));   /* the rump */
     }
     if (o.mane) trunk.add(box(0.36 * S, 0.3 * S, 0.24 * S, dk, 0, 0.06 * S, 0.22 * S));
+    /* a mountain goat (2026-10-18, the operator: "make mountain goats look like mountain goats"): a shaggy white coat - a hump over the
+       shoulders, a fringe hanging under the belly, 'pantaloons' on the upper legs (leg() below) - a beard, black hooves, and short black
+       horns that sweep back (o.goatHorns, by the ears) */
+    if (o.hump) trunk.add(ball(0.17 * S, o.shag || c, 0, 0.13 * S, 0.2 * S, 1));
+    if (o.shag) for (const zz of [-0.24, -0.12, 0, 0.12, 0.24]) for (const sd of [-1, 1]) trunk.add(box(0.06 * S, 0.12 * S, 0.11 * S, shade(o.shag, zz % 0.24 ? 0.96 : 1), sd * 0.13 * S, -0.15 * S, zz * S));
     const neck = group(0, 0.1 * S, 0.34 * S); trunk.add(neck);
     neck.add(box(0.24 * S, 0.22 * S, 0.24 * S, o.face || c, 0, 0.04 * S, 0.1 * S));   /* face: a head of its own colour (a sheep's dark face) */
     if (o.wool) neck.add(ball(0.09 * S, o.wool, 0, 0.17 * S, 0.06 * S, 1));   /* the topknot */
     neck.add(box(0.13 * S, 0.11 * S, 0.2 * S, o.snout || dk, 0, -0.01 * S, 0.29 * S));
     neck.add(box(0.06 * S, 0.04 * S, 0.04 * S, DARK, 0, 0.02 * S, 0.4 * S));
     neck.add(box(0.035 * S, 0.035 * S, 0.01 * S, o.eyes || '#e8d040', -0.07 * S, 0.09 * S, 0.221 * S), box(0.035 * S, 0.035 * S, 0.01 * S, o.eyes || '#e8d040', 0.07 * S, 0.09 * S, 0.221 * S));
+    if (o.beard) neck.add(box(0.07 * S, 0.14 * S, 0.06 * S, o.beard, 0, -0.1 * S, 0.3 * S), box(0.05 * S, 0.06 * S, 0.05 * S, shade(o.beard, 0.94), 0, -0.19 * S, 0.29 * S));
+    if (o.goatHorns) for (const sd of [-1, 1]) {   /* up from the brow, then back over the neck: two cones, the second bent further */
+      const hg = group(sd * 0.06 * S, 0.15 * S, 0.12 * S); neck.add(hg); hg.rotation.x = -0.45; hg.rotation.z = -sd * 0.12;
+      hg.add(cone(0.032 * S, 0.13 * S, o.goatHorns, 0, 0.065 * S, 0, 6));
+      const tip = group(0, 0.11 * S, 0); hg.add(tip); tip.rotation.x = -0.75; tip.add(cone(0.02 * S, 0.1 * S, o.goatHorns, 0, 0.05 * S, 0, 6));
+    }
     if (o.tusks) { neck.add(cone(0.018 * S, 0.09 * S, o.tusks, -0.06 * S, -0.02 * S, 0.36 * S, 4)); neck.add(cone(0.018 * S, 0.09 * S, o.tusks, 0.06 * S, -0.02 * S, 0.36 * S, 4)); }
     if (o.antlers) for (const sd of [-1, 1]) {   /* a beam up and back with two tines */
       const ab = group(sd * 0.07 * S, 0.2 * S, 0.04 * S); neck.add(ab); ab.rotation.z = -sd * 0.35; ab.rotation.x = -0.3;
@@ -18848,7 +18859,8 @@ function createModels(THREE, opts) {
       const g = group(x * S, -0.08 * S, z * S); trunk.add(g);
       const fh = 0.04 * S, joint = hipY - 0.08 * S, shinH = Math.max(0.08 * S, joint - fh);
       g.add(box(0.09 * S, shinH, 0.1 * S, o.legs || dk, 0, -shinH / 2, 0));
-      g.add(box(0.1 * S, fh, 0.12 * S, shade(o.legs || c, 0.55), 0, fh / 2 - joint, 0.01 * S));   /* soles on the ground, not through it */
+      if (o.shag) g.add(box(0.13 * S, shinH * 0.45, 0.14 * S, o.shag, 0, -shinH * 0.22, 0));   /* the goat's shaggy 'pantaloons' */
+      g.add(box(0.1 * S, fh * (o.hooves ? 2 : 1), 0.12 * S, o.hooves || shade(o.legs || c, 0.55), 0, fh * (o.hooves ? 1 : 0.5) - joint, 0.01 * S));   /* soles on the ground, not through it */
       return g;
     }
     const FL = leg(-0.11, 0.25), FR = leg(0.11, 0.25), BL = leg(-0.11, -0.25), BR = leg(0.11, -0.25);
@@ -26869,7 +26881,7 @@ ASH3D.defineData({"ashvale3d":"module","name":"part.char.giant_spider","api":1,"
 
 </script>
 <script>
-ASH3D.defineData({"ashvale3d":"module","name":"part.char.goat","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"char.goat","kind":"char","role":"monster","name":"Mountain goat","body":"beast","beast":{"size":0.9,"legLen":1.15,"color":"#e6e0d4","snout":"#cfc7b8","tail":"#d8d0c2","tailLen":0.1,"mane":true,"eyes":"#c8a030","tusks":"#3a3430"}}});
+ASH3D.defineData({"ashvale3d":"module","name":"part.char.goat","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"char.goat","kind":"char","role":"monster","name":"Mountain goat","body":"beast","beast":{"size":0.9,"legLen":1.15,"color":"#eeeae0","snout":"#e6e0d4","legs":"#e2dccf","tail":"#eeeae0","tailLen":0.08,"ears":"side","eyes":"#c8a030","goatHorns":"#1e1c1a","beard":"#f8f5ee","hump":true,"shag":"#f8f5ee","hooves":"#1e1c1a"}}});
 
 </script>
 <script>
