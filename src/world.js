@@ -354,7 +354,7 @@
       },
       roadTorchesIn(x0, y0, x1, y1) {   /* lamps along the trails between towns (sadfrog 2026-10-07) */
         if (!WG || !WG.roadObjects) return [];
-        return WG.roadObjects(FACE, x0 + OX, y0 + OY, x1 + OX, y1 + OY).map(o => Object.assign({}, o, { x: o.x - OX, y: o.y - OY }));
+        return WG.roadObjects(FACE, x0 + OX, y0 + OY, x1 + OX, y1 + OY).map(o => Object.assign({}, o, { x: o.x - OX, y: o.y - OY }, o.ax != null ? { ax: o.ax - OX, ay: o.ay - OY, bx: o.bx - OX, by: o.by - OY } : {}));   /* a bridge's line too (wbridge) */
       },
       groundH: (cx, cy) => WG ? fieldAt(cx, cy)[0] - HB : 0,
       snowH: WG ? (CFG.snowLine || 110) - HB : 1e9,   /* the snow line (2026-10-03) in groundH's frame; tree snow starts 55 m below it, alpine rock 22 m below */

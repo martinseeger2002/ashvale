@@ -6,10 +6,36 @@
   "goblin_chief": {
    "bones": "big_bones",
    "drops": [
-    {"any": ["helmet_t4", "body_t4", "legs_t4", "chain_t4", "shield_t4", "sword_t4", "dagger_t4", "longsword_t4", "mace_t4"], "one_in": 10},
-    {"item": "shield_t2", "one_in": 1},
-    {"item": "potion", "one_in": 2},
-    {"item": "arrows_t2", "n": [5, 15], "one_in": 3}
+    {
+     "any": [
+      "helmet_t4",
+      "body_t4",
+      "legs_t4",
+      "chain_t4",
+      "shield_t4",
+      "sword_t4",
+      "dagger_t4",
+      "longsword_t4",
+      "mace_t4"
+     ],
+     "one_in": 10
+    },
+    {
+     "item": "shield_t2",
+     "one_in": 1
+    },
+    {
+     "item": "potion",
+     "one_in": 2
+    },
+    {
+     "item": "arrows_t2",
+     "n": [
+      5,
+      15
+     ],
+     "one_in": 3
+    }
    ]
   },
   "boar": {
@@ -224,10 +250,23 @@
     {
      "item": "mithril_ore",
      "one_in": 2,
-     "n": [2, 4]
+     "n": [
+      2,
+      4
+     ]
     },
     {
-     "any": ["helmet_t5", "body_t5", "legs_t5", "chain_t5", "shield_t5", "sword_t5", "dagger_t5", "longsword_t5", "mace_t5"],
+     "any": [
+      "helmet_t5",
+      "body_t5",
+      "legs_t5",
+      "chain_t5",
+      "shield_t5",
+      "sword_t5",
+      "dagger_t5",
+      "longsword_t5",
+      "mace_t5"
+     ],
      "one_in": 8
     },
     {
@@ -235,6 +274,103 @@
      "one_in": 32
     }
    ]
+  },
+  "sheep": {
+   "name": "Sheep",
+   "level": 2,
+   "hp": 6,
+   "att": 1,
+   "def": 2,
+   "attb": 0,
+   "defb": 0,
+   "max": 1,
+   "speed": 4,
+   "aggro": 0,
+   "respawn": 60,
+   "drops": [
+    {
+     "item": "mutton_raw",
+     "one_in": 1
+    },
+    {
+     "item": "wool",
+     "one_in": 1
+    }
+   ],
+   "gold": 0,
+   "anim": "bite",
+   "look": "sheep",
+   "animal": true,
+   "shy": 3,
+   "ownDice": true,
+   "roam": 3,
+   "fleeHit": true,
+   "roamEvery": 4
+  },
+  "cow": {
+   "name": "Cow",
+   "level": 4,
+   "hp": 12,
+   "att": 2,
+   "def": 3,
+   "attb": 0,
+   "defb": 0,
+   "max": 1,
+   "speed": 4,
+   "aggro": 0,
+   "respawn": 60,
+   "drops": [
+    {
+     "item": "beef_raw",
+     "one_in": 1
+    },
+    {
+     "item": "cowhide",
+     "one_in": 1
+    },
+    {
+     "item": "bones",
+     "one_in": 1
+    }
+   ],
+   "gold": 0,
+   "anim": "bite",
+   "look": "cow",
+   "animal": true,
+   "shy": 2,
+   "ownDice": true,
+   "roam": 3,
+   "fleeHit": true,
+   "roamEvery": 5
+  },
+  "granary_rat": {
+   "name": "Granary rat",
+   "level": 2,
+   "hp": 5,
+   "att": 1,
+   "def": 1,
+   "attb": 0,
+   "defb": 0,
+   "max": 1,
+   "speed": 4,
+   "aggro": 0,
+   "respawn": 50,
+   "drops": [
+    {
+     "item": "rat_meat_raw",
+     "one_in": 1
+    },
+    {
+     "item": "rat_pelt",
+     "one_in": 1
+    }
+   ],
+   "gold": 0,
+   "anim": "bite",
+   "look": "rat",
+   "ownDice": true,
+   "roam": 3,
+   "roamEvery": 3
   }
  }
 }

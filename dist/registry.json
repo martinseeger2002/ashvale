@@ -360,6 +360,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.aldith": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.aldous": {
     "id": null,
     "v": 1,
@@ -450,7 +456,25 @@
     "api": 1,
     "kind": "json"
    },
+   "char.cow": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.cressa": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.deer": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.edda": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -720,6 +744,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.sheep": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.silas": {
     "id": null,
     "v": 1,
@@ -769,6 +799,12 @@
     "kind": "json"
    },
    "char.timber_wolf": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.tobin": {
     "id": null,
     "v": 1,
     "api": 1,

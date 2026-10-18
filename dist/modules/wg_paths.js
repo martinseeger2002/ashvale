@@ -375,6 +375,8 @@
                 const L2 = Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) || 1, nx = -(b2[1] - a2[1]) / L2, ny = (b2[0] - a2[0]) / L2, mid = along[(i + j) >> 1];
                 for (const [q, off] of [[a2, w0 + 0.7], [b2, w0 + 0.7], [mid, Math.max(0.6, w0 - 0.2)]]) for (const side of [-1, 1])
                   BRIDGE_LIT.push({ k: 'torch', x: Math.floor(q[0] + nx * off * side), y: Math.floor(-(q[1] + ny * off * side)), w: 1, h: 1, face: A.face });
+                /* the bridge itself (src/scene.js 'wbridge'): its line over the water, bank to bank, in the game's frame (y down the map) */
+                BRIDGE_LIT.push({ k: 'wbridge', x: Math.floor(mid[0]), y: Math.floor(-mid[1]), w: 1, h: 1, face: A.face, ax: along[i][0], ay: -along[i][1], bx: along[j][0], by: -along[j][1], hw: w0 });
               }
               i = j;
             } }

@@ -1171,7 +1171,7 @@
       let CK = null; try { const CM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('castle'); if (CM && CM.create) CK = CM.create({ THREE, B, Batcher, KitBatch, kitData, heightAt, group, pickables }); } catch (e) { console.warn('castle module', e && e.message); }
       const surfOfMap = (tx, ty) => { const Hh = heightsOf(map); return Hh.surf ? Hh.surf(tx, ty) : heightAt(tx + 0.5, ty + 0.5); };
       const mounts = [];   /* items hung on walls: {obj, item, quest, untilStep} */
-      const torches = [], street = [], fortunes = [];
+      const torches = [], street = [], fortunes = [], mills = [];
       const dungeonLayers = new Map();
       function dungeonLayer(lv) {
         lv |= 0; let d = dungeonLayers.get(lv); if (d) return d;
@@ -1337,6 +1337,56 @@
             const w = o.w || 1, d = o.h || 1, along = w >= d;
             for (let t = 0; t <= (along ? w : d); t += 2) for (const side of [0, 1]) { const px = along ? o.x + Math.min(t, w - 0.15) + 0.08 : o.x + side * (w - 0.16) + 0.08, pz = along ? o.y + side * (d - 0.16) + 0.08 : o.y + Math.min(t, d - 0.15) + 0.08, py = heightAt(px, pz);
               B.add('box', 0x5a3c22, px, py - 0.88, pz, 0.16, 1.6, 0.16); }
+            break;
+          }
+          case 'wbridge': {   /* a road bridge out in the world (2026-10-17, the operator: "a nice arching bridge with torches"): a stone deck
+             on the arch the ground already makes (heightsOf archRise, which the walkers ride), parapets with coping either side that run
+             down into the water and hide the ground's slope, and an arch opening in each side wall. ax/ay -> bx/by is its line over the water. */
+            const ax = o.ax, az = o.ay, L = Math.hypot(o.bx - o.ax, o.by - o.ay) || 1, ux = (o.bx - o.ax) / L, uz = (o.by - o.ay) / L, nx = -uz, nz = ux;
+            const yaw = Math.atan2(-uz, ux), hw = (o.hw || 1.4) + 0.75, s0 = -2.2, s1 = L + 2.2, n = Math.max(10, Math.ceil((s1 - s0) / 0.5)), seg = (s1 - s0) / n;
+            const mx = ax + ux * L / 2, mz = az + uz * L / 2, sf = HG.surf(Math.floor(mx), Math.floor(mz));
+            const wY = sf != null && isFinite(sf) ? sf : heightAt(mx, mz) - 1.5;
+            const STONE = 0x9a948a, COPE = 0xbcb6aa, DECK = 0x8e8270;
+            /* the deck's line: over the highest ground across its width at each step, so the ground's own arch never shows through */
+            const deckY = (sv) => { const px = ax + ux * sv, pz = az + uz * sv; let h = -1e9; for (const f of [-0.7, -0.35, 0, 0.35, 0.7]) h = Math.max(h, heightAt(px + nx * hw * f, pz + nz * hw * f)); return h + 0.14; };
+            const tilt = (m, pitch) => { m.rotation.order = 'YZX'; m.rotation.y = yaw; m.rotation.z = pitch; return m; };   /* along the span, then up the slope */
+            for (let k = 0; k < n; k++) {
+              const sa = s0 + k * seg, sb = sa + seg, sm = sa + seg / 2, px = ax + ux * sm, pz = az + uz * sm, ya = deckY(sa), yb = deckY(sb), dy = (ya + yb) / 2, pitch = Math.atan2(yb - ya, seg), len = Math.hypot(seg, yb - ya) + 0.04;
+              group.add(tilt(mesh(new THREE.BoxGeometry(len, 0.26, hw * 2), DECK, px, dy - 0.11, pz), pitch));
+              for (const side of [-1, 1]) {
+                const wx = px + nx * hw * side, wz = pz + nz * hw * side, top = dy + 0.85, bot = Math.min(wY - 0.4, dy - 0.2);
+                const wall = mesh(new THREE.BoxGeometry(seg + 0.02, top - bot, 0.38), STONE, wx, (top + bot) / 2, wz); wall.rotation.y = yaw; group.add(wall);
+                group.add(tilt(mesh(new THREE.BoxGeometry(len + 0.02, 0.12, 0.5), COPE, wx, top + 0.06, wz), pitch));
+              }
+            }
+            /* the arch: a dark half-round in each side wall at the middle of the span, its foot at the water */
+            const R = Math.max(1.2, Math.min(L / 2 - 0.4, 3.2));
+            for (const side of [-1, 1]) {
+              const a = new THREE.Mesh(new THREE.CircleGeometry(R, 20, 0, Math.PI), new THREE.MeshLambertMaterial({ color: 0x1c262c, side: THREE.DoubleSide }));
+              a.position.set(mx + nx * (hw + 0.2) * side, wY - 0.05, mz + nz * (hw + 0.2) * side); a.rotation.y = Math.atan2(nx * side, nz * side); group.add(a);
+            }
+            break;
+          }
+          case 'windmill': {   /* a tower mill (the Lake Castle's, 2026-10-17): a tapered stone tower, a boarded cap, four sails that turn
+             in the wind (update below); face = the side the sails look out over, and the door is on that side */
+            const W0 = o.w || 4, ST = 0xcfc4ad, DK = 0x7a6a58, face = o.face || 'e';
+            const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = { n: Math.PI, s: 0, e: Math.PI / 2, w: -Math.PI / 2 }[face] || 0; group.add(g);
+            const tw = mesh(new THREE.CylinderGeometry(W0 * 0.32, W0 * 0.46, 7.2, 12), ST, 0, 3.6, 0); tw.castShadow = true; g.add(tw);
+            for (const hy of [2.4, 4.8]) g.add(mesh(new THREE.CylinderGeometry(W0 * 0.43 - hy * 0.018, W0 * 0.43 - hy * 0.018, 0.14, 12), DK, 0, hy, 0));
+            g.add(mesh(new THREE.BoxGeometry(0.9, 1.7, 0.12), 0x5a3c24, 0, 0.85, W0 * 0.45));                       /* the door */
+            for (const [wy, wz] of [[3.4, W0 * 0.4], [5.6, W0 * 0.36]]) g.add(mesh(new THREE.BoxGeometry(0.5, 0.6, 0.1), 0x2a2620, 0, wy, wz));
+            const cap = mesh(new THREE.ConeGeometry(W0 * 0.42, 2.0, 12), 0x6a3a2a, 0, 8.2, 0); cap.castShadow = true; g.add(cap);
+            g.add(mesh(new THREE.CylinderGeometry(W0 * 0.36, W0 * 0.36, 0.3, 12), 0x5a3c24, 0, 7.3, 0));
+            const hub = new THREE.Group(); hub.position.set(0, 7.4, W0 * 0.42 + 0.35); g.add(hub);
+            hub.add(mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.6, 8), 0x3a2a1a, 0, 0, -0.2)); hub.children[0].rotation.x = Math.PI / 2;
+            const sails = new THREE.Group(); hub.add(sails);
+            for (let k = 0; k < 4; k++) {
+              const arm = new THREE.Group(); arm.rotation.z = k * Math.PI / 2; sails.add(arm);
+              arm.add(mesh(new THREE.BoxGeometry(0.16, 4.6, 0.12), 0x4a3424, 0, 2.3, 0));                         /* the stock */
+              const cloth = mesh(new THREE.BoxGeometry(0.95, 3.6, 0.04), 0xe8e0cc, 0.56, 2.7, 0.04); arm.add(cloth);  /* the sail cloth on its lattice */
+              for (let r = 0; r < 6; r++) arm.add(mesh(new THREE.BoxGeometry(1.05, 0.05, 0.06), 0x4a3424, 0.56, 1.05 + r * 0.66, 0.08));
+            }
+            mills.push({ sails, ph: hash2(o.x, o.y) * 6 });
             break;
           }
           case 'well': {
@@ -1859,7 +1909,8 @@
           const r = rockAt.get(i); if (r) r.ore.visible = !on;
         },
         update(dt, time) {
-          for (const m of fortunes) m.update(dt, time);   /* [Claude 2026-10-16] the Fortune Engines' reels, lever, orb and counter */
+          for (const m of fortunes) m.update(dt, time);
+          for (const m of mills) m.sails.rotation.z = -(time * 0.55 + m.ph);   /* the windmill's sails, turning steadily */   /* [Claude 2026-10-16] the Fortune Engines' reels, lever, orb and counter */
           for (const t of torches) {
             const s = 0.85 + 0.15 * Math.sin(time * 13 + t.ph) + 0.08 * Math.sin(time * 31 + t.ph * 2);
             if (t.tend) { const on = LAMPQ ? !!LAMPQ(t.tx, t.ty) : true; t.f.visible = on; if (t.f2) t.f2.visible = on; }

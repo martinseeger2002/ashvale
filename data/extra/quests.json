@@ -1186,6 +1186,207 @@
     "The Heart below the chained dragon is steady. Let it remain so for a while, {name}."
    ],
    "story": 4
+  },
+  "rats_in_the_grain": {
+   "name": "Rats in the Grain",
+   "giver": "edda",
+   "story": 1,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "castle",
+     "goal": {
+      "kill": "granary_rat",
+      "n": 6
+     },
+     "reward": "xp:strength:400",
+     "talk": [
+      "You'll be from the road, then. Good. Everyone from the castle is too busy being a castle.",
+      "The granary by my mill has rats. Not a rat - rats, the sort that hold meetings. Six of them, at least, and every one eating the garrison's flour.",
+      "They work the yard round it, in the sacks waiting to go in. Thin them out. Mind the sacks; the sacks are the point."
+     ],
+     "progress": [
+      "Still squeaking round the granary. I can hear them from the mill."
+     ],
+     "complete": [
+      "Quiet. I'd forgotten the granary could be quiet.",
+      "Now the flour's only half spoiled, which in a castle counts as clean."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "castle",
+     "goal": {
+      "talk": "castle_cook"
+     },
+     "reward": "xp:cooking:350",
+     "talk": [
+      "Marta in the castle kitchens has been baking with whatever the rats left her.",
+      "Go and tell her the granary is clear and the next sacks will be whole. She'll want to hear it from someone who saw it."
+     ],
+     "progress": [
+      "Marta's in the kitchens, in the bailey. Follow the smell of bread that isn't as good as it should be."
+     ],
+     "complete": [
+      "She said 'about time', did she? That's Marta for 'thank you'.",
+      "Here - that's for the walking. Come back if Tobin wants a hand; he always wants a hand."
+     ]
+    }
+   ],
+   "done": [
+    "The sails turn and the sacks stay whole. A mill can't ask for more."
+   ]
+  },
+  "the_far_field": {
+   "name": "The Far Field",
+   "giver": "tobin",
+   "after": "rats_in_the_grain",
+   "story": 2,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "whisperwood",
+     "goal": {
+      "kill": "wolf",
+      "n": 5
+     },
+     "reward": "xp:attack:500",
+     "talk": [
+      "Edda says you're useful. Edda doesn't say that about the weather.",
+      "Grey wolves come down out of Whisperwood and take my lambs off the road at dusk. I've counted three gone this month.",
+      "Five wolves fewer and the rest will learn the road's not theirs. That's how wolves learn."
+     ],
+     "progress": [
+      "Still lost one last night. They're in Whisperwood, north of Ashvale."
+     ],
+     "complete": [
+      "Five. The ewes stood about the fold all morning like they'd heard."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "castle",
+     "goal": {
+      "bring": "logs",
+      "n": 6
+     },
+     "reward": "xp:woodcutting:450",
+     "talk": [
+      "Now the fences. The cows lean on them, the sheep go under them, and I mend them, every day.",
+      "Six logs - plain wood, nothing fancy - and I'll have the pens tight before the frost."
+     ],
+     "progress": [
+      "Six logs. There's wood all along the road if you've an axe."
+     ],
+     "complete": [
+      "That'll hold them. Until it doesn't, and then I'll be fencing again.",
+      "Sister Aldith up at the chapel was asking after someone who'll walk a long way. That's you now."
+     ]
+    }
+   ],
+   "done": [
+    "Sheep in, cows in, wolves out. Some days a farm does what it's told."
+   ]
+  },
+  "vespers": {
+   "name": "Vespers",
+   "giver": "aldith",
+   "after": "the_far_field",
+   "story": 3,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "village",
+     "goal": {
+      "talk": "aldous"
+     },
+     "reward": "xp:prayer:300",
+     "talk": [
+      "The chapel has stood empty since the last chaplain left, and now it has me, which is better than nothing and not by much.",
+      "Father Aldous in Ashvale kept the old order of evening prayer. I'd like his blessing before I ring the bell.",
+      "Take him this letter. Down the road, over the bridge, past the lamps."
+     ],
+     "progress": [
+      "Father Aldous keeps the church in Ashvale, by the square."
+     ],
+     "complete": [
+      "He sent his blessing and a list of everything I'm doing wrong. That is how I know he means it."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "castle",
+     "goal": {
+      "bring": "mutton_cooked",
+      "n": 3
+     },
+     "reward": "xp:prayer:450",
+     "talk": [
+      "After vespers the poor come to the gate - drovers, a few old soldiers, Tobin's boy when his father isn't looking.",
+      "Bring me three roast mutton. Tobin's sheep give the meat; the castle's fires will cook it, if you watch them."
+     ],
+     "progress": [
+      "Three roast mutton. Raw won't do, and burnt won't do either - I've tried both on them."
+     ],
+     "complete": [
+      "Three. That's supper for the gate and a reason to come back to the chapel.",
+      "The castellan has been asking who brought the bell back. You'd better go and tell him."
+     ]
+    }
+   ],
+   "done": [
+    "The bell rings at dusk now. The watch say it makes the walls feel shorter."
+   ]
+  },
+  "castellans_bridge": {
+   "name": "The Castellan's Bridge",
+   "giver": "castellan",
+   "after": "vespers",
+   "story": 4,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "whisperwood",
+     "goal": {
+      "kill": "bandit",
+      "n": 6
+     },
+     "reward": "xp:defence:600",
+     "talk": [
+      "So you're the one the mill, the farm and the chapel all talk about. Three people agreeing is rare here; I'll take it.",
+      "Travellers stop coming when bandits work the road out of Whisperwood. No travellers, no market, no castle worth the name.",
+      "Six bandits. Then the road is ours again, and so is the bridge."
+     ],
+     "progress": [
+      "The bandits work the woods north of Ashvale. The road won't be safe till they're fewer."
+     ],
+     "complete": [
+      "Six. The drovers will hear of it before I've finished saying it."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "castle",
+     "goal": {
+      "talk": "gate_guard"
+     },
+     "reward": "shield_t2",
+     "talk": [
+      "Go to the gate guard and tell him the bridge is to be lit every night from now on, torches at both ends and on the crest.",
+      "He'll grumble. He grumbles at the portcullis too, and it still opens."
+     ],
+     "progress": [
+      "The gate guard is at the barbican, leaning on the spear he says he doesn't need."
+     ],
+     "complete": [
+      "He grumbled, then he lit them. That's the whole of soldiering.",
+      "Take the shield. It has the castle's mark, and the watch will know you by it."
+     ]
+    }
+   ],
+   "done": [
+    "The road is lit, the bridge is held, and the market comes in the morning. That's a castle."
+   ]
   }
  }
 }

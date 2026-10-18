@@ -1,7 +1,8 @@
 {
  "items": {
   "dragon_cape": {
-   "description": "Dragon cape, cosmetic cape. Magic +8. Orange cloth with a white dragon on the back. Dragonfire from the chained dragon cannot pass it."
+   "description": "Dragon cape, cosmetic cape. Magic +8. Dragonfire from the chained dragon cannot pass it.",
+   "weight": 900
   },
   "ring_angels": {
    "name": "The Ring of Angels",
@@ -551,12 +552,148 @@
   "dragon_bones": {
    "description": "Dragon bones, resource bones. Bury them for a great deal of Prayer XP. From the ruined keep."
   },
-  "dragon_cape": {
-   "description": "Dragon cape, cosmetic cape. Magic +8. Dragonfire from the chained dragon cannot pass it.",
-   "weight": 900
-  },
   "castle_stone": {
    "description": "Lake Castle stone, tool stone. Teleport castle, Cooldown ticks 3000. Call to arms: the castle guard comes to your side. Made in the valley of Ashvale."
+  },
+  "mutton_raw": {
+   "name": "Raw mutton",
+   "description": "Raw mutton, resource meat. Cooking level 6, Cooking XP 40. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "meat",
+   "weight": 700,
+   "model": "item.chicken",
+   "value": 5,
+   "attributes": [
+    {
+     "trait_type": "Cooks into",
+     "value": "mutton_cooked"
+    },
+    {
+     "trait_type": "Burns into",
+     "value": "mutton_burnt"
+    },
+    {
+     "trait_type": "Cooking level",
+     "value": 6
+    },
+    {
+     "trait_type": "Cooking XP",
+     "value": 40
+    }
+   ]
+  },
+  "mutton_cooked": {
+   "name": "Roast mutton",
+   "description": "Roast mutton, food meat. Heal 5. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "food",
+   "subcategory": "meat",
+   "weight": 700,
+   "model": "item.chicken",
+   "value": 11,
+   "attributes": [
+    {
+     "trait_type": "Heal",
+     "value": 5
+    }
+   ]
+  },
+  "mutton_burnt": {
+   "name": "Burnt mutton",
+   "description": "Burnt mutton, resource meat. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "meat",
+   "weight": 700,
+   "model": "item.chicken",
+   "value": 0,
+   "attributes": []
+  },
+  "beef_raw": {
+   "name": "Raw beef",
+   "description": "Raw beef, resource meat. Cooking level 10, Cooking XP 55. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "meat",
+   "weight": 900,
+   "model": "item.chicken",
+   "value": 7,
+   "attributes": [
+    {
+     "trait_type": "Cooks into",
+     "value": "beef_cooked"
+    },
+    {
+     "trait_type": "Burns into",
+     "value": "beef_burnt"
+    },
+    {
+     "trait_type": "Cooking level",
+     "value": 10
+    },
+    {
+     "trait_type": "Cooking XP",
+     "value": 55
+    }
+   ]
+  },
+  "beef_cooked": {
+   "name": "Roast beef",
+   "description": "Roast beef, food meat. Heal 7. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "food",
+   "subcategory": "meat",
+   "weight": 900,
+   "model": "item.chicken",
+   "value": 15,
+   "attributes": [
+    {
+     "trait_type": "Heal",
+     "value": 7
+    }
+   ]
+  },
+  "beef_burnt": {
+   "name": "Burnt beef",
+   "description": "Burnt beef, resource meat. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "meat",
+   "weight": 900,
+   "model": "item.chicken",
+   "value": 0,
+   "attributes": []
+  },
+  "wool": {
+   "name": "Wool",
+   "description": "Wool, resource fleece. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "pelt",
+   "weight": 300,
+   "model": "item.pelt",
+   "value": 6,
+   "attributes": []
+  },
+  "cowhide": {
+   "name": "Cowhide",
+   "description": "Cowhide, resource pelt. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "pelt",
+   "weight": 1200,
+   "model": "item.pelt",
+   "value": 16,
+   "attributes": []
   }
  }
 }

@@ -98,8 +98,8 @@ function house(o) {   /* the village's building kind: walls 'X', floor 'i', door
 const ROADY = -1690;
 house({ k: 'house', x: 4027, y: -1700, w: 10, h: 6, door: [4031, -1695], roof: '#4a4f5a', wall: '#cfc4ad', enter: true, sign: 'Barracks', floors: 2 });
 house({ k: 'house', x: 4046, y: -1701, w: 10, h: 6, door: [4050, -1696], roof: '#7a3b2a', wall: '#d6cbb2', enter: true, sign: 'Stables' });
-house({ k: 'house', x: 4062, y: -1702, w: 9, h: 8, door: [4066, -1695], roof: '#5b4a8a', wall: '#e0d6c0', enter: true, sign: 'Chapel' });
-house({ k: 'house', x: 4083, y: -1701, w: 8, h: 6, door: [4086, -1696], roof: '#7a5a2a', wall: '#d6cbb2', enter: true, sign: 'Granary' });
+house({ k: 'church', x: 4062, y: -1702, w: 9, h: 8, door: [4066, -1695], roof: '#3e4a5a', wall: '#dcd4c2', enter: true, sign: 'Castle Chapel' });   /* a church like Ashvale's and Saltmere's: bell tower, slate spire, cross */
+house({ k: 'house', x: 4083, y: -1701, w: 8, h: 6, door: [4086, -1696], roof: '#7a5a2a', wall: '#d6cbb2', enter: true, sign: 'Castle Stores' });   /* the quartermaster's; the grain is in the granary by the mill */
 house({ k: 'smithy', x: 4100, y: -1701, w: 8, h: 6, door: [4103, -1696], roof: '#3f4248', wall: '#b9b0a0', enter: true, sign: 'Castle Forge' });
 house({ k: 'house', x: 4027, y: -1684, w: 11, h: 8, door: [4037, -1680], roof: '#3f6a4a', wall: '#ddd2bb', enter: true, sign: 'Great Hall', floors: 2 });
 house({ k: 'house', x: 4098, y: -1684, w: 10, h: 7, door: [4098, -1680], roof: '#6a3a3a', wall: '#d8c9a3', enter: true, sign: 'Kitchens' });
@@ -118,7 +118,7 @@ set(PORTAL.x, PORTAL.y, 'd'); set(PORTAL.to[0], PORTAL.to[1], 'd');
 npcs.push({ id: 'castle_chest', name: 'Castle chest', look: 'chest', x: 4052, y: -1684, chest: true, examine: 'The castle chest. Everything you own from Ashvale is kept in your arcade wallet; this is where you see it.' });
 const inside = (o, x, y) => x > o.x && y > o.y && x < o.x + o.w - 1 && y < o.y + o.h - 1;
 const byName = n => objects.find(o => o.sign === n);
-const KIT = byName('Kitchens'), FORGE = byName('Castle Forge'), GRAN = byName('Granary'), ARM = byName('Armoury'), HALL = byName('Great Hall');
+const KIT = byName('Kitchens'), FORGE = byName('Castle Forge'), GRAN = byName('Castle Stores'), ARM = byName('Armoury'), HALL = byName('Great Hall');
 objects.push({ k: 'range', x: KIT.x + 3, y: KIT.y + 1, w: 1, h: 1 }, { k: 'range', x: KIT.x + 6, y: KIT.y + 1, w: 1, h: 1 }, { k: 'table', x: KIT.x + 3, y: KIT.y + 4, w: 3, h: 1 }, { k: 'barrel', x: KIT.x + 8, y: KIT.y + 4, w: 1, h: 1 });
 objects.push({ k: 'furnace', x: FORGE.x + 1, y: FORGE.y + 1, w: 2, h: 2 }, { k: 'anvil', x: FORGE.x + 4, y: FORGE.y + 3, w: 1, h: 1 }, { k: 'rack', x: FORGE.x + 5, y: FORGE.y + 1, w: 1, h: 1 });
 objects.push({ k: 'shelf', x: GRAN.x + 1, y: GRAN.y + 1, w: 3, h: 1 }, { k: 'counter', x: GRAN.x + 2, y: GRAN.y + 3, w: 2, h: 1 }, { k: 'rack', x: ARM.x + 1, y: ARM.y + 1, w: 1, h: 1 }, { k: 'table', x: HALL.x + 2, y: HALL.y + 3, w: 6, h: 1 });
@@ -136,11 +136,58 @@ const fishing = [];
   for (const sp of spots) { if (fishing.length >= kinds.length) break; if (fishing.some(f => Math.hypot(f.x - sp[0], f.y - sp[1]) < 6)) continue; fishing.push(Object.assign({ x: sp[0], y: sp[1] }, kinds[fishing.length])); }
   console.log('fishing spots:', fishing.length);
 }
-npcs.push({ id: 'castellan', name: 'Castellan Brannoc', look: 'brannoc', guard: true, maxHit: 10, gear: { weapon: 'longsword_t2' }, x: INNER.x + 2, y: K.y - 2, examine: 'Castellan Brannoc, keeper of the lake castle. He has the keys, and he has had them for a long time.',
+npcs.push({ id: 'castellan', name: 'Castellan Brannoc', look: 'brannoc', guard: true, talk: 'quest', quest: 'castellans_bridge', quests: ['castellans_bridge'], maxHit: 10, gear: { weapon: 'longsword_t2' }, x: INNER.x + 2, y: K.y - 2, examine: 'Castellan Brannoc, keeper of the lake castle. He has the keys, and he has had them for a long time.',
   lines: ['The lake keeps our back and the river keeps the road. The walls only have to argue with the bridge.', 'Walk the walls if you like; the steps are by the corners and either side of the gate.'] });
 npcs.push({ id: 'gate_guard', name: 'Gate guard', look: 'ash_knight', guard: true, maxHit: 8, gear: { weapon: 'sword_t3', shield: 'shield_t2', head: 'helmet_t2' }, x: GATE.x + 2, y: GATE.y - 2, examine: 'A guard at the castle gate, leaning on a spear he has not needed in years.',
   lines: ['Welcome to the lake castle. Ashvale is back down the road, over the river bridge, south-west.', 'Mind the gatehouse, the portcullis sticks.'] });
 /* steps up the inside of the walls: a flight of 4 rising along the wall; foot = the yard tile where it starts, top = the wall tile it reaches */
+/* --- the castle's folk outside the walls and its market (2026-10-17, the operator: "a farmer outside with sheep cows, a granary
+   outside with a wind mill, make the church look like other churches, add market stalls in the court yard"); their quests are
+   in data/extra/quests.json (tools/castle/make_castle_extras.py) */
+const spawns = [];
+const clear = (x0, y0, x1, y1) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const c = at(x, y); if (c !== '~' && c !== 's' && c !== 'X' && c !== 'i' && c !== 'p' && c !== 'd') set(x, y, '.'); } };
+const pathLine = (pts) => { for (let k = 0; k + 1 < pts.length; k++) { const [ax, ay] = pts[k], [bx, by] = pts[k + 1], n = Math.max(Math.abs(bx - ax), Math.abs(by - ay));
+  for (let i = 0; i <= n; i++) { const x = Math.round(ax + (bx - ax) * i / n), y = Math.round(ay + (by - ay) * i / n); for (const [dx, dy] of [[0, 0], [ax === bx ? 1 : 0, ay === by ? 1 : 0]]) { const c = at(x + dx, y + dy); if (c !== '~' && c !== 'X' && c !== 'i' && c !== 'F') set(x + dx, y + dy, 'p'); } } } };
+/* the chapel inside: the altar on the far wall, two pews either side of the aisle, a sconce by the door, and its chaplain */
+{ const CH = byName('Castle Chapel');
+  objects.push({ k: 'altar', x: CH.x + 4, y: CH.y + 1, w: 1, h: 1 }); set(CH.x + 4, CH.y + 1, 'X');
+  for (const [px, py] of [[CH.x + 1, CH.y + 4], [CH.x + 6, CH.y + 4], [CH.x + 1, CH.y + 3], [CH.x + 6, CH.y + 3]]) objects.push({ k: 'pew', x: px, y: py, w: 2, h: 1 });
+  objects.push({ k: 'sconce', x: CH.x + 5, y: CH.y + CH.h - 2, w: 1, h: 1, face: 's', night: true });
+  npcs.push({ id: 'aldith', name: 'Sister Aldith', look: 'aldith', x: CH.x + 3, y: CH.y + 2, talk: 'quest', quest: 'vespers', quests: ['vespers'],
+    examine: 'Sister Aldith, chaplain of the Lake Castle, who rang the bell on her first evening and has not let it rest since.' }); }
+/* the market: stalls along the road through the bailey, between the gatehouse and the inner gate, and a trader to keep them */
+for (const [x, y] of [[4044, ROADY - 3], [4047, ROADY - 3], [4054, ROADY - 3], [4057, ROADY - 3], [4044, ROADY + 3], [4047, ROADY + 3], [4058, ROADY + 3], [4061, ROADY + 3]]) {
+  if (at(x, y) !== 'd' && at(x, y) !== '.') { console.error('BLOCKED - a market stall would stand on', at(x, y), 'at', x, y); process.exit(1); }
+  objects.push({ k: 'stall', x, y, w: 1, h: 1 }); set(x, y, 'X'); }
+npcs.push({ id: 'cressa', name: 'Cressa the trader', look: 'cressa', x: 4051, y: ROADY - 2, examine: 'Cressa, who sells whatever came over the bridge this week, and swears it was always meant to.',
+  lines: ['Market day is every day the road is open. Lately that is most days.', 'If you are going to the farm, Tobin owes me for a bell. Do not mention it. I will know if you did not.'] });
+/* west of the walls: the windmill, the granary it fills, and the miller; rats in the grain (the first of her quest) */
+const MILL = { x: 4002, y: -1704, w: 4, h: 4 }, GRANARY = { x: 3996, y: -1694, w: 9, h: 6 };
+clear(3992, -1712, 4018, -1680);
+objects.push({ k: 'windmill', x: MILL.x, y: MILL.y, w: MILL.w, h: MILL.h, face: 'e', door: [MILL.x + MILL.w, MILL.y + 2] });
+for (let y = MILL.y; y < MILL.y + MILL.h; y++) for (let x = MILL.x; x < MILL.x + MILL.w; x++) set(x, y, 'X');
+house({ k: 'house', x: GRANARY.x, y: GRANARY.y, w: GRANARY.w, h: GRANARY.h, door: [GRANARY.x + 4, GRANARY.y], roof: '#8a6a3a', wall: '#d8c8a0', enter: true, sign: 'Granary' });
+objects.push({ k: 'barrel', x: GRANARY.x + 1, y: GRANARY.y + 4, w: 1, h: 1 }, { k: 'crate', x: GRANARY.x + 7, y: GRANARY.y + 4, w: 1, h: 1 }, { k: 'crate', x: GRANARY.x + 7, y: GRANARY.y + 1, w: 1, h: 1 });
+/* the granary rats work the yard round it, outdoors (a monster spawned on a building's floor misbehaves); they roll their own dice
+   (data/extra/monsters.json granary_rat), so they leave the world's shared dice where every other fight expects them */
+for (const [x, y] of [[GRANARY.x - 1, GRANARY.y + 8], [GRANARY.x + 3, GRANARY.y + 8], [GRANARY.x + 7, GRANARY.y + 8], [GRANARY.x - 2, GRANARY.y + 4], [GRANARY.x + 10, GRANARY.y + 4], [GRANARY.x + 5, GRANARY.y + 10]]) spawns.push({ m: 'granary_rat', x, y });
+npcs.push({ id: 'edda', name: 'Miller Edda', look: 'edda', x: MILL.x + MILL.w + 2, y: MILL.y + 3, talk: 'quest', quest: 'rats_in_the_grain', quests: ['rats_in_the_grain'],
+  examine: 'Miller Edda, floured to the elbows, who can tell the weather by the sails and the castle\'s mood by its bread.' });
+objects.push({ k: 'torch', x: MILL.x + MILL.w + 1, y: MILL.y + 1, w: 1, h: 1 }, { k: 'torch', x: GRANARY.x + 3, y: GRANARY.y - 2, w: 1, h: 1 });
+pathLine([[GATE.x - 2, BAR.y - 4], [4012, BAR.y - 4], [4012, GRANARY.y - 2], [GRANARY.x + 4, GRANARY.y - 2], [GRANARY.x + 4, GRANARY.y - 1]]);
+/* south-east of the ward: the farm - a farmhouse, a fold for the sheep, a pasture for the cows, and the farmer */
+const FARM = { x0: 4097, y0: -1660, x1: 4120, y1: -1624 };
+clear(FARM.x0, FARM.y0, FARM.x1, FARM.y1);
+house({ k: 'house', x: 4108, y: -1660, w: 8, h: 6, door: [4111, -1655], roof: '#6a4a2a', wall: '#ddd2bb', enter: true, sign: 'Farmhouse' });
+const pen = (x0, y0, x1, y1, gate) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if ((x === x0 || x === x1 || y === y0 || y === y1) && !(x === gate[0] && y === gate[1])) set(x, y, 'F'); };
+pen(4098, -1650, 4106, -1640, [4102, -1650]);                    /* the fold: its gate on the farmyard side */
+pen(4108, -1648, 4119, -1632, [4113, -1648]);                    /* the pasture */
+for (const [x, y] of [[4100, -1647], [4104, -1646], [4101, -1643], [4104, -1642]]) spawns.push({ m: 'sheep', x, y });
+for (const [x, y] of [[4111, -1644], [4116, -1642], [4112, -1637], [4116, -1636]]) spawns.push({ m: 'cow', x, y });
+npcs.push({ id: 'tobin', name: 'Farmer Tobin', look: 'tobin', x: 4107, y: -1652, talk: 'quest', quest: 'the_far_field', quests: ['the_far_field'],
+  examine: 'Farmer Tobin, who keeps the castle in mutton, milk and complaints about fences.' });
+objects.push({ k: 'torch', x: 4107, y: -1654, w: 1, h: 1 }, { k: 'well', x: 4100, y: -1657, w: 2, h: 2 }); for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) set(4100 + dx, -1657 + dy, 'X');
+pathLine([[GATE.x + 3, BAR.y - 4], [4120, BAR.y - 4], [4120, -1653], [4102, -1653], [4102, -1651]]);
 /* --- stairs you walk up (Martin: "they should be staircases like the terrain and I just walk up them"): raised ground,
    0.6 m a tile; ramps = [x, y, metres] (src/world.js liftAt); the wall walk and tower tops stand at LH */
 const LH = 4.2, ramps = new Map();
@@ -227,13 +274,14 @@ for (const o of objects) {
 }
 for (const n of npcs) { n.x += DX; n.y += DY; if (n.patrol) n.patrol = n.patrol.map(([x, y]) => mv(x, y)); }
 for (const f of fishing) { f.x += DX; f.y += DY; }
+for (const sp of spawns) { sp.x += DX; sp.y += DY; }
 { /* the town portal goes in rules.json (portals are made from there, src/core.js) */
   const rp = path.join(ROOT, 'data', 'rules.json'), RJ = JSON.parse(fs.readFileSync(rp));
   const P = { id: 'castle', name: 'the Lake Castle', x: PORTAL.x + DX, y: PORTAL.y + DY, to: mv(...PORTAL.to) };   /* its stone: castle_stone (tools/make_data.py) */
   RJ.data.portals = (RJ.data.portals || []).filter(q => q.id !== 'castle').concat([P]); fs.writeFileSync(rp, JSON.stringify(RJ)); console.log('portal', JSON.stringify(P));
 }
 const zone = { ashvale3d: 'module', name: 'zone.castle', api: 1, v: 2, data: {
-  name: 'Lake castle', level: 'safe', origin: [GX, GY], size: [W, H], ground: 'village', tiles: T.map(r => r.join('')), objects, npcs, spawns: [], fishing,
+  name: 'Lake castle', level: 'safe', origin: [GX, GY], size: [W, H], ground: 'village', tiles: T.map(r => r.join('')), objects, npcs, spawns, fishing,
   weather: { kinds: { clear: 60, rain: 25, fog: 15 }, min: 300, max: 900 } } };
 fs.writeFileSync(path.join(ROOT, 'data', 'zone.castle.json'), JSON.stringify(zone));
 console.log('zone.castle: %d objects, %d npcs, %dx%d tiles at (%d, %d) game tiles', objects.length, npcs.length, W, H, GX, GY);

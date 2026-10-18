@@ -1358,13 +1358,13 @@ function wild6k(c) {
   const marks = []; for (const z of allZones) for (const m of (z.fishing || [])) marks.push(Object.assign({ zone: z.id }, m));
   const dm = (x, y) => Math.round(Math.hypot(x - RG.x, y - RG.y));
   const cookedOf = new Set(Object.entries(D.items).flatMap(([k, it]) => (it.attributes || []).filter(a => a.trait_type === 'Cooks into').map(a => a.value)));
-  ok(Object.values(fire).filter(f => f.cooks).length === 10 && ['village', 'saltmere'].every(z => allZones.find(a => a.id === z).objects.filter(o => o.k === 'range').length === 1),
+  ok(Object.values(fire).filter(f => f.cooks).length === 12 &&   /* 2026-10-17: + raw mutton and raw beef, the Lake Castle farm's sheep and cows */ ['village', 'saltmere'].every(z => allZones.find(a => a.id === z).objects.filter(o => o.k === 'range').length === 1),
      'the ladder is real before it is a quest: ' + Object.values(fire).filter(f => f.cooks).length + ' raw things cook into food, and one range stands in each built town, none in the wood');
   /* Re-measured on the current quests 2026-10-10: three threads want a thing that came off a fire now - the range's
      own ladder, Iria's supper (a lobster) and the sugar bush (what boils down in the buckets). Named in full, so a
      fourth one asking for cooked food still fails this. */
   const cookedAsked = Object.entries(D.quests.quests).filter(([k, q]) => q.steps.some(st => [].concat(st.goal.bring || []).some(b => cookedOf.has(b)))).map(([k]) => k).sort();
-  ok(cookedAsked.join() === ['iria_supper', 'kitchen_range', 'sugar_bush'].join(),
+  ok(cookedAsked.join() === ['iria_supper', 'kitchen_range', 'sugar_bush', 'vespers'].join(),   /* 2026-10-17: Vespers asks for roast mutton from the castle farm, on purpose */
      'and the threads that ever ask for a thing cooked through are this one and the two named: ' + cookedAsked.join(', '));
   ok(dm(RG.x, RG.y) === 0 && Math.round(Math.hypot(RG.x - WL.x, RG.y - WL.y)) === 7,
      'seven paces from the well, exactly as she says: the range is ' + RG.x + ',' + RG.y + ' and the well ' + WL.x + ',' + WL.y);
