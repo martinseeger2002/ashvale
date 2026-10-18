@@ -372,34 +372,6 @@
    "roam": 3,
    "roamEvery": 3
   },
-  "crag_wolf": {
-   "name": "Crag wolf",
-   "level": 16,
-   "hp": 32,
-   "att": 15,
-   "def": 12,
-   "attb": 8,
-   "defb": 6,
-   "max": 5,
-   "speed": 4,
-   "aggro": 6,
-   "respawn": 70,
-   "drops": [
-    {
-     "item": "timber_wolf_pelt",
-     "one_in": 1
-    },
-    {
-     "item": "bones",
-     "one_in": 1
-    }
-   ],
-   "gold": 0,
-   "anim": "bite",
-   "look": "timber_wolf",
-   "ownDice": true,
-   "roam": 4
-  },
   "pass_bandit": {
    "name": "Pass bandit",
    "level": 18,
@@ -432,6 +404,34 @@
    "ownDice": true,
    "roam": 3
   },
+  "crag_wolf": {
+   "name": "Crag wolf",
+   "level": 16,
+   "hp": 32,
+   "att": 15,
+   "def": 12,
+   "attb": 8,
+   "defb": 6,
+   "max": 5,
+   "speed": 4,
+   "aggro": 6,
+   "respawn": 70,
+   "drops": [
+    {
+     "item": "timber_wolf_pelt",
+     "one_in": 1
+    },
+    {
+     "item": "bones",
+     "one_in": 1
+    }
+   ],
+   "gold": 0,
+   "anim": "bite",
+   "look": "timber_wolf",
+   "ownDice": true,
+   "roam": 4
+  },
   "frost_goblin": {
    "name": "Frost goblin",
    "level": 15,
@@ -463,6 +463,345 @@
    "look": "goblin",
    "ownDice": true,
    "roam": 3
+  },
+  "quill_rat": {
+   "name": "Quill rat",
+   "level": 14,
+   "hp": 26,
+   "att": 12,
+   "def": 10,
+   "attb": 6,
+   "defb": 6,
+   "max": 3,
+   "speed": 4,
+   "aggro": 4,
+   "respawn": 60,
+   "anim": "bite",
+   "look": "rat",
+   "animal": true,
+   "roam": 4,
+   "gold": 0,
+   "ownDice": true,
+   "cast": {
+    "name": "Quill spray",
+    "range": 4,
+    "att": 12,
+    "attb": 8,
+    "max": 3
+   },
+   "drops": [
+    {
+     "item": "rat_meat_raw",
+     "one_in": 1
+    },
+    {
+     "item": "rat_pelt",
+     "one_in": 2
+    }
+   ],
+   "hint": "It rattles its back at you, then the quills come."
+  },
+  "ashling": {
+   "name": "Ashling",
+   "level": 16,
+   "hp": 30,
+   "att": 15,
+   "def": 12,
+   "attb": 8,
+   "defb": 6,
+   "max": 4,
+   "speed": 4,
+   "aggro": 5,
+   "respawn": 70,
+   "anim": "stab",
+   "look": "ashling",
+   "animal": false,
+   "roam": 3,
+   "gold": 12,
+   "ownDice": true,
+   "ai": {
+    "kind": "humanoid",
+    "faction": "ashling",
+    "rally": 6,
+    "leash": 10,
+    "keep": [
+     3,
+     5
+    ],
+    "fleePct": 40
+   },
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "dagger_t3",
+     "one_in": 24
+    },
+    {
+     "item": "arrows_t2",
+     "n": [
+      4,
+      10
+     ],
+     "one_in": 5
+    }
+   ],
+   "hint": "Brave in a crowd. Kill one and watch the rest."
+  },
+  "moor_walker": {
+   "name": "Moor walker",
+   "level": 18,
+   "hp": 38,
+   "att": 16,
+   "def": 14,
+   "attb": 10,
+   "defb": 10,
+   "max": 5,
+   "speed": 5,
+   "aggro": 4,
+   "respawn": 90,
+   "anim": "slash",
+   "look": "moor_walker",
+   "animal": false,
+   "roam": 2,
+   "gold": 20,
+   "ownDice": true,
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "helmet_t3",
+     "one_in": 30
+    }
+   ],
+   "hint": "Slow. Patient. Hits like a dropped sack of grain."
+  },
+  "den_ashling": {
+   "name": "Ashling",
+   "level": 20,
+   "hp": 32,
+   "att": 13,
+   "def": 14,
+   "attb": 10,
+   "defb": 8,
+   "max": 3,
+   "speed": 4,
+   "aggro": 6,
+   "respawn": 2000,
+   "anim": "stab",
+   "look": "ashling",
+   "animal": false,
+   "roam": 2,
+   "gold": 15,
+   "ownDice": true,
+   "ai": {
+    "kind": "humanoid",
+    "faction": "ashling",
+    "rally": 3,
+    "leash": 10,
+    "keep": [
+     3,
+     5
+    ],
+    "fleePct": 40
+   },
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "dagger_t3",
+     "one_in": 16
+    },
+    {
+     "item": "arrows_t3",
+     "n": [
+      3,
+      8
+     ],
+     "one_in": 6
+    }
+   ]
+  },
+  "den_shaman": {
+   "name": "Ashling firecaller",
+   "level": 24,
+   "hp": 38,
+   "att": 13,
+   "def": 16,
+   "attb": 12,
+   "defb": 10,
+   "max": 3,
+   "speed": 4,
+   "aggro": 7,
+   "respawn": 2000,
+   "anim": "cast",
+   "look": "ashling_shaman",
+   "animal": false,
+   "roam": 1,
+   "gold": 30,
+   "ownDice": true,
+   "cast": {
+    "name": "Ember bolt",
+    "range": 5,
+    "att": 15,
+    "attb": 16,
+    "max": 3
+   },
+   "ai": {
+    "kind": "humanoid",
+    "faction": "ashling",
+    "rally": 3,
+    "leash": 10,
+    "keep": [
+     4,
+     5
+    ],
+    "fleePct": 20
+   },
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "staff_t3",
+     "one_in": 10
+    },
+    {
+     "item": "prayer_potion",
+     "one_in": 4
+    },
+    {
+     "item": "potion",
+     "one_in": 3
+    }
+   ],
+   "hint": "Kill the one with the bone mask first. The little ones fight harder while it lives."
+  },
+  "den_walker": {
+   "name": "Moor walker",
+   "level": 22,
+   "hp": 46,
+   "att": 14,
+   "def": 17,
+   "attb": 12,
+   "defb": 10,
+   "max": 3,
+   "speed": 5,
+   "aggro": 5,
+   "respawn": 2000,
+   "anim": "slash",
+   "look": "moor_walker",
+   "animal": false,
+   "roam": 1,
+   "gold": 22,
+   "ownDice": true,
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "body_t3",
+     "one_in": 24
+    },
+    {
+     "item": "legs_t3",
+     "one_in": 24
+    }
+   ]
+  },
+  "den_brute": {
+   "name": "Den brute",
+   "level": 28,
+   "hp": 70,
+   "att": 17,
+   "def": 22,
+   "attb": 16,
+   "defb": 16,
+   "max": 4,
+   "speed": 5,
+   "aggro": 5,
+   "respawn": 2000,
+   "anim": "slash",
+   "look": "den_brute",
+   "animal": false,
+   "roam": 1,
+   "gold": 60,
+   "ownDice": true,
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "mace_t4",
+     "one_in": 8
+    },
+    {
+     "item": "potion",
+     "one_in": 2
+    }
+   ],
+   "hint": "All shoulders and no patience."
+  },
+  "cinderhide": {
+   "name": "Cinderhide",
+   "level": 34,
+   "hp": 100,
+   "att": 20,
+   "def": 25,
+   "attb": 20,
+   "defb": 17,
+   "max": 4,
+   "speed": 5,
+   "aggro": 7,
+   "respawn": 2000,
+   "anim": "slash",
+   "look": "cinderhide",
+   "animal": false,
+   "roam": 1,
+   "gold": 200,
+   "ownDice": true,
+   "relentless": true,
+   "hunter": true,
+   "drops": [
+    {
+     "item": "potion",
+     "n": [
+      2,
+      2
+     ],
+     "one_in": 1
+    },
+    {
+     "item": "prayer_potion",
+     "one_in": 1
+    },
+    {
+     "item": "sword_t4",
+     "one_in": 3
+    },
+    {
+     "item": "shield_t4",
+     "one_in": 4
+    },
+    {
+     "item": "body_t4",
+     "one_in": 6
+    },
+    {
+     "item": "bones",
+     "one_in": 1
+    }
+   ],
+   "hint": "A walker that burned and kept walking. It is the reason the den is warm."
   }
  }
 }

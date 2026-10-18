@@ -18,7 +18,7 @@ JS = ['globe', 'wg_geo', 'wg_terrain', 'wg_paths', 'wg_sites', 'wg_tiles', 'worl
 DATA_MODS = [('wg_tables', os.path.join(DATA, 'atlas', 'wg_tables.json')), ('atlas_palette', os.path.join(DATA, 'atlas', 'atlas_palette.json')),
              ('globecfg', os.path.join(DATA, 'globecfg.json'))]
 sys.path.insert(0, ROOT); import build as _B
-ZONES = [z for z in _B.ZONES if z not in ('spidercave', 'lodges')]   # every zone the game has (underground ones are not on the land)
+ZONES = [z for z in _B.ZONES if z not in ('spidercave', 'lodges', 'hollowden')]   # every zone the game has (underground ones are not on the land)
 
 
 def main():

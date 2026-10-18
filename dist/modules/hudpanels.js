@@ -166,12 +166,13 @@
           '<button class="btn ' + (S.runToggle ? 'on' : '') + '" data-a="runtoggle">Run: ' + (S.runToggle ? 'always (hold Shift to walk)' : 'only on double-click') + '</button>' +
           '<button class="btn ' + (S.sound ? 'on' : '') + '" data-a="sound">Sound: ' + (S.sound ? 'On' : 'Off') + '</button>' +
           '<button class="btn ' + (S.shadows ? 'on' : '') + '" data-a="shadows">Shadows: ' + (S.shadows ? 'On' : 'Off') + '</button>' +
+          '<button class="btn ' + (S.showPet !== false ? 'on' : '') + '" data-a="showpet">Pet: ' + (S.showPet !== false ? 'Shown' : 'Hidden') + '</button>' +   /* [Claude 2026-10-17] a Doginal / ADD pet at your heel */
           '<button class="btn" data-a="cam">Reset camera</button><button class="btn" data-a="help">Controls &amp; help</button>' +
           '<button class="btn" data-a="new">' + (ST.newGameArm ? 'Tap again: start over' : 'New character') + '</button>' +
           '<div class="info" style="font-size:10px;color:#c8b48a">' + A.esc(api.modulesText()) + '</div>';
         for (const b of panel.querySelectorAll('.btn')) b.onclick = () => {
           const a = b.dataset.a;
-          if (a === 'run') api.cmd({ c: 'run', on: !p.run }); else if (a === 'runtoggle') api.toggle('runToggle'); else if (a === 'sound') api.toggle('sound'); else if (a === 'shadows') api.toggle('shadows');
+          if (a === 'run') api.cmd({ c: 'run', on: !p.run }); else if (a === 'runtoggle') api.toggle('runToggle'); else if (a === 'sound') api.toggle('sound'); else if (a === 'shadows') api.toggle('shadows'); else if (a === 'showpet') api.toggle('showPet');
           else if (a === 'cam') api.resetCamera(); else if (a === 'help') K.showHelp(true);
           else if (a === 'new') { if (ST.newGameArm) api.newGame(); else { ST.newGameArm = 1; setTimeout(() => { ST.newGameArm = 0; refresh('settings'); }, 3000); } }
           setTimeout(() => refresh('settings'), 50);

@@ -1,0 +1,34 @@
+{
+ "rhosyn": {
+  "examine": "Captain Rhosyn of the Thornwatch, three arrows short of a full quiver and not about to say why.",
+  "lines": [
+   "We hold this camp because there is nowhere left to fall back to. That makes it simple.",
+   "The archery butts are for the novices. The real practice is on the moor, and the targets move.",
+   "If you see a sister on the moor with her bow drawn on you, do not wait to ask which side she's on. Not any more."
+  ]
+ },
+ "tavish": {
+  "examine": "Tavish the caravan master, whose wagons have not rolled since the road east closed.",
+  "lines": [
+   "Three wagons, two horses, one road east, and that road's shut. So here I sit.",
+   "The Sisters feed us and we keep their stores dry. It's a fair trade. It's the only trade going.",
+   "When the road opens I'm leaving at a gallop, and you're welcome to ride along. Until then, there's the moor."
+  ]
+ },
+ "sentry": {
+  "examine": "A Thornwatch sentry, watching the moor over the bridge.",
+  "lines": [
+   "Bridge is clear. For now.",
+   "Ashlings were at the fence-line at dusk. They always come back.",
+   "Keep to the trail and you'll see them before they see you."
+  ]
+ },
+ "briar": {
+  "examine": "Scout Briar, who sleeps on the moor so the camp doesn't have to.",
+  "lines": [
+   "The den's mouth is just there, between the skull stones. You'll feel the heat before you see it.",
+   "I count them going in at dusk. More every night.",
+   "If you go down, I'll know if you come back. I'll be right here."
+  ]
+ }
+}

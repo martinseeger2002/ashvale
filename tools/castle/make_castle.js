@@ -1,7 +1,7 @@
 /* make_castle.js -> data/zone.castle.json: the Lake Castle, full size, on the shore of East Lake ~450 m from Ashvale, compass
    north-east (2026-10-17, the operator: "move the lake castle to the north east of ashvale separated by a river with a
    bridge", then "I do not like how it was shrank down ... it can be a little further away like the same distance as
-   saltmere so we can add content along the path"). The plan is the original castle of 2026-10-05 (Martin: "Build a castle
+   saltmere so we can add content along the path"). The plan is the original castle of 2026-10-05 (the operator: "Build a castle
    complex on this natural land formation", "make it bigger"), unchanged in size:
      outer bailey (curtain walls, round towers, a barbican before the gatehouse) facing the road from Ashvale,
      inner ward round a five-storey keep, buildings in the bailey from the house kit, a well, the town portal and chest.
@@ -17,7 +17,7 @@
 const fs = require('fs'), path = require('path'), ROOT = path.join(__dirname, '..', '..');
 const { W: WG, CFG } = require('./mask.js');
 const X0 = 3990, Y0 = -1724, W = 132, H = 102;   /* the plan frame (the original castle's), and the zone's size */
-const GX = -72, GY = 446;                           /* game tiles of the zone's top-left corner: the castle's middle is near (7, 503), ~450 m from the square (Saltmere's distance) on dry ground */   /* the zone: the neck, the peninsula and the lake round it (Martin: "it could be a lot bigger", then "make it bigger") */
+const GX = -72, GY = 446;                           /* game tiles of the zone's top-left corner: the castle's middle is near (7, 503), ~450 m from the square (Saltmere's distance) on dry ground */   /* the zone: the neck, the peninsula and the lake round it (the operator: "it could be a lot bigger", then "make it bigger") */
 const TREES = 'TPOWMYUELQZDr';
 /* the world's letters, so the zone meets the land round it; paths and roads of its own are drawn below */
 const M = []; for (let y = 0; y < H; y++) { const r = []; for (let x = 0; x < W; x++) { const c = WG.tileAt(CFG.face, GX + x + CFG.origin[0], GY + y + CFG.origin[1]); r.push('pdcBv'.indexOf(c) >= 0 ? '.' : c); } M.push(r); }
@@ -84,7 +84,7 @@ for (const dx of [-2, -1, 1, 2]) for (const dy of [-1, 0, 1]) set(GATE.x + dx, G
 objects.push({ k: 'cgate', x: INNER.x, y: INNER.y, dir: 's', small: true });
 /* the keep, in the ward: five storeys */
 const K = { x: 4054, y: -1656, w: 22, h: 16 };
-/* walk-in (Martin: "the door on the keep is closed so I can't go inside of it"): stone walls 'X', its floor 'i', the door open, five storeys of 3.2 m with stairs */
+/* walk-in (the operator: "the door on the keep is closed so I can't go inside of it"): stone walls 'X', its floor 'i', the door open, five storeys of 3.2 m with stairs */
 objects.push({ k: 'ckeep', x: K.x, y: K.y, w: K.w, h: K.h, floors: 5, lh: 3.2, enter: true, door: [INNER.x, K.y], donjon: { r: 4.2, h: 11 } });
 for (let y = K.y; y < K.y + K.h; y++) for (let x = K.x; x < K.x + K.w; x++) set(x, y, (x === K.x || y === K.y || x === K.x + K.w - 1 || y === K.y + K.h - 1) ? 'X' : 'i');
 set(INNER.x, K.y, 'i');
@@ -112,7 +112,7 @@ for (let y = Y0; y < BAR.y; y++) for (let x = GATE.x - 4; x <= GATE.x + 5; x++) 
 for (let y = GATE.y + 1; y <= ROADY; y++) for (const d of [0, 1]) if (at(GATE.x + d, y) === 'd') set(GATE.x + d, y, 'p');
 for (let x = GATE.x; x <= INNER.x; x++) for (const d of [0, 1]) if (at(x, ROADY + d) === 'd') set(x, ROADY + d, 'p');
 for (let y = ROADY; y <= K.y - 1; y++) for (const d of [0, 1]) if (at(INNER.x + d, y) === 'd' || at(INNER.x + d, y) === '.') set(INNER.x + d, y, 'p');
-/* --- a full town (Martin: "a chest and town portal and a kitchen where the player can cook and whatever else the castle needs
+/* --- a full town (the operator: "a chest and town portal and a kitchen where the player can cook and whatever else the castle needs
    to be a full-blown town") */
 const PORTAL = { x: 4048, y: -1684, to: [4049, -1683] };      /* the town portal, by the road just inside the gate */
 set(PORTAL.x, PORTAL.y, 'd'); set(PORTAL.to[0], PORTAL.to[1], 'd');
@@ -243,7 +243,7 @@ for (const R of ROYALS) {
   for (const [x, y] of [[R.x, R.y]].concat(R.patrol || [])) { const c = at(x, y); if ('X~TPOMWY'.indexOf(c) >= 0) { console.error('BLOCKED - %s would walk into %s at %d,%d', R.id, c, x, y); process.exit(1); } }
   npcs.push(Object.assign({ id: R.id, name: R.name, look: R.look, x: R.x, y: R.y, talk: 'quest', quest: R.quest, quests: [R.quest], examine: R.examine }, R.patrol ? { patrol: R.patrol } : {}));
 }
-/* --- stairs you walk up (Martin: "they should be staircases like the terrain and I just walk up them"): raised ground,
+/* --- stairs you walk up (the operator: "they should be staircases like the terrain and I just walk up them"): raised ground,
    0.6 m a tile; ramps = [x, y, metres] (src/world.js liftAt); the wall walk and tower tops stand at LH */
 const LH = 4.2, ramps = new Map();
 const RISE = (k, n) => +((k + 1) * LH / (n + 1)).toFixed(2);
@@ -275,7 +275,7 @@ for (const t of TOWERS) {
   deckCells.delete(d1x + ',' + d1y); deckCells.delete(d2[0] + ',' + d2[1]);
   ramps.set(d1x + ',' + d1y, 1.4); ramps.set(d2[0] + ',' + d2[1], 2.8);
   /* the door stands on the first step (d1), facing the yard; a tap on it walks you up through the tower to a tile of the
-     tower top beside the second step (Martin: "click on the door on the bottom level of the tower, you should go in it,
+     tower top beside the second step (the operator: "click on the door on the bottom level of the tower, you should go in it,
      come out the door accessing the wall") */
   const top = ring.filter(([x, y]) => deckCells.has(x + ',' + y) && Math.max(Math.abs(x - d2[0]), Math.abs(y - d2[1])) === 1).sort((p, q) => Math.hypot(p[0] - t.x, p[1] - t.y) - Math.hypot(q[0] - t.x, q[1] - t.y))[0];
   o.door = [foot[0] - d1x, foot[1] - d1y]; o.dtile = [d1x, d1y]; o.ttile = top || d2;

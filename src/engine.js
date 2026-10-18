@@ -259,7 +259,7 @@
       const SAVE = SAVE_KEY, SET = 'ashvale3d.settings.v1';
       let save = null; try { save = JSON.parse(store.get(SAVE) || 'null'); } catch (e) { save = null; }
       if (opts.fresh || q.has('fresh') || q.has('dragonheart')) save = null;
-      let settings = { sound: true, shadows: !isPhone, runToggle: false }; try { Object.assign(settings, JSON.parse(store.get(SET) || '{}')); } catch (e) { /* defaults */ }
+      let settings = { sound: true, shadows: !isPhone, runToggle: false, showPet: true }; try { Object.assign(settings, JSON.parse(store.get(SET) || '{}')); } catch (e) { /* defaults */ }
 
       /* ---------- data + rules */
       /* the zones here now: an eager registry's (DATA zone.*), and the ones area loading fetched before the start (LZ). With an
@@ -279,6 +279,7 @@
       if (HOME && core.setNewHome) core.setNewHome(HOME);
       const me = core.addPlayer(PID, save);
       let FE = null;   /* [Claude 2026-10-16] the Fortune Engines' part (engfortune.js), installed with the Bank client below */
+      let PET = null;  /* [Claude 2026-10-17] pets from Doginals (engpet.js): a Doginal Dog or an Anti Doginal Dog in the wallet walks at your heel */
       if (!/^@/.test(String(me.name || ''))) me.name = '@guest';   /* [Claude 2026-10-15] no chosen names any more: '@guest' until the arcade says your @tag (the operator: "There's no need for two names") */
       /* Purpose-built local playtest for The Heart Below. It never runs in the framed arcade and always starts from a fresh,
          disposable character: all combat and dungeon-check skills at 99, prerequisite stories complete, and top-tier kit. */
@@ -1486,6 +1487,7 @@
         const r = canvas.getBoundingClientRect(); ndc.set((cx - r.left) / r.width * 2 - 1, -(cy - r.top) / r.height * 2 + 1);
         ray.setFromCamera(ndc, camera);
         const objs = proxies.filter(px => { const e = px.userData.ent; return !e || (!e.dead && e.root.visible); });
+        if (PET) objs.push.apply(objs, PET.pickables());   /* [Claude 2026-10-17] pets: long-press / right-click */
         for (const r2 of regions) if (r2.built && regionDist(r2, me.x, me.y) <= 45) objs.push.apply(objs, r2.built.pickables);   /* only what is near (seeded chunks are many) */
         const hits = ray.intersectObjects(objs, false), out = [], seen = new Set();
         for (const h of hits) {
@@ -1610,6 +1612,7 @@
           out.push(...taken, { html: 'Examine <span class="c">Chess table</span>', fn: () => hud.chat(chessExamine(st), 'sys') });
           return out;
         }
+        if (t.kind === 'pet') return PET ? PET.menu(t) : [];   /* [Claude 2026-10-17] a pet: choose yours / inspect */
         if ((t.kind === 'fortune' || t.kind === 'fehot') && FE) return FE.menu(t);   /* [Claude 2026-10-16] a Fortune Engine */
         if (t.kind === 'pokertable') {   /* THE POKER TABLE: six chairs round one felt in the Saltmere tap room; once you are sitting, the panel in front of you does the talking */
           const T = core.pokerTableById(t.id); if (!T) return [];
@@ -1733,7 +1736,7 @@
         if (lastTap && now - lastTap.t < 300 && Math.hypot(cx - lastTap.x, cy - lastTap.y) < 40 && lastTap.act) {
           const up = Object.assign({}, lastTap.act, { run: runFor(true) }); lastTap = null; send(up); hud.hideMenu(); return;
         }
-        const ts = targetsAt(cx, cy).filter(t => t.kind !== 'remote' && t.kind !== 'decor'); if (!ts.length) {   /* scenery is examined from the menu; a click on it walks you there */ const g = groundAt(cx, cy); if (g) ts.push({ kind: 'ground', x: g.x, y: g.y }); else return; }
+        const ts = targetsAt(cx, cy).filter(t => t.kind !== 'remote' && t.kind !== 'pet' && t.kind !== 'decor'); if (!ts.length) {   /* scenery is examined from the menu; a click on it walks you there; a pet only in the long-press menu */ const g = groundAt(cx, cy); if (g) ts.push({ kind: 'ground', x: g.x, y: g.y }); else return; }
         const o = optionsFor(ts[0])[0];
         if (o) { if (o.act) o.act = Object.assign({}, o.act, { run: runFor(!!settings.runToggle) }); doAct(o, cx, cy); lastTap = { t: now, x: cx, y: cy, act: o.act || null }; }
         hud.hideMenu();
@@ -1877,7 +1880,7 @@
         if (me.boat !== 1) { carryTell(r, 0); hud.chat((r.name || 'Your partner') + ' is left on the bank here until they come back.', 'sys'); dropRemote(id, true); return; }   /* ashore: they wait on the bank */
         if (now - r.offline.told > 15000) { r.offline.told = now; carryTell(r, 1); }
       }
-      function dropRemote(id, hard, keep) { const r = remotes.get(id);
+      function dropRemote(id, hard, keep) { const r = remotes.get(id); if (PET) PET.drop(id);
         if (!hard && r && !r.offline && ghostable(r, id)) { makeGhost(id, r); return; } if (r) { if (r.name && r.name !== 'Adventurer') knewName.set(id, r.name); removeEnt(r.e); remotes.delete(id); } if (core.S.players[id] && core.S.players[id].puppet) coreCall(() => core.removePlayer(id, keep)); }   /* [Claude 2026-10-14] coreCall: its events (a card-table cashout to the Bank) are handled, not lost */
       function dropRemotes(keep) { for (const id of Array.from(remotes.keys())) dropRemote(id, false, keep); }   /* keep [Claude 2026-10-12]: OUR room dropped - their chess seats wait for the host's word */
       /* fighting a monster of another area (the operator: attackers can be attacked back across borders): we tell the room which
@@ -2181,6 +2184,19 @@
       scoreTell = ENGBANK.scoreTell; scoresAsk = ENGBANK.scoresAsk;
       /* [Claude 2026-10-16] THE FORTUNE ENGINES (src/engfortune.js): seat, first-person view, the machine's taps and the Bank's words */
       FE = deps.engfortune ? deps.engfortune.install({ THREE, SCENE, core, hud, PID, ENGBANK, cam, camera, canvas, host, FPV, myEnt, send, netSend, walletRefresh, walletState, get me() { return me; }, get settings() { return settings; } }) : null;
+      PET = deps.engpet ? deps.engpet.install({ THREE, scene, CHAR, footY, myEnt, netSend: o => netSendBig(o, null, 'pt' in o ? 'pet' : null),
+        playOnce: (e, name) => { if (!e.dead && !e.oneShot && !e.prone && !e.held && !e.canoe) playOnce(e, name); },   /* [Claude 2026-10-18] petting: the engine's own one-shot, so the walk/idle loop comes back after it */
+        groundY: (x, z, e, fy) => {   /* [Claude 2026-10-18] the pet's own ground (the operator: on a slope it sank into it); upstairs its owner's floor, a big step (a wall walk) its owner's height */
+          const rr = e === myEnt ? null : remotes.get(String(e.key || '').slice(2)), lv = e === myEnt ? (me.lv | 0) : rr ? (rr.lvR | 0) : 0;
+          if (lv) return fy; const h = footY(x, z); return Number.isFinite(h) && Math.abs(h - fy) < 1.5 ? h : fy;
+        },
+        canStand: (x, z, e) => {   /* [Claude 2026-10-18] where a pet may go: on an upper floor only inside its owner's building (the operator: it walked out through the Tap's wall and floated), on the ground nothing blocked */
+          const tx = Math.floor(x), ty = Math.floor(z), o = e.root.position, rr = e === myEnt ? null : remotes.get(String(e.key || '').slice(2));
+          const lv = e === myEnt ? (me.lv | 0) : rr ? (rr.lvR | 0) : 0;
+          if (core.M.inWorld && !core.M.inWorld(tx, ty)) return false;
+          if (lv) { const b = core.M.buildingAt ? core.M.buildingAt(Math.floor(o.x), Math.floor(o.z), lv) : -1; return b >= 0 && core.M.buildingAt(tx, ty, lv) === b; }
+          return !core.M.blocked(tx, ty) || (core.M.liftAt && core.M.liftAt(tx, ty) > 0);
+        },   /* [Claude 2026-10-18] a pet message carries its picture (~900 bytes): split, the newest replacing a queued one */ walletState, hud, base: arcadeBase, get settings() { return settings; }, ownerName: id => { const r = remotes.get(id); return r ? label(r.name, r.from) : ''; } }) : null;
       function boardWho() {   /* the keep board is the arcade @tag, not the default Adventurer (2026-10-10) */
         const t = (room && room.me && room.me.tag) || hintedTag || me.tag;
         if (t) { const h = String(t).replace(/^@/, '').replace(/[^\w]/g, '').slice(0, 16); if (h.length >= 2 && !/^adventurer$/i.test(h)) return '@' + h; }
@@ -2287,7 +2303,7 @@
       }
       const totalLevel = p => (D.rules.skills || []).reduce((a, k) => a + core.lv(p, k), 0);   /* the Skills tab's Total level */
       const NETGQ = { t: 0 };
-      function netGear() { netSend({ g: gearOf(me), n: me.name, T: totalLevel(me), SK: Object.fromEntries(Object.keys(me.xp).map(k => [k, core.lv(me, k)])), ST: core.storyPoints(me), L: ['attack', 'strength', 'defence', 'hitpoints', 'ranged', 'magic', 'dexterity'].map(k => core.lv(me, k)), st: me.styles }); netOutfit(); }
+      function netGear() { netSend({ g: gearOf(me), n: me.name, T: totalLevel(me), SK: Object.fromEntries(Object.keys(me.xp).map(k => [k, core.lv(me, k)])), ST: core.storyPoints(me), L: ['attack', 'strength', 'defence', 'hitpoints', 'ranged', 'magic', 'dexterity'].map(k => core.lv(me, k)), st: me.styles }); if (PET) netSendBig({ pt: PET.desc() }, null, 'pet'); netOutfit(); }   /* [Claude 2026-10-18] the pet apart: with its picture it passed the 500-byte cap and took the whole gear message down with it */
       function netOutfit() { if (myEnt.H.outfit) netSend({ o: myEnt.H.outfit }); }
       /* chat: what you type goes to everyone in the same zone room; rate-limited here (the mesh limits ~5 msgs/s) */
       const sayTimes = [];
@@ -2374,6 +2390,8 @@
            wrong (a missed message) must be corrected by the 10 s refresh */
         if (d.g && typeof d.g === 'object' && sameSet(d.g, r.e.H.gear) === false) r.e.H.setGear(d.g);
         if (d.g && typeof d.g === 'object') hawkify(r.e, d.g.ring);   /* another player's hawk ring */
+        if ('pt' in d && PET) PET.net(id, d.pt, r.e);   /* [Claude 2026-10-17] their pet dog */
+        if (d.ptp && PET && PET.petted) PET.petted(id);   /* [Claude 2026-10-18] they petted their dog: hearts over it here too */
         if (d.o && typeof d.o === 'object' && r.e.H.setOutfit && sameSet(d.o, r.e.H.outfit || {}) === false) { r.e.H.setOutfit(d.o); r.dressed = 1; }
         else if (!r.dressed && typeof d.h === 'string' && d.h !== r.home && r.e.H.setOutfit) { r.home = d.h; const L = homeLook(d.h); if (L) r.e.H.setOutfit(L); }   /* no outfit heard yet: their home's defaults */
         if (Array.isArray(d.p) && typeof d.a === 'string') { r.boat = d.bt | 0; r.ride = d.rd || null; r.pole = !!d.pl; r.knock = !!d.kn; r.hl = isFinite(+d.hl) ? Math.max(-1.5, Math.min(1.5, +d.hl)) : 0; }
@@ -2887,7 +2905,7 @@
         for (const g of fires.values()) { const u = g.userData, sc = 0.8 + 0.25 * Math.sin(now / 70 + u.ph) + 0.1 * Math.sin(now / 23 + u.ph); u.f1.scale.set(1, sc, 1); u.f2.scale.set(1, 1.1 * sc, 1); }
         if (wxMod && wxMod.update && !CAVE.on) wxMod.update(elapsed);
         if (!CAVE.on) dayTick(); else { if (STARS.pts) STARS.pts.visible = false; underSeason(); }   /* day and night on top of the weather's sky */   /* underground the cave sets the fog and the sky */
-        updateRemotes(now, dt); pokerClock(now); if (FE) FE.frame(now, dt);
+        updateRemotes(now, dt); pokerClock(now); if (FE) FE.frame(now, dt); if (PET) PET.frame(now, dt);
         for (let i = projs.length - 1; i >= 0; i--) {
           const p = projs[i]; p.t += dt; const k = Math.min(1, p.t / p.dur);
           const to = p.tgt.root.position.clone(); to.y += p.tgt.hawk ? 0.25 : (p.tgt.H.height || 1.2) * p.tgt.scale * 0.55;   /* up at the hawk itself in the sky */
@@ -3113,7 +3131,7 @@
           sfx: n => sfx(n),
           settings: () => settings,
           musicPanel: (el, redraw) => { if (MUSIC) MUSIC.panel(el, redraw); },   /* the Music tab (src/engmusic.js) */
-          toggle: k => { settings[k] = !settings[k]; store.set(SET, JSON.stringify(settings)); if (k === 'shadows') { sun.castShadow = settings.shadows; for (const e of ents.values()) e.blob.visible = !settings.shadows && !e.hawk; renderer.shadowMap.needsUpdate = true; scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); } },
+          toggle: k => { settings[k] = !settings[k]; store.set(SET, JSON.stringify(settings)); if (k === 'shadows') { sun.castShadow = settings.shadows; for (const e of ents.values()) e.blob.visible = !settings.shadows && !e.hawk; renderer.shadowMap.needsUpdate = true; scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); } if (k === 'showPet' && PET) PET.shown(); },
           resetCamera: () => { cam.tyaw = PI * 0.12; cam.tpitch = 0.92; cam.tdist = isPhone ? 9 : 11; },
           faceNorth: () => { const v = trueNorth(me.x, me.y), want = -PI / 2 - Math.atan2(v[1], v[0]); cam.tyaw = want + Math.round((cam.tyaw - want) / (2 * PI)) * 2 * PI; },   /* true north up, the short way round */
           newGame: () => { stopped = true; const at = Date.now(); (CLOUD_OK ? bankRoom() : Promise.resolve(null)).then(R => R && R.send(Object.assign(withHome({ t: 'sv', id: at, i: 0, n: 1 }), { d: '' }, CLOUD.base != null ? { base: CLOUD.base } : {}))).catch(() => {}).then(() => store.set(SAVE, '')).then(() => location.reload(), () => location.reload()); },   /* the Bank's copy goes too: an empty save, newer than any */
@@ -3387,6 +3405,7 @@
         progInfo: () => { const P = renderer.info.programs || [], I = renderer.info; return { n: P.length, calls: I.render.calls, tris: I.render.triangles, geos: I.memory.geometries, tex: I.memory.textures, applyMs: SEASON.applyMs, applies: SEASON.applies }; },
         tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },
         fortune: () => FE,   /* [Claude 2026-10-16] tests: the Fortune Engines' part */
+        pet: () => PET, petToggle: () => hudApi().toggle('showPet'),   /* [Claude 2026-10-17] tests: the pets part, the Settings toggle */
         pokerNetRow: t => pkNet(core.pokerRow(t)), _pokerModel: t => pokerModel(t), _pokerView: t => pokerView(t), _pokerClock: () => JSON.parse(JSON.stringify(PKT)), solitaire: () => openSolitaire(), _dropNext: k => { DROP_NEXT = k; }, pokerKey: () => MYPK, pokerSealed: t => PH[t] || null,   /* [Claude 2026-10-12] tests: the row as it leaves this dealer */   /* a test taps a thing as a player would (first option) */
         travelShown: () => { const el = host.querySelector('.travel'); return el && el.style.display !== 'none' ? el.className + ' | ' + el.querySelector('.tt').textContent : null; },
         say, store, models: MOD, allowedAsset, wallet: walletApi(DATA.items.items), walletState: () => walletState, walletRefresh,
@@ -3405,5 +3424,5 @@
     }
     return { api: 1, start, openStore };
   }
-  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engine', { api: 1, v: 2, needs: { three: 160, core: 2, models: 1, scene: 2, hud: 1, net: 2, trade: 1, wallet: 1, trip: 2, audit: 1, gamepad: 1, data: 1, engsky: 1, engbank: 1, engfortune: 1, engmusic: 1 } }, engineFactory);
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engine', { api: 1, v: 2, needs: { three: 160, core: 2, models: 1, scene: 2, hud: 1, net: 2, trade: 1, wallet: 1, trip: 2, audit: 1, gamepad: 1, data: 1, engsky: 1, engbank: 1, engfortune: 1, engpet: 1, engmusic: 1 } }, engineFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

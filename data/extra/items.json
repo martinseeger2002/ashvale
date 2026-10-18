@@ -695,6 +695,63 @@
    "value": 16,
    "attributes": []
   },
+  "frost_ink": {
+   "name": "Frost ink",
+   "description": "A pot of the Frostspire's ink, pale blue and cold enough to sting. The Circle writes with it because it does not fade, and the frost goblins steal it because it is shiny.",
+   "collection": "ASHVALE The Frostspire",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "curio",
+   "weight": 300,
+   "model": "item.potion",
+   "value": 15,
+   "attributes": []
+  },
+  "wizard_focus": {
+   "name": "Wizard's focus",
+   "description": "A sphere of summit ice that has not melted since the Ember King's chain was forged, held up on a silver stem. Archmage Halvard gives it to those who pass his trial. Held in the shield hand it adds 5 to your Magic bonus: your spells find their mark more often (it sharpens the aim, not the blow - a spell still hits as hard as it ever did). Needs Magic 30.",
+   "collection": "ASHVALE The Frostspire",
+   "game": "ashvale",
+   "category": "jewellery",
+   "subcategory": "charm",
+   "tier": 3,
+   "weight": 300,
+   "req": {
+    "magic": 30
+   },
+   "model": "gear.focus",
+   "value": 2500,
+   "attributes": [
+    {
+     "trait_type": "Magic",
+     "value": 5
+    }
+   ]
+  },
+  "tome_stones": {
+   "name": "Tome of Stones",
+   "description": "The Circle's second book: the Three Stones at the shrine were the first wardens of the mountain, wizards who stood their watch so long they forgot to stop. Wyn swears they still hum the hours.",
+   "collection": "ASHVALE The Frostspire",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "note",
+   "weight": 600,
+   "model": "item.note",
+   "value": 1,
+   "attributes": []
+  },
+  "tome_echoes": {
+   "name": "Tome of Echoes",
+   "description": "The Circle's first book: the mountain was raised to be a watchtower, and every echo on it is a word the watchers once said aloud and the stone kept. Aled has read it so often he answers it.",
+   "collection": "ASHVALE The Frostspire",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "note",
+   "weight": 600,
+   "model": "item.note",
+   "value": 1,
+   "attributes": []
+  },
   "wizard_cloak": {
    "name": "Wizard cloak top",
    "description": "The upper half of the Circle of the Long Night's cloak, deep blue and lined with silver thread that holds the cold out and the magic in; wear the bottoms with it. Magic +10, Defence +12. Needs Magic 40. Sold at the Frostspire.",
@@ -719,6 +776,18 @@
      "value": 12
     }
    ]
+  },
+  "tome_far_road": {
+   "name": "Tome of the Far Road",
+   "description": "The Circle's third book: a map of the roads beyond the mountain, and a warning in frost ink that the Ember King's chain was forged on this summit and must be kept cold here, or it will soften there.",
+   "collection": "ASHVALE The Frostspire",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "note",
+   "weight": 600,
+   "model": "item.note",
+   "value": 1,
+   "attributes": []
   },
   "wizard_cloak_bottoms": {
    "name": "Wizard cloak bottoms",
@@ -745,74 +814,26 @@
     }
    ]
   },
-  "wizard_focus": {
-   "name": "Wizard's focus",
-   "description": "A sphere of summit ice that has not melted since the Ember King's chain was forged, held up on a silver stem. Archmage Halvard gives it to those who pass his trial. Held in the shield hand it adds 5 to your Magic bonus: your spells find their mark more often (it sharpens the aim, not the blow - a spell still hits as hard as it ever did). Needs Magic 30.",
-   "collection": "ASHVALE The Frostspire",
+  "thornwatch_stone": {
+   "name": "Thornwatch stone",
+   "description": "Thornwatch stone, tool stone. Teleport thornwatch, Cooldown ticks 3000. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Portal Stones",
    "game": "ashvale",
-   "category": "jewellery",
-   "subcategory": "charm",
-   "tier": 3,
-   "weight": 300,
-   "req": {
-    "magic": 30
-   },
-   "model": "gear.focus",
-   "value": 2500,
+   "category": "tool",
+   "subcategory": "stone",
+   "weight": 200,
+   "model": "item.stone",
+   "value": 0,
    "attributes": [
     {
-     "trait_type": "Magic",
-     "value": 5
+     "trait_type": "Teleport",
+     "value": "thornwatch"
+    },
+    {
+     "trait_type": "Cooldown ticks",
+     "value": 3000
     }
    ]
-  },
-  "frost_ink": {
-   "name": "Frost ink",
-   "description": "A pot of the Frostspire's ink, pale blue and cold enough to sting. The Circle writes with it because it does not fade, and the frost goblins steal it because it is shiny.",
-   "collection": "ASHVALE The Frostspire",
-   "game": "ashvale",
-   "category": "resource",
-   "subcategory": "curio",
-   "weight": 300,
-   "model": "item.potion",
-   "value": 15,
-   "attributes": []
-  },
-  "tome_echoes": {
-   "name": "Tome of Echoes",
-   "description": "The Circle's first book: the mountain was raised to be a watchtower, and every echo on it is a word the watchers once said aloud and the stone kept. Aled has read it so often he answers it.",
-   "collection": "ASHVALE The Frostspire",
-   "game": "ashvale",
-   "category": "resource",
-   "subcategory": "note",
-   "weight": 600,
-   "model": "item.note",
-   "value": 1,
-   "attributes": []
-  },
-  "tome_stones": {
-   "name": "Tome of Stones",
-   "description": "The Circle's second book: the Three Stones at the shrine were the first wardens of the mountain, wizards who stood their watch so long they forgot to stop. Wyn swears they still hum the hours.",
-   "collection": "ASHVALE The Frostspire",
-   "game": "ashvale",
-   "category": "resource",
-   "subcategory": "note",
-   "weight": 600,
-   "model": "item.note",
-   "value": 1,
-   "attributes": []
-  },
-  "tome_far_road": {
-   "name": "Tome of the Far Road",
-   "description": "The Circle's third book: a map of the roads beyond the mountain, and a warning in frost ink that the Ember King's chain was forged on this summit and must be kept cold here, or it will soften there.",
-   "collection": "ASHVALE The Frostspire",
-   "game": "ashvale",
-   "category": "resource",
-   "subcategory": "note",
-   "weight": 600,
-   "model": "item.note",
-   "value": 1,
-   "attributes": []
   }
  }
 }

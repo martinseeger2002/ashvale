@@ -29,7 +29,7 @@
   },
   "wallet": {
    "id": null,
-   "v": "1",
+   "v": "2",
    "api": 1,
    "kind": "js"
   },
@@ -255,6 +255,12 @@
    "api": 1,
    "kind": "js"
   },
+  "engpet": {
+   "id": null,
+   "v": "2",
+   "api": 1,
+   "kind": "js"
+  },
   "sky": {
    "id": null,
    "v": "1",
@@ -408,6 +414,18 @@
     "api": 1,
     "kind": "json"
    },
+   "char.ashling": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.ashling_shaman": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.bandit": {
     "id": null,
     "v": 1,
@@ -439,6 +457,12 @@
     "kind": "json"
    },
    "char.brannoc": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.briar": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -480,6 +504,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.cinderhide": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.cobb": {
     "id": null,
     "v": 1,
@@ -504,6 +534,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.den_brute": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.edda": {
     "id": null,
     "v": 1,
@@ -517,6 +553,18 @@
     "kind": "json"
    },
    "char.edric_skel": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.elin": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.fennick": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -570,6 +618,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.gwen": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.hale": {
     "id": null,
     "v": 1,
@@ -613,6 +667,12 @@
     "kind": "json"
    },
    "char.iria": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.isolde": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -703,6 +763,12 @@
     "kind": "json"
    },
    "char.modulus": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.moor_walker": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -804,6 +870,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.rhosyn": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.rowan": {
     "id": null,
     "v": 1,
@@ -877,6 +949,24 @@
     "kind": "json"
    },
    "char.tamsin": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.tavish": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.thorn_sentry": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.thorn_sentry2": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1955,6 +2045,24 @@
     "kind": "json"
    },
    "dragonkeep": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "thornwatch": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "redmoor": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "hollowden": {
     "id": null,
     "v": 1,
     "api": 1,

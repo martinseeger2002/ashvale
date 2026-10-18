@@ -31,6 +31,7 @@ JS_MODULES.insert(JS_MODULES.index('engine'), 'engsky')
 JS_MODULES.insert(JS_MODULES.index('engine'), 'engbank')
 JS_MODULES.insert(JS_MODULES.index('engine'), 'engmusic')   # [Claude 2026-10-18] the soundtrack: area tracks that unlock as you travel (data/music.json, tools/music/compose.py)
 JS_MODULES.insert(JS_MODULES.index('engine'), 'engfortune')   # [Claude 2026-10-16] the Fortune Engines' controller (seat, view, the Bank's words)   # the chest and the @ashvale Bank client   # the engine's sky, its own inscription (2026-10-08: the engine split into parts)
+JS_MODULES.insert(JS_MODULES.index('engine'), 'engpet')   # [Claude 2026-10-17] pets from Doginals (a Doginal Dog or ADD in the wallet)
 if os.path.exists(os.path.join(SRC, 'sky.js')):
     JS_MODULES.insert(JS_MODULES.index('engine'), 'sky')
 if os.path.exists(os.path.join(SRC, 'skyview.js')):   # the sky drawn as a 3D scene of its own: sun, moon, stars (2026-10-07)
@@ -50,6 +51,7 @@ if os.path.exists(os.path.join(SRC, 'worldgen.js')):
 DATA_MODULES.append('atlas_palette')   # the Atlas's colours (src/earth.js PAL): the Atlas boots from the game's registry since 2026-10-11
 DATA_PATHS = {'wg_tables': 'atlas/wg_tables', 'atlas_palette': 'atlas/atlas_palette'}   # data modules that live in a subfolder of data/
 ZONES = ['village', 'eastend', 'whisperwood', 'saltmere', 'castle', 'wolfden', 'cavemouth', 'spidercave', 'ancientchapel', 'evengrove', 'ziibiing', 'lodges', 'ricelake', 'sugarcamp', 'flintbank', 'obsidianbank', 'willowbank', 'dragonapproach', 'dragonkeep']   # ziibiing + lodges: the Ojibwe village on the river and its wigwams' insides (tools/make_zone_ziibiing.py)   # castle: the lake castle 4 km out (tools/castle/make_castle.js)   # dragonapproach: Squire Elian at -11,-78; dragonkeep: the ruined keep at -54,-99
+ZONES = ZONES + ['thornwatch', 'redmoor', 'hollowden']   # Thornwatch Camp, the Red Moor and the Hollow Den under it (tools/thornwatch/, 2026-10-18)
 ZONES = ZONES + ['mt_lodge', 'mt_shrine', 'mt_ledge', 'mt_warden', 'mt_crags', 'mt_pass', 'mt_farside', 'mt_tower']   # the great mountain's camps (tools/mountain/make_camps.js, 2026-10-18)   # saltmere: the second town, on the sea shore 3.4 km east (tools/make_zone_saltmere.mjs)
 if os.environ.get('ASH_NO_CASTLE') == '1':   # 2026-10-05: "forget about this castle for now" - a release without it
     ZONES = [z for z in ZONES if z != 'castle']
@@ -109,7 +111,7 @@ def zone_index(zones):
                 and ox <= o['x'] < ox + w and oy <= o['y'] < oy + h]
         e = {'id': zid, 'name': z.get('name', zid), 'origin': z['origin'], 'size': z['size'], 'stub': zone_stub_tiles(z), 'pads': pads,
              'npcs': [{'id': n['id'], 'name': n.get('name', n['id']), 'x': n['x'], 'y': n['y']} for n in z.get('npcs') or []]}
-        for k in ('level', 'ground', 'respawn', 'weather', 'under', 'setPiece', 'style', 'surface', 'surfaceOffset'):   # setPiece: false keeps a zone off worldgen (Claude 2026-10-16)   # under: a cave area outside the land (surface = its entrance up top)
+        for k in ('level', 'ground', 'respawn', 'weather', 'under', 'setPiece', 'style', 'surface', 'surfaceOffset', 'ownWays'):   # ownWays: no paths grow from its edges (src/wg_paths.js), so the stubs must know it too (Thornwatch, 2026-10-18)   # setPiece: false keeps a zone off worldgen (Claude 2026-10-16)   # under: a cave area outside the land (surface = its entrance up top)
             if k in z: e[k] = z[k]
         out.append(e)
     return {"ashvale3d": "module", "name": "zoneindex", "api": 1, "v": 1, "data": {"zones": out}}

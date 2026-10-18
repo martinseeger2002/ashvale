@@ -183,7 +183,7 @@
           const objs = (z.objects || []).filter(o => o.x >= ox && o.y >= oy && o.x < ox + w && o.y < oy + h).map(o => Object.assign({}, o, { x: o.x + gx, y: o.y + gy }, o.x2 != null ? { x2: o.x2 + gx, y2: o.y2 + gy } : null));   /* a run (a castle wall) moves both ends */
           const groves = ((popts && popts.groves) || []).filter(q => q.piece === z.id).map(q => Object.assign({}, q, { x: q.x + gx, y: q.y + gy }));
           const walls = ((popts && popts.walls) || []).filter(q => q.piece === z.id).map(q => Object.assign({}, q, { pts: (q.pts || []).map(p => [p[0] + gx, p[1] + gy]) }));
-          const pc = { id: z.id, face, x: X0, y: Y0, w, h, tiles: decks(z), objects: objs, belt: belt[z.id] || 0, groves, walls, links: links.filter(l => l[0] === z.id).map(l => l[1]), linkStyles: Object.fromEntries(links.filter(l => l[0] === z.id && l[2]).map(l => [l[1], l[2]])) };
+          const pc = { id: z.id, face, x: X0, y: Y0, w, h, tiles: decks(z), objects: objs, belt: belt[z.id] || 0, groves, walls, links: links.filter(l => l[0] === z.id).map(l => l[1]), linkStyles: Object.fromEntries(links.filter(l => l[0] === z.id && l[2]).map(l => [l[1], l[2]])), ownWays: !!z.ownWays };   /* ownWays: the zone's ways out are laid by hand (data/atlas/wg_tables.json trails), so none grow from its edges */
           if (N) {
             const C = [[X0, Y0], [X0 + w, Y0], [X0, Y0 + h], [X0 + w, Y0 + h]].map(c => onFace(c[0], c[1]));
             const f = C[0].f;

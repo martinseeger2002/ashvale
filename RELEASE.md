@@ -1,5 +1,20 @@
 # ASHVALE: fix, test, release (for the local agent)
 
+## Note for the authorizing / inscribing operator (2026-10-10)
+
+**Dragon cape (orange, white dragon on the back).** Inscriptions cannot be edited after they are written. Existing `dragon_cape` NFTs on the Flag (`ASHVALE Items`, key `dragon_cape`) still carry the old blue cape in their inscribed JSON and any inscribed icon.
+
+In the live game, worn look comes from the current `cloth.cape` part, so a new parts/models release already paints those copies orange in-world. Chain explorers and the arcade inventory still show whatever was inscribed.
+
+Please, unless you have a way to rewrite those inscriptions (there is none on-chain):
+1. Take a list of current `dragon_cape` owners from the Flag.
+2. Delete / burn the old blue cape NFTs from the Flag.
+3. Reissue each owner a new `dragon_cape` of this orange design.
+
+Do not mint extras. Drop rate is now 1 in 10.
+
+---
+
 2026-10-02: "Give the local agent clear instructions on how to continue to build, test and release so that as
 it fixes bugs, it can publish them without you." This is the whole loop. Follow it in order, every time.
 

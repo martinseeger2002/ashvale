@@ -1390,9 +1390,10 @@ function wild6k(c) {
   /* the burn, off the engine\'s own messages, at the rung and ten levels above it */
   const burnAt = (lvl, raw, cooks) => {
     const c = AshCore.create(D, { seed: 'burn-' + raw + lvl }), q = c.addPlayer('pb', { inv: [] });
-    q.xp.cooking = D.rules.xp[Math.max(1, lvl)] * 10;
+    const xp0 = D.rules.xp[Math.max(1, lvl)] * 10; q.xp.cooking = xp0;
     q.x = RG.x + 1; q.y = RG.y; let burnt = 0, done = 0;
     for (let i = 0; i < 60000 && done < cooks; i++) {
+      q.xp.cooking = xp0;   /* [Claude 2026-10-18] held at the rung: the burn rate is measured AT a level, not across the levels the batch earns (40 cooks of a rising cook read 18-43%) */
       if (!q.inv.some(t => t && fire[t.id] && fire[t.id].cooks)) { const f = q.inv.findIndex(t => !t); if (f >= 0) q.inv[f] = { id: raw, n: 1 }; }
       if (!q.act || q.act.k !== 'gather') c.cmd('pb', { c: 'gather', x: RG.x, y: RG.y });
       for (const e of c.tick()) if (e.e === 'msg' && /^You (accidentally burn the|cook the) /.test(e.text)) { if (/burn/.test(e.text)) burnt++; done++; }

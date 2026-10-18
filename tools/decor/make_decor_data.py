@@ -145,6 +145,8 @@ for k in ("milestone", "lantern_post", "wayshrine", "stone_bench", "fallen_log",
     K[k]["block"] = "tile"
 K["rail_fence"]["block"] = "line"; K["rail_fence"]["len"] = 2.9
 K["iron_fence"]["block"] = "line"; K["iron_fence"]["len"] = 1.0   # the flower beds, the piers and the open gate you walk past (or through)
+_EX = os.path.join(ROOT, 'data', 'extra', 'decor.json')   # kinds other tools add (tools/thornwatch/make_tw_decor.py), kept across reruns
+if os.path.exists(_EX): K.update(json.load(open(_EX)).get('kinds', {}))
 DECOR = {"ashvale3d": "module", "name": "decor", "api": 1, "v": 1,
          "data": {"note": "reusable scenery (tools/decor/make_decor_data.py): parts [shape, colour, x, y, z, sx, sy, sz, ry, rx, rz], colours from a palette; a snowy palette adds the kind's snow parts",
                   "palettes": PALETTES, "kinds": K}}
