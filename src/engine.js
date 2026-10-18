@@ -68,7 +68,7 @@
     /* ---------- saves: arcade.storage inside an arcade viewer (inscribed pages have NO localStorage, it throws),
        else this browser's localStorage, else memory only. Reads come from a cache filled before start(); writes go
        through and never throw (setItem rejects outside a viewer). */
-    const STORE_KEYS = ['ashvale3d.save.v1', 'ashvale3d.settings.v1', 'ashvale3d.help'];
+    const STORE_KEYS = ['ashvale3d.save.v1', 'ashvale3d.settings.v1', 'ashvale3d.help', 'ashvale3d.music.v1'];   /* music.v1 (src/engmusic.js: on/off, volume, mode, unlocked tracks): it was written but never read back, so every visit began with the music on at 60% (2026-10-18) */
     function memoryStore(cache, backend, S) {
       cache = cache || {}; let warned = false;
       const warn = e => { if (!warned) { warned = true; console.warn('ASHVALE: saving failed (' + (e && e.message || e) + '); progress is kept until you close the page.'); } };
