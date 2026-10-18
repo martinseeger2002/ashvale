@@ -157,6 +157,8 @@
         };
       } else if (ST.tab === 'magic') {
         panel.innerHTML = '<h4>Magic</h4><div class="soonbox">' + A.ICON.magic.replace('<svg ', '<svg style="width:42px;height:42px;display:block;margin:0 auto 8px" ') + 'Available soon<small>Spellbooks are on their way. Until then, a staff in hand casts its own spell (see Combat).</small></div>';
+      } else if (ST.tab === 'music') {   /* the soundtrack's list, drawn by src/engmusic.js */
+        if (api.musicPanel) api.musicPanel(panel, () => refresh('music')); else panel.innerHTML = '<h4>Music</h4>';
       } else if (ST.tab === 'settings') {
         const S = api.settings();
         panel.innerHTML = '<h4>Settings</h4>' +

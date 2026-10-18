@@ -1116,6 +1116,8 @@
         }
       }
       /* THE SKY lives in its own module (src/engsky.js, 2026-10-08): what it needs goes in, what the engine uses comes back */
+      /* THE SOUNDTRACK (src/engmusic.js, 2026-10-18): area tracks that unlock as you travel, and the Music tab */
+      const MUSIC = deps.engmusic ? deps.engmusic.install({ DATA, core, store, hud: () => hud }) : null;
       const ENGSKY = deps.engsky.install({ THREE, DATA, PI, SCENE, CAVE, D, PID, SKY, camera, core, coreCall, hemi, hud, isPhone, me, myEnt, q, say, scene, send, showWeather, sun, zoneHere,
         pineSnow, get cam() { return cam; }, get wxMod() { return wxMod; }, get wxShown() { return wxShown; }, set wxShown(v) { wxShown = v; } });
       const { DAY_S, DEMO, NS, SEASON, SEASONS, SKYM, SKYV, STARS, SUNL, SUN_EPOCH, TL, dayTick, underSeason, dot3, moonAt, skyNow, sunAt, sunTime } = ENGSKY;
@@ -2835,6 +2837,7 @@
         requestAnimationFrame(frame);
         for (const r of regions) if (r.built && r.built.setFloor) r.built.setFloor(me.lv | 0);
         caveTick(performance.now()); torchTick(performance.now());
+        if (MUSIC) MUSIC.frame(me.x, me.y, zoneHere);   /* the soundtrack follows the area (it looks every 20 frames) */
         for (const t of gFlames) { const q = performance.now() / 1000, k = 0.85 + 0.15 * Math.sin(q * 13 + t.ph) + 0.08 * Math.sin(q * 31 + t.ph * 2); t.f.scale.set(1, k, 1); t.f2.scale.set(1, k, 1); }
         /* One clock. The tick loop keeps lastTick on performance.now() and stamps each stride with the tick's own
            time (see doTick), but the rAF argument is the frame's START time, which trails performance.now() by
@@ -3098,6 +3101,7 @@
           say: t => say(t),
           sfx: n => sfx(n),
           settings: () => settings,
+          musicPanel: (el, redraw) => { if (MUSIC) MUSIC.panel(el, redraw); },   /* the Music tab (src/engmusic.js) */
           toggle: k => { settings[k] = !settings[k]; store.set(SET, JSON.stringify(settings)); if (k === 'shadows') { sun.castShadow = settings.shadows; for (const e of ents.values()) e.blob.visible = !settings.shadows && !e.hawk; renderer.shadowMap.needsUpdate = true; scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); } },
           resetCamera: () => { cam.tyaw = PI * 0.12; cam.tpitch = 0.92; cam.tdist = isPhone ? 9 : 11; },
           faceNorth: () => { const v = trueNorth(me.x, me.y), want = -PI / 2 - Math.atan2(v[1], v[0]); cam.tyaw = want + Math.round((cam.tyaw - want) / (2 * PI)) * 2 * PI; },   /* true north up, the short way round */
@@ -3390,5 +3394,5 @@
     }
     return { api: 1, start, openStore };
   }
-  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engine', { api: 1, v: 2, needs: { three: 160, core: 2, models: 1, scene: 2, hud: 1, net: 2, trade: 1, wallet: 1, trip: 2, audit: 1, gamepad: 1, data: 1, engsky: 1, engbank: 1, engfortune: 1 } }, engineFactory);
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engine', { api: 1, v: 2, needs: { three: 160, core: 2, models: 1, scene: 2, hud: 1, net: 2, trade: 1, wallet: 1, trip: 2, audit: 1, gamepad: 1, data: 1, engsky: 1, engbank: 1, engfortune: 1, engmusic: 1 } }, engineFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

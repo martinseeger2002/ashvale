@@ -29,6 +29,7 @@ if os.path.exists(os.path.join(SRC, 'seasons.js')):   # the year and its seasons
 for _m in ('atlas_shapes', 'atlas_chunk', 'earth'): JS_MODULES.insert(JS_MODULES.index('engine'), _m)   # the Atlas (src/earth.js) is a game module since 2026-10-11: it boots from the game's registry, so every release updates it
 JS_MODULES.insert(JS_MODULES.index('engine'), 'engsky')
 JS_MODULES.insert(JS_MODULES.index('engine'), 'engbank')
+JS_MODULES.insert(JS_MODULES.index('engine'), 'engmusic')   # [Claude 2026-10-18] the soundtrack: area tracks that unlock as you travel (data/music.json, tools/music/compose.py)
 JS_MODULES.insert(JS_MODULES.index('engine'), 'engfortune')   # [Claude 2026-10-16] the Fortune Engines' controller (seat, view, the Bank's words)   # the chest and the @ashvale Bank client   # the engine's sky, its own inscription (2026-10-08: the engine split into parts)
 if os.path.exists(os.path.join(SRC, 'sky.js')):
     JS_MODULES.insert(JS_MODULES.index('engine'), 'sky')
@@ -38,7 +39,7 @@ if os.path.exists(os.path.join(SRC, 'geo.js')):       # the global grid: face ce
     JS_MODULES.insert(JS_MODULES.index('engine'), 'geo')
 if os.path.exists(os.path.join(SRC, 'fog.js')):       # fog measured from the camera-player segment (2026-10-02): its own module
     JS_MODULES.insert(JS_MODULES.index('engine'), 'fog')
-DATA_MODULES = ['items', 'monsters', 'shops', 'quests', 'rules', 'globecfg', 'assets', 'housekit']   # housekit: converted Quaternius house pieces (tools/housekit/q2code.mjs --game)
+DATA_MODULES = ['items', 'monsters', 'shops', 'quests', 'rules', 'globecfg', 'assets', 'housekit', 'music']   # music: the soundtrack (tools/music/compose.py)   # housekit: converted Quaternius house pieces (tools/housekit/q2code.mjs --game)
 DATA_MODULES = DATA_MODULES + (['starmap'] if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'starmap.json')) else [])   # the real night sky (d3-celestial, BSD-3)
 DATA_MODULES = DATA_MODULES + (['pools'] if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'pools.json')) else [])   # pools: tools/pools3d.py data   # globecfg: where ASHVALE sits on the globe (P2)
 # globe P2 step B: seeded land around the old map. The globe grid + worldgen modules (written for the Atlas, used as they

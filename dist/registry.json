@@ -243,6 +243,12 @@
    "api": 1,
    "kind": "js"
   },
+  "engmusic": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
   "engfortune": {
    "id": null,
    "v": "1",
@@ -323,6 +329,12 @@
     "kind": "json"
    },
    "housekit": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "music": {
     "id": null,
     "v": 1,
     "api": 1,
