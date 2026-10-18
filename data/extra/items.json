@@ -697,7 +697,7 @@
   },
   "wizard_cloak": {
    "name": "Wizard cloak top",
-   "description": "The Circle of the Long Night's own cloak, deep blue and lined with silver thread that holds the cold out and the magic in. Magic +10, Defence +12. Needs Magic 40. Sold at the Frostspire.",
+   "description": "The upper half of the Circle of the Long Night's cloak, deep blue and lined with silver thread that holds the cold out and the magic in; wear the bottoms with it. Magic +10, Defence +12. Needs Magic 40. Sold at the Frostspire.",
    "collection": "ASHVALE The Frostspire",
    "game": "ashvale",
    "category": "armour",
@@ -707,7 +707,7 @@
    "req": {
     "magic": 40
    },
-   "model": "gear.robe",
+   "model": "gear.robetop",
    "value": 12000,
    "attributes": [
     {
@@ -747,7 +747,7 @@
   },
   "wizard_focus": {
    "name": "Wizard's focus",
-   "description": "A sphere of clear ice that never melts, given by Archmage Halvard to those who pass his trial. Worn in the shield hand: Magic +5.",
+   "description": "A sphere of summit ice that has not melted since the Ember King's chain was forged, held up on a silver stem. Archmage Halvard gives it to those who pass his trial. Held in the shield hand it adds 5 to your Magic bonus: your spells find their mark more often (it sharpens the aim, not the blow - a spell still hits as hard as it ever did). Needs Magic 30.",
    "collection": "ASHVALE The Frostspire",
    "game": "ashvale",
    "category": "jewellery",
@@ -757,7 +757,7 @@
    "req": {
     "magic": 30
    },
-   "model": "gear.rosary",
+   "model": "gear.focus",
    "value": 2500,
    "attributes": [
     {

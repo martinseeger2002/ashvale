@@ -6,8 +6,7 @@
   "kind": "gear",
   "slot": "shield",
   "items": {
-    "vorth_rosary": "#e07020",
-    "wizard_focus": "#a8dcff"
+    "vorth_rosary": "#e07020"
   },
   "mount": {
     "j": "handL",

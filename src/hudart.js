@@ -4,7 +4,7 @@
 (function (G) {
   'use strict';
   const CSS = `
-.ash *{box-sizing:border-box}.ash{position:absolute;inset:0;overflow:hidden;font:600 13px/1.25 "Trebuchet MS",Verdana,system-ui,sans-serif;color:#ffcf3f;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;--slot:40px;--mm:150px;--tab:40px}
+.ash *{box-sizing:border-box}.ash{position:absolute;inset:0;overflow:hidden;font:600 13px/1.25 "Trebuchet MS",Verdana,system-ui,sans-serif;color:#ffcf3f;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;--slot:40px;--mm:150px;--tab:40px;--tabs:var(--tab)}
 @media (max-height:520px),(max-width:700px){.ash{--slot:29px;--mm:104px;--tab:36px;font-size:12px}}
 @media (pointer:coarse) and (max-width:700px){.ash{--slot:44px;--mm:100px;--tab:48px;font-size:13px}}
 @media (pointer:coarse) and (max-height:520px){.ash{--slot:38px;--mm:88px;--tab:44px}}
@@ -13,9 +13,9 @@
 .ash .ui{pointer-events:auto}
 .ash .stone{background:linear-gradient(#4a4034,#3a3127);border:2px solid #1b1610;box-shadow:inset 0 0 0 1px #6b5d48,0 2px 6px #0008;border-radius:6px}
 .ash .t{text-shadow:1px 1px 0 #000}
-.ash .mm{position:absolute;right:calc(var(--tab) + 14px);top:8px;width:var(--mm);height:var(--mm);border-radius:50%;border:3px solid #1b1610;box-shadow:0 0 0 2px #6b5d48,0 3px 8px #000a;background:#111;overflow:hidden}
+.ash .mm{position:absolute;right:calc(var(--tabs) + 14px);top:8px;width:var(--mm);height:var(--mm);border-radius:50%;border:3px solid #1b1610;box-shadow:0 0 0 2px #6b5d48,0 3px 8px #000a;background:#111;overflow:hidden}
 .ash .mm canvas{width:100%;height:100%;display:block}
-.ash .compass{position:absolute;right:calc(var(--tab) + 16px + var(--mm));top:10px;width:48px;height:48px;border-radius:50%;border:2px solid #1b1610;box-shadow:0 0 0 1px #6b5d48,0 2px 6px #000a;background:radial-gradient(circle at 50% 40%,#5c5040,#241e18 72%);z-index:3;cursor:pointer}
+.ash .compass{position:absolute;right:calc(var(--tabs) + 16px + var(--mm));top:10px;width:48px;height:48px;border-radius:50%;border:2px solid #1b1610;box-shadow:0 0 0 1px #6b5d48,0 2px 6px #000a;background:radial-gradient(circle at 50% 40%,#5c5040,#241e18 72%);z-index:3;cursor:pointer}
 .ash .compass .face{position:absolute;inset:0}
 .ash .compass b{position:absolute;font:700 11px/1 "Trebuchet MS",Verdana,sans-serif;color:#e8d7b0;text-shadow:1px 1px 0 #000}
 .ash .compass b:nth-child(1){left:50%;top:4px;margin-left:-4px;color:#ff4a3a}
@@ -24,7 +24,7 @@
 .ash .compass b:nth-child(4){left:4px;top:50%;margin-top:-5px}
 .ash .compass i{position:absolute;left:50%;top:15px;width:0;height:0;margin-left:-4px;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:12px solid #e23;filter:drop-shadow(0 0 1px #000)}
 .ash .compass i::after{content:'';position:absolute;left:-3px;top:9px;border-left:3px solid transparent;border-right:3px solid transparent;border-top:7px solid #f3ecdf}
-.ash .orbs{position:absolute;right:calc(var(--tab) + 14px);top:8px;width:var(--mm);height:var(--mm);pointer-events:none;z-index:2}   /* the same box as the minimap, so the orbs can sit on its rim */
+.ash .orbs{position:absolute;right:calc(var(--tabs) + 14px);top:8px;width:var(--mm);height:var(--mm);pointer-events:none;z-index:2}   /* the same box as the minimap, so the orbs can sit on its rim */
 .ash .orb{position:absolute;left:50%;top:50%;width:calc(var(--mm)*.34);height:calc(var(--mm)*.34);margin-left:calc(var(--mm)*-.17);margin-top:calc(var(--mm)*-.17);border-radius:50%;border:2px solid #1b1610;box-shadow:0 0 0 1px #6b5d48;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;cursor:pointer;overflow:hidden;background:#222;pointer-events:auto;transform:rotate(var(--a)) translateX(calc(var(--mm)/2 + 4px)) rotate(calc(var(--a)*-1))}   /* on the rim: under the compass, then along the lower border */
 .ash .orb.hp{--a:150deg}.ash .orb.run{--a:108deg}.ash .orb.pray{--a:66deg}
 .ash .orb i{position:absolute;left:0;right:0;bottom:0;display:block}
@@ -48,7 +48,7 @@
 .ash .tab{width:var(--tab);height:var(--tab);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
 .ash .tab svg{width:62%;height:62%}
 .ash .tab.on{background:linear-gradient(#7a3a22,#5a2a18);box-shadow:inset 0 0 0 1px #d08050}
-.ash .panel{position:absolute;right:calc(var(--tab) + 14px);top:calc(var(--mm) + 46px);max-height:calc(100% - var(--mm) - 54px);width:calc(var(--slot)*4 + 34px);padding:8px;overflow:auto;display:none}
+.ash .panel{position:absolute;right:calc(var(--tabs) + 14px);top:calc(var(--mm) + 46px);max-height:calc(100% - var(--mm) - 54px);width:calc(var(--slot)*4 + 34px);padding:8px;overflow:auto;display:none}
 .ash .panel.open{display:block}
 .ash .inv{display:grid;grid-template-columns:repeat(4,var(--slot));grid-auto-rows:var(--slot);gap:3px;justify-content:center}
 .ash .slot{position:relative;border-radius:4px;background:#2c251c;box-shadow:inset 0 0 0 1px #4b4032;cursor:pointer}
@@ -92,6 +92,7 @@
 .ash .chatw .chatx{position:absolute;left:0;top:-24px;padding:2px 10px;border-radius:6px 6px 0 0;background:#000a;color:#ffd23f;font:600 12px system-ui,sans-serif;cursor:pointer;pointer-events:auto}
 .ash .chat .table{color:#b8e6c4}
 @media (max-height:520px){.ash .inv{gap:2px}.ash .panel{padding:5px 6px}.ash .panel h4{margin-bottom:3px}.ash .chat{max-height:calc(3*1.3em + 10px);font-size:11px}.ash .chatw{width:min(40vw,360px)}}
+@media (max-height:520px){.ash{--tabs:calc(var(--tab)*2 + 4px)}.ash .tabs{display:grid;grid-template-columns:repeat(2,var(--tab));grid-auto-rows:var(--tab);gap:4px}}   /* a short screen (a phone held sideways, 2026-10-18): the tab buttons in two columns, so ten or more still fit; everything placed from the tabs moves over by --tabs */
 .ash .chat div{margin:1px 0;text-shadow:1px 1px 0 #000}
 .ash .chat .warn{color:#ff6a5a}.ash .chat .level{color:#7fd0ff}.ash .chat .trade{color:#ffd77a}.ash .chat .quest{color:#d9a0ff}.ash .chat .npc{color:#9cf}.ash .chat .sys{color:#ffcf3f}.ash .chat .dm{color:#ff9ce0}
 .ash .hover{position:absolute;left:8px;top:6px;font-size:13px;color:#fff;text-shadow:1px 1px 0 #000;pointer-events:none;white-space:nowrap}
@@ -103,7 +104,7 @@
 .ash .splat{position:absolute;width:26px;height:24px;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;color:#fff;font:800 13px/1 Verdana,sans-serif;text-shadow:1px 1px 0 #000;background:no-repeat center/contain}
 .ash .splat.miss{color:#fff}
 .ash .tag{position:absolute;transform:translate(-50%,-100%);color:#0ff;font-size:11px;text-shadow:1px 1px 0 #000;white-space:nowrap;text-align:center;line-height:1.25} .ash .tag .tl{color:#ffcf3f;font-size:10px}
-.ash .xpd{position:absolute;right:calc(var(--tab) + 30px + var(--mm) + var(--mm)*.36);top:20px;text-align:right;font-size:12px;color:#fff;text-shadow:1px 1px 0 #000;pointer-events:none}
+.ash .xpd{position:absolute;right:calc(var(--tabs) + 30px + var(--mm) + var(--mm)*.36);top:20px;text-align:right;font-size:12px;color:#fff;text-shadow:1px 1px 0 #000;pointer-events:none}
 .ash .xpd div{animation:ashxp 1.6s ease-out forwards}
 @keyframes ashxp{0%{opacity:0;transform:translateY(16px)}15%{opacity:1;transform:translateY(0)}80%{opacity:1}100%{opacity:0;transform:translateY(-24px)}}
 .ash .banner{position:absolute;left:50%;top:18%;transform:translateX(-50%);padding:10px 22px;text-align:center;font-size:18px;color:#fff;display:none;white-space:nowrap}

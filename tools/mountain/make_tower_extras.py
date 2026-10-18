@@ -34,14 +34,16 @@ def thing(name, desc, sub, model, value, weight=200):
 ITEMS = {
     # the best magic armour: no body piece gives more than Magic +2 (the Vorthan robe), no legs piece any; Defence below plate of the
     # same price, as a robe should be
-    "wizard_cloak": gear("Wizard cloak top", "The Circle of the Long Night's own cloak, deep blue and lined with silver thread that holds the cold out "
-                         "and the magic in. Magic +10, Defence +12. Needs Magic 40. Sold at the Frostspire.",
-                         "armour", "robe", 5, 1600, {"magic": 40}, "gear.robe", 12000, [("Magic", 10), ("Defence", 12)]),
+    "wizard_cloak": gear("Wizard cloak top", "The upper half of the Circle of the Long Night's cloak, deep blue and lined with silver thread that holds the "
+                         "cold out and the magic in; wear the bottoms with it. Magic +10, Defence +12. Needs Magic 40. Sold at the Frostspire.",
+                         "armour", "robe", 5, 1600, {"magic": 40}, "gear.robetop", 12000, [("Magic", 10), ("Defence", 12)]),
     "wizard_cloak_bottoms": gear("Wizard cloak bottoms", "The long skirts of the Circle's cloak, the hem bound in leather so it does not snag on the "
                                  "mountain's rocks. Magic +7, Defence +8. Needs Magic 40. Sold at the Frostspire.",
                                  "armour", "robelegs", 5, 1200, {"magic": 40}, "gear.robelegs", 8500, [("Magic", 7), ("Defence", 8)]),
-    "wizard_focus": gear("Wizard's focus", "A sphere of clear ice that never melts, given by Archmage Halvard to those who pass his trial. Worn in the "
-                         "shield hand: Magic +5.", "jewellery", "charm", 3, 300, {"magic": 30}, "gear.rosary", 2500, [("Magic", 5)]),
+    "wizard_focus": gear("Wizard's focus", "A sphere of summit ice that has not melted since the Ember King's chain was forged, held up on a silver "
+                         "stem. Archmage Halvard gives it to those who pass his trial. Held in the shield hand it adds 5 to your Magic bonus: your "
+                         "spells find their mark more often (it sharpens the aim, not the blow - a spell still hits as hard as it ever did). "
+                         "Needs Magic 30.", "jewellery", "charm", 3, 300, {"magic": 30}, "gear.focus", 2500, [("Magic", 5)]),
     "frost_ink": thing("Frost ink", "A pot of the Frostspire's ink, pale blue and cold enough to sting. The Circle writes with it because it does not "
                        "fade, and the frost goblins steal it because it is shiny.", "curio", "item.potion", 15, 300),
     "tome_echoes": thing("Tome of Echoes", "The Circle's first book: the mountain was raised to be a watchtower, and every echo on it is a word the "
@@ -52,8 +54,8 @@ ITEMS = {
                            "Ember King's chain was forged on this summit and must be kept cold here, or it will soften there.", "note", "item.note", 1, 600),
 }
 COLOURS = {   # the new items' colours in their model parts (models.js reads ITEMS from each part's `items`)
-    "gear.robe": {"wizard_cloak": "#2c3488"}, "gear.robelegs": {"wizard_cloak_bottoms": "#2c3488"},
-    "gear.rosary": {"wizard_focus": "#a8dcff"}, "item.rosary": {"wizard_focus": "#a8dcff"},
+    "gear.robetop": {"wizard_cloak": "#2c3488"}, "gear.robelegs": {"wizard_cloak_bottoms": "#2c3488"},
+    "gear.focus": {"wizard_focus": "#a8dcff"}, "item.focus": {"wizard_focus": "#a8dcff"},
     "item.potion": {"frost_ink": "#8fd0f0"}, "item.note": {"tome_echoes": "#5a3a7a", "tome_stones": "#6a6458", "tome_far_road": "#2a4a6a"},
 }
 ROBELEGS = {   # gear.robelegs: the cloak's skirts on the hips (a little wider than a robe's own, so they sit over one), a silver hem
@@ -67,6 +69,47 @@ ROBELEGS = {   # gear.robelegs: the cloak's skirts on the hips (a little wider t
         {"t": "box", "s": [0.46, 0.05, 0.5], "c": "$c", "p": [0, 0.03, 0]},
         {"t": "box", "s": [0.48, 0.06, 0.05], "c": "#c8ccd8", "p": [0, 0.04, 0.26]},
     ],
+}
+
+SILVER = "#c8ccd8"
+ROBETOP = {   # gear.robetop: the cloak's upper half - a robe's body, shoulders and sleeves cut off at the hip with a short silver-hemmed flare,
+    # so the bottoms (gear.robelegs) are the skirts (2026-10-18, the operator: "cut off the legs of the robe top so it makes sense to have 2 pieces")
+    "ashvale3d": "part", "api": 1, "v": 1, "id": "gear.robetop", "kind": "gear", "slot": "body", "family": "cloth", "items": {},
+    "shapes": [
+        {"t": "cyl", "s": ["0.22*W", "0.195*W", 0.48], "c": "$c", "p": [0, 0.27, 0], "seg": 10, "k": [1, 1, 0.72], "j": "torso"},
+        {"t": "cyl", "s": ["0.205*W*(1+0.12*fem)", "0.25*W*(1+0.1*fem)", 0.2], "c": "$c", "p": [0, -0.06, 0], "seg": 10, "k": [1, 1, 0.78], "j": "hips"},
+        {"t": "cyl", "s": ["0.248*W*(1+0.1*fem)", "0.254*W*(1+0.1*fem)", 0.045], "c": SILVER, "p": [0, -0.16, 0], "seg": 10, "k": [1, 1, 0.78], "j": "hips"},
+        {"t": "cyl", "s": ["0.205*W", "0.205*W", 0.05], "c": SILVER, "p": [0, 0.05, 0], "seg": 10, "k": [1, 1, 0.74], "j": "torso"},
+        {"t": "box", "s": [0.03, 0.4, 0.02], "c": SILVER, "p": [0, 0.29, 0.16], "j": "torso"},
+        {"t": "sphere", "s": [0.15], "c": "$c:0.82", "p": [0, 0.46, -0.11], "seg": [9, 6], "k": [1.25, 0.55, 0.75], "j": "torso"},
+        {"t": "capsule", "s": [0.076, 0.17], "c": "$c", "p": [0, -0.14, 0], "j": "sh*"},
+        {"t": "cyl", "s": [0.07, 0.115, 0.17], "c": "$c", "p": [0, -0.18, 0], "seg": 8, "j": "el*"},
+        {"t": "cyl", "s": [0.112, 0.118, 0.03], "c": SILVER, "p": [0, -0.27, 0], "seg": 8, "j": "el*"},
+    ],
+    "groundShapes": [
+        {"t": "box", "s": [0.42, 0.05, 0.36], "c": "$c", "p": [0, 0.03, 0]},
+        {"t": "box", "s": [0.3, 0.05, 0.11], "c": "$c", "p": [-0.3, 0.03, -0.08], "r": [0, -0.5, 0]},
+        {"t": "box", "s": [0.3, 0.05, 0.11], "c": "$c", "p": [0.3, 0.03, -0.08], "r": [0, 0.5, 0]},
+        {"t": "box", "s": [0.44, 0.06, 0.04], "c": SILVER, "p": [0, 0.04, 0.19]},
+    ],
+}
+_PRONGS = [{"t": "tube", "s": [0.008], "c": SILVER, "pts": [[0, 0.13, 0], [0.055 * c, 0.19, 0.055 * s], [0.05 * c, 0.27, 0.05 * s]], "seg": 6}
+           for c, s in ((1, 0), (-0.5, 0.866), (-0.5, -0.866))]
+FOCUS = {   # gear.focus: a ball of never-melting ice in a three-pronged silver cradle on a short stem, held up in the shield hand
+    "ashvale3d": "part", "api": 1, "v": 1, "id": "gear.focus", "kind": "gear", "slot": "shield", "items": {},
+    "mount": {"j": "handL", "p": [0, 0, 0], "r": [0, 0, 0]}, "ground": {"p": [0, 0.03, 0], "r": [1.45, 0, 0]},
+    "shapes": [
+        {"t": "sphere", "s": [0.03], "c": SILVER, "p": [0, -0.06, 0], "seg": [8, 6]},
+        {"t": "cyl", "s": [0.024, 0.032, 0.2], "c": SILVER, "p": [0, 0.04, 0], "seg": 8},
+        {"t": "cyl", "s": [0.05, 0.03, 0.03], "c": SILVER, "p": [0, 0.15, 0], "seg": 8},
+    ] + _PRONGS + [
+        {"t": "sphere", "s": [0.085], "c": "$c", "p": [0, 0.25, 0], "seg": [12, 9], "glow": True},
+        {"t": "sphere", "s": [0.032], "c": "#ffffff", "p": [0, 0.25, 0], "seg": [8, 6], "glow": True},
+    ],
+}
+FOCUS_ICON = {   # item.focus: the same, standing on its foot
+    "ashvale3d": "part", "api": 1, "v": 1, "id": "item.focus", "kind": "item", "items": {},
+    "shapes": [{"t": "cyl", "s": [0.08, 0.09, 0.025], "c": SILVER, "p": [0, 0.012, 0], "seg": 10}] + [dict(x, p=[(x.get("p") or [0, 0, 0])[0], (x.get("p") or [0, 0, 0])[1] + 0.09, (x.get("p") or [0, 0, 0])[2]]) if "p" in x else dict(x, pts=[[q[0], q[1] + 0.09, q[2]] for q in x["pts"]]) for x in FOCUS["shapes"][1:]],
 }
 
 MONSTERS = {   # the frost goblins carry off the tower's ink (all their drops given, as overlay() replaces a drops list whole)
@@ -194,7 +237,9 @@ if __name__ == '__main__':
             with open(rp, 'w', encoding='utf-8') as f:
                 json.dump(R, f, indent=1, ensure_ascii=False); f.write('\n')
     # model parts: the robelegs part, the new items' colours
-    json.dump(ROBELEGS, open(os.path.join(PARTS, 'gear.robelegs.json'), 'w', encoding='utf-8'), indent=1)
+    for P0 in (ROBELEGS, ROBETOP, FOCUS, FOCUS_ICON):   # this tool's own parts (their item colours added below)
+        old = load(os.path.join(PARTS, P0['id'] + '.json')) if os.path.exists(os.path.join(PARTS, P0['id'] + '.json')) else {}
+        json.dump(dict(P0, items=dict(old.get('items', {}))), open(os.path.join(PARTS, P0['id'] + '.json'), 'w', encoding='utf-8'), indent=1)
     for pid, cols in COLOURS.items():
         pp = os.path.join(PARTS, pid + '.json'); P = load(pp)
         if all(P.get('items', {}).get(k) == v for k, v in cols.items()): continue   # already there: leave the file's own layout alone

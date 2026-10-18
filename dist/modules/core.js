@@ -819,7 +819,7 @@
           if (isAuth(zoneOf(p.x, p.y))) chessMove(p, id, from, to, promo); else ev({ e: 'xcmove', p: p.id, t: id, from, to, promo });
           break;
         }
-        case 'npc': { const n = M.npcs.find(q => q.id === c.id); if (n) { p._trade = !!c.trade; p.act = { k: 'npc', id: n.id }; p.skilling = null; closeShop(p); } break; }
+        case 'npc': { const n = M.npcs.find(q => q.id === c.id); if (n && (n.lv | 0) === (p.lv | 0)) {   /* an NPC upstairs is talked to upstairs */ p._trade = !!c.trade; p.act = { k: 'npc', id: n.id }; p.skilling = null; closeShop(p); } break; }
         case 'mobtalk': {
           const m = mobByUid(c.uid), d = m && D.monsters[m.key];
           if (!m || m.dead || !d || !d.lines) break;

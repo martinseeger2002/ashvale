@@ -1039,18 +1039,102 @@
       const B = Batcher(group), BF = Batcher(group), anim = [], RICEP = [];   /* RICEP: the wild rice plants, grown by the seasons */   /* BF: the small flora, which the seasons take away and give back */
       const roofs = [];
       const floor = HG.floor;
+      /* TK - the tower kit (2026-10-18, the operator: "players should be able to enter the wizard tower - model it after the one in osrs"):
+         the Frostspire as a walk-in building of storeys, like the castle keep's hooks (keepStorey per floor, keepTop above the last).
+         A round wall whose inner face passes through the corners of the walkable square (the o.w x o.h block less its edge tiles, which
+         are wall in the zone), so the floor plan is a square room in a round tower; the curved space between holds the furniture, which
+         blocks no tile on any floor. Ground floor: the shop counter and the wizards' hall; first floor: the library; top floor: the
+         Archmage's study (tools/mountain/make_tower.js puts Pell below, Halvard at the top). Above it all (keepTop, hidden while you
+         are inside): the balcony, the lantern room and the blue cone roof with the beacon. */
+      const TK = (() => {
+        const ST = 0x8e9098, DK = 0x6a6c74, TRIM = 0xc8ccd8, BLUE = 0x2c3488, WOOD = 0x5a3b22, PLANK = 0x8a6a46, TW = 0.5;
+        const geom = o => { const cx = o.x + o.w / 2, cz = o.y + o.h / 2, hs = o.w / 2 - 1, R = hs * Math.SQRT2 + 0.05; return { cx, cz, hs, R, RO: R + TW }; };
+        const faceAng = o => ({ e: 0, s: Math.PI / 2, w: Math.PI, n: -Math.PI / 2 })[o.face || 's'];
+        const angd = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+        const ring = (Bk, G, r0, y, h, t, col, skip) => { const N = 30, rm = r0 + t / 2, ch = 2 * Math.PI * rm / N + 0.06; for (let k = 0; k < N; k++) { const a = (k + 0.5) / N * Math.PI * 2; if (skip && skip(a)) continue; Bk.add('box', col, G.cx + Math.cos(a) * rm, y + h / 2, G.cz + Math.sin(a) * rm, t, h, ch, -a); } };
+        /* the floor between the square room and the curve, one circular segment per side (a shape laid flat) */
+        const segs = (target, G, y, col) => { for (let q = 0; q < 4; q++) { const a0 = Math.PI / 4 + q * Math.PI / 2, sh = new THREE.Shape(); sh.moveTo(G.R * Math.cos(a0), -G.R * Math.sin(a0));
+          for (let k = 1; k <= 12; k++) { const t = a0 + k / 12 * Math.PI / 2; sh.lineTo(G.R * Math.cos(t), -G.R * Math.sin(t)); }
+          const m = new THREE.Mesh(new THREE.ShapeGeometry(sh), lam(col, { side: THREE.DoubleSide })); m.rotation.x = -Math.PI / 2; m.position.set(G.cx, y, G.cz); m.receiveShadow = true; target.add(m); } };
+        /* furniture standing in a segment against the curve, at angle a: a curved run of bookcases, a desk, a counter... */
+        const atWall = (G, a, inset) => [G.cx + Math.cos(a) * (G.R - inset), G.cz + Math.sin(a) * (G.R - inset)];
+        const books = (Bk, G, y, a, n) => { for (let k = 0; k < n; k++) { const t = a + (k - (n - 1) / 2) * 0.2, [x, z] = atWall(G, t, 0.32); Bk.add('box', WOOD, x, y + 1.05, z, 0.42, 2.1, 0.95, -t);
+          for (let r = 0; r < 4; r++) for (let b = 0; b < 5; b++) { const [bx, bz] = atWall(G, t + (b - 2) * 0.034, 0.55); Bk.add('box', [0xd29a52, 0xc84040, 0x8a5aa0, 0x6aa0d0, 0x3a6a4a][(k + r + b) % 5], bx, y + 0.3 + r * 0.5, bz, 0.06, 0.34, 0.15, -t); } } };
+        const glow = (target, x, y, z, r, col) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 8), new THREE.MeshBasicMaterial({ color: col })); m.position.set(x, y, z); target.add(m); };
+        function keepStorey(target, o, yb, H, f, door) {
+          const G = geom(o), Bk = Batcher(target), fa = faceAng(o);
+          const skip = f === 0 ? (a => angd(a, fa) < 0.17) : null;   /* the doorway */
+          ring(Bk, G, G.R, yb - (f ? 0 : 0.3), H + (f ? 0 : 0.3), TW, ST, skip);
+          ring(Bk, G, G.R + TW - 0.05, yb + H - 0.18, 0.22, 0.2, DK, skip && f === 0 ? null : null);
+          /* windows: dark slits outside and in, a pale sill; turned a little each storey so they climb round the tower */
+          for (let k = 0; k < 4; k++) { const a = fa + Math.PI / 4 + k * Math.PI / 2 + f * 0.45; if (angd(a, fa) < 0.4) continue;
+            for (const [rr, c] of [[G.RO + 0.01, 0x1c1e2a], [G.R - 0.01, 0x2a3040]]) Bk.add('box', c, G.cx + Math.cos(a) * rr, yb + H * 0.55, G.cz + Math.sin(a) * rr, 0.06, 1.1, 0.5, -a);
+            Bk.add('box', TRIM, G.cx + Math.cos(a) * (G.RO + 0.05), yb + H * 0.55 - 0.62, G.cz + Math.sin(a) * (G.RO + 0.05), 0.16, 0.1, 0.7, -a); }
+          if (f === 0) {
+            Bk.add('cyl32', DK, G.cx, yb - 0.55, G.cz, G.RO * 2 + 0.9, 1.1, G.RO * 2 + 0.9);
+            { const fl = new THREE.Mesh(new THREE.CircleGeometry(G.R + 0.05, 36), lam(0x7a7468)); fl.rotation.x = -Math.PI / 2; fl.position.set(G.cx, yb - 0.005, G.cz); fl.receiveShadow = true; target.add(fl); }
+            { const rug = new THREE.Mesh(new THREE.CircleGeometry(2.2, 28), lam(BLUE)); rug.rotation.x = -Math.PI / 2; rug.position.set(G.cx, yb + 0.01, G.cz); target.add(rug); }
+            /* the doorway: jambs and a lintel on the outer face, the passage through the wall's thickness, the door swung open inside it */
+            const dx = Math.cos(fa), dz = Math.sin(fa), tx = -dz, tz = dx, din = G.hs + 1;   /* din: the outer edge of the square block */
+            for (const s2 of [-1, 1]) { Bk.add('box', TRIM, G.cx + dx * (G.RO - 0.1) + tx * s2 * 0.95, yb + 1.3, G.cz + dz * (G.RO - 0.1) + tz * s2 * 0.95, 0.4, 2.6, 0.24, -fa);
+              const pl = (G.RO - din) + 0.2, pm = (G.RO + din) / 2; Bk.add('box', ST, G.cx + dx * pm + tx * s2 * 0.85, yb + H / 2, G.cz + dz * pm + tz * s2 * 0.85, pl, H, 0.2, -fa); }
+            Bk.add('box', TRIM, G.cx + dx * (G.RO - 0.1), yb + 2.7, G.cz + dz * (G.RO - 0.1), 0.42, 0.3, 2.2, -fa);
+            Bk.add('box', ST, G.cx + dx * (G.RO + din) / 2, yb + 2.6 + (H - 2.6) / 2, G.cz + dz * (G.RO + din) / 2, G.RO - din + 0.2, H - 2.6, 1.9, -fa);
+            Bk.add('box', 0x4a2e18, G.cx + dx * (din + 0.2) + tx * 0.78, yb + 1.15, G.cz + dz * (din + 0.2) + tz * 0.78, 0.9, 2.3, 0.08, -fa);
+            for (const s2 of [-1, 1]) { const bx = G.cx + dx * (G.RO + 0.03) + tx * s2 * 1.9, bz = G.cz + dz * (G.RO + 0.03) + tz * s2 * 1.9;
+              Bk.add('box', BLUE, bx, yb + 3.2, bz, 0.05, 2.2, 0.8, -fa); Bk.add('box', TRIM, bx, yb + 4.35, bz, 0.08, 0.08, 0.95, -fa); Bk.add('box', TRIM, bx + dx * 0.03, yb + 3.4, bz + dz * 0.03, 0.03, 0.32, 0.32, -fa); }
+            /* the shop counter opposite the door (Pell's), shelves of jars behind it, bookcases left and right */
+            const ba = fa + Math.PI, [kx, kz] = atWall(G, ba, 0.95);
+            Bk.add('box', WOOD, kx, yb + 0.5, kz, 0.6, 1.0, 2.4, -ba); Bk.add('box', PLANK, kx, yb + 1.03, kz, 0.72, 0.06, 2.5, -ba);
+            for (let k = 0; k < 3; k++) { const t = ba + (k - 1) * 0.28, [x, z] = atWall(G, t, 0.25); Bk.add('box', WOOD, x, yb + 1.6, z, 0.3, 0.06, 1.2, -t); for (let j = 0; j < 4; j++) { const [jx, jz] = atWall(G, t + (j - 1.5) * 0.06, 0.32); Bk.add('cyl', [0x8fd0f0, 0x6ab86a, 0xd06a4a, 0xe0c060][(j + k) % 4], jx, yb + 1.78, jz, 0.14, 0.26, 0.14); } }
+            books(Bk, G, yb, ba + Math.PI / 2, 3); books(Bk, G, yb, ba - Math.PI / 2, 3);
+            glow(target, G.cx, yb + H - 0.5, G.cz, 0.22, 0x9fe0ff);
+          } else {
+            segs(target, G, yb - 0.04, 0x9a7046);   /* the same boards as the floor's square (building() slab) */
+            if (f === 1) {   /* the library: bookcases round the curve, a reading desk with a lamp, a globe */
+              for (let q = 0; q < 4; q++) books(Bk, G, yb, fa + Math.PI / 4 + q * Math.PI / 2, 4);
+              const [dxk, dzk] = atWall(G, fa, 0.7); Bk.add('box', WOOD, dxk, yb + 0.42, dzk, 0.7, 0.84, 1.4, -fa); Bk.add('box', 0xe8e0c8, dxk, yb + 0.86, dzk, 0.4, 0.03, 0.55, -fa + 0.2);
+              glow(target, dxk, yb + 1.05, dzk + 0.4, 0.1, 0xffd27a);
+              const [gx, gz] = atWall(G, fa + Math.PI, 0.7); Bk.add('cyl', WOOD, gx, yb + 0.4, gz, 0.12, 0.8, 0.12); glow(target, gx, yb + 1.0, gz, 0.28, 0x4a8ad0);
+            } else {   /* the Archmage's study: star charts, a telescope at the window, the scrying orb on its pedestal, his desk */
+              books(Bk, G, yb, fa + Math.PI * 0.75, 3); books(Bk, G, yb, fa - Math.PI * 0.75, 3);
+              const [tx2, tz2] = atWall(G, fa + Math.PI / 4 + 0.9, 0.7); Bk.add('cyl', 0x3a3a44, tx2, yb + 0.5, tz2, 0.08, 1.0, 0.08); Bk.add('cyl', 0xc8a050, tx2 + 0.2, yb + 1.15, tz2, 0.14, 0.9, 0.14, 0, 0.9);
+              const [ox2, oz2] = atWall(G, fa + Math.PI, 0.75); Bk.add('cyl12', DK, ox2, yb + 0.5, oz2, 0.4, 1.0, 0.4); glow(target, ox2, yb + 1.25, oz2, 0.3, 0x9fe0ff);
+              const [dx3, dz3] = atWall(G, fa, 0.7); Bk.add('box', WOOD, dx3, yb + 0.42, dz3, 0.7, 0.84, 1.6, -fa); Bk.add('box', 0xe8e0c8, dx3, yb + 0.86, dz3, 0.5, 0.03, 0.7, -fa - 0.15);
+              { const rug = new THREE.Mesh(new THREE.CircleGeometry(1.6, 28), lam(0x5a2a6a)); rug.rotation.x = -Math.PI / 2; rug.position.set(G.cx, yb + 0.02, G.cz); target.add(rug); }
+              glow(target, G.cx, yb + H - 0.5, G.cz, 0.2, 0x9fe0ff);
+            }
+          }
+          Bk.finish();
+        }
+        function keepTop(target, o, ytop) {
+          const G = geom(o), Bk = Batcher(target);
+          Bk.add('cyl32', DK, G.cx, ytop + 0.2, G.cz, G.RO * 2 + 1.6, 0.45, G.RO * 2 + 1.6);
+          for (let k = 0; k < 28; k++) { const a = k / 28 * Math.PI * 2; Bk.add('box', DK, G.cx + Math.cos(a) * (G.RO + 0.65), ytop + 0.85, G.cz + Math.sin(a) * (G.RO + 0.65), 0.18, 0.85, 0.18); }
+          Bk.add('cyl32', DK, G.cx, ytop + 1.3, G.cz, G.RO * 2 + 1.45, 0.12, G.RO * 2 + 1.45);
+          Bk.add('cyl32', ST, G.cx, ytop + 2.2, G.cz, G.R * 1.4, 3.6, G.R * 1.4);
+          for (let k = 0; k < 4; k++) { const a = faceAng(o) + k * Math.PI / 2; Bk.add('box', 0xffd27a, G.cx + Math.cos(a) * (G.R * 0.7 + 0.01), ytop + 2.3, G.cz + Math.sin(a) * (G.R * 0.7 + 0.01), 0.08, 1.0, 0.55, -a); }
+          Bk.add('cyl32', TRIM, G.cx, ytop + 4.05, G.cz, G.R * 1.5 + 0.1, 0.18, G.R * 1.5 + 0.1);
+          { const roof = mesh(new THREE.ConeGeometry(G.R * 0.95, 7, 18), BLUE, G.cx, ytop + 7.6, G.cz); target.add(roof); }
+          Bk.add('cyl', TRIM, G.cx, ytop + 11.5, G.cz, 0.1, 1.4, 0.1);
+          glow(target, G.cx, ytop + 12.35, G.cz, 0.45, 0x9fe0ff);
+          Bk.finish();
+        }
+        return { keepStorey, keepTop };
+      })();
+      const storeyH = (o, lv) => { const bi = map.buildingAt ? map.buildingAt(o.x, o.y, lv) : -1, Bd = bi >= 0 && map.buildings ? map.buildings[bi] : null; return Bd && Bd.lh ? Bd.lh : 1.8; };
       function building(o) {
         const x0 = o.x, z0 = o.y, x1 = o.x + o.w, z1 = o.y + o.h, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
         let base = -9; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) base = Math.max(base, hAt(x, y), hAt(x + 1, y + 1));
         base += 0.04;
         for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) floor.set(x, y, base);
         const wall = parseInt((o.wall || '#d8c9a3').slice(1), 16), roof = parseInt((o.roof || '#7a3b2a').slice(1), 16), WH = o.lh || 1.8, TH = 0.16;
-        const STONEK = o.k === 'ckeep' && CK && CK.keepStorey;   /* the castle's walk-in keep: stone storeys from src/castle.js instead of the house kit */
+        const SK = o.k === 'wtower' ? TK : o.k === 'ckeep' && CK && CK.keepStorey ? CK : null, STONEK = !!SK;   /* the castle's walk-in keep (src/castle.js) or the wizards' round tower (TK): their own stone storeys instead of the house kit */
         const g = new THREE.Group(); group.add(g);
         /* floor + stone plinth */
-        g.add(mesh(new THREE.BoxGeometry(o.w + 0.2, 0.5, o.h + 0.2), 0x7c766c, cx, base - 0.27, cz));
-        g.add(mesh(new THREE.BoxGeometry(o.w - 0.05, 0.05, o.h - 0.05), o.k === 'smithy' ? 0x6a655c : 0x9a7046, cx, base - 0.01, cz));
-        if (o.k !== 'smithy') for (let k = 1; k < o.h * 2; k++) B.add('box', 0x7a5636, cx, base + 0.016, z0 + k * 0.5, o.w - 0.1, 0.01, 0.025);
+        if (o.k !== 'wtower') g.add(mesh(new THREE.BoxGeometry(o.w + 0.2, 0.5, o.h + 0.2), 0x7c766c, cx, base - 0.27, cz));   /* the round tower lays its own round plinth and floor (TK) */
+        if (o.k !== 'wtower') g.add(mesh(new THREE.BoxGeometry(o.w - 0.05, 0.05, o.h - 0.05), o.k === 'smithy' ? 0x6a655c : 0x9a7046, cx, base - 0.01, cz));
+        if (o.k !== 'smithy' && o.k !== 'wtower') for (let k = 1; k < o.h * 2; k++) B.add('box', 0x7a5636, cx, base + 0.016, z0 + k * 0.5, o.w - 0.1, 0.01, 0.025);
         /* door side */
         let side = 's', dpos = 0;
         if (o.door) { const [dx, dy] = o.door; side = dy === o.y + o.h - 1 && o.h > 1 ? 's' : dy === o.y ? 'n' : dx === o.x ? 'w' : 'e'; dpos = (side === 's' || side === 'n') ? dx + 0.5 : dy + 0.5; }
@@ -1079,7 +1163,7 @@
           }
           for (const [px, pz] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) kb.add(WALL.corner, px, y0, pz, 0, S0, S0, S0, tint);
         };
-        if (STONEK) CK.keepStorey(g, o, base, WH, 0, { side, at: dpos });
+        if (STONEK) SK.keepStorey(g, o, base, WH, 0, { side, at: dpos });
         else if (KT) { const kb = KitBatch(g); kitWalls(kb, base, true); kb.flush(); }
         for (const sd in sides) {
           const [ax, az, bx, bz] = sides[sd], horiz = az === bz, L0 = horiz ? ax : az, L1 = horiz ? bx : bz;
@@ -1135,7 +1219,7 @@
           /* an upper floor: the slab round an opening where the flight from below arrives, a railing on three sides (you
              step off at the north end) and a bobbing amber arrow over it - the way down is never hidden (the operator) */
           const slab = (into, yb, hole) => {
-            const X0 = o.x, X1 = o.x + o.w, Z0 = o.y, Z1 = o.y + o.h, hx = hole ? hole[0] : 0, hz = hole ? hole[1] : 0;
+            const ins = o.k === 'wtower' ? 1 : 0, X0 = o.x + ins, X1 = o.x + o.w - ins, Z0 = o.y + ins, Z1 = o.y + o.h - ins, hx = hole ? hole[0] : 0, hz = hole ? hole[1] : 0;   /* ins: the round tower's floors stop at its wall tiles (TK fills out to the curve) */
             const box = (x0, x1, z0, z1) => { if (x1 - x0 > 0.01 && z1 - z0 > 0.01) into.add(mesh(new THREE.BoxGeometry(x1 - x0 + 0.06, 0.12, z1 - z0 + 0.06), 0x9a7046, (x0 + x1) / 2, yb - 0.04, (z0 + z1) / 2)); };
             if (!hole) return box(X0, X1, Z0, Z1);
             box(X0, X1, Z0, hz); box(X0, X1, hz + 1, Z1); box(X0, hx, hz, hz + 1); box(hx + 1, X1, hz, hz + 1);
@@ -1150,7 +1234,7 @@
             const sg = new THREE.Group(); g.add(sg); storeys.push(sg);
             const yb = base + WH * f;
             slab(sg, yb, o.enter ? P(f - 1) : null);
-            if (STONEK) CK.keepStorey(sg, o, yb, WH, f, null);
+            if (STONEK) SK.keepStorey(sg, o, yb, WH, f, null);
             else if (KT) { const kb = KitBatch(sg); kitWalls(kb, yb, false); kb.flush(); }
             else for (const [L, horiz, fx, fz] of [[o.w, true, 0, o.h / 2], [o.w, true, 0, -o.h / 2], [o.h, false, o.w / 2, 0], [o.h, false, -o.w / 2, 0]]) {
               sg.add(mesh(new THREE.BoxGeometry(horiz ? L + TH : TH, WH, horiz ? TH : L + TH), wall, cx + fx, yb + WH / 2, cz + fz));
@@ -1160,7 +1244,7 @@
             if (o.enter && f < FL - 1) stairs(sg, yb, P(f));
           }
         }
-        if (STONEK) { o._y0 = base; CK.keepTop(rg, o, base + WH * FL); }   /* the keep's battlements, banners and donjon are its roof: hidden while you are inside */
+        if (STONEK) { o._y0 = base; SK.keepTop(rg, o, base + WH * FL); }   /* the keep's battlements, banners and donjon are its roof: hidden while you are inside */
         else if (o.k === 'church') {   /* the church's steeple (2026-10-07): a square bell tower over the door end, a slate spire and a gilt cross */
           const tx = side === 'e' ? x1 - 0.9 : side === 'w' ? x0 + 0.9 : cx, tz = side === 'n' ? z0 + 0.9 : side === 's' ? z1 - 0.9 : cz, tb = base + WH * FL, th = rh + 1.5;
           rg.add(mesh(new THREE.BoxGeometry(1.4, th, 1.4), wall, tx, tb + th / 2 - 0.1, tz));
@@ -1467,33 +1551,7 @@
             torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x, y, z, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y, lv: o.lv | 0 });
             break;
           }
-          case 'wtower': {   /* the Frostspire (2026-10-18, tools/mountain/make_tower.js): the wizards' round tower on the great mountain's crown -
-               a stone shaft on a plinth, string courses, windows climbing round it, a railed balcony, a lit top room under a blue cone roof
-               and the beacon on its spire; the door (o.face) towards the trail up from the High Pass. Its tiles are 'X' in the zone. */
-            const TW = o.w || 7, cx = o.x + TW / 2, cz = o.y + (o.h || TW) / 2, yb = heightAt(cx, cz);
-            const ST = 0x8e9098, DK = 0x6a6c74, TRIM = 0xc8ccd8, BLUE = 0x2c3488, R = TW * 0.41;
-            const F = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] }[o.face || 's'], fy = Math.atan2(F[0], F[1]), SX = -F[1], SZ = F[0];
-            B.add('cyl32', DK, cx, yb - 0.4, cz, R * 2 + 1.2, 2.0, R * 2 + 1.2);
-            B.add('cyl32', ST, cx, yb + 8.5, cz, R * 2, 17, R * 2);
-            for (const h of [4.2, 8.6, 13]) B.add('cyl32', DK, cx, yb + h, cz, R * 2 + 0.2, 0.28, R * 2 + 0.2);
-            B.add('cyl32', DK, cx, yb + 17.2, cz, R * 2 + 1.4, 0.45, R * 2 + 1.4);
-            for (let k = 0; k < 24; k++) { const a = k / 24 * Math.PI * 2; B.add('box', DK, cx + Math.cos(a) * (R + 0.6), yb + 17.85, cz + Math.sin(a) * (R + 0.6), 0.18, 0.85, 0.18); }
-            B.add('cyl32', DK, cx, yb + 18.3, cz, R * 2 + 1.25, 0.12, R * 2 + 1.25);
-            B.add('cyl32', ST, cx, yb + 19.4, cz, R * 1.55, 3.6, R * 1.55);
-            for (let k = 0; k < 4; k++) { const a = fy + k * Math.PI / 2; B.add('box', 0xffd27a, cx + Math.sin(a) * (R * 0.775 + 0.01), yb + 19.5, cz + Math.cos(a) * (R * 0.775 + 0.01), 0.55, 1.0, 0.08, a); }
-            for (let k = 0; k < 9; k++) { const a = fy + 1.1 + k * 0.95, h = 3.1 + k * 1.5; B.add('box', 0x1c1e2a, cx + Math.sin(a) * (R + 0.01), yb + h, cz + Math.cos(a) * (R + 0.01), 0.45, 0.85, 0.1, a); B.add('box', TRIM, cx + Math.sin(a) * (R + 0.04), yb + h + 0.5, cz + Math.cos(a) * (R + 0.04), 0.6, 0.12, 0.12, a); }
-            { const roof = mesh(new THREE.ConeGeometry(R * 1.05, 6.2, 16), BLUE, cx, yb + 24.3, cz); group.add(roof); }
-            B.add('cyl32', TRIM, cx, yb + 21.25, cz, R * 2.1 + 0.1, 0.18, R * 2.1 + 0.1);
-            B.add('cyl', TRIM, cx, yb + 27.9, cz, 0.1, 1.4, 0.1);
-            { const orb = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 8), new THREE.MeshBasicMaterial({ color: 0x9fe0ff })); orb.position.set(cx, yb + 28.75, cz); group.add(orb); }
-            const dx = cx + F[0] * (R + 0.02), dz = cz + F[1] * (R + 0.02);
-            B.add('box', 0x4a2e18, dx, yb + 1.2, dz, 1.3, 2.4, 0.16, fy);
-            B.add('box', TRIM, dx + F[0] * 0.05, yb + 2.55, dz + F[1] * 0.05, 1.7, 0.28, 0.2, fy);
-            for (const s2 of [-1, 1]) B.add('box', TRIM, dx + SX * s2 * 0.78 + F[0] * 0.05, yb + 1.25, dz + SZ * s2 * 0.78 + F[1] * 0.05, 0.22, 2.5, 0.2, fy);
-            B.add('box', DK, cx + F[0] * (R + 0.7), yb + 0.12, cz + F[1] * (R + 0.7), 2.0, 0.3, 1.0, fy);
-            for (const s2 of [-1, 1]) { const bx = dx + SX * s2 * 1.7 + F[0] * 0.08, bz = dz + SZ * s2 * 1.7 + F[1] * 0.08; B.add('box', BLUE, bx, yb + 5.2, bz, 0.8, 2.4, 0.05, fy); B.add('box', TRIM, bx, yb + 6.45, bz, 0.95, 0.08, 0.08, fy); B.add('box', TRIM, bx + F[0] * 0.03, yb + 5.4, bz + F[1] * 0.03, 0.32, 0.32, 0.03, fy + Math.PI / 4); }
-            break;
-          }
+          case 'wtower': building(o); break;   /* the Frostspire: a walk-in round tower (TK, the tower kit, in building()) */
           case 'signpost': {   /* a fingerpost by a road between towns (2026-10-18, src/wg_paths.js SIGNPOSTS): an oak post, one arm per town,
                the name painted on both faces with the arrow at the arm's tip, so it reads the right way from either side */
             const WOOD = 0x5a3b1e;
@@ -1778,7 +1836,7 @@
             const FM = deps.fortune; if (!FM || !FM.build) break;
             const lv = o.lv | 0, rfUp = lv > 0 ? roofs.find(r => o.x >= r.x0 && o.x <= r.x1 && o.y >= r.y0 && o.y <= r.y1) : null;
             const into = rfUp && rfUp.storeys && rfUp.storeys[lv - 1] ? rfUp.storeys[lv - 1] : group;
-            const fl = floorY(o, y) + 1.8 * lv, id = o.id || ('f' + o.x + ',' + o.y);
+            const fl = floorY(o, y) + lv * storeyH(o, lv), id = o.id || ('f' + o.x + ',' + o.y);
             const m = FM.build(THREE, { wrap: seeThrough });
             m.group.position.set(x, fl, z); m.group.rotation.y = ({ s: 0, n: Math.PI, e: Math.PI / 2, w: -Math.PI / 2 })[o.face || 's'] || 0;
             into.add(m.group);
@@ -1804,7 +1862,7 @@
                each turned to face the felt (the operator: "the chairs need to be aligned better"). */
             const lv = o.lv | 0, rfUp = lv > 0 ? roofs.find(r => o.x >= r.x0 && o.x <= r.x1 && o.y >= r.y0 && o.y <= r.y1) : null;
             const into = rfUp && rfUp.storeys && rfUp.storeys[lv - 1] ? rfUp.storeys[lv - 1] : group;
-            const fl = floorY(o, y) + 1.8 * lv, top = fl + 0.74, id = o.id || ('p' + o.x + ',' + o.y);
+            const fl = floorY(o, y) + lv * storeyH(o, lv), top = fl + 0.74, id = o.id || ('p' + o.x + ',' + o.y);
             /* [Claude 2026-10-11, the operator's two-table room] the felt is round and sized by the table's footprint: on two by two
                tiles it is r 1.10, and the eight chairs stand two to a side on the tiles round it, each 0.17 m off the rail,
                none under it (the top-down diagram, handoff/poker_plan.md 6c) */

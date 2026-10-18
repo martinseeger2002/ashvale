@@ -523,6 +523,7 @@
         let up = 0;
         if (c === 'p') { const p = core.S.players[e.key.slice(2)]; if (p && p.lv) { const B = p.bld >= 0 && core.M.buildings ? core.M.buildings[p.bld] : null; up = p.lv * (B && B.lh ? B.lh : 1.8); } }
         else if (c === 'm') { const m = core.mobByUid(+e.key.slice(2)); if (m && m.lv) { const bi = core.M.buildingAt ? core.M.buildingAt(Math.floor(e.to.x), Math.floor(e.to.z), m.lv | 0) : -1, B = bi >= 0 && core.M.buildings ? core.M.buildings[bi] : null; up = m.lv * (B && B.lh ? B.lh : 1.8); } }
+        else if (c === 'n') { const n = core.M.npcs.find(q => 'n:' + q.id === e.key); if (n && n.lv && !n.lh) { const bi = core.M.buildingAt ? core.M.buildingAt(n.x, n.y, n.lv | 0) : -1, B = bi >= 0 && core.M.buildings ? core.M.buildings[bi] : null; up = n.lv * (B && B.lh ? B.lh : 1.8); } }   /* an NPC upstairs in a building (the Frostspire's Archmage, 2026-10-18); one with its own lh stands on a castle wall (lifts below) */
         else if (c === 'r') {   /* [Claude 2026-10-11] another player on a storey: their last row says which (l), the building under them says how tall */
           const r = remotes.get(e.key.slice(2)), b = r && r.buf.length ? r.buf[r.buf.length - 1] : null;
           if (b && b.l) { const bi = core.M.buildingAt ? core.M.buildingAt(Math.floor(e.to.x), Math.floor(e.to.z)) : -1, B = bi >= 0 && core.M.buildings ? core.M.buildings[bi] : null; up = b.l * (B && B.lh ? B.lh : 1.8); }
@@ -791,7 +792,7 @@
         }
         for (const n of core.M.npcs) {
           const e = ents.get('n:' + n.id); if (!e) continue;
-          e.root.visible = (me.lv | 0) === 0 && npcShown(n) && !(e.dead && e.deadT && now - e.deadT >= 2200);   /* a fallen guard, faded out (the frame loop below) */
+          e.root.visible = (me.lv | 0) === (n.lv | 0) && npcShown(n) && !(e.dead && e.deadT && now - e.deadT >= 2200);   /* a fallen guard, faded out (the frame loop below) */
           if (n.patrol || n.guard || n.watch || n.sapAt || n.sapDay) { if (moveTo(e, n.x, n.y, stamp)) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else if (n.wface != null) e.tyaw = faceYaw(n.wface); }   /* a watchman walking his round, a guard answering the call to arms, the village at the sugar bush; standing still at a job, they face the maple or the akik (core says which way) */
           if (n.sapDay) { const sk = n.work ? 'cook' : null; if (sk !== e.skill) e.skill = sk; }   /* hands at the work: the spile at a maple, a bucket tipped at the akik. Their buckets are not items, so nothing goes in them but the pose */
         }   /* hidden NPCs stay unseen until their flag */

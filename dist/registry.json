@@ -1380,6 +1380,12 @@
     "api": 1,
     "kind": "json"
    },
+   "gear.focus": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "gear.ghostlight": {
     "id": null,
     "v": 1,
@@ -1495,6 +1501,12 @@
     "kind": "json"
    },
    "gear.robelegs": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "gear.robetop": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1639,6 +1651,12 @@
     "kind": "json"
    },
    "item.flint": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.focus": {
     "id": null,
     "v": 1,
     "api": 1,

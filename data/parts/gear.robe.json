@@ -8,8 +8,7 @@
  "family": "cloth",
  "items": {
   "monk_robe": "#6e4a2c",
-  "vorthan_robe": "#e07020",
-  "wizard_cloak": "#2c3488"
+  "vorthan_robe": "#e07020"
  },
  "shapes": [
   {
