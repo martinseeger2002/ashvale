@@ -94,7 +94,7 @@
     /* one zone's content into the set-piece lists; returns what it added (area loading adds zones later: M.addZone) */
     function ingest(z) {
       const n0 = npcs.length, s0 = spawns.length, o0 = objects.length;
-      pieces.push({ id: z.id, x0: z.origin[0], y0: z.origin[1], x1: z.origin[0] + z.size[0], y1: z.origin[1] + z.size[1], tiles: decks(z) });
+      pieces.push({ id: z.id, x0: z.origin[0], y0: z.origin[1], x1: z.origin[0] + z.size[0], y1: z.origin[1] + z.size[1], tiles: decks(z), spot: z.setPiece === false });
       W = Math.max(W, z.origin[0] + z.size[0]); H = Math.max(H, z.origin[1] + z.size[1]);
       for (const n of z.npcs || []) npcs.push(Object.assign({ zone: z.id }, n));
       for (const s of z.spawns || []) spawns.push(Object.assign({ zone: z.id }, s));
@@ -344,7 +344,7 @@
       API, CH, cfg: CFG, key, kx, ky, W, H, pieces, npcs, spawns, objects, nodes, respawn: respawn || [Math.floor(W / 2), Math.floor(H / 2)],
       tileAt, blocked, losAt, wallAt, insideAt, zoneAt, nodeAt, inWorld, addZone, hasZone: (id) => pieces.some(P => P.id === id),
       regionOf: (x, y) => 'vale:' + FACE + ':' + Math.floor((x + GX) / REG) + ':' + Math.floor((y + GY) / REG),
-      seeded: !!WG, inPiece: (x, y) => !!chunkAt(x, y).zi[ci(x, y)], underAt, underNear, underStyle, waterKind, iceAt, setIce, latOf,
+      seeded: !!WG, inPiece: (x, y) => { const z = chunkAt(x, y).zi[ci(x, y)]; return !!z && !pieces[z - 1].spot; },   /* a spot zone (setPiece: false) stands on the world's own ground: the scene draws it as the land (the great mountain's camps, 2026-10-18) */ underAt, underNear, underStyle, waterKind, iceAt, setIce, latOf,
       /* seeded land, in the vale frame: sites (camps, ore, fishing; ids and monster uids from worldgen), the ground height
          at a tile corner relative to the set pieces' base height (so the old map keeps its own heights), the biome */
       sitesIn(x0, y0, x1, y1) {

@@ -4,7 +4,7 @@ const m = n => JSON.parse(fs.readFileSync(path.join(ROOT, 'data', n + '.json')))
 const globe = require(path.join(ROOT, 'src', 'globe.js')), WG = require(path.join(ROOT, 'src', 'worldgen.js'));
 const CFG = m('globecfg');
 const G = globe.createGlobe({ n: CFG.n, radius_m: CFG.radius_m, seed: CFG.seed }), W = WG.createWorldgen(G, { seed: CFG.seed });
-const zones = fs.readdirSync(path.join(ROOT, 'data')).filter(f => /^zone\..*\.json$/.test(f) && f !== 'zone.castle.json').map(f => Object.assign({ id: f.slice(5, -5) }, m(f.slice(0, -5))));
+const zones = fs.readdirSync(path.join(ROOT, 'data')).filter(f => /^zone\..*\.json$/.test(f) && f !== 'zone.castle.json' && !/^zone\.mt_/.test(f))   /* the mountain's camps are sampled from the world, never from themselves (tools/mountain/make_camps.js) */.map(f => Object.assign({ id: f.slice(5, -5) }, m(f.slice(0, -5))));
 W.setSetPieces(W.piecesFromZones(zones, CFG.face, CFG.origin[0], CFG.origin[1], { belt: CFG.belt || {}, links: CFG.links || [] }));
 function mask(x0, y0, w, h) {
   const rows = [];

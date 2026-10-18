@@ -1,0 +1,37 @@
+{
+ "orla": {
+  "examine": "Orla, who hunts the foothills and keeps the trail log at the lodge.",
+  "lines": [
+   "The safe road's long, but it gets you there with both legs.",
+   "Mind the cliffs. They don't move, and that's the trouble."
+  ]
+ },
+ "wyn": {
+  "examine": "Keeper Wyn, who tends the three stones and says they talk back.",
+  "lines": [
+   "The stones remember what the living forget.",
+   "Patience is a kind of climbing too."
+  ]
+ },
+ "aled": {
+  "examine": "Aled the hermit, who has lived on this ledge long enough to argue with the echoes and win sometimes.",
+  "lines": [
+   "Shout, if you like. The echoes will tell you you're wrong.",
+   "Thirty winters up here. Thirty-one, if the broth keeps coming."
+  ]
+ },
+ "bryn": {
+  "examine": "Warden Bryn, who keeps travellers off the dangerous climb and is mostly ignored.",
+  "lines": [
+   "Safe road's that way. I say it to everyone. Nobody listens.",
+   "If you go up, go up armed. If you come down, come down quieter than you went."
+  ]
+ },
+ "tamsin": {
+  "examine": "Tamsin the scout, watching the west where the map runs out.",
+  "lines": [
+   "Smoke, some evenings, to the west.",
+   "A map's only a promise until someone walks it."
+  ]
+ }
+}

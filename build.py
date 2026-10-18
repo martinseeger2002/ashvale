@@ -50,7 +50,7 @@ if os.path.exists(os.path.join(SRC, 'worldgen.js')):
 DATA_MODULES.append('atlas_palette')   # the Atlas's colours (src/earth.js PAL): the Atlas boots from the game's registry since 2026-10-11
 DATA_PATHS = {'wg_tables': 'atlas/wg_tables', 'atlas_palette': 'atlas/atlas_palette'}   # data modules that live in a subfolder of data/
 ZONES = ['village', 'eastend', 'whisperwood', 'saltmere', 'castle', 'wolfden', 'cavemouth', 'spidercave', 'ancientchapel', 'evengrove', 'ziibiing', 'lodges', 'ricelake', 'sugarcamp', 'flintbank', 'obsidianbank', 'willowbank', 'dragonapproach', 'dragonkeep']   # ziibiing + lodges: the Ojibwe village on the river and its wigwams' insides (tools/make_zone_ziibiing.py)   # castle: the lake castle 4 km out (tools/castle/make_castle.js)   # dragonapproach: Squire Elian at -11,-78; dragonkeep: the ruined keep at -54,-99
-ZONES = ZONES   # saltmere: the second town, on the sea shore 3.4 km east (tools/make_zone_saltmere.mjs)
+ZONES = ZONES + ['mt_lodge', 'mt_shrine', 'mt_ledge', 'mt_warden', 'mt_crags', 'mt_pass', 'mt_farside']   # the great mountain's camps (tools/mountain/make_camps.js, 2026-10-18)   # saltmere: the second town, on the sea shore 3.4 km east (tools/make_zone_saltmere.mjs)
 if os.environ.get('ASH_NO_CASTLE') == '1':   # 2026-10-05: "forget about this castle for now" - a release without it
     ZONES = [z for z in ZONES if z != 'castle']
 AREA = os.environ.get('ASH_AREA_LOADING', '1') != '0'   # area loading (handoff/area_loading.md): live since registry v62 (the operator's OK 2026-10-06); ASH_AREA_LOADING=0 builds the old layout

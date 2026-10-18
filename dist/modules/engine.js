@@ -1418,6 +1418,12 @@
         const cp = Math.max(0.3, cam.pitch);
         camera.position.set(camT.x + Math.sin(cam.yaw) * Math.cos(cp) * cam.dist, camT.y + Math.sin(cp) * cam.dist, camT.z + Math.cos(cam.yaw) * Math.cos(cp) * cam.dist);
         const gy = heightAt(camera.position.x, camera.position.z) + 0.6; if (camera.position.y < gy) camera.position.y = gy;
+        /* and the ground between: on a cliff (the great mountain's ledges, 2026-10-18) the slope between the camera and you would fill the
+           view, so the camera rises until its line down to you clears the ground at a quarter, half and three-quarters of the way */
+        if (!cam.film && cam.mode !== 'chess' && cam.mode !== 'poker') for (const t of [0.25, 0.5, 0.75]) {
+          const lx = camT.x + (camera.position.x - camT.x) * t, lz = camT.z + (camera.position.z - camT.z) * t, need = heightAt(lx, lz) + 0.8;
+          const ly = camT.y + (camera.position.y - camT.y) * t; if (ly < need) camera.position.y = camT.y + (need - camT.y) / t;
+        }
         /* LOOK UP AT THE SKY (2026-10-07: "look up past the point where it is currently limited to slide the camera into first person
            view"): tilting on past the lowest view slides the camera forward into your character's eyes, and from there you look up -
            to the sun, the moon, the stars, straight overhead. Tilt back down and it slides out again. */

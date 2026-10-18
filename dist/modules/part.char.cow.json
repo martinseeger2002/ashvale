@@ -1,0 +1,1 @@
+{"ashvale3d":"module","name":"part.char.cow","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"char.cow","kind":"char","role":"monster","name":"Cow","body":"beast","beast":{"size":1.35,"legLen":1.0,"color":"#7a4a2a","snout":"#d8c8b0","tail":"#5a3420","tailLen":0.32,"tailTip":"#2a1a10","horns":"#e0d8c0","ears":"#6a3e22","eyes":"#1a1612"}}}

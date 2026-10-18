@@ -1467,6 +1467,34 @@
             torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x, y, z, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y, lv: o.lv | 0 });
             break;
           }
+          case 'signpost': {   /* a fingerpost by a road between towns (2026-10-18, src/wg_paths.js SIGNPOSTS): an oak post, one arm per town,
+               the name painted on both faces with the arrow at the arm's tip, so it reads the right way from either side */
+            const WOOD = 0x5a3b1e;
+            B.add('box', WOOD, x, y + 1.35, z, 0.16, 2.7, 0.16);
+            B.add('box', WOOD, x, y + 2.74, z, 0.24, 0.1, 0.24);
+            B.add('box', 0x4a4038, x, y + 0.1, z, 0.34, 0.2, 0.34);
+            (o.arms || []).forEach((arm, i) => {
+              const dx = Math.cos(arm.a), dz = Math.sin(arm.a), ay = y + 2.42 - i * 0.34, AL = 1.25, cx = x + dx * (AL / 2 + 0.04), cz = z + dz * (AL / 2 + 0.04);
+              B.add('box', 0x7a5530, cx, ay, cz, 0.05, 0.27, AL, Math.atan2(dx, dz));
+              for (const side of [1, -1]) {
+                const cv = document.createElement('canvas'); cv.width = 512; cv.height = 112; const g2 = cv.getContext('2d');
+                const tip = side > 0 ? 1 : -1, x0 = tip > 0 ? 0 : 60, x1 = tip > 0 ? 452 : 512;
+                g2.fillStyle = '#c9a46a'; g2.beginPath();
+                if (tip > 0) { g2.moveTo(0, 4); g2.lineTo(452, 4); g2.lineTo(510, 56); g2.lineTo(452, 108); g2.lineTo(0, 108); }
+                else { g2.moveTo(512, 4); g2.lineTo(60, 4); g2.lineTo(2, 56); g2.lineTo(60, 108); g2.lineTo(512, 108); }
+                g2.closePath(); g2.fill(); g2.strokeStyle = '#4a3014'; g2.lineWidth = 6; g2.stroke();
+                g2.fillStyle = '#2a180c'; g2.textAlign = 'center'; g2.textBaseline = 'middle';
+                let fs = 58; g2.font = 'bold ' + fs + 'px Georgia, serif'; while (fs > 26 && g2.measureText(arm.t).width > x1 - x0 - 40) { fs -= 4; g2.font = 'bold ' + fs + 'px Georgia, serif'; }
+                g2.fillText(arm.t, (x0 + x1) / 2, 58);
+                const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+                const m = new THREE.Mesh(new THREE.PlaneGeometry(AL, AL * 112 / 512), new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.5 }));
+                m.rotation.y = Math.atan2(-dz, dx) + (side > 0 ? 0 : Math.PI);   /* the plane's +x along the arm (front) or back along it */
+                m.position.set(cx - dz * side * 0.03, ay, cz + dx * side * 0.03);
+                group.add(m);
+              }
+            });
+            break;
+          }
           case 'lamp': {   /* a gas street lamp on the verge of a trail (2026-10-07): iron post, glass lantern, pyramid cap */
             const IR = 0x23272b;
             B.add('box', IR, x, y + 0.14, z, 0.3, 0.28, 0.3);

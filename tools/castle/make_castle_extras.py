@@ -224,20 +224,21 @@ QUESTS = {
         "done": ["The road is lit, the bridge is held, and the market comes in the morning. That's a castle."]},
 }
 
-# --- extras (kept across make_data reruns) and the live modules
-for mod, key, new in (("items", "items", ITEMS), ("monsters", "monsters", MONSTERS), ("quests", "quests", QUESTS)):
-    ep = os.path.join(EX, mod + '.json')
-    ex = load(ep) if os.path.exists(ep) else {key: {}}
-    ex.setdefault(key, {}).update(new)
-    with open(ep, 'w', encoding='utf-8') as f:
-        json.dump(ex, f, indent=1, ensure_ascii=False); f.write('\n')
-    lp = os.path.join(DD, mod + '.json'); live = load(lp)
-    overlay(live['data'], {key: new})
-    with open(lp, 'w', encoding='utf-8') as f:
-        json.dump(live, f, separators=(',', ':'), ensure_ascii=False)
-    print('%s: %d added or updated' % (mod, len(new)))
-for pid, body in PART_CHARS.items():
-    part = dict({"ashvale3d": "part", "api": 1, "v": 1, "id": pid, "kind": "char"}, **body)
-    with open(os.path.join(PARTS, pid + '.json'), 'w', encoding='utf-8') as f:
-        json.dump(part, f, separators=(',', ':'), ensure_ascii=False)
-print('parts:', ', '.join(PART_CHARS))
+if __name__ == '__main__':   # importable: tools/mountain/make_mountain_extras.py reuses overlay() and the paths
+    # --- extras (kept across make_data reruns) and the live modules
+    for mod, key, new in (("items", "items", ITEMS), ("monsters", "monsters", MONSTERS), ("quests", "quests", QUESTS)):
+        ep = os.path.join(EX, mod + '.json')
+        ex = load(ep) if os.path.exists(ep) else {key: {}}
+        ex.setdefault(key, {}).update(new)
+        with open(ep, 'w', encoding='utf-8') as f:
+            json.dump(ex, f, indent=1, ensure_ascii=False); f.write('\n')
+        lp = os.path.join(DD, mod + '.json'); live = load(lp)
+        overlay(live['data'], {key: new})
+        with open(lp, 'w', encoding='utf-8') as f:
+            json.dump(live, f, separators=(',', ':'), ensure_ascii=False)
+        print('%s: %d added or updated' % (mod, len(new)))
+    for pid, body in PART_CHARS.items():
+        part = dict({"ashvale3d": "part", "api": 1, "v": 1, "id": pid, "kind": "char"}, **body)
+        with open(os.path.join(PARTS, pid + '.json'), 'w', encoding='utf-8') as f:
+            json.dump(part, f, separators=(',', ':'), ensure_ascii=False)
+    print('parts:', ', '.join(PART_CHARS))

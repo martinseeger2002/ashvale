@@ -384,6 +384,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.aled": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.animikii": {
     "id": null,
     "v": 1,
@@ -433,6 +439,12 @@
     "kind": "json"
    },
    "char.bryce": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.bryn": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -720,6 +732,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.orla": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.pax": {
     "id": null,
     "v": 1,
@@ -840,6 +858,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.tamsin": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.timber_wolf": {
     "id": null,
     "v": 1,
@@ -925,6 +949,12 @@
     "kind": "json"
    },
    "char.wren": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.wyn": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1885,6 +1915,48 @@
    "dragonkeep": {
     "id": null,
     "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "mt_lodge": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json"
+   },
+   "mt_shrine": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json"
+   },
+   "mt_ledge": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json"
+   },
+   "mt_warden": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json"
+   },
+   "mt_crags": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json"
+   },
+   "mt_pass": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json"
+   },
+   "mt_farside": {
+    "id": null,
+    "v": 2,
     "api": 1,
     "kind": "json"
    }

@@ -22,7 +22,10 @@ const G = AshGlobe.createGlobe(cfg), W = AW.createWorldgen(G, { seed: cfg.seed }
 W.setSetPieces(W.piecesFromZones(zones, cfg.face, cfg.origin[0], cfg.origin[1], { belt: cfg.belt || {}, links: cfg.links || [] }));
 ok(typeof W.roadObjects === 'function', 'worldgen exposes the roadside posts');
 const ox = cfg.origin[0], oy = cfg.origin[1];
-const torches = W.roadObjects(cfg.face, 0 + ox - 40, -40 + oy, 540 + ox, 90 + oy);
+const roadside = W.roadObjects(cfg.face, 0 + ox - 40, -40 + oy, 540 + ox, 90 + oy), torches = roadside.filter(o => o.k !== 'signpost');
+/* [Claude 2026-10-18] the road's fingerposts (src/wg_paths.js SIGNPOSTS): one out of each town and one half way, every arm a town */
+const posts = roadside.filter(o => o.k === 'signpost');
+ok(posts.length >= 3 && posts.every(o => o.arms.some(a => a.t === 'Saltmere') && o.arms.some(a => a.t === 'Ashvale')), 'the road has signposts to Saltmere and Ashvale (' + posts.length + ')');
 ok(torches.length >= 8, 'the trail between Ashvale and Saltmere has lit posts (' + torches.length + ')');
 ok(torches.every(o => o.k === 'lamp' && o.w === 1), 'every roadside post is a gas street lamp');
 ok(torches.every(o => W.tileAt ? 'pc'.indexOf(W.tileAt(o.face, o.x, o.y)) < 0 : true), 'none stands on the road');

@@ -153,7 +153,7 @@
     function setSetPieces(list) {
       const PIECES = [], tmp = ctx.newSample();
       ctx.PIECES = PIECES; ctx.PIECE_BY_ID = new Map(); BUCKET.clear(); SEG = [];
-      const ROAD = [], BRIDGE_LIT = []; ctx.ROAD_OBJ = ROAD;   /* BRIDGE_LIT: torches on road bridges, which stand on the road and so skip the verge filter below */
+      const ROAD = [], BRIDGE_LIT = [], ROADS_L = []; ctx.ROAD_OBJ = ROAD;   /* ROADS_L: the roads between towns as laid, for their signposts */   /* BRIDGE_LIT: torches on road bridges, which stand on the road and so skip the verge filter below */
       const inPiece = (face, gx, gy) => PIECES.some(q => q.face === face && gx >= q.x && gy >= q.y && gx < q.x + q.w && gy < q.y + q.h);
       function lightTrail(face, pts, w0) {   /* lit posts along a trail between towns (the road to Saltmere) */
         if (!pts || pts.length < 2) return;
@@ -215,6 +215,28 @@
       /* exits: runs of 'p' (paths), 'c' (cobbled streets) and '~' (streams) on outer edges, plus explicit exits */
       const inOther = (pc, gx, gy) => PIECES.some(q => q !== pc && q.face === pc.face && gx >= q.x && gy >= q.y && gx < q.x + q.w && gy < q.y + q.h);
       const segs = [];
+      /* a road or trail over lake water - a narrow arm, or an editor river whose bed the lake fill keeps above the grid's 0.25 m (the Lake
+         Castle's river, tools/castle/make_waters.js), or a natural river's flooded valley (the mountain trails) - crosses it on a bridge
+         (kind 2, drawn 'B' by wg_tiles) when the water is no wider than BRIDGE metres along the way: torches at both banks and on the crest,
+         and the bridge itself (src/scene.js 'wbridge'); wider water is left to the route to go round. pts in the face's plane. */
+      function layBridges(face, pts, w0, hb) {
+        const wetAt = (px, py) => { ctx.foldInto(face, px, py, SB); const s1 = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false); return s1.river >= 3 || s1.h < ctx.WATER; };
+        const along = []; for (let q = 0; q + 1 < pts.length; q++) { const a2 = pts[q], b2 = pts[q + 1], n = Math.max(1, Math.ceil(Math.hypot(b2[0] - a2[0], b2[1] - a2[1]))); for (let r = 0; r < n; r++) along.push([a2[0] + (b2[0] - a2[0]) * r / n, a2[1] + (b2[1] - a2[1]) * r / n]); }
+        along.push(pts[pts.length - 1]);
+        for (let i = 0; i < along.length; i++) {
+          if (!wetAt(along[i][0], along[i][1])) continue;
+          let j = i; while (j + 1 < along.length && wetAt(along[j + 1][0], along[j + 1][1])) j++;
+          const a2 = along[Math.max(0, i - 2)], b2 = along[Math.min(along.length - 1, j + 2)];
+          if (Math.hypot(along[j][0] - along[i][0], along[j][1] - along[i][1]) <= BRIDGE) {
+            segs.push(face, a2[0], a2[1], b2[0], b2[1], w0, 2, hb);
+            const L2 = Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) || 1, nx = -(b2[1] - a2[1]) / L2, ny = (b2[0] - a2[0]) / L2, mid = along[(i + j) >> 1];
+            for (const [q, off] of [[a2, w0 + 0.7], [b2, w0 + 0.7], [mid, Math.max(0.6, w0 - 0.2)]]) for (const side of [-1, 1])
+              BRIDGE_LIT.push({ k: 'torch', x: Math.floor(q[0] + nx * off * side), y: Math.floor(-(q[1] + ny * off * side)), w: 1, h: 1, face });
+            BRIDGE_LIT.push({ k: 'wbridge', x: Math.floor(mid[0]), y: Math.floor(-mid[1]), w: 1, h: 1, face, ax: along[i][0], ay: -along[i][1], bx: along[j][0], by: -along[j][1], hw: w0 });
+          }
+          i = j;
+        }
+      }
       function walk(pc, x, y, base, L, w0, kind, hv, depth) {
         let a = base;
         for (let d = 0, k = 0; d < L; d += PT.step, k++) {
@@ -359,31 +381,11 @@
             for (let q = 1; q < st.length; q++) { const a2 = st[q - 1], b2 = st[q], n = Math.max(1, Math.ceil(Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) / CS)); for (let r = 1; r <= n; r++) fine.push([a2[0] + (b2[0] - a2[0]) * r / n, a2[1] + (b2[1] - a2[1]) * r / n]); }
             pts.length = 0; pts.push(...fine);
           }
-          /* a road over lake water - a narrow arm, or an editor river whose bed the lake fill keeps above the grid's 0.25 m (the
-             Lake Castle's river, tools/castle/make_waters.js) - crosses it on a bridge (kind 2, drawn 'B' by wg_tiles) when the
-             water is no wider than BRIDGE metres along the road, as a footpath does; wider water is the search's to go round */
-          { const wetAt = (px, py) => { ctx.foldInto(A.face, px, py, SB); const s1 = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false); return s1.river >= 3 || s1.h < ctx.WATER; };
-            const along = []; for (let q = 0; q + 1 < pts.length; q++) { const a2 = pts[q], b2 = pts[q + 1], n = Math.max(1, Math.ceil(Math.hypot(b2[0] - a2[0], b2[1] - a2[1]))); for (let r = 0; r < n; r++) along.push([a2[0] + (b2[0] - a2[0]) * r / n, a2[1] + (b2[1] - a2[1]) * r / n]); }
-            along.push(pts[pts.length - 1]);
-            for (let i = 0; i < along.length; i++) {
-              if (!wetAt(along[i][0], along[i][1])) continue;
-              let j = i; while (j + 1 < along.length && wetAt(along[j + 1][0], along[j + 1][1])) j++;
-              const a2 = along[Math.max(0, i - 2)], b2 = along[Math.min(along.length - 1, j + 2)];
-              if (Math.hypot(along[j][0] - along[i][0], along[j][1] - along[i][1]) <= BRIDGE) {
-                segs.push(A.face, a2[0], a2[1], b2[0], b2[1], w0, 2, A.hb - 0.75);
-                /* torches: a pair on the verge at each bank, and a pair at the crest on the deck's edges (the arch: src/scene.js archRise) */
-                const L2 = Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) || 1, nx = -(b2[1] - a2[1]) / L2, ny = (b2[0] - a2[0]) / L2, mid = along[(i + j) >> 1];
-                for (const [q, off] of [[a2, w0 + 0.7], [b2, w0 + 0.7], [mid, Math.max(0.6, w0 - 0.2)]]) for (const side of [-1, 1])
-                  BRIDGE_LIT.push({ k: 'torch', x: Math.floor(q[0] + nx * off * side), y: Math.floor(-(q[1] + ny * off * side)), w: 1, h: 1, face: A.face });
-                /* the bridge itself (src/scene.js 'wbridge'): its line over the water, bank to bank, in the game's frame (y down the map) */
-                BRIDGE_LIT.push({ k: 'wbridge', x: Math.floor(mid[0]), y: Math.floor(-mid[1]), w: 1, h: 1, face: A.face, ax: along[i][0], ay: -along[i][1], bx: along[j][0], by: -along[j][1], hw: w0 });
-              }
-              i = j;
-            } }
+          layBridges(A.face, pts, w0, A.hb - 0.75);   /* a road over narrow water crosses it on a bridge (with its torches) */
           let px0 = pts[0][0], py0 = pts[0][1];
           for (let k = 2; k < pts.length; k += 2) { const q = pts[Math.min(k, pts.length - 1)]; segs.push(A.face, px0, py0, q[0], q[1], w0, RK, A.hb - 0.75); px0 = q[0]; py0 = q[1]; }
           segs.push(A.face, px0, py0, tx, ty, w0, RK, A.hb - 0.75);
-          if (!trail) lightTrail(A.face, pts, w0);
+          if (!trail) { lightTrail(A.face, pts, w0); ROADS_L.push({ A, B: Bp, pts: pts.slice(), w0 }); }
         } else {
           const pts = [[x, y]];
           for (let k = 0, d = 0; d < D0 * 2.5 && Math.hypot(tx - x, ty - y) > PT.step; k++, d += PT.step) {
@@ -395,8 +397,44 @@
             x = nx; y = ny; pts.push([x, y]);
           }
           segs.push(A.face, x, y, tx, ty, w0, RK, A.hb - 0.75);
-          pts.push([tx, ty]); if (!trail) lightTrail(A.face, pts, w0);
+          pts.push([tx, ty]); if (!trail) { lightTrail(A.face, pts, w0); ROADS_L.push({ A, B: Bp, pts: pts.slice(), w0 }); }
         }
+      }
+      /* SIGNPOSTS (2026-10-18, the operator: "signs at relevant cobble stone path points pointing to next towns"): a fingerpost on the
+         verge (the side the lamps are not on) just out of each town on every road between towns, one at the far end, one half way on a
+         long road. Each has an arm along the road to each end's town (the road's own direction there, not the crow's), and a post by a
+         town points too down that town's other roads. Names: T.signNames (a town of two pieces, Ashvale's village and West End, is one
+         name), else the piece's id. Arms: {t, a}, a = the arm's heading in game tiles (atan2(dy, dx), y down the map). */
+      {
+        const NM = T.signNames || {}, nameOf = p => NM[p.id] || p.id, posts = [];
+        const at = (pts, d) => { for (let i = 1; i < pts.length; i++) { const L = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); if (d <= L || i === pts.length - 1) { const k = L ? Math.min(1, d / L) : 0; return { x: pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * k, y: pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * k }; } d -= L; } return { x: pts[0][0], y: pts[0][1] }; };
+        const head = (p, q) => Math.atan2(-(q.y - p.y), q.x - p.x);   /* plane points -> a game-tile heading */
+        for (const r of ROADS_L) {
+          let L = 0; for (let i = 1; i < r.pts.length; i++) L += Math.hypot(r.pts[i][0] - r.pts[i - 1][0], r.pts[i][1] - r.pts[i - 1][1]);
+          if (L < 40) continue;
+          const a = nameOf(r.A), b = nameOf(r.B);
+          const place = (d, by) => {
+            const p = at(r.pts, d), fw = at(r.pts, Math.min(L, d + 10)), bk = at(r.pts, Math.max(0, d - 10)), t = at(r.pts, d + 1), u = at(r.pts, d - 1);
+            const ux = t.x - u.x, uy = t.y - u.y, ul = Math.hypot(ux, uy) || 1, off = r.w0 + 1.6;
+            const px = p.x + (uy / ul) * off, py = p.y - (ux / ul) * off;   /* the left of the road going on, the lamps' other side */
+            const gx = Math.floor(px), gy = Math.floor(-py);
+            if (inPiece(r.A.face, gx, gy)) return;
+            posts.push({ k: 'signpost', x: gx, y: gy, w: 1, h: 1, face: r.A.face, by, arms: [{ t: b, a: +head(p, fw).toFixed(3) }, { t: a, a: +head(p, bk).toFixed(3) }] });
+          };
+          place(7, a); place(L - 7, b); if (L > 220) place(L / 2, null);
+        }
+        for (const P of posts) if (P.by) for (const Q of posts) if (Q.by === P.by && Q !== P) {   /* a town's other roads, from its gate */
+          const ar = Q.arms[0]; if (P.arms.some(x => x.t === ar.t)) continue;
+          const hq = Math.atan2(Q.y - P.y, Q.x - P.x); if (Math.hypot(Q.x - P.x, Q.y - P.y) > 2) P.arms.push({ t: ar.t, a: +hq.toFixed(3) });
+        }
+        for (const P of posts) { delete P.by; ROAD.push(P); }
+      }
+      /* hand-laid trails (T.trails, tools/mountain/make_trails.js: the great mountain's safe road, its dangerous climb and the way to it
+         from the castle): path segments like the towns' own, through the cliffs wg_tiles makes of steep high ground, bridged over water */
+      for (const tr of (T.trails || [])) {
+        const face = tr.face == null ? (PIECES[0] ? PIECES[0].face : 0) : tr.face, P2 = (tr.pts || []).map(([vx, vy]) => [vx + 0.5, -(vy + 0.5)]), w0 = tr.w || 1.3;
+        for (let q = 0; q + 1 < P2.length; q++) segs.push(face, P2[q][0], P2[q][1], P2[q + 1][0], P2[q + 1][1], w0, 0, -1e9);
+        if (P2.length > 1) layBridges(face, P2, w0, -1e9);
       }
       SEG = segs;
       for (let k = 0; k < SEG.length / NS; k++) {

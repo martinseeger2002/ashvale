@@ -33,6 +33,7 @@
       return false;
     }
     let FOREST_HIT = false;   /* set by baseTile: this tree came from the forest dice (only those may be cleared for a way through) */
+    const TF2 = new Float64Array(24), CLIFF = 0.75;   /* the cliff rule's neighbour samples; the slope (rise per metre) past which ground is rock */
     function baseTile(f, gx, gy) {
       FOREST_HIT = false;
       const PI = ctx.PIECES;
@@ -65,6 +66,9 @@
       }
       if (h < WATER - 0.05) return pd < 0 && ctx.bridgeDist(f, cx, cy) < 0 ? 'B' : '~';   /* a bridge: wg_paths lays one only across a stream */
       if (TF[3] > 0.1) return '^';
+      /* cliffs (2026-10-18, the great mountain): steep high ground is rock you cannot walk, so the mountain is crossed by its trails (T.trails)
+         as in the old roads over the peaks; the lowlands are never this steep or this high, so nothing else changes */
+      if (h > 12 && pd > 1.6) { ctx.fieldTrue(f, cx + 1, cy, TF2); const hx = TF2[0]; ctx.fieldTrue(f, cx, cy - 1, TF2); if (Math.hypot(hx - h, TF2[0] - h) > CLIFF) return '^'; }
       if (pd < 0) return ctx.roadDist && ctx.roadDist(f, cx, cy) < 0 ? 'c' : 'p';   /* 'c': cobbles on a road between towns */
       if (TF[2] > 0.5 || (TF[2] > 0.3 && h < WATER + 0.3)) {
         /* the open desert: sand with a saguaro here and there (2026-10-06), never on a beach or a path */

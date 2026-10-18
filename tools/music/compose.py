@@ -52,6 +52,10 @@ TRACKS = [
     ('willowbank', 'Bending Green Whispers', 'Willows over slow water.', 'flute', 84, 'lydian', 3, 'none', True, 'walk'),
     ('dragonapproach', "Squire's Watch Song", 'A lonely vigil under a wide open sky.', 'recorder', 100, 'dorian', 4, 'march', True, 'walk'),
     ('dragonkeep', "Ember King's Ruin", 'Ash, broken iron and the chain that holds it.', 'strings', 86, 'phrygian', 4, 'dark', True, 'drone'),
+    # the great mountain (2026-10-18; names drafted by the local Qwen model, edited): its slopes (a region), the shrine and ledge, the pass
+    ('mountain', 'The Switchback Road', 'Snow on the heights and the long road climbing.', 'horn', 92, 'dorian', 4, 'march', True, 'drone'),
+    ('mt_shrine', "The Hermit's Altar", 'Three stones, thin air and a hush above the clouds.', 'flute', 66, 'lydian', 3, 'none', True, 'drone'),
+    ('mt_pass', 'Teeth of the Pass', 'Wolves, knives and a wind that wants you off the ledge.', 'strings', 124, 'phrygian', 4, 'dark', True, 'pulse'),
 ]
 ROOTS = [60, 62, 64, 65, 67, 57, 59]   # C D E F G A B (lead octave)
 # night versions (2026-10-18, the operator: "make sure there is some song versions for night time"): the same tune - the same seed,
@@ -66,6 +70,9 @@ NIGHT = {
     'eastend': ('Spring Lanes in Moonlight', 'Hedgerows drift in a hushed spring night.'),
     'whisperwood': ('Pines After Dark', 'Tall pines rustle with something distant and low.'),
     'saltmere': ('Dockside Hush', 'Salt wind over quiet docks and empty tables.'),
+    'mountain': ('Frostbound Switchbacks', 'The road climbs on in silence through the frozen turns.'),
+    'mt_shrine': ('Moonlit Shrine', 'The stones keep still in the high shadow.'),
+    'mt_pass': ('Cold Hunt by Night', 'Eyes in the snow and the pass gone quiet.'),
     'castle': ('Royal Court by Moonlight', 'Whispers drift across the water under the banners.'),
     'lakes': ('Stone Bridge in Moonlight', 'Still water holds the moon; the bridge stands quiet.'),
     'wolfden': ("The Pack's Silent Watch", 'The high air bites while the den watches from afar.'),
@@ -155,9 +162,11 @@ tracks = {}
 for t in TRACKS:
     tracks[t[0]] = compose(*t)
     tracks[t[0] + '_night'] = compose(*t, night=True)
-areas = {t[0]: t[0] for t in TRACKS if t[0] not in ('wild', 'lakes')}
+areas = {t[0]: t[0] for t in TRACKS if t[0] not in ('wild', 'lakes', 'mountain')}
+areas.update({'mt_lodge': 'mountain', 'mt_warden': 'mountain', 'mt_farside': 'mountain', 'mt_ledge': 'mt_shrine', 'mt_crags': 'mt_pass'})   # the camps (tools/mountain/make_camps.js)
 data = {'tracks': tracks, 'order': [k for t in TRACKS for k in (t[0], t[0] + '_night')], 'areas': areas, 'wild': 'wild', 'start': ['village', 'wild'],
-        'regions': [{'track': 'lakes', 'x0': -330, 'y0': 330, 'x1': 230, 'y1': 560, 'note': 'the Lake Castle\'s lakes and river (tools/castle/make_waters.js)'}]}
+        'regions': [{'track': 'lakes', 'x0': -330, 'y0': 330, 'x1': 230, 'y1': 560, 'note': 'the Lake Castle\'s lakes and river (tools/castle/make_waters.js)'},
+                    {'track': 'mountain', 'x0': -640, 'y0': 590, 'x1': -150, 'y1': 1060, 'note': 'the great mountain (tools/mountain/make_mountain.js)'}]}
 mod = {'ashvale3d': 'module', 'name': 'music', 'api': 1, 'v': 1, 'data': data}
 with open(os.path.join(ROOT, 'data', 'music.json'), 'w') as f:
     json.dump(mod, f, separators=(',', ':'))

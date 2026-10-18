@@ -371,6 +371,94 @@
    "ownDice": true,
    "roam": 3,
    "roamEvery": 3
+  },
+  "crag_wolf": {
+   "name": "Crag wolf",
+   "level": 16,
+   "hp": 32,
+   "att": 15,
+   "def": 12,
+   "attb": 8,
+   "defb": 6,
+   "max": 5,
+   "speed": 4,
+   "aggro": 6,
+   "respawn": 70,
+   "drops": [
+    {
+     "item": "timber_wolf_pelt",
+     "one_in": 1
+    },
+    {
+     "item": "bones",
+     "one_in": 1
+    }
+   ],
+   "gold": 0,
+   "anim": "bite",
+   "look": "timber_wolf",
+   "ownDice": true,
+   "roam": 4
+  },
+  "pass_bandit": {
+   "name": "Pass bandit",
+   "level": 18,
+   "hp": 34,
+   "att": 16,
+   "def": 14,
+   "attb": 10,
+   "defb": 12,
+   "max": 5,
+   "speed": 4,
+   "aggro": 5,
+   "respawn": 90,
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "sword_t2",
+     "one_in": 4
+    },
+    {
+     "item": "bread",
+     "one_in": 3
+    }
+   ],
+   "gold": 30,
+   "anim": "slash",
+   "look": "bandit",
+   "ownDice": true,
+   "roam": 3
+  },
+  "frost_goblin": {
+   "name": "Frost goblin",
+   "level": 15,
+   "hp": 28,
+   "att": 14,
+   "def": 11,
+   "attb": 8,
+   "defb": 8,
+   "max": 4,
+   "speed": 4,
+   "aggro": 4,
+   "respawn": 75,
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "sword_t1",
+     "one_in": 3
+    }
+   ],
+   "gold": 15,
+   "anim": "slash",
+   "look": "goblin",
+   "ownDice": true,
+   "roam": 3
   }
  }
 }
