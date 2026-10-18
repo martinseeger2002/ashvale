@@ -3,6 +3,8 @@
    original tunes in the manner of the old MIDI soundtracks); this part plays them through a small WebAudio synth - modal lead
    voices (flute, recorder, harp, lute, oboe, horn, strings, pipe), a bass, held string chords and hand percussion - one bar ahead
    of the clock, and crossfades when the track changes.
+   - Night: after dark each area plays its night version (music.tracks['<id>_night'], the same tune slower and softer), which
+     unlocks on its own the first time you are there at night.
    - Each area has a track (music.areas: zone id -> track; music.regions: boxes of the open world, e.g. the castle lakes; anything
      else is music.wild). Walking into an area for the first time unlocks its track, as the old game did: "You have unlocked a new
      music track: <name>." The starting tracks are unlocked from the first step.
@@ -29,9 +31,12 @@
     const D = (K.DATA && K.DATA.music) || null;
     if (!D || !D.tracks) return { frame() {}, panel(el) { el.innerHTML = '<h4>Music</h4><div class="info">No music in this build.</div>'; }, state: () => ({}) };
     const store = K.store, hud = () => (typeof K.hud === 'function' ? K.hud() : K.hud);
-    let S = { unlocked: (D.start || []).slice(), mode: 'auto', loop: null, on: true, vol: 0.6 };
+    let S = { unlocked: (D.start || []).slice(), mode: 'auto', loop: null, on: true, vol: 0.6, nights: true };   /* nights: list the night versions (the tab's toggle) */
     try { const s = JSON.parse(store.get(KEY) || 'null'); if (s && typeof s === 'object') S = Object.assign(S, s, { unlocked: Array.from(new Set((D.start || []).concat(s.unlocked || []))) }); } catch (e) { /* defaults */ }
     const save = () => { try { store.set(KEY, JSON.stringify(S)); } catch (e) { /* private window: kept for this visit */ } };
+    /* ?allmusic (2026-10-18, the operator: "enable all of the players music so we can listen to the songs"): every track unlocked in this
+       browser, to hear the whole soundtrack; everyone else still unlocks them by travelling */
+    try { if (G.location && /[?&]allmusic\b/.test(G.location.search)) { S.unlocked = Object.keys(D.tracks); save(); } } catch (e) { /* no location */ }
     let ctx = null, master = null, noise = null, cur = null, areaTrack = null, frames = 0, timer = null;
     const ORDER = (D.order || Object.keys(D.tracks)).filter(id => D.tracks[id]);
     /* each track's events, bar by bar, so the scheduler lays one bar at a time */
@@ -101,10 +106,12 @@
       for (const r of (D.regions || [])) if (x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) return r.track;
       return D.wild;
     }
-    function frame(x, y, zoneFn) {
+    function frame(x, y, zoneFn, nightFn) {
       if (++frames % 20) return;
       const zone = typeof zoneFn === 'function' ? zoneFn() : zoneFn;
-      const t = trackFor(x, y, zone); if (!t || t === areaTrack) return;
+      let t = trackFor(x, y, zone);
+      if (t && (typeof nightFn === 'function' ? nightFn() : nightFn) && D.tracks[t + '_night']) t += '_night';   /* after dark: the area's night version (unlocked on its own) */
+      if (!t || t === areaTrack) return;
       areaTrack = t;
       if (S.unlocked.indexOf(t) < 0) {
         S.unlocked.push(t); save();
@@ -114,21 +121,23 @@
       if (S.mode === 'auto' && S.on) play(t);
     }
     function panel(el, redraw) {
-      const T = cur && D.tracks[cur.id], got = ORDER.filter(id => S.unlocked.indexOf(id) >= 0).length;
+      const T = cur && D.tracks[cur.id], LIST = S.nights ? ORDER : ORDER.filter(id => !D.tracks[id].night), got = LIST.filter(id => S.unlocked.indexOf(id) >= 0).length;
       const btn = (a, label, on) => '<button class="btn' + (on ? ' on' : '') + '" data-ma="' + a + '">' + label + '</button>';
       el.innerHTML = '<h4>Music</h4>' +
         '<div class="info">' + (T && S.on ? 'Now playing: <b>' + T.name + '</b>' : S.on ? 'Tap anywhere to start the music.' : 'The music is off.') + '</div>' +
-        '<div style="display:flex;gap:4px;flex-wrap:wrap;margin:4px 0">' + btn('auto', 'Auto', S.mode === 'auto') + btn('onoff', S.on ? 'Music: On' : 'Music: Off', S.on) + '</div>' +
+        '<div style="display:flex;gap:4px;flex-wrap:wrap;margin:4px 0">' + btn('auto', 'Auto', S.mode === 'auto') + btn('onoff', S.on ? 'Music: On' : 'Music: Off', S.on) + btn('nights', S.nights ? 'Night versions: Shown' : 'Night versions: Hidden', S.nights) + '</div>' +
         '<div class="info" style="display:flex;align-items:center;gap:6px">Volume <input type="range" min="0" max="100" value="' + Math.round(S.vol * 100) + '" data-ma="vol" style="flex:1"></div>' +
-        '<div class="info">Unlocked ' + got + ' of ' + ORDER.length + '</div>' +
-        '<div style="max-height:260px;overflow:auto;line-height:1.55">' + ORDER.map(id => {
+        '<div class="info">Unlocked ' + got + ' of ' + LIST.length + '</div>' +
+        '<div style="max-height:260px;overflow:auto;line-height:1.55">' + LIST.map(id => {
           const ok = S.unlocked.indexOf(id) >= 0, playing = cur && cur.id === id;
-          return '<div data-mt="' + id + '" title="' + (ok ? D.tracks[id].mood.replace(/"/g, '&quot;') : 'Not yet unlocked: find where it plays.') + '" style="cursor:' + (ok ? 'pointer' : 'default') + ';color:' + (ok ? '#3fd34f' : '#e03a32') + (playing ? ';font-weight:bold;text-decoration:underline' : '') + '">' + D.tracks[id].name + '</div>';
+          const N = D.tracks[id].night;
+          return '<div data-mt="' + id + '" title="' + (ok ? D.tracks[id].mood.replace(/"/g, '&quot;') : 'Not yet unlocked: find where it plays.') + '" style="cursor:' + (ok ? 'pointer' : 'default') + ';color:' + (ok ? '#3fd34f' : '#e03a32') + (playing ? ';font-weight:bold;text-decoration:underline' : '') + '">' + (N ? '<span style="padding-left:10px;opacity:.8">&#9790; </span>' : '') + D.tracks[id].name + '</div>';
         }).join('') + '</div>';
       el.onclick = (e) => {
         const a = e.target.dataset && e.target.dataset.ma, t = e.target.dataset && e.target.dataset.mt;
         wake();
         if (a === 'auto') { S.mode = 'auto'; S.loop = null; if (areaTrack) play(areaTrack); }
+        else if (a === 'nights') { S.nights = !S.nights; }   /* only the list: the night version still plays after dark */
         else if (a === 'onoff') { S.on = !S.on; if (!S.on && cur && cur.out && ctx) { cur.out.gain.setTargetAtTime(0, ctx.currentTime, 0.3); cur = null; } else if (S.on) { wake(); play(S.mode === 'loop' && S.loop ? S.loop : areaTrack); } }
         else if (t && S.unlocked.indexOf(t) >= 0) { S.mode = 'loop'; S.loop = t; play(t); }
         else return;

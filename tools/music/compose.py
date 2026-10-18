@@ -54,9 +54,41 @@ TRACKS = [
     ('dragonkeep', "Ember King's Ruin", 'Ash, broken iron and the chain that holds it.', 'strings', 86, 'phrygian', 4, 'dark', True, 'drone'),
 ]
 ROOTS = [60, 62, 64, 65, 67, 57, 59]   # C D E F G A B (lead octave)
+# night versions (2026-10-18, the operator: "make sure there is some song versions for night time"): the same tune - the same seed,
+# so the same motif, rhythm and contour - in the darker sister mode, three-quarter time slower, a softer voice, held chords and
+# little or no percussion. Names and moods drafted by the local Qwen model from the day titles, edited by hand.
+DARKER = {'ionian': 'aeolian', 'lydian': 'dorian', 'mixolydian': 'dorian', 'dorian': 'aeolian', 'aeolian': 'aeolian', 'phrygian': 'phrygian'}
+SOFTER = {'horn': 'strings', 'oboe': 'flute', 'lute': 'harp', 'pipe': 'recorder', 'strings': 'strings', 'flute': 'flute', 'recorder': 'flute', 'harp': 'harp'}
+HUSH = {'march': 'gentle', 'tavern': 'gentle', 'folk': 'gentle', 'dark': 'dark', 'gentle': 'none', 'none': 'none'}
+NIGHT = {
+    'village': ('Lamplight on the Well', 'Soft lamplight and quiet faces by the well.'),
+    'wild': ('The Road Under Stars', 'The road winds on softly toward shadowed hills.'),
+    'eastend': ('Spring Lanes in Moonlight', 'Hedgerows drift in a hushed spring night.'),
+    'whisperwood': ('Pines After Dark', 'Tall pines rustle with something distant and low.'),
+    'saltmere': ('Dockside Hush', 'Salt wind over quiet docks and empty tables.'),
+    'castle': ('Royal Court by Moonlight', 'Whispers drift across the water under the banners.'),
+    'lakes': ('Stone Bridge in Moonlight', 'Still water holds the moon; the bridge stands quiet.'),
+    'wolfden': ("The Pack's Silent Watch", 'The high air bites while the den watches from afar.'),
+    'cavemouth': ('Damp Echoes', 'The last light fades, leaving echoes off the rock.'),
+    'spidercave': ('Silent Webs in the Dark', 'Too many legs shift softly in the dark.'),
+    'ancientchapel': ('Old Hush on the Hill', 'Broken stone hums while the hill keeps its hush.'),
+    'evengrove': ('Stillness Off the Map', 'A calm that feels wrong, kept off every chart.'),
+    'ziibiing': ('Birch River Moon', 'Canoes rest on calm water; voices low by the fire.'),
+    'lodges': ('Embers of the Elder Tale', 'Logs settle to embers while the old stories go on.'),
+    'ricelake': ('Paddles in the Dark Rice', 'Quiet paddles among the rice under the stars.'),
+    'sugarcamp': ('Kettles Under the Stars', 'Woodsmoke curls while the kettles hiss into the night.'),
+    'flintbank': ('Sparks in the Night Breeze', 'Stone on stone, soft, in the river night.'),
+    'obsidianbank': ('Black Glass, Cold Tide', 'Dark reflections shimmer on the black glass shore.'),
+    'willowbank': ('Willows Over Dark Water', 'Willows bow over the slow, dark water.'),
+    'dragonapproach': ("Squire's Vigil", 'A lonely watch under the wide night sky.'),
+    'dragonkeep': ('Ashes of the Ember King', 'Ash settles on broken iron and the heavy chain.'),
+}
 
 
-def compose(area, name, mood, lead, bpm, mode, meter, perc, pad, bstyle):
+def compose(area, name, mood, lead, bpm, mode, meter, perc, pad, bstyle, night=False):
+    if night:   # the same seed below keeps the tune; everything about how it is played softens
+        name, mood = NIGHT[area]; mode, lead, perc, bstyle, pad = DARKER[mode], SOFTER[lead], HUSH[perc], 'drone', True
+        bpm = max(54, round(bpm * 0.75))
     R = random.Random(int(hashlib.sha256(area.encode()).hexdigest()[:12], 16))
     sc, root = MODES[mode], R.choice(ROOTS)
     bar = meter * 4
@@ -96,7 +128,7 @@ def compose(area, name, mood, lead, bpm, mode, meter, perc, pad, bstyle):
                 m = deg(c + d)
                 while m > 81: m -= 12
                 while m < 57: m += 12
-                vel = 0.75 if t % bar == 0 else (0.6 if t % 4 == 0 else 0.5)
+                vel = (0.75 if t % bar == 0 else (0.6 if t % 4 == 0 else 0.5)) * (0.85 if night else 1)
                 leadN.append([start, ln, m, round(vel, 2)])
     bassN, padN = [], []
     for sec in range(4):
@@ -114,13 +146,17 @@ def compose(area, name, mood, lead, bpm, mode, meter, perc, pad, bstyle):
                 for d in chord(c):
                     m = deg(d) - 12
                     padN.append([s0, bar, m, 0.32])
-    return {'id': area, 'name': name, 'mood': mood, 'lead': lead, 'bpm': bpm, 'meter': meter, 'mode': mode, 'bars': 32,
+    return {'id': area + ('_night' if night else ''), 'name': name, 'mood': mood, 'lead': lead, 'bpm': bpm, 'meter': meter, 'mode': mode, 'bars': 32,
+            'night': night, 'base': area,
             'parts': {'lead': leadN, 'bass': bassN, 'pad': padN}, 'perc': PERC[perc][meter]}
 
 
-tracks = {t[0]: compose(*t) for t in TRACKS}
+tracks = {}
+for t in TRACKS:
+    tracks[t[0]] = compose(*t)
+    tracks[t[0] + '_night'] = compose(*t, night=True)
 areas = {t[0]: t[0] for t in TRACKS if t[0] not in ('wild', 'lakes')}
-data = {'tracks': tracks, 'order': [t[0] for t in TRACKS], 'areas': areas, 'wild': 'wild', 'start': ['village', 'wild'],
+data = {'tracks': tracks, 'order': [k for t in TRACKS for k in (t[0], t[0] + '_night')], 'areas': areas, 'wild': 'wild', 'start': ['village', 'wild'],
         'regions': [{'track': 'lakes', 'x0': -330, 'y0': 330, 'x1': 230, 'y1': 560, 'note': 'the Lake Castle\'s lakes and river (tools/castle/make_waters.js)'}]}
 mod = {'ashvale3d': 'module', 'name': 'music', 'api': 1, 'v': 1, 'data': data}
 with open(os.path.join(ROOT, 'data', 'music.json'), 'w') as f:

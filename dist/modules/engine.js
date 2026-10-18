@@ -2837,7 +2837,7 @@
         requestAnimationFrame(frame);
         for (const r of regions) if (r.built && r.built.setFloor) r.built.setFloor(me.lv | 0);
         caveTick(performance.now()); torchTick(performance.now());
-        if (MUSIC) MUSIC.frame(me.x, me.y, zoneHere);   /* the soundtrack follows the area (it looks every 20 frames) */
+        if (MUSIC) MUSIC.frame(me.x, me.y, zoneHere, () => !!core.S.night);   /* the soundtrack follows the area, and the night (it looks every 20 frames) */
         for (const t of gFlames) { const q = performance.now() / 1000, k = 0.85 + 0.15 * Math.sin(q * 13 + t.ph) + 0.08 * Math.sin(q * 31 + t.ph * 2); t.f.scale.set(1, k, 1); t.f2.scale.set(1, k, 1); }
         /* One clock. The tick loop keeps lastTick on performance.now() and stamps each stride with the tick's own
            time (see doTick), but the rAF argument is the frame's START time, which trails performance.now() by
