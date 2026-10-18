@@ -13,7 +13,7 @@ drafts of the shapes, which were mostly rebuilt here by hand - the model kept si
 laid fence rails across their posts and stacked small boxes where a roof was wanted.
     python3 tools/decor/make_decor_data.py      (then python3 build.py)
 """
-import json, os
+import json, math, os
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SNOW = "#f4f6f8"
 PALETTES = {
@@ -99,13 +99,52 @@ K["rail_fence"] = {"name": "Rail fence", "examine": "Three posts hold up two rai
     "parts": [["box", "darkwood", -1.4, 0.55, 0, 0.14, 1.1, 0.14], ["box", "darkwood", 0, 0.55, 0, 0.14, 1.1, 0.14], ["box", "darkwood", 1.4, 0.55, 0, 0.14, 1.1, 0.14],
               ["box", "wood", 0, 0.9, 0.09, 2.9, 0.09, 0.06], ["box", "wood", -0.7, 0.4, 0.09, 1.45, 0.09, 0.06], ["box", "wood", 0.72, 0.28, 0.09, 1.5, 0.09, 0.06, 0, 0, 0.3]],
     "snow": [["box", SNOW, 0, 0.96, 0.09, 2.9, 0.03, 0.08]]}
+# THE LAKE CASTLE'S CEMETERY (2026-10-18, the operator: "a quaint cemetery at -90, 533 with flowers and a metal fence around it, entrance towards
+# the path"; laid by tools/decor/place_cemetery.js). Names and examine lines drafted by the local Qwen model (Qwen3.5-9B) and edited; the shapes
+# made here. A grave's headstone stands at the back of its tile (-z) with its mound in front (+z); the railing is 1 m sections, a post at -x.
+MOUND = [["rock", "moss", 0, 0.06, 0.3, 0.6, 0.14, 1.0]]
+K["gravestone"] = {"name": "Gravestone", "examine": "A rounded stone over a tidy mound, topped with flowers and mild regret.",
+    "parts": [["box", "darkstone", 0, 0.06, -0.35, 0.7, 0.12, 0.22], ["box", "stone", 0, 0.48, -0.35, 0.56, 0.74, 0.12], ["cyl12", "stone", 0, 0.85, -0.35, 0.56, 0.12, 0.56, 0, 1.5708, 0],
+              ["box", "accent", 0, 0.66, -0.285, 0.3, 0.05, 0.01], ["box", "accent", 0, 0.56, -0.285, 0.22, 0.04, 0.01]] + MOUND
+             + [["box", "leaf", -0.12, 0.17, 0.15, 0.02, 0.12, 0.02], ["box", "cloth", -0.12, 0.25, 0.15, 0.09, 0.08, 0.09], ["box", "leaf", 0.1, 0.17, 0.38, 0.02, 0.12, 0.02],
+                ["box", "cloth3", 0.1, 0.25, 0.38, 0.09, 0.08, 0.09], ["box", "paper", 0.02, 0.18, 0.6, 0.08, 0.07, 0.08]],
+    "snow": [["box", SNOW, 0, 1.12, -0.35, 0.3, 0.03, 0.13], ["box", SNOW, 0, 0.14, 0.3, 0.5, 0.03, 0.85]]}
+K["grave_cross"] = {"name": "Grave cross", "examine": "A weathered stone cross, standing up straighter than anyone buried here.",
+    "parts": [["box", "darkstone", 0, 0.08, -0.35, 0.5, 0.16, 0.3], ["box", "stone", 0, 0.7, -0.35, 0.14, 1.1, 0.12], ["box", "stone", 0, 0.95, -0.35, 0.56, 0.13, 0.12],
+              ["box", "moss", 0.1, 0.19, -0.2, 0.18, 0.05, 0.04]] + MOUND + [["box", "leaf", 0.05, 0.17, 0.3, 0.02, 0.12, 0.02], ["box", "cloth2", 0.05, 0.25, 0.3, 0.09, 0.08, 0.09]],
+    "snow": [["box", SNOW, 0, 1.03, -0.35, 0.52, 0.03, 0.13], ["box", SNOW, 0, 1.26, -0.35, 0.14, 0.03, 0.13], ["box", SNOW, 0, 0.14, 0.3, 0.5, 0.03, 0.85]]}
+K["grave_old"] = {"name": "Old grave", "examine": "Moss has won this slab, and whoever lies under it is keeping the name to themselves.",
+    "parts": [["box", "darkstone", 0.05, 0.32, -0.3, 0.46, 0.68, 0.12, 0, 0, 0.18], ["box", "moss", 0.0, 0.52, -0.235, 0.3, 0.14, 0.01, 0, 0, 0.18],
+              ["box", "moss", 0.1, 0.12, -0.235, 0.3, 0.1, 0.01, 0, 0, 0.18], ["rock", "moss", 0, 0.05, 0.3, 0.6, 0.1, 0.9], ["rock", "stone", 0.32, 0.06, 0.0, 0.2, 0.12, 0.18]],
+    "snow": [["box", SNOW, -0.01, 0.67, -0.3, 0.4, 0.03, 0.13, 0, 0, 0.18]]}
+FLOWERS = [(-0.28, -0.1, "cloth", 0.26), (-0.1, 0.12, "cloth3", 0.32), (0.08, -0.14, "paper", 0.24), (0.24, 0.06, "cloth2", 0.3), (-0.02, -0.02, "accent", 0.36), (0.3, -0.18, "cloth", 0.22), (-0.24, 0.18, "paper", 0.28)]
+K["flower_bed"] = {"name": "Flower bed", "examine": "Wild blooms, tended by someone who visits more often than the residents do.",
+    "parts": [["rock", "leaf", 0, 0.05, 0, 0.8, 0.1, 0.55]] + [p for (x, z, c, h) in FLOWERS for p in (["box", "leaf", x, h / 2, z, 0.025, h, 0.025], ["box", c, x, h, z, 0.1, 0.07, 0.1])],
+    "snow": []}
+K["iron_fence"] = {"name": "Iron railing", "examine": "Spear-tipped bars guard the quiet, or perhaps just keep the sheep out of it.",
+    "parts": [["box", "metal", -0.5, 0.6, 0, 0.06, 1.2, 0.06], ["pyr", "metal", -0.5, 1.26, 0, 0.09, 0.12, 0.09, 0.785], ["box", "metal", 0, 1.0, 0, 1.0, 0.04, 0.03], ["box", "metal", 0, 0.2, 0, 1.0, 0.04, 0.03]]
+             + [p for x in (-0.3, -0.1, 0.1, 0.3) for p in (["box", "metal", x, 0.57, 0, 0.022, 1.02, 0.022], ["pyr", "metal", x, 1.12, 0, 0.05, 0.09, 0.05, 0.785])],
+    "snow": [["box", SNOW, 0, 1.03, 0, 1.0, 0.02, 0.04]]}
+PIER = lambda x, h: [["box", "darkstone", x, 0.08, 0, 0.36, 0.16, 0.36], ["box", "stone", x, h / 2, 0, 0.28, h - 0.1, 0.28], ["box", "darkstone", x, h - 0.02, 0, 0.34, 0.06, 0.34], ["cyl12", "metal", x, h + 0.09, 0, 0.18, 0.18, 0.18]]
+K["iron_post"] = {"name": "Stone pier", "examine": "A sturdy stone pier wearing an iron ball like a very small, very heavy hat.",
+    "parts": PIER(0, 1.36), "snow": [["box", SNOW, 0, 1.38, 0, 0.32, 0.03, 0.32]]}
+def leaf(hx, sign, ang=1.2):   # a gate leaf 0.9 m wide hinged at x = hx, swung `ang` radians in (towards +z)
+    dx, dz, r = sign * math.cos(ang), math.sin(ang), -ang if sign > 0 else math.pi + ang
+    at = lambda s, y, sx, sy, sz: ["box", "metal", round(hx + dx * s, 3), y, round(dz * s, 3), sx, sy, sz, round(r, 3)]
+    return [at(0.45, 1.25, 0.9, 0.04, 0.03), at(0.45, 0.2, 0.9, 0.04, 0.03), at(0.88, 0.72, 0.04, 1.1, 0.03)] + [at(s, 0.72, 0.022, 1.06, 0.022) for s in (0.18, 0.36, 0.54, 0.72)]
+K["iron_gate"] = {"name": "Iron gate", "examine": "The double gates stand open, inviting the curious, the grieving and the lost.",
+    "parts": PIER(-1.0, 1.9) + PIER(1.0, 1.9) + leaf(-0.86, 1) + leaf(0.86, -1)
+             + [["box", "metal", 0, 1.96, 0, 1.72, 0.04, 0.03], ["box", "metal", -0.45, 2.1, 0, 0.82, 0.04, 0.03, 0, 0, 0.32], ["box", "metal", 0.45, 2.1, 0, 0.82, 0.04, 0.03, 0, 0, -0.32],
+                ["box", "metal", 0, 2.2, 0, 0.04, 0.3, 0.03], ["box", "metal", 0, 2.28, 0, 0.18, 0.04, 0.03]],
+    "snow": [["box", SNOW, -1.0, 1.92, 0, 0.32, 0.03, 0.32], ["box", SNOW, 1.0, 1.92, 0, 0.32, 0.03, 0.32]]}
 # what stands in the way (src/world.js decorBlock, 2026-10-18: "make solid decor block movement without blocking roads"): "tile" blocks the
 # piece's own tile, "line" is a run of edge walls len metres long along the piece's turn (a fence section); none (prayer flags) you walk
 # under. Never on a path tile: world.js leaves any tile or edge by a path open.
 for k in ("milestone", "lantern_post", "wayshrine", "stone_bench", "fallen_log", "boulders", "broken_cart", "ruin_pillar", "stump_axe",
-          "supply_cache", "standing_stone", "dead_tree"):
+          "supply_cache", "standing_stone", "dead_tree", "gravestone", "grave_cross", "grave_old"):
     K[k]["block"] = "tile"
 K["rail_fence"]["block"] = "line"; K["rail_fence"]["len"] = 2.9
+K["iron_fence"]["block"] = "line"; K["iron_fence"]["len"] = 1.0   # the flower beds, the piers and the open gate you walk past (or through)
 DECOR = {"ashvale3d": "module", "name": "decor", "api": 1, "v": 1,
          "data": {"note": "reusable scenery (tools/decor/make_decor_data.py): parts [shape, colour, x, y, z, sx, sy, sz, ry, rx, rz], colours from a palette; a snowy palette adds the kind's snow parts",
                   "palettes": PALETTES, "kinds": K}}

@@ -332,6 +332,10 @@
         const ea = near(A.ex, cb), eb = near(Bp.ex, ca); if (!ea || !eb) continue;
         let x = ea.x + 0.5, y = -ea.y - 0.5; const tx = eb.x + 0.5, ty = -eb.y - 0.5, hv = g.hash3(g.hashStr(A.id), g.hashStr(Bp.id), ctx.S.pa);
         const trail = A.linkStyles[bid] === 'trail', RK = trail ? 0 : 3;   /* a trail (2026-10-07: "a skinny trail running from the village to Ashvale"): dirt, narrow, no lamps */
+        /* a WINDING road (globecfg links [a, b, 'wind'], 2026-10-18: the road to the Lake Castle over its hill - "keep the cobble path but make
+           it winding through"): cobbles, lamps and fences as any road, but it climbs as a cart would - a steep step costs far more than a
+           detour, and a corner is skipped only where the straight way stays under WIND_GRADE - so over a hill it winds along the slopes */
+        const wind = A.linkStyles[bid] === 'wind', WIND_GRADE = 0.09;
         const D0 = Math.hypot(tx - x, ty - y), w0 = trail ? PT.halfMin : Math.max(1.4, PT.halfMin, Math.min(PT.halfMax, ea.w / 2));   /* a road is wider than a footpath */
         /* the route goes AROUND water (the operator): a search on a 4 m grid over the ground between the two gates, water,
            rock and other set pieces closed, a little extra cost for slopes so it keeps to the easy ground; the trail is
@@ -351,34 +355,63 @@
           }
           hgt[k] = v; return v > -1e8;
         };
-        const si = Math.round((x - gx0) / CS), sj = Math.round((y - gy0) / CS), ti = Math.round((tx - gx0) / CS), tj = Math.round((ty - gy0) / CS);
-        const gsc = new Float32Array(GW * GH).fill(1e30), from = new Int32Array(GW * GH).fill(-1), heap = [];
-        const hpush = (f, k) => { heap.push([f, k]); let i = heap.length - 1; while (i > 0) { const p2 = (i - 1) >> 1; if (heap[p2][0] <= heap[i][0]) break; const t2 = heap[p2]; heap[p2] = heap[i]; heap[i] = t2; i = p2; } };
-        const hpop = () => { const top = heap[0], l = heap.pop(); if (heap.length) { heap[0] = l; let i = 0; for (;;) { const a2 = 2 * i + 1, b2 = a2 + 1; let m2 = i; if (a2 < heap.length && heap[a2][0] < heap[m2][0]) m2 = a2; if (b2 < heap.length && heap[b2][0] < heap[m2][0]) m2 = b2; if (m2 === i) break; const t2 = heap[m2]; heap[m2] = heap[i]; heap[i] = t2; i = m2; } } return top; };
-        const sk = sj * GW + si, tk = tj * GW + ti; gsc[sk] = 0; hpush(0, sk); let found = false, pops = 0;
-        while (heap.length && pops < 400000) {
-          const [, k] = hpop(); pops++; if (k === tk) { found = true; break; }
-          const i = k % GW, j = (k - i) / GW, h0 = hgt[k] === hgt[k] ? hgt[k] : 0;
-          for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
-            if (!di && !dj) continue; const ni = i + di, nj = j + dj; if (ni < 0 || nj < 0 || ni >= GW || nj >= GH) continue;
-            const nk = nj * GW + ni; if (nk !== tk && !ok(ni, nj)) continue;
-            const step = (di && dj ? 1.414 : 1) * CS, dh = Math.abs((hgt[nk] === hgt[nk] && hgt[nk] > -1e8 ? hgt[nk] : h0) - h0);
-            const ng = gsc[k] + step * (1 + (trail ? 0.6 : 0.3) * dh / CS) * (trail ? 0.92 + 0.16 * g.u01(g.hash3(ni, nj, hv)) : 0.98 + 0.04 * g.u01(g.hash3(ni, nj, hv)));   /* a road between towns runs as straight as the ground allows (2026-10-08); a trail wanders */
-            if (ng < gsc[nk]) { gsc[nk] = ng; from[nk] = k; hpush(ng + Math.hypot(ni - ti, nj - tj) * CS, nk); }
+        const hpush = (heap, f, k) => { heap.push([f, k]); let i = heap.length - 1; while (i > 0) { const p2 = (i - 1) >> 1; if (heap[p2][0] <= heap[i][0]) break; const t2 = heap[p2]; heap[p2] = heap[i]; heap[i] = t2; i = p2; } };
+        const hpop = (heap) => { const top = heap[0], l = heap.pop(); if (heap.length) { heap[0] = l; let i = 0; for (;;) { const a2 = 2 * i + 1, b2 = a2 + 1; let m2 = i; if (a2 < heap.length && heap[a2][0] < heap[m2][0]) m2 = a2; if (b2 < heap.length && heap[b2][0] < heap[m2][0]) m2 = b2; if (m2 === i) break; const t2 = heap[m2]; heap[m2] = heap[i]; heap[i] = t2; i = m2; } } return top; };
+        function search(x, y, tx, ty) {   /* one reach of the route, gate to gate (or by a waypoint): the grid points, or null */
+          const si = Math.round((x - gx0) / CS), sj = Math.round((y - gy0) / CS), ti = Math.round((tx - gx0) / CS), tj = Math.round((ty - gy0) / CS);
+          const gsc = new Float32Array(GW * GH).fill(1e30), from = new Int32Array(GW * GH).fill(-1), heap = [];
+          const sk = sj * GW + si, tk = tj * GW + ti; gsc[sk] = 0; hpush(heap, 0, sk); let pops = 0;
+          while (heap.length && pops < 400000) {
+            const [, k] = hpop(heap); pops++;
+            if (k === tk) { const pts = []; for (let q = tk; q >= 0; q = from[q]) { const i = q % GW, j = (q - i) / GW; pts.push([gx0 + i * CS, gy0 + j * CS]); if (q === sk) break; } pts.reverse(); pts[0] = [x, y]; pts[pts.length - 1] = [tx, ty]; return pts; }
+            const i = k % GW, j = (k - i) / GW, h0 = hgt[k] === hgt[k] ? hgt[k] : 0;
+            for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+              if (!di && !dj) continue; const ni = i + di, nj = j + dj; if (ni < 0 || nj < 0 || ni >= GW || nj >= GH) continue;
+              const nk = nj * GW + ni; if (nk !== tk && !ok(ni, nj)) continue;
+              const step = (di && dj ? 1.414 : 1) * CS, dh = Math.abs((hgt[nk] === hgt[nk] && hgt[nk] > -1e8 ? hgt[nk] : h0) - h0);
+              const gr = dh / step, ng = gsc[k] + step * (wind ? 1 + 2.5 * gr + 30 * Math.max(0, gr - WIND_GRADE) : 1 + (trail ? 0.6 : 0.3) * dh / CS) * (trail ? 0.92 + 0.16 * g.u01(g.hash3(ni, nj, hv)) : 0.98 + 0.04 * g.u01(g.hash3(ni, nj, hv)));   /* a road between towns runs as straight as the ground allows (2026-10-08); a trail wanders */
+              if (ng < gsc[nk]) { gsc[nk] = ng; from[nk] = k; hpush(heap, ng + Math.hypot(ni - ti, nj - tj) * CS, nk); }
+            }
           }
+          return null;
         }
+        /* a winding road may be led by waypoints (wg_tables roadVia["A>B"], face tiles: tools/mountain/make_hill.js takes the Lake Castle road
+           through the valley between its hill's knobs); each reach between them is searched and straightened on its own */
+        const VIA = wind && T.roadVia ? (T.roadVia[A.id + '>' + Bp.id] || []).map(([vx, vy]) => [vx + 0.5, -(vy + 0.5)]) : [];
+        const stops = [[x, y], ...VIA, [tx, ty]], legs = [];
+        for (let q = 0; q + 1 < stops.length; q++) { const L = search(stops[q][0], stops[q][1], stops[q + 1][0], stops[q + 1][1]); if (!L) { legs.length = 0; break; } legs.push(L); }
+        const found = legs.length > 0;
         if (found) {
-          const pts = []; for (let k = tk; k >= 0; k = from[k]) { const i = k % GW, j = (k - i) / GW; pts.push([gx0 + i * CS, gy0 + j * CS]); if (k === sk) break; }
-          pts.reverse(); pts[0] = [x, y]; pts[pts.length - 1] = [tx, ty];
+          const pts = [];
           /* STRAIGHTEN (2026-10-08: "as straight as possible from Ashvale to Saltmere"): a road skips every corner it can - from
              each point, on to the farthest point it reaches in a straight line over open ground - so it runs in long straight
              reaches and bends only where water, rock or a town is in the way. A trail keeps its wander. */
-          if (!trail && pts.length > 2) {
-            const clear = (a2, b2) => { const n = Math.ceil(Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) / (CS / 2)); for (let q = 1; q < n; q++) { const px = a2[0] + (b2[0] - a2[0]) * q / n, py = a2[1] + (b2[1] - a2[1]) * q / n, ci = Math.round((px - gx0) / CS), cj = Math.round((py - gy0) / CS); if (ci < 0 || cj < 0 || ci >= GW || cj >= GH || !ok(ci, cj)) return false; } return true; };
-            const st = [pts[0]]; let i0 = 0;
-            while (i0 < pts.length - 1) { let j = pts.length - 1; while (j > i0 + 1 && !clear(pts[i0], pts[j])) j--; st.push(pts[j]); i0 = j; }
-            const fine = [st[0]];   /* back to points every step or so, so the road is laid (and lit) as before */
-            for (let q = 1; q < st.length; q++) { const a2 = st[q - 1], b2 = st[q], n = Math.max(1, Math.ceil(Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) / CS)); for (let r = 1; r <= n; r++) fine.push([a2[0] + (b2[0] - a2[0]) * r / n, a2[1] + (b2[1] - a2[1]) * r / n]); }
+          const hAt = (px, py) => { const fi = (px - gx0) / CS, fj = (py - gy0) / CS, i0 = Math.floor(fi), j0 = Math.floor(fj), u = fi - i0, v = fj - j0;   /* the grid's ground, bilinear (a winding road's grade) */
+            const c = (i, j) => { i = Math.max(0, Math.min(GW - 1, i)); j = Math.max(0, Math.min(GH - 1, j)); ok(i, j); const hh = hgt[j * GW + i]; return hh > -1e8 ? hh : 0; };
+            return (c(i0, j0) * (1 - u) + c(i0 + 1, j0) * u) * (1 - v) + (c(i0, j0 + 1) * (1 - u) + c(i0 + 1, j0 + 1) * u) * v; };
+          const open = (px, py) => { const ci = Math.round((px - gx0) / CS), cj = Math.round((py - gy0) / CS); return ci >= 0 && cj >= 0 && ci < GW && cj < GH && ok(ci, cj); };
+          const clear = (a2, b2) => { const L2 = Math.hypot(b2[0] - a2[0], b2[1] - a2[1]), n = Math.ceil(L2 / (CS / 2)); let hp = wind ? hAt(a2[0], a2[1]) : 0;
+            for (let q = 1; q < n; q++) { const px = a2[0] + (b2[0] - a2[0]) * q / n, py = a2[1] + (b2[1] - a2[1]) * q / n; if (!open(px, py)) return false;
+              if (wind) { const hq = hAt(px, py); if (Math.abs(hq - hp) > WIND_GRADE * L2 / n + 0.02) return false; hp = hq; } }
+            return true; };
+          for (const leg of legs) {
+            let st = leg;
+            if (!trail && leg.length > 2) { st = [leg[0]]; let i0 = 0; while (i0 < leg.length - 1) { let j = leg.length - 1; while (j > i0 + 1 && !clear(leg[i0], leg[j])) j--; st.push(leg[j]); i0 = j; } }
+            for (let q = pts.length ? 1 : 0; q < st.length; q++) pts.push(st[q]);
+          }
+          /* a winding road's corners are rounded into bends (Chaikin, three passes; a cut that would leave open ground keeps its corner) */
+          if (wind) for (let pass = 0; pass < 3 && pts.length > 2; pass++) {
+            const sm = [pts[0]];
+            for (let q = 0; q + 1 < pts.length; q++) {
+              const a2 = pts[q], b2 = pts[q + 1], c1 = [a2[0] * 0.75 + b2[0] * 0.25, a2[1] * 0.75 + b2[1] * 0.25], c2 = [a2[0] * 0.25 + b2[0] * 0.75, a2[1] * 0.25 + b2[1] * 0.75];
+              if (q > 0) sm.push(open(c1[0], c1[1]) ? c1 : a2);
+              if (q + 2 < pts.length) sm.push(open(c2[0], c2[1]) ? c2 : b2);
+            }
+            sm.push(pts[pts.length - 1]); pts.length = 0; pts.push(...sm);
+          }
+          if (!trail && (legs.length > 1 || legs[0].length > 2)) {   /* back to points every step or so, so the road is laid (and lit) as before */
+            const fine = [pts[0]];
+            for (let q = 1; q < pts.length; q++) { const a2 = pts[q - 1], b2 = pts[q], n = Math.max(1, Math.ceil(Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) / CS)); for (let r = 1; r <= n; r++) fine.push([a2[0] + (b2[0] - a2[0]) * r / n, a2[1] + (b2[1] - a2[1]) * r / n]); }
             pts.length = 0; pts.push(...fine);
           }
           layBridges(A.face, pts, w0, A.hb - 0.75);   /* a road over narrow water crosses it on a bridge (with its torches) */
@@ -461,7 +494,7 @@
             }
           }
         }
-        for (const S of (T.decor || [])) ROAD.push({ k: S.k, x: S.x, y: S.y, w: 1, h: 1, face: S.face, ry: S.ry || 0, pal: S.pal, s: S.s });   /* scenery out in the world (data/decor.json kinds; tools/decor/place_trail_decor.js) */
+        for (const S of (T.decor || [])) ROAD.push(Object.assign({ k: S.k, x: S.x, y: S.y, w: 1, h: 1, face: S.face, ry: S.ry || 0, pal: S.pal, s: S.s }, S.dx || S.dz ? { dx: S.dx || 0, dz: S.dz || 0 } : {}));   /* scenery out in the world (data/decor.json kinds; tools/decor/place_trail_decor.js, place_cemetery.js - a railing section on a tile edge: dx/dz off its tile's centre) */
         for (const S of (T.trailSigns || [])) ROAD.push({ k: 'signpost', x: S.x, y: S.y, w: 1, h: 1, face: S.face, arms: S.arms });   /* the great mountain's trails (tools/mountain/make_signs.js) */
       }
       /* hand-laid trails (T.trails, tools/mountain/make_trails.js: the great mountain's safe road, its dangerous climb and the way to it
