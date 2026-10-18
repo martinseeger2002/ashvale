@@ -21,7 +21,8 @@
     "kiteshield",
     "robe",
     "torch",
-    "boots"
+    "boots",
+    "robelegs"
    ],
    "cosmetic": [
     "hat",
@@ -54,7 +55,8 @@
    "armour/robe": "body",
    "armour/boots": "feet",
    "cosmetic/robe": "body",
-   "jewellery/charm": "shield"
+   "jewellery/charm": "shield",
+   "armour/robelegs": "legs"
   },
   "traits": {
    "Prayer XP": [

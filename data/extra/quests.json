@@ -1898,6 +1898,239 @@
    "done": [
     "The trail log has a new page headed 'West', and nothing written under it yet."
    ]
+  },
+  "tower_beacon": {
+   "name": "The Frostspire Beacon",
+   "giver": "halvard",
+   "story": 1,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "mt_tower",
+     "goal": {
+      "bring": "logs",
+      "n": 5
+     },
+     "reward": "xp:firemaking:400",
+     "talk": [
+      "You climbed up here on purpose? Then you can be useful on purpose. The beacon at the top of the tower has gone out.",
+      "It is not a pretty light. It tells the valley the Circle is still watching, and it tells the things in the dark the same.",
+      "Five logs. There are no trees up here, which is why nobody up here has any."
+     ],
+     "progress": [
+      "Five logs for the beacon. The pines on the way up the safe road will give them, if you bring a hatchet."
+     ],
+     "complete": [
+      "Five. Dry, too. It will be lit within the hour, and the castle will see it from the walls."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "mt_tower",
+     "goal": {
+      "talk": "pell"
+     },
+     "reward": "xp:magic:300",
+     "talk": [
+      "Now tell Pell the beacon is fed. He keeps the log of it, and he will want to write something important-sounding in it.",
+      "Do not let him sell you anything while you are there. Or do. I am not your mother."
+     ],
+     "progress": [
+      "Pell is at his stall in the yard. Tell him the beacon is fed."
+     ],
+     "complete": [
+      "Beacon fed! I'll write it down. 'Fed, by a traveller, with logs.' The Archmage says my entries are too long."
+     ]
+    }
+   ],
+   "done": [
+    "The beacon burns every night now. The Archmage pretends not to look at it from the yard."
+   ]
+  },
+  "stolen_ink": {
+   "name": "The Stolen Ink",
+   "giver": "halvard",
+   "after": "tower_beacon",
+   "story": 2,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "mt_pass",
+     "goal": {
+      "kill": "frost_goblin",
+      "n": 3
+     },
+     "reward": "xp:magic:600",
+     "talk": [
+      "The Circle writes in frost ink. It does not fade, it does not run, and the frost goblins think it is the shiniest thing in the world.",
+      "They have stolen a winter's worth from our stores and taken it down to the rocks above the pass.",
+      "Persuade three of them that ink is not worth it. I leave the method to you, but I am a wizard, and I have an opinion."
+     ],
+     "progress": [
+      "The frost goblins keep to the rocks above the High Pass. Three of them."
+     ],
+     "complete": [
+      "Three. They will tell the others, in their fashion, which is mostly shrieking."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "mt_tower",
+     "goal": {
+      "bring": "frost_ink",
+      "n": 3
+     },
+     "reward": "xp:magic:600",
+     "talk": [
+      "Now the ink itself. Three pots. The goblins carry it about with them because they cannot think where else to put it.",
+      "If a pot is cracked, bring it anyway. Frost ink in a cracked pot is still frost ink, only colder."
+     ],
+     "progress": [
+      "Three pots of frost ink. The frost goblins above the pass carry it."
+     ],
+     "complete": [
+      "Three, and not one opened. You have more patience than any apprentice I have ever had."
+     ]
+    }
+   ],
+   "done": [
+    "Pell has labelled the ink cupboard 'NOT FOR GOBLINS'. The Archmage says this will not help."
+   ]
+  },
+  "scattered_tomes": {
+   "name": "The Scattered Tomes",
+   "giver": "halvard",
+   "after": "stolen_ink",
+   "story": 3,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "mt_ledge",
+     "goal": {
+      "talk": "aled"
+     },
+     "reward": "tome_echoes",
+     "talk": [
+      "The Circle once had three books worth keeping. In a weak moment, years apart, I lent all three to people who live on this mountain.",
+      "Aled on the ledge has the Tome of Echoes, Wyn at the shrine the Tome of Stones, and Tamsin at the Far Foot the Tome of the Far Road.",
+      "Start with Aled. He will say he has not finished it. He has had it for thirty years."
+     ],
+     "progress": [
+      "Aled's ledge is down the safe road's west shoulder. Ask him for the Tome of Echoes."
+     ],
+     "complete": [
+      "The Tome of Echoes? Take it. I know it by heart, and the echoes know it better. Tell Halvard I found the ending sad."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "mt_shrine",
+     "goal": {
+      "talk": "wyn"
+     },
+     "reward": "tome_stones",
+     "talk": [
+      "Wyn has the Tome of Stones. Wyn will want to tell you what it means, at length, beside the stones.",
+      "Let him. It is cheaper than arguing, and he is usually right."
+     ],
+     "progress": [
+      "The shrine is on the north shoulder, on the safe road. Ask Wyn for the Tome of Stones."
+     ],
+     "complete": [
+      "The book of the stones. Read the third chapter by them sometime; they like to hear it. Go carefully, it is older than the shrine."
+     ]
+    },
+    {
+     "id": 3,
+     "zone": "mt_farside",
+     "goal": {
+      "talk": "tamsin"
+     },
+     "reward": "tome_far_road",
+     "talk": [
+      "The last is the Tome of the Far Road, with Tamsin at the Far Foot. She borrowed it for the maps and kept it for the warnings.",
+      "It is the one I most want back. Do not read the last page on the way up. Or do, and then walk faster."
+     ],
+     "progress": [
+      "Tamsin waits at the Far Foot, at the bottom of both ways on the far side. Ask her for the Tome of the Far Road."
+     ],
+     "complete": [
+      "The Far Road? Here. I copied the maps. I didn't copy the last page; I didn't want it in my own hand."
+     ]
+    },
+    {
+     "id": 4,
+     "zone": "mt_tower",
+     "goal": {
+      "talk": "pell"
+     },
+     "reward": "xp:magic:1500",
+     "talk": [
+      "All three. Read them on the way up, if you have not; they were written to be read side by side, and they sulk apart.",
+      "Then show them to Pell. He keeps the Circle's catalogue, and he has been waiting thirty years to tick them off."
+     ],
+     "progress": [
+      "Show the three tomes to Pell at his stall in the yard. Keep them after; the Circle lends its books to its friends."
+     ],
+     "complete": [
+      "Echoes, Stones, the Far Road - all three ticked! The Archmage read the last page over your shoulder. He says the chain hums colder than last year.",
+      "Keep them. He says a book on a shelf up here helps nobody, and you have already read the part that matters."
+     ]
+    }
+   ],
+   "done": [
+    "The three books sit side by side in the tower now. Halvard reads the last page of the third one every night."
+   ]
+  },
+  "archmage_trial": {
+   "name": "The Archmage's Trial",
+   "giver": "halvard",
+   "after": "scattered_tomes",
+   "story": 3,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "mt_pass",
+     "goal": {
+      "kill": "pass_bandit",
+      "n": 3
+     },
+     "reward": "xp:magic:800",
+     "talk": [
+      "The Circle takes no members who cannot keep a road. Watching the stars is easy; getting home from watching them is not.",
+      "Clear the pass of three bandits. Then three frost goblins. Then come back up and we will see about a cloak worthy of the name."
+     ],
+     "progress": [
+      "Three pass bandits on the High Pass, then three frost goblins."
+     ],
+     "complete": [
+      "Three bandits. Now the goblins, and then come up."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "mt_pass",
+     "goal": {
+      "kill": "frost_goblin",
+      "n": 3
+     },
+     "reward": "wizard_focus",
+     "talk": [
+      "The goblins now. Three. They will be expecting you, having heard the bandits.",
+      "Come back up when it is done. The cold will tell me before you do."
+     ],
+     "progress": [
+      "Three frost goblins in the rocks above the pass."
+     ],
+     "complete": [
+      "The road is kept. Take this focus: ice from the summit that has not melted since the chain was forged.",
+      "Welcome to the Circle of the Long Night. Pell will sell you the cloak at a member's price, which is the same price, said more warmly."
+     ]
+    }
+   ],
+   "done": [
+    "You are of the Circle now. Halvard nods when you pass, which from him is a speech."
+   ]
   }
  }
 }

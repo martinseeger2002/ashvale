@@ -450,6 +450,10 @@
      "one_in": 1
     },
     {
+     "item": "frost_ink",
+     "one_in": 2
+    },
+    {
      "item": "sword_t1",
      "one_in": 3
     }

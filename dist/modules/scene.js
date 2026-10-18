@@ -1467,6 +1467,33 @@
             torches.push({ f, f2, ph: hash2(o.x, o.y) * 10, x, y, z, night: !!o.night, tend: (o.zone === 'village' || o.zone === 'saltmere'), tx: o.x, ty: o.y, lv: o.lv | 0 });
             break;
           }
+          case 'wtower': {   /* the Frostspire (2026-10-18, tools/mountain/make_tower.js): the wizards' round tower on the great mountain's crown -
+               a stone shaft on a plinth, string courses, windows climbing round it, a railed balcony, a lit top room under a blue cone roof
+               and the beacon on its spire; the door (o.face) towards the trail up from the High Pass. Its tiles are 'X' in the zone. */
+            const TW = o.w || 7, cx = o.x + TW / 2, cz = o.y + (o.h || TW) / 2, yb = heightAt(cx, cz);
+            const ST = 0x8e9098, DK = 0x6a6c74, TRIM = 0xc8ccd8, BLUE = 0x2c3488, R = TW * 0.41;
+            const F = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] }[o.face || 's'], fy = Math.atan2(F[0], F[1]), SX = -F[1], SZ = F[0];
+            B.add('cyl32', DK, cx, yb - 0.4, cz, R * 2 + 1.2, 2.0, R * 2 + 1.2);
+            B.add('cyl32', ST, cx, yb + 8.5, cz, R * 2, 17, R * 2);
+            for (const h of [4.2, 8.6, 13]) B.add('cyl32', DK, cx, yb + h, cz, R * 2 + 0.2, 0.28, R * 2 + 0.2);
+            B.add('cyl32', DK, cx, yb + 17.2, cz, R * 2 + 1.4, 0.45, R * 2 + 1.4);
+            for (let k = 0; k < 24; k++) { const a = k / 24 * Math.PI * 2; B.add('box', DK, cx + Math.cos(a) * (R + 0.6), yb + 17.85, cz + Math.sin(a) * (R + 0.6), 0.18, 0.85, 0.18); }
+            B.add('cyl32', DK, cx, yb + 18.3, cz, R * 2 + 1.25, 0.12, R * 2 + 1.25);
+            B.add('cyl32', ST, cx, yb + 19.4, cz, R * 1.55, 3.6, R * 1.55);
+            for (let k = 0; k < 4; k++) { const a = fy + k * Math.PI / 2; B.add('box', 0xffd27a, cx + Math.sin(a) * (R * 0.775 + 0.01), yb + 19.5, cz + Math.cos(a) * (R * 0.775 + 0.01), 0.55, 1.0, 0.08, a); }
+            for (let k = 0; k < 9; k++) { const a = fy + 1.1 + k * 0.95, h = 3.1 + k * 1.5; B.add('box', 0x1c1e2a, cx + Math.sin(a) * (R + 0.01), yb + h, cz + Math.cos(a) * (R + 0.01), 0.45, 0.85, 0.1, a); B.add('box', TRIM, cx + Math.sin(a) * (R + 0.04), yb + h + 0.5, cz + Math.cos(a) * (R + 0.04), 0.6, 0.12, 0.12, a); }
+            { const roof = mesh(new THREE.ConeGeometry(R * 1.05, 6.2, 16), BLUE, cx, yb + 24.3, cz); group.add(roof); }
+            B.add('cyl32', TRIM, cx, yb + 21.25, cz, R * 2.1 + 0.1, 0.18, R * 2.1 + 0.1);
+            B.add('cyl', TRIM, cx, yb + 27.9, cz, 0.1, 1.4, 0.1);
+            { const orb = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 8), new THREE.MeshBasicMaterial({ color: 0x9fe0ff })); orb.position.set(cx, yb + 28.75, cz); group.add(orb); }
+            const dx = cx + F[0] * (R + 0.02), dz = cz + F[1] * (R + 0.02);
+            B.add('box', 0x4a2e18, dx, yb + 1.2, dz, 1.3, 2.4, 0.16, fy);
+            B.add('box', TRIM, dx + F[0] * 0.05, yb + 2.55, dz + F[1] * 0.05, 1.7, 0.28, 0.2, fy);
+            for (const s2 of [-1, 1]) B.add('box', TRIM, dx + SX * s2 * 0.78 + F[0] * 0.05, yb + 1.25, dz + SZ * s2 * 0.78 + F[1] * 0.05, 0.22, 2.5, 0.2, fy);
+            B.add('box', DK, cx + F[0] * (R + 0.7), yb + 0.12, cz + F[1] * (R + 0.7), 2.0, 0.3, 1.0, fy);
+            for (const s2 of [-1, 1]) { const bx = dx + SX * s2 * 1.7 + F[0] * 0.08, bz = dz + SZ * s2 * 1.7 + F[1] * 0.08; B.add('box', BLUE, bx, yb + 5.2, bz, 0.8, 2.4, 0.05, fy); B.add('box', TRIM, bx, yb + 6.45, bz, 0.95, 0.08, 0.08, fy); B.add('box', TRIM, bx + F[0] * 0.03, yb + 5.4, bz + F[1] * 0.03, 0.32, 0.32, 0.03, fy + Math.PI / 4); }
+            break;
+          }
           case 'signpost': {   /* a fingerpost by a road between towns (2026-10-18, src/wg_paths.js SIGNPOSTS): an oak post, one arm per town,
                the name painted on both faces with the arrow at the arm's tip, so it reads the right way from either side */
             const WOOD = 0x5a3b1e;

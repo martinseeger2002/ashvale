@@ -56,6 +56,7 @@ TRACKS = [
     ('mountain', 'The Switchback Road', 'Snow on the heights and the long road climbing.', 'horn', 92, 'dorian', 4, 'march', True, 'drone'),
     ('mt_shrine', "The Hermit's Altar", 'Three stones, thin air and a hush above the clouds.', 'flute', 66, 'lydian', 3, 'none', True, 'drone'),
     ('mt_pass', 'Teeth of the Pass', 'Wolves, knives and a wind that wants you off the ledge.', 'strings', 124, 'phrygian', 4, 'dark', True, 'pulse'),
+    ('mt_tower', 'The Frostspire', 'Starlight, cold stone and old books at the top of the world.', 'harp', 72, 'lydian', 3, 'none', True, 'drone'),
 ]
 ROOTS = [60, 62, 64, 65, 67, 57, 59]   # C D E F G A B (lead octave)
 # night versions (2026-10-18, the operator: "make sure there is some song versions for night time"): the same tune - the same seed,
@@ -73,6 +74,7 @@ NIGHT = {
     'mountain': ('Frostbound Switchbacks', 'The road climbs on in silence through the frozen turns.'),
     'mt_shrine': ('Moonlit Shrine', 'The stones keep still in the high shadow.'),
     'mt_pass': ('Cold Hunt by Night', 'Eyes in the snow and the pass gone quiet.'),
+    'mt_tower': ('Beacon Over the Snow', 'The beacon burns and the stars wheel over the summit.'),
     'castle': ('Royal Court by Moonlight', 'Whispers drift across the water under the banners.'),
     'lakes': ('Stone Bridge in Moonlight', 'Still water holds the moon; the bridge stands quiet.'),
     'wolfden': ("The Pack's Silent Watch", 'The high air bites while the den watches from afar.'),

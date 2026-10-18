@@ -694,6 +694,125 @@
    "model": "item.pelt",
    "value": 16,
    "attributes": []
+  },
+  "wizard_cloak": {
+   "name": "Wizard cloak top",
+   "description": "The Circle of the Long Night's own cloak, deep blue and lined with silver thread that holds the cold out and the magic in. Magic +10, Defence +12. Needs Magic 40. Sold at the Frostspire.",
+   "collection": "ASHVALE The Frostspire",
+   "game": "ashvale",
+   "category": "armour",
+   "subcategory": "robe",
+   "tier": 5,
+   "weight": 1600,
+   "req": {
+    "magic": 40
+   },
+   "model": "gear.robe",
+   "value": 12000,
+   "attributes": [
+    {
+     "trait_type": "Magic",
+     "value": 10
+    },
+    {
+     "trait_type": "Defence",
+     "value": 12
+    }
+   ]
+  },
+  "wizard_cloak_bottoms": {
+   "name": "Wizard cloak bottoms",
+   "description": "The long skirts of the Circle's cloak, the hem bound in leather so it does not snag on the mountain's rocks. Magic +7, Defence +8. Needs Magic 40. Sold at the Frostspire.",
+   "collection": "ASHVALE The Frostspire",
+   "game": "ashvale",
+   "category": "armour",
+   "subcategory": "robelegs",
+   "tier": 5,
+   "weight": 1200,
+   "req": {
+    "magic": 40
+   },
+   "model": "gear.robelegs",
+   "value": 8500,
+   "attributes": [
+    {
+     "trait_type": "Magic",
+     "value": 7
+    },
+    {
+     "trait_type": "Defence",
+     "value": 8
+    }
+   ]
+  },
+  "wizard_focus": {
+   "name": "Wizard's focus",
+   "description": "A sphere of clear ice that never melts, given by Archmage Halvard to those who pass his trial. Worn in the shield hand: Magic +5.",
+   "collection": "ASHVALE The Frostspire",
+   "game": "ashvale",
+   "category": "jewellery",
+   "subcategory": "charm",
+   "tier": 3,
+   "weight": 300,
+   "req": {
+    "magic": 30
+   },
+   "model": "gear.rosary",
+   "value": 2500,
+   "attributes": [
+    {
+     "trait_type": "Magic",
+     "value": 5
+    }
+   ]
+  },
+  "frost_ink": {
+   "name": "Frost ink",
+   "description": "A pot of the Frostspire's ink, pale blue and cold enough to sting. The Circle writes with it because it does not fade, and the frost goblins steal it because it is shiny.",
+   "collection": "ASHVALE The Frostspire",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "curio",
+   "weight": 300,
+   "model": "item.potion",
+   "value": 15,
+   "attributes": []
+  },
+  "tome_echoes": {
+   "name": "Tome of Echoes",
+   "description": "The Circle's first book: the mountain was raised to be a watchtower, and every echo on it is a word the watchers once said aloud and the stone kept. Aled has read it so often he answers it.",
+   "collection": "ASHVALE The Frostspire",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "note",
+   "weight": 600,
+   "model": "item.note",
+   "value": 1,
+   "attributes": []
+  },
+  "tome_stones": {
+   "name": "Tome of Stones",
+   "description": "The Circle's second book: the Three Stones at the shrine were the first wardens of the mountain, wizards who stood their watch so long they forgot to stop. Wyn swears they still hum the hours.",
+   "collection": "ASHVALE The Frostspire",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "note",
+   "weight": 600,
+   "model": "item.note",
+   "value": 1,
+   "attributes": []
+  },
+  "tome_far_road": {
+   "name": "Tome of the Far Road",
+   "description": "The Circle's third book: a map of the roads beyond the mountain, and a warning in frost ink that the Ember King's chain was forged on this summit and must be kept cold here, or it will soften there.",
+   "collection": "ASHVALE The Frostspire",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "note",
+   "weight": 600,
+   "model": "item.note",
+   "value": 1,
+   "attributes": []
   }
  }
 }

@@ -570,6 +570,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.halvard": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.hare": {
     "id": null,
     "v": 1,
@@ -739,6 +745,12 @@
     "kind": "json"
    },
    "char.pax": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.pell": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1482,6 +1494,12 @@
     "api": 1,
     "kind": "json"
    },
+   "gear.robelegs": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "gear.rosary": {
     "id": null,
     "v": 4,
@@ -1955,6 +1973,12 @@
     "kind": "json"
    },
    "mt_farside": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json"
+   },
+   "mt_tower": {
     "id": null,
     "v": 2,
     "api": 1,
