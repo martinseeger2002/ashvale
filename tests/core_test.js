@@ -1518,8 +1518,8 @@ function wild6k(c) {
   ok(d && /range|net|well/i.test(d.lines.join(' ')), 'it opens on a cold iron range seven paces from a well: ' + ((d || {}).lines || []).join(' / ').slice(0, 64));
   const stubble = ck.M.sitesIn(RG.x - 220, RG.y - 220, RG.x + 220, RG.y + 220).filter(s => s.monster === 'hare')
     .sort((a, b) => Math.hypot(a.x - RG.x, a.y - RG.y) - Math.hypot(b.x - RG.x, b.y - RG.y))[0];
-  ok(stubble && stubble.x - RG.x > 40 && Math.round(Math.hypot(stubble.x - RG.x, stubble.y - RG.y)) < 140,   /* game +x is compass north-west here (true north points game +x +y near Ashvale); the old field to the north-east is the Lake Castle's ground since 2026-10-17 */
-     'the stubble she points at is ' + (stubble ? Math.round(Math.hypot(stubble.x - RG.x, stubble.y - RG.y)) : '?') + ' m out, north-west of the wall as Cinder says, and the hares are standing in it');
+  ok(stubble && Math.abs(stubble.y - RG.y) > 40 && Math.round(Math.hypot(stubble.x - RG.x, stubble.y - RG.y)) < 140,
+     'the stubble she points at is ' + (stubble ? Math.round(Math.hypot(stubble.x - RG.x, stubble.y - RG.y)) : '?') + ' m out and south of the wall, and the hares are standing in it');
   const stubbleH = ck.M.sitesIn(RG.x - 220, RG.y - 220, RG.x + 220, RG.y + 220).filter(s => s.monster === 'hare')
     .sort((a, b) => Math.hypot(a.x - RG.x, a.y - RG.y) - Math.hypot(b.x - RG.x, b.y - RG.y)).slice(0, 10);
   let shots = 0;

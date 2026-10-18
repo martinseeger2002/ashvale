@@ -153,7 +153,7 @@
     function setSetPieces(list) {
       const PIECES = [], tmp = ctx.newSample();
       ctx.PIECES = PIECES; ctx.PIECE_BY_ID = new Map(); BUCKET.clear(); SEG = [];
-      const ROAD = []; ctx.ROAD_OBJ = ROAD;
+      const ROAD = [], BRIDGE_LIT = []; ctx.ROAD_OBJ = ROAD;   /* BRIDGE_LIT: torches on road bridges, which stand on the road and so skip the verge filter below */
       const inPiece = (face, gx, gy) => PIECES.some(q => q.face === face && gx >= q.x && gy >= q.y && gx < q.x + q.w && gy < q.y + q.h);
       function lightTrail(face, pts, w0) {   /* lit posts along a trail between towns (the road to Saltmere) */
         if (!pts || pts.length < 2) return;
@@ -359,6 +359,25 @@
             for (let q = 1; q < st.length; q++) { const a2 = st[q - 1], b2 = st[q], n = Math.max(1, Math.ceil(Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) / CS)); for (let r = 1; r <= n; r++) fine.push([a2[0] + (b2[0] - a2[0]) * r / n, a2[1] + (b2[1] - a2[1]) * r / n]); }
             pts.length = 0; pts.push(...fine);
           }
+          /* a road over lake water - a narrow arm, or an editor river whose bed the lake fill keeps above the grid's 0.25 m (the
+             Lake Castle's river, tools/castle/make_waters.js) - crosses it on a bridge (kind 2, drawn 'B' by wg_tiles) when the
+             water is no wider than BRIDGE metres along the road, as a footpath does; wider water is the search's to go round */
+          { const wetAt = (px, py) => { ctx.foldInto(A.face, px, py, SB); const s1 = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false); return s1.river >= 3 || s1.h < ctx.WATER; };
+            const along = []; for (let q = 0; q + 1 < pts.length; q++) { const a2 = pts[q], b2 = pts[q + 1], n = Math.max(1, Math.ceil(Math.hypot(b2[0] - a2[0], b2[1] - a2[1]))); for (let r = 0; r < n; r++) along.push([a2[0] + (b2[0] - a2[0]) * r / n, a2[1] + (b2[1] - a2[1]) * r / n]); }
+            along.push(pts[pts.length - 1]);
+            for (let i = 0; i < along.length; i++) {
+              if (!wetAt(along[i][0], along[i][1])) continue;
+              let j = i; while (j + 1 < along.length && wetAt(along[j + 1][0], along[j + 1][1])) j++;
+              const a2 = along[Math.max(0, i - 2)], b2 = along[Math.min(along.length - 1, j + 2)];
+              if (Math.hypot(along[j][0] - along[i][0], along[j][1] - along[i][1]) <= BRIDGE) {
+                segs.push(A.face, a2[0], a2[1], b2[0], b2[1], w0, 2, A.hb - 0.75);
+                /* torches: a pair on the verge at each bank, and a pair at the crest on the deck's edges (the arch: src/scene.js archRise) */
+                const L2 = Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) || 1, nx = -(b2[1] - a2[1]) / L2, ny = (b2[0] - a2[0]) / L2, mid = along[(i + j) >> 1];
+                for (const [q, off] of [[a2, w0 + 0.7], [b2, w0 + 0.7], [mid, Math.max(0.6, w0 - 0.2)]]) for (const side of [-1, 1])
+                  BRIDGE_LIT.push({ k: 'torch', x: Math.floor(q[0] + nx * off * side), y: Math.floor(-(q[1] + ny * off * side)), w: 1, h: 1, face: A.face });
+              }
+              i = j;
+            } }
           let px0 = pts[0][0], py0 = pts[0][1];
           for (let k = 2; k < pts.length; k += 2) { const q = pts[Math.min(k, pts.length - 1)]; segs.push(A.face, px0, py0, q[0], q[1], w0, RK, A.hb - 0.75); px0 = q[0]; py0 = q[1]; }
           segs.push(A.face, px0, py0, tx, ty, w0, RK, A.hb - 0.75);
@@ -385,7 +404,7 @@
         for (let by = by0; by <= by1; by++) for (let bx = bx0; bx <= bx1; bx++) { const kk = bkey(f, bx, by); if (!BUCKET.has(kk)) BUCKET.set(kk, []); BUCKET.get(kk).push(k); }
       }
       /* a lamp stands on the verge, never on a path: where trails meet or bend, drop any that came to stand on one (2026-10-07) */
-      ctx.ROAD_OBJ = ROAD.filter(o => pathDist(o.face, o.x + 0.5, -(o.y + 0.5)) > 0.3);
+      ctx.ROAD_OBJ = ROAD.filter(o => pathDist(o.face, o.x + 0.5, -(o.y + 0.5)) > 0.3).concat(BRIDGE_LIT);
       if (ctx.clearCaches) ctx.clearCaches();
       return PIECES.map(p => ({ id: p.id, face: p.face, x: p.x, y: p.y, w: p.w, h: p.h, hb: p.hb }));
     }

@@ -687,6 +687,16 @@
         corner = (cx, cy) => hc[Math.max(0, Math.min(H, cy)) * (W + 1) + Math.max(0, Math.min(W, cx))];
       } else {
         const P = map.inPiece; chunks = new Map();
+        /* the arch of a world bridge (2026-10-17, the operator: "a nice arching bridge with torches", the Lake Castle's river): a deck
+           corner rises with its distance to the nearer bank - up to 1.4 m at 5 m out, so a 10 m span peaks in its middle and a longer one
+           runs level over the top. Entities ride the same corners (heightAt), so the walk goes over the crest. */
+        const ARCH = new Map(), dryT = (x, y) => { const t = at(x, y); return t !== '~' && t !== 'v' && t !== 'B'; };
+        const archRise = (cx, cy) => {
+          const k = cx + ',' + cy; let r = ARCH.get(k); if (r != null) return r;
+          let d = 5;
+          for (let y = cy - 6; y < cy + 6; y++) for (let x = cx - 6; x < cx + 6; x++) if (dryT(x, y)) d = Math.min(d, Math.hypot(Math.max(0, x - cx, cx - x - 1), Math.max(0, y - cy, cy - y - 1)));
+          r = 1.4 * Math.sin(Math.min(1, d / 5) * Math.PI / 2); ARCH.set(k, r); if (ARCH.size > 20000) ARCH.clear(); return r;
+        };
         const depth = (cx, cy) => {   /* tiles from this corner to the nearest tile outside the set pieces (0 = on the edge, max 8) */
           for (let r = 1; r <= 8; r++) for (let y = cy - r; y < cy + r; y++) for (let x = cx - r; x < cx + r; x++) {
             if (y !== cy - r && y !== cy + r - 1 && x !== cx - r && x !== cx + r - 1) continue;
@@ -756,6 +766,7 @@
                the water like a brown mesa (Saltmere quay, 2026-10-04: "fix how everything looks"). A deck
                over dry land (a bridge, a pier head) still rides that land. */
             sh = Math.max(map.groundH(cx, cy), s);
+            if (!P(cx - 1, cy - 1) && !P(cx, cy - 1) && !P(cx - 1, cy) && !P(cx, cy)) sh += archRise(cx, cy);   /* a bridge out in the world arches over its river; a town's piers and docks stay flat */
           } else {
             let nW = 0, rim = -Infinity;
             if (isW(t00)) { nW++; rim = Math.max(rim, surfOf(cx - 1, cy - 1)); }
