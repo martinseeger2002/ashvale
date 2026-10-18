@@ -4,7 +4,7 @@
      the Far Foot (Tamsin), where the town beyond will one day be reached.
    Each zone's ground is the world's own tiles there (the trails, tools/mountain/make_trails.js, and the cliffs, src/wg_tiles.js), the
    trail drawn as dirt ('d') inside a camp so the worldgen takes no path exits from its edges (src/wg_paths.js would wander new paths out
-   of a 'p' on a piece's edge). Monsters are the mountain's own (tools/mountain/make_mountain_extras.py), with their own dice.
+   of a 'p' on a piece's edge). No notice boards: a 'wsign' is the keep's scoreboard; the ways are signed by tools/mountain/make_signs.js. Monsters are the mountain's own (tools/mountain/make_mountain_extras.py), with their own dice.
      node tools/mountain/make_camps.js     (after make_trails.js and make_mountain_extras.py) */
 'use strict';
 const fs = require('fs'), path = require('path'), ROOT = path.join(__dirname, '..', '..');
@@ -21,13 +21,13 @@ const along = (pts, f) => { const L = []; let tot = 0; for (let i = 1; i < pts.l
 const dpts = WPJ.trails.danger, iw = dpts.findIndex(p => Math.hypot(p[0] - WP.warden.x, p[1] - WP.warden.y) < 6), ip = dpts.findIndex(p => Math.hypot(p[0] - WP.pass.x, p[1] - WP.pass.y) < 6);
 const CRAGS = along(dpts.slice(Math.max(0, iw), ip > 0 ? ip + 1 : dpts.length), 0.5);
 const CAMPS = [
-  { id: 'mt_lodge', name: 'Foothill Lodge', at: WP.lodge, w: 20, h: 16, level: 'safe', npc: 'orla', npcName: 'Orla the hunter', quests: ['flask_for_the_hermit', 'wolves_on_the_climb'], kit: ['tent', 'tent', 'campfire', 'woodpile', 'wsign', 'torch'] },
+  { id: 'mt_lodge', name: 'Foothill Lodge', at: WP.lodge, w: 20, h: 16, level: 'safe', npc: 'orla', npcName: 'Orla the hunter', quests: ['flask_for_the_hermit', 'wolves_on_the_climb'], kit: ['tent', 'tent', 'campfire', 'woodpile', 'torch'] },
   { id: 'mt_shrine', name: 'Shrine of the Three Stones', at: WP.shrine, w: 18, h: 16, shelf: 15, level: 'safe', npc: 'wyn', npcName: 'Keeper Wyn', quests: ['three_stones'], kit: ['cairn', 'cairn', 'cairn', 'altar', 'torch'] },
   { id: 'mt_ledge', name: "Hermit's Ledge", at: WP.ledge, w: 16, h: 14, shelf: 15, level: 'safe', npc: 'aled', npcName: 'Aled the hermit', quests: ['echo_riddle'], kit: ['tent', 'campfire', 'woodpile'] },
-  { id: 'mt_warden', name: "Warden's Post", at: WP.warden, w: 16, h: 14, level: 'safe', npc: 'bryn', npcName: 'Warden Bryn', quests: ['the_high_pass'], kit: ['tent', 'wsign', 'torch', 'torch'] },
+  { id: 'mt_warden', name: "Warden's Post", at: WP.warden, w: 16, h: 14, level: 'safe', npc: 'bryn', npcName: 'Warden Bryn', quests: ['the_high_pass'], kit: ['tent', 'torch', 'torch'] },
   { id: 'mt_crags', name: 'The Crags', at: CRAGS, w: 28, h: 28, shelf: 24, level: '14-20', spawns: [['crag_wolf', 4]], kit: ['woodpile'] },
   { id: 'mt_pass', name: 'The High Pass', at: WP.pass, w: 26, h: 26, shelf: 24, level: '15-22', spawns: [['pass_bandit', 4], ['frost_goblin', 3]], kit: ['tent', 'tent', 'campfire', 'crate'] },
-  { id: 'mt_farside', name: 'Far Foot', at: WP.farside, w: 18, h: 14, level: 'safe', npc: 'tamsin', npcName: 'Tamsin the scout', quests: ['beyond_the_mountain'], kit: ['tent', 'campfire', 'wsign'] },
+  { id: 'mt_farside', name: 'Far Foot', at: WP.farside, w: 18, h: 14, level: 'safe', npc: 'tamsin', npcName: 'Tamsin the scout', quests: ['beyond_the_mountain'], kit: ['tent', 'campfire', 'woodpile'] },
 ];
 /* a level shelf for the camps on the steep flanks: a flatten stroke at the trail's own height there, so the camp stands on a terrace (and
    the cliff rule, which only takes steep ground, leaves it open); the world is read again with the shelves in */
@@ -59,7 +59,6 @@ for (const C of CAMPS) {
   for (const k of C.kit) {
     const p = take(k === 'cairn' ? 3 : 2); if (!p) { console.error('note: no room for a %s in %s', k, C.id); continue; }
     const o = { k, x: p[0] + X0, y: p[1] + Y0, w: 1, h: 1 };
-    if (k === 'wsign') o.text = C.id === 'mt_lodge' || C.id === 'mt_warden' ? 'Safe road: west, past the lodge. Dangerous climb: up, past the warden.' : C.id === 'mt_farside' ? 'Back over the mountain: the Lake Castle.' : C.name;
     objects.push(o);
     if ('tent cairn altar crate woodpile'.split(' ').indexOf(k) >= 0) T[p[1]][p[0]] = 'X';
   }

@@ -428,6 +428,7 @@
           const hq = Math.atan2(Q.y - P.y, Q.x - P.x); if (Math.hypot(Q.x - P.x, Q.y - P.y) > 2) P.arms.push({ t: ar.t, a: +hq.toFixed(3) });
         }
         for (const P of posts) { delete P.by; ROAD.push(P); }
+        for (const S of (T.trailSigns || [])) ROAD.push({ k: 'signpost', x: S.x, y: S.y, w: 1, h: 1, face: S.face, arms: S.arms });   /* the great mountain's trails (tools/mountain/make_signs.js) */
       }
       /* hand-laid trails (T.trails, tools/mountain/make_trails.js: the great mountain's safe road, its dangerous climb and the way to it
          from the castle): path segments like the towns' own, through the cliffs wg_tiles makes of steep high ground, bridged over water */
