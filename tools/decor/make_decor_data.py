@@ -99,6 +99,13 @@ K["rail_fence"] = {"name": "Rail fence", "examine": "Three posts hold up two rai
     "parts": [["box", "darkwood", -1.4, 0.55, 0, 0.14, 1.1, 0.14], ["box", "darkwood", 0, 0.55, 0, 0.14, 1.1, 0.14], ["box", "darkwood", 1.4, 0.55, 0, 0.14, 1.1, 0.14],
               ["box", "wood", 0, 0.9, 0.09, 2.9, 0.09, 0.06], ["box", "wood", -0.7, 0.4, 0.09, 1.45, 0.09, 0.06], ["box", "wood", 0.72, 0.28, 0.09, 1.5, 0.09, 0.06, 0, 0, 0.3]],
     "snow": [["box", SNOW, 0, 0.96, 0.09, 2.9, 0.03, 0.08]]}
+# what stands in the way (src/world.js decorBlock, 2026-10-18: "make solid decor block movement without blocking roads"): "tile" blocks the
+# piece's own tile, "line" is a run of edge walls len metres long along the piece's turn (a fence section); none (prayer flags) you walk
+# under. Never on a path tile: world.js leaves any tile or edge by a path open.
+for k in ("milestone", "lantern_post", "wayshrine", "stone_bench", "fallen_log", "boulders", "broken_cart", "ruin_pillar", "stump_axe",
+          "supply_cache", "standing_stone", "dead_tree"):
+    K[k]["block"] = "tile"
+K["rail_fence"]["block"] = "line"; K["rail_fence"]["len"] = 2.9
 DECOR = {"ashvale3d": "module", "name": "decor", "api": 1, "v": 1,
          "data": {"note": "reusable scenery (tools/decor/make_decor_data.py): parts [shape, colour, x, y, z, sx, sy, sz, ry, rx, rz], colours from a palette; a snowy palette adds the kind's snow parts",
                   "palettes": PALETTES, "kinds": K}}

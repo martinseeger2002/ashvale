@@ -266,7 +266,7 @@
          index, more arrive while you play (lazyTick, core.addZone) */
       const zones = Object.keys(DATA).filter(k => k.indexOf('zone.') === 0).map(k => Object.assign({ id: k.slice(5) }, DATA[k]));
       if (ZINDEX) for (const z of ZINDEX) if (LZ[z.id] && !zones.some(q => q.id === z.id)) zones.push(Object.assign({}, LZ[z.id]));
-      const D = { items: DATA.items.items, monsters: DATA.monsters.monsters, shops: DATA.shops, quests: DATA.quests, rules: DATA.rules, zones, globecfg: DATA.globecfg };
+      const D = { items: DATA.items.items, monsters: DATA.monsters.monsters, shops: DATA.shops, quests: DATA.quests, rules: DATA.rules, zones, globecfg: DATA.globecfg, decor: DATA.decor };   /* decor: solid scenery stands in the way (world.js stampDecor) */
       if (ZINDEX) D.zoneIndex = DATA.zoneindex;
       const seed = opts.seed || q.get('seed') || ('ashvale-' + Date.now());
       /* globe P2: seeded land around the old map (worldgen + globe modules, when the registry has them; ?flat turns it off) */

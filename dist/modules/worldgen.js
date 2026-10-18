@@ -265,6 +265,7 @@
         sample, newSample: ctx.newSample, field, lattice, height: (f, x, y) => sample(f, x, y, SMP).h,
         setEdits, edits: () => EDL,
         walkable: ctx.walkable, tileAt: ctx.tileAt, tiles: ctx.tiles, forTiles: ctx.forTiles, sites: ctx.sites, setSetPieces: (l) => { LASTPC = l; ctx.setSetPieces(l); }, setGroves: (l) => { ctx.setGroves(l); ctx.clearCaches(); }, piecesFromZones, objectsIn,
+        pathDist: (f, x, y) => ctx.pathDist ? ctx.pathDist(f, x, y) : 1e9,   /* < 0 on a path (plane point); world.js keeps solid decor off the paths */
         roadObjects: (face, gx0, gy0, gx1, gy1) => { const L = ctx.ROAD_OBJ || []; return face == null ? L.slice() : L.filter(o => o.face === face && o.x >= gx0 && o.x <= gx1 && o.y >= gy0 && o.y <= gy1); },
         /* area loading (handoff/area_loading.md): a town first placed as its index STUB (edge band + building pads, all that
            is read outside it) gets its real tiles and objects when its zone arrives. Paths, pads and edge profiles were made

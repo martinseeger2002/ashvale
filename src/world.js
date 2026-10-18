@@ -220,6 +220,40 @@
       }
     }
     fillFns.push(stampCleared);
+    /* SOLID DECOR (2026-10-18: "players walk straight through fences, boulders, carts"): the world's scenery out along the roads
+       (data/decor.json kinds with a block, laid by worldgen: wg_paths FENCES and wg_tables decor) stands in the way. A "tile" piece
+       blocks its own tile; a "line" piece (a rail fence section, len metres along its turn ry, carried off its tile's centre by
+       dx/dz) is a run of edge walls, as a building's are: every step between two tile centres that crosses the section is shut, so
+       a run of sections is a fence you cannot walk through, diagonals included (core stepClear). Nothing stands on or by a path:
+       a tile within 0.3 m of one, or an edge with such a tile on either side, stays open, so the roads are always walkable. A
+       pure function of the road objects, so every node and every refill shuts the same edges. */
+    const DK = D.decor && D.decor.kinds, DKB = DK ? Object.keys(DK).filter(k => DK[k].block) : [];
+    const pathNear = (x, y) => WG.pathDist(FACE, x + OX + 0.5, -(y + OY + 0.5)) < 0.3;
+    function stampDecor(c) {
+      if (!DKB.length || !WG || !WG.roadObjects || !WG.pathDist) return;
+      const x0 = c.x0, y0 = c.y0, own = (x, y) => x >= x0 && y >= y0 && x < x0 + CH && y < y0 + CH, pc = new Map();
+      const isPath = (x, y) => { const k = key(x, y); let v = pc.get(k); if (v == null) { v = pathNear(x, y); pc.set(k, v); } return v; };
+      const shut = (x, y, b) => { if (own(x, y)) c.wl[ci(x, y)] |= b; };
+      for (const g of WG.roadObjects(FACE, x0 + OX - 3, y0 + OY - 3, x0 + OX + CH + 2, y0 + OY + CH + 2)) {
+        const K = DK[g.k]; if (!K || !K.block) continue;
+        const x = g.x - OX, y = g.y - OY;
+        if (K.block === 'tile') { if (own(x, y) && !open.has(key(x, y)) && !isPath(x, y)) c.fl[ci(x, y)] |= 1; continue; }
+        if (K.block !== 'line') continue;
+        const h = (K.len || 2.9) * (g.s || 1) / 2, ux = Math.cos(g.ry || 0), uy = -Math.sin(g.ry || 0);   /* along the section, in tiles (y down) */
+        const mx = x + 0.5 + (g.dx || 0), my = y + 0.5 + (g.dz || 0);
+        const cross = (ax, ay, bx, by) => {   /* does the step between these tile centres pass through the section? (a centre on its line: the + side) */
+          const sa = (ax - mx) * uy - (ay - my) * ux, sb = (bx - mx) * uy - (by - my) * ux;
+          if ((sa >= 0) === (sb >= 0)) return false;
+          const t = sa / (sa - sb); return Math.abs((ax + (bx - ax) * t - mx) * ux + (ay + (by - ay) * t - my) * uy) <= h;
+        };
+        for (let ty = Math.floor(my - h) - 1; ty <= Math.floor(my + h) + 1; ty++) for (let tx = Math.floor(mx - h) - 1; tx <= Math.floor(mx + h) + 1; tx++) {
+          if (isPath(tx, ty)) continue;
+          if (!isPath(tx + 1, ty) && cross(tx + 0.5, ty + 0.5, tx + 1.5, ty + 0.5)) { shut(tx, ty, 2); shut(tx + 1, ty, 8); }
+          if (!isPath(tx, ty + 1) && cross(tx + 0.5, ty + 0.5, tx + 0.5, ty + 1.5)) { shut(tx, ty, 4); shut(tx, ty + 1, 1); }
+        }
+      }
+    }
+    fillFns.push(stampDecor);
     let lcx = 0x7fffffff, lcy = 0x7fffffff, lc = null, clock = 0, filled = 0, dropped = 0;
     const areaId = (x, y) => FACE + ':' + Math.floor((x + GX) / AREA) + ':' + Math.floor((y + GY) / AREA);
     function fill(cx, cy) {
