@@ -791,7 +791,7 @@
         }
         for (const n of core.M.npcs) {
           const e = ents.get('n:' + n.id); if (!e) continue;
-          e.root.visible = (me.lv | 0) === 0 && npcShown(n);
+          e.root.visible = (me.lv | 0) === 0 && npcShown(n) && !(e.dead && e.deadT && now - e.deadT >= 2200);   /* a fallen guard, faded out (the frame loop below) */
           if (n.patrol || n.guard || n.watch || n.sapAt || n.sapDay) { if (moveTo(e, n.x, n.y, stamp)) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else if (n.wface != null) e.tyaw = faceYaw(n.wface); }   /* a watchman walking his round, a guard answering the call to arms, the village at the sugar bush; standing still at a job, they face the maple or the akik (core says which way) */
           if (n.sapDay) { const sk = n.work ? 'cook' : null; if (sk !== e.skill) e.skill = sk; }   /* hands at the work: the spile at a maple, a bucket tipped at the akik. Their buckets are not items, so nothing goes in them but the pose */
         }   /* hidden NPCs stay unseen until their flag */
@@ -917,7 +917,7 @@
           case 'respawn': { const t = ents.get('p:' + e.p); if (!t) break; t.dead = false; t.oneShot = false; t.loco = null; t.H.setOpacity && t.H.setOpacity(1); t.root.visible = true; const p = core.S.players[e.p]; place(t, p.x, p.y); t.H.play('idle', { loop: true }); if (e.p === PID) { hud.death(false); cam.snap = true; arriveCheck(); } break; }
           case 'gone': { const t = ents.get('m:' + e.mob); if (t) { t.dead = true; t.deadT = now - 5000; t.oneShot = true; t.root.visible = false; } break; }   /* the host says it is dead: hide it at once (2026-10-02: frozen monsters after re-entering a zone) */
           case 'spawn': { const m = core.mobByUid(e.mob), t = ents.get('m:' + e.mob); if (!t) break; t.dead = false; t.oneShot = false; t.loco = null; t.root.visible = true; t.H.setOpacity && t.H.setOpacity(1); place(t, m.x, m.y); t.H.play('idle', { loop: true }); t.spawnT = now; t.hp = m.hp; break; }
-          case 'guard': { const t = ents.get('n:' + e.id); if (!t) break; if (e.up) { t.dead = false; t.oneShot = false; t.root.visible = true; t.H.setOpacity && t.H.setOpacity(1); t.H.play('idle', { loop: true }); } else { t.dead = true; t.oneShot = true; t.H.play('death', { loop: false }); } break; }
+          case 'guard': { const t = ents.get('n:' + e.id); if (!t) break; if (e.up) { t.dead = false; t.deadT = 0; t.oneShot = false; t.root.visible = true; t.H.setOpacity && t.H.setOpacity(1); t.H.play('idle', { loop: true }); } else { t.dead = true; t.deadT = now; t.oneShot = true; t.H.play('death', { loop: false }); sfx('mobdie', t); } break; }   /* a fallen guard fades like a monster's corpse and comes back at his post */
           case 'msg': if (mine) hud.chat(e.text, e.kind); break;
           case 'xp': if (mine) hud.xpDrop(e.skill, e.n); break;
           case 'level': if (mine) { hud.levelUp(e.skill, e.lvl); sfx('level'); burst(myEnt.root.position, 0xffd040); netGear(); } break;   /* others see the new total level */
@@ -2853,7 +2853,7 @@
           if (e.tellUntil && now >= e.tellUntil) { e.tellUntil = 0; e.oneShot = false; if (e.H.tell) e.H.tell(null); }
           if (e.oneShot && e.oneT && now - e.oneT > 2500 && !e.dead && !(e.tellUntil && now < e.tellUntil)) e.oneShot = false;
           for (const rec of e.impacts) if (!rec.fired && now - rec.t > 850) { fireImpact(e, rec); break; }
-          if (e.dead && e.key.charAt(0) === 'm') { const k = (now - e.deadT) / 1000; if (k > 1.3 && k < 2.2 && e.H.setOpacity) e.H.setOpacity(Math.max(0, 1 - (k - 1.3) / 0.8)); if (k >= 2.2) e.root.visible = false; }
+          if (e.dead && (e.key.charAt(0) === 'm' || (e.key.charAt(0) === 'n' && e.deadT))) { const k = (now - e.deadT) / 1000; if (k > 1.3 && k < 2.2 && e.H.setOpacity) e.H.setOpacity(Math.max(0, 1 - (k - 1.3) / 0.8)); if (k >= 2.2) e.root.visible = false; }
           if (e.spawnT) { const k = Math.min(1, (now - e.spawnT) / 400); e.H.object.scale.setScalar(e.scale * (0.3 + 0.7 * k)); if (k >= 1) e.spawnT = 0; }
           if (e.root.visible) { e.H.update(dt); if (e.hawk) e.hawk.update(dt); }
           if (e.chain && e.root.visible) {

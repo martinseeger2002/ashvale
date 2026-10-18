@@ -3140,7 +3140,7 @@
       ['The portal stones hum if you lay a hand on them. I have never liked it.', 'A road you can see is enough road for me.'],
       ['Night watch is long and mostly nothing. Then it is not.', 'That is the whole of the job.'],
       ['My boots are older than your sword, whatever sword that is.', 'They still get me to the next lamp.'],
-      ['A castle stands a long way off, past any road I walk.', 'People who have never been there call it Lake Castle. I could not tell you the lake, or who keeps it. That story is not ours yet.'],
+      ['Out the south gate the road runs north-east to a river, and over the bridge stands the Lake Castle.', 'Castellan Brannoc keeps it. His watchmen walk the walls and leave the town lamps to us.'],
       ['The dragon\'s ruin is not the old king\'s keep. That one burned with him.', 'The ruin still has a chain on it. I do not walk that way.']
     ];
     function watchSay(p) {
@@ -3149,6 +3149,15 @@
       return WATCH_SAY[i].map(l => String(l).replace(/\{name\}/g, p.name || 'traveller'));
     }
     const GSTAT = { hp: 40, att: 16, def: 16, attb: 12, defb: 12, max: 7, cb: 33 };
+    /* a fallen guard is a kill like a monster's (the operator 2026-10-17: "make guards act as actual monsters ... no drops"):
+       coins and bones every time, now and then a piece of his kit, left two ticks after he falls for whoever felled him */
+    const GLOOT = { gold: 25, drops: [{ item: 'bread', one_in: 3 }, { item: 'helmet_t2', one_in: 6 }, { item: 'sword_t3', one_in: 8 }, { item: 'shield_t2', one_in: 10 }, { item: 'tinderbox', one_in: 12 }] };
+    function guardDrops(n) {
+      const owner = n.killer || null, x = n.dx, y = n.dy, ex = { lv: n.lv | 0 };
+      dropGround('coins', GLOOT.gold, x, y, owner, 300, ex);
+      if (PRAY.bones && IT[PRAY.bones]) dropGround(PRAY.bones, 1, x, y, owner, 300, ex);
+      for (const d of GLOOT.drops) if (IT[d.item] && R.int(d.one_in || 1) === 0) dropGround(d.item, 1, x, y, owner, 300, ex);
+    }
     function isTended(o) {
       if (!o) return false;
       if (o.k === 'lamp') return true;
@@ -3209,8 +3218,10 @@
       if (p && !p.puppet) hitXp(p, h.cls, dmg, h.xp, false);
       if (p) rallyWatch(n, p);
       if (n.hp <= 0) {
-        n.down = S.t + 80; n.hp = 0; n.path = null; n.duty = null;
-        ev({ e: 'guard', id: n.id, up: false });
+        n.down = S.t + 80; n.hp = 0; n.path = null; n.duty = null; n.foe = null;
+        n.killer = p ? p.id : null; n.dropAt = S.t + 2; n.dx = n.x; n.dy = n.y;
+        for (const pid of S.order) { const o = S.players[pid]; if (o && o.act && o.act.k === 'attackn' && o.act.id === n.id) o.act = null; }
+        ev({ e: 'guard', id: n.id, up: false, killer: n.killer });
         if (p) msg(p, 'The town guard falls. The rest of the watch does not.', 'warn');
       }
     }
@@ -3290,6 +3301,7 @@
         if (!n.watch) continue;
         if (n.hx == null) { n.hx = n.x; n.hy = n.y; }
         if (n.down) {
+          if (n.dropAt && S.t >= n.dropAt) { n.dropAt = 0; guardDrops(n); }
           if (S.t >= n.down) { n.down = 0; n.hp = GSTAT.hp; n.x = n.hx; n.y = n.hy; ev({ e: 'guard', id: n.id, up: true }); }
           continue;
         }

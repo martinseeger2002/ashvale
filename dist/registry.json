@@ -111,6 +111,12 @@
    "api": 1,
    "kind": "js"
   },
+  "castle": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
   "fortune": {
    "id": null,
    "v": "1",
@@ -1711,6 +1717,12 @@
    "saltmere": {
     "id": null,
     "v": 3,
+    "api": 1,
+    "kind": "json"
+   },
+   "castle": {
+    "id": null,
+    "v": 2,
     "api": 1,
     "kind": "json"
    },
