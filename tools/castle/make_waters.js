@@ -14,6 +14,7 @@ const TP = path.join(ROOT, 'data', 'atlas', 'wg_tables.json'), TAG = 'castle_wat
 /* the natural ground first: take our old strokes out of the tables before the worldgen reads them */
 const TJ = JSON.parse(fs.readFileSync(TP, 'utf8'));
 TJ.data.edits = (TJ.data.edits || []).filter(e => e.tag !== TAG);
+if (TJ.data.fish) TJ.data.fish.spots = (TJ.data.fish.spots || []).filter(h => h.tag !== TAG);
 if (!TJ.data.edits.length) delete TJ.data.edits;
 fs.writeFileSync(TP, JSON.stringify(TJ));
 const { W, CFG } = require('./mask.js');
@@ -78,3 +79,33 @@ fs.writeFileSync(TP, JSON.stringify(TJ));
 console.log('%s at %s m (%d strokes), %s at %s m (%d strokes); the river %d strokes, %s m -> %s m, flowing %s -> %s',
   LAKES[0].name, LAKES[0].level, LAKES[0].strokes.length, LAKES[1].name, LAKES[1].level, LAKES[1].strokes.length,
   river.length, river[0].to, river[river.length - 1].to, src.name, dst.name);
+
+/* --- fishing spots all along the new water (2026-10-17, the operator: "put some fishing spots throughout the new river and lakes"):
+   read the world again with the strokes in, walk each lake's shore and both banks of the river, and keep a shore tile of water
+   (land beside it, so it is fished from the bank) every so often. Shrimp with a net and salmon with a rod, alternating, as the
+   castle's own marks are; no trout - Ashvale's lake keeps the only trout marks near the village. src/wg_sites.js serves them. */
+for (const k of Object.keys(require.cache)) if (/[\\/](src|data|tools[\\/]castle)[\\/]/.test(k)) delete require.cache[k];
+const W2 = require('./mask.js').W;
+const tile = (x, y) => W2.tileAt(F, x + OX, y + OY);
+const BLOCK = 'TPORNIr~FHXWMYCGAUSVJ^KZD';
+const shore = (x, y) => tile(x, y) === '~' && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const c = tile(x + dx, y + dy); return c !== '~' && BLOCK.indexOf(c) < 0; });
+const KINDS = [{ fish: 'shrimp_raw' }, { fish: 'salmon_raw', req: 30, xp: 350, tool: 'fishing_rod' }];
+const spots = [], near = (x, y, d) => spots.some(s => Math.hypot(s.gx - x, s.gy - y) < d);
+const take = (x, y, gap) => {   /* the nearest shore tile within 6 m of (x, y), not too close to another spot */
+  let best = null, bd = 1e9;
+  for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) { const tx = Math.round(x) + dx, ty = Math.round(y) + dy, d = Math.hypot(dx, dy); if (d < bd && shore(tx, ty) && !near(tx, ty, gap)) { bd = d; best = [tx, ty]; } }
+  if (best) spots.push({ gx: best[0], gy: best[1], fr: KINDS[spots.length % KINDS.length], name: '' });
+  return !!best;
+};
+for (const L of LAKES) {   /* round each lake's shore, about every 22 m */
+  const R = L.r * 1.25, n = Math.max(6, Math.round(2 * Math.PI * R / 22));
+  for (let k = 0; k < n; k++) { const a = k / n * Math.PI * 2; take(L.x + Math.cos(a) * R, L.y + Math.sin(a) * R, 14); }
+}
+for (let i = 6; i < pts.length - 6; i += 14) {   /* down the river, every ~28 m, the banks taken in turn */
+  const [x, y] = pts[i], [x2, y2] = pts[Math.min(pts.length - 1, i + 1)], l = Math.hypot(x2 - x, y2 - y) || 1, side = (i / 14) % 2 ? 1 : -1;
+  take(x - (y2 - y) / l * RIVER_R * side, y + (x2 - x) / l * RIVER_R * side, 14);
+}
+TJ.data.fish = TJ.data.fish || {};
+TJ.data.fish.spots = (TJ.data.fish.spots || []).concat(spots.map((s, i) => ({ id: 'castle' + i, x: s.gx + OX, y: s.gy + OY, fr: s.fr, tag: TAG })));
+fs.writeFileSync(TP, JSON.stringify(TJ));
+console.log('fishing spots: %d along the lakes and the river (%d shrimp, %d salmon)', spots.length, spots.filter(s => s.fr.fish === 'shrimp_raw').length, spots.filter(s => s.fr.fish === 'salmon_raw').length);

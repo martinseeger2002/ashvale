@@ -133,6 +133,13 @@
         const fr = fishFor(ctx.coreDistU(s.ux, s.uy, s.uz), s.w[3] > 0.3, u01(mix32(hv ^ 99)));
         list.push({ id: 'w1:' + face + ':f' + qx + '.' + qy, face, kind: 'fishing', x: gx, y: gy, level: fr.req || 1, cls: CLS[s.cls], spawns: [], objects: [], nodes: [], fishing: [Object.assign({ x: gx, y: gy }, fr)] });
       }
+      /* hand-placed fishing spots (T.fish.spots, tools/castle/make_waters.js: along the Lake Castle's lakes and river), served like the
+         grid's own: the grid's one random point per 16 m cell rarely lands on the shore of a narrow river */
+      for (const h of (T.fish.spots || [])) {
+        if ((h.face == null ? face : h.face) !== face || h.x < gx0 || h.x > gx1 || h.y < gy0 || h.y > gy1) continue;
+        const fr = Object.assign({}, h.fr || T.fish.default), s = ctx.landInto(face, h.x + 0.5, -h.y - 0.5, SB, tmp, ctx.PIECES.length > 0);
+        list.push({ id: 'w1:' + face + ':h' + h.id, face, kind: 'fishing', x: h.x, y: h.y, level: fr.req || 1, cls: CLS[s.cls], spawns: [], objects: [], nodes: [], fishing: [Object.assign({ x: h.x, y: h.y }, fr)] });
+      }
       if (T.wild) herds(face, gx0, gy0, gx1, gy1, list);
       return list;
     }

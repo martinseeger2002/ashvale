@@ -687,16 +687,6 @@
         corner = (cx, cy) => hc[Math.max(0, Math.min(H, cy)) * (W + 1) + Math.max(0, Math.min(W, cx))];
       } else {
         const P = map.inPiece; chunks = new Map();
-        /* the arch of a world bridge (2026-10-17, the operator: "a nice arching bridge with torches", the Lake Castle's river): a deck
-           corner rises with its distance to the nearer bank - up to 1.4 m at 5 m out, so a 10 m span peaks in its middle and a longer one
-           runs level over the top. Entities ride the same corners (heightAt), so the walk goes over the crest. */
-        const ARCH = new Map(), dryT = (x, y) => { const t = at(x, y); return t !== '~' && t !== 'v' && t !== 'B'; };
-        const archRise = (cx, cy) => {
-          const k = cx + ',' + cy; let r = ARCH.get(k); if (r != null) return r;
-          let d = 5;
-          for (let y = cy - 6; y < cy + 6; y++) for (let x = cx - 6; x < cx + 6; x++) if (dryT(x, y)) d = Math.min(d, Math.hypot(Math.max(0, x - cx, cx - x - 1), Math.max(0, y - cy, cy - y - 1)));
-          r = 1.4 * Math.sin(Math.min(1, d / 5) * Math.PI / 2); ARCH.set(k, r); if (ARCH.size > 20000) ARCH.clear(); return r;
-        };
         const depth = (cx, cy) => {   /* tiles from this corner to the nearest tile outside the set pieces (0 = on the edge, max 8) */
           for (let r = 1; r <= 8; r++) for (let y = cy - r; y < cy + r; y++) for (let x = cx - r; x < cx + r; x++) {
             if (y !== cy - r && y !== cy + r - 1 && x !== cx - r && x !== cx + r - 1) continue;
@@ -766,7 +756,6 @@
                the water like a brown mesa (Saltmere quay, 2026-10-04: "fix how everything looks"). A deck
                over dry land (a bridge, a pier head) still rides that land. */
             sh = Math.max(map.groundH(cx, cy), s);
-            if (!P(cx - 1, cy - 1) && !P(cx, cy - 1) && !P(cx - 1, cy) && !P(cx, cy)) sh += archRise(cx, cy);   /* a bridge out in the world arches over its river; a town's piers and docks stay flat */
           } else {
             let nW = 0, rim = -Infinity;
             if (isW(t00)) { nW++; rim = Math.max(rim, surfOf(cx - 1, cy - 1)); }
@@ -793,7 +782,28 @@
         return { get: (x, y) => { const a = arr(x, y, false); return a ? a[((y & 63) << 6) | (x & 63)] : NaN; },
                  set: (x, y, v) => { arr(x, y, true)[((y & 63) << 6) | (x & 63)] = v; } };
       })());
+      /* world road bridges (scene 'wbridge', 2026-10-17: "the bridge looks bad and walking over it is muddy"): each registers its line here
+         and its deck becomes the walking surface - a true arch over the water and a ramp onto each bank - so walkers tread the stone,
+         not the ground under it. deckAt(b, s): the deck's height s metres along b from its first bank (negative or past L: the ramps). */
+      const BRIDGES = [], RAMP = 3;
+      const deckAt = (b, sv) => {
+        if (sv >= 0 && sv <= b.L) return b.base + b.rise * Math.sin(Math.PI * sv / b.L);
+        const end = sv < 0 ? 0 : b.L, k = Math.min(1, Math.abs(sv - end) / RAMP), gx = b.ax + b.ux * sv, gz = b.az + b.uz * sv, g = groundAt(gx, gz);
+        return b.base + (Math.max(g, b.base - 1) - b.base) * k * k * (3 - 2 * k);   /* eased from the deck's foot down (or up) to the road */
+      };
+      const bridgeAt = (x, z) => {
+        for (const b of BRIDGES) {
+          const dx = x - b.ax, dz = z - b.az, sv = dx * b.ux + dz * b.uz, t = dx * b.nx + dz * b.nz;
+          if (sv >= -RAMP && sv <= b.L + RAMP && Math.abs(t) <= b.hw) return deckAt(b, sv);
+        }
+        return null;
+      };
+      const addBridge = (b) => { if (!BRIDGES.some(q => q.key === b.key)) BRIDGES.push(b); };
       function heightAt(x, z) {
+        if (BRIDGES.length) { const by = bridgeAt(x, z); if (by != null) return by; }
+        return groundAt(x, z);
+      }
+      function groundAt(x, z) {
         if (!seeded && (x < 0 || z < 0 || x > W || z > H)) return -0.3;
         if (seeded || (x >= 0 && z >= 0 && x < W && z < H)) { const fl = floor.get(Math.floor(x), Math.floor(z)); if (fl === fl) return fl; }
         const xi = seeded ? Math.floor(x) : Math.min(W - 1, Math.floor(x)), zi = seeded ? Math.floor(z) : Math.min(H - 1, Math.floor(z)), fx = x - xi, fz = z - zi;
@@ -803,7 +813,7 @@
       /* an area that arrives later (area loading) changes the ground under it: forget the cached corners there (they were worked
          out from its stub, or for an underground area from solid rock) so the next build reads its real tiles */
       const forget = (x0, y0, w, h) => { if (!chunks) return; for (let cy = (y0 - 2) >> 6; cy <= (y0 + h + 2) >> 6; cy++) for (let cx = (x0 - 2) >> 6; cx <= (x0 + w + 2) >> 6; cx++) chunks.delete(map.key(cx, cy)); };
-      return (map._hgt = { corner, heightAt, floor, surf: (x, y) => surfOf(x, y), forget });
+      return (map._hgt = { corner, heightAt, groundAt, floor, surf: (x, y) => surfOf(x, y), forget, addBridge, deckAt });
     }
 
     function build(map, opts) {
@@ -1180,7 +1190,7 @@
       }
       const floorY = (o, y) => { const f = floor.get(o.x, o.y); return isNaN(f) ? y : f; };
       const siteObjs = chunk ? [].concat(...map.sitesIn(X0, Y0, X1 - 1, Y1 - 1).map(st => st.objects), ...(map.roadTorchesIn ? map.roadTorchesIn(X0, Y0, X1 - 1, Y1 - 1) : [])) : [];   /* tents, campfires, and lit posts along the town roads */
-      const objs = (chunk ? siteObjs : map.objects.filter(o => inR(o.x, o.y))).sort((a, b) => (b.enter ? 1 : 0) - (a.enter ? 1 : 0));
+      const objs = (chunk ? siteObjs : map.objects.filter(o => inR(o.x, o.y))).sort((a, b) => ((b.k === 'wbridge') - (a.k === 'wbridge')) || ((b.enter ? 1 : 0) - (a.enter ? 1 : 0)));   /* a bridge first: its deck is the ground for the torches on it */
       const pkSeats = new Set(); for (const o of objs) if (o.k === 'pokertable') for (const sq of o.seats || []) pkSeats.add(sq[0] + ',' + sq[1]);   /* [Claude] the seats a poker table furnishes itself */
       for (const o of objs) {
         const x = o.x + (o.w || 1) / 2, z = o.y + (o.h || 1) / 2; let y = heightAt(x, z);
@@ -1339,31 +1349,33 @@
               B.add('box', 0x5a3c22, px, py - 0.88, pz, 0.16, 1.6, 0.16); }
             break;
           }
-          case 'wbridge': {   /* a road bridge out in the world (2026-10-17, the operator: "a nice arching bridge with torches"): a stone deck
-             on the arch the ground already makes (heightsOf archRise, which the walkers ride), parapets with coping either side that run
-             down into the water and hide the ground's slope, and an arch opening in each side wall. ax/ay -> bx/by is its line over the water. */
+          case 'wbridge': {   /* a road bridge out in the world (2026-10-17, the operator: "a nice arching bridge with torches", then "the bridge looks
+             bad and walking over it is muddy"): a stone arch whose deck is the walking surface (heightsOf addBridge/deckAt), pale paving,
+             parapets with coping that follow it down onto the banks, and an arch in each side wall. ax/ay -> bx/by is its line over the water. */
             const ax = o.ax, az = o.ay, L = Math.hypot(o.bx - o.ax, o.by - o.ay) || 1, ux = (o.bx - o.ax) / L, uz = (o.by - o.ay) / L, nx = -uz, nz = ux;
-            const yaw = Math.atan2(-uz, ux), hw = (o.hw || 1.4) + 0.75, s0 = -2.2, s1 = L + 2.2, n = Math.max(10, Math.ceil((s1 - s0) / 0.5)), seg = (s1 - s0) / n;
+            const yaw = Math.atan2(-uz, ux), hw = (o.hw || 1.4) + 0.6;
             const mx = ax + ux * L / 2, mz = az + uz * L / 2, sf = HG.surf(Math.floor(mx), Math.floor(mz));
-            const wY = sf != null && isFinite(sf) ? sf : heightAt(mx, mz) - 1.5;
-            const STONE = 0x9a948a, COPE = 0xbcb6aa, DECK = 0x8e8270;
-            /* the deck's line: over the highest ground across its width at each step, so the ground's own arch never shows through */
-            const deckY = (sv) => { const px = ax + ux * sv, pz = az + uz * sv; let h = -1e9; for (const f of [-0.7, -0.35, 0, 0.35, 0.7]) h = Math.max(h, heightAt(px + nx * hw * f, pz + nz * hw * f)); return h + 0.14; };
-            const tilt = (m, pitch) => { m.rotation.order = 'YZX'; m.rotation.y = yaw; m.rotation.z = pitch; return m; };   /* along the span, then up the slope */
+            const wY = sf != null && isFinite(sf) ? sf : HG.groundAt(mx, mz) - 0.3;
+            const bank = Math.max(HG.groundAt(ax - ux * 1.5, az - uz * 1.5), HG.groundAt(o.bx + ux * 1.5, o.by + uz * 1.5));
+            const BR = { key: o.ax.toFixed(1) + ',' + o.ay.toFixed(1), ax, az, ux, uz, nx, nz, L, hw: hw - 0.25, base: Math.max(wY + 0.45, bank), rise: Math.min(2.2, 0.6 + L * 0.12) };
+            HG.addBridge(BR);
+            const STONE = 0x9a948a, COPE = 0xc4beb2, PAVE = 0xb4ad9f, JOINT = 0x8a8478;
+            const s0 = -3, s1 = L + 3, n = Math.max(16, Math.ceil((s1 - s0) / 0.4)), seg = (s1 - s0) / n;
+            const tilt = (m, pitch) => { m.rotation.order = 'YZX'; m.rotation.y = yaw; m.rotation.z = pitch; return m; };
             for (let k = 0; k < n; k++) {
-              const sa = s0 + k * seg, sb = sa + seg, sm = sa + seg / 2, px = ax + ux * sm, pz = az + uz * sm, ya = deckY(sa), yb = deckY(sb), dy = (ya + yb) / 2, pitch = Math.atan2(yb - ya, seg), len = Math.hypot(seg, yb - ya) + 0.04;
-              group.add(tilt(mesh(new THREE.BoxGeometry(len, 0.26, hw * 2), DECK, px, dy - 0.11, pz), pitch));
+              const sa = s0 + k * seg, sb = sa + seg, sm = sa + seg / 2, px = ax + ux * sm, pz = az + uz * sm, ya = HG.deckAt(BR, sa), yb = HG.deckAt(BR, sb), dy = (ya + yb) / 2, pitch = Math.atan2(yb - ya, seg), len = Math.hypot(seg, yb - ya) + 0.03;
+              group.add(tilt(mesh(new THREE.BoxGeometry(len, 0.3, hw * 2), k % 3 ? PAVE : JOINT, px, dy - 0.15, pz), pitch));   /* paving, a darker joint every third course */
               for (const side of [-1, 1]) {
-                const wx = px + nx * hw * side, wz = pz + nz * hw * side, top = dy + 0.85, bot = Math.min(wY - 0.4, dy - 0.2);
-                const wall = mesh(new THREE.BoxGeometry(seg + 0.02, top - bot, 0.38), STONE, wx, (top + bot) / 2, wz); wall.rotation.y = yaw; group.add(wall);
+                const wx = px + nx * hw * side, wz = pz + nz * hw * side, top = dy + 0.8, bot = Math.min(wY - 0.4, dy - 0.3);
+                const wall = mesh(new THREE.BoxGeometry(seg + 0.02, top - bot, 0.36), STONE, wx, (top + bot) / 2, wz); wall.rotation.y = yaw; group.add(wall);
                 group.add(tilt(mesh(new THREE.BoxGeometry(len + 0.02, 0.12, 0.5), COPE, wx, top + 0.06, wz), pitch));
               }
             }
-            /* the arch: a dark half-round in each side wall at the middle of the span, its foot at the water */
-            const R = Math.max(1.2, Math.min(L / 2 - 0.4, 3.2));
+            /* the arch: a dark half-round under the crest in each side wall, its foot at the water */
+            const R = Math.max(1.2, Math.min(L / 2 - 0.3, BR.base + BR.rise - wY - 0.5));
             for (const side of [-1, 1]) {
-              const a = new THREE.Mesh(new THREE.CircleGeometry(R, 20, 0, Math.PI), new THREE.MeshLambertMaterial({ color: 0x1c262c, side: THREE.DoubleSide }));
-              a.position.set(mx + nx * (hw + 0.2) * side, wY - 0.05, mz + nz * (hw + 0.2) * side); a.rotation.y = Math.atan2(nx * side, nz * side); group.add(a);
+              const a = new THREE.Mesh(new THREE.CircleGeometry(R, 24, 0, Math.PI), new THREE.MeshLambertMaterial({ color: 0x1a2328, side: THREE.DoubleSide }));
+              a.position.set(mx + nx * (hw + 0.19) * side, wY - 0.05, mz + nz * (hw + 0.19) * side); a.rotation.y = Math.atan2(nx * side, nz * side); group.add(a);
             }
             break;
           }
