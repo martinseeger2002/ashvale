@@ -1,0 +1,1 @@
+{"ashvale3d":"part","api":1,"v":1,"id":"item.steak","kind":"item","items":{"beef_raw":"#c84a4a","beef_cooked":"#8a4a22","beef_burnt":"#2c221c"},"shapes":[{"t":"box","s":[0.16,0.03,0.11],"c":"$c","p":[0,0.015,0],"r":[0,0.3,0]},{"t":"box","s":[0.15,0.006,0.02],"c":"#f0e0d0","p":[0,0.031,0.04],"r":[0,0.3,0]}]}

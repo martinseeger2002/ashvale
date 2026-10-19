@@ -116,6 +116,19 @@
       if (d.weight) b.push((d.weight * Math.max(1, n || 1) / 1000).toFixed(d.weight * (n || 1) < 1000 ? 2 : 1) + ' kg');
       if (d.carry) b.push('Carry +' + (d.carry / 1000) + ' kg');
       if (d.energy) b.push('Run energy +' + Math.round(d.energy / 100) + '%');
+      /* what it is for (2026-10-18, the operator: items should "have an examine feature regarding their use in game"): the quests that ask
+         for it or hand it out, and a seed's crop - read from the data, so every item says it */
+      const QS = (core.D.quests && core.D.quests.quests) || {}, uses = [], gives = [];
+      for (const qid in QS) for (const st of QS[qid].steps || []) {
+        const g = st.goal || {}, w = g.with ? (typeof g.with === 'string' ? [g.with] : Object.keys(g.with)) : [], br = g.bring ? [].concat(g.bring) : [];
+        if (br.concat(w).indexOf(id) >= 0 || g.harvest === id || g.cook === id) { if (uses.indexOf(QS[qid].name) < 0) uses.push(QS[qid].name); }
+        if ([].concat(st.reward || []).some(r => String(r).replace(/:\d+$/, '') === id) && gives.indexOf(QS[qid].name) < 0) gives.push(QS[qid].name);
+      }
+      const FA = core.farm, sc = FA && Object.values(FA.crops).find(c => c.seed === id);
+      if (sc) b.push('Plant it at Farming ' + sc.lvl + ' (' + ((FA.tiers[String(sc.tier)] || {}).name || 'a farming patch') + ' or larger); grows in ' + sc.phases + ' phases of ' + sc.blocks + ' blocks');
+      if (d.tool === 'farming') b.push('A Farming tool');
+      if (uses.length) b.push('Wanted in ' + uses.join(', '));
+      if (gives.length) b.push('A reward from ' + gives.join(', '));
       return d.name + (d.english ? ' (' + d.english + ')' : '') + (n > 1 ? ' x ' + n.toLocaleString() : '') + ': ' + (d.examine ? d.examine + ' ' : '') + (b.length ? b.join(', ') + '. ' : '') + (req ? 'Requires ' + req + '. ' : '') + 'Value ' + d.value + ' GOLD.' + (d.nft ? ' (ASHVALE Armoury: ' + d.nft.copies + ' NFT copies)' : '');
     }
 

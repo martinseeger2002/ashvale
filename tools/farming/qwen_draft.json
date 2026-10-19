@@ -1,0 +1,55 @@
+{
+  "rake": "A sturdy tool to clear weeds from roadside patches before you plant.",
+  "seed_dibber": "A sharp implement to push seeds deep into the soil for best growth.",
+  "spade": "A heavy blade to dig up mature crops once they are ready to harvest.",
+  "watering_can": "A tin vessel to pour water on crops for a slightly bigger harvest.",
+  "potato_seed": "A small tuber to plant in level 1 patches for a quick, starchy reward.",
+  "onion_seed": "A bulbous seed for level 5 patches that yields a pungent, useful vegetable.",
+  "cabbage_seed": "A green packet for level 9 patches that grows into a hearty head for stews.",
+  "barley_seed": "A golden grain for level 14 patches used to brew ale or make bread.",
+  "strawberry_seed": "A red packet for level 19 patches that produces sweet, juicy fruit.",
+  "pumpkin_seed": "A large orange seed for level 27 patches that grows into a heavy, round gourd.",
+  "moonleaf_seed": "A silver packet for level 33 patches used by wizards to make spell ink.",
+  "frostbloom_seed": "An icy blue seed for level 45 patches that only grows in the high snows.",
+  "potato": "A freshly dug tuber ready to be baked or mashed into a filling meal.",
+  "baked_potato": "A hot, fluffy potato roasted in the oven with butter and salt.",
+  "onion": "A sliced bulb perfect for adding sharp flavor to soups and stews.",
+  "cabbage": "A crisp green leaf wrapped tight, ideal for cooking down into a stew.",
+  "barley": "A harvested grain that can be ground into flour or brewed into ale.",
+  "strawberry": "A sweet, red berry that tastes best when eaten fresh from the patch.",
+  "pumpkin": "A large orange gourd that can be carved into lanterns or made into soup.",
+  "moonleaf": "A shimmering silver herb dried for use in creating powerful wizard spells.",
+  "frostbloom": "A rare ice-blue flower that glows in the cold and is hard to find.",
+  "quests": {
+    "first_furrows": {
+      "talk": [
+        "Right, lad, time to get your hands dirty. Grab a rake, seed dibber, and spade from any general store.",
+        "Head to the roadside patch near the castle and clear the weeds before planting three potato seeds.",
+        "Water them, wait for the blocks to tick over, then dig up three potatoes to show me you can do it."
+      ],
+      "progress": "You need to clear weeds, plant, water, and dig up three potatoes to start your journey.",
+      "complete": "Three potatoes harvested! You've got the hang of the basics, Tobin is pleased.",
+      "done": "Your first harvest is a success; the farm is finally taking shape."
+    },
+    "lodge_greens": {
+      "talk": [
+        "Orla needs greens for her famous mountain stew, and she wants them fresh from the patch.",
+        "You'll need to grow four cabbages in a level 9 patch, making sure to water them for the best yield.",
+        "Once they're fully grown, use your spade to dig them up and bring them straight to the lodge."
+      ],
+      "progress": "Grow four cabbages in a level 9 patch and dig them up for Orla's stew.",
+      "complete": "Four crisp cabbages delivered! Orla says the stew is better than ever.",
+      "done": "The lodge is happy with your greens; the mountain stew is a hit."
+    },
+    "moonleaf_for_the_circle": {
+      "talk": [
+        "The Circle of the Long Night needs fresh ink, and only moonleaf works for our ancient spells.",
+        "Find one of the rare large patches, plant two moonleaf seeds, and wait patiently for the silver glow.",
+        "When the blocks finish, dig up the moonleaf and bring it to me immediately for the Circle."
+      ],
+      "progress": "Plant and grow two moonleaf in a rare large patch for the Circle's spell ink.",
+      "complete": "Two moonleaf harvested! The wizards are thrilled to have fresh ink for their scrolls.",
+      "done": "The Circle is grateful; your magic is now ready to be written down."
+    }
+  }
+}

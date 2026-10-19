@@ -22,7 +22,7 @@ const G = AshGlobe.createGlobe(cfg), W = AW.createWorldgen(G, { seed: cfg.seed }
 W.setSetPieces(W.piecesFromZones(zones, cfg.face, cfg.origin[0], cfg.origin[1], { belt: cfg.belt || {}, links: cfg.links || [] }));
 ok(typeof W.roadObjects === 'function', 'worldgen exposes the roadside posts');
 const ox = cfg.origin[0], oy = cfg.origin[1];
-const roadside = W.roadObjects(cfg.face, 0 + ox - 40, -40 + oy, 540 + ox, 90 + oy), torches = roadside.filter(o => o.k !== 'signpost' && o.k !== 'rail_fence');
+const roadside = W.roadObjects(cfg.face, 0 + ox - 40, -40 + oy, 540 + ox, 90 + oy), torches = roadside.filter(o => o.k !== 'signpost' && o.k !== 'rail_fence' && o.k !== 'farmpatch');   /* [Claude 2026-10-18] the farming patches by the road are its neighbours, not its posts */
 /* [Claude 2026-10-18] the road's fence runs (src/wg_paths.js FENCES): sections of rail fence, none on the road */
 ok(roadside.filter(o => o.k === 'rail_fence').length >= 6, 'the road has fence runs (' + roadside.filter(o => o.k === 'rail_fence').length + ' sections)');
 /* [Claude 2026-10-18] the road's fingerposts (src/wg_paths.js SIGNPOSTS): one out of each town and one half way, every arm a town */

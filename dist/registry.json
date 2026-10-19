@@ -1638,7 +1638,73 @@
     "api": 1,
     "kind": "json"
    },
+   "item.chop": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.coins": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.cowhide": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.crop_barley": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.crop_cabbage": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.crop_frostbloom": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.crop_moonleaf": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.crop_onion": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.crop_potato": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.crop_pumpkin": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.crop_strawberry": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.dibber": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1651,6 +1717,12 @@
     "kind": "json"
    },
    "item.fish": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.fleece": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1669,6 +1741,12 @@
     "kind": "json"
    },
    "item.hero_bones": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.inkpot": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1770,6 +1848,12 @@
     "api": 1,
     "kind": "json"
    },
+   "item.rake": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.ring": {
     "id": null,
     "v": 1,
@@ -1800,6 +1884,18 @@
     "api": 1,
     "kind": "json"
    },
+   "item.scroll": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.seedpouch": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.shrimp": {
     "id": null,
     "v": 1,
@@ -1818,7 +1914,43 @@
     "api": 1,
     "kind": "json"
    },
+   "item.spade": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.steak": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.stone": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.tome_echoes": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.tome_far_road": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.tome_stones": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.wateringcan": {
     "id": null,
     "v": 1,
     "api": 1,

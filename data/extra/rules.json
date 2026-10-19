@@ -48,7 +48,34 @@
     "bucket",
     "curio",
     "stone",
-    "tobacco"
+    "tobacco",
+    "seed",
+    "herb"
+   ],
+   "tool": [
+    "hatchet",
+    "pickaxe",
+    "net",
+    "rod",
+    "pot",
+    "tinderbox",
+    "stone",
+    "pole",
+    "knocker",
+    "snare",
+    "flint",
+    "rake",
+    "dibber",
+    "spade",
+    "wateringcan"
+   ],
+   "food": [
+    "bread",
+    "fish",
+    "mushroom",
+    "meat",
+    "candy",
+    "crop"
    ]
   },
   "slots": {
@@ -87,6 +114,12 @@
      30
     ]
    }
+  },
+  "tools": {
+   "rake": "farming",
+   "dibber": "farming",
+   "spade": "farming",
+   "wateringcan": "farming"
   }
  },
  "nodes": {
@@ -110,7 +143,8 @@
   "fishing",
   "cooking",
   "firemaking",
-  "prayer"
+  "prayer",
+  "farming"
  ],
  "prayer": {
   "resist": 100,
@@ -289,5 +323,189 @@
     10
    ]
   }
- ]
+ ],
+ "farming": {
+  "block": 60,
+  "hourSeconds": 300,
+  "note": "a block is a minute of the game's clock (Dogecoin's block time); the clock keeps running while you are away, so crops grow offline",
+  "crops": {
+   "potato": {
+    "lvl": 1,
+    "tier": 1,
+    "phases": 4,
+    "blocks": 2,
+    "yield": [
+     3,
+     6
+    ],
+    "xpPlant": 8,
+    "xpHarvest": 9,
+    "seed": "potato_seed",
+    "crop": "potato",
+    "leaf": "#4a8a34",
+    "fruit": "#b08a5a"
+   },
+   "onion": {
+    "lvl": 5,
+    "tier": 1,
+    "phases": 4,
+    "blocks": 3,
+    "yield": [
+     3,
+     6
+    ],
+    "xpPlant": 10,
+    "xpHarvest": 11,
+    "seed": "onion_seed",
+    "crop": "onion",
+    "leaf": "#4a8a34",
+    "fruit": "#d8b878"
+   },
+   "cabbage": {
+    "lvl": 9,
+    "tier": 1,
+    "phases": 4,
+    "blocks": 4,
+    "yield": [
+     3,
+     7
+    ],
+    "xpPlant": 12,
+    "xpHarvest": 13,
+    "seed": "cabbage_seed",
+    "crop": "cabbage",
+    "leaf": "#4a8a34",
+    "fruit": "#6aa84a"
+   },
+   "barley": {
+    "lvl": 14,
+    "tier": 2,
+    "phases": 5,
+    "blocks": 4,
+    "yield": [
+     4,
+     8
+    ],
+    "xpPlant": 16,
+    "xpHarvest": 15,
+    "seed": "barley_seed",
+    "crop": "barley",
+    "leaf": "#9a8040",
+    "fruit": "#d8b860"
+   },
+   "strawberry": {
+    "lvl": 19,
+    "tier": 2,
+    "phases": 5,
+    "blocks": 5,
+    "yield": [
+     3,
+     6
+    ],
+    "xpPlant": 22,
+    "xpHarvest": 26,
+    "seed": "strawberry_seed",
+    "crop": "strawberry",
+    "leaf": "#4a8a34",
+    "fruit": "#d83a3a"
+   },
+   "pumpkin": {
+    "lvl": 27,
+    "tier": 2,
+    "phases": 5,
+    "blocks": 7,
+    "yield": [
+     2,
+     4
+    ],
+    "xpPlant": 32,
+    "xpHarvest": 40,
+    "seed": "pumpkin_seed",
+    "crop": "pumpkin",
+    "leaf": "#4a8a34",
+    "fruit": "#e07a20"
+   },
+   "moonleaf": {
+    "lvl": 33,
+    "tier": 3,
+    "phases": 4,
+    "blocks": 10,
+    "yield": [
+     2,
+     4
+    ],
+    "xpPlant": 45,
+    "xpHarvest": 60,
+    "seed": "moonleaf_seed",
+    "crop": "moonleaf",
+    "leaf": "#4a8a34",
+    "fruit": "#b8c8e8"
+   },
+   "frostbloom": {
+    "lvl": 45,
+    "tier": 3,
+    "phases": 5,
+    "blocks": 12,
+    "yield": [
+     1,
+     3
+    ],
+    "xpPlant": 70,
+    "xpHarvest": 95,
+    "seed": "frostbloom_seed",
+    "crop": "frostbloom",
+    "leaf": "#4a8a34",
+    "fruit": "#8fd8f8"
+   }
+  },
+  "tiers": {
+   "1": {
+    "name": "small farming patch",
+    "share": 0.62
+   },
+   "2": {
+    "name": "farming patch",
+    "share": 0.27
+   },
+   "3": {
+    "name": "large farming patch",
+    "share": 0.11
+   }
+  },
+  "weeds": 3,
+  "weedsBack": 25,
+  "rakeXp": 4,
+  "waterBonus": 1,
+  "tools": {
+   "rake": "rake",
+   "plant": "dibber",
+   "harvest": "spade",
+   "water": "wateringcan"
+  },
+  "seeds": {
+   "chance": 6,
+   "weights": {
+    "potato": 40,
+    "onion": 26,
+    "cabbage": 16,
+    "barley": 9,
+    "strawberry": 5,
+    "pumpkin": 2.5,
+    "moonleaf": 1.0,
+    "frostbloom": 0.4
+   },
+   "note": "1 kill in `chance` drops a seed; which one by weight among the crops of level <= 2 x the beast's level + 3 (so the rare seeds come from the strong); rolled on dice of their own (core.js FARMING), never the world's"
+  },
+  "noSeeds": [
+   "sheep",
+   "cow",
+   "chicken",
+   "hen",
+   "hare",
+   "snow_hare",
+   "deer",
+   "goat",
+   "lizard"
+  ]
+ }
 }

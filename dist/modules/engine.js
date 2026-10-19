@@ -701,6 +701,37 @@
         for (const [uid, o] of gItems) if (!seen.has(uid)) { const fl = o.children[0] && o.children[0].userData.flame; if (fl) gFlames.splice(gFlames.indexOf(fl), 1); scene.remove(o); proxies.splice(proxies.indexOf(o.userData.px), 1); gItems.delete(uid); }
       }
 
+      /* FARMING (2026-10-18): what grows in the patches near you - your own crop (core patchView): weeds as tufts, a crop as four plants that
+         grow taller phase by phase and show their fruit when ready, darker soil when watered. Redrawn when it changes (checked every second). */
+      const gPatches = new Map();
+      let patchClock = 0;
+      function syncPatches(force) {
+        if (!core.patchView || !core.M.roadTorchesIn || !me) return;
+        const now = performance.now(); if (!force && now - patchClock < 1000) return; patchClock = now;
+        const FA = core.farm || { crops: {} }, seen = new Set();
+        for (const o of core.M.roadTorchesIn(me.x - 48, me.y - 48, me.x + 48, me.y + 48)) {
+          if (o.k !== 'farmpatch') continue;
+          const k = o.x + ',' + o.y, v = core.patchView(me.id, o); if (!v) continue; seen.add(k);
+          const sig = [v.w, v.crop, v.phase, v.ready ? 1 : 0, v.water ? 1 : 0].join('|'), had = gPatches.get(k);
+          if (had && had.userData.sig === sig) continue;
+          if (had) scene.remove(had);
+          const g = new THREE.Group(), cx = o.x + 1, cz = o.y + 1, y0 = Math.min(heightAt(o.x + 0.2, o.y + 0.2), heightAt(o.x + 1.8, o.y + 1.8), heightAt(cx, cz)) + 0.14;
+          const add = (geo, col, x, y, z) => { const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: col, flatShading: true })); m.position.set(x, y, z); m.castShadow = true; g.add(m); return m; };
+          if (v.water) add(new THREE.BoxGeometry(1.75, 0.02, 1.75), 0x2e2018, cx, y0 + 0.01, cz);
+          if (!v.crop) for (let i = 0; i < v.w * 4; i++) { const a = i * 2.4, r = 0.25 + (i % 3) * 0.22; add(new THREE.ConeGeometry(0.08, 0.28, 4), 0x5a8a2a, cx + Math.cos(a) * r, y0 + 0.14, cz + Math.sin(a) * r); }
+          else {
+            const C = FA.crops[v.crop] || {}, t = v.phases ? Math.min(1, (v.phase + 1) / (v.phases + 1)) : 1, h = 0.12 + 0.6 * t;
+            for (const [dx, dz] of [[-0.45, -0.45], [0.45, -0.45], [-0.45, 0.45], [0.45, 0.45]]) {
+              add(new THREE.CylinderGeometry(0.02, 0.03, h, 5), parseInt(String(C.leaf || '#4a8a34').slice(1), 16), cx + dx, y0 + h / 2, cz + dz);
+              add(new THREE.SphereGeometry(0.1 + 0.12 * t, 6, 4), parseInt(String(C.leaf || '#4a8a34').slice(1), 16), cx + dx, y0 + h * 0.85, cz + dz).scale.y = 0.6;
+              if (v.ready) add(new THREE.SphereGeometry(0.09, 6, 5), parseInt(String(C.fruit || '#d0a040').slice(1), 16), cx + dx + 0.05, y0 + h * 0.95, cz + dz + 0.05);
+            }
+          }
+          g.userData.sig = sig; scene.add(g); gPatches.set(k, g);
+        }
+        for (const [k, g] of gPatches) if (!seen.has(k)) { scene.remove(g); gPatches.delete(k); }
+      }
+
       /* your snares where you set them (core setTrap; 2026-10-09): only yours are drawn, a nagwaagan on the ground */
       const gTraps = new Map();
       function syncTraps() {
@@ -804,7 +835,7 @@
           if (mv) e.tyaw = e.headYaw != null ? e.headYaw : Math.atan2(e.to.x - e.from.x, e.to.z - e.from.z); else if (m.tgt) e.tyaw = faceYaw(m.face);
           e.hp = m.hp;
         }
-        syncGround(); syncTraps();
+        syncGround(); syncTraps(); syncPatches();
         for (const ev of evs) { handle(ev, now); netEvent(ev); }
         if (TRIP) { TRIP.events(evs); TRIP.tick(); }
         netAct();
@@ -923,6 +954,7 @@
           case 'xp': if (mine) hud.xpDrop(e.skill, e.n); break;
           case 'level': if (mine) { hud.levelUp(e.skill, e.lvl); sfx('level'); burst(myEnt.root.position, 0xffd040); netGear(); } break;   /* others see the new total level */
           case 'equip': { const t = ents.get('p:' + e.p); if (t) { const g = gearOf(core.S.players[e.p]); t.H.setGear(g); hawkify(t, g.ring); } if (mine) { dirty.eq = 1; sfx('equip'); netGear(); } break; }
+          case 'patch': if (mine) syncPatches(true); break;   /* FARMING: your crop changed */
           case 'quest': if (mine) syncMounts();   /* falls through */
           case 'using':
           case 'inv': case 'take': case 'trade': case 'eat': case 'style': case 'run': case 'burden': case 'start':
@@ -1570,6 +1602,16 @@
         if (t.kind === 'caveout') {   /* the cave's way out, up top: it only goes up (2026-10-07: "it should inform them in the chat that there is no way down") */
           const nm = '<span class="c">Cave opening</span>', say = () => hud.chat("The shaft drops away steep and narrow into the dark. There's no way down from here.", 'sys');
           return [{ html: 'Enter ' + nm, fn: say, act: null }, { html: 'Examine ' + nm, fn: () => hud.chat('A narrow opening in the rock. A cold draught breathes up out of it.', 'sys') }]; }
+        if (t.kind === 'patch') {   /* FARMING: what you can do to your crop in this patch */
+          const o = core.patchAt ? core.patchAt(t.x, t.y) : null, v = o && core.patchView(me.id, o), FA = core.farm; if (!v || !FA) return [];
+          const tn = (FA.tiers[String(o.tier || 1)] || {}).name || 'farming patch', nm = '<span class="c">' + esc(tn.charAt(0).toUpperCase() + tn.slice(1)) + '</span>', A = op => ({ c: 'farm', x: o.x, y: o.y, op }), out = [];
+          if (!v.crop && v.w) out.push({ html: 'Rake ' + nm, act: A('rake') });
+          if (!v.crop && !v.w) for (const c of Object.values(FA.crops)) if ((me.inv || []).some(s => s && s.id === c.seed)) out.push({ html: 'Plant <span class="o">' + esc(core.item(c.seed).name) + '</span>', act: Object.assign(A('plant'), { seed: c.seed }) });
+          if (v.crop && v.ready) out.push({ html: 'Harvest ' + nm, act: A('harvest') });
+          if (v.crop && !v.ready && !v.water) out.push({ html: 'Water ' + nm, act: A('water') });
+          out.push({ html: 'Inspect ' + nm, act: A('inspect') });
+          return out;
+        }
         if (t.kind === 'trap') { const nm = '<span class="c">Nagwaagan (snare)</span>';
           return [{ html: 'Check ' + nm, act: { c: 'trap', x: t.x, y: t.y }, red: 1 }, { html: 'Take up ' + nm, act: { c: 'trap', x: t.x, y: t.y, up: 1 } },
                   { html: 'Examine ' + nm, fn: () => hud.chat('Your nagwaagan (snare): a noose of sinew across a waabooz (rabbit) run, tied to a bent sapling.', 'sys') }]; }

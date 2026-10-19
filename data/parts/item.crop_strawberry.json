@@ -1,0 +1,1 @@
+{"ashvale3d":"part","api":1,"v":1,"id":"item.crop_strawberry","kind":"item","items":{"strawberry":"#d83a3a"},"shapes":[{"t":"cone","s":[0.05,0.09],"c":"$c","p":[0,0.05,0],"r":[3.1416,0,0]},{"t":"cyl","s":[0.05,0.03,0.015],"c":"#3a8a2a","p":[0,0.1,0],"seg":6},{"t":"cyl","s":[0.006,0.006,0.03],"c":"#3a6a2a","p":[0,0.12,0],"seg":4}]}

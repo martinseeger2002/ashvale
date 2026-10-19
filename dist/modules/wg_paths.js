@@ -494,6 +494,31 @@
             }
           }
         }
+        /* PATCHES (FARMING, 2026-10-18: "in random free spots between saltmere ashvale and lake castle"): farming patches, 2 x 2 tiles, in
+           free spots 5-9 m off the roads between the towns, every 45-135 m (seeded by the road), on dry, level, open ground out of the towns.
+           Their tier decides what grows in them (rules.farming): small ones most often, the large ones that take every crop rarest - every
+           third patch a tier 2, every seventh a tier 3, the rest tier 1. src/core.js FARMING keeps each player's crop in each. */
+        {
+          let idx = 0; const placedP = [];
+          for (const r of ROADS_L) {
+            const pts = r.pts, face = r.A.face, seed = g.hashStr('patch:' + r.A.id + '>' + r.B.id); let n = 0; const R = () => g.u01(g.mix32(seed + (n++) * 7919));
+            const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+            const L = cum[cum.length - 1], pt = d => { let i = 1; while (i < pts.length - 1 && cum[i] < d) i++; const l = cum[i] - cum[i - 1] || 1, k = Math.max(0, Math.min(1, (d - cum[i - 1]) / l)); return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * k, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * k]; };
+            for (let d = 30 + R() * 40; d < L - 25; d += 45 + R() * 90) {
+              const a = pt(d - 1), b = pt(d + 1), l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, tx = (b[0] - a[0]) / l, ty = (b[1] - a[1]) / l, sd = R() < 0.5 ? -1 : 1, off = r.w0 + 5 + R() * 4;
+              const c = pt(d), px = c[0] - ty * sd * off, py = c[1] + tx * sd * off, gx = Math.floor(px) - 1, gy = Math.floor(-py) - 1;
+              let ok = true, lo = 1e9, hi = -1e9;
+              for (const [dx, dy] of [[0, 0], [2, 0], [0, 2], [2, 2], [1, 1]]) {
+                if (inPiece(face, gx + Math.min(dx, 1), gy + Math.min(dy, 1))) { ok = false; break; }
+                ctx.foldInto(face, gx + dx, -(gy + dy), SB); const s0 = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false);
+                if (s0.h < ctx.WATER + 0.3 || s0.peakS > 0.05) { ok = false; break; } lo = Math.min(lo, s0.h); hi = Math.max(hi, s0.h);
+              }
+              if (!ok || hi - lo > 0.8 || placedP.some(q => Math.abs(q[0] - gx) < 5 && Math.abs(q[1] - gy) < 5)) continue;
+              const tier = idx % 7 === 3 ? 3 : idx % 3 === 1 ? 2 : 1; idx++;
+              placedP.push([gx, gy]); ROAD.push({ k: 'farmpatch', x: gx, y: gy, w: 2, h: 2, face, tier });
+            }
+          }
+        }
         for (const S of (T.decor || [])) ROAD.push(Object.assign({ k: S.k, x: S.x, y: S.y, w: 1, h: 1, face: S.face, ry: S.ry || 0, pal: S.pal, s: S.s }, S.dx || S.dz ? { dx: S.dx || 0, dz: S.dz || 0 } : {}));   /* scenery out in the world (data/decor.json kinds; tools/decor/place_trail_decor.js, place_cemetery.js - a railing section on a tile edge: dx/dz off its tile's centre) */
         for (const S of (T.trailSigns || [])) ROAD.push({ k: 'signpost', x: S.x, y: S.y, w: 1, h: 1, face: S.face, arms: S.arms });   /* the great mountain's trails (tools/mountain/make_signs.js) */
       }

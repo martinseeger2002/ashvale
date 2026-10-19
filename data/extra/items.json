@@ -308,9 +308,10 @@
    "category": "resource",
    "subcategory": "note",
    "weight": 20,
-   "model": "item.bones",
+   "model": "item.scroll",
    "value": 1,
-   "attributes": []
+   "attributes": [],
+   "examine": "A damp note in a Vorthan's hand naming the Red Pyre, the rosary and the cave. Take it to Mother Wenna in Saltmere (The Red Pyre)."
   },
   "sapling": {
    "name": "Sapling",
@@ -563,7 +564,7 @@
    "category": "resource",
    "subcategory": "meat",
    "weight": 700,
-   "model": "item.chicken",
+   "model": "item.chop",
    "value": 5,
    "attributes": [
     {
@@ -582,7 +583,8 @@
      "trait_type": "Cooking XP",
      "value": 40
     }
-   ]
+   ],
+   "examine": "Raw mutton. Cook it on a range or fire for roast mutton."
   },
   "mutton_cooked": {
    "name": "Roast mutton",
@@ -592,14 +594,15 @@
    "category": "food",
    "subcategory": "meat",
    "weight": 700,
-   "model": "item.chicken",
+   "model": "item.chop",
    "value": 11,
    "attributes": [
     {
      "trait_type": "Heal",
      "value": 5
     }
-   ]
+   ],
+   "examine": "Roast mutton. Heals 5; the castle's chaplain asks for some (Vespers)."
   },
   "mutton_burnt": {
    "name": "Burnt mutton",
@@ -609,9 +612,10 @@
    "category": "resource",
    "subcategory": "meat",
    "weight": 700,
-   "model": "item.chicken",
+   "model": "item.chop",
    "value": 0,
-   "attributes": []
+   "attributes": [],
+   "examine": "Burnt mutton. Good for nothing but a lesson."
   },
   "beef_raw": {
    "name": "Raw beef",
@@ -621,7 +625,7 @@
    "category": "resource",
    "subcategory": "meat",
    "weight": 900,
-   "model": "item.chicken",
+   "model": "item.steak",
    "value": 7,
    "attributes": [
     {
@@ -640,7 +644,8 @@
      "trait_type": "Cooking XP",
      "value": 55
     }
-   ]
+   ],
+   "examine": "Raw beef. Cook it on a range or fire."
   },
   "beef_cooked": {
    "name": "Roast beef",
@@ -650,14 +655,15 @@
    "category": "food",
    "subcategory": "meat",
    "weight": 900,
-   "model": "item.chicken",
+   "model": "item.steak",
    "value": 15,
    "attributes": [
     {
      "trait_type": "Heal",
      "value": 7
     }
-   ]
+   ],
+   "examine": "Roast beef. Heals well; the castle kitchens buy it."
   },
   "beef_burnt": {
    "name": "Burnt beef",
@@ -667,9 +673,10 @@
    "category": "resource",
    "subcategory": "meat",
    "weight": 900,
-   "model": "item.chicken",
+   "model": "item.steak",
    "value": 0,
-   "attributes": []
+   "attributes": [],
+   "examine": "Burnt beef. The dogs won't touch it either."
   },
   "wool": {
    "name": "Wool",
@@ -679,9 +686,10 @@
    "category": "resource",
    "subcategory": "pelt",
    "weight": 300,
-   "model": "item.pelt",
+   "model": "item.fleece",
    "value": 6,
-   "attributes": []
+   "attributes": [],
+   "examine": "A fleece of wool from the castle's sheep. Keeper Wyn wants one as an offering (The Three Stones); it also sells."
   },
   "cowhide": {
    "name": "Cowhide",
@@ -691,9 +699,10 @@
    "category": "resource",
    "subcategory": "pelt",
    "weight": 1200,
-   "model": "item.pelt",
+   "model": "item.cowhide",
    "value": 16,
-   "attributes": []
+   "attributes": [],
+   "examine": "A cowhide from the castle farm. Tanners and the castle's stores buy them."
   },
   "wizard_cloak": {
    "name": "Wizard cloak top",
@@ -718,7 +727,8 @@
      "trait_type": "Defence",
      "value": 12
     }
-   ]
+   ],
+   "examine": "The upper half of the Circle's cloak. Worn on the body: Magic +10, Defence +12. Needs Magic 40; sold by Pell at the Frostspire."
   },
   "wizard_cloak_bottoms": {
    "name": "Wizard cloak bottoms",
@@ -743,7 +753,8 @@
      "trait_type": "Defence",
      "value": 8
     }
-   ]
+   ],
+   "examine": "The Circle's cloak skirts. Worn on the legs: Magic +7, Defence +8. Needs Magic 40; sold by Pell at the Frostspire."
   },
   "wizard_focus": {
    "name": "Wizard's focus",
@@ -764,7 +775,8 @@
      "trait_type": "Magic",
      "value": 5
     }
-   ]
+   ],
+   "examine": "An ice orb on a silver stem, from The Archmage's Trial. Held in the shield hand: Magic +5, so your spells land more often."
   },
   "frost_ink": {
    "name": "Frost ink",
@@ -774,9 +786,10 @@
    "category": "resource",
    "subcategory": "curio",
    "weight": 300,
-   "model": "item.potion",
+   "model": "item.inkpot",
    "value": 15,
-   "attributes": []
+   "attributes": [],
+   "examine": "A pot of the Frostspire's frost ink. Frost goblins steal it; Archmage Halvard wants three back (The Stolen Ink)."
   },
   "tome_echoes": {
    "name": "Tome of Echoes",
@@ -786,9 +799,10 @@
    "category": "resource",
    "subcategory": "note",
    "weight": 600,
-   "model": "item.note",
+   "model": "item.tome_echoes",
    "value": 1,
-   "attributes": []
+   "attributes": [],
+   "examine": "The Circle's Tome of Echoes, from Aled. Show it to Pell at the Frostspire (The Scattered Tomes); yours to keep after, for its lore."
   },
   "tome_stones": {
    "name": "Tome of Stones",
@@ -798,9 +812,10 @@
    "category": "resource",
    "subcategory": "note",
    "weight": 600,
-   "model": "item.note",
+   "model": "item.tome_stones",
    "value": 1,
-   "attributes": []
+   "attributes": [],
+   "examine": "The Circle's Tome of Stones, from Wyn. Show it to Pell at the Frostspire (The Scattered Tomes); yours to keep after."
   },
   "tome_far_road": {
    "name": "Tome of the Far Road",
@@ -810,8 +825,302 @@
    "category": "resource",
    "subcategory": "note",
    "weight": 600,
-   "model": "item.note",
+   "model": "item.tome_far_road",
    "value": 1,
+   "attributes": [],
+   "examine": "The Circle's Tome of the Far Road, from Tamsin. Show it to Pell (The Scattered Tomes); its last page warns of the chain."
+  },
+  "rake": {
+   "name": "Rake",
+   "description": "A sturdy rake. Use it on a farming patch to clear the weeds before you plant.",
+   "examine": "A sturdy rake. Use it on a farming patch to clear the weeds before you plant.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "tool",
+   "subcategory": "rake",
+   "weight": 1400,
+   "model": "item.rake",
+   "value": 20,
+   "attributes": []
+  },
+  "seed_dibber": {
+   "name": "Seed dibber",
+   "description": "A pointed stick for poking seeds into soil. Needed to plant anything in a farming patch.",
+   "examine": "A pointed stick for poking seeds into soil. Needed to plant anything in a farming patch.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "tool",
+   "subcategory": "dibber",
+   "weight": 300,
+   "model": "item.dibber",
+   "value": 8,
+   "attributes": []
+  },
+  "spade": {
+   "name": "Spade",
+   "description": "A good iron spade. Dig up a farming patch's crop with it once the crop is fully grown.",
+   "examine": "A good iron spade. Dig up a farming patch's crop with it once the crop is fully grown.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "tool",
+   "subcategory": "spade",
+   "weight": 1600,
+   "model": "item.spade",
+   "value": 18,
+   "attributes": []
+  },
+  "watering_can": {
+   "name": "Watering can",
+   "description": "A watering can. Water a growing crop once for a bigger harvest; it refills itself from the dew, apparently.",
+   "examine": "A watering can. Water a growing crop once for a bigger harvest; it refills itself from the dew, apparently.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "tool",
+   "subcategory": "wateringcan",
+   "weight": 900,
+   "model": "item.wateringcan",
+   "value": 25,
+   "attributes": []
+  },
+  "potato_seed": {
+   "name": "Potato seed",
+   "description": "Potato seeds (Farming 1). Plant in any farming patch; potatoes are ready in about 8 blocks.",
+   "examine": "Potato seeds (Farming 1). Plant in any farming patch; potatoes are ready in about 8 blocks.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "seed",
+   "weight": 5,
+   "model": "item.seedpouch",
+   "value": 3,
+   "attributes": [],
+   "stackable": true
+  },
+  "potato": {
+   "name": "Potato",
+   "description": "A potato, dug from your own patch. Eat it raw if you must (heals 1); it sells to the general stores.",
+   "examine": "A potato, dug from your own patch. Eat it raw if you must (heals 1); it sells to the general stores.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "food",
+   "subcategory": "crop",
+   "weight": 300,
+   "model": "item.crop_potato",
+   "value": 5,
+   "attributes": [
+    {
+     "trait_type": "Heal",
+     "value": 1
+    }
+   ]
+  },
+  "onion_seed": {
+   "name": "Onion seed",
+   "description": "Onion seeds (Farming 5). Plant in any farming patch; onions are ready in about 12 blocks.",
+   "examine": "Onion seeds (Farming 5). Plant in any farming patch; onions are ready in about 12 blocks.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "seed",
+   "weight": 5,
+   "model": "item.seedpouch",
+   "value": 5,
+   "attributes": [],
+   "stackable": true
+  },
+  "onion": {
+   "name": "Onion",
+   "description": "An onion. Eat it if you are brave (heals 2), or sell it; cooks pay well for them.",
+   "examine": "An onion. Eat it if you are brave (heals 2), or sell it; cooks pay well for them.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "food",
+   "subcategory": "crop",
+   "weight": 300,
+   "model": "item.crop_onion",
+   "value": 7,
+   "attributes": [
+    {
+     "trait_type": "Heal",
+     "value": 2
+    }
+   ]
+  },
+  "cabbage_seed": {
+   "name": "Cabbage seed",
+   "description": "Cabbage seeds (Farming 9). Plant in any farming patch; cabbages are ready in about 16 blocks.",
+   "examine": "Cabbage seeds (Farming 9). Plant in any farming patch; cabbages are ready in about 16 blocks.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "seed",
+   "weight": 5,
+   "model": "item.seedpouch",
+   "value": 8,
+   "attributes": [],
+   "stackable": true
+  },
+  "cabbage": {
+   "name": "Cabbage",
+   "description": "A cabbage. Heals 3 if you eat it; the lodge on the mountain puts them in every stew.",
+   "examine": "A cabbage. Heals 3 if you eat it; the lodge on the mountain puts them in every stew.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "food",
+   "subcategory": "crop",
+   "weight": 300,
+   "model": "item.crop_cabbage",
+   "value": 10,
+   "attributes": [
+    {
+     "trait_type": "Heal",
+     "value": 3
+    }
+   ]
+  },
+  "barley_seed": {
+   "name": "Barley seed",
+   "description": "Barley seeds (Farming 14). Needs a farming patch or a large one, not a small patch; about 20 blocks.",
+   "examine": "Barley seeds (Farming 14). Needs a farming patch or a large one, not a small patch; about 20 blocks.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "seed",
+   "weight": 5,
+   "model": "item.seedpouch",
+   "value": 12,
+   "attributes": [],
+   "stackable": true
+  },
+  "barley": {
+   "name": "Barley",
+   "description": "A sheaf of barley, for the mill and the brewers. Not food on its own; it sells well.",
+   "examine": "A sheaf of barley, for the mill and the brewers. Not food on its own; it sells well.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "grain",
+   "weight": 300,
+   "model": "item.crop_barley",
+   "value": 12,
+   "attributes": []
+  },
+  "strawberry_seed": {
+   "name": "Strawberry seed",
+   "description": "Strawberry seeds (Farming 19). Needs a farming patch or a large one; ripe in about 25 blocks.",
+   "examine": "Strawberry seeds (Farming 19). Needs a farming patch or a large one; ripe in about 25 blocks.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "seed",
+   "weight": 5,
+   "model": "item.seedpouch",
+   "value": 18,
+   "attributes": [],
+   "stackable": true
+  },
+  "strawberry": {
+   "name": "Strawberry",
+   "description": "A ripe strawberry. Heals 6 and tastes like summer.",
+   "examine": "A ripe strawberry. Heals 6 and tastes like summer.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "food",
+   "subcategory": "crop",
+   "weight": 300,
+   "model": "item.crop_strawberry",
+   "value": 22,
+   "attributes": [
+    {
+     "trait_type": "Heal",
+     "value": 6
+    }
+   ]
+  },
+  "pumpkin_seed": {
+   "name": "Pumpkin seed",
+   "description": "Pumpkin seeds (Farming 27). Needs a farming patch or a large one; slow, about 35 blocks.",
+   "examine": "Pumpkin seeds (Farming 27). Needs a farming patch or a large one; slow, about 35 blocks.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "seed",
+   "weight": 5,
+   "model": "item.seedpouch",
+   "value": 30,
+   "attributes": [],
+   "stackable": true
+  },
+  "pumpkin": {
+   "name": "Pumpkin",
+   "description": "A pumpkin. Heals 8 if you can face eating that much pumpkin.",
+   "examine": "A pumpkin. Heals 8 if you can face eating that much pumpkin.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "food",
+   "subcategory": "crop",
+   "weight": 2200,
+   "model": "item.crop_pumpkin",
+   "value": 45,
+   "attributes": [
+    {
+     "trait_type": "Heal",
+     "value": 8
+    }
+   ]
+  },
+  "moonleaf_seed": {
+   "name": "Moonleaf seed",
+   "description": "Moonleaf seeds (Farming 33). Only a large farming patch will take them; about 40 blocks.",
+   "examine": "Moonleaf seeds (Farming 33). Only a large farming patch will take them; about 40 blocks.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "seed",
+   "weight": 5,
+   "model": "item.seedpouch",
+   "value": 60,
+   "attributes": [],
+   "stackable": true
+  },
+  "moonleaf": {
+   "name": "Moonleaf",
+   "description": "A silver moonleaf. The wizards of the Frostspire grind it into their frost ink; worth a good deal.",
+   "examine": "A silver moonleaf. The wizards of the Frostspire grind it into their frost ink; worth a good deal.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "herb",
+   "weight": 300,
+   "model": "item.crop_moonleaf",
+   "value": 95,
+   "attributes": []
+  },
+  "frostbloom_seed": {
+   "name": "Frostbloom seed",
+   "description": "Frostbloom seeds (Farming 45). Only a large farming patch; about 60 blocks, and worth every one.",
+   "examine": "Frostbloom seeds (Farming 45). Only a large farming patch; about 60 blocks, and worth every one.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "seed",
+   "weight": 5,
+   "model": "item.seedpouch",
+   "value": 120,
+   "attributes": [],
+   "stackable": true
+  },
+  "frostbloom": {
+   "name": "Frostbloom",
+   "description": "A frostbloom, cold to the touch and faintly glowing. Rare, and prized by every wizard in the valley.",
+   "examine": "A frostbloom, cold to the touch and faintly glowing. Rare, and prized by every wizard in the valley.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "herb",
+   "weight": 300,
+   "model": "item.crop_frostbloom",
+   "value": 230,
    "attributes": []
   }
  }

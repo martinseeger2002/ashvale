@@ -242,15 +242,17 @@
     dexterity: SV('M4 20c6-2 9-7 10-16 2 5 1 9-2 12l6 1-3 3H4z', '#9ad0b0'), speechcraft: SV('M3 4h18v12H9l-5 4v-4H3z', '#e8c8f0'),
     fishing: SV('M2 12c4-5 10-6 15-2l4-3v10l-4-3c-5 4-11 3-15-2z', '#60a0d0'), cooking: SV('M4 10h16v3c0 5-3 8-8 8s-8-3-8-8zm4-6c0 2 2 2 2 4m4-4c0 2 2 2 2 4', '#d0a040'),
     firemaking: SV('M12 2c3 4 6 6 6 11a6 6 0 01-12 0c0-3 2-5 3-7 1 2 1 3 3 4 0-3-1-5 0-8z', '#ff8a30'),
-    prayer: SV('M12 2l2 4h-1v3h4v2h-4v8l3 3H8l3-3v-8H7V9h4V6h-1z', '#8fd8ff')
+    prayer: SV('M12 2l2 4h-1v3h4v2h-4v8l3 3H8l3-3v-8H7V9h4V6h-1z', '#8fd8ff'),
+    farming: SV('M12 22V11M12 13c-4 0-7-3-7-7 4 0 7 3 7 7zm0-2c0-4 3-7 7-7 0 4-3 7-7 7zM5 22h14', '#7ac04a')   /* a sprout (FARMING, 2026-10-18) */
   };
-  const SKILL_ORDER = ['attack', 'hitpoints', 'strength', 'ranged', 'defence', 'magic', 'prayer', 'dexterity', 'speechcraft', 'woodcutting', 'mining', 'fishing', 'cooking', 'firemaking'];
+  const SKILL_ORDER = ['attack', 'hitpoints', 'strength', 'ranged', 'defence', 'magic', 'prayer', 'dexterity', 'speechcraft', 'woodcutting', 'mining', 'fishing', 'cooking', 'firemaking', 'farming'];
   const SKILL_INFO = { attack: 'Hit more often in melee. Trained by the Accurate style.', strength: 'Hit harder in melee and carry 1 kg more per level. Trained by the Aggressive style.',
     defence: 'Get hit less often by everything. Trained by the Defensive style (and Longrange or Defensive cast). Armour needs it.', hitpoints: 'Your health. Trained by every hit you land.',
     ranged: 'Bows and arrows. Trained by hitting with a bow.', magic: 'Staffs and spells. Trained by casting.', prayer: 'Prayers that protect you from blows. Your Prayer points drain while one is on; pray at the church altar to recharge. Trained by burying bones.', dexterity: 'Run longer, dodge blows, faster daggers and bows at 50.',
     speechcraft: 'Better prices in every shop. Trained by trading and by talking quests through.', woodcutting: 'Chop trees with a hatchet.', mining: 'Mine rocks with a pickaxe.',
     fishing: 'Catch fish with a net, a rod or a lobster pot.', cooking: 'Cook raw fish on a range or a campfire; burn less as you level.',
-    firemaking: 'Light campfires: a tinderbox on logs. Better logs need more levels and burn longer.' };
+    firemaking: 'Light campfires: a tinderbox on logs. Better logs need more levels and burn longer.',
+    farming: 'Grow crops in the farming patches by the roads: rake the weeds, plant a seed with a dibber, wait out its blocks, dig it up with a spade. Seeds come from the general stores and off beasts you fight; larger patches take rarer crops.' };
   const START_SKILLS = [['attack', 'Hit more often in melee'], ['strength', 'Hit harder, carry 1 kg more per level'], ['defence', 'Get hit less often'], ['ranged', 'Bows and arrows'], ['magic', 'Staffs and spells'], ['hitpoints', 'More health'], ['dexterity', 'Run longer, dodge, faster daggers and bows'], ['speechcraft', 'Better prices in shops']];
   const EQ_LAYOUT = [null, 'head', null, 'cape', 'neck', 'ammo', 'weapon', 'body', 'shield', 'pack', 'legs', null, 'hands', 'feet', 'ring'];
   const EQ_ACTIVE = { head: 1, cape: 1, pack: 1, ammo: 1, weapon: 1, body: 1, shield: 1, legs: 1, feet: 1, ring: 1 };

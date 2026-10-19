@@ -1,0 +1,1 @@
+{"ashvale3d":"module","name":"part.item.crop_onion","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"item.crop_onion","kind":"item","items":{"onion":"#d8b878"},"shapes":[{"t":"sphere","s":[0.065],"c":"$c","p":[0,0.065,0]},{"t":"cone","s":[0.03,0.08],"c":"#8a9a4a","p":[0,0.15,0]},{"t":"cyl","s":[0.03,0.01,0.02],"c":"#d8c8a0","p":[0,0.005,0],"seg":6}]}}

@@ -1,0 +1,1 @@
+{"ashvale3d":"module","name":"part.item.dibber","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"item.dibber","kind":"item","items":{"seed_dibber":"#7a5530"},"shapes":[{"t":"cone","s":[0.02,0.18],"c":"$c","p":[0,0.02,0.05],"r":[1.5708,0,0]},{"t":"box","s":[0.1,0.025,0.025],"c":"$c:0.8","p":[0,0.02,-0.06]}]}}

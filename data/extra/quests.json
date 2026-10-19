@@ -2131,6 +2131,125 @@
    "done": [
     "You are of the Circle now. Halvard nods when you pass, which from him is a speech."
    ]
+  },
+  "first_furrows": {
+   "name": "First Furrows",
+   "giver": "tobin",
+   "story": 2,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "castle",
+     "goal": {
+      "harvest": "potato",
+      "n": 3
+     },
+     "reward": [
+      "xp:farming:300",
+      "onion_seed:3"
+     ],
+     "talk": [
+      "Time you got your hands dirty. A rake, a seed dibber and a spade - any general store has them, the castle's included.",
+      "There are farming patches all along the roads between here, Ashvale and Saltmere. Find one, rake the weeds off and plant potato seeds.",
+      "Water them if you've a can, wait a few blocks, then dig me up three potatoes."
+     ],
+     "progress": [
+      "Rake a patch, plant potato seeds, wait for them to grow, dig up three potatoes. The stores sell the seeds too."
+     ],
+     "complete": [
+      "Three potatoes, and dirt to the elbows. You'll make a farmer yet. Here - onion seeds, for your next row."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "castle",
+     "goal": {
+      "harvest": "onion",
+      "n": 3
+     },
+     "reward": "xp:farming:450",
+     "talk": [
+      "Onions next. They take a little longer and they make you cry when you cut them, which is how you know they're honest.",
+      "Plant those seeds I gave you and bring me news of three onions."
+     ],
+     "progress": [
+      "Grow and dig up three onions. Farming level 5 to plant them."
+     ],
+     "complete": [
+      "Three onions! The castle cook will have them before you can blink. You know your way round a patch now."
+     ]
+    }
+   ],
+   "done": [
+    "Tobin nods at every farming patch you pass, as if they were old friends of his."
+   ]
+  },
+  "lodge_greens": {
+   "name": "Greens for the Lodge",
+   "giver": "orla",
+   "after": "wolves_on_the_climb",
+   "story": 1,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "mt_lodge",
+     "goal": {
+      "harvest": "cabbage",
+      "n": 4
+     },
+     "reward": [
+      "xp:farming:700",
+      "xp:cooking:300"
+     ],
+     "talk": [
+      "The lodge's stew has been mostly water and optimism since the snows came. It needs greens.",
+      "Grow me four cabbages in one of the patches down by the roads. Farming 9 should do it."
+     ],
+     "progress": [
+      "Four cabbages, grown in a farming patch by the roads below."
+     ],
+     "complete": [
+      "Four fat cabbages. The stew will be a stew again. Sit down, have a bowl - you earned the first one."
+     ]
+    }
+   ],
+   "done": [
+    "The lodge's stew is famous now. Orla says it was always famous; it just hadn't been told."
+   ]
+  },
+  "moonleaf_for_the_circle": {
+   "name": "Moonleaf for the Circle",
+   "giver": "halvard",
+   "after": "archmage_trial",
+   "story": 2,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "mt_tower",
+     "goal": {
+      "harvest": "moonleaf",
+      "n": 2
+     },
+     "reward": [
+      "xp:farming:1500",
+      "xp:magic:500"
+     ],
+     "talk": [
+      "Frost ink is half summit cold and half moonleaf, and the goblins have left us short of both.",
+      "Moonleaf will only grow in the large farming patches - rare things, by the roads below. Farming 33, and patience.",
+      "Two leaves. Bring word when you have dug them up."
+     ],
+     "progress": [
+      "Grow two moonleaf in a large farming patch. The seeds come off strong beasts, now and then."
+     ],
+     "complete": [
+      "Two moonleaf, silver as the beacon. The Circle's ink will be blacker than ever, which is to say paler, which is how frost ink works."
+     ]
+    }
+   ],
+   "done": [
+    "The Circle writes in moonleaf ink now. Halvard says you can taste the difference. Pell says not to."
+   ]
   }
  }
 }

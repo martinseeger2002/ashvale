@@ -441,6 +441,7 @@
       if (s.attuned) p.attuned = JSON.parse(JSON.stringify(s.attuned));
       if (s.orders && typeof s.orders === 'object') p.orders = JSON.parse(JSON.stringify(s.orders));   /* what the people are making for you (a canoe takes two days) */
       if (Array.isArray(s.bless)) p.bless = s.bless.filter(b => b && Number.isInteger(b.x) && Number.isInteger(b.y)).slice(-12).map(b => ({ x: b.x, y: b.y, day: b.day | 0, r: Math.min(30, b.r | 0) }));
+      if (s.patches && typeof s.patches === 'object' && FARM) { p.patches = {}; for (const k of Object.keys(s.patches).slice(0, 400)) { const v = s.patches[k]; if (!/^-?\d+,-?\d+$/.test(k) || !v || typeof v !== 'object') continue; const o = { w: Math.max(0, Math.min(FARM.weeds, v.w | 0)) }; if (v.crop && FARM.crops[v.crop] && isFinite(+v.at)) { o.crop = v.crop; o.at = +v.at; o.water = v.water ? 1 : 0; } else if (isFinite(+v.clear)) o.clear = +v.clear; p.patches[k] = o; } }   /* FARMING */
       if (Array.isArray(s.traps)) p.traps = s.traps.filter(t => t && IT[t.id] && trapOf(IT[t.id]) && Number.isInteger(t.x) && Number.isInteger(t.y)).slice(0, 8).map(t => ({ id: t.id, x: underMove(t.x, t.y)[0], y: underMove(t.x, t.y)[1], prey: String(t.prey || ''), ready: +t.ready || 0 }));
       if (typeof s.town === 'string') p.town = s.town;
       if (s.hawkHp != null) p.hawkHp = s.hawkHp | 0;
@@ -518,7 +519,7 @@
     function exportPlayer(id) {
       const p = S.players[id]; if (!p) return null;
       const at = p.dead ? wakeSpot(p).at : [p.x, p.y];
-      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, orders: p.orders || {}, traps: p.traps || [], bless: p.bless || [], town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, gift: p.gift && Object.keys(p.gift).length ? p.gift : undefined, kills: p.kills || {}, pk: p.pk || undefined, ch: p.ch || undefined, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
+      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, orders: p.orders || {}, traps: p.traps || [], patches: p.patches || {}, bless: p.bless || [], town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, gift: p.gift && Object.keys(p.gift).length ? p.gift : undefined, kills: p.kills || {}, pk: p.pk || undefined, ch: p.ch || undefined, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
     }
 
     // ---------------- pathfinding: BFS over the tile grid, 8 directions, no corner cutting (RuneScape-style)
@@ -901,6 +902,7 @@
         case 'use': useItem(p, c.slot | 0); break;
         case 'craft': { const n = M.npcs.find(q => q.id === c.npc), L = n && (Array.isArray(n.craft) ? n.craft : n.craft ? [n.craft] : []), k = L && L[c.i | 0];
           if (k && !p.dead && cheb(p.x, p.y, n.x, n.y) <= 3 && (!k.after || questFinished(p, k.after))) orderCraft(p, n, k); break; }
+        case 'farm': { const o = patchAt(c.x | 0, c.y | 0); if (o && FARM && !p.dead) { p.act = { k: 'farm', x: o.x, y: o.y, op: String(c.op || 'inspect'), seed: c.seed ? String(c.seed) : null }; p.fT = 0; p.skilling = null; closeShop(p); } break; }   /* FARMING */
         case 'trap': { const t = (p.traps || []).find(q => q.x === (c.x | 0) && q.y === (c.y | 0)); if (t && !p.dead) { p.act = { k: 'trap', x: t.x, y: t.y, up: c.up ? 1 : 0 }; p.skilling = null; closeShop(p); } break; }
         case 'arms': { const has = p.inv.concat(Object.values(p.eq || {})).some(s => s && IT[s.id] && IT[s.id].arms); if (!has) { msg(p, 'You need the Lake Castle stone to call the guard.', 'warn'); break; } callToArms(p, !!c.on); break; }
         case 'equip': equip(p, c.slot | 0); break;
@@ -1315,6 +1317,12 @@
         if (!id || !IT[id]) continue;
         const n = d.n ? d.n[0] + R.int(d.n[1] - d.n[0] + 1) : 1; dropGround(id, n, m.x, m.y, owner, 300, { lv: m.lv | 0 });
       }
+      /* FARMING: now and then a seed, the better ones only off the stronger beasts and rarer still (rules.farming.seeds), on the farm's own dice */
+      if (FARM && FARM.seeds && !m.summon && owner && (FARM.noSeeds || []).indexOf(m.key) < 0 && (md.level | 0) >= 2 && FD.int(FARM.seeds.chance) === 0) {
+        const cap = (md.level | 0) * 2 + 3, L = Object.entries(FARM.seeds.weights).filter(([k]) => FARM.crops[k] && FARM.crops[k].lvl <= cap && IT[FARM.crops[k].seed]);
+        let r = FD.next() * L.reduce((t, x) => t + x[1], 0);
+        for (const [k, w] of L) if ((r -= w) < 0) { dropGround(FARM.crops[k].seed, 1, m.x, m.y, owner, 300, { lv: m.lv | 0 }); break; }
+      }
     }
     function mobAttack(m, p, mode) {
       const md = MON[m.key], b = bonuses(p), st = style(p), magic = mode === 'magic', ranged = !!mode && !magic, cls = magic ? 'magic' : ranged ? 'ranged' : 'melee', C = magic ? md.cast || {} : null;
@@ -1643,6 +1651,93 @@
       p.hints.at.push([x, y]); msg(p, H, 'quest');
     }
     function trapOf(d) { return d && (d.trap || ((RU.items || {}).traps || {})[d.subcategory]) || null; }   /* rules.items.traps by subcategory */
+    /* FARMING (2026-10-18, the operator: "make a new skill called farming - in random free spots between saltmere ashvale and lake castle -
+       ... the crops should take different amount of blocks to grow in a few different phases ... require tools like osrs ... a way to get
+       seeds from some combat enemies, higher seeds being less likely"). The patches are worldgen's road objects (k 'farmpatch', 2 x 2 tiles,
+       tier 1-3: src/wg_paths.js PATCHES); each player keeps their own state of every patch, saved with the character, in p.patches
+       {"x,y": {w: weeds left, crop, at: the block it was planted, water, clear: the block it was last emptied}}. Time is counted in blocks:
+       a minute of the game's clock (rules.farming.block seconds; the clock - natureHours - keeps going while you are away, so crops grow
+       offline). A crop grows through its phases, `blocks` each, and is dug up when the last is done. A rake clears the weeds (three
+       goes), a seed dibber plants, a spade digs it up, a watering can adds a crop. Every roll here is on dice of their own (FD), never the
+       world's R, so no fight, drop or catch anywhere else comes out differently. */
+    const FARM = RU.farming || null, FD = Rng(String(opts.seed || 'ashvale') + ':farming');
+    const blocksNow = () => natureHours() * ((FARM && FARM.hourSeconds) || 300) / ((FARM && FARM.block) || 60);   /* a game hour is 300 real seconds (engsky: a day is 2 hours) */
+    function patchAt(x, y) {
+      if (!M.roadTorchesIn) return null;
+      for (const o of M.roadTorchesIn(x - 2, y - 2, x + 1, y + 1)) if (o.k === 'farmpatch' && x >= o.x && y >= o.y && x < o.x + (o.w || 2) && y < o.y + (o.h || 2)) return o;
+      return null;
+    }
+    function patchState(p, o) {
+      const s = Object.assign({ w: FARM.weeds }, (p.patches || {})[o.x + ',' + o.y] || {});
+      if (!s.crop && s.clear != null) s.w = Math.max(s.w, Math.min(FARM.weeds, Math.floor((blocksNow() - s.clear) / FARM.weedsBack)));   /* an empty patch weeds over again */
+      return s;
+    }
+    function cropStage(s) {
+      const C = s.crop && FARM.crops[s.crop]; if (!C) return null;
+      const b = blocksNow() - s.at, ph = Math.max(0, Math.min(C.phases, Math.floor(b / C.blocks)));
+      return { C, phase: ph, ready: ph >= C.phases, left: Math.max(0, Math.ceil(C.phases * C.blocks - b)) };
+    }
+    const holding = (p, kind) => (p.inv || []).some(sl => sl && IT[sl.id] && IT[sl.id].kind === kind) || Object.values(p.eq || {}).some(sl => sl && IT[sl.id] && IT[sl.id].kind === kind);
+    function patchView(p, o) {   /* what the engine draws in a patch for this player */
+      const s = patchState(p, o), st = cropStage(s);
+      return { w: s.w | 0, crop: s.crop || null, phase: st ? st.phase : 0, phases: st ? st.C.phases : 0, ready: !!(st && st.ready), water: !!s.water, left: st ? st.left : 0 };
+    }
+    function creditHarvest(p, item, n) {
+      for (const qid in p.quests) {
+        const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.steps[q.step - 1];
+        if (st && st.goal.harvest === item && q.n < (st.goal.n == null ? 1 : st.goal.n)) { q.n = Math.min(st.goal.n || 1, (q.n | 0) + n); msg(p, Q.name + ': ' + q.n + ' / ' + (st.goal.n || 1) + ' ' + IT[item].name.toLowerCase() + ' grown.', 'quest'); }
+      }
+    }
+    function farmTick(p, o, a) {
+      if (S.t < (p.fT || 0)) return;
+      const id = o.x + ',' + o.y, s = patchState(p, o), st = cropStage(s), T = FARM.tiers[String(o.tier || 1)] || { name: 'farming patch' };
+      const keep = () => { p.patches = p.patches || {}; p.patches[id] = s; ev({ e: 'patch', p: p.id, x: o.x, y: o.y }); }, stop = () => { p.act = null; p.skilling = null; };
+      const nm = c => IT[c] ? IT[c].name.toLowerCase() : c;
+      p.face = faceTo(p.x, p.y, o.x, o.y);
+      if (a.op === 'inspect') {
+        const accepts = Object.values(FARM.crops).filter(c => c.tier <= (o.tier || 1)).map(c => nm(c.crop)).join(', ');
+        msg(p, 'A ' + T.name + '. ' + (st ? (st.ready ? 'Its ' + nm(st.C.crop) + ' is fully grown, ready to dig up.' : 'Its ' + nm(st.C.crop) + ' is in phase ' + (st.phase + 1) + ' of ' + st.C.phases + ', about ' + st.left + ' blocks to go' + (s.water ? ' (watered).' : '.'))
+          : s.w ? 'Overgrown with weeds; rake them off before you plant.' : 'Clear soil, ready to plant.') + ' It takes: ' + accepts + '.'); stop(); return;
+      }
+      if (a.op === 'rake') {
+        if (s.crop) { msg(p, 'Something is growing here.'); stop(); return; }
+        if (!s.w) { msg(p, 'The patch is clear of weeds already.'); stop(); return; }
+        if (!holding(p, 'rake')) { msg(p, 'You need a rake to clear the weeds.', 'warn'); stop(); return; }
+        p.skilling = 'rake'; p.fT = S.t + 4; s.w--; addXp(p, 'farming', FARM.rakeXp * 10);
+        if (!s.w) { s.clear = blocksNow(); msg(p, 'You rake the last of the weeds away. The patch is ready to plant.'); stop(); }
+        keep(); return;
+      }
+      if (a.op === 'plant') {
+        const C = Object.values(FARM.crops).find(c => c.seed === a.seed);
+        if (!C || !IT[C.seed]) { stop(); return; }
+        if (s.crop) { msg(p, 'Something is growing here already.'); stop(); return; }
+        if (s.w) { msg(p, 'Rake the weeds off first.', 'warn'); stop(); return; }
+        if (C.tier > (o.tier || 1)) { msg(p, 'That seed needs a bigger patch: ' + ((FARM.tiers[String(C.tier)] || {}).name || 'a larger one') + ' or larger.', 'warn'); stop(); return; }
+        if (lv(p, 'farming') < C.lvl) { msg(p, 'You need a Farming level of ' + C.lvl + ' to plant that.', 'warn'); stop(); return; }
+        if (!holding(p, 'dibber')) { msg(p, 'You need a seed dibber to plant seeds.', 'warn'); stop(); return; }
+        if (invCount(p, C.seed) < 1) { msg(p, 'You have no ' + nm(C.seed) + 's.'); stop(); return; }
+        removeItem(p, C.seed, 1); s.crop = C.crop; s.at = Math.round(blocksNow() * 100) / 100; s.water = 0; delete s.clear;
+        addXp(p, 'farming', C.xpPlant * 10); p.skilling = 'plant'; p.fT = S.t + 3;
+        msg(p, 'You plant the ' + nm(C.seed) + ' in the patch.'); ev({ e: 'inv', p: p.id }); keep(); stop(); return;
+      }
+      if (a.op === 'water') {
+        if (!st || st.ready) { msg(p, st ? 'It is fully grown; it needs a spade now, not water.' : 'There is nothing here to water.'); stop(); return; }
+        if (s.water) { msg(p, 'You have watered it already.'); stop(); return; }
+        if (!holding(p, 'wateringcan')) { msg(p, 'You need a watering can.', 'warn'); stop(); return; }
+        s.water = 1; msg(p, 'You water the ' + nm(st.C.crop) + '.'); keep(); stop(); return;
+      }
+      if (a.op === 'harvest') {
+        if (!st) { msg(p, 'There is nothing growing here.'); stop(); return; }
+        if (!st.ready) { msg(p, 'The ' + nm(st.C.crop) + ' is not ready yet: about ' + st.left + ' blocks to go.'); stop(); return; }
+        if (!holding(p, 'spade')) { msg(p, 'You need a spade to dig it up.', 'warn'); stop(); return; }
+        const [lo, hi] = st.C.yield, n = lo + FD.int(hi - lo + 1) + (s.water ? FARM.waterBonus : 0), crop = st.C.crop;
+        if (addItem(p, crop, n)) dropGround(crop, n, p.x, p.y, p.id, 600);
+        addXp(p, 'farming', st.C.xpHarvest * n * 10); msg(p, 'You dig up ' + n + ' ' + nm(crop) + (n > 1 ? 's' : '') + '.');
+        creditHarvest(p, crop, n);
+        p.patches = p.patches || {}; p.patches[id] = { w: 0, clear: blocksNow() }; ev({ e: 'patch', p: p.id, x: o.x, y: o.y }); ev({ e: 'inv', p: p.id }); p.skilling = 'dig'; p.fT = S.t + 3; stop(); return;
+      }
+      stop();
+    }
     function trapsMsg(p) { ev({ e: 'traps', p: p.id, traps: (p.traps || []).map(t => ({ x: t.x, y: t.y, id: t.id, ready: natureHours() >= t.ready ? 1 : 0 })) }); }
     function setTrap(p, slot) {
       const s = p.inv[slot], d = s && IT[s.id], T = trapOf(d); if (!T) return;
@@ -1817,18 +1912,18 @@
         const counted = (st) => {
           if (st.goal.kills) { let n = 0; for (const k in st.goal.kills) n += Math.min(st.goal.kills[k], (q.kn && q.kn[k]) | 0); return n; }
           if (st.goal.flag) return hasFlag(p, st.goal.flag) ? 1 : 0;
-          return (st.goal.kill || st.goal.cook || st.goal.talk || st.goal.plant || st.goal.light) ? (q.n | 0) : (st.goal.bring && bids(st.goal).length ? bringHave(st.goal) : (q.n | 0));
+          return (st.goal.kill || st.goal.cook || st.goal.talk || st.goal.plant || st.goal.light || st.goal.harvest) ? (q.n | 0) : (st.goal.bring && bids(st.goal).length ? bringHave(st.goal) : (q.n | 0));
         };
         const killsMet = (st) => { const K = st.goal.kills; if (!K) return true; for (const k in K) if (((q.kn && q.kn[k]) | 0) < K[k]) return false; return true; };
         const met = (st) => {
           const g = st.goal;
-          if ((g.kill || g.cook || g.talk || g.plant || g.light) && (q.n | 0) < need(st)) return false;
+          if ((g.kill || g.cook || g.talk || g.plant || g.light || g.harvest) && (q.n | 0) < need(st)) return false;
           if (g.wait != null && !(natureHours() >= (q.t0 == null ? Infinity : q.t0) + g.wait)) return false;
           if (g.kills && !killsMet(st)) return false;
           if (g.flag && !hasFlag(p, g.flag)) return false;
           if (g.bring && (!bids(g).length || bringHave(g) < bringN(st))) return false;
           if (withs(st).some(([id, k]) => !IT[id] || invCount(p, id) < k)) return false;
-          return !!(g.kill || g.cook || g.talk || g.bring || g.plant || g.kills || g.flag || g.light || g.wait != null);
+          return !!(g.kill || g.cook || g.talk || g.bring || g.plant || g.kills || g.flag || g.light || g.harvest || g.wait != null);
         };
         const fill = (L, st) => linesFor(p, L).map(l => String(l).replace(/\{(n|goal|left|name)\}/g, (m, k) => k === 'name' ? (p.name || 'traveller') : !st ? '' : k === 'n' ? counted(st) : k === 'goal' ? need(st) : Math.max(0, need(st) - counted(st))));
         const doneTalk = () => Q.nextAfter && !questFinished(p, Q.nextAfter) ? (Q.nextLocked || Q.done) : (Q.nextReady || Q.done);
@@ -3535,6 +3630,11 @@
       } else if (a && a.k === 'unplant') {
         if (inReach(p.x, p.y, a.x, a.y, 1)) { p.path = []; p.act = null; unplantAt(p, a.x, a.y); }
         else { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, a.x, a.y, 1), a.x, a.y); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, a.x, a.y, 1)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
+      } else if (a && a.k === 'farm') {   /* FARMING: walk up to the patch (any tile beside its 2 x 2), then work it */
+        const o = patchAt(a.x, a.y), by = (x, y) => o && x >= o.x - 1 && y >= o.y - 1 && x <= o.x + (o.w || 2) && y <= o.y + (o.h || 2);
+        if (!o) { p.act = null; p.skilling = null; }
+        else if (by(p.x, p.y)) { p.path = []; farmTick(p, o, a); }
+        else { p.skilling = null; p.path = findPath(p.x, p.y, by, o.x, o.y); stepPath(p); if (!p.path.length && !by(p.x, p.y)) { msg(p, "I can't reach that!", 'warn'); p.act = null; } }
       } else if (a && a.k === 'gather') {
         const n = nodeAt(a.i);
         if (!n) { p.act = null; p.skilling = null; }
@@ -4089,6 +4189,7 @@
     }
     return {
       setNewHome: h => { if (HOMES[h]) NEWHOME = h; }, markGift: (pid, id, n) => markGift(S.players[pid], id, n), homeOf: p => (p && p.home) || 'ashvale', npcFor, lineFor, questForHome, questMarks,
+      patchAt, patchView: (pid, o) => (S.players[pid] && o && FARM ? patchView(S.players[pid], o) : null), farm: FARM,
       API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, trapOf, offerOf, isBlessed: (pid, x, y) => !!(S.players[pid] && blessed(S.players[pid], x, y)), setNature, natureHours, setNatureTell, seasonOn, dayHour, fireLit, steamFor, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       tableAt, tableById, tables, chessOf, chessRow, chessRows, chessGame, chessTurn, chessMoves, applyChess, hostSit, hostStand, hostMove, hostSel, standUp,
       setTableAuth: (id, v) => { if (v == null) delete TAUTH[id]; else TAUTH[id] = !!v; }, tableAuth: id => tAuth(pokerTableById(id)),
