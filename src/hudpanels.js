@@ -94,7 +94,7 @@
           const g = st && st.goal, need = g ? (g.n == null ? 1 : g.n) : 1;
           const killsLeft = (gg) => { let n = 0; for (const k in gg.kills || {}) n += Math.max(0, gg.kills[k] - ((q && q.kn && q.kn[k]) | 0)); return n; };
           const waited = !(g && g.wait != null) || (core.natureHours && core.natureHours() >= (q.t0 == null ? Infinity : q.t0) + g.wait);
-          const ready = !!(st && g && waited && (!((g.kill || g.cook || g.talk || g.plant || g.light || g.harvest) && (q.n | 0) < need)) && !(g.kills && killsLeft(g) > 0) && !(g.bring && held(g.bring) < (g.bn == null ? need : g.bn)) && !wl(g).some(([id, k]) => held(id) < k));
+          const ready = !!(st && g && waited && (!((g.kill || g.cook || g.talk || g.plant || g.light || g.harvest || g.pet) && (q.n | 0) < need)) && !(g.kills && killsLeft(g) > 0) && !(g.bring && held(g.bring) < (g.bn == null ? need : g.bn)) && !wl(g).some(([id, k]) => held(id) < k));
           if (!q) h += 'Speak to ' + who(Q[id].giver) + '.';
           else if (!st) { h += 'Completed!' + (Q[id].story ? ' +' + Q[id].story + ' story point' + (Q[id].story === 1 ? '' : 's') + '.' : ''); const FL = (core.D.rules && core.D.rules.flags) || {}; for (const k in FL) if (FL[k].quest === id && core.hasFlag(p, k)) h += '<br><span class="g">' + A.esc(A.cap(FL[k].name)) + '</span> is on you.' + (FL[k].desc ? ' ' + A.esc(FL[k].desc.replace(/^[^:]*: /, '')).replace(/^./, c => c.toUpperCase()) : ''); }
           else if (ready) h += 'Return to ' + who(st.ends || Q[id].giver) + '.';
@@ -112,7 +112,8 @@
               const bn = g.bn == null ? need : g.bn;
               h += 'Step ' + q.step + ': bring ' + many(iname(g.bring), bn) + ' (' + held(g.bring) + '/' + bn + ')' + wl(g).map(([id, k]) => ' and ' + many(iname(id), k) + ' (' + held(id) + '/' + k + ')').join('') + '.';
             }
-            else if (g.talk) h += 'Step ' + q.step + ': talk to ' + who(g.talk) + (need > 1 ? ' ' + need + ' times' : '') + '.';
+            else if (g.talk) h += 'Step ' + q.step + ': talk to ' + who(g.talk) + (need > 1 ? ' ' + need + ' times' : '') + (g.speech ? ' and talk them round (Speechcraft ' + g.speech + ')' : '') + '.';
+            else if (g.pet) { const m = core.D.monsters[g.pet]; h += 'Step ' + q.step + ': find ' + A.esc(m ? m.name : g.pet) + ' and pet ' + (m && m.name ? 'them' : 'it') + '.'; }   /* Saltmere's pirates */
             else if (g.light) h += 'Step ' + q.step + ': light ' + (need > 1 ? need + ' fires' : 'a fire') + ' (' + have + '/' + need + ').';
             else if (g.wait != null) { const left = Math.max(0, (q.t0 == null ? 0 : q.t0) + g.wait - (core.natureHours ? core.natureHours() : 0)); h += 'Step ' + q.step + ': ' + who(st.ends || Q[id].giver) + ' is at work. Come back in ' + (left >= 1 ? Math.ceil(left) + ' game hour' + (Math.ceil(left) > 1 ? 's' : '') : 'a little while') + '.'; }
             /* sadfrog's Even Grove: plant saplings (on open ground, or on stumps); slay several named foes, each counted */

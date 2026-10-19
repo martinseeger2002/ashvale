@@ -1160,6 +1160,123 @@
    "model": "item.crop_frostbloom",
    "value": 230,
    "attributes": []
+  },
+  "captain_cutlass": {
+   "name": "Captain's cutlass",
+   "description": "Captain Ruark's lucky cutlass: a gilt basket hilt and a nick for every lie he has told. Take it back to him (The Captain's Cutlass).",
+   "examine": "Captain Ruark's lucky cutlass: a gilt basket hilt and a nick for every lie he has told. Take it back to him (The Captain's Cutlass).",
+   "collection": "ASHVALE The Pirates of Saltmere",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "curio",
+   "weight": 1400,
+   "model": "item.captain_cutlass",
+   "value": 5,
+   "attributes": []
+  },
+  "cutlass": {
+   "name": "Cutlass",
+   "description": "A pirate's cutlass, short and curved, from Captain Ruark. Attack +14, Strength +13. Needs Attack 15.",
+   "examine": "A pirate's cutlass, short and curved, from Captain Ruark. Attack +14, Strength +13. Needs Attack 15.",
+   "collection": "ASHVALE The Pirates of Saltmere",
+   "game": "ashvale",
+   "category": "weapon",
+   "subcategory": "sword",
+   "weight": 1500,
+   "model": "gear.cutlass",
+   "value": 600,
+   "attributes": [
+    {
+     "trait_type": "Attack",
+     "value": 14
+    },
+    {
+     "trait_type": "Strength",
+     "value": 13
+    },
+    {
+     "trait_type": "Speed",
+     "value": 4
+    },
+    {
+     "trait_type": "Range",
+     "value": 1
+    }
+   ],
+   "tier": 3,
+   "req": {
+    "attack": 15
+   }
+  },
+  "sea_salt": {
+   "name": "Sea salt",
+   "description": "A twist of Nettie's sea salt. Grizz wants it for his stew (Fish Stew Again).",
+   "examine": "A twist of Nettie's sea salt. Grizz wants it for his stew (Fish Stew Again).",
+   "collection": "ASHVALE The Pirates of Saltmere",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "curio",
+   "weight": 100,
+   "model": "item.saltpouch",
+   "value": 4,
+   "attributes": []
+  },
+  "tarred_rope": {
+   "name": "Tarred rope",
+   "description": "A coil of rope tarred against the sea. Bryce the shipwright stitches sails with it (Black Sails); Sela sells it.",
+   "examine": "A coil of rope tarred against the sea. Bryce the shipwright stitches sails with it (Black Sails); Sela sells it.",
+   "collection": "ASHVALE The Pirates of Saltmere",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "curio",
+   "weight": 600,
+   "model": "item.tarredrope",
+   "value": 12,
+   "attributes": []
+  },
+  "sail_canvas": {
+   "name": "Sail canvas",
+   "description": "A bolt of heavy sail canvas from Sela's chandlery. Enough for a mainsail (Black Sails).",
+   "examine": "A bolt of heavy sail canvas from Sela's chandlery. Enough for a mainsail (Black Sails).",
+   "collection": "ASHVALE The Pirates of Saltmere",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "curio",
+   "weight": 1800,
+   "model": "item.canvas",
+   "value": 30,
+   "attributes": []
+  },
+  "pirate_stew": {
+   "name": "Pirate's stew",
+   "description": "A bowl of Grizz's stew with real potatoes and onions in it. Heals 14. Made at a fire from 3 potatoes, 3 onions, sea salt and a shrimp.",
+   "examine": "A bowl of Grizz's stew with real potatoes and onions in it. Heals 14. Made at a fire from 3 potatoes, 3 onions, sea salt and a shrimp.",
+   "collection": "ASHVALE The Pirates of Saltmere",
+   "game": "ashvale",
+   "category": "food",
+   "subcategory": "meat",
+   "weight": 600,
+   "model": "item.stew",
+   "value": 40,
+   "attributes": [
+    {
+     "trait_type": "Heal",
+     "value": 14
+    }
+   ]
+  },
+  "hat_tricorn": {
+   "name": "Captain's tricorn",
+   "description": "Captain Ruark's spare tricorn, given for Black Sails. It makes you look like you own a ship, or at least a strong opinion about one.",
+   "examine": "Captain Ruark's spare tricorn, given for Black Sails. It makes you look like you own a ship, or at least a strong opinion about one.",
+   "collection": "ASHVALE The Pirates of Saltmere",
+   "game": "ashvale",
+   "category": "cosmetic",
+   "subcategory": "hat",
+   "weight": 300,
+   "model": "cloth.hat_tricorn",
+   "value": 250,
+   "attributes": []
   }
  }
 }

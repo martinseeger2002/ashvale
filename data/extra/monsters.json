@@ -972,6 +972,61 @@
    "fleeHit": true,
    "roamEvery": 3,
    "tame": true
+  },
+  "smuggler": {
+   "name": "Smuggler",
+   "examine": "A warehouse smuggler: a long knife, a short temper and somebody else's cutlass.",
+   "level": 12,
+   "hp": 24,
+   "att": 12,
+   "def": 10,
+   "attb": 8,
+   "defb": 9,
+   "max": 4,
+   "speed": 4,
+   "aggro": 4,
+   "respawn": 80,
+   "drops": [
+    {
+     "item": "captain_cutlass",
+     "one_in": 2
+    },
+    {
+     "item": "bread",
+     "one_in": 4
+    }
+   ],
+   "gold": 15,
+   "anim": "stab",
+   "look": "bandit",
+   "animal": false,
+   "ownDice": true,
+   "roam": 2
+  },
+  "admiral": {
+   "name": "Admiral",
+   "examine": "Admiral: a black and white cat who sleeps in the pirates' rum store and outranks the cabin boy.",
+   "level": 1,
+   "hp": 3,
+   "att": 1,
+   "def": 1,
+   "attb": 0,
+   "defb": 0,
+   "max": 1,
+   "speed": 4,
+   "aggro": 0,
+   "respawn": 60,
+   "drops": [],
+   "gold": 0,
+   "anim": "bite",
+   "look": "cat_tuxedo",
+   "animal": true,
+   "shy": 3,
+   "ownDice": true,
+   "roam": 2,
+   "fleeHit": true,
+   "roamEvery": 3,
+   "tame": true
   }
  }
 }

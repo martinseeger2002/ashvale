@@ -121,7 +121,37 @@
    "dibber": "farming",
    "spade": "farming",
    "wateringcan": "farming"
-  }
+  },
+  "fireMix": [
+   {
+    "take": {
+     "willow_bark": 2,
+     "asemaa": 1
+    },
+    "give": {
+     "apaakozigan": 3
+    },
+    "xp": {
+     "cooking": 150
+    },
+    "say": "You toast the miskwaabiimizh (red willow) bark over the fire and rub it fine with the asemaa (tobacco): three pinches of apaakozigan (kinnikinnick)."
+   },
+   {
+    "take": {
+     "potato": 3,
+     "onion": 3,
+     "sea_salt": 1,
+     "shrimp": 1
+    },
+    "give": {
+     "pirate_stew": 1
+    },
+    "xp": {
+     "cooking": 1200
+    },
+    "say": "You simmer the potatoes, onions and shrimp with the sea salt into a pirate's stew. It smells like something other than fish."
+   }
+  ]
  },
  "nodes": {
   "altar": {

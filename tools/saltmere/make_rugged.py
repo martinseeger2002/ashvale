@@ -18,7 +18,7 @@ pirates' looks (data/parts/char.<id>.json) and the tricorn hat they wear (cloth.
 character creator).
     python3 tools/saltmere/make_rugged.py      (after tools/decor/make_decor_data.py; then python3 build.py)
 """
-import json, math, os
+import json, math, os, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ZP, PARTS = os.path.join(ROOT, 'data', 'zone.saltmere.json'), os.path.join(ROOT, 'data', 'parts')
 TAGS = ('rugged', 'pirates', 'piers')
@@ -74,12 +74,16 @@ CREW = [   # id, name, x, y, examine, lines, look
      {'build': 'small', 'outfit': {'skin': '#d8a070', 'hair': 'short', 'hairColor': '#8a5a2a', 'hat': {'style': 'bandana', 'color': '#a83a2a'},
       'shirt': {'style': 'shirt', 'color': '#e0d8c8'}, 'pants': {'style': 'shorts', 'color': '#4a5a7a'}, 'boots': '#5a3a20'}}),
 ]
+try:   # the crew's quests (tools/saltmere/make_pirate_quests.py): kept when the crew is rebuilt
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from make_pirate_quests import CREW_QUESTS
+except Exception: CREW_QUESTS = {}
 for cid, name, x, y, ex, lines, look in CREW:
-    Z['npcs'].append({'id': cid, 'name': name, 'look': cid, 'x': x, 'y': y, 'examine': ex, 'lines': lines, 'tag': 'pirates'})
+    Z['npcs'].append(dict({'id': cid, 'name': name, 'look': cid, 'x': x, 'y': y, 'examine': ex, 'lines': lines, 'tag': 'pirates'},
+                          **({'quest': CREW_QUESTS[cid][0], 'quests': CREW_QUESTS[cid], 'talk': 'quest'} if cid in CREW_QUESTS else {})))
     with open(os.path.join(PARTS, 'char.' + cid + '.json'), 'w', encoding='utf-8') as f:
         json.dump(dict({'ashvale3d': 'part', 'api': 1, 'v': 1, 'id': 'char.' + cid, 'kind': 'char', 'role': 'npc', 'name': name, 'body': 'humanoid'}, **look), f, separators=(',', ':'), ensure_ascii=False)
 with open(os.path.join(PARTS, 'cloth.hat_tricorn.json'), 'w', encoding='utf-8') as f:   # three cocked brim corners (a 3-sided cylinder, a point to the front) on a low crown, a gold edge
-    json.dump({'ashvale3d': 'part', 'api': 1, 'v': 1, 'id': 'cloth.hat_tricorn', 'kind': 'cloth', 'homes': ['saltmere_pirates'], 'slot': 'hat', 'style': 'tricorn', 'color': '#1e1c1e', 'hides': [],
+    json.dump({'ashvale3d': 'part', 'api': 1, 'v': 1, 'id': 'cloth.hat_tricorn', 'kind': 'cloth', 'homes': ['saltmere_pirates'], 'slot': 'hat', 'style': 'tricorn', 'color': '#1e1c1e', 'hides': [], 'items': {'hat_tricorn': '#1e1c1e'},   # the Captain's tricorn, a reward of Black Sails
                'shapes': [{'t': 'cyl', 's': [0.27, 0.27, 0.05], 'seg': 3, 'c': '$c', 'p': [0, 0.2, 0.0], 'j': 'head'}, {'t': 'cyl', 's': [0.275, 0.275, 0.015], 'seg': 3, 'c': '#b08a3a', 'p': [0, 0.226, 0.0], 'j': 'head'},
                           {'t': 'cyl', 's': [0.13, 0.155, 0.13], 'seg': 10, 'c': '$c', 'p': [0, 0.27, -0.01], 'j': 'head'}], 'ground': {'p': [0, -0.1, 0]}}, f, separators=(',', ':'))
 

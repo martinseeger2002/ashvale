@@ -2298,6 +2298,309 @@
    "done": [
     "The Circle writes in moonleaf ink now. Halvard says you can taste the difference. Pell says not to."
    ]
+  },
+  "captains_cutlass": {
+   "name": "The Captain's Cutlass",
+   "giver": "ruark",
+   "after": "rudder",
+   "story": 3,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "saltmere",
+     "goal": {
+      "talk": "tolly"
+     },
+     "reward": "xp:speechcraft:200",
+     "talk": [
+      "My lucky cutlass went over the side, or so Toby swears. Funny how a blade that sinks turns up for sale in a tavern.",
+      "Ask Tolly the dockhand. The tide brings everything to the third pier, the one with the bad plank."
+     ],
+     "say": [
+      "The third pier? Nothing came ashore but weed and a boot, and the boot was mine.",
+      "Ask at the Tap. Things that don't wash up get drunk instead."
+     ],
+     "progress": [
+      "Ask Tolly the dockhand on the piers whether the tide brought a cutlass in."
+     ],
+     "complete": [
+      "Nothing washed up. As I thought. Somebody walked it ashore."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "saltmere",
+     "goal": {
+      "talk": "hollis"
+     },
+     "reward": "xp:speechcraft:200",
+     "talk": [
+      "Try Hollis at the Tap. If a blade was sold for drink in this town, Hollis poured the drink.",
+      "Be polite. He has a cudgel under the bar and a long memory."
+     ],
+     "say": [
+      "A fancy cutlass? A man from the warehouses sold one for three rounds and a story. The story was better than the cutlass.",
+      "He went back to the North Warehouse. They all go back to the North Warehouse."
+     ],
+     "progress": [
+      "Ask Hollis at the Saltmere Tap who sold a cutlass for drink."
+     ],
+     "complete": [
+      "The North Warehouse. Smugglers. Of course it's smugglers. It's always smugglers in this harbour."
+     ]
+    },
+    {
+     "id": 3,
+     "zone": "saltmere",
+     "goal": {
+      "kill": "smuggler",
+      "n": 2
+     },
+     "reward": "xp:attack:600",
+     "talk": [
+      "Two of them loiter at the North Warehouse door, by the sound of it, minding a crate. My cutlass will be on one of them.",
+      "Explain to them, firmly, whose it is."
+     ],
+     "progress": [
+      "Deal with the two smugglers at the North Warehouse door and get the cutlass off them."
+     ],
+     "complete": [
+      "Two smugglers fewer. If the cutlass isn't in your hand yet, it's on the cobbles by that warehouse."
+     ]
+    },
+    {
+     "id": 4,
+     "zone": "saltmere",
+     "goal": {
+      "bring": "captain_cutlass",
+      "n": 1
+     },
+     "reward": [
+      "cutlass",
+      "coins:300",
+      "xp:attack:800"
+     ],
+     "talk": [
+      "Now bring it here. Every nick in that blade is a story, and most of the stories are lies, but they're my lies.",
+      "The smugglers drop it as often as they hold it. Look about you."
+     ],
+     "progress": [
+      "Bring Captain Ruark his cutlass. The smugglers at the North Warehouse have it."
+     ],
+     "complete": [
+      "That's her. And I know Toby sold it; there's only one fool aboard who'd trade steel for a story.",
+      "I'm not angry. I'm impressed. Here - a cutlass of your own, and coin for your trouble. Don't sell it for drink."
+     ]
+    }
+   ],
+   "done": [
+    "Ruark tells the cutlass story differently every time. In the newest one, you are a sea serpent."
+   ]
+  },
+  "fish_stew_again": {
+   "name": "Fish Stew Again",
+   "giver": "grizz",
+   "after": "empty_water",
+   "story": 2,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "saltmere",
+     "goal": {
+      "bring": "shrimp_raw",
+      "n": 2
+     },
+     "ends": "nettie",
+     "reward": [
+      "sea_salt",
+      "xp:fishing:300"
+     ],
+     "talk": [
+      "Forty days of fish stew. The crew are starting to look like fish. Soot has grown fins, I swear it.",
+      "First, salt. Nettie the fishmonger keeps a sea salt better than mine. She'll want fish for it, mind - two raw shrimp."
+     ],
+     "progress": [
+      "Take two raw shrimp to Nettie the fishmonger for a twist of sea salt."
+     ],
+     "complete": [
+      "Two shrimp for a twist of salt - fair trade. Tell Grizz it's for stew, not for preserving the crew."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "saltmere",
+     "goal": {
+      "bring": "pirate_stew",
+      "n": 1
+     },
+     "reward": [
+      "coins:150",
+      "xp:cooking:600",
+      "xp:farming:600"
+     ],
+     "talk": [
+      "Now the part that grew in the ground. Three potatoes, three onions - farm them, buy them, I won't ask.",
+      "Put them in a pot at any fire with the salt and a cooked shrimp, and bring me a pirate's stew. A stew. With things in it."
+     ],
+     "progress": [
+      "At any fire, cook 3 potatoes, 3 onions, the sea salt and a cooked shrimp into a pirate's stew, and bring it to Grizz."
+     ],
+     "complete": [
+      "Potatoes! Onions! Something that isn't fish! The crew will weep.",
+      "Soot says he saw a carrot in the sky this morning. I've stopped arguing with Soot."
+     ]
+    }
+   ],
+   "done": [
+    "Grizz makes the stew every Friday now. On the other days it's still fish."
+   ]
+  },
+  "black_sails": {
+   "name": "Black Sails",
+   "giver": "grix",
+   "after": "sail_loft",
+   "story": 3,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "saltmere",
+     "goal": {
+      "talk": "sela"
+     },
+     "reward": "xp:speechcraft:200",
+     "talk": [
+      "The mainsail's torn and the captain won't sail with a patched sail. Canvas costs money. Money costs questions.",
+      "Get me canvas, no questions. Sela the chandler has canvas. Start there."
+     ],
+     "say": [
+      "Canvas I have. Twine strong enough to hold a mainsail in a gale I haven't - that's tarred rope, and Bryce knows how to use it.",
+      "I'll sell you both. I won't ask what it's for, and you won't tell me it's for nets."
+     ],
+     "progress": [
+      "Ask Sela the chandler about sail canvas."
+     ],
+     "complete": [
+      "Sela has it. Good. She never asks questions she can't sell the answers to."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "saltmere",
+     "goal": {
+      "bring": "sail_canvas",
+      "n": 1,
+      "with": {
+       "tarred_rope": 3
+      }
+     },
+     "ends": "bryce",
+     "reward": "xp:speechcraft:300",
+     "talk": [
+      "Buy a bolt of canvas and three coils of tarred rope from Sela, and take them to Bryce the shipwright.",
+      "He'll stitch it into a mainsail and row it out himself. He likes us. He thinks we're a fishing boat."
+     ],
+     "progress": [
+      "Take a bolt of sail canvas and three tarred ropes to Bryce the shipwright."
+     ],
+     "complete": [
+      "A mainsail? For a fishing boat? With a skull on it? ...I'll have it stitched by the tide and rowed out to her. Don't tell me any more."
+     ]
+    },
+    {
+     "id": 3,
+     "zone": "saltmere",
+     "goal": {
+      "talk": "calder",
+      "speech": 15
+     },
+     "reward": "xp:speechcraft:800",
+     "talk": [
+      "Trouble. Mayor Calder has heard there's a pirate ship in his harbour.",
+      "Talk him out of it. You have the face for it. It's a fishing boat, Mayor, with ambitious sails. It needs a good tongue: Speechcraft 15 at least."
+     ],
+     "progress": [
+      "Talk Mayor Calder out of the notion that there's a pirate ship in his harbour (Speechcraft 15)."
+     ],
+     "complete": [
+      "A fishing boat. With ambitious sails. ...Very well. But if it fishes for anything that isn't fish, I'll hear of it."
+     ]
+    },
+    {
+     "id": 4,
+     "zone": "saltmere",
+     "goal": {
+      "talk": "grix"
+     },
+     "reward": [
+      "hat_tricorn",
+      "coins:200"
+     ],
+     "talk": [
+      "Come back and tell me it's done. I'll write it down as 'nets'.",
+      "Everything gets written down as nets."
+     ],
+     "progress": [
+      "Tell Quartermaster Grix the sail is stitched and the Mayor is quiet."
+     ],
+     "complete": [
+      "Sail stitched, Mayor quiet, and not one question. 'Nets.' There.",
+      "The captain sends you his spare tricorn. He has six. He says a hat makes the sailor."
+     ]
+    }
+   ],
+   "done": [
+    "Grix's ledger lists four hundred nets. The ship has never carried a net."
+   ]
+  },
+  "the_admiral": {
+   "name": "The Admiral",
+   "giver": "toby",
+   "after": "salt_road",
+   "story": 1,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "saltmere",
+     "goal": {
+      "pet": "admiral"
+     },
+     "reward": "xp:dexterity:200",
+     "talk": [
+      "There's a cat that sleeps in the rum store. I call her Admiral. She's gone off, and the quartermaster says that's one less mouth.",
+      "She'll be in the alleys behind the quay. Find her and give her a scratch - she comes back for a scratch."
+     ],
+     "progress": [
+      "Find Admiral, a black and white cat, in Saltmere's alleys, and pet her."
+     ],
+     "complete": [
+      "She purrs like a ship's bilge pump and follows you a step or two. Toby will want to know."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "saltmere",
+     "goal": {
+      "talk": "toby"
+     },
+     "reward": [
+      "coins:100",
+      "xp:speechcraft:200"
+     ],
+     "talk": [
+      "You found her? Go on, tell me where. No - don't, she'd hate that.",
+      "Just tell me she's all right."
+     ],
+     "progress": [
+      "Tell Toby the cabin boy that Admiral is safe."
+     ],
+     "complete": [
+      "She'll come back to the rum barrels now she knows someone looked. Thanks. When I get my sword, you can hold it first."
+     ]
+    }
+   ],
+   "done": [
+    "Admiral sleeps on the rum barrels again. Grix has stopped counting her as a mouth."
+   ]
   }
  }
 }

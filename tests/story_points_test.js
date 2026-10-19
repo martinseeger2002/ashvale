@@ -16,7 +16,7 @@ ok(Qs.ashen_crown.story === 5, 'The Ashen Crown is five: wolves, chiefs, wraiths
 ok(Qs.wayside_prayer.story === 1 && Qs.biiwaanag.story === 1, 'a short talk or a first fire is one');
 ok(Qs.red_pyre.story === 3 && Qs.even_guard.story === 3, 'the Red Pyre and the Even Guard are three');
 const tot = ids.reduce((a, id) => a + (Qs[id].story | 0), 0);
-ok(tot === 90, 'the valley has 90 story points in all (' + tot + ')');   /* [Claude 2026-10-18] 85 (with The Hollow Den 1, Thornwatch Camp) + Farming: First Furrows 2, Greens for the Lodge 1, Moonleaf for the Circle 2 */
+ok(tot === 99, 'the valley has 99 story points in all (' + tot + ')');   /* [Claude 2026-10-19] 90 + Saltmere's pirates: The Captain's Cutlass 3, Fish Stew Again 2, Black Sails 3, The Admiral 1 */
 
 const last = Qs.ashen_crown.steps[5];
 ok(Array.isArray(last.reward) && last.reward.indexOf('xp:strength:8000') >= 0 && last.reward.indexOf('fighter_boots') >= 0, 'the last Ashen Crown step pays Strength XP and fighter boots');

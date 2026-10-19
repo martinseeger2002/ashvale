@@ -1530,6 +1530,12 @@
     "api": 1,
     "kind": "json"
    },
+   "gear.cutlass": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "gear.dagger": {
     "id": null,
     "v": 1,
@@ -1777,6 +1783,18 @@
     "kind": "json"
    },
    "item.candy": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.canvas": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.captain_cutlass": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -2040,6 +2058,12 @@
     "api": 1,
     "kind": "json"
    },
+   "item.saltpouch": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.sapbucket": {
     "id": null,
     "v": 1,
@@ -2094,7 +2118,19 @@
     "api": 1,
     "kind": "json"
    },
+   "item.stew": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.stone": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.tarredrope": {
     "id": null,
     "v": 1,
     "api": 1,

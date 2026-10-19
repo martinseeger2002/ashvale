@@ -166,6 +166,7 @@ for (const [qid, Q] of Object.entries(D.quests.quests)) {
   const many = n => n == null || n > 0;
   ok(live.every(s => s.goal.kill ? (D.monsters[s.goal.kill] && many(s.goal.n) && (!s.goal.bring || D.items[s.goal.bring]))
                     : s.goal.cook ? (D.items[s.goal.cook] && many(s.goal.n))
+                    : s.goal.pet ? !!(D.monsters[s.goal.pet] && D.monsters[s.goal.pet].tame)   /* [Claude 2026-10-19] pet a tame animal (The Admiral) */
                     : s.goal.harvest ? !!(D.rules.farming && Object.values(D.rules.farming.crops).some(c => c.crop === s.goal.harvest) && D.items[s.goal.harvest]) && many(s.goal.n)   /* [Claude 2026-10-18] FARMING: a crop grown in a patch */
                     : s.goal.bring ? ([].concat(s.goal.bring).every(b => D.items[b]) && many(s.goal.n) && (!s.goal.with || (typeof s.goal.with === 'string' ? [s.goal.with] : Object.keys(s.goal.with)).every(w => D.items[w])))   /* a list: any of them will do (sap in a bucket or a pail) */
                     : s.goal.talk ? !!keeperZone(s.goal.talk)
@@ -286,7 +287,7 @@ for (const S of Object.values(D.shops.shops)) {
       if (g.bring) for (const b of [].concat(g.bring)) { const it = D.items[b]; if (!it || !it.name) nameless(where + ' wants ' + (g.n || 1) + ' of ' + b + ', which is not an item'); else ok(true, where + ' asks for ' + it.name); }
       if (g.talk) { if (!npcHere[g.talk]) nameless(where + ' sends you to ' + g.talk + ', who stands nowhere'); else ok(true, where + ' sends you to ' + g.talk + ' in ' + npcHere[g.talk]); }
       /* [Claude 2026-10-16] flag (a world deed, The Heart Below step 3) is a goal kind the engine and panel describe */
-      if (!g.kill && !g.bring && !g.talk && !g.plant && !g.kills && !g.light && !g.harvest && !g.cook && !g.flag && g.wait == null) ok(false, where + ' has a goal the panel cannot describe: ' + JSON.stringify(g));   /* cook is a goal kind the panel says (hudpanels.js: "cook N of X", counted in core at the fire) - re-measured 2026-10-10 */
+      if (!g.kill && !g.bring && !g.talk && !g.plant && !g.kills && !g.light && !g.harvest && !g.pet && !g.cook && !g.flag && g.wait == null) ok(false, where + ' has a goal the panel cannot describe: ' + JSON.stringify(g));   /* cook is a goal kind the panel says (hudpanels.js: "cook N of X", counted in core at the fire) - re-measured 2026-10-10 */
       for (const r of [].concat(s.reward || [])) {
       if (typeof r === 'string' && r.startsWith('xp:')) { const [, sk] = r.split(':'); ok(D.rules.skills.indexOf(sk) >= 0 || sk === 'hitpoints', where + ' pays ' + r + ' in a skill the game has'); }
       else if (typeof r === 'string' && r.startsWith('flag:')) ok(!!(D.rules.flags || {})[r.slice(5)], where + ' leaves the ' + r.slice(5) + ' flag, which the rules define');
@@ -1205,6 +1206,7 @@ function wild6k(c) {
      rice stands into a canoe (zone objects k:'rice' -> wild_rice, core.js rideTick) */
   const crafted = new Set(), searched = new Set(), tapped = new Set();
   for (const z of D.zones) for (const n of (z.npcs || [])) { for (const c of (n.craft || [])) if (c.give) crafted.add(c.give); for (const id of ((n.search || {}).items || [])) searched.add(id); }
+  for (const mx of ((D.rules.items || {}).fireMix || [])) for (const id in mx.give || {}) searched.add(id);   /* [Claude 2026-10-19] made at a fire from several things (the pirate's stew) */
   if (Object.values(D.rules.nodes).some(nd => nd.tap)) for (const [k, it] of Object.entries(D.items)) for (const a of (it.attributes || [])) if (a.trait_type === 'Fills into' && (shelf.has(k) || crafted.has(k))) tapped.add(a.value);
   const riced = D.zones.some(z => (z.objects || []).some(o => o.k === 'rice'));
   const getable = (it, n) => !!byItem[it] || marks.has(it) || (dropped[it] || 0) >= n || shelf.has(it) || tapped.has(it) || searched.has(it) || (riced && it === 'wild_rice');

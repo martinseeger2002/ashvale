@@ -1718,6 +1718,13 @@
       let r = FD.next() * L.reduce((t, x) => t + x[1], 0);
       for (const [c, w] of L) if ((r -= w) < 0) { const sd = FARM.crops[c].seed; dropGround(sd, 1, p.x, p.y, p.id, 600); msg(p, 'You spot ' + (IT[sd].name.match(/^[aeiou]/i) ? 'an ' : 'a ') + IT[sd].name.toLowerCase() + ' in the grass.'); break; }
     }
+    /* PET goal (2026-10-19, Saltmere's pirates: "find Admiral and pet her"): {pet: monster key} is met by petting one */
+    function creditPet(p, key) {
+      for (const qid in p.quests) {
+        const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.steps[q.step - 1];
+        if (st && st.goal.pet === key && (q.n | 0) < (st.goal.n || 1)) { q.n = (q.n | 0) + 1; msg(p, Q.name + ': ' + (MON[key] ? MON[key].name : key) + ' petted.', 'quest'); }
+      }
+    }
     function creditHarvest(p, item, n) {
       for (const qid in p.quests) {
         const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.steps[q.step - 1];
@@ -1901,6 +1908,7 @@
       let said = null, ends = null;
       for (const qid in p.quests) {
         const q = p.quests[qid], Q2 = D.quests.quests[qid], s2 = Q2 && Q2.steps[q.step - 1];
+        if (s2 && s2.goal.talk === n.id && !q.n && s2.goal.speech && lv(p, 'speechcraft') < s2.goal.speech) { msg(p, n.name + ' is not persuaded. A better tongue might do it (Speechcraft ' + s2.goal.speech + ').', 'warn'); continue; }   /* a Speechcraft check (Black Sails: talking the Mayor round) */
         if (s2 && s2.goal.talk === n.id && !q.n) {
           q.n = 1; msg(p, Q2.name + ': you have said your piece to ' + n.name + '.', 'quest');
           if (s2.flag) { p.flags = p.flags || {}; if (!p.flags[s2.flag] && FLAGS[s2.flag]) { p.flags[s2.flag] = S.t || 1; ev({ e: 'flag', p: p.id, flag: s2.flag }); } }
@@ -1950,18 +1958,18 @@
         const counted = (st) => {
           if (st.goal.kills) { let n = 0; for (const k in st.goal.kills) n += Math.min(st.goal.kills[k], (q.kn && q.kn[k]) | 0); return n; }
           if (st.goal.flag) return hasFlag(p, st.goal.flag) ? 1 : 0;
-          return (st.goal.kill || st.goal.cook || st.goal.talk || st.goal.plant || st.goal.light || st.goal.harvest) ? (q.n | 0) : (st.goal.bring && bids(st.goal).length ? bringHave(st.goal) : (q.n | 0));
+          return (st.goal.kill || st.goal.cook || st.goal.talk || st.goal.plant || st.goal.light || st.goal.harvest || st.goal.pet) ? (q.n | 0) : (st.goal.bring && bids(st.goal).length ? bringHave(st.goal) : (q.n | 0));
         };
         const killsMet = (st) => { const K = st.goal.kills; if (!K) return true; for (const k in K) if (((q.kn && q.kn[k]) | 0) < K[k]) return false; return true; };
         const met = (st) => {
           const g = st.goal;
-          if ((g.kill || g.cook || g.talk || g.plant || g.light || g.harvest) && (q.n | 0) < need(st)) return false;
+          if ((g.kill || g.cook || g.talk || g.plant || g.light || g.harvest || g.pet) && (q.n | 0) < need(st)) return false;
           if (g.wait != null && !(natureHours() >= (q.t0 == null ? Infinity : q.t0) + g.wait)) return false;
           if (g.kills && !killsMet(st)) return false;
           if (g.flag && !hasFlag(p, g.flag)) return false;
           if (g.bring && (!bids(g).length || bringHave(g) < bringN(st))) return false;
           if (withs(st).some(([id, k]) => !IT[id] || invCount(p, id) < k)) return false;
-          return !!(g.kill || g.cook || g.talk || g.bring || g.plant || g.kills || g.flag || g.light || g.harvest || g.wait != null);
+          return !!(g.kill || g.cook || g.talk || g.bring || g.plant || g.kills || g.flag || g.light || g.harvest || g.pet || g.wait != null);
         };
         const fill = (L, st) => linesFor(p, L).map(l => String(l).replace(/\{(n|goal|left|name)\}/g, (m, k) => k === 'name' ? (p.name || 'traveller') : !st ? '' : k === 'n' ? counted(st) : k === 'goal' ? need(st) : Math.max(0, need(st) - counted(st))));
         const doneTalk = () => Q.nextAfter && !questFinished(p, Q.nextAfter) ? (Q.nextLocked || Q.done) : (Q.nextReady || Q.done);
@@ -3594,6 +3602,7 @@
           const md = MON[m.key], L = md.petLines || PET_LINES;
           p.face = faceTo(p.x, p.y, m.x, m.y); m.face = faceTo(m.x, m.y, p.x, p.y); m.wx = null; m.path = null; m.calm = S.t + 12;
           msg(p, L[(S.t + m.uid) % L.length].replace('{name}', md.name.toLowerCase())); ev({ e: 'pet', p: p.id, uid: m.uid }); p.act = null;
+          creditPet(p, m.key);   /* a quest's pet goal (The Admiral) */
         }
       } else if (a && a.k === 'take') {
         const g = S.ground.find(q => q.uid === a.uid);
