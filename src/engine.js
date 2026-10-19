@@ -932,6 +932,7 @@
           case 'shop': if (mine) { hud.openShop(e.shop); faceNpc(e.npc); } break;
           case 'portal': if (mine) {   /* the towns you have touched a portal in (2026-10-04) */
             const L = (e.to || []).map(P => ({ html: 'Travel to <span class="y">' + P.name + '</span>', fn: () => { send({ c: 'portal', to: P.id }); const T = (D.rules.portals || []).find(q => q.id === P.id); travelSoon(null, P.name, T && T.to[0], T && T.to[1], true); } }));
+            if (e.back) L.unshift({ html: 'Back through your town portal to <span class="y">' + String(e.back).replace(/[&<>]/g, '') + '</span> <span class="c">(once)</span>', fn: () => send({ c: 'portal', to: 'back' }) });   /* [Claude 2026-10-18] a Scroll of town portal's way back */
             if (!L.length) hud.chat('Touch the town portal in another town, and you can travel there from here.', 'sys');
             else { const r = host.getBoundingClientRect(); hud.menu(r.width / 2, r.height / 2, L); }
             if ((e.unknown || []).length) hud.chat('Not yet attuned: ' + e.unknown.join(', ') + '.', 'sys');

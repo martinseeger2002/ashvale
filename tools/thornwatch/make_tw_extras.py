@@ -39,21 +39,21 @@ MONSTERS = {   # each with dice of its own (ownDice), as the mountain's are
     # clears ~28 of 32 on one bag of potions and finishes on the second trip)
     "den_ashling": {"name": "Ashling", "level": 20, "hp": 32, "att": 13, "def": 14, "attb": 10, "defb": 8, "max": 3, "speed": 4, "aggro": 6, "respawn": 2000,
                     "anim": "stab", "look": "ashling", "animal": False, "roam": 2, "gold": 15, "ownDice": True, "ai": dict(_imp_ai, rally=3),
-                    "drops": [{"item": "bones", "one_in": 1}, {"item": "dagger_t3", "one_in": 16}, {"item": "arrows_t3", "n": [3, 8], "one_in": 6}]},
+                    "drops": [{"item": "town_portal_scroll", "one_in": 11}, {"item": "bones", "one_in": 1}, {"item": "dagger_t3", "one_in": 16}, {"item": "arrows_t3", "n": [3, 8], "one_in": 6}]},
     "den_shaman": {"name": "Ashling firecaller", "level": 24, "hp": 38, "att": 13, "def": 16, "attb": 12, "defb": 10, "max": 3, "speed": 4, "aggro": 7, "respawn": 2000,
                    "anim": "cast", "look": "ashling_shaman", "animal": False, "roam": 1, "gold": 30, "ownDice": True, "cast": dict(_bolt, att=15, max=3),
                    "ai": dict(_imp_ai, keep=[4, 5], fleePct=20, rally=3),
-                   "drops": [{"item": "bones", "one_in": 1}, {"item": "staff_t3", "one_in": 10}, {"item": "prayer_potion", "one_in": 4}, {"item": "potion", "one_in": 3}],
+                   "drops": [{"item": "town_portal_scroll", "one_in": 11}, {"item": "bones", "one_in": 1}, {"item": "staff_t3", "one_in": 10}, {"item": "prayer_potion", "one_in": 4}, {"item": "potion", "one_in": 3}],
                    "hint": "Kill the one with the bone mask first. The little ones fight harder while it lives."},
     "den_walker": {"name": "Moor walker", "level": 22, "hp": 46, "att": 14, "def": 17, "attb": 12, "defb": 10, "max": 3, "speed": 5, "aggro": 5, "respawn": 2000,
                    "anim": "slash", "look": "moor_walker", "animal": False, "roam": 1, "gold": 22, "ownDice": True,
-                   "drops": [{"item": "bones", "one_in": 1}, {"item": "body_t3", "one_in": 24}, {"item": "legs_t3", "one_in": 24}]},
+                   "drops": [{"item": "town_portal_scroll", "one_in": 11}, {"item": "bones", "one_in": 1}, {"item": "body_t3", "one_in": 24}, {"item": "legs_t3", "one_in": 24}]},
     "den_brute": {"name": "Den brute", "level": 28, "hp": 70, "att": 17, "def": 22, "attb": 16, "defb": 16, "max": 4, "speed": 5, "aggro": 5, "respawn": 2000,
                   "anim": "slash", "look": "den_brute", "animal": False, "roam": 1, "gold": 60, "ownDice": True,
-                  "drops": [{"item": "bones", "one_in": 1}, {"item": "mace_t4", "one_in": 8}, {"item": "potion", "one_in": 2}], "hint": "All shoulders and no patience."},
+                  "drops": [{"item": "town_portal_scroll", "one_in": 11}, {"item": "bones", "one_in": 1}, {"item": "mace_t4", "one_in": 8}, {"item": "potion", "one_in": 2}], "hint": "All shoulders and no patience."},
     "cinderhide": {"name": "Cinderhide", "level": 34, "hp": 100, "att": 20, "def": 25, "attb": 20, "defb": 17, "max": 4, "speed": 5, "aggro": 7, "respawn": 2000,
                    "anim": "slash", "look": "cinderhide", "animal": False, "roam": 1, "gold": 200, "ownDice": True, "relentless": True, "hunter": True,
-                   "drops": [{"item": "potion", "n": [2, 2], "one_in": 1}, {"item": "prayer_potion", "one_in": 1}, {"item": "sword_t4", "one_in": 3}, {"item": "shield_t4", "one_in": 4},
+                   "drops": [{"item": "town_portal_scroll", "one_in": 2}, {"item": "potion", "n": [2, 2], "one_in": 1}, {"item": "prayer_potion", "one_in": 1}, {"item": "sword_t4", "one_in": 3}, {"item": "shield_t4", "one_in": 4},
                              {"item": "body_t4", "one_in": 6}, {"item": "bones", "one_in": 1}],
                    "hint": "A walker that burned and kept walking. It is the reason the den is warm."},
 }
@@ -113,8 +113,11 @@ QUESTS = {
 # back wall east of the captain's pavilion. A portal also makes the camp a town: die on the moor or in the den and you wake by it.
 # and its stone, as every town has one (tests/core_test.js: one stone back to each town, earned, never sold): Mother Isolde gives it
 # with The Hollow Den's reward
-ITEMS = {"thornwatch_stone": {"name": "Thornwatch stone", "description": "Thornwatch stone, tool stone. Teleport thornwatch, Cooldown ticks 3000. Made in the valley of Ashvale.",
-                              "collection": "ASHVALE Portal Stones", "game": "ashvale", "category": "tool", "subcategory": "stone", "weight": 200, "model": "item.stone",
+ITEMS = {"town_portal_scroll": {"name": "Scroll of town portal", "description": "Scroll of town portal. Read it and a door opens to the nearest town portal; step back through any town portal once to return to where you read it. One use. Found in the Hollow Den.",
+                                "collection": "ASHVALE Items", "game": "ashvale", "category": "tool", "subcategory": "scroll", "weight": 20, "model": "item.scroll",
+                                "value": 25, "attributes": [{"trait_type": "Town portal", "value": 1}]},   # 2026-10-18: one-time use, den drop, ~3 a clear
+         "thornwatch_stone": {"name": "Thornwatch stone", "description": "Thornwatch stone, tool stone. Teleport thornwatch, Cooldown ticks 3000. Made in the valley of Ashvale.",
+                              "collection": "ASHVALE Portal Stones", "game": "ashvale", "category": "tool", "subcategory": "stone", "weight": 200, "model": "item.thornwatchstone",
                               "value": 0, "attributes": [{"trait_type": "Teleport", "value": "thornwatch"}, {"trait_type": "Cooldown ticks", "value": 3000}]}}
 PORTALS = [{"id": "thornwatch", "name": "Thornwatch Camp", "x": 133, "y": 86, "to": [133, 85]}]
 
@@ -153,6 +156,33 @@ if __name__ == '__main__':
         with open(lp, 'w', encoding='utf-8') as f:
             json.dump(live, f, separators=(',', ':'), ensure_ascii=False)
         print('rules: portal thornwatch')
+    # the Scroll of town portal (2026-10-18: "a scroll with a blue ribbon around it"): a rolled parchment lying along x,
+    # its curled ends a shade darker, a blue ribbon round the middle tied in a bow on top with two tails
+    PI2 = 1.5707963
+    SCROLL = {"ashvale3d": "part", "api": 1, "v": 1, "id": "item.scroll", "kind": "item", "items": {"town_portal_scroll": "#ecdcae"}, "shapes": [
+        {"t": "cyl", "s": [0.03, 0.03, 0.2], "c": "$c", "p": [0, 0.031, 0], "r": [0, 0, PI2], "seg": 12},
+        {"t": "cyl", "s": [0.035, 0.035, 0.014], "c": "$c:0.82", "p": [0.094, 0.031, 0], "r": [0, 0, PI2], "seg": 12},
+        {"t": "cyl", "s": [0.035, 0.035, 0.014], "c": "$c:0.82", "p": [-0.094, 0.031, 0], "r": [0, 0, PI2], "seg": 12},
+        {"t": "cyl", "s": [0.012, 0.012, 0.204], "c": "#b89a60", "p": [0, 0.031, 0], "r": [0, 0, PI2], "seg": 8},
+        {"t": "torus", "s": [0.0325, 0.006], "c": "#2a5fd0", "p": [0, 0.031, 0], "r": [0, PI2, 0], "seg": [6, 16]},
+        {"t": "torus", "s": [0.013, 0.0045], "c": "#2a5fd0", "p": [-0.012, 0.07, 0], "r": [0, PI2, 0.55], "seg": [5, 10]},
+        {"t": "torus", "s": [0.013, 0.0045], "c": "#2a5fd0", "p": [0.012, 0.07, 0], "r": [0, PI2, -0.55], "seg": [5, 10]},
+        {"t": "box", "s": [0.008, 0.032, 0.006], "c": "#2350b8", "p": [-0.008, 0.052, 0.03], "r": [0.9, 0, 0.25]},
+        {"t": "box", "s": [0.008, 0.032, 0.006], "c": "#2350b8", "p": [0.008, 0.052, 0.03], "r": [0.9, 0, -0.25]}]}
+    # the Thornwatch stone (2026-10-18: "visually distinct from the other stones"): a dark red stone of the Red Moor, a ring
+    # of six black-green thorns standing round its crown and a bone-white arrowhead set in the middle, for the archers' camp
+    import math
+    TS = {"ashvale3d": "part", "api": 1, "v": 1, "id": "item.thornwatchstone", "kind": "item", "items": {"thornwatch_stone": "#7a3428"}, "shapes": [
+        {"t": "ico", "s": [0.092], "c": "$c", "p": [0, 0.05, 0], "d": 1, "k": [1.2, 0.58, 1.05]},
+        {"t": "torus", "s": [0.045, 0.007], "c": "#2c3a24", "p": [0, 0.1, 0], "r": [1.5708, 0, 0], "seg": [5, 14]}] +
+        [{"t": "cone", "s": [0.013, 0.048], "c": "#2e4424", "p": [round(math.cos(a) * 0.046, 4), 0.112, round(math.sin(a) * 0.046, 4)],
+          "r": [round(-math.sin(a) * 0.5, 3), 0, round(math.cos(a) * 0.5, 3)]} for a in [i * math.pi / 3 for i in range(6)]] +
+        [{"t": "cone", "s": [0.016, 0.04], "c": "#e8e0c8", "p": [0, 0.122, 0]},
+         {"t": "cyl", "s": [0.005, 0.005, 0.03], "c": "#6a4a2a", "p": [0, 0.092, 0]}]}
+    with open(os.path.join(PARTS, 'item.thornwatchstone.json'), 'w', encoding='utf-8') as f:
+        json.dump(TS, f, separators=(',', ':'), ensure_ascii=False)
+    with open(os.path.join(PARTS, 'item.scroll.json'), 'w', encoding='utf-8') as f:
+        json.dump(SCROLL, f, separators=(',', ':'), ensure_ascii=False)
     for pid, body in PART_CHARS.items():
         with open(os.path.join(PARTS, pid + '.json'), 'w', encoding='utf-8') as f:
             json.dump(dict({"ashvale3d": "part", "api": 1, "v": 1, "id": pid, "kind": "char"}, **body), f, separators=(',', ':'), ensure_ascii=False)

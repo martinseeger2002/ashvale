@@ -439,6 +439,7 @@
         if (q && q.step > Q.steps.length && !(p.flags && p.flags[k])) { p.flags = p.flags || {}; p.flags[k] = 1; }
       }
       if (s.attuned) p.attuned = JSON.parse(JSON.stringify(s.attuned));
+      if (s.tp && Number.isInteger(s.tp.x) && Number.isInteger(s.tp.y)) p.tp = { x: s.tp.x, y: s.tp.y, lv: s.tp.lv | 0, name: String(s.tp.name || 'where you read the scroll').slice(0, 60) };   /* a town portal still open */
       if (s.orders && typeof s.orders === 'object') p.orders = JSON.parse(JSON.stringify(s.orders));   /* what the people are making for you (a canoe takes two days) */
       if (Array.isArray(s.bless)) p.bless = s.bless.filter(b => b && Number.isInteger(b.x) && Number.isInteger(b.y)).slice(-12).map(b => ({ x: b.x, y: b.y, day: b.day | 0, r: Math.min(30, b.r | 0) }));
       if (Array.isArray(s.traps)) p.traps = s.traps.filter(t => t && IT[t.id] && trapOf(IT[t.id]) && Number.isInteger(t.x) && Number.isInteger(t.y)).slice(0, 8).map(t => ({ id: t.id, x: underMove(t.x, t.y)[0], y: underMove(t.x, t.y)[1], prey: String(t.prey || ''), ready: +t.ready || 0 }));
@@ -518,7 +519,7 @@
     function exportPlayer(id) {
       const p = S.players[id]; if (!p) return null;
       const at = p.dead ? wakeSpot(p).at : [p.x, p.y];
-      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, orders: p.orders || {}, traps: p.traps || [], bless: p.bless || [], town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, gift: p.gift && Object.keys(p.gift).length ? p.gift : undefined, kills: p.kills || {}, pk: p.pk || undefined, ch: p.ch || undefined, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
+      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, tp: p.tp || undefined, orders: p.orders || {}, traps: p.traps || [], bless: p.bless || [], town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, gift: p.gift && Object.keys(p.gift).length ? p.gift : undefined, kills: p.kills || {}, pk: p.pk || undefined, ch: p.ch || undefined, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
     }
 
     // ---------------- pathfinding: BFS over the tile grid, 8 directions, no corner cutting (RuneScape-style)
@@ -906,7 +907,7 @@
         case 'equip': equip(p, c.slot | 0); break;
         case 'unequip': unequip(p, c.eq); break;
         case 'eat': eat(p, c.slot | 0); break;
-        case 'portal': { const P = portalOf(c.to), here = M.npcs.find(n => n.portal && cheb(p.x, p.y, n.x, n.y) <= 2); if (P && here && here.portal !== P.id && !p.dead && p.attuned && p.attuned[P.id] && p.attuned[here.portal]) teleport(p, P, 'You step through the portal to ' + P.name + '.'); break; }
+        case 'portal': if (c.to === 'back') { const here = M.npcs.find(n => n.portal && cheb(p.x, p.y, n.x, n.y) <= 2), B = p.tp; if (here && B && !p.dead) { delete p.tp; teleport(p, { id: 'townportal', name: B.name, to: [B.x, B.y] }, 'You step back through your town portal, and it closes behind you.'); p.lv = B.lv | 0; } break; } else { const P = portalOf(c.to), here = M.npcs.find(n => n.portal && cheb(p.x, p.y, n.x, n.y) <= 2); if (P && here && here.portal !== P.id && !p.dead && p.attuned && p.attuned[P.id] && p.attuned[here.portal]) teleport(p, P, 'You step through the portal to ' + P.name + '.'); break; }
         case 'perch': {   /* a hawk perches in a tree, on the side you tapped */
           if (!airborne(p)) break; const n = nodeAt(idx(c.x | 0, c.y | 0)); if (!n || nodeDef(n).skill !== 'woodcutting') break;
           p.path = findPath(p.x, p.y, (x, y) => x === n.x && y === n.y, n.x, n.y, 80); p.act = null; p.skilling = null;
@@ -941,6 +942,22 @@
     function closeShop(p) { if (p.shop) { p.shop = null; ev({ e: 'shopclose', p: p.id }); } }
 
     function clearUsing(p) { if (!p.using) return; p.using = null; ev({ e: 'using', p: p.id }); }
+    /* SCROLL OF TOWN PORTAL (2026-10-18): "a one time use scroll ... allow the user to portal back to where they came from
+       by using the town portal. But just once." Reading it takes you to the town portal nearest where you stand (from under the
+       ground, nearest the cave's way out) and remembers the spot; at any town portal, "Back through your town portal" returns
+       you there once. A new portal needs a new scroll. */
+    function townPortal(p, slot) {
+      if (p.dead || !PORTALS.length) return;
+      if (M.npcs.some(n => n.portal && (p.lv | 0) === 0 && cheb(p.x, p.y, n.x, n.y) <= 30)) { msg(p, 'You are in town already. The scroll keeps.', 'warn'); return; }
+      let sx = p.x, sy = p.y;
+      if (M.underAt && M.underAt(p.x, p.y) != null) { let best = null, bd = 1e9; for (const o of M.objects || []) if (o.k === 'caveexit' && o.to) { const d = cheb(o.x, o.y, p.x, p.y); if (d < bd) { bd = d; best = o; } } if (best) { sx = best.to[0]; sy = best.to[1]; } }
+      let P = null, pd = 1e18; for (const q of PORTALS) { const d = (q.to[0] - sx) ** 2 + (q.to[1] - sy) ** 2; if (d < pd) { pd = d; P = q; } }
+      const uz = M.underAt ? M.underAt(p.x, p.y) : null, zu = uz != null ? (D.zones || []).find(q => q.id === uz) : null, z = zu || zoneOf(p.x, p.y), here = (z && (z.name || z.id)) || 'where you read it';
+      const back = { x: p.x, y: p.y, lv: p.lv | 0, name: String(here) };
+      removeItem(p, p.inv[slot].id, 1); p.attuned = p.attuned || {}; p.attuned[P.id] = 1;
+      teleport(p, P, 'You read the scroll. The words burn away, a door of light opens, and you step out at ' + P.name + '. Its portal will take you back to ' + back.name + ', once.');
+      p.tp = back;
+    }
     function useItem(p, slot) {
       const s = p.inv[slot]; if (!s) return; const d = IT[s.id];
       if (d.buryXp) { bury(p, slot); return; }
@@ -948,6 +965,7 @@
       if (offerOf(d)) { offerTobacco(p, slot); return; }
       /* rings wear on click (their teleport is a trigger, e.g. the Ring of Angels). Charms and stones with a Teleport
          trait Use to travel; Wear still equips a charm that also has an eq slot (Vorth's rosary in the shield hand). */
+      if (d.townPortal) { townPortal(p, slot); return; }
       if (d.eq && (d.eq === 'ring' || d.teleport == null)) { equip(p, slot); return; }
       if (d.teleport) {   /* a town stone: home, as often as you like, once its cooldown has passed (30 minutes) */
         if (d.teleFrom) {   /* "questId:step" — beads stay cold until that quest step. After Wenna sends you (and after the errand is done) they still know the cave. */
@@ -1760,7 +1778,7 @@
       if (n.portal) {   /* touching a portal attunes you to it; you can travel to any portal you have touched (2026-10-04) */
         p.attuned = p.attuned || {}; const fresh = !p.attuned[n.portal]; p.attuned[n.portal] = 1; const P0 = portalOf(n.portal);
         if (fresh) msg(p, 'The stones hum as you touch them: you will always find your way back to ' + (P0 ? P0.name : 'here') + ' through any town portal.', 'info');
-        ev({ e: 'portal', p: p.id, npc: n.id, here: n.portal, to: PORTALS.filter(P => P.id !== n.portal && p.attuned[P.id]).map(P => ({ id: P.id, name: P.name })), unknown: PORTALS.filter(P => !p.attuned[P.id]).map(P => P.name) }); return; }
+        ev({ e: 'portal', p: p.id, npc: n.id, here: n.portal, to: PORTALS.filter(P => P.id !== n.portal && p.attuned[P.id]).map(P => ({ id: P.id, name: P.name })), unknown: PORTALS.filter(P => !p.attuned[P.id]).map(P => P.name), back: p.tp ? p.tp.name : null }); return; }   /* back: a read Scroll of town portal's one way back */
       const ga = n.giftAfter, giftOk = !ga || ((p.quests[ga.quest] || {}).step || 0) > ga.step;   /* a gift can wait for a quest step (the Ashvale stone: after the Goblin Chief) */
       /* a "go and speak to so-and-so" step is met by speaking to them, wherever they happen to stand (the operator
          2026-10-05: quest goals are data, not code). Checked before their shop or their own lines, so an errand

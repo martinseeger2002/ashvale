@@ -1776,7 +1776,7 @@ module('rules', 3, {
                             "caught": "There is a {prey} in your nagwaagan (snare)."}},
         "tools": {"hatchet": "woodcutting", "pickaxe": "mining", "net": "fishing", "rod": "fishing", "pot": "fishing", "tinderbox": "firemaking", "flint": "firemaking"},
         "edible": ["food", "potion"], "drink": ["potion"],
-        "traits": {"Edition": "edition", "Cures": "cures", "Light": "light", "Form": "form", "Teleport": "teleport", "Cooldown ticks": "cooldown", "Call to arms": "arms", "Attack": "attack", "Strength": "strength", "Defence": "defence", "Ranged": "ranged", "Magic": "magic", "Ranged strength": "rstr",
+        "traits": {"Edition": "edition", "Cures": "cures", "Light": "light", "Form": "form", "Teleport": "teleport", "Town portal": "townPortal", "Cooldown ticks": "cooldown", "Call to arms": "arms", "Attack": "attack", "Strength": "strength", "Defence": "defence", "Ranged": "ranged", "Magic": "magic", "Ranged strength": "rstr",
                    "Speed": "speed", "Range": "range", "Carry": ["carry", 1000], "Heal": "heal", "Heal %": "healPct", "Prayer %": "prayPct", "Cooks into": "cooks",
                    "Burns into": "burns", "Container": "vessel", "Fills into": "fills", "English": "english", "Energy": "energy", "Cooking level": "cookReq", "Cooking XP": "cookXp", "Firemaking level": "fireReq", "Burn ticks": "burnTicks",
                    "Firemaking XP": "fireXp", "Tool": "tool", "Bound": "bound", "Effect": "effect", "Effect ticks": "effectTicks", "Effect chance": "effectChance", "Effect damage": "effectDamage"},

@@ -822,7 +822,7 @@
    "category": "tool",
    "subcategory": "stone",
    "weight": 200,
-   "model": "item.stone",
+   "model": "item.thornwatchstone",
    "value": 0,
    "attributes": [
     {
@@ -832,6 +832,23 @@
     {
      "trait_type": "Cooldown ticks",
      "value": 3000
+    }
+   ]
+  },
+  "town_portal_scroll": {
+   "name": "Scroll of town portal",
+   "description": "Scroll of town portal. Read it and a door opens to the nearest town portal; step back through any town portal once to return to where you read it. One use. Found in the Hollow Den.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "tool",
+   "subcategory": "scroll",
+   "weight": 20,
+   "model": "item.scroll",
+   "value": 25,
+   "attributes": [
+    {
+     "trait_type": "Town portal",
+     "value": 1
     }
    ]
   }

@@ -611,6 +611,10 @@
    },
    "drops": [
     {
+     "item": "town_portal_scroll",
+     "one_in": 11
+    },
+    {
      "item": "bones",
      "one_in": 1
     },
@@ -666,6 +670,10 @@
    },
    "drops": [
     {
+     "item": "town_portal_scroll",
+     "one_in": 11
+    },
+    {
      "item": "bones",
      "one_in": 1
     },
@@ -704,6 +712,10 @@
    "ownDice": true,
    "drops": [
     {
+     "item": "town_portal_scroll",
+     "one_in": 11
+    },
+    {
      "item": "bones",
      "one_in": 1
     },
@@ -736,6 +748,10 @@
    "gold": 60,
    "ownDice": true,
    "drops": [
+    {
+     "item": "town_portal_scroll",
+     "one_in": 11
+    },
     {
      "item": "bones",
      "one_in": 1
@@ -772,6 +788,10 @@
    "relentless": true,
    "hunter": true,
    "drops": [
+    {
+     "item": "town_portal_scroll",
+     "one_in": 2
+    },
     {
      "item": "potion",
      "n": [
