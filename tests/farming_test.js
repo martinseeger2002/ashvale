@@ -56,5 +56,15 @@ const [lo, hi] = F.crops.potato.yield;
 ok(has('potato') >= lo + 1 && has('potato') <= hi + 1, 'the spade digs up ' + has('potato') + ' potatoes (' + lo + '-' + hi + ', +1 for the water)');
 ok(!view().crop && view().w === 0, 'the patch is empty again');
 ok((p.quests.first_furrows.n | 0) === Math.min(3, has('potato')), 'First Furrows counts them (' + p.quests.first_furrows.n + '/3)');
+/* seeds on your travels: a walk over open fields turns some up, the common ones for a beginner */
+{
+  const cf = AshCore.create(Object.assign({}, D, { wg: WG }), { seed: 'fields' }), w = cf.addPlayer('walker', { xp: { hitpoints: 1200 } }), Mf = cf.M, open = [];
+  for (let y = 60; y < 420 && open.length < 3000; y += 1) for (let x = -40; x < 60 && open.length < 3000; x += 1) if ('.,'.indexOf(Mf.tileAt(x, y)) >= 0 && !(Mf.inPiece && Mf.inPiece(x, y))) open.push([x, y]);
+  const seen = new Map();   /* each find as it turns up (dropped things lie a few minutes, then go) */
+  for (const [x, y] of open) { w.x = x; w.y = y; w.path = []; cf.tick(); for (const g of cf.S.ground) if (g.owner === 'walker' && /_seed$/.test(g.id)) seen.set(g.uid, g); }
+  const found = [...seen.values()], lvOf = id => F.crops[id.replace(/_seed$/, '')].lvl;
+  ok(found.length >= 3 && found.length <= 25, open.length + ' steps over open fields turned up ' + found.length + ' seeds (' + found.map(g => g.id.replace('_seed', '')).join(', ') + ')');
+  ok(found.every(g => lvOf(g.id) <= 11), 'a beginner finds only seeds within 10 levels of their Farming');
+}
 console.log(fails ? fails + ' FAILED' : 'all ok');
 process.exit(fails ? 1 : 0);

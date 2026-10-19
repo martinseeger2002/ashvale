@@ -1319,7 +1319,7 @@
       }
       /* FARMING: now and then a seed, the better ones only off the stronger beasts and rarer still (rules.farming.seeds), on the farm's own dice */
       if (FARM && FARM.seeds && !m.summon && owner && (FARM.noSeeds || []).indexOf(m.key) < 0 && (md.level | 0) >= 2 && FD.int(FARM.seeds.chance) === 0) {
-        const cap = (md.level | 0) * 2 + 3, L = Object.entries(FARM.seeds.weights).filter(([k]) => FARM.crops[k] && FARM.crops[k].lvl <= cap && IT[FARM.crops[k].seed]);
+        const lvm = md.level | 0, cap = lvm * 2 + 3, L = Object.entries(FARM.seeds.weights).filter(([k]) => FARM.crops[k] && FARM.crops[k].lvl <= cap && IT[FARM.crops[k].seed]).map(([k, w]) => [k, w * Math.pow(1 + lvm / 10, FARM.crops[k].lvl / (FARM.seeds.boost || 30))]);   /* the strong drop the rare seeds more often; a higher seed stays rarer */
         let r = FD.next() * L.reduce((t, x) => t + x[1], 0);
         for (const [k, w] of L) if ((r -= w) < 0) { dropGround(FARM.crops[k].seed, 1, m.x, m.y, owner, 300, { lv: m.lv | 0 }); break; }
       }
@@ -1682,6 +1682,19 @@
       const s = patchState(p, o), st = cropStage(s);
       return { w: s.w | 0, crop: s.crop || null, phase: st ? st.phase : 0, phases: st ? st.C.phases : 0, ready: !!(st && st.ready), water: !!s.water, left: st ? st.left : 0 };
     }
+    /* seeds found on your travels (2026-10-18, the operator: "sometimes walking through the open fields seeds should have a chance to just be
+       spawned randomly, rarely but possible to find on your travels"): each step onto open grass outside the towns has a small chance
+       (rules.farming.field.chance) of turning up a seed beside you - the common ones mostly, a rare one now and then, never far beyond your
+       own Farming level - on the farm's own dice. Yours to pick up, like loot. */
+    function fieldSeed(p) {
+      const FS = FARM && FARM.field; if (!FS || p.dead || p.boat || (p.lv | 0)) return;
+      const k = p.x + ',' + p.y; if (p._fs === k) return; p._fs = k;
+      if ('.,'.indexOf(M.tileAt(p.x, p.y)) < 0 || (M.inPiece && M.inPiece(p.x, p.y))) return;
+      if (FD.int(FS.chance) !== 0) return;
+      const cap = lv(p, 'farming') + (FS.over || 10), L = Object.entries(FARM.seeds.weights).filter(([c]) => FARM.crops[c] && FARM.crops[c].lvl <= cap && IT[FARM.crops[c].seed]);
+      let r = FD.next() * L.reduce((t, x) => t + x[1], 0);
+      for (const [c, w] of L) if ((r -= w) < 0) { const sd = FARM.crops[c].seed; dropGround(sd, 1, p.x, p.y, p.id, 600); msg(p, 'You spot ' + (IT[sd].name.match(/^[aeiou]/i) ? 'an ' : 'a ') + IT[sd].name.toLowerCase() + ' in the grass.'); break; }
+    }
     function creditHarvest(p, item, n) {
       for (const qid in p.quests) {
         const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.steps[q.step - 1];
@@ -1732,8 +1745,10 @@
         if (!holding(p, 'spade')) { msg(p, 'You need a spade to dig it up.', 'warn'); stop(); return; }
         const [lo, hi] = st.C.yield, n = lo + FD.int(hi - lo + 1) + (s.water ? FARM.waterBonus : 0), crop = st.C.crop;
         if (addItem(p, crop, n)) dropGround(crop, n, p.x, p.y, p.id, 600);
-        addXp(p, 'farming', st.C.xpHarvest * n * 10); msg(p, 'You dig up ' + n + ' ' + nm(crop) + (n > 1 ? 's' : '') + '.');
+        const many = w => n === 1 ? w : /y$/.test(w) ? w.slice(0, -1) + 'ies' : /o$/.test(w) ? w + 'es' : /(af)$/.test(w) ? w.slice(0, -1) + 'ves' : /s$/.test(w) ? w : w + 's';   /* potatoes, strawberries, moonleaves */
+        addXp(p, 'farming', st.C.xpHarvest * n * 10); msg(p, 'You dig up ' + n + ' ' + many(nm(crop)) + '.');
         creditHarvest(p, crop, n);
+        if (FARM.seedBack && FD.next() < FARM.seedBack && IT[st.C.seed]) { if (addItem(p, st.C.seed, 1)) dropGround(st.C.seed, 1, p.x, p.y, p.id, 600); msg(p, 'You find a ' + nm(st.C.seed) + ' among the roots.'); }   /* now and then a seed back, so a rare crop can be grown again */
         p.patches = p.patches || {}; p.patches[id] = { w: 0, clear: blocksNow() }; ev({ e: 'patch', p: p.id, x: o.x, y: o.y }); ev({ e: 'inv', p: p.id }); p.skilling = 'dig'; p.fT = S.t + 3; stop(); return;
       }
       stop();
@@ -3643,6 +3658,7 @@
       } else { stepPath(p); if (p.boat && p.land && !p.path.length) disembark(p); }
       if (p.shop) { const sh = shopOf(p.shop); if (!nearKeeper(p, sh)) closeShop(p); }
       burdenCheck(p);
+      fieldSeed(p);   /* FARMING: now and then a seed in the grass on your travels */
       if (!p.moved || !p.run) p.energy = Math.min(10000, p.energy + 15);
       if (S.t % (p.pray && p.pray.rapid_heal ? 50 : 100) === 0 && p.hp < maxHp(p)) p.hp++;
     }

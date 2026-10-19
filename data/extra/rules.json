@@ -339,7 +339,7 @@
      6
     ],
     "xpPlant": 8,
-    "xpHarvest": 9,
+    "xpHarvest": 7,
     "seed": "potato_seed",
     "crop": "potato",
     "leaf": "#4a8a34",
@@ -355,7 +355,7 @@
      6
     ],
     "xpPlant": 10,
-    "xpHarvest": 11,
+    "xpHarvest": 16,
     "seed": "onion_seed",
     "crop": "onion",
     "leaf": "#4a8a34",
@@ -371,7 +371,7 @@
      7
     ],
     "xpPlant": 12,
-    "xpHarvest": 13,
+    "xpHarvest": 25,
     "seed": "cabbage_seed",
     "crop": "cabbage",
     "leaf": "#4a8a34",
@@ -387,7 +387,7 @@
      8
     ],
     "xpPlant": 16,
-    "xpHarvest": 15,
+    "xpHarvest": 35,
     "seed": "barley_seed",
     "crop": "barley",
     "leaf": "#9a8040",
@@ -403,7 +403,7 @@
      6
     ],
     "xpPlant": 22,
-    "xpHarvest": 26,
+    "xpHarvest": 69,
     "seed": "strawberry_seed",
     "crop": "strawberry",
     "leaf": "#4a8a34",
@@ -419,7 +419,7 @@
      4
     ],
     "xpPlant": 32,
-    "xpHarvest": 40,
+    "xpHarvest": 167,
     "seed": "pumpkin_seed",
     "crop": "pumpkin",
     "leaf": "#4a8a34",
@@ -435,7 +435,7 @@
      4
     ],
     "xpPlant": 45,
-    "xpHarvest": 60,
+    "xpHarvest": 249,
     "seed": "moonleaf_seed",
     "crop": "moonleaf",
     "leaf": "#4a8a34",
@@ -451,7 +451,7 @@
      3
     ],
     "xpPlant": 70,
-    "xpHarvest": 95,
+    "xpHarvest": 657,
     "seed": "frostbloom_seed",
     "crop": "frostbloom",
     "leaf": "#4a8a34",
@@ -476,6 +476,7 @@
   "weedsBack": 25,
   "rakeXp": 4,
   "waterBonus": 1,
+  "seedBack": 0.3,
   "tools": {
    "rake": "rake",
    "plant": "dibber",
@@ -483,7 +484,8 @@
    "water": "wateringcan"
   },
   "seeds": {
-   "chance": 6,
+   "chance": 4,
+   "boost": 30,
    "weights": {
     "potato": 40,
     "onion": 26,
@@ -491,10 +493,10 @@
     "barley": 9,
     "strawberry": 5,
     "pumpkin": 2.5,
-    "moonleaf": 1.0,
-    "frostbloom": 0.4
+    "moonleaf": 1.8,
+    "frostbloom": 0.9
    },
-   "note": "1 kill in `chance` drops a seed; which one by weight among the crops of level <= 2 x the beast's level + 3 (so the rare seeds come from the strong); rolled on dice of their own (core.js FARMING), never the world's"
+   "note": "1 kill in `chance` drops a seed; which one by weight x (1 + beast level / 10) ^ (crop level / boost) among the crops of level <= 2 x the beast's level + 3 - so the strong drop the rare seeds more often, and a higher seed is always rarer than a lower one off the same beast; rolled on dice of their own (core.js FARMING), never the world's"
   },
   "noSeeds": [
    "sheep",
@@ -506,6 +508,11 @@
    "deer",
    "goat",
    "lizard"
-  ]
+  ],
+  "field": {
+   "chance": 250,
+   "over": 10,
+   "note": "a step onto open grass outside the towns finds a seed 1 time in `chance` (about one every few minutes of walking), of a crop no more than `over` levels above your Farming"
+  }
  }
 }

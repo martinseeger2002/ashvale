@@ -28,30 +28,31 @@ from make_castle_extras import overlay, load, DD, EX, PARTS   # noqa: E402
 # ---------------------------------------------------------------- the crops
 # id: level, patch tier, phases, blocks a phase, yield [lo, hi], XP to plant, XP a crop dug up, seed value, crop value, heal (food) or None
 CROPS = {
-    "potato":     (1, 1, 4, 2, [3, 6], 8, 9, 3, 5, 1),
-    "onion":      (5, 1, 4, 3, [3, 6], 10, 11, 5, 7, 2),
-    "cabbage":    (9, 1, 4, 4, [3, 7], 12, 13, 8, 10, 3),
-    "barley":     (14, 2, 5, 4, [4, 8], 16, 15, 12, 12, None),
-    "strawberry": (19, 2, 5, 5, [3, 6], 22, 26, 18, 22, 6),
-    "pumpkin":    (27, 2, 5, 7, [2, 4], 32, 40, 30, 45, 8),
-    "moonleaf":   (33, 3, 4, 10, [2, 4], 45, 60, 60, 95, None),
-    "frostbloom": (45, 3, 5, 12, [1, 3], 70, 95, 120, 230, None),
+    "potato":     (1, 1, 4, 2, [3, 6], 8, 7, 3, 5, 1),
+    "onion":      (5, 1, 4, 3, [3, 6], 10, 16, 5, 7, 2),
+    "cabbage":    (9, 1, 4, 4, [3, 7], 12, 25, 8, 10, 3),
+    "barley":     (14, 2, 5, 4, [4, 8], 16, 35, 12, 12, None),
+    "strawberry": (19, 2, 5, 5, [3, 6], 22, 69, 18, 22, 6),
+    "pumpkin":    (27, 2, 5, 7, [2, 4], 32, 167, 30, 45, 8),
+    "moonleaf":   (33, 3, 4, 10, [2, 4], 45, 249, 60, 95, None),
+    "frostbloom": (45, 3, 5, 12, [1, 3], 70, 657, 120, 230, None),
 }
 NAMES = {"potato": "Potato", "onion": "Onion", "cabbage": "Cabbage", "barley": "Barley", "strawberry": "Strawberry", "pumpkin": "Pumpkin",
          "moonleaf": "Moonleaf", "frostbloom": "Frostbloom"}
 COL = {"potato": ("#b08a5a", "#6a4a2a"), "onion": ("#d8b878", "#8a6a3a"), "cabbage": ("#6aa84a", "#3a6a2a"), "barley": ("#d8b860", "#9a8040"),
        "strawberry": ("#d83a3a", "#c84a4a"), "pumpkin": ("#e07a20", "#b85a1a"), "moonleaf": ("#b8c8e8", "#5a6a9a"), "frostbloom": ("#8fd8f8", "#3a8ab0")}
-SEED_TABLE = {"chance": 6, "weights": {"potato": 40, "onion": 26, "cabbage": 16, "barley": 9, "strawberry": 5, "pumpkin": 2.5, "moonleaf": 1.0, "frostbloom": 0.4},
-              "note": "1 kill in `chance` drops a seed; which one by weight among the crops of level <= 2 x the beast's level + 3 (so the rare seeds come from the strong); rolled on dice of their own (core.js FARMING), never the world's"}
+SEED_TABLE = {"chance": 4, "boost": 30, "weights": {"potato": 40, "onion": 26, "cabbage": 16, "barley": 9, "strawberry": 5, "pumpkin": 2.5, "moonleaf": 1.8, "frostbloom": 0.9},
+              "note": "1 kill in `chance` drops a seed; which one by weight x (1 + beast level / 10) ^ (crop level / boost) among the crops of level <= 2 x the beast's level + 3 - so the strong drop the rare seeds more often, and a higher seed is always rarer than a lower one off the same beast; rolled on dice of their own (core.js FARMING), never the world's"}
 NO_SEEDS = ["sheep", "cow", "chicken", "hen", "hare", "snow_hare", "deer", "goat", "lizard"]   # livestock and prey: they carry no seeds
 FARMING = {
     "block": 60, "hourSeconds": 300, "note": "a block is a minute of the game's clock (Dogecoin's block time); the clock keeps running while you are away, so crops grow offline",
     "crops": {k: {"lvl": v[0], "tier": v[1], "phases": v[2], "blocks": v[3], "yield": v[4], "xpPlant": v[5], "xpHarvest": v[6],
                   "seed": k + "_seed", "crop": k, "leaf": COL[k][1] if k in ("barley",) else "#4a8a34", "fruit": COL[k][0]} for k, v in CROPS.items()},
     "tiers": {"1": {"name": "small farming patch", "share": 0.62}, "2": {"name": "farming patch", "share": 0.27}, "3": {"name": "large farming patch", "share": 0.11}},
-    "weeds": 3, "weedsBack": 25, "rakeXp": 4, "waterBonus": 1,
+    "weeds": 3, "weedsBack": 25, "rakeXp": 4, "waterBonus": 1, "seedBack": 0.3,
     "tools": {"rake": "rake", "plant": "dibber", "harvest": "spade", "water": "wateringcan"},
     "seeds": SEED_TABLE, "noSeeds": NO_SEEDS,
+    "field": {"chance": 250, "over": 10, "note": "a step onto open grass outside the towns finds a seed 1 time in `chance` (about one every few minutes of walking), of a crop no more than `over` levels above your Farming"},
 }
 
 # ---------------------------------------------------------------- examine lines (Qwen's drafts, edited)
@@ -212,8 +213,8 @@ QUESTS = {
 }
 GIVERS = {"tobin": ("zone.castle", "tools/castle/make_castle.js"), "orla": ("zone.mt_lodge", "tools/mountain/make_camps.js"), "halvard": ("zone.mt_tower", "tools/mountain/make_tower.js")}
 SHOP_ADD = {"general": ["rake", "seed_dibber", "spade", "watering_can", "potato_seed", "onion_seed", "cabbage_seed"],
-            "salt_general": ["rake", "seed_dibber", "spade", "watering_can", "potato_seed", "onion_seed", "cabbage_seed"],
-            "castle_general": ["rake", "seed_dibber", "spade", "watering_can", "potato_seed", "onion_seed", "cabbage_seed"]}
+            "salt_general": ["rake", "seed_dibber", "spade", "watering_can", "potato_seed", "onion_seed", "cabbage_seed", "barley_seed", "strawberry_seed"],
+            "castle_general": ["rake", "seed_dibber", "spade", "watering_can", "potato_seed", "onion_seed", "cabbage_seed", "barley_seed", "strawberry_seed"]}
 RULES_KINDS = {"tool": ["rake", "dibber", "spade", "wateringcan"], "resource": ["seed", "herb", "grain"], "food": ["crop"]}
 RULES_TOOLS = {"rake": "farming", "dibber": "farming", "spade": "farming", "wateringcan": "farming"}
 

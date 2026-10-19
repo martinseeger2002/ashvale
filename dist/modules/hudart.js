@@ -92,7 +92,7 @@
 .ash .chatw .chatx{position:absolute;left:0;top:-24px;padding:2px 10px;border-radius:6px 6px 0 0;background:#000a;color:#ffd23f;font:600 12px system-ui,sans-serif;cursor:pointer;pointer-events:auto}
 .ash .chat .table{color:#b8e6c4}
 @media (max-height:520px){.ash .inv{gap:2px}.ash .panel{padding:5px 6px}.ash .panel h4{margin-bottom:3px}.ash .chat{max-height:calc(3*1.3em + 10px);font-size:11px}.ash .chatw{width:min(40vw,360px)}}
-@media (max-height:520px){.ash{--tabs:calc(var(--tab)*2 + 4px)}.ash .tabs{display:grid;grid-template-columns:repeat(2,var(--tab));grid-auto-rows:var(--tab);gap:4px}}   /* a short screen (a phone held sideways, 2026-10-18): the tab buttons in two columns, so ten or more still fit; everything placed from the tabs moves over by --tabs */
+@media (max-height:520px){.ash{--tabs:calc(var(--tab)*2 + 4px)}.ash .tabs{display:grid;grid-template-columns:repeat(2,var(--tab));grid-auto-rows:var(--tab);gap:4px}.ash .panel{min-width:236px;overflow-x:hidden}.ash .sk{font-size:11px;padding:2px 3px;gap:3px}.ash .sk svg{width:13px;height:13px}}   /* a short screen (a phone held sideways, 2026-10-18): the tab buttons in two columns, so ten or more still fit; everything placed from the tabs moves over by --tabs */
 .ash .chat div{margin:1px 0;text-shadow:1px 1px 0 #000}
 .ash .chat .warn{color:#ff6a5a}.ash .chat .level{color:#7fd0ff}.ash .chat .trade{color:#ffd77a}.ash .chat .quest{color:#d9a0ff}.ash .chat .npc{color:#9cf}.ash .chat .sys{color:#ffcf3f}.ash .chat .dm{color:#ff9ce0}
 .ash .hover{position:absolute;left:8px;top:6px;font-size:13px;color:#fff;text-shadow:1px 1px 0 #000;pointer-events:none;white-space:nowrap}
