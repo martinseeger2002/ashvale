@@ -1182,3 +1182,10 @@ the walk here feature".
 - the operator: "When you stand up from a slot machine, your Gold should automatically cash out to your inventory" -> engfortune: the
   moment the Bank closes a sitting ('closing' or 'paid') its credit goes back in the pack (payBack, counted as on its way);
   the Bank's later payout never adds it twice. fortune_pw ALL OK (stand-in Bank now closes first, pays 3 s later).
+
+## 0.8.141 - 2026-10-17 (Claude): stuck Fortune Engine deposits come home - RELEASED (v168; cards 94abb52a ASHVALE, a5ae4052 Ziibiing)
+- the operator: deposited 1,000, spun, the game froze (arcade room down 14:46:45-14:47:10); after a restart the chest showed 60,000,
+  pack 0, wallet still 61,000 (the Bank never got fein/fespin; the 1,000 sat booked as gone). "So I should automatically come back"
+- engfortune: fein events while the ledger is unknown are queued (HELD_EV); a 30 s sweep calls off a deposit with no tx after
+  5 min (feinx + back to the pack, gone undone); a spin unanswered for 30 s puts the wager back on the credit and frees the machine.
+- fortune_pw ALL OK; check_live v168, no console errors. Feed note posted.

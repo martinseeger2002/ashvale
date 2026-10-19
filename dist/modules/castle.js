@@ -1,4 +1,4 @@
-/* ASHVALE 3D castle module ('castle', api 1): the castle kit, split out of scene.js (Martin 2026-10-05: "make sure whatever
+/* ASHVALE 3D castle module ('castle', api 1): the castle kit, split out of scene.js (2026-10-05: "make sure whatever
    we're doing gets modularized so that in future releases we don't have to inscribe huge files") - a castle change is
    one small inscription. The scene hands it its batcher and helpers per region build:
      const C = ASH3D.get('castle').create({ THREE, B, KitBatch, kitData, heightAt, group })
@@ -12,7 +12,7 @@
     /* tap targets: an invisible box over a wall, stair or tower top; a tap on it walks you to that tile (over the stairs) */
     const PICKMAT = new THREE.MeshBasicMaterial({ visible: false });
     function pickBox(x, y, z, sx, sy, sz, info) { const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), PICKMAT); m.position.set(x, y, z); m.userData.pick = Object.assign({ kind: 'deckpick' }, info); group.add(m); pickables.push(m); }
-  /* ---------- the castle kit (Martin 2026-10-05: "build a castle kit", the lake castle, data/zone.castle.json from
+  /* ---------- the castle kit (2026-10-05: "build a castle kit", the lake castle, data/zone.castle.json from
      tools/castle/make_castle.js): flat-colour stone like the house kit - curtain walls with a plinth, mortar courses,
      a walkway and battlements; round towers with a corbel ring, arrow slits and the kit's conical tower roof; the
      gatehouse with its portcullis; the keep with glazed windows, corner turrets and battlements. Instanced boxes and
@@ -20,7 +20,7 @@
   const STONE = 0xa59f92, COURSE = 0x8b8579, CAP = 0xb8b2a4, SLIT = 0x26221e, OAK = 0x5a3c24, IRON2 = 0x2e2a26, BANNER = 0x8c2a24;
   const TOWER_TINT = kitData() ? { [kitData().tile]: '#8c3f2e' } : null;
   const hMin = pts => Math.min(...pts.map(([x, z]) => heightAt(x, z)));
-  /* battlements as real castle walls have them (Martin: "look at the top of actual castle walls"): on the OUTER side a
+  /* battlements as real castle walls have them (the operator: "look at the top of actual castle walls"): on the OUTER side a
      parapet that steps out over the face on a row of corbels, waist high, with merlons on it - each capped by a
      coping stone, every other one pierced by an arrow slit - and open crenels between; on the inner side a low
      parapet with a coping. out = +1/-1 along the wall's normal axis; 0 = an inner wall (low parapets both sides). */
@@ -55,7 +55,7 @@
     const n = Math.max(1, Math.floor(len / 1.1));
     for (let k = 0; k < n; k++) { const t = -len / 2 + (k + 0.5) * len / n; for (const o of offs) B.add('box', STONE, cx + (along ? t : o), y + 0.38, cz + (along ? o : t), along ? 0.6 : 0.32, 0.76, along ? 0.32 : 0.6); }
   }
-  /* masonry (Martin: "the castles should look as real as the houses"): dressed blocks in four shades, staggered course
+  /* masonry (the operator: "the castles should look as real as the houses"): dressed blocks in four shades, staggered course
      by course, standing 2.5 cm proud of darker mortar - instanced, so thousands cost a few draws */
   const MORTAR = 0x837d71, SHADES = [0xa8a295, 0x9e978a, 0xb2ac9e, 0x938d81];
   const RH = 0.46;
@@ -70,7 +70,7 @@
       }
     }
   }
-  function blocksRound(cx, cz, y0, r, h, from) {   /* round a tower: each block's face curves with the tower (Martin: "fix those tower bricks so they're rounded") */
+  function blocksRound(cx, cz, y0, r, h, from) {   /* round a tower: each block's face curves with the tower (the operator: "fix those tower bricks so they're rounded") */
     const rows = Math.floor(h / RH), n = Math.max(8, Math.round(2 * Math.PI * r / 0.95)), R = r + 0.03, kind = 'arc:' + n + ':' + R.toFixed(2);
     for (let rr = (from || 0); rr < rows; rr++) for (let k = 0; k < n; k++) {
       const a = (k + (rr % 2 ? 0.5 : 0)) / n * 2 * Math.PI, sh = SHADES[(k * 7 + rr * 3) % 4];
@@ -179,7 +179,7 @@
     for (const sgn of [-1, 1]) B.add('box', OAK, cx + (along ? sgn * (OP / 2 - 0.05) : -face * 0.6), y0 + OH / 2, cz + (along ? -face * 0.6 : sgn * (OP / 2 - 0.05)), along ? 0.08 : OP / 2, OH - 0.1, along ? OP / 2 : 0.08);
     if (!small) for (const sgn of [-1, 1]) { const off = sgn * (Wd / 2 - 0.2); banner(cx + (along ? off : -out * 0.2), y0 + H + 0.1, cz + (along ? -out * 0.2 : off), along ? 0 : Math.PI / 2); }
   }
-  /* the walk-in keep (Martin: "the door on the keep is closed so I can't go inside of it"): scene.js building() lays the floors,
+  /* the walk-in keep (the operator: "the door on the keep is closed so I can't go inside of it"): scene.js building() lays the floors,
      the stairs between them and hides what is above you; this draws one storey's stone walls (windows both faces, the door
      gap on the ground floor) into that storey's group, and the keep's top into the roof group */
   function keepStorey(target, o, yb, H, f, door) {

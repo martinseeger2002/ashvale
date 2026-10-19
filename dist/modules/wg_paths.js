@@ -178,7 +178,7 @@
         }
       }
       for (const sp of (list || [])) {
-        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, groves: sp.groves || [], walls: sp.walls || [], links: sp.links || [], linkStyles: sp.linkStyles || {}, rot: sp.rot || null };
+        const pc = { id: String(sp.id), face: sp.face | 0, x: sp.x | 0, y: sp.y | 0, w: sp.w | 0, h: sp.h | 0, tiles: sp.tiles || [], objects: sp.objects || [], exits: sp.exits || [], belt: +sp.belt || 0, groves: sp.groves || [], walls: sp.walls || [], links: sp.links || [], linkStyles: sp.linkStyles || {}, rot: sp.rot || null, ownWays: !!sp.ownWays };
         pc.px0 = pc.x; pc.px1 = pc.x + pc.w; pc.py0 = -(pc.y + pc.h); pc.py1 = -pc.y;
         PIECES.push(pc); ctx.PIECE_BY_ID.set(pc.id, pc);
       }
@@ -303,7 +303,7 @@
           }
         }
         for (const e of pc.exits) ex.push({ x: e.x, y: e.y, dir: e.dir, w: e.w || 2, kind: 0 });
-        pc.ex = pc.rot ? [] : ex;   /* a rotated piece (another face): no path or stream runs continue out of its bounding box */
+        pc.ex = pc.rot || pc.ownWays ? [] : ex;   /* a rotated piece (another face): no path or stream runs continue out of its bounding box; nor from a zone whose ways out are laid by hand (ownWays: Thornwatch Camp's cobbled spur, 2026-10-18) */
       }
       /* a gate the road to another town leaves from gets the road only, not a dirt path of its own beside it (the operator
          2026-10-07, the cobbled road): mark the exits the trails between towns will use */
@@ -526,7 +526,7 @@
          from the castle): path segments like the towns' own, through the cliffs wg_tiles makes of steep high ground, bridged over water */
       for (const tr of (T.trails || [])) {
         const face = tr.face == null ? (PIECES[0] ? PIECES[0].face : 0) : tr.face, P2 = (tr.pts || []).map(([vx, vy]) => [vx + 0.5, -(vy + 0.5)]), w0 = tr.w || 1.3;
-        for (let q = 0; q + 1 < P2.length; q++) segs.push(face, P2[q][0], P2[q][1], P2[q + 1][0], P2[q + 1][1], w0, 0, -1e9);
+        for (let q = 0; q + 1 < P2.length; q++) segs.push(face, P2[q][0], P2[q][1], P2[q + 1][0], P2[q + 1][1], w0, tr.road ? 3 : 0, -1e9);   /* tr.road: cobbles, like the roads between towns (2026-10-18: Thornwatch Camp's spur onto the Saltmere road) */
         if (P2.length > 1) layBridges(face, P2, w0, -1e9);
       }
       SEG = segs;

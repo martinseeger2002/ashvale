@@ -308,7 +308,7 @@
    "category": "resource",
    "subcategory": "note",
    "weight": 20,
-   "model": "item.scroll",
+   "model": "item.edric_scroll",
    "value": 1,
    "attributes": [],
    "examine": "A damp note in a Vorthan's hand naming the Red Pyre, the rosary and the cave. Take it to Mother Wenna in Saltmere (The Red Pyre)."
@@ -704,6 +704,67 @@
    "attributes": [],
    "examine": "A cowhide from the castle farm. Tanners and the castle's stores buy them."
   },
+  "frost_ink": {
+   "name": "Frost ink",
+   "description": "A pot of the Frostspire's ink, pale blue and cold enough to sting. The Circle writes with it because it does not fade, and the frost goblins steal it because it is shiny.",
+   "collection": "ASHVALE The Frostspire",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "curio",
+   "weight": 300,
+   "model": "item.inkpot",
+   "value": 15,
+   "attributes": [],
+   "examine": "A pot of the Frostspire's frost ink. Frost goblins steal it; Archmage Halvard wants three back (The Stolen Ink)."
+  },
+  "wizard_focus": {
+   "name": "Wizard's focus",
+   "description": "A sphere of summit ice that has not melted since the Ember King's chain was forged, held up on a silver stem. Archmage Halvard gives it to those who pass his trial. Held in the shield hand it adds 5 to your Magic bonus: your spells find their mark more often (it sharpens the aim, not the blow - a spell still hits as hard as it ever did). Needs Magic 30.",
+   "collection": "ASHVALE The Frostspire",
+   "game": "ashvale",
+   "category": "jewellery",
+   "subcategory": "charm",
+   "tier": 3,
+   "weight": 300,
+   "req": {
+    "magic": 30
+   },
+   "model": "gear.focus",
+   "value": 2500,
+   "attributes": [
+    {
+     "trait_type": "Magic",
+     "value": 5
+    }
+   ],
+   "examine": "An ice orb on a silver stem, from The Archmage's Trial. Held in the shield hand: Magic +5, so your spells land more often."
+  },
+  "tome_stones": {
+   "name": "Tome of Stones",
+   "description": "The Circle's second book: the Three Stones at the shrine were the first wardens of the mountain, wizards who stood their watch so long they forgot to stop. Wyn swears they still hum the hours.",
+   "collection": "ASHVALE The Frostspire",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "note",
+   "weight": 600,
+   "model": "item.tome_stones",
+   "value": 1,
+   "attributes": [],
+   "examine": "The Circle's Tome of Stones, from Wyn. Show it to Pell at the Frostspire (The Scattered Tomes); yours to keep after."
+  },
+  "tome_echoes": {
+   "name": "Tome of Echoes",
+   "description": "The Circle's first book: the mountain was raised to be a watchtower, and every echo on it is a word the watchers once said aloud and the stone kept. Aled has read it so often he answers it.",
+   "collection": "ASHVALE The Frostspire",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "note",
+   "weight": 600,
+   "model": "item.tome_echoes",
+   "value": 1,
+   "attributes": [],
+   "examine": "The Circle's Tome of Echoes, from Aled. Show it to Pell at the Frostspire (The Scattered Tomes); yours to keep after, for its lore."
+  },
   "wizard_cloak": {
    "name": "Wizard cloak top",
    "description": "The upper half of the Circle of the Long Night's cloak, deep blue and lined with silver thread that holds the cold out and the magic in; wear the bottoms with it. Magic +10, Defence +12. Needs Magic 40. Sold at the Frostspire.",
@@ -729,6 +790,19 @@
     }
    ],
    "examine": "The upper half of the Circle's cloak. Worn on the body: Magic +10, Defence +12. Needs Magic 40; sold by Pell at the Frostspire."
+  },
+  "tome_far_road": {
+   "name": "Tome of the Far Road",
+   "description": "The Circle's third book: a map of the roads beyond the mountain, and a warning in frost ink that the Ember King's chain was forged on this summit and must be kept cold here, or it will soften there.",
+   "collection": "ASHVALE The Frostspire",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "note",
+   "weight": 600,
+   "model": "item.tome_far_road",
+   "value": 1,
+   "attributes": [],
+   "examine": "The Circle's Tome of the Far Road, from Tamsin. Show it to Pell (The Scattered Tomes); its last page warns of the chain."
   },
   "wizard_cloak_bottoms": {
    "name": "Wizard cloak bottoms",
@@ -756,79 +830,43 @@
    ],
    "examine": "The Circle's cloak skirts. Worn on the legs: Magic +7, Defence +8. Needs Magic 40; sold by Pell at the Frostspire."
   },
-  "wizard_focus": {
-   "name": "Wizard's focus",
-   "description": "A sphere of summit ice that has not melted since the Ember King's chain was forged, held up on a silver stem. Archmage Halvard gives it to those who pass his trial. Held in the shield hand it adds 5 to your Magic bonus: your spells find their mark more often (it sharpens the aim, not the blow - a spell still hits as hard as it ever did). Needs Magic 30.",
-   "collection": "ASHVALE The Frostspire",
+  "thornwatch_stone": {
+   "name": "Thornwatch stone",
+   "description": "Thornwatch stone, tool stone. Teleport thornwatch, Cooldown ticks 3000. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Portal Stones",
    "game": "ashvale",
-   "category": "jewellery",
-   "subcategory": "charm",
-   "tier": 3,
-   "weight": 300,
-   "req": {
-    "magic": 30
-   },
-   "model": "gear.focus",
-   "value": 2500,
+   "category": "tool",
+   "subcategory": "stone",
+   "weight": 200,
+   "model": "item.thornwatchstone",
+   "value": 0,
    "attributes": [
     {
-     "trait_type": "Magic",
-     "value": 5
+     "trait_type": "Teleport",
+     "value": "thornwatch"
+    },
+    {
+     "trait_type": "Cooldown ticks",
+     "value": 3000
     }
-   ],
-   "examine": "An ice orb on a silver stem, from The Archmage's Trial. Held in the shield hand: Magic +5, so your spells land more often."
+   ]
   },
-  "frost_ink": {
-   "name": "Frost ink",
-   "description": "A pot of the Frostspire's ink, pale blue and cold enough to sting. The Circle writes with it because it does not fade, and the frost goblins steal it because it is shiny.",
-   "collection": "ASHVALE The Frostspire",
+  "town_portal_scroll": {
+   "name": "Scroll of town portal",
+   "description": "Scroll of town portal. Read it and a door opens to the nearest town portal; step back through any town portal once to return to where you read it. One use. Found in the Hollow Den.",
+   "collection": "ASHVALE Items",
    "game": "ashvale",
-   "category": "resource",
-   "subcategory": "curio",
-   "weight": 300,
-   "model": "item.inkpot",
-   "value": 15,
-   "attributes": [],
-   "examine": "A pot of the Frostspire's frost ink. Frost goblins steal it; Archmage Halvard wants three back (The Stolen Ink)."
-  },
-  "tome_echoes": {
-   "name": "Tome of Echoes",
-   "description": "The Circle's first book: the mountain was raised to be a watchtower, and every echo on it is a word the watchers once said aloud and the stone kept. Aled has read it so often he answers it.",
-   "collection": "ASHVALE The Frostspire",
-   "game": "ashvale",
-   "category": "resource",
-   "subcategory": "note",
-   "weight": 600,
-   "model": "item.tome_echoes",
-   "value": 1,
-   "attributes": [],
-   "examine": "The Circle's Tome of Echoes, from Aled. Show it to Pell at the Frostspire (The Scattered Tomes); yours to keep after, for its lore."
-  },
-  "tome_stones": {
-   "name": "Tome of Stones",
-   "description": "The Circle's second book: the Three Stones at the shrine were the first wardens of the mountain, wizards who stood their watch so long they forgot to stop. Wyn swears they still hum the hours.",
-   "collection": "ASHVALE The Frostspire",
-   "game": "ashvale",
-   "category": "resource",
-   "subcategory": "note",
-   "weight": 600,
-   "model": "item.tome_stones",
-   "value": 1,
-   "attributes": [],
-   "examine": "The Circle's Tome of Stones, from Wyn. Show it to Pell at the Frostspire (The Scattered Tomes); yours to keep after."
-  },
-  "tome_far_road": {
-   "name": "Tome of the Far Road",
-   "description": "The Circle's third book: a map of the roads beyond the mountain, and a warning in frost ink that the Ember King's chain was forged on this summit and must be kept cold here, or it will soften there.",
-   "collection": "ASHVALE The Frostspire",
-   "game": "ashvale",
-   "category": "resource",
-   "subcategory": "note",
-   "weight": 600,
-   "model": "item.tome_far_road",
-   "value": 1,
-   "attributes": [],
-   "examine": "The Circle's Tome of the Far Road, from Tamsin. Show it to Pell (The Scattered Tomes); its last page warns of the chain."
+   "category": "tool",
+   "subcategory": "scroll",
+   "weight": 20,
+   "model": "item.scroll",
+   "value": 25,
+   "attributes": [
+    {
+     "trait_type": "Town portal",
+     "value": 1
+    }
+   ]
   },
   "rake": {
    "name": "Rake",

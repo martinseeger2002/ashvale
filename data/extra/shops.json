@@ -1,0 +1,67 @@
+{
+ "shops": {
+  "thornwatch_forge": {
+   "name": "Gwen's Forge",
+   "keeper": "gwen",
+   "stock": [
+    "dagger_t3",
+    "dagger_t4",
+    "sword_t3",
+    "sword_t4",
+    "mace_t3",
+    "mace_t4",
+    "longsword_t3",
+    "longsword_t4",
+    "bow_t3",
+    "bow_t4",
+    "arrows_t3",
+    "arrows_t4",
+    "shield_t3",
+    "shield_t4",
+    "helmet_t3",
+    "helmet_t4",
+    "body_t3",
+    "body_t4",
+    "legs_t3",
+    "legs_t4"
+   ],
+   "buys": "any",
+   "buyRate": 40,
+   "sellRate": 100,
+   "greet": "Mind the sparks. If it's bent I'll straighten it, if it's sharp I'll sell it."
+  },
+  "thornwatch_herbs": {
+   "name": "The Sisters' Remedies",
+   "keeper": "elin",
+   "stock": [
+    "potion",
+    "prayer_potion",
+    "antidote",
+    "salmon",
+    "lobster"
+   ],
+   "buys": "any",
+   "buyRate": 40,
+   "sellRate": 100,
+   "greet": "Mother Isolde mixes them, I only count the jars. Two drops on the tongue, not the whole flask."
+  },
+  "thornwatch_peddler": {
+   "name": "Fennick's Wagon",
+   "keeper": "fennick",
+   "stock": [
+    "torch",
+    "tinderbox",
+    "arrows_t2",
+    "arrows_t3",
+    "pack_t2",
+    "pack_t3",
+    "salmon",
+    "potion"
+   ],
+   "buys": "any",
+   "buyRate": 35,
+   "sellRate": 110,
+   "greet": "Everything a hero needs and a few things a hero only thinks they need. Prices are fair. Fairly fair."
+  }
+ }
+}

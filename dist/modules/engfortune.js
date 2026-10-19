@@ -176,6 +176,21 @@
       finally { paying = false; setTimeout(payNext, 500); }
     }
     setInterval(payNext, 4000);
+    /* [Claude 2026-10-17] the operator: a deposit and a spin during an arcade restart froze the machine; after a reload his 1,000 stayed
+       neither in the pack nor on the machine (the send never went, nothing gave it back). Now: a deposit whose send has not gone
+       in 5 minutes is called off - the Bank voids it, the GOLD (still in the wallet) is back in the pack - and a deposit core
+       took while the wallet was unknown is handled as soon as it is known. */
+    const HELD_EV = [];
+    setInterval(() => {
+      const L = ledger(); if (!L) return;
+      while (HELD_EV.length) event(HELD_EV.shift());
+      if (paying) return;
+      for (const b of (L.feb || [])) if (!b.tx && !b.failed && !b.refunded && Date.now() - (b.at || 0) > 300000) {
+        b.failed = true; L.out = L.out || {}; L.out.coins = (L.out.coins || []).filter(x => x.id !== 'fe:' + b.id);
+        bankSend(b.s + '|x|' + b.id, { t: 'feinx', v: 1, s: b.s, id: b.id });
+        refund(b); ENGBANK.ledgerSave();
+      }
+    }, 30000);
     /* [Claude 2026-10-16] a deposit's 'gone' is settled the moment the wallet count shows its block (the operator: 65,609 - 609 + 500 showed
        64,891 - the deposit was counted out twice for the 15 minutes the old timer waited). The count is the arcade's confirmed
        balance: once /r/tx says the send is in a block, the wallet is read again, and the first count read after that holds it. */
@@ -363,6 +378,12 @@
         else if (p.x === o.seat[0] && p.y === o.seat[1] && (p.lv | 0) === (o.lv | 0) && !(P && P.path && P.path.length)) enter(pend.id);
         else if (now - pend.at > 600 && !(P && P.path && P.path.length)) pend = null;   /* stopped somewhere else */
       }
+      if (FEV && FEV.pendSpin && Date.now() - FEV.pendSpin.at > 30000) {   /* [Claude 2026-10-17] the Bank never answered that spin: the wager is back on the credit, the machine free */
+        const F = FEV; F.credit += F.pendSpin.w; F.pendSpin = null; F.busy = false; const m = machine(F.id); if (m) m.mood({ win: false });
+        for (const k of Array.from(Q.keys())) if (k.startsWith(F.s + '|spin|')) Q.delete(k);
+        say('The Bank did not answer that spin. Your wager is back on your credit.');
+        if (F.standAfter) { F.standAfter = false; standUp(); }
+      }
       if (FEV) {
         const o = FEV.o;
         if (p.dead || p.x !== o.seat[0] || p.y !== o.seat[1] || (p.lv | 0) !== (o.lv | 0)) standUp();
@@ -382,7 +403,8 @@
       if (e.p !== PID) return;
       const L = ledger();
       if (e.e === 'fein') {
-        if (!L) return; L.feb = L.feb || []; L.fes = L.fes || {};
+        if (!L) { HELD_EV.push(e); return; }   /* [Claude 2026-10-17] the wallet not known this moment (an arcade restart): kept, never lost */
+        L.feb = L.feb || []; L.fes = L.fes || {};
         const id = Date.now().toString(36) + randHex(2);
         /* [Claude 2026-10-16] the chest ledger (engbank): these coins leave the wallet by our own send, like a trade - so they are
            'gone', never 'spent'. Counted as spent (or as used-up promises while a payout was on its way), the wallet's own

@@ -172,9 +172,9 @@
     host.addEventListener('pointerdown', e => { if (ctx.style.display === 'block' && !ctx.contains(e.target) && performance.now() - menuOpenT > 200) hideMenu(); }, true);
 
     /* ---------- NPC dialogue */
-    function dialog(name, linesIn, onClose, choices) {
+    function dialog(name, linesIn, onClose, choices, opts) {   /* opts.img: {src, flip} a picture over the text (a pet's own art) */
       if (dlgQ && dlgQ.onClose) { const prev = dlgQ.onClose; dlgQ.onClose = null; prev('dismiss'); }
-      dlgQ = { name, lines: (linesIn || []).slice(), i: 0, onClose: onClose || null, choices: choices && choices.length ? choices : null }; drawDlg();
+      dlgQ = { name, lines: (linesIn || []).slice(), i: 0, onClose: onClose || null, choices: choices && choices.length ? choices : null, img: opts && opts.img || null }; drawDlg();
     }
     function closeDialog(pick) {
       const done = dlgQ && dlgQ.onClose; dlg.style.display = 'none'; dlgQ = null; if (done) done(pick);
@@ -185,7 +185,7 @@
       }
       const last = dlgQ.i >= dlgQ.lines.length - 1, pick = last && dlgQ.choices;
       dlg.style.display = 'block';
-      dlg.innerHTML = '<div class="nm">' + A.esc(dlgQ.name) + '</div><div class="ln">' + A.esc(dlgQ.lines[dlgQ.i]) + '</div>' +
+      dlg.innerHTML = '<div class="nm">' + A.esc(dlgQ.name) + '</div>' + (dlgQ.img && dlgQ.i === 0 ? '<img alt="" src="' + A.esc(dlgQ.img.src) + '" style="display:block;width:120px;height:120px;margin:6px auto;border-radius:6px;image-rendering:pixelated;' + (dlgQ.img.flip ? 'filter:invert(100%);transform:scaleX(-1);' : '') + '">' : '') + '<div class="ln">' + A.esc(dlgQ.lines[dlgQ.i]) + '</div>' +
         (pick ? '<div class="go">' + dlgQ.choices.map(c => '<button type="button" class="btn" data-pick="' + A.esc(c.id) + '">' + A.esc(c.label) + '</button>').join(' ') + '</div>'
           : '<div class="go">' + (last ? 'Tap here to close' : 'Tap here to continue') + '</div>');
       if (pick) dlg.querySelectorAll('[data-pick]').forEach(b => { b.onclick = (ev) => { ev.stopPropagation(); closeDialog(b.getAttribute('data-pick')); }; });

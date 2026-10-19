@@ -67,7 +67,8 @@
     "rake",
     "dibber",
     "spade",
-    "wateringcan"
+    "wateringcan",
+    "scroll"
    ],
    "food": [
     "bread",
@@ -321,6 +322,16 @@
    "to": [
     -124,
     10
+   ]
+  },
+  {
+   "id": "thornwatch",
+   "name": "Thornwatch Camp",
+   "x": 133,
+   "y": 86,
+   "to": [
+    133,
+    85
    ]
   }
  ],

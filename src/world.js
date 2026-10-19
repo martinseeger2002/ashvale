@@ -444,7 +444,7 @@
     const have = new Map((D.zones || []).map(z => [z.id, z]));
     return ZI.filter(onLand).map(e => have.get(e.id) || stubZone(e));   /* an underground area is not on the land */
   }
-  function stubZone(e) { return { id: e.id, origin: e.origin, size: e.size, tiles: e.stub, objects: e.pads || [] }; }
+  function stubZone(e) { return { id: e.id, origin: e.origin, size: e.size, tiles: e.stub, objects: e.pads || [], ownWays: !!e.ownWays }; }   /* ownWays: as the full zone (wg_paths), or the stub would grow paths the zone does not */
   /* a zone that arrived after the world was made: worldgen gets its real inside (the stub's place in the list is kept) */
   function arriveWorldgen(W, D, z) {
     if (z && (z.under || z.setPiece === false)) return false;   /* an underground area is not on the land; nor is a spot zone (setPiece: false) */

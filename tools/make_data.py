@@ -1776,7 +1776,7 @@ module('rules', 3, {
                             "caught": "There is a {prey} in your nagwaagan (snare)."}},
         "tools": {"hatchet": "woodcutting", "pickaxe": "mining", "net": "fishing", "rod": "fishing", "pot": "fishing", "tinderbox": "firemaking", "flint": "firemaking"},
         "edible": ["food", "potion"], "drink": ["potion"],
-        "traits": {"Edition": "edition", "Cures": "cures", "Light": "light", "Form": "form", "Teleport": "teleport", "Cooldown ticks": "cooldown", "Call to arms": "arms", "Attack": "attack", "Strength": "strength", "Defence": "defence", "Ranged": "ranged", "Magic": "magic", "Ranged strength": "rstr",
+        "traits": {"Edition": "edition", "Cures": "cures", "Light": "light", "Form": "form", "Teleport": "teleport", "Town portal": "townPortal", "Cooldown ticks": "cooldown", "Call to arms": "arms", "Attack": "attack", "Strength": "strength", "Defence": "defence", "Ranged": "ranged", "Magic": "magic", "Ranged strength": "rstr",
                    "Speed": "speed", "Range": "range", "Carry": ["carry", 1000], "Heal": "heal", "Heal %": "healPct", "Prayer %": "prayPct", "Cooks into": "cooks",
                    "Burns into": "burns", "Container": "vessel", "Fills into": "fills", "English": "english", "Energy": "energy", "Cooking level": "cookReq", "Cooking XP": "cookXp", "Firemaking level": "fireReq", "Burn ticks": "burnTicks",
                    "Firemaking XP": "fireXp", "Tool": "tool", "Bound": "bound", "Effect": "effect", "Effect ticks": "effectTicks", "Effect chance": "effectChance", "Effect damage": "effectDamage"},
@@ -1805,7 +1805,7 @@ module('rules', 3, {
     # `to` is where you arrive. The Ashvale stone (Teleport "ashvale") takes you to the same spot.
     "portals": [{"id": "ashvale", "name": "Ashvale", "x": 19, "y": 55, "to": [19, 56]},
                 {"id": "saltmere", "name": "Saltmere", "x": 462, "y": 28, "to": [462, 29]},
-                {"id": "castle", "name": "the Lake Castle", "x": 4048, "y": 8419, "to": [4049, 8418]}],   # no stone at Ziibiing (2026-10-11: "I didn't ask for a town portal")   # the lake castle's portal, here for good (2026-10-08: make_castle.js added it, every later make_data run dropped it, and the castle stone said "Nothing happens")
+                {"id": "castle", "name": "the Lake Castle", "x": -14, "y": 486, "to": [-13, 487]}],   # no stone at Ziibiing (2026-10-11: "I didn't ask for a town portal")   # the lake castle's portal, here for good (2026-10-08: make_castle.js added it, every later make_data run dropped it, and the castle stone said "Nothing happens")
     # 2026-10-04: "logs, pelts arrows potions should all de spawn. Only Gear and tools and Gold should persist."
     # 2026-10-06: "Gold, and valuable items should stay there until somebody picks them up" (by value, 100 GOLD);
     # "All teleport or rune stone must always persist". The @ashvale Bank keeps them in the world across sessions.

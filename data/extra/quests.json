@@ -1622,85 +1622,6 @@
     "The ledgers balance, for once. He has asked to be left alone with them."
    ]
   },
-  "flask_for_the_hermit": {
-   "name": "A Flask for the Hermit",
-   "giver": "orla",
-   "story": 1,
-   "steps": [
-    {
-     "id": 1,
-     "zone": "mt_ledge",
-     "goal": {
-      "talk": "aled"
-     },
-     "reward": "xp:speechcraft:250",
-     "talk": [
-      "There's an old man on the west ledge, up the safe road, who will not come down and will not starve either, if I can help it.",
-      "Take him this flask of broth while it's hot. Stay on the road; the mountain is generous with ways to fall off it.",
-      "Then come back and tell me he drank it, not that he said he would."
-     ],
-     "progress": [
-      "Aled's ledge is up the safe road, past the shrine, round the west shoulder. Bring me back his thanks."
-     ],
-     "complete": [
-      "He drank it? All of it? Then he'll live till spring out of sheer stubbornness.",
-      "That's one errand off my list and three more on it. Welcome to the lodge."
-     ]
-    }
-   ],
-   "done": [
-    "The broth goes up every week now. Aled says it is too salty, which means he likes it."
-   ]
-  },
-  "wolves_on_the_climb": {
-   "name": "Wolves on the Climb",
-   "giver": "orla",
-   "after": "flask_for_the_hermit",
-   "story": 2,
-   "steps": [
-    {
-     "id": 1,
-     "zone": "mt_crags",
-     "goal": {
-      "kill": "crag_wolf",
-      "n": 4
-     },
-     "reward": "xp:attack:600",
-     "talk": [
-      "Crag wolves have come down the east face, bolder than they ought to be, and they've had two of my snares and one of my dogs.",
-      "The warden keeps folk off that climb for good reason. You're not folk, apparently. Four of them, on the crags."
-     ],
-     "progress": [
-      "The crags are up the dangerous climb from Warden Bryn's post. They hunt in pairs; don't let them pick the ground."
-     ],
-     "complete": [
-      "Four. The dogs will sleep tonight and so will I."
-     ]
-    },
-    {
-     "id": 2,
-     "zone": "mt_lodge",
-     "goal": {
-      "bring": "timber_wolf_pelt",
-      "n": 2
-     },
-     "reward": "xp:ranged:400",
-     "talk": [
-      "Now the pelts, two of them. A winter on this mountain is a long thing to do without fur.",
-      "Wolf from the crags or from the den north of Ashvale, I'm not fussy. The cold isn't either."
-     ],
-     "progress": [
-      "Two timber wolf pelts. The crag wolves drop them, and so do the ones north of the village."
-     ],
-     "complete": [
-      "Good thick ones. I'll have a coat by the first snow and a story to tell about it."
-     ]
-    }
-   ],
-   "done": [
-    "The lodge has a new rug and fewer visitors with teeth."
-   ]
-  },
   "three_stones": {
    "name": "The Three Stones",
    "giver": "wyn",
@@ -1755,54 +1676,6 @@
    ],
    "done": [
     "The stones hum when you pass. Wyn says it is gratitude; the hermit says it is wind."
-   ]
-  },
-  "echo_riddle": {
-   "name": "The Echo's Question",
-   "giver": "aled",
-   "story": 1,
-   "steps": [
-    {
-     "id": 1,
-     "zone": "mt_ledge",
-     "goal": {
-      "bring": "tinderbox",
-      "n": 1
-     },
-     "reward": "xp:magic:300",
-     "talk": [
-      "The echoes up here have been asking me a riddle for thirty years, and I am tired of being the only one who answers.",
-      "I sleep in a pocket and wake with a scrape. I hold a fire I never feel. Bring me one of me.",
-      "One, mind. The echoes count, and they are pettier than I am."
-     ],
-     "progress": [
-      "Sleeps in a pocket, wakes with a scrape, holds a fire it never feels. Any shop in the valley sells the answer."
-     ],
-     "complete": [
-      "A tinderbox. The echoes say it was too easy. The echoes always say that."
-     ]
-    },
-    {
-     "id": 2,
-     "zone": "mt_shrine",
-     "goal": {
-      "talk": "wyn"
-     },
-     "reward": "xp:speechcraft:300",
-     "talk": [
-      "Now a harder one, and not for you. Go to Wyn at the shrine and ask him what the stones were before they were stones.",
-      "He's been not telling me for twenty years. Perhaps he'll not tell you instead, and then come back and say what he didn't say."
-     ],
-     "progress": [
-      "Wyn's shrine is down the road, on the north shoulder. Ask him. Then come back up and tell me."
-     ],
-     "complete": [
-      "Mountains, he said? Before they were stones they were mountains. Insufferable. And true, which is worse."
-     ]
-    }
-   ],
-   "done": [
-    "The echoes have a new riddle now. Aled will not tell anyone what it is, which he enjoys enormously."
    ]
   },
   "the_high_pass": {
@@ -1897,6 +1770,133 @@
    ],
    "done": [
     "The trail log has a new page headed 'West', and nothing written under it yet."
+   ]
+  },
+  "flask_for_the_hermit": {
+   "name": "A Flask for the Hermit",
+   "giver": "orla",
+   "story": 1,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "mt_ledge",
+     "goal": {
+      "talk": "aled"
+     },
+     "reward": "xp:speechcraft:250",
+     "talk": [
+      "There's an old man on the west ledge, up the safe road, who will not come down and will not starve either, if I can help it.",
+      "Take him this flask of broth while it's hot. Stay on the road; the mountain is generous with ways to fall off it.",
+      "Then come back and tell me he drank it, not that he said he would."
+     ],
+     "progress": [
+      "Aled's ledge is up the safe road, past the shrine, round the west shoulder. Bring me back his thanks."
+     ],
+     "complete": [
+      "He drank it? All of it? Then he'll live till spring out of sheer stubbornness.",
+      "That's one errand off my list and three more on it. Welcome to the lodge."
+     ]
+    }
+   ],
+   "done": [
+    "The broth goes up every week now. Aled says it is too salty, which means he likes it."
+   ]
+  },
+  "wolves_on_the_climb": {
+   "name": "Wolves on the Climb",
+   "giver": "orla",
+   "after": "flask_for_the_hermit",
+   "story": 2,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "mt_crags",
+     "goal": {
+      "kill": "crag_wolf",
+      "n": 4
+     },
+     "reward": "xp:attack:600",
+     "talk": [
+      "Crag wolves have come down the east face, bolder than they ought to be, and they've had two of my snares and one of my dogs.",
+      "The warden keeps folk off that climb for good reason. You're not folk, apparently. Four of them, on the crags."
+     ],
+     "progress": [
+      "The crags are up the dangerous climb from Warden Bryn's post. They hunt in pairs; don't let them pick the ground."
+     ],
+     "complete": [
+      "Four. The dogs will sleep tonight and so will I."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "mt_lodge",
+     "goal": {
+      "bring": "timber_wolf_pelt",
+      "n": 2
+     },
+     "reward": "xp:ranged:400",
+     "talk": [
+      "Now the pelts, two of them. A winter on this mountain is a long thing to do without fur.",
+      "Wolf from the crags or from the den north of Ashvale, I'm not fussy. The cold isn't either."
+     ],
+     "progress": [
+      "Two timber wolf pelts. The crag wolves drop them, and so do the ones north of the village."
+     ],
+     "complete": [
+      "Good thick ones. I'll have a coat by the first snow and a story to tell about it."
+     ]
+    }
+   ],
+   "done": [
+    "The lodge has a new rug and fewer visitors with teeth."
+   ]
+  },
+  "echo_riddle": {
+   "name": "The Echo's Question",
+   "giver": "aled",
+   "story": 1,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "mt_ledge",
+     "goal": {
+      "bring": "tinderbox",
+      "n": 1
+     },
+     "reward": "xp:magic:300",
+     "talk": [
+      "The echoes up here have been asking me a riddle for thirty years, and I am tired of being the only one who answers.",
+      "I sleep in a pocket and wake with a scrape. I hold a fire I never feel. Bring me one of me.",
+      "One, mind. The echoes count, and they are pettier than I am."
+     ],
+     "progress": [
+      "Sleeps in a pocket, wakes with a scrape, holds a fire it never feels. Any shop in the valley sells the answer."
+     ],
+     "complete": [
+      "A tinderbox. The echoes say it was too easy. The echoes always say that."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "mt_shrine",
+     "goal": {
+      "talk": "wyn"
+     },
+     "reward": "xp:speechcraft:300",
+     "talk": [
+      "Now a harder one, and not for you. Go to Wyn at the shrine and ask him what the stones were before they were stones.",
+      "He's been not telling me for twenty years. Perhaps he'll not tell you instead, and then come back and say what he didn't say."
+     ],
+     "progress": [
+      "Wyn's shrine is down the road, on the north shoulder. Ask him. Then come back up and tell me."
+     ],
+     "complete": [
+      "Mountains, he said? Before they were stones they were mountains. Insufferable. And true, which is worse."
+     ]
+    }
+   ],
+   "done": [
+    "The echoes have a new riddle now. Aled will not tell anyone what it is, which he enjoys enormously."
    ]
   },
   "tower_beacon": {
@@ -2130,6 +2130,54 @@
    ],
    "done": [
     "You are of the Circle now. Halvard nods when you pass, which from him is a speech."
+   ]
+  },
+  "hollow_den": {
+   "name": "The Hollow Den",
+   "giver": "isolde",
+   "story": 1,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "hollowden",
+     "goal": {
+      "kills": {
+       "den_ashling": 18,
+       "den_shaman": 3,
+       "den_walker": 8,
+       "den_brute": 2,
+       "cinderhide": 1
+      },
+      "n": 32
+     },
+     "reward": [
+      "xp:attack:6000",
+      "xp:defence:6000",
+      "shield_t4",
+      "thornwatch_stone"
+     ],
+     "talk": [
+      "Come in out of the wind, traveller. I am Isolde, and these walls of stakes are all that is left to the Thornwatch.",
+      "We kept the abbey on the ridge for three hundred years. Then something woke beneath it, and our own sisters turned their bows on us. We ran. Sisters do not run.",
+      "There is a cave on the Red Moor, past the old foundations, with skulls cut into the rocks at its mouth. The Hollow Den.",
+      "Whatever is calling the dead up out of the moor, it is gathering there. I can feel it when I close my eyes, like heat from a banked fire.",
+      "Go down and clear it. All of it, every last creature, or it will only fill again. Do that, and the Sisters will remember your name."
+     ],
+     "progress": [
+      "{left} still stir in the den, {name}. I can feel them. Search every chamber; they like the dead ends.",
+      "The little red ones run when their pack breaks. Let them go and they come back with friends. Kill the firecaller first.",
+      "Elin sells my potions by the gate. Take more than you think you need."
+     ],
+     "complete": [
+      "It's quiet. I felt it the moment the last of them fell: like a window opening in a stuffy room.",
+      "Cinderhide. So that was the heat. We buried him on the moor two winters ago; he didn't stay buried.",
+      "Take this shield with the Sisters' thanks; it hung in the abbey's chapel. And this stone: hold it and think of our fire, and the ring by the back wall will bring you home.",
+      "You fight like one of us. That is the highest praise I have."
+     ]
+    }
+   ],
+   "done": [
+    "The moor feels lighter since the den went quiet. The dead stay where we put them, mostly."
    ]
   },
   "first_furrows": {

@@ -49,7 +49,15 @@
     async function load(address) {
       if (!address) throw new Error('no wallet address');
       const out = { address, gear: {}, tokens: {}, pids: { coins: A.gold }, gold: 0, at: Date.now(), raw: {}, pieces: [], makers: {}, issuers: {} };   /* makers/issuers: who automated returns go back to */
-      const L = await getJSON('/r/inscriptions/' + address + '?limit=500');
+      /* [Claude 2026-10-17] every piece, page by page: one read of 500 left the operator's @apple (781 inscriptions) without his rosary,
+         robes and cape - neither in the pack nor in the chest. A page that adds nothing new ends it (a server that ignores offset). */
+      const L = [], seen = new Set();
+      for (let off = 0; off < 20000; off += 500) {
+        const page = await getJSON('/r/inscriptions/' + address + '?limit=500&offset=' + off);
+        if (!Array.isArray(page) || !page.length) break;
+        let fresh = 0; for (const p of page) { const pid = p && (p.id || p.txid); if (pid && !seen.has(pid)) { seen.add(pid); L.push(p); fresh++; } }
+        if (page.length < 500 || !fresh) break;
+      }
       for (const p of (Array.isArray(L) ? L : [])) {
         if (!accepted(p) || (p.owner && p.owner !== address)) continue;
         const coll = (p.json && p.json.collection) || p.collection || '', k = keyOf(p);
@@ -88,6 +96,6 @@
     return { api: API, load, owns, last: () => last, assetOf: (id) => A.items[id] || null };
   }
   const Wallet = { api: API, create };
-  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('wallet', { api: API, v: 1 }, () => Wallet);
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('wallet', { api: API, v: 2 }, () => Wallet);
   if (typeof module !== 'undefined' && module.exports) module.exports = Wallet;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

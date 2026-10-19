@@ -84,7 +84,7 @@ EX_CROPS = {
 }
 # the quest items made before, each now with its own model and a line saying what it is for
 QUEST_EXAMINE = {
-    "edric_note": ("item.scroll", "A damp note in a Vorthan's hand naming the Red Pyre, the rosary and the cave. Take it to Mother Wenna in Saltmere (The Red Pyre)."),
+    "edric_note": ("item.edric_scroll", "A damp note in a Vorthan's hand naming the Red Pyre, the rosary and the cave. Take it to Mother Wenna in Saltmere (The Red Pyre)."),
     "frost_ink": ("item.inkpot", "A pot of the Frostspire's frost ink. Frost goblins steal it; Archmage Halvard wants three back (The Stolen Ink)."),
     "tome_echoes": ("item.tome_echoes", "The Circle's Tome of Echoes, from Aled. Show it to Pell at the Frostspire (The Scattered Tomes); yours to keep after, for its lore."),
     "tome_stones": ("item.tome_stones", "The Circle's Tome of Stones, from Wyn. Show it to Pell at the Frostspire (The Scattered Tomes); yours to keep after."),
@@ -160,7 +160,7 @@ part("item.spade", {"spade": WOOD}, [{"t": "cyl", "s": [0.013, 0.013, 0.5], "c":
 part("item.wateringcan", {"watering_can": "#6a8a9a"}, [{"t": "cyl", "s": [0.07, 0.08, 0.13], "c": "$c", "p": [0, 0.065, 0], "seg": 10},
     {"t": "cyl", "s": [0.01, 0.018, 0.16], "c": "$c", "p": [0.1, 0.1, 0], "r": [0, 0, -0.9], "seg": 6}, {"t": "torus", "s": [0.045, 0.008], "c": "$c:0.8", "p": [-0.06, 0.12, 0], "r": [1.5708, 0, 1.5708]}])
 # the old quest items' own models
-part("item.scroll", {"edric_note": "#d8ccaa"}, [{"t": "cyl", "s": [0.025, 0.025, 0.18], "c": "$c", "p": [0, 0.025, 0], "r": [0, 0, 1.5708], "seg": 8},
+part("item.edric_scroll", {"edric_note": "#d8ccaa"}, [{"t": "cyl", "s": [0.025, 0.025, 0.18], "c": "$c", "p": [0, 0.025, 0], "r": [0, 0, 1.5708], "seg": 8},
     {"t": "box", "s": [0.14, 0.004, 0.1], "c": "$c:0.95", "p": [0, 0.004, 0.05]}, {"t": "cyl", "s": [0.028, 0.028, 0.012], "c": "#8a2a1a", "p": [0, 0.025, 0], "r": [0, 0, 1.5708], "seg": 8}])
 part("item.inkpot", {"frost_ink": "#8fd0f0"}, [{"t": "cyl", "s": [0.05, 0.06, 0.07], "c": "#2a3040", "p": [0, 0.035, 0], "seg": 8},
     {"t": "cyl", "s": [0.042, 0.042, 0.01], "c": "$c", "p": [0, 0.071, 0], "seg": 8, "glow": True}, {"t": "cyl", "s": [0.004, 0.006, 0.2], "c": "#e8e8f0", "p": [0.02, 0.15, 0], "r": [0, 0, -0.35], "seg": 4},
@@ -215,7 +215,8 @@ GIVERS = {"tobin": ("zone.castle", "tools/castle/make_castle.js"), "orla": ("zon
 SHOP_ADD = {"general": ["rake", "seed_dibber", "spade", "watering_can", "potato_seed", "onion_seed", "cabbage_seed"],
             "salt_general": ["rake", "seed_dibber", "spade", "watering_can", "potato_seed", "onion_seed", "cabbage_seed", "barley_seed", "strawberry_seed"],
             "castle_general": ["rake", "seed_dibber", "spade", "watering_can", "potato_seed", "onion_seed", "cabbage_seed", "barley_seed", "strawberry_seed"]}
-RULES_KINDS = {"tool": ["rake", "dibber", "spade", "wateringcan"], "resource": ["seed", "herb", "grain"], "food": ["crop"]}
+# scroll: the town portal scroll (Thornwatch, merged 2026-10-19) is a tool/scroll
+RULES_KINDS = {"tool": ["rake", "dibber", "spade", "wateringcan", "scroll"], "resource": ["seed", "herb", "grain"], "food": ["crop"]}
 RULES_TOOLS = {"rake": "farming", "dibber": "farming", "spade": "farming", "wateringcan": "farming"}
 
 if __name__ == '__main__':
