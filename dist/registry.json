@@ -1458,6 +1458,18 @@
     "api": 1,
     "kind": "json"
    },
+   "gear.chaps": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "gear.coif": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "gear.dagger": {
     "id": null,
     "v": 1,
@@ -1507,6 +1519,12 @@
     "kind": "json"
    },
    "gear.helmet": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "gear.hidebody": {
     "id": null,
     "v": 1,
     "api": 1,

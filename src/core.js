@@ -328,7 +328,7 @@
       addXp(p, 'prayer', d.buryXp);
     }
     function bonuses(p) {
-      const b = { attack: 0, strength: 0, defence: 0, ranged: 0, rstr: 0, magic: 0, prayer: 0, prayerSec: 0, ppHold: 0 };
+      const b = { attack: 0, strength: 0, defence: 0, ranged: 0, rstr: 0, magic: 0, prayer: 0, prayerSec: 0, ppHold: 0, magicPen: 0, rangedPen: 0 };   /* magicPen / rangedPen: percent off spell and arrow accuracy from metal armour (tools/combat) */
       for (const s of EQ_SLOTS) { const e = p.eq[s]; if (!e) continue; const d = IT[e.id]; for (const k in b) b[k] += d[k] || 0; }
       return b;
     }
@@ -338,6 +338,9 @@
       const b = bonuses(p), d = drain || 12;
       return PRAY.resist + 2 * Math.max(0, b.prayer) + (Math.max(0, b.prayerSec) + Math.max(0, b.ppHold) * Math.max(0, p.pp | 0)) * d / 0.6;
     }
+    /* COMBAT BALANCE (2026-10-19, after OSRS): metal armour takes a share off magic and ranged accuracy - each piece its percent
+       ("Magic penalty" / "Ranged penalty"), added up and capped at 92 % - so a wizard in full plate lands about one spell in ten */
+    const armourDrag = pct => 1 - Math.min(92, Math.max(0, pct || 0)) / 100;
     function weaponOf(p) { const w = p.eq.weapon; return w ? IT[w.id] : null; }
     function wclass(p) { const w = weaponOf(p); return w ? w.class : 'melee'; }
     function style(p) { const c = wclass(p), L = STYLES[c]; return L[Math.min(p.styles[c] || 0, L.length - 1)]; }
@@ -1170,9 +1173,9 @@
         const ammo = p.eq.ammo; if (!ammo) { msg(p, 'There is no ammo left in your quiver.', 'warn'); p.act = null; return false; }
         const ad = IT[ammo.id]; if (lv(p, 'ranged') < (ad.req ? ad.req.ranged || 1 : 1)) { msg(p, 'You need Ranged level ' + ad.req.ranged + ' to fire ' + ad.name.toLowerCase() + '.', 'warn'); p.act = null; return false; }
         ammoId = ammo.id; ammo.n--; if (ammo.n <= 0) delete p.eq.ammo;
-        A = (eff(p, 'ranged') + (st.att || 0) + 8) * (b.ranged + 64);
+        A = Math.floor((eff(p, 'ranged') + (st.att || 0) + 8) * Math.max(1, b.ranged + 64) * armourDrag(b.rangedPen));
         if (R.int(2) === 0) p._arrowDrop = { id: ammo.id, x: m.x, y: m.y };
-      } else if (c === 'magic') A = (eff(p, 'magic') + 8) * (b.magic + 64);
+      } else if (c === 'magic') A = Math.floor((eff(p, 'magic') + 8) * Math.max(1, b.magic + 64) * armourDrag(b.magicPen));   /* plate weighs on a spell (tools/combat) */
       else A = (eff(p, 'attack') + (st.att || 0) + 8) * (b.attack + 64);
       let Dr = (md.def + 9) * (md.defb + 64), blocked = false;
       if (md.ai && md.ai.blockPct && R.int(100) < md.ai.blockPct) { Dr *= 2; blocked = true; }   /* shield up: harder to land a hit */
@@ -3328,8 +3331,8 @@
         const ammo = p.eq.ammo; if (!ammo) { msg(p, 'There is no ammo left in your quiver.', 'warn'); p.act = null; return false; }
         const ad = IT[ammo.id]; if (lv(p, 'ranged') < (ad.req ? ad.req.ranged || 1 : 1)) { msg(p, 'You need Ranged level ' + ad.req.ranged + ' to fire ' + ad.name.toLowerCase() + '.', 'warn'); p.act = null; return false; }
         ammoId = ammo.id; ammo.n--; if (ammo.n <= 0) delete p.eq.ammo;
-        A = (eff(p, 'ranged') + (st.att || 0) + 8) * (b.ranged + 64);
-      } else if (c === 'magic') A = (eff(p, 'magic') + 8) * (b.magic + 64);
+        A = Math.floor((eff(p, 'ranged') + (st.att || 0) + 8) * Math.max(1, b.ranged + 64) * armourDrag(b.rangedPen));
+      } else if (c === 'magic') A = Math.floor((eff(p, 'magic') + 8) * Math.max(1, b.magic + 64) * armourDrag(b.magicPen));   /* plate weighs on spells against the watch too */
       else A = (eff(p, 'attack') + (st.att || 0) + 8) * (b.attack + 64);
       const Dr = (GSTAT.def + 9) * (GSTAT.defb + 64), hit = rollAttack(A, Dr), dmg = hit ? R.int(max + 1) : 0;
       const dist = cheb(p.x, p.y, n.x, n.y), delay = c === 'ranged' ? 1 + Math.floor((3 + dist) / 6) : c === 'magic' ? 1 + Math.floor((1 + dist) / 3) : 0;

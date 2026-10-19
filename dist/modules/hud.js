@@ -109,6 +109,7 @@
       for (const k of ['attack', 'strength', 'defence', 'ranged', 'magic']) if (d[k]) b.push(A.cap(k) + ' +' + d[k]);
       if (d.rstr) b.push('Ranged strength +' + d.rstr);
       if (d.prayer) b.push('Prayer +' + d.prayer);
+      if (d.magicPen) b.push('Magic accuracy -' + d.magicPen + '%'); if (d.rangedPen) b.push('Ranged accuracy -' + d.rangedPen + '%');   /* metal armour (tools/combat) */
       if (d.prayerSec) b.push('+' + d.prayerSec + 's per prayer point');
       if (d.ppHold) b.push('+' + d.ppHold + 's before each point, for every Prayer point you still hold');
       if (d.heal) b.push('Heals ' + d.heal); if (d.healPct) b.push('Heals ' + d.healPct + '% of your hitpoints'); if (d.prayPct) b.push('Restores ' + d.prayPct + '% of your Prayer points');
