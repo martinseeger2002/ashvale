@@ -25,6 +25,8 @@ PALETTES = {
                   "metal": "#3a3c42", "leaf": "#3a5a40", "moss": "#8a968a", "accent": "#c8ccd8", "paper": "#eef0f2", "snow": True},
     "desert":    {"stone": "#c8a878", "darkstone": "#9a7a50", "wood": "#8a6a40", "darkwood": "#5a4028", "cloth": "#c86a2a", "cloth2": "#2a7a8a", "cloth3": "#e8d0a0",
                   "metal": "#4a4038", "leaf": "#7a8a3a", "moss": "#9a8a4a", "accent": "#d8b040", "paper": "#f0e0b8"},
+    "harbour":   {"stone": "#7a7c78", "darkstone": "#585a58", "wood": "#7a6a58", "darkwood": "#4a3e34", "cloth": "#8a3a30", "cloth2": "#3a4a5a", "cloth3": "#a08a4a",
+                  "metal": "#3a3c40", "leaf": "#4a6a3a", "moss": "#5a6a3a", "accent": "#b08a3a", "paper": "#d8d0b8"},   # Saltmere: salt-bleached wood, soot, faded cloth
     "swamp":     {"stone": "#5e6a5a", "darkstone": "#3e4a3e", "wood": "#4a3a26", "darkwood": "#2e2418", "cloth": "#5a4a3a", "cloth2": "#3a4a3a", "cloth3": "#7a7a4a",
                   "metal": "#2e3230", "leaf": "#3a5a2a", "moss": "#4a6a2a", "accent": "#8a9a5a", "paper": "#b8b8a0"},
 }
@@ -137,14 +139,117 @@ K["iron_gate"] = {"name": "Iron gate", "examine": "The double gates stand open, 
              + [["box", "metal", 0, 1.96, 0, 1.72, 0.04, 0.03], ["box", "metal", -0.45, 2.1, 0, 0.82, 0.04, 0.03, 0, 0, 0.32], ["box", "metal", 0.45, 2.1, 0, 0.82, 0.04, 0.03, 0, 0, -0.32],
                 ["box", "metal", 0, 2.2, 0, 0.04, 0.3, 0.03], ["box", "metal", 0, 2.28, 0, 0.18, 0.04, 0.03]],
     "snow": [["box", SNOW, -1.0, 1.92, 0, 0.32, 0.03, 0.32], ["box", SNOW, 1.0, 1.92, 0, 0.32, 0.03, 0.32]]}
+# SALTMERE, RUN DOWN (2026-10-19, the operator: "the empty streets of saltmere need to have cobble stones and decor - work with qwen again - make it
+# kind of ghetto and rugged ... make one end of the piers or board walk occupied by pirates"; laid by tools/saltmere/make_rugged.py). Names and
+# examine lines drafted by the local Qwen model (Qwen3.5-9B) and edited; the shapes made here. The palette 'harbour' greys any kind down.
+FIRE = [["cone", "#e8742a", 0, 1.0, 0, 0.36, 0.34, 0.36], ["cone", "#ffd27a", 0.05, 0.98, 0.02, 0.2, 0.24, 0.2], ["glow", "#ffb050", 0, 1.05, 0, 0.12]]
+K["trash_heap"] = {"name": "Scrap heap", "examine": "It smells of old fish and despair, in roughly equal measure.",
+    "parts": [["rock", "darkwood", 0, 0.12, 0, 0.9, 0.24, 0.7], ["box", "wood", -0.2, 0.28, 0.05, 0.5, 0.06, 0.18, 0.5, 0, 0.4], ["box", "darkwood", 0.25, 0.24, -0.15, 0.3, 0.3, 0.3, 0.6, 0.2, 0.1],
+              ["box", "cloth", 0.05, 0.3, 0.2, 0.3, 0.05, 0.25, 0.3], ["box", "cloth2", -0.3, 0.18, -0.2, 0.25, 0.04, 0.2, 1.2], ["cyl", "#3a5a3a", 0.38, 0.06, 0.25, 0.07, 0.22, 0.07, 0, 1.4, 0],
+              ["box", "paper", -0.05, 0.27, -0.25, 0.22, 0.02, 0.04, 0.4], ["box", "paper", -0.05, 0.27, -0.25, 0.02, 0.02, 0.12, 0.4]],
+    "snow": [["box", SNOW, 0, 0.26, 0, 0.7, 0.03, 0.5]]}
+K["burn_barrel"] = {"name": "Burning barrel", "examine": "A small fire in a big barrel: the warmest thing in Saltmere, the people included.",
+    "parts": [["cyl12", "metal", 0, 0.42, 0, 0.56, 0.84, 0.56], ["cyl12", "#5a3a2a", 0, 0.2, 0, 0.58, 0.06, 0.58], ["cyl12", "#5a3a2a", 0, 0.66, 0, 0.58, 0.06, 0.58],
+              ["cyl12", "darkwood", 0, 0.85, 0, 0.46, 0.04, 0.46], ["box", "wood", 0.12, 0.92, 0, 0.4, 0.05, 0.06, 0.4, 0, 0.5]] + FIRE, "snow": []}
+K["laundry_line"] = {"name": "Washing line", "examine": "Shirts flapping in the salt wind, never quite dry and never quite clean.",
+    "parts": [["box", "darkwood", -1.25, 1.0, 0, 0.08, 2.0, 0.08], ["box", "darkwood", 1.25, 1.0, 0, 0.08, 2.0, 0.08], ["rock", "stone", -1.25, 0.08, 0, 0.28, 0.16, 0.28], ["rock", "stone", 1.25, 0.08, 0, 0.28, 0.16, 0.28],
+              ["box", "#d8d0c0", 0, 1.86, 0, 2.5, 0.015, 0.015], ["box", "cloth", -0.75, 1.6, 0, 0.42, 0.5, 0.02], ["box", "paper", -0.2, 1.66, 0, 0.34, 0.38, 0.02, 0, 0, 0.04],
+              ["box", "cloth2", 0.3, 1.52, 0, 0.36, 0.64, 0.02], ["box", "cloth3", 0.82, 1.66, 0, 0.26, 0.36, 0.02, 0, 0, -0.06]],
+    "snow": [["box", SNOW, -1.25, 2.02, 0, 0.1, 0.03, 0.1], ["box", SNOW, 1.25, 2.02, 0, 0.1, 0.03, 0.1]]}
+K["rope_coil"] = {"name": "Tarred rope", "examine": "It smells of tar, and of every knot anybody ever got wrong.",
+    "parts": [["cyl12", "#8a6a3a", 0, 0.04, 0, 0.6, 0.08, 0.6], ["cyl12", "#7a5a30", 0, 0.11, 0, 0.5, 0.07, 0.5], ["cyl12", "#8a6a3a", 0, 0.17, 0, 0.38, 0.06, 0.38],
+              ["cyl12", "darkwood", 0, 0.2, 0, 0.16, 0.02, 0.16], ["box", "#8a6a3a", 0.36, 0.03, 0.1, 0.35, 0.04, 0.04, 0.6]], "snow": [["cyl12", SNOW, 0, 0.21, 0, 0.36, 0.02, 0.36]]}
+K["fish_rack"] = {"name": "Drying rack", "examine": "Fish hang stiffly in the wind, hoping not to catch a cold.",
+    "parts": [["box", "darkwood", -0.7, 0.6, 0, 0.08, 1.2, 0.08], ["box", "darkwood", 0.7, 0.6, 0, 0.08, 1.2, 0.08], ["box", "wood", 0, 1.15, 0, 1.5, 0.05, 0.05], ["box", "wood", 0, 0.82, 0, 1.5, 0.04, 0.04]]
+             + [p for i, x in enumerate((-0.5, -0.25, 0, 0.25, 0.5)) for p in (["box", "#9aa6aa", x, 1.0, 0, 0.07, 0.24, 0.03], ["box", "#7a868a", x, 0.86, 0, 0.12, 0.04, 0.02], ["box", "#9aa6aa", x + 0.12, 0.68, 0, 0.06, 0.2, 0.03])],
+    "snow": [["box", SNOW, 0, 1.18, 0, 1.5, 0.02, 0.06]]}
+POT = lambda x, y, z: [["cyl12", "wood", x, y, z, 0.45, 0.4, 0.45], ["cyl12", "darkwood", x, y - 0.12, z, 0.47, 0.04, 0.47], ["cyl12", "darkwood", x, y + 0.12, z, 0.47, 0.04, 0.47], ["cyl12", DARK if False else "#2a2420", x, y, z + 0.2, 0.16, 0.16, 0.04, 0, 1.5708, 0]]
+K["lobster_pots"] = {"name": "Lobster pots", "examine": "Empty traps, waiting for lobsters that have heard all about them.",
+    "parts": POT(-0.25, 0.2, 0) + POT(0.25, 0.2, 0.05) + POT(0, 0.6, 0.02) + [["cyl12", "accent", 0.45, 0.06, 0.3, 0.12, 0.1, 0.12]], "snow": [["cyl12", SNOW, 0, 0.81, 0.02, 0.4, 0.03, 0.4]]}
+K["net_pile"] = {"name": "Net heap", "examine": "A heap of net, a few cork floats and a great many chances to trip.",
+    "parts": [["rock", "#4a5248", 0, 0.1, 0, 1.0, 0.2, 0.8], ["rock", "#3a423a", 0.2, 0.18, -0.1, 0.6, 0.16, 0.5], ["cyl12", "accent", -0.3, 0.18, 0.2, 0.1, 0.08, 0.1],
+              ["cyl12", "cloth", 0.25, 0.24, 0.15, 0.1, 0.08, 0.1], ["cyl12", "accent", 0.0, 0.26, -0.25, 0.1, 0.08, 0.1], ["box", "#8a6a3a", -0.45, 0.05, -0.2, 0.4, 0.03, 0.03, 0.3]],
+    "snow": [["box", SNOW, 0, 0.21, 0, 0.7, 0.03, 0.5]]}
+K["upturned_boat"] = {"name": "Old rowboat", "examine": "Its last voyage ended in an argument with a rock. The rock won.",
+    "parts": [["box", "wood", 0, 0.3, 0, 2.6, 0.5, 1.0], ["box", "wood", 1.4, 0.28, 0, 0.6, 0.46, 0.7], ["box", "darkwood", 0.1, 0.57, 0, 3.0, 0.06, 0.08],
+              ["box", "darkwood", 0, 0.42, 0.505, 2.6, 0.04, 0.01], ["box", "darkwood", 0, 0.42, -0.505, 2.6, 0.04, 0.01], ["box", "#2a2420", -0.4, 0.4, 0.507, 0.32, 0.16, 0.012],
+              ["box", "wood", 0.3, 0.04, 0.8, 1.6, 0.04, 0.08, 0.3]], "snow": [["box", SNOW, 0, 0.56, 0, 2.6, 0.03, 0.9]]}
+K["plank_pile"] = {"name": "Salvaged planks", "examine": "Good for mending a pier, or a coffin, depending how the week goes.",
+    "parts": [["box", ("wood", "darkwood")[i % 2], 0, 0.05 + 0.08 * i, (i % 3 - 1) * 0.04, 2.0, 0.07, 0.24, (i * 0.07) - 0.12] for i in range(5)] + [["box", "wood", -0.6, 0.45, 0.3, 1.2, 0.06, 0.22, 0.3, 0, 0.6]],
+    "snow": [["box", SNOW, 0, 0.42, 0, 1.9, 0.03, 0.24]]}
+K["notice_board"] = {"name": "Wanted board", "examine": "Peeling posters offer rewards for faces nobody here admits to recognising.",
+    "parts": [["box", "darkwood", -0.55, 0.8, 0, 0.08, 1.6, 0.08], ["box", "darkwood", 0.55, 0.8, 0, 0.08, 1.6, 0.08], ["box", "wood", 0, 1.2, 0, 1.2, 0.8, 0.05], ["box", "darkwood", 0, 1.66, 0, 1.4, 0.05, 0.3],
+              ["box", "paper", -0.3, 1.3, 0.03, 0.3, 0.4, 0.005, 0, 0, 0.05], ["box", "#e0d0a0", 0.08, 1.24, 0.03, 0.28, 0.36, 0.005, 0, 0, -0.08], ["box", "paper", 0.38, 1.34, 0.03, 0.25, 0.3, 0.005],
+              ["box", "#2a2420", -0.3, 1.36, 0.035, 0.14, 0.14, 0.003], ["box", "#2a2420", 0.08, 1.3, 0.035, 0.13, 0.13, 0.003], ["box", "cloth", -0.3, 1.18, 0.035, 0.22, 0.04, 0.003], ["box", "cloth", 0.08, 1.12, 0.035, 0.2, 0.04, 0.003]],
+    "snow": [["box", SNOW, 0, 1.7, 0, 1.4, 0.03, 0.3]]}
+BONES = [["box", "#eeeae0", 0, 0, 0.012, 0.32, 0.04, 0.004, 0, 0, 0.6], ["box", "#eeeae0", 0, 0, 0.012, 0.32, 0.04, 0.004, 0, 0, -0.6]]
+def skull(x, y, z, k=1.0, face=1):   # a skull and crossbones on a black field, facing +z (face=1) or -z
+    out = [["box", "#eeeae0", x, y + 0.06 * k, z + 0.012 * face, 0.2 * k, 0.18 * k, 0.005], ["box", "#141414", x - 0.05 * k, y + 0.08 * k, z + 0.016 * face, 0.05 * k, 0.05 * k, 0.003], ["box", "#141414", x + 0.05 * k, y + 0.08 * k, z + 0.016 * face, 0.05 * k, 0.05 * k, 0.003]]
+    return out + [["box", "#eeeae0", x, y - 0.12 * k, z + 0.012 * face, 0.32 * k, 0.04 * k, 0.004, 0, 0, a] for a in (0.6, -0.6)]
+K["pirate_flag"] = {"name": "Black flag", "examine": "A skull on black. It means 'keep your distance', and the gulls never listen.",
+    "parts": [["cyl", "darkwood", 0, 1.6, 0, 0.1, 3.2, 0.1], ["rock", "stone", 0, 0.1, 0, 0.4, 0.2, 0.4], ["box", "#141414", 0.47, 2.85, 0, 0.86, 0.56, 0.02]] + skull(0.45, 2.85, 0) + skull(0.45, 2.85, 0, 1.0, -1),
+    "snow": []}
+WHEEL = lambda x, z: ["cyl12", "wood", x, 0.18, z, 0.36, 0.08, 0.36, 0, 1.5708, 0]
+K["cannon"] = {"name": "Ship's cannon", "examine": "Tired from years of barking at the inland sea, and still loaded, by the smell of it.",
+    "parts": [["box", "darkwood", 0, 0.24, 0, 1.0, 0.24, 0.6], WHEEL(0.32, 0.34), WHEEL(0.32, -0.34), WHEEL(-0.32, 0.34), WHEEL(-0.32, -0.34),
+              ["cyl12", "metal", 0.25, 0.52, 0, 0.26, 1.5, 0.26, 0, 0, 1.5708], ["cyl12", "metal", 1.0, 0.52, 0, 0.32, 0.1, 0.32, 0, 0, 1.5708], ["cyl12", "metal", -0.54, 0.52, 0, 0.14, 0.14, 0.14],
+              ["cyl12", "#141414", 1.06, 0.52, 0, 0.16, 0.02, 0.16, 0, 0, 1.5708]], "snow": [["box", SNOW, 0, 0.37, 0, 0.9, 0.02, 0.5]]}
+BARREL = lambda x, y, z, lying=False: [["cyl12", "wood", x, y, z, 0.5, 0.7, 0.5] + ([0, 0, 1.5708] if lying else []), ["cyl12", "darkwood", x, y, z, 0.52, 0.06, 0.52] + ([0, 0, 1.5708] if lying else [])]
+K["rum_barrels"] = {"name": "Rum barrels", "examine": "They leak a little sweetness, mostly for the benefit of the cats.",
+    "parts": BARREL(-0.3, 0.35, 0) + BARREL(0.3, 0.35, 0.05) + [["cyl12", "darkwood", -0.3, 0.12, 0, 0.52, 0.05, 0.52], ["cyl12", "darkwood", 0.3, 0.58, 0.05, 0.52, 0.05, 0.52]]
+             + BARREL(0, 0.96, 0, True) + [["box", "metal", 0.37, 0.96, 0, 0.06, 0.06, 0.06], ["box", "accent", 0, 0.96, 0.255, 0.22, 0.12, 0.01]], "snow": [["box", SNOW, 0, 1.22, 0, 0.5, 0.03, 0.3]]}
+K["sea_chest"] = {"name": "Sea chest", "examine": "Locked and iron-bound: a fortune in coin, or a pirate's very old socks.",
+    "parts": [["box", "darkwood", 0, 0.25, 0, 0.9, 0.5, 0.55], ["cyl12", "wood", 0, 0.5, 0, 0.55, 0.9, 0.55, 0, 0, 1.5708], ["box", "metal", -0.3, 0.38, 0, 0.05, 0.76, 0.58],
+              ["box", "metal", 0.3, 0.38, 0, 0.05, 0.76, 0.58], ["box", "accent", 0, 0.42, 0.285, 0.1, 0.12, 0.02]], "snow": [["box", SNOW, 0, 0.78, 0, 0.8, 0.03, 0.3]]}
+K["shanty"] = {"name": "Shanty", "examine": "Four walls would be generous. Three, and a curtain.",
+    "parts": [["box", "darkwood", 0, 0.9, -0.6, 1.8, 1.8, 0.08], ["box", "wood", -0.88, 0.75, -0.1, 0.06, 1.5, 1.0], ["box", "wood", 0.88, 0.75, -0.1, 0.06, 1.5, 1.0],
+              ["box", "metal", 0, 1.72, -0.1, 2.0, 0.05, 1.4, 0, 0.3, 0], ["box", "#6a3a2a", -0.4, 1.74, 0.1, 0.6, 0.06, 0.5, 0, 0.3, 0], ["box", "cloth2", 0.3, 0.7, 0.38, 0.62, 1.3, 0.02],
+              ["box", "wood", -0.45, 0.25, 0.25, 0.5, 0.5, 0.5, 0.3], ["box", "darkwood", -0.88, 1.1, 0.42, 0.06, 0.3, 0.12]], "snow": [["box", SNOW, 0, 1.79, -0.1, 1.9, 0.03, 1.3, 0, 0.3, 0]]}
+def ship():   # the pirates' ship, moored: bow to +x, beam along z, its waterline 0.6 m under the pier it is tied to (anchored ON the pier: the scene
+    # takes a piece's ground where its tile and dx/dz put it, and out over the water that is the sea bed)
+    BLK, RED, BONE, SAIL = "#1c1a1e", "#7a2a24", "#e8e4da", "#1e1e22"
+    P = [["box", "darkwood", 0, -0.2, 0, 11, 1.8, 3.6], ["box", "darkwood", 0, -1.0, 0, 10, 0.8, 2.6], ["box", "darkwood", 5.9, -0.2, 0.85, 2.3, 1.8, 0.3, 0.75], ["box", "darkwood", 5.9, -0.2, -0.85, 2.3, 1.8, 0.3, -0.75],
+         ["cyl", "wood", 7.6, 1.1, 0, 0.14, 3.2, 0.14, 0, 0, -1.2], ["box", "wood", 0.2, 0.62, 0, 10.6, 0.06, 3.3], ["box", "darkwood", -4.6, 1.3, 0, 2.4, 1.4, 3.4], ["box", "wood", -4.6, 2.02, 0, 2.4, 0.05, 3.4],
+         ["box", RED, 0, 0.3, 1.805, 11, 0.18, 0.02], ["box", RED, 0, 0.3, -1.805, 11, 0.18, 0.02]]
+    for x in (-2.5, -0.5, 1.5, 3.5):
+        for z in (1.81, -1.81): P.append(["box", BLK, x, -0.1, z, 0.36, 0.3, 0.02])
+    for z in (1.7, -1.7): P.append(["box", "darkwood", 0.6, 0.95, z, 10, 0.08, 0.08])
+    for mx, h, w in ((1.5, 7.0, 3.0), (-2.2, 6.0, 2.4)):
+        P += [["cyl", "darkwood", mx, 0.6 + h / 2, 0, 0.26 if mx > 0 else 0.22, h, 0.26 if mx > 0 else 0.22], ["cyl", "darkwood", mx, 0.6 + h * 0.86, 0, 0.1, w + 0.4, 0.1, 0, 1.5708, 0],
+              ["cyl", "darkwood", mx, 0.6 + h * 0.5, 0, 0.1, w + 0.6, 0.1, 0, 1.5708, 0], ["box", SAIL, mx + 0.06, 0.6 + h * 0.68, 0, 0.04, h * 0.34, w], ["box", SAIL, mx + 0.08, 0.6 + h * 0.36, 0, 0.04, h * 0.28, w + 0.2]]
+    P += [["box", BONE, 1.62, 5.4, 0, 0.005, 0.5, 0.56], ["box", BLK, 1.63, 5.48, -0.12, 0.004, 0.12, 0.12], ["box", BLK, 1.63, 5.48, 0.12, 0.004, 0.12, 0.12],
+          ["box", BONE, 1.62, 4.95, 0, 0.004, 0.08, 0.9, 0.6, 0, 0], ["box", BONE, 1.62, 4.95, 0, 0.004, 0.08, 0.9, -0.6, 0, 0],
+          ["cyl12", "wood", 1.5, 6.4, 0, 0.9, 0.4, 0.9], ["cyl", "darkwood", 1.5, 8.0, 0, 0.06, 1.2, 0.06], ["box", BLK, 1.5, 8.35, 0.45, 0.03, 0.5, 0.8],
+          ["glow", "#ffd27a", -5.85, 2.3, 1.2, 0.1], ["glow", "#ffd27a", -5.85, 2.3, -1.2, 0.1], ["box", "darkwood", -5.82, 1.3, 0, 0.06, 1.2, 3.0]]
+    return [q[:4] + [round(q[4] + 2.9, 3)] + q[5:] if q[0] != 'glow' else q[:4] + [round(q[4] + 2.9, 3)] + q[5:] for q in P]   # tied alongside: 2.9 m out from its anchor on the pier (+z)
+K["pirate_ship"] = {"name": "The Gull's Grudge", "examine": "Black sails, low in the water, and a crew who swear blind it is only a fishing boat.", "parts": ship(), "snow": []}
+# THE PIERS (2026-10-19, the operator: "please fix the piers at saltmere as actual decor assets that look and operate nice"): a pier's 'B' tiles
+# keep their walking (the deck height is the scene's own), and each is drawn as boards on a cross beam (planks along local z); an edge facing
+# the water (+z) adds a stringer, and every other one a pile driven into the bed with a rope rail; bollards and a ladder at the heads. All
+# walked over, none examined (nopick). Laid by tools/saltmere/make_rugged.py.
+PLANKS = [["box", ("wood", "darkwood", "wood", "#6a5a48")[i], -0.375 + 0.25 * i, -0.015 + 0.006 * (i % 2), 0, 0.235, 0.05, 1.0] for i in range(4)] + [["box", "darkwood", 0, -0.08, 0, 1.0, 0.08, 0.12]]
+EDGE = [["box", "darkwood", 0, -0.07, 0.47, 1.02, 0.14, 0.1]]
+K["pier_deck"] = {"name": "Pier", "examine": "", "nopick": True, "parts": PLANKS, "snow": [["box", SNOW, 0, 0.015, 0, 0.98, 0.01, 0.98]]}
+K["pier_edge"] = {"name": "Pier", "examine": "", "nopick": True, "parts": EDGE, "snow": []}
+K["pier_post"] = {"name": "Pier", "examine": "", "nopick": True,
+    "parts": EDGE + [["cyl", "darkwood", 0, -0.9, 0.47, 0.22, 2.7, 0.22], ["cyl", "#3a3028", 0, 0.47, 0.47, 0.24, 0.05, 0.24], ["box", "#8a6a3a", -0.5, 0.33, 0.47, 1.02, 0.03, 0.03, 0, 0, 0.08], ["box", "#8a6a3a", 0.5, 0.33, 0.47, 1.02, 0.03, 0.03, 0, 0, -0.08]],
+    "snow": [["cyl", SNOW, 0, 0.5, 0.47, 0.22, 0.03, 0.22]]}
+K["bollard"] = {"name": "Bollard", "examine": "A mooring post, worn smooth by a hundred years of ropes and the occasional sitting sailor.", "nopick": False,
+    "parts": [["cyl12", "darkwood", 0, 0.25, 0, 0.3, 0.5, 0.3], ["cyl12", "#3a3028", 0, 0.52, 0, 0.38, 0.06, 0.38], ["cyl12", "#8a6a3a", 0, 0.3, 0, 0.33, 0.08, 0.33], ["cyl12", "#8a6a3a", 0, 0.18, 0, 0.33, 0.06, 0.33]],
+    "snow": [["cyl12", SNOW, 0, 0.56, 0, 0.36, 0.03, 0.36]]}
+K["pier_ladder"] = {"name": "Ladder", "examine": "Slick rungs down to the water. Down is the easy direction.", "nopick": True,
+    "parts": [["box", "darkwood", -0.22, -0.4, 0.52, 0.06, 1.8, 0.06], ["box", "darkwood", 0.22, -0.4, 0.52, 0.06, 1.8, 0.06]] + [["box", "wood", 0, y, 0.52, 0.44, 0.04, 0.05] for y in (0.3, -0.05, -0.4, -0.75, -1.1)],
+    "snow": []}
 # what stands in the way (src/world.js decorBlock, 2026-10-18: "make solid decor block movement without blocking roads"): "tile" blocks the
 # piece's own tile, "line" is a run of edge walls len metres long along the piece's turn (a fence section); none (prayer flags) you walk
 # under. Never on a path tile: world.js leaves any tile or edge by a path open.
 for k in ("milestone", "lantern_post", "wayshrine", "stone_bench", "fallen_log", "boulders", "broken_cart", "ruin_pillar", "stump_axe",
-          "supply_cache", "standing_stone", "dead_tree", "gravestone", "grave_cross", "grave_old"):
+          "supply_cache", "standing_stone", "dead_tree", "gravestone", "grave_cross", "grave_old", "trash_heap", "burn_barrel", "fish_rack",
+          "lobster_pots", "upturned_boat", "plank_pile", "notice_board", "pirate_flag", "cannon", "rum_barrels", "sea_chest", "shanty"):
     K[k]["block"] = "tile"
 K["rail_fence"]["block"] = "line"; K["rail_fence"]["len"] = 2.9
 K["iron_fence"]["block"] = "line"; K["iron_fence"]["len"] = 1.0   # the flower beds, the piers and the open gate you walk past (or through)
+# walked over or under: the washing line, a coil of rope, a heap of net, the pirates' ship (on the water, tied to its pier)
 _EX = os.path.join(ROOT, 'data', 'extra', 'decor.json')   # kinds other tools add (tools/thornwatch/make_tw_decor.py), kept across reruns
 if os.path.exists(_EX): K.update(json.load(open(_EX)).get('kinds', {}))
 DECOR = {"ashvale3d": "module", "name": "decor", "api": 1, "v": 1,

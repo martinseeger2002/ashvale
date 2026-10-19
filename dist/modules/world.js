@@ -230,13 +230,17 @@
     const DK = D.decor && D.decor.kinds, DKB = DK ? Object.keys(DK).filter(k => DK[k].block) : [];
     const pathNear = (x, y) => WG.pathDist(FACE, x + OX + 0.5, -(y + OY + 0.5)) < 0.3;
     function stampDecor(c) {
-      if (!DKB.length || !WG || !WG.roadObjects || !WG.pathDist) return;
+      if (!DKB.length) return;
       const x0 = c.x0, y0 = c.y0, own = (x, y) => x >= x0 && y >= y0 && x < x0 + CH && y < y0 + CH, pc = new Map();
-      const isPath = (x, y) => { const k = key(x, y); let v = pc.get(k); if (v == null) { v = pathNear(x, y); pc.set(k, v); } return v; };
+      /* a path: worldgen's (within 0.3 m), or in a set piece a street, path or bridge tile of its own (2026-10-19: decor placed in a zone) */
+      const pieceTile = (x, y) => { for (const P of pieces) if (x >= P.x0 && y >= P.y0 && x < P.x1 && y < P.y1) return P.tiles[y - P.y0][x - P.x0]; return null; };
+      const isPath = (x, y) => { const k = key(x, y); let v = pc.get(k); if (v == null) { const pt = pieceTile(x, y); v = (pt != null && 'pcB'.indexOf(pt) >= 0) || (!!(WG && WG.pathDist) && pathNear(x, y)); pc.set(k, v); } return v; };
       const shut = (x, y, b) => { if (own(x, y)) c.wl[ci(x, y)] |= b; };
-      for (const g of WG.roadObjects(FACE, x0 + OX - 3, y0 + OY - 3, x0 + OX + CH + 2, y0 + OY + CH + 2)) {
+      const here = [];
+      if (WG && WG.roadObjects) for (const g of WG.roadObjects(FACE, x0 + OX - 3, y0 + OY - 3, x0 + OX + CH + 2, y0 + OY + CH + 2)) here.push([g, g.x - OX, g.y - OY]);
+      for (const g of objects) if (g.solid && DK[g.k] && g.x >= x0 - 3 && g.y >= y0 - 3 && g.x <= x0 + CH + 2 && g.y <= y0 + CH + 2) here.push([g, g.x, g.y]);   /* a zone's own scenery that asks to stand in the way (solid: true - Saltmere's, tools/saltmere/make_rugged.py; zones laid before this keep their decor walk-through) */
+      for (const [g, x, y] of here) {
         const K = DK[g.k]; if (!K || !K.block) continue;
-        const x = g.x - OX, y = g.y - OY;
         if (K.block === 'tile') { if (own(x, y) && !open.has(key(x, y)) && !isPath(x, y)) c.fl[ci(x, y)] |= 1; continue; }
         if (K.block !== 'line') continue;
         const h = (K.len || 2.9) * (g.s || 1) / 2, ux = Math.cos(g.ry || 0), uy = -Math.sin(g.ry || 0);   /* along the section, in tiles (y down) */
@@ -350,6 +354,27 @@
       }
     };
     if (YD) for (const P of pieces) yard(P);
+    /* STRAYS (2026-10-19, the operator: "please add cats to the game"): rules.strays - a cat for every `per` buildings of a set piece, at most
+       `max` (or the town's own number in `towns`), each on a free outdoor tile three out from a building, the kinds in turn (the town's own
+       list in `townKinds`, else `kinds`). Like the yard birds, deterministic from the buildings, and added after every bird, so no uid
+       already given moves. */
+    const SD = D.rules && D.rules.strays;
+    const strays = (P) => {
+      const BK = (YD && YD.kinds) || ['house', 'shop', 'smithy'], bl = objects.filter(o => o.zone === P.id && BK.indexOf(o.k) >= 0).sort((a, b) => a.y - b.y || a.x - b.x);
+      const most = (SD.towns && SD.towns[P.id] != null) ? SD.towns[P.id] : SD.max, kinds = (SD.townKinds && SD.townKinds[P.id]) || SD.kinds;
+      let made = 0;
+      for (let i = 0; i < bl.length && made < most; i += Math.max(1, Math.min(SD.per, Math.floor(bl.length / Math.max(1, most))))) {
+        const o = bl[i], w = o.w || 1, h = o.h || 1, ring = [];
+        for (let x = o.x - 3; x <= o.x + w + 2; x++) ring.push([x, o.y + h + 2], [x, o.y - 3]);
+        for (let y = o.y - 2; y <= o.y + h + 1; y++) ring.push([o.x + w + 2, y], [o.x - 3, y]);
+        for (let t = (o.x * 11 + o.y * 5) % ring.length, n = 0; n < ring.length; n++, t++) {
+          const [x, y] = ring[t % ring.length];
+          if (zoneAt(x, y) !== P.id || blocked(x, y) || insideAt(x, y) || spawns.some(q => q.x === x && q.y === y)) continue;
+          spawns.push({ zone: P.id, m: kinds[made % kinds.length], x, y }); made++; break;
+        }
+      }
+    };
+    if (SD) for (const P of pieces) strays(P);
     const pin = (P) => { for (let y = P.y0 >> SH; y <= (P.y1 - 1) >> SH; y++) for (let x = P.x0 >> SH; x <= (P.x1 - 1) >> SH; x++) chunkAt(x << SH, y << SH); };
     /* area loading (handoff/area_loading.md): a zone that arrives after the world was made. Its content joins the lists the
        same way createWorld's did; chunks already filled where it lies (worldgen land, no town) are dropped so they fill
@@ -370,7 +395,7 @@
         for (let i = 0; i < CH * CH; i++) if (NODE[c.t[i]]) { const nk = key(c.x0 + (i & CM), c.y0 + (i >> SH)); if (!fixed.has(nk)) nodes.delete(nk); }
         if (c === lc) { lc = null; lcx = lcy = 0x7fffffff; } }
       pin(P);
-      const s0 = spawns.length; if (YD) yard(P);
+      const s0 = spawns.length; if (YD) yard(P); if (SD) strays(P);
       return { id: z.id, npcs: got.npcs, spawns: got.spawns.concat(spawns.slice(s0)), objects: got.objects };
     }
 

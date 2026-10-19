@@ -1138,6 +1138,7 @@
         };
         for (const p of K.parts) put(p);
         if (P.snow) for (const p of K.snow || []) put(p);
+        if (K.nopick) return;   /* structure, not a thing to look at (the Saltmere pier decking, 2026-10-19): no pick box */
         /* a pick box over it, so every piece can be examined (engine: right-click; a left-click goes through to the ground) */
         let x0 = 9, x1 = -9, z0 = 9, z1 = -9, top = 0.3;
         for (const p of K.parts) { const r = p[0] === 'glow' ? p[5] : Math.max(p[5], p[7]) / 2; x0 = Math.min(x0, p[2] - r); x1 = Math.max(x1, p[2] + r); z0 = Math.min(z0, p[4] - r); z1 = Math.max(z1, p[4] + r); top = Math.max(top, p[3] + (p[0] === 'glow' ? p[5] : p[6] / 2)); }
@@ -1476,15 +1477,19 @@
               group.add(tilt(mesh(new THREE.BoxGeometry(len, 0.3, hw * 2), k % 3 ? PAVE : JOINT, px, dy - 0.15, pz), pitch));   /* paving, a darker joint every third course */
               for (const side of [-1, 1]) {
                 const wx = px + nx * hw * side, wz = pz + nz * hw * side, top = dy + 0.8, bot = Math.min(wY - 0.4, dy - 0.3);
-                const wall = mesh(new THREE.BoxGeometry(seg + 0.02, top - bot, 0.36), STONE, wx, (top + bot) / 2, wz); wall.rotation.y = yaw; group.add(wall);
+                group.add(tilt(mesh(new THREE.BoxGeometry(len + 0.02, top - bot, 0.36), STONE, wx, (top + bot) / 2, wz), pitch));   /* tilted with the deck: no saw-teeth along the parapet (2026-10-19) */
                 group.add(tilt(mesh(new THREE.BoxGeometry(len + 0.02, 0.12, 0.5), COPE, wx, top + 0.06, wz), pitch));
               }
             }
-            /* the arch: a dark half-round under the crest in each side wall, its foot at the water */
-            const R = Math.max(1.2, Math.min(L / 2 - 0.3, BR.base + BR.rise - wY - 0.5));
-            for (const side of [-1, 1]) {
-              const a = new THREE.Mesh(new THREE.CircleGeometry(R, 24, 0, Math.PI), new THREE.MeshLambertMaterial({ color: 0x1a2328, side: THREE.DoubleSide }));
-              a.position.set(mx + nx * (hw + 0.19) * side, wY - 0.05, mz + nz * (hw + 0.19) * side); a.rotation.y = Math.atan2(nx * side, nz * side); group.add(a);
+            /* the arches: a dark half-round in each side wall, its foot at the water - one under the crest, or for a long span (the river on
+               the way to the great mountain, 23 m, 2026-10-19) a row of them, one to every 8 m or so, each as tall as the deck above it allows */
+            const nA = L > 12 ? Math.ceil(L / 8) : 1, archM = new THREE.MeshLambertMaterial({ color: 0x1a2328, side: THREE.DoubleSide });
+            for (let i = 0; i < nA; i++) {
+              const sc = L * (i + 0.5) / nA, R = Math.max(nA > 1 ? 0.9 : 1.2, Math.min(L / (2 * nA) - (nA > 1 ? 0.45 : 0.3), HG.deckAt(BR, sc) - wY - 0.5));
+              for (const side of [-1, 1]) {
+                const a = new THREE.Mesh(new THREE.CircleGeometry(R, 24, 0, Math.PI), archM);
+                a.position.set(ax + ux * sc + nx * (hw + 0.19) * side, wY - 0.05, az + uz * sc + nz * (hw + 0.19) * side); a.rotation.y = Math.atan2(nx * side, nz * side); group.add(a);
+              }
             }
             break;
           }

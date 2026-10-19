@@ -760,6 +760,7 @@
         case 'attack': {
           if (c.id) { const n = M.npcs.find(q => q.id === c.id); if (n && n.watch && !n.down) { p.act = { k: 'attackn', id: n.id }; p.skilling = null; p._stall = 0; closeShop(p); } break; }
           const m = mobByUid(c.uid); if (m && (m.lv | 0) !== (p.lv | 0)) { msg(p, "You can't reach that from this floor.", 'warn'); break; }
+          if (m && !m.dead && MON[m.key] && MON[m.key].tame) { p.act = { k: 'pet', uid: m.uid }; p.skilling = null; closeShop(p); break; }   /* a tame animal is never fought: the click pets it */
           if (m && !m.dead) { if (coverBlocks(p, m)) { msg(p, 'You dare not strike. One blow here would unmask you both.', 'warn'); break; } p.act = { k: 'attack', uid: m.uid }; p.skilling = null; p._stall = 0; closeShop(p); } break;
         }
         case 'escape': {
@@ -770,6 +771,7 @@
           teleport(p, { to: n.escape, id: 'caveexit' }, n.escapeSay || 'You climb back up into the daylight.');
           break;
         }
+        case 'pet': { const m = mobByUid(c.uid); if (m && !m.dead && MON[m.key] && MON[m.key].tame && (m.lv | 0) === (p.lv | 0)) { p.act = { k: 'pet', uid: m.uid }; p.skilling = null; closeShop(p); } break; }
         case 'take': { const g = S.ground.find(q => q.uid === c.uid && (q.lv | 0) === (p.lv | 0)); if (g) { p.act = { k: 'take', uid: g.uid }; p.skilling = null; closeShop(p); } break; }
         case 'enter': { const o = passageAt(c.x, c.y, p.lv); if (o && !p.dead) { p.act = { k: 'enter', x: o.x, y: o.y, lv: p.lv | 0 }; p.skilling = null; closeShop(p); } break; }   /* a cave mouth, a way out, or a vertical hatch */
         case 'mechanism': { const o = mechanismAt(c.x, c.y, p.lv); if (o && !p.dead) { p.act = { k: 'mechanism', x: o.x, y: o.y, lv: p.lv | 0 }; p.skilling = null; closeShop(p); } break; }
@@ -1153,7 +1155,8 @@
 
     // ---------------- combat
     function rollAttack(A, Dr) { return R.int(A + 1) > R.int(Dr + 1); }
-    function hawkStrike(p, m) {   /* the hawk dives: hitPct % for hitDmg, Dexterity spent, open to a hit while it is down */
+    function hawkStrike(p, m) {
+      if (MON[m.key] && MON[m.key].tame) { p.act = null; return false; }   /* the hawk dives: hitPct % for hitDmg, Dexterity spent, open to a hit while it is down */
       if ((p.energy || 0) < HK.energy) { msg(p, 'Your wings are too tired to strike. Rest a moment.', 'warn'); p.act = null; return false; }
       p.energy -= HK.energy; p.striking = S.t + HK.exposed;
       const hit = R.int(100) < HK.hitPct, dmg = hit ? HK.hitDmg : 0;
@@ -1163,7 +1166,9 @@
       if (MON[m.key].fleeHit) stampede(m, p);
       return true;
     }
+    const PET_LINES = ['The {name} leans into your hand and purrs like a small engine.', 'The {name} allows this. Briefly.', 'The {name} headbutts your knuckles and looks pleased with itself.', 'The {name} purrs, then bites you, very gently, to keep things honest.', 'The {name} rolls over. It is a trap. You know it is a trap.'];
     function playerAttack(p, m) {
+      if (MON[m.key] && MON[m.key].tame) { p.act = null; return false; }   /* TAME (2026-10-19, the operator: "cats should never be attackable unless they are designated enemy varieties") */
       if (coverBlocks(p, m)) { msg(p, 'You dare not strike. One blow here would unmask you both.', 'warn'); p.act = null; return false; }
       if (isHawk(p)) return hawkStrike(p, m);
       const c = wclass(p), st = style(p), b = bonuses(p), md = MON[m.key];
@@ -1199,7 +1204,7 @@
       return true;
     }
     function landOnMob(h) {
-      const m = mobByUid(h.dst), p = S.players[h.src]; if (!m || m.dead) return;
+      const m = mobByUid(h.dst), p = S.players[h.src]; if (!m || m.dead || (MON[m.key] && MON[m.key].tame)) return;
       const dmg = Math.min(h.dmg, m.hp); m.hp -= dmg;
       ev({ e: 'hit', dst: m.uid, src: h.src, dmg, max: MON[m.key].hp, hp: m.hp, cls: h.cls, dex: !!h.dex, blocked: !!h.blocked });
       if (h.arrow) dropGround(h.arrow.id, 1, h.arrow.x, h.arrow.y, h.src, 200);
@@ -3584,6 +3589,15 @@
             }
           }
         }
+      } else if (a && a.k === 'pet') {   /* petting a tame animal: walk up beside it; it stops a while, and you hear about it */
+        const m = mobByUid(a.uid);
+        if (!m || m.dead || (m.lv | 0) !== (p.lv | 0)) p.act = null;
+        else if (!inReach(p.x, p.y, m.x, m.y, 1)) { p.path = findPath(p.x, p.y, (x, y) => inReach(x, y, m.x, m.y, 1), m.x, m.y, 30); stepPath(p); if (!p.path.length && !inReach(p.x, p.y, m.x, m.y, 1)) p.act = null; }
+        else {
+          const md = MON[m.key], L = md.petLines || PET_LINES;
+          p.face = faceTo(p.x, p.y, m.x, m.y); m.face = faceTo(m.x, m.y, p.x, p.y); m.wx = null; m.path = null; m.calm = S.t + 12;
+          msg(p, L[(S.t + m.uid) % L.length].replace('{name}', md.name.toLowerCase())); ev({ e: 'pet', p: p.id, uid: m.uid }); p.act = null;
+        }
       } else if (a && a.k === 'take') {
         const g = S.ground.find(q => q.uid === a.uid);
         if (!g || (g.lv | 0) !== (p.lv | 0)) p.act = null;
@@ -3983,6 +3997,7 @@
         return;
       }
       if (m.back) { if (m.x === m.sx && m.y === m.sy) m.back = 0; else if (!mobStepToward(m, m.sx, m.sy)) { m.x = m.sx; m.y = m.sy; m.back = 0; } mobHeal(m, md, 5); return; }
+      if (m.calm > S.t) return;   /* a petted cat stays put a moment */
       if (md.ownDice) {   /* wildlife wanders on its own dice (uid + tick), so a hen in a yard never shifts the fight rolls */
         const h = Math.imul((m.uid % 2147483647) ^ Math.imul(S.t, 0x9e3779b1), 0x85ebca6b) >>> 0, r = md.roam || 3;
         if (h % (md.roamEvery || 10) === 0) { m.wx = m.sx + ((h >>> 8) % (2 * r + 1)) - r; m.wy = m.sy + ((h >>> 16) % (2 * r + 1)) - r; }   /* roamEvery: birds potter about */

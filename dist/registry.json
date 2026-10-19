@@ -486,6 +486,42 @@
     "api": 1,
     "kind": "json"
    },
+   "char.cat_alley": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.cat_black": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.cat_ginger": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.cat_mouser": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.cat_siamese": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.cat_tuxedo": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.chain_dragon": {
     "id": null,
     "v": 1,
@@ -613,6 +649,18 @@
     "kind": "json"
    },
    "char.goblin_shaman": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.grix": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.grizz": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -882,6 +930,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.ruark": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.sela": {
     "id": null,
     "v": 1,
@@ -901,6 +955,12 @@
     "kind": "json"
    },
    "char.snow_hare": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.soot": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -979,6 +1039,12 @@
     "kind": "json"
    },
    "char.tobin": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.toby": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1273,6 +1339,12 @@
     "kind": "json"
    },
    "cloth.hat_spidercrown": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "cloth.hat_tricorn": {
     "id": null,
     "v": 1,
     "api": 1,

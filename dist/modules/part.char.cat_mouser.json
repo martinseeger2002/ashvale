@@ -1,0 +1,1 @@
+{"ashvale3d":"module","name":"part.char.cat_mouser","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"char.cat_mouser","kind":"char","role":"monster","name":"Harbour mouser","body":"quadruped","quadruped":{"preset":"cat","color":"#f0ebe2","pattern":"calico","mark":"#d0782e","patch":"#2a2420","eyes":"#d8b030","girth":1.38,"len":1.08,"legLen":0.9,"size":1.12}}}

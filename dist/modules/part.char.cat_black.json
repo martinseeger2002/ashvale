@@ -1,0 +1,1 @@
+{"ashvale3d":"module","name":"part.char.cat_black","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"char.cat_black","kind":"char","role":"monster","name":"Black cat","body":"quadruped","quadruped":{"preset":"cat","color":"#24221f","pattern":"solid","belly":"#2c2a26","eyes":"#9ad040","nose":"#4a3a3a","inner":"#5a4446","len":1.05,"girth":0.92}}}
