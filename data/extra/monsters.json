@@ -1027,6 +1027,27 @@
    "fleeHit": true,
    "roamEvery": 3,
    "tame": true
+  },
+  "tut_rat": {
+   "name": "Island rat",
+   "examine": "A fat island rat, used to being practised on. It has made its peace with this.",
+   "level": 1,
+   "hp": 4,
+   "att": 1,
+   "def": 1,
+   "attb": 0,
+   "defb": 0,
+   "max": 1,
+   "speed": 4,
+   "aggro": 0,
+   "respawn": 20,
+   "drops": [],
+   "gold": 0,
+   "anim": "bite",
+   "look": "rat",
+   "animal": true,
+   "ownDice": true,
+   "roam": 3
   }
  }
 }

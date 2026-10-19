@@ -1584,7 +1584,8 @@
           case 'wtower': building(o); break;   /* the Frostspire: a walk-in round tower (TK, the tower kit, in building()) */
           case 'farmpatch': {   /* FARMING (2026-10-18): a patch's bed - a low timber frame round 2 x 2 tiles of dark soil and a post at one corner,
                its cap the tier's colour (green small, amber, violet large); what grows in it is each player's own, drawn by the engine */
-            const x0 = o.x, z0 = o.y, W2 = o.w || 2, H2 = o.h || 2, yb = Math.min(heightAt(x0 + 0.2, z0 + 0.2), heightAt(x0 + W2 - 0.2, z0 + H2 - 0.2), heightAt(x0 + W2 / 2, z0 + H2 / 2));
+            const x0 = o.x, z0 = o.y, W2 = o.w || 2, H2 = o.h || 2, hs = [[0.1, 0.1], [W2 - 0.1, 0.1], [0.1, H2 - 0.1], [W2 - 0.1, H2 - 0.1], [W2 / 2, H2 / 2]].map(([dx, dz]) => heightAt(x0 + dx, z0 + dz)), yb = Math.max(...hs), ylo = Math.min(...hs);   /* a level bed at its highest corner, banked down to the slope, never sunk in it */
+            if (yb - ylo > 0.02) B.add('box', 0x5a4632, x0 + W2 / 2, (yb + ylo) / 2 - 0.05, z0 + H2 / 2, W2 + 0.1, yb - ylo + 0.1, H2 + 0.1);
             B.add('box', 0x4a3426, x0 + W2 / 2, yb + 0.06, z0 + H2 / 2, W2 - 0.2, 0.16, H2 - 0.2);
             for (const [cx2, cz2, sx, sz] of [[x0 + W2 / 2, z0 + 0.06, W2, 0.12], [x0 + W2 / 2, z0 + H2 - 0.06, W2, 0.12], [x0 + 0.06, z0 + H2 / 2, 0.12, H2], [x0 + W2 - 0.06, z0 + H2 / 2, 0.12, H2]]) B.add('box', 0x7a5530, cx2, yb + 0.1, cz2, sx, 0.2, sz);
             B.add('box', 0x6a4a2a, x0 + 0.06, yb + 0.45, z0 + 0.06, 0.1, 0.9, 0.1);

@@ -1,0 +1,22 @@
+{
+ "tut_guide": {
+  "name": "Guide Elsbeth",
+  "examine": "An island guide with a whistle, a clipboard and the patience of someone who has explained walking a thousand times."
+ },
+ "tut_survival": {
+  "name": "Survivalist Marlow",
+  "examine": "Survivalist Marlow. He can light a fire with two wet sticks and a strong opinion."
+ },
+ "tut_farmer": {
+  "name": "Gardener Fen",
+  "examine": "Gardener Fen, the island's gardener. There is soil under every fingernail and a radish in every pocket."
+ },
+ "tut_combat": {
+  "name": "Sergeant Kade",
+  "examine": "Sergeant Kade. Shouts like a drill sergeant, which he was, and smiles like a grandfather, which he is."
+ },
+ "tut_ferryman": {
+  "name": "Ferryman Odo",
+  "examine": "Ferryman Odo. He has rowed every new face in the valley to Ashvale, and remembers most of them."
+ }
+}

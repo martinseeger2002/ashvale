@@ -420,6 +420,7 @@
       for (const [id2, n] of ((homeOf(p) || {}).inv || RU.start.inv)) addItem(p, id2, n);
       if (save) importInto(p, save);
       if (save) placeFrom(p, save);
+      else if (TUT && home === TUT.home && opts.tutorial) { p.x = TUT.spawn[0]; p.y = TUT.spawn[1]; p.tut = 1; }   /* TUTORIAL: a new character starts on the island (the game turns it on: opts.tutorial) */
       p.hp = Math.min(p.hp, maxHp(p)); if (!(p.hp > 0)) p.hp = maxHp(p);   /* also a save that kept NaN (stored as null) */
       p.pray = {}; p.pd = 0; p.pp = save && Number.isInteger(save.pp) ? Math.max(0, Math.min(maxPp(p), save.pp)) : maxPp(p);
       return p;
@@ -445,6 +446,7 @@
       if (s.tp && Number.isInteger(s.tp.x) && Number.isInteger(s.tp.y)) p.tp = { x: s.tp.x, y: s.tp.y, lv: s.tp.lv | 0, name: String(s.tp.name || 'where you read the scroll').slice(0, 60) };   /* a town portal still open */
       if (s.orders && typeof s.orders === 'object') p.orders = JSON.parse(JSON.stringify(s.orders));   /* what the people are making for you (a canoe takes two days) */
       if (Array.isArray(s.bless)) p.bless = s.bless.filter(b => b && Number.isInteger(b.x) && Number.isInteger(b.y)).slice(-12).map(b => ({ x: b.x, y: b.y, day: b.day | 0, r: Math.min(30, b.r | 0) }));
+      if (s.tut && TUT) p.tut = 1;   /* TUTORIAL: still on the island */
       if (s.patches && typeof s.patches === 'object' && FARM) { p.patches = {}; for (const k of Object.keys(s.patches).slice(0, 400)) { const v = s.patches[k]; if (!/^-?\d+,-?\d+$/.test(k) || !v || typeof v !== 'object') continue; const o = { w: Math.max(0, Math.min(FARM.weeds, v.w | 0)) }; if (v.crop && FARM.crops[v.crop] && isFinite(+v.at)) { o.crop = v.crop; o.at = +v.at; o.water = v.water ? 1 : 0; } else if (isFinite(+v.clear)) o.clear = +v.clear; p.patches[k] = o; } }   /* FARMING */
       if (Array.isArray(s.traps)) p.traps = s.traps.filter(t => t && IT[t.id] && trapOf(IT[t.id]) && Number.isInteger(t.x) && Number.isInteger(t.y)).slice(0, 8).map(t => ({ id: t.id, x: underMove(t.x, t.y)[0], y: underMove(t.x, t.y)[1], prey: String(t.prey || ''), ready: +t.ready || 0 }));
       if (typeof s.town === 'string') p.town = s.town;
@@ -523,7 +525,7 @@
     function exportPlayer(id) {
       const p = S.players[id]; if (!p) return null;
       const at = p.dead ? wakeSpot(p).at : [p.x, p.y];
-      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, tp: p.tp || undefined, orders: p.orders || {}, traps: p.traps || [], patches: p.patches || {}, bless: p.bless || [], town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, gift: p.gift && Object.keys(p.gift).length ? p.gift : undefined, kills: p.kills || {}, pk: p.pk || undefined, ch: p.ch || undefined, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
+      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, tp: p.tp || undefined, orders: p.orders || {}, traps: p.traps || [], patches: p.patches || {}, tut: p.tut ? 1 : undefined, bless: p.bless || [], town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, gift: p.gift && Object.keys(p.gift).length ? p.gift : undefined, kills: p.kills || {}, pk: p.pk || undefined, ch: p.ch || undefined, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
     }
 
     // ---------------- pathfinding: BFS over the tile grid, 8 directions, no corner cutting (RuneScape-style)
@@ -1689,6 +1691,7 @@
     const FARM = RU.farming || null, FD = Rng(String(opts.seed || 'ashvale') + ':farming');
     const blocksNow = () => natureHours() * ((FARM && FARM.hourSeconds) || 300) / ((FARM && FARM.block) || 60);   /* a game hour is 300 real seconds (engsky: a day is 2 hours) */
     function patchAt(x, y) {
+      for (const o of M.objects || []) if (o.k === 'farmpatch' && x >= o.x && y >= o.y && x < o.x + (o.w || 2) && y < o.y + (o.h || 2)) return o;   /* a patch a zone lays (the tutorial island's) */
       if (!M.roadTorchesIn) return null;
       for (const o of M.roadTorchesIn(x - 2, y - 2, x + 1, y + 1)) if (o.k === 'farmpatch' && x >= o.x && y >= o.y && x < o.x + (o.w || 2) && y < o.y + (o.h || 2)) return o;
       return null;
@@ -1727,6 +1730,18 @@
         const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.steps[q.step - 1];
         if (st && st.goal.pet === key && (q.n | 0) < (st.goal.n || 1)) { q.n = (q.n | 0) + 1; msg(p, Q.name + ': ' + (MON[key] ? MON[key].name : key) + ' petted.', 'quest'); }
       }
+    }
+    /* TUTORIAL (2026-10-19, the operator: "when i start as a player i am not brought through a mandatory tutorial space referencing osrs
+       tutorial island watered down"): a new character of rules.tutorial.home starts on the island (newPlayer) with p.tut set, and is
+       brought back if they come off it before the tutorial quest is done (dying wakes you at home - you are brought back from there too).
+       When the quest is done - the ferryman's step - they cross to their home's spawn. Only when the game asks for it (opts.tutorial; the
+       engine does, but for ?notut and the dev tour), so a core made for a test or a tool starts characters where they always did. */
+    const TUT = RU.tutorial || null;
+    function tutorialTick(p) {
+      if (!p.tut || !TUT || p.dead) return;
+      const q = p.quests[TUT.quest], Q = D.quests.quests[TUT.quest];
+      if (q && Q && q.step > Q.steps.length) { p.tut = 0; teleport(p, { id: 'ferry', to: spawnOf(p) }, null); msg(p, 'Odo rows you across the water to ' + ((homeOf(p) || {}).name || 'the valley') + '. Welcome to the valley.', 'quest'); return; }
+      if (zoneOf(p.x, p.y) !== TUT.zone) { teleport(p, { id: 'ferry', to: TUT.spawn }, null); msg(p, 'You are not done on the island yet. Finish with the guides, and Ferryman Odo will take you across.', 'warn'); }
     }
     function creditHarvest(p, item, n) {
       for (const qid in p.quests) {
@@ -3703,6 +3718,7 @@
       if (p.shop) { const sh = shopOf(p.shop); if (!nearKeeper(p, sh)) closeShop(p); }
       burdenCheck(p);
       fieldSeed(p);   /* FARMING: now and then a seed in the grass on your travels */
+      tutorialTick(p);   /* TUTORIAL: kept on the island until the ferryman takes you */
       if (!p.moved || !p.run) p.energy = Math.min(10000, p.energy + 15);
       if (S.t % (p.pray && p.pray.rapid_heal ? 50 : 100) === 0 && p.hp < maxHp(p)) p.hp++;
     }

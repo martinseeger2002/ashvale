@@ -272,7 +272,7 @@
       /* globe P2: seeded land around the old map (worldgen + globe modules, when the registry has them; ?flat turns it off) */
       { const get = n => G.ASH3D && G.ASH3D.get ? G.ASH3D.get(n) : null, WGM = get('worldgen'), AG = get('globe'), AW = get('world') || G.AshWorld;
         if (WGM && AG && AW && AW.seededWorldgen && !q.has('flat')) { try { D.wg = AW.seededWorldgen(WGM, AG, D); } catch (er) { console.warn('worldgen', er && er.message); } } }
-      const core = AshCore.create(D, { seed });
+      const core = AshCore.create(D, { seed, tutorial: !(q.has('notut') || q.get('home') === 'tour') });   /* TUTORIAL: new characters start on the island; ?notut (and the dev tour) start you in the village */
       const PID = 'me';
       /* where a new character is born (handoff/ziibiing_start_plan.md): the Ziibiing card's launcher sets ASH3D_HOME; on this machine's
          preview ?home=ziibiing does the same */
@@ -710,13 +710,14 @@
         if (!core.patchView || !core.M.roadTorchesIn || !me) return;
         const now = performance.now(); if (!force && now - patchClock < 1000) return; patchClock = now;
         const FA = core.farm || { crops: {} }, seen = new Set();
-        for (const o of core.M.roadTorchesIn(me.x - 48, me.y - 48, me.x + 48, me.y + 48)) {
+        const near = core.M.roadTorchesIn(me.x - 48, me.y - 48, me.x + 48, me.y + 48).concat((core.M.objects || []).filter(o => o.k === 'farmpatch' && Math.abs(o.x - me.x) < 48 && Math.abs(o.y - me.y) < 48));
+        for (const o of near) {
           if (o.k !== 'farmpatch') continue;
           const k = o.x + ',' + o.y, v = core.patchView(me.id, o); if (!v) continue; seen.add(k);
           const sig = [v.w, v.crop, v.phase, v.ready ? 1 : 0, v.water ? 1 : 0].join('|'), had = gPatches.get(k);
           if (had && had.userData.sig === sig) continue;
           if (had) scene.remove(had);
-          const g = new THREE.Group(), cx = o.x + 1, cz = o.y + 1, y0 = Math.min(heightAt(o.x + 0.2, o.y + 0.2), heightAt(o.x + 1.8, o.y + 1.8), heightAt(cx, cz)) + 0.14;
+          const g = new THREE.Group(), cx = o.x + 1, cz = o.y + 1, y0 = Math.max(heightAt(o.x + 0.1, o.y + 0.1), heightAt(o.x + 1.9, o.y + 0.1), heightAt(o.x + 0.1, o.y + 1.9), heightAt(o.x + 1.9, o.y + 1.9), heightAt(cx, cz)) + 0.14;   /* on the bed's level top (scene farmpatch) */
           const add = (geo, col, x, y, z) => { const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: col, flatShading: true })); m.position.set(x, y, z); m.castShadow = true; g.add(m); return m; };
           if (v.water) add(new THREE.BoxGeometry(1.75, 0.02, 1.75), 0x2e2018, cx, y0 + 0.01, cz);
           if (!v.crop) for (let i = 0; i < v.w * 4; i++) { const a = i * 2.4, r = 0.25 + (i % 3) * 0.22; add(new THREE.ConeGeometry(0.08, 0.28, 4), 0x5a8a2a, cx + Math.cos(a) * r, y0 + 0.14, cz + Math.sin(a) * r); }
@@ -3407,7 +3408,7 @@
       }
       { const HD = (D.rules.homes || {})[core.homeOf(me)] || {};
         hud.chat('Welcome to ' + (HD.name || 'Ashvale') + '.', 'sys');
-        if (!save) hud.chat(HD.first || 'Elder Maren waits by the well. Tap her to talk.', 'sys'); }
+        if (!save) hud.chat(me && me.tut ? 'You wake on Tutorial Island. Guide Elsbeth is right beside you - tap her to begin.' : (HD.first || 'Elder Maren waits by the well. Tap her to talk.'), 'sys'); }   /* TUTORIAL: a new character's first line points to the island's guide */
       if (!save && MOD.outfitStyles && !q.has('nocreator')) { myEnt.yaw = myEnt.tyaw = cam.yaw = cam.tyaw; openWardrobe(true); }
       else if (!store.get('ashvale3d.help') || !save) hud.showHelp(true);
       hud.refresh('all');

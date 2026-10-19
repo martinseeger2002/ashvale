@@ -12,7 +12,7 @@ const zones = fs.readdirSync(DD).filter(f => /^zone\..*\.json$/.test(f)).map(f =
 const D = { items: mod('items').items, monsters: mod('monsters').monsters, shops: mod('shops'), quests: mod('quests'), rules: mod('rules'), zones, globecfg: mod('globecfg'), decor: mod('decor') };
 const F = D.rules.farming, WG = AshWorld.seededWorldgen(WGM, AG, D), C = D.globecfg, OX = C.origin[0], OY = C.origin[1];
 ok(D.rules.skills.indexOf('farming') >= 0 && F && Object.keys(F.crops).length >= 8, 'Farming is a skill with ' + Object.keys(F.crops).length + ' crops');
-ok(Object.values(F.crops).every(c => D.items[c.seed] && D.items[c.crop] && c.phases >= 4 && c.blocks > 0), 'every crop has a seed and a crop item, four or more phases and a number of blocks each');
+ok(Object.values(F.crops).every(c => D.items[c.seed] && D.items[c.crop] && c.phases >= 3 && c.blocks > 0), 'every crop has a seed and a crop item, three or more phases and a number of blocks each');   /* three: the tutorial's radish */
 ok(['rake', 'seed_dibber', 'spade', 'watering_can'].every(t => D.items[t]) && D.shops.shops.general.stock.indexOf('rake') >= 0, 'the tools exist and the Ashvale store sells them');
 
 /* the patches: by the roads, out of the towns, on dry land, of every tier */

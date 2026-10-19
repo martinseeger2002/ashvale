@@ -2607,6 +2607,38 @@
    "model": "cloth.hat_tricorn",
    "value": 250,
    "attributes": []
+  },
+  "radish_seed": {
+   "name": "Radish seed",
+   "description": "Radish seeds (Farming 1). The quickest crop there is: ready in under a minute. Gardener Fen hands them out on the tutorial island.",
+   "examine": "Radish seeds (Farming 1). The quickest crop there is: ready in under a minute. Gardener Fen hands them out on the tutorial island.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "resource",
+   "subcategory": "seed",
+   "weight": 5,
+   "model": "item.seedpouch",
+   "value": 1,
+   "attributes": [],
+   "stackable": true
+  },
+  "radish": {
+   "name": "Radish",
+   "description": "A radish, red and peppery. Heals 1. Your first crop, probably.",
+   "examine": "A radish, red and peppery. Heals 1. Your first crop, probably.",
+   "collection": "ASHVALE Farming",
+   "game": "ashvale",
+   "category": "food",
+   "subcategory": "crop",
+   "weight": 100,
+   "model": "item.crop_radish",
+   "value": 2,
+   "attributes": [
+    {
+     "trait_type": "Heal",
+     "value": 1
+    }
+   ]
   }
  }
 }

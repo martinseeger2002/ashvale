@@ -506,16 +506,26 @@
             const pts = r.pts, face = r.A.face, seed = g.hashStr('patch:' + r.A.id + '>' + r.B.id); let n = 0; const R = () => g.u01(g.mix32(seed + (n++) * 7919));
             const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
             const L = cum[cum.length - 1], pt = d => { let i = 1; while (i < pts.length - 1 && cum[i] < d) i++; const l = cum[i] - cum[i - 1] || 1, k = Math.max(0, Math.min(1, (d - cum[i - 1]) / l)); return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * k, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * k]; };
-            for (let d = 30 + R() * 40; d < L - 25; d += 45 + R() * 90) {
-              const a = pt(d - 1), b = pt(d + 1), l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, tx = (b[0] - a[0]) / l, ty = (b[1] - a[1]) / l, sd = R() < 0.5 ? -1 : 1, off = r.w0 + 5 + R() * 4;
-              const c = pt(d), px = c[0] - ty * sd * off, py = c[1] + tx * sd * off, gx = Math.floor(px) - 1, gy = Math.floor(-py) - 1;
-              let ok = true, lo = 1e9, hi = -1e9;
-              for (const [dx, dy] of [[0, 0], [2, 0], [0, 2], [2, 2], [1, 1]]) {
-                if (inPiece(face, gx + Math.min(dx, 1), gy + Math.min(dy, 1))) { ok = false; break; }
-                ctx.foldInto(face, gx + dx, -(gy + dy), SB); const s0 = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false);
-                if (s0.h < ctx.WATER + 0.3 || s0.peakS > 0.05) { ok = false; break; } lo = Math.min(lo, s0.h); hi = Math.max(hi, s0.h);
-              }
-              if (!ok || hi - lo > 0.8 || placedP.some(q => Math.abs(q[0] - gx) < 5 && Math.abs(q[1] - gy) < 5)) continue;
+            for (let d = 30 + R() * 30; d < L - 25; d += 35 + R() * 60) {
+              const a = pt(d - 1), b = pt(d + 1), l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, tx = (b[0] - a[0]) / l, ty = (b[1] - a[1]) / l, sd0 = R() < 0.5 ? -1 : 1, off = r.w0 + 5 + R() * 4;
+              const c = pt(d);
+              const fits = (sd) => {   /* this side of the road: dry, level (0.5 m at most over the bed), open, out of the towns, apart from the others */
+                const px = c[0] - ty * sd * off, py = c[1] + tx * sd * off, gx = Math.floor(px) - 1, gy = Math.floor(-py) - 1;
+                let lo = 1e9, hi = -1e9;
+                for (const [dx, dy] of [[0, 0], [2, 0], [0, 2], [2, 2], [1, 1], [1, 0], [0, 1], [2, 1], [1, 2]]) {   /* corners, middle and edge midpoints: no patch on a slope (2026-10-19: two sat half in a hillside) */
+                  if (inPiece(face, gx + Math.min(dx, 1), gy + Math.min(dy, 1))) return null;
+                  ctx.foldInto(face, gx + dx, -(gy + dy), SB); const s0 = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false);
+                  if (s0.h < ctx.WATER + 0.3 || s0.peakS > 0.05) return null; lo = Math.min(lo, s0.h); hi = Math.max(hi, s0.h);
+                }
+                if (hi - lo > 0.5 || placedP.some(q => Math.abs(q[0] - gx) < 5 && Math.abs(q[1] - gy) < 5)) return null;
+                const mx = gx + 1, my = -(gy + 1);   /* clear of every path, road and trail laid so far (segs: face, ax, ay, bx, by, half width, kind) */
+                for (let o = 0; o < segs.length; o += NS) { if (segs[o] !== face || segs[o + 6] === 1) continue;
+                  const ax = segs[o + 1], ay = segs[o + 2], ex = segs[o + 3] - ax, ey = segs[o + 4] - ay, t = Math.max(0, Math.min(1, ((mx - ax) * ex + (my - ay) * ey) / (ex * ex + ey * ey || 1)));
+                  if (Math.hypot(mx - ax - ex * t, my - ay - ey * t) < segs[o + 5] + 2.6) return null; }
+                return [gx, gy];
+              };
+              const at = fits(sd0) || fits(-sd0); if (!at) continue;
+              const gx = at[0], gy = at[1];
               const tier = idx % 7 === 3 ? 3 : idx % 3 === 1 ? 2 : 1; idx++;
               placedP.push([gx, gy]); ROAD.push({ k: 'farmpatch', x: gx, y: gy, w: 2, h: 2, face, tier });
             }

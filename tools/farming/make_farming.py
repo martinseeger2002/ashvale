@@ -248,7 +248,8 @@ if __name__ == '__main__':
                 if kd not in L: L.append(kd)
             cats[c] = L
         it.setdefault('tools', {}).update(RULES_TOOLS)
-        D['farming'] = FARMING
+        keep = {k: v for k, v in ((D.get('farming') or {}).get('crops') or {}).items() if k not in FARMING['crops']}   # crops other tools add (the tutorial's radish)
+        D['farming'] = json.loads(json.dumps(FARMING)); D['farming']['crops'].update(keep)
         if rp.startswith(os.path.join(DD, 'rules')): json.dump(R, open(rp, 'w', encoding='utf-8'), separators=(',', ':'), ensure_ascii=False)
         else:
             with open(rp, 'w', encoding='utf-8') as f: json.dump(R, f, indent=1, ensure_ascii=False); f.write('\n')

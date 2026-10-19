@@ -1062,6 +1062,36 @@
     "api": 1,
     "kind": "json"
    },
+   "char.tut_combat": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.tut_farmer": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.tut_ferryman": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.tut_guide": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.tut_survival": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.vael": {
     "id": null,
     "v": 1,
@@ -1896,6 +1926,12 @@
     "api": 1,
     "kind": "json"
    },
+   "item.crop_radish": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.crop_strawberry": {
     "id": null,
     "v": 1,
@@ -2381,6 +2417,12 @@
     "kind": "json"
    },
    "mt_tower": {
+    "id": null,
+    "v": 2,
+    "api": 1,
+    "kind": "json"
+   },
+   "tutorial": {
     "id": null,
     "v": 2,
     "api": 1,
