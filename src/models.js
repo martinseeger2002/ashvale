@@ -325,6 +325,7 @@ export function createModels(THREE, opts) {
     const c = PARTS['char.' + key];
     if (!c) return null;
     if (c.body === 'beast') return beast(c.beast || {});
+    if (c.body === 'quadruped') return quadruped(c.quadruped || {});   /* cats first (2026-10-19), any supple four-legged thing after */
     if (c.body === 'bird') return bird(c.bird || {});
     if (c.body === 'spider') return spider(c.spider || {});
     if (c.body === 'chest') return chest(c.chest || {});
@@ -444,6 +445,30 @@ export function createModels(THREE, opts) {
     death: { dur: 1, hold: true, fn: K(0, {}, 0.3, { neck: [-0.3], legFL: [-0.4], legFR: [0.4] }, 1, { roll: [1.5], lift: [0.02], legFL: [-0.7], legFR: [-0.4], legBL: [0.6], legBR: [0.3], neck: [0.3], tail: [0, 0, 0] }) }
   };
   BEAST.slash = BEAST.stab = BEAST.crush = BEAST.bite;
+  /* the QUADRUPED's poses (a cat first): sitting is pitch up, hips down, the hind legs folded under (thigh forward, hock back), the front
+     legs kept upright, the head levelled and the tail wrapped round to the side; H._sit carries the body's own numbers */
+  const qsit = (H) => { const q = (H && H._sit) || { pitch: -0.5, drop: 0.07 }; return { pitch: [q.pitch], lift: [-q.drop], legFL: [-q.pitch], legFR: [-q.pitch], legBL: [-1.15], legBR: [-1.15], shinBL: [1.6], shinBR: [1.6], neck: [0.32] }; };
+  const QDEATH = new Map(), qdeath = hip => { let f = QDEATH.get(hip); if (!f) QDEATH.set(hip, f = K(0, {}, 0.3, { neck: [-0.3] }, 1, { roll: [1.45], lift: [-hip * 0.62], legFL: [-0.5], legFR: [-0.3], legBL: [0.6], legBR: [0.4], neck: [0.2], tail: [-1.2, 0.4, 0] })); return f; };   /* lies down on its side */
+  const ping = (t, k) => Math.pow(Math.max(0, Math.sin(TAU * t * k)), 12);   /* a short twitch now and then */
+  const QUAD = Object.assign({}, BEAST, {
+    idle: { loop: true, dur: 4, fn: (t, _, H) => {
+      const s = Math.sin(TAU * t), e = ping(t, 1), f = ping(t + 0.37, 1);
+      const ear = { earL: [0, 0, 0.5 * e], earR: [0, 0, -0.5 * f] };
+      if (H && H._idle === 'stand') return Object.assign({ tail: [0, 0.35 * s, 0], tail3: [0.2 * s, 0.3 * s, 0], neck: [0.04 * s], head: [0, 0.3 * Math.sin(TAU * t * 0.5), 0] }, ear);
+      return Object.assign(qsit(H), { tail: [-1.75, 0.55, 0], tail2: [0, 0.55 + 0.08 * s, 0], tail3: [0.05, 0.5 + 0.35 * s, 0], head: [0, 0.35 * Math.sin(TAU * t * 0.5), 0.06 * s] }, ear);
+    } },
+    sit: { loop: true, dur: 4, fn: (t, c, H) => QUAD.idle.fn(t, c, Object.assign({}, H, { _idle: 'sit', _sit: H && H._sit })) },
+    walk: { loop: true, dur: 0.9, fn: (t, _, H) => { const s = Math.sin(TAU * t), s2 = Math.sin(TAU * t * 2), S = (H && H._S) || 1;
+      return { legFL: [0.45 * s], legBR: [0.45 * s], legFR: [-0.45 * s], legBL: [-0.45 * s], shinBL: [0.35 * Math.max(0, -s)], shinBR: [0.35 * Math.max(0, s)],
+        tail: [0.1, 0.12 * s, 0], tail3: [0.15, 0.2 * s, 0], neck: [0.05 * s2], lift: [0.006 * S * s2], roll: [0.03 * s] }; } },
+    run: { loop: true, dur: 0.42, fn: (t, _, H) => { const s = Math.sin(TAU * t), S = (H && H._S) || 1;   /* a bound: the front pair together, the hind pair together, the spine flexing */
+      return { legFL: [0.95 * s], legFR: [0.85 * s], legBL: [-0.95 * s], legBR: [-0.85 * s], shinBL: [0.5 * Math.max(0, s)], shinBR: [0.5 * Math.max(0, s)],
+        pitch: [0.14 * s], lift: [0.03 * S * Math.abs(Math.cos(TAU * t))], tail: [-0.55 - 0.2 * s, 0, 0], tail3: [0.3, 0, 0], neck: [-0.1 * s], earL: [0, 0, 0.35], earR: [0, 0, -0.35] }; } },
+    bite: { dur: 0.6, impact: 0.5, fn: K(0, {}, 0.35, { neck: [0.2], legFR: [-0.35], pitch: [-0.12], earL: [0, 0, 0.7], earR: [0, 0, -0.7] }, 0.5, { neck: [-0.15], legFR: [-1.5], dz: [0.04], pitch: [-0.2], earL: [0, 0, 0.7], earR: [0, 0, -0.7] }, 1, {}) },   /* a swipe of the paw */
+    hit: { dur: 0.4, fn: K(0, {}, 0.3, { neck: [-0.3], dz: [-0.04], pitch: [0.1], earL: [0, 0, 0.8], earR: [0, 0, -0.8], tail: [0.4, 0, 0] }, 1, {}) },
+    death: { dur: 1, hold: true, fn: (t, c, H) => qdeath((H && H._hipY) || 0.22)(t, c || {}) },
+  });
+  QUAD.slash = QUAD.stab = QUAD.crush = QUAD.bite; QUAD.sprawl = QUAD.death;
 
   /* ---------- the animated character (shared by humanoids and beasts) ---------- */
   function character(root, joints, poses, extra) {
@@ -660,6 +685,117 @@ export function createModels(THREE, opts) {
     }
     H.muzzle = out => (out = out || new THREE.Vector3(), neck.getWorldPosition(out));
     Object.defineProperty(H, 'height', { get: () => (hipY + 0.42 * S) * root.scale.y });
+    H.play('idle'); H.update(0);
+    return H;
+  }
+
+  /* ---------- QUADRUPED (2026-10-19, the operator: "make a new base model for cats - that can be adapted for other assets later"): a supple
+     four-legged animal - a rounded body (chest and haunch), two-part legs with paws (the hind legs bent at the hock), a tail of segments
+     that curls, a rounded head with a muzzle, slit-pupilled eyes, whiskers and ears. Every proportion and the coat are parameters, so the
+     cat is one preset and a lynx, a fox, a hound or a lion is another (QUAD_PRESETS) or a part's own numbers (o.preset, then o over it):
+       size (1 = a house cat, ~0.25 m at the shoulder), len, girth, legLen, head, snout (0 flat .. 1 long), ears 'point'|'round'|'floppy'|
+       'none', earSize, earTufts, tailLen, tailThick, tailFluff, tailUp (the carriage, radians), tailCurl, color, belly, pattern 'solid'|
+       'tabby'|'tuxedo'|'points'|'calico'|'spots', mark (the pattern's colour), patch (calico's third), socks, eyes, pupil 'slit'|'round',
+       nose, inner (inside the ears), whiskers (a colour, or false), mane, ruff (cheek tufts), idle 'sit'|'stand'.
+     Joints as the beasts' (neck, tail, legFL..legBR, lift, dz, pitch, roll) and tail2, tail3, head, earL, earR, shinBL, shinBR; poses QUAD
+     (BEAST's for anything QUAD lacks): it sits when it stops, walks in a diagonal gait with its tail up, bounds when it runs, swipes a paw. */
+  const QUAD_PRESETS = {
+    cat: { size: 1, len: 1, girth: 1, legLen: 1, head: 1, snout: 0.3, ears: 'point', earSize: 1, tailLen: 1, tailThick: 1, tailFluff: 0, tailUp: 1.05, tailCurl: 0.14,
+      color: '#8a7a68', pattern: 'tabby', mark: '#4a3e34', eyes: '#c8cc48', pupil: 'slit', nose: '#c87a7a', inner: '#d89a94', whiskers: '#eeeae2', idle: 'sit' },
+  };
+  const ell = (rx, ry, rz, c, x, y, z) => { const m = ball(1, c, x, y, z, 1); m.scale.set(rx, ry, rz); return m; };
+  function quadruped(o0) {
+    const o = Object.assign({}, QUAD_PRESETS.cat, QUAD_PRESETS[o0.preset] || {}, o0);
+    const S = o.size, c = o.color, mk = o.mark || shade(c, 0.55), belly = o.belly || shade(c, 1.25), socks = o.socks || null;
+    const pt = o.pattern, pts = pt === 'points', tux = pt === 'tuxedo';
+    const L = 0.46 * o.len * S, Gh = 0.15 * o.girth * S, Gw = 0.13 * o.girth * S, legH = 0.22 * o.legLen * S, R = 0.075 * o.head * S;
+    const hipY = legH; const root = group(), roll = group(), body = group(); root.add(roll); roll.add(body); body.position.y = hipY;
+    const trunk = group(); body.add(trunk);
+    const torso = pts ? (o.belly || shade(c, 1.1)) : c;
+    trunk.add(ell(Gw * 0.53, Gh * 0.52, L * 0.33, torso, 0, Gh * 0.06, L * 0.18));   /* the chest */
+    trunk.add(ell(Gw * 0.5, Gh * 0.5, L * 0.32, torso, 0, Gh * 0.02, -L * 0.2));   /* the haunch */
+    trunk.add(ell(Gw * 0.4, Gh * 0.3, L * 0.42, tux || pts ? '#f2efe8' : belly, 0, -Gh * 0.24, 0));   /* the belly */
+    if (tux) trunk.add(ell(Gw * 0.36, Gh * 0.36, L * 0.12, '#f2efe8', 0, -Gh * 0.02, L * 0.42));   /* a white bib */
+    /* the body's cross-section at z (the bigger of chest and haunch): centre height and half-width / half-height there */
+    const xsec = z => { let best = { cy: 0, rx: 0, ry: 0 }; for (const [zc, rz, cy, rx, ry] of [[L * 0.18, L * 0.33, Gh * 0.06, Gw * 0.53, Gh * 0.52], [-L * 0.2, L * 0.32, Gh * 0.02, Gw * 0.5, Gh * 0.5]]) {
+      const k2 = 1 - Math.pow((z - zc) / rz, 2); if (k2 > 0 && Math.sqrt(k2) * ry > best.ry) best = { cy, rx: Math.sqrt(k2) * rx, ry: Math.sqrt(k2) * ry }; } return best; };
+    const onSkin = (z, th, r, col) => { const q = xsec(z); if (!q.ry) return; const R2 = Math.min(r, 0.55 * Math.min(q.rx, q.ry));   /* a patch: a cap sunk into the body at angle th from the top */
+      const m = ell(R2, R2 * 0.6, R2 * 1.3, col, Math.sin(th) * q.rx * 0.8, q.cy + Math.cos(th) * q.ry * 0.8, z); m.rotation.z = -th; trunk.add(m); };
+    if (pt === 'tabby') for (const f of [-0.44, -0.32, -0.2, -0.08, 0.04, 0.16, 0.28]) {   /* bands round the body, thin as paint */
+      const z = f * L, q = xsec(z); if (q.ry) trunk.add(ell(q.rx * 1.03, q.ry * 1.03, 0.012 * S, mk, 0, q.cy, z));
+    }
+    if (pt === 'calico') for (const [f, th, r, col] of [[-0.26, 0.5, 0.06, mk], [0.12, -0.6, 0.055, o.patch || '#2a2420'], [0.34, 0.3, 0.05, mk], [-0.02, -0.1, 0.045, o.patch || '#2a2420'], [-0.36, -0.9, 0.04, mk]]) onSkin(f * L, th, r * S * o.girth, col);
+    if (pt === 'spots') for (let i = 0; i < 16; i++) onSkin((-0.42 + 0.056 * i) * L, (i % 2 ? 1 : -1) * (0.35 + 0.35 * ((i * 7) % 3) / 2), 0.016 * S, mk);
+    /* the head: a neck at the chest's front, the head on it (neck nods the lot, head turns and tilts) */
+    const neck = group(0, Gh * 0.32, L * 0.4); trunk.add(neck);
+    neck.add(ell(Gw * 0.34, Gh * 0.36, L * 0.13, pts ? torso : c, 0, Gh * 0.08, L * 0.04));
+    const head = group(0, Gh * 0.42, L * 0.12); neck.add(head);
+    const face = pts ? mk : c;
+    head.add(ell(R, R * 0.86, R * 0.92, c, 0, 0, 0));   /* the skull */
+    if (pts) head.add(ell(R * 0.82, R * 0.7, R * 0.6, mk, 0, -R * 0.12, R * 0.42));   /* the dark mask */
+    const mzL = R * (0.26 + 0.6 * o.snout), mzC = tux ? '#f2efe8' : face;
+    head.add(ell(R * 0.5, R * 0.34, mzL, mzC, 0, -R * 0.3, R * 0.62 + mzL * 0.4));   /* the muzzle */
+    head.add(ell(R * 0.3, R * 0.2, R * 0.2, tux ? '#f2efe8' : shade(face, 1.15), 0, -R * 0.5, R * 0.6 + mzL * 0.3));   /* the chin */
+    const tipZ = R * 0.62 + mzL * 1.35;
+    head.add(box(R * 0.2, R * 0.12, R * 0.08, o.nose, 0, -R * 0.2, tipZ));   /* the nose */
+    for (const sd of [-1, 1]) {
+      const ey = group(sd * R * 0.4, R * 0.12, R * 0.78); head.add(ey); ey.rotation.y = sd * 0.35;
+      ey.add(box(R * 0.26, R * 0.2, R * 0.04, o.eyes, 0, 0, 0));
+      ey.add(box(o.pupil === 'round' ? R * 0.1 : R * 0.05, o.pupil === 'round' ? R * 0.1 : R * 0.19, R * 0.02, DARK, 0, 0, R * 0.025));
+      if (o.whiskers) for (const [a, dy] of [[0.18, 0], [0, -0.06], [-0.18, -0.12]]) {
+        const w = box(R * 0.9, 0.003 * S, 0.003 * S, o.whiskers, sd * R * 0.62, -R * 0.36 + dy * R, tipZ - R * 0.25); w.rotation.z = sd * a; w.rotation.y = -sd * 0.25; head.add(w);
+      }
+    }
+    if (pt === 'tabby') for (const x of [-0.22, 0, 0.22]) { const st = box(R * 0.08, R * 0.02, R * 0.36, mk, x * R, R * 0.84, R * 0.2); st.rotation.y = x * 1.6; head.add(st); }   /* the M on the brow */
+    const ears = [];
+    for (const sd of [-1, 1]) {
+      const eg = group(sd * R * 0.5, R * 0.58, -R * 0.05); head.add(eg); eg.rotation.z = -sd * 0.28; ears.push(eg);
+      const es = o.earSize, ec = pts ? mk : c;
+      if (o.ears === 'point') { eg.add(cone(R * 0.36 * es, R * 0.62 * es, ec, 0, R * 0.28 * es, 0, 3)); eg.add(cone(R * 0.22 * es, R * 0.42 * es, o.inner, 0, R * 0.22 * es, R * 0.07 * es, 3)); }
+      else if (o.ears === 'round') eg.add(ell(R * 0.26 * es, R * 0.26 * es, R * 0.1 * es, ec, 0, R * 0.12 * es, 0));
+      else if (o.ears === 'floppy') { const f = box(R * 0.32 * es, R * 0.7 * es, R * 0.08 * es, shade(ec, 0.85), sd * R * 0.12, -R * 0.28 * es, 0); f.rotation.z = sd * 0.5; eg.add(f); }
+      if (o.earTufts && o.ears === 'point') eg.add(cone(R * 0.05, R * 0.3, o.earTufts === true ? DARK : o.earTufts, 0, R * 0.7 * es, 0, 4));
+      if (o.ruff) { const rf = cone(R * 0.28, R * 0.6, o.ruff === true ? shade(c, 1.2) : o.ruff, sd * R * 0.75, -R * 0.45, R * 0.15, 4); rf.rotation.z = sd * 2.4; head.add(rf); }
+    }
+    if (o.mane) { neck.add(ell(Gw * 0.75, Gh * 0.8, L * 0.2, o.mane, 0, Gh * 0.35, L * 0.08)); head.add(ell(R * 1.35, R * 1.3, R * 0.7, o.mane, 0, 0, -R * 0.3)); }
+    /* the legs: shoulder / hip joint, upper leg, knee (the hind ones a hock, bent back), lower leg, paw */
+    const pawH = 0.024 * S, up = legH * 0.48;
+    function leg(x, z, hind) {
+      const g = group(x, -Gh * 0.08, z); trunk.add(g);
+      const a1 = hind ? -0.3 : 0, a2 = hind ? 0.55 : 0; g.rotation.x = a1;
+      const lc = socks || (pts ? mk : c);
+      g.add(hind ? ell(0.038 * S * o.girth, up * 0.6, 0.05 * S * o.girth, c, 0, -up * 0.45, 0) : cyl(0.026 * S, 0.022 * S, up, c, 0, -up / 2, 0, 7));
+      const knee = group(0, -up, 0); g.add(knee); knee.rotation.x = a2;
+      const lo = Math.max(0.03 * S, (legH - pawH - up * Math.cos(a1)) / Math.cos(a1 + a2));
+      knee.add(cyl(0.02 * S, 0.018 * S, lo, hind ? lc : lc, 0, -lo / 2, 0, 7));
+      const paw = group(0, -lo, 0); knee.add(paw); paw.rotation.x = -(a1 + a2);
+      paw.add(ell(0.026 * S, pawH * 0.6, 0.034 * S, socks || (pts ? mk : (tux ? '#f2efe8' : c)), 0, pawH * 0.35, 0.01 * S));
+      if (pt === 'tabby') g.add(box(0.05 * S, 0.008 * S, 0.012 * S, mk, 0, -up * 0.7, 0.02 * S));
+      return { g, knee };
+    }
+    const FL = leg(-Gw * 0.3, L * 0.3, false), FR = leg(Gw * 0.3, L * 0.3, false), BL = leg(-Gw * 0.32, -L * 0.3, true), BR = leg(Gw * 0.32, -L * 0.3, true);
+    /* the tail: N segments from the rump, each turned a little more (the curl); tail, tail2, tail3 are its 1st, 3rd and 5th */
+    const N = 6, segL = 0.38 * o.tailLen * S / N, t0 = 0.022 * o.tailThick * S, segs = [];
+    let parent = group(0, Gh * 0.22, -L * 0.48); trunk.add(parent); const tailRoot = parent;
+    for (let i = 0; i < N; i++) {
+      const sg = group(0, 0, i ? -segL : 0); parent.add(sg); sg.rotation.x = i ? o.tailCurl : o.tailUp; segs.push(sg);
+      const fl = 1 + o.tailFluff * Math.sin(Math.PI * (i + 0.5) / N), r0 = t0 * (1 - 0.45 * i / N) * fl, r1 = t0 * (1 - 0.45 * (i + 1) / N) * fl;
+      const dark = (pt === 'tabby' && i % 2) || (pts) || (i === N - 1 && (pt === 'tabby' || o.tailTip));
+      const m = cyl(r1, r0, segL * 1.08, dark ? (o.tailTip || mk) : c, 0, 0, -segL / 2, 7); m.rotation.x = -Math.PI / 2; sg.add(m);
+      parent = sg;
+    }
+    const rot = obj => ({ kind: 'rot', o: obj, r0: [obj.rotation.x, obj.rotation.y, obj.rotation.z] });
+    const joints = {
+      neck: rot(neck), head: rot(head), earL: rot(ears[0]), earR: rot(ears[1]), tail: rot(segs[0]), tail2: rot(segs[2]), tail3: rot(segs[4]),
+      legFL: rot(FL.g), legFR: rot(FR.g), legBL: rot(BL.g), legBR: rot(BR.g), shinBL: rot(BL.knee), shinBR: rot(BR.knee),
+      lift: { kind: 'y', o: body, p0: hipY }, dz: { kind: 'z', o: trunk, p0: 0 }, pitch: { kind: 'rx', o: trunk }, roll: { kind: 'rz', o: roll }
+    };
+    void tailRoot;
+    const H = character(root, joints, QUAD);
+    H._hipY = hipY; H._S = S; H._sit = { pitch: -0.5, drop: L * 0.3 * Math.sin(0.5) }; H._idle = o.idle;
+    H.setGear = () => H; H.setTool = () => H; H.attackAnim = () => 'bite';
+    H.muzzle = out => (out = out || new THREE.Vector3(), head.getWorldPosition(out));
+    Object.defineProperty(H, 'height', { get: () => (hipY + Gh * 0.8 + R * 1.6) * root.scale.y });
     H.play('idle'); H.update(0);
     return H;
   }

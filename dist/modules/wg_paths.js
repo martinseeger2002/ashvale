@@ -227,15 +227,17 @@
           if (!wetAt(along[i][0], along[i][1])) continue;
           let j = i; while (j + 1 < along.length && wetAt(along[j + 1][0], along[j + 1][1])) j++;
           const a2 = along[Math.max(0, i - 2)], b2 = along[Math.min(along.length - 1, j + 2)];
-          if (Math.hypot(along[j][0] - along[i][0], along[j][1] - along[i][1]) <= BRIDGE) {
-            segs.push(face, a2[0], a2[1], b2[0], b2[1], w0, 2, hb);
-            const L2 = Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) || 1, nx = -(b2[1] - a2[1]) / L2, ny = (b2[0] - a2[0]) / L2, mid = along[(i + j) >> 1];
-            for (const [q, off] of [[a2, w0 + 0.7], [b2, w0 + 0.7], [mid, Math.max(0.6, w0 - 0.2)]]) for (const side of [-1, 1])
-              BRIDGE_LIT.push({ k: 'torch', x: Math.floor(q[0] + nx * off * side), y: Math.floor(-(q[1] + ny * off * side)), w: 1, h: 1, face });
-            BRIDGE_LIT.push({ k: 'wbridge', x: Math.floor(mid[0]), y: Math.floor(-mid[1]), w: 1, h: 1, face, ax: along[i][0], ay: -along[i][1], bx: along[j][0], by: -along[j][1], hw: w0 });
-          }
+          if (Math.hypot(along[j][0] - along[i][0], along[j][1] - along[i][1]) <= BRIDGE) oneBridge(face, a2, b2, along[i], along[j], w0, hb, along[(i + j) >> 1]);
           i = j;
         }
+      }
+      /* one bridge: its path segment (kind 2) from bank a2 to bank b2, the water from p to q under it, torches at both banks and the crest */
+      function oneBridge(face, a2, b2, p, q, w0, hb, m) {
+        segs.push(face, a2[0], a2[1], b2[0], b2[1], w0, 2, hb);
+        const L2 = Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) || 1, nx = -(b2[1] - a2[1]) / L2, ny = (b2[0] - a2[0]) / L2, mid = m || [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+        for (const [c, off] of [[a2, w0 + 0.7], [b2, w0 + 0.7], [mid, Math.max(0.6, w0 - 0.2)]]) for (const side of [-1, 1])
+          BRIDGE_LIT.push({ k: 'torch', x: Math.floor(c[0] + nx * off * side), y: Math.floor(-(c[1] + ny * off * side)), w: 1, h: 1, face });
+        BRIDGE_LIT.push({ k: 'wbridge', x: Math.floor(mid[0]), y: Math.floor(-mid[1]), w: 1, h: 1, face, ax: p[0], ay: -p[1], bx: q[0], by: -q[1], hw: w0 });
       }
       function walk(pc, x, y, base, L, w0, kind, hv, depth) {
         let a = base;
@@ -486,7 +488,7 @@
                   if (inPiece(face, gx, gy)) continue;
                   ctx.foldInto(face, px, py, SB);
                   const s0 = ctx.landInto(SB[0], SB[1], SB[2], SB, tmp, false);
-                  if (s0.h < ctx.WATER + 0.2 || s0.peakS > 0.08) continue;
+                  if (s0.h < ctx.WATER + 0.2 || s0.peakS > 0.08 || s0.river >= 1.5) continue;   /* nor in a river (2026-10-19: fences stood in the mountain trail's river, beside its bridge) */
                   ROAD.push({ k: 'rail_fence', x: gx, y: gy, w: 1, h: 1, face, ry: +Math.atan2(ty, tx).toFixed(3), pal: s0.h > 75 ? 'snow' : 'temperate', dx: +(px - gx - 0.5).toFixed(2), dz: +(-py - gy - 0.5).toFixed(2) });
                 }
               }
@@ -528,6 +530,10 @@
         const face = tr.face == null ? (PIECES[0] ? PIECES[0].face : 0) : tr.face, P2 = (tr.pts || []).map(([vx, vy]) => [vx + 0.5, -(vy + 0.5)]), w0 = tr.w || 1.3;
         for (let q = 0; q + 1 < P2.length; q++) segs.push(face, P2[q][0], P2[q][1], P2[q + 1][0], P2[q + 1][1], w0, tr.road ? 3 : 0, -1e9);   /* tr.road: cobbles, like the roads between towns (2026-10-18: Thornwatch Camp's spur onto the Saltmere road) */
         if (P2.length > 1) layBridges(face, P2, w0, -1e9);
+        for (const [ax, ay, bx, by] of (tr.bridges || [])) {   /* a river the trail would ford, bridged as the roads are (tools/mountain/make_bridges.js, 2026-10-19) */
+          const p = [ax + 0.5, -(ay + 0.5)], q = [bx + 0.5, -(by + 0.5)], L = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1, ux = (q[0] - p[0]) / L, uy = (q[1] - p[1]) / L;
+          oneBridge(face, [p[0] - ux * 2, p[1] - uy * 2], [q[0] + ux * 2, q[1] + uy * 2], p, q, w0, -1e9);
+        }
       }
       SEG = segs;
       for (let k = 0; k < SEG.length / NS; k++) {

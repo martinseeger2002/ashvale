@@ -1,0 +1,1 @@
+{"ashvale3d":"module","name":"part.char.cat_tuxedo","api":1,"v":1,"data":{"ashvale3d":"part","api":1,"v":1,"id":"char.cat_tuxedo","kind":"char","role":"monster","name":"Tuxedo cat","body":"quadruped","quadruped":{"preset":"cat","color":"#1e1c1a","pattern":"tuxedo","eyes":"#c8cc48","nose":"#d08a8a"}}}

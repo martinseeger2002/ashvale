@@ -525,5 +525,37 @@
    "over": 10,
    "note": "a step onto open grass outside the towns finds a seed 1 time in `chance` (about one every few minutes of walking), of a crop no more than `over` levels above your Farming"
   }
+ },
+ "strays": {
+  "note": "2026-10-19: cats in every town (src/world.js strays) - one per `per` buildings, at most max, or the town's own number",
+  "per": 4,
+  "max": 3,
+  "kinds": [
+   "cat_alley",
+   "cat_ginger",
+   "cat_tuxedo",
+   "cat_black",
+   "cat_siamese",
+   "cat_mouser"
+  ],
+  "towns": {
+   "saltmere": 10,
+   "village": 3,
+   "castle": 4
+  },
+  "townKinds": {
+   "saltmere": [
+    "cat_alley",
+    "cat_black",
+    "cat_ginger",
+    "cat_alley",
+    "cat_mouser",
+    "cat_tuxedo",
+    "cat_black",
+    "cat_alley",
+    "cat_ginger",
+    "cat_mouser"
+   ]
+  }
  }
 }

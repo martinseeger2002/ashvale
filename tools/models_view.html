@@ -88,6 +88,11 @@ if (view === 'chars') {
   cam.position.set(0, 2.6 + rows * 0.62, 4.2 + rows * 0.62); cam.lookAt(0, 0, -1.5 + (rows - 1) / 2);
   const icons = document.createElement('div'); icons.style.cssText = 'position:fixed;right:6px;top:6px;width:280px;background:#2a2016;padding:4px;display:flex;flex-wrap:wrap;gap:2px';
   ids.forEach(id => { const u = M.icon(id, 64); const im = document.createElement('img'); im.src = u || ''; im.width = 32; im.height = 32; im.title = id; im.style.background = '#3e3022'; icons.appendChild(im); }); document.body.appendChild(icons);
+} else if (view === 'pose') {
+  /* monsters in one pose, a plain player for scale: #view=pose&only=cat_alley,cat_black&anim=walk[&t=0.3][&rot=0.9][&side=1] (2026-10-19, the quadruped) */
+  const ks = (Q.only || 'cat_alley').split(','), pl = M.humanoid(); place(pl, -1.2, 0);
+  ks.forEach((k, i) => { const H = M.monster(k); H.play(anim, { loop: true }); H.object.rotation.y = Q.rot != null ? +Q.rot : 0.9; place(H, (i % 4) * 0.8, -0.2 + Math.floor(i / 4) * 0.8); });
+  if (Q.side) { cam.position.set(4.2, 0.7, 0.2); cam.lookAt(0.8, 0.25, 0.2); } else { cam.position.set(1.2, 1.5, 3.4); cam.lookAt(1.0, 0.3, 0); }
 } else if (view === 'anim') {
   const list = ['idle', 'walk', 'run', 'slash', 'stab', 'crush', 'block', 'hit', 'death', 'bow', 'cast', 'chop', 'mine', 'fish', 'cook', 'pickup', 'eat'];
   list.forEach((a, i) => {

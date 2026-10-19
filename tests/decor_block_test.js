@@ -15,7 +15,7 @@ const isPath = (x, y) => WG.pathDist(C.face, x + OX + 0.5, -(y + OY + 0.5)) < 0.
 const all = WG.roadObjects(C.face, -1e9, -1e9, 1e9, 1e9).map(o => Object.assign({}, o, { x: o.x - OX, y: o.y - OY }));
 const fences = all.filter(o => o.k === 'rail_fence'), solid = all.filter(o => K[o.k] && K[o.k].block === 'tile');
 ok(fences.length > 50 && solid.length > 10, 'the world has fence sections (' + fences.length + ') and solid pieces (' + solid.length + ') to test');
-const OPEN = ['prayer_flags', 'flower_bed', 'iron_post', 'iron_gate'];   /* you walk under the flags, past the flowers and piers, through the open gate */
+const OPEN = ['prayer_flags', 'flower_bed', 'iron_post', 'iron_gate', 'laundry_line', 'rope_coil', 'net_pile', 'pirate_ship', 'pier_deck', 'pier_edge', 'pier_post', 'bollard', 'pier_ladder'];   /* and the piers' boards */   /* you walk under the flags, past the flowers and piers, through the open gate */
 ok(Object.keys(K).every(k => OPEN.includes(k) ? !K[k].block : !!K[k].block), 'every kind but ' + OPEN.join(', ') + ' stands in the way (data/decor.json block)');
 
 /* a boulder (or any tile piece) blocks its own tile */
