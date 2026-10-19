@@ -1,0 +1,55 @@
+{
+  "apprentice": {
+    "hat": "A dusty-blue cap that helps your first spells land.",
+    "top": "A robe top aiding spell success, softer than steel.",
+    "bottoms": "Robe bottoms that boost magic accuracy over plate."
+  },
+  "adept": {
+    "hat": "A teal hood sharpening spell hits while keeping warmth.",
+    "top": "Teal robes that guide spells better than metal armor.",
+    "bottoms": "Robe bottoms offering magic help with solid protection."
+  },
+  "mystic": {
+    "hat": "A deep purple cap ensuring your high-level spells land.",
+    "top": "Purple robes that boost spell accuracy without ruining casting.",
+    "bottoms": "Mystic bottoms that aid magic while offering steel-like defense."
+  },
+  "arcane": {
+    "hat": "A near-black hat with silver thread for perfect spell hits.",
+    "top": "Arcane robes that maximize magic success while resisting steel.",
+    "bottoms": "Silver-stitched bottoms aiding spells without blocking magic."
+  },
+  "circle_hat": {
+    "hat": "The tall blue Circle hat that sharpens spells for wizards."
+  },
+  "leather": {
+    "hat": "A soft coif that helps arrows fly true and keeps you warm.",
+    "top": "Leather body armor protecting better than robes but less than steel.",
+    "chaps": "Leather chaps shielding legs from arrows while aiding range.",
+    "boots": "Leather boots protecting feet and helping arrows land far."
+  },
+  "studded": {
+    "hat": "A studded coif offering steel-like defense for ranged attacks.",
+    "top": "Studded body armor protecting better than robes, less than plate.",
+    "chaps": "Iron-studded chaps that shield legs while aiding arrow accuracy.",
+    "boots": "Studded boots protecting feet and helping arrows fly true."
+  },
+  "wolfhide": {
+    "hat": "A grey wolf-pelt coif offering strong defense for archers.",
+    "top": "Wolfhide body armor protecting better than robes, less than steel.",
+    "chaps": "Wolf-pelt chaps shielding legs while aiding arrow precision.",
+    "boots": "Furry wolfhide boots protecting feet and helping arrows land."
+  },
+  "frosthide": {
+    "hat": "A pale hide coif offering tough defense for ranged combat.",
+    "top": "Frosthide body armor protecting better than robes, less than steel.",
+    "chaps": "Frost-goblin chaps shielding legs while aiding arrow accuracy.",
+    "boots": "Pale hide boots protecting feet and helping arrows fly true."
+  },
+  "dragonhide": {
+    "hat": "A red scaled coif offering near-plate defense for archers.",
+    "top": "Dragonhide body armor protecting better than robes, less than steel.",
+    "chaps": "Red scaled chaps shielding legs while aiding arrow precision.",
+    "boots": "Dragonhide boots protecting feet and helping arrows land far."
+  }
+}

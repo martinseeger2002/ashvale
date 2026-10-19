@@ -22,7 +22,11 @@
     "robe",
     "torch",
     "boots",
-    "robelegs"
+    "robelegs",
+    "hood",
+    "coif",
+    "hidebody",
+    "chaps"
    ],
    "cosmetic": [
     "hat",
@@ -84,7 +88,11 @@
    "armour/boots": "feet",
    "cosmetic/robe": "body",
    "jewellery/charm": "shield",
-   "armour/robelegs": "legs"
+   "armour/robelegs": "legs",
+   "armour/hood": "head",
+   "armour/coif": "head",
+   "armour/hidebody": "body",
+   "armour/chaps": "legs"
   },
   "traits": {
    "Prayer XP": [
@@ -94,7 +102,9 @@
    "Prayer": "prayer",
    "Prayer seconds": "prayerSec",
    "Prayer hold": "ppHold",
-   "Teleport from step": "teleFrom"
+   "Teleport from step": "teleFrom",
+   "Magic penalty": "magicPen",
+   "Ranged penalty": "rangedPen"
   },
   "limits": {
    "flat": {

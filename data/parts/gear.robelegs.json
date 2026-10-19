@@ -7,7 +7,11 @@
  "slot": "legs",
  "family": "cloth",
  "items": {
-  "wizard_cloak_bottoms": "#2c3488"
+  "wizard_cloak_bottoms": "#2c3488",
+  "apprentice_bottoms": "#6a7a9a",
+  "adept_bottoms": "#2f6a5a",
+  "mystic_bottoms": "#5a3a8a",
+  "arcane_bottoms": "#262634"
  },
  "shapes": [
   {
