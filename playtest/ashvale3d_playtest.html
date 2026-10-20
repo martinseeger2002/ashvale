@@ -18483,7 +18483,7 @@ POSSIBILITY OF SUCH DAMAGE. */
 .ash .golfp.club .cw{text-align:center;min-width:118px}
 .ash .golfp.club .cn{font:bold 14px Georgia,serif;color:#cfe9c0}.ash .golfp.club .cd{font-size:15px;color:#ffe08a;font-weight:bold}
 .ash .golfp.spin,.ash .golfp.putt{right:calc(8px + env(safe-area-inset-right,0px));bottom:calc(92px + env(safe-area-inset-bottom,0px));display:flex;gap:4px;padding:4px}
-.ash .golfp.spin button,.ash .golfp.putt button{font-size:12px;min-width:48px}.ash .golfp.putt button{min-width:64px}
+.ash .golfp.spin button,.ash .golfp.putt button{font-size:12px;min-width:48px}.ash .golfp.putt button{min-width:64px}.ash .golfp.putt .gtap{background:#2f7a3a;color:#fff;font-weight:bold}
 .ash .golfp button.on,.ash .golfp button:active{background:linear-gradient(#5d9a6a,#2e5b3f);color:#fff}
 .ash .golfp.aim{right:calc(8px + env(safe-area-inset-right,0px));bottom:calc(146px + env(safe-area-inset-bottom,0px));display:flex;gap:4px;padding:4px}
 .ash .golfp.aim button{min-width:52px;font-size:20px}
@@ -18534,7 +18534,8 @@ POSSIBILITY OF SUCH DAMAGE. */
       E.lie = part('lie'); E.club = part('club', '<button data-a="prev" aria-label="Longer club">&#9664;</button><div class="cw"><div class="cn"></div><div class="cd"></div></div><button data-a="next" aria-label="Shorter club">&#9654;</button>');
       E.aim = part('aim', '<button data-a="aimL" aria-label="Aim left">&#8630;</button><button data-a="aimR" aria-label="Aim right">&#8631;</button>');
       E.spin = part('spin', '<button data-s="top">Top</button><button data-s="none">None</button><button data-s="back">Back</button>');
-      E.putt = part('putt', '<button data-r="short">Short</button><button data-r="long">Long</button>');
+      E.putt = part('putt', '<button data-r="short">Short</button><button data-r="long">Long</button><button data-r="tap" class="gtap">Tap in</button>');
+      E.tap = E.putt.querySelector('.gtap');   /* within 10 ft of the pin: the ball is knocked in */
       E.swing = part('swing', '<div class="meter"><i class="sweet"></i><i class="fill"></i><i class="zero"></i><i class="max"></i><i class="pin"></i><i class="pow"></i><i class="gmark"></i><i class="lab"></i></div><button class="swingbtn">SWING</button>');
       E.waitMsg = part('waitm');   /* a group's turns: Waiting: <name> is playing */
       E.flashes = flashes = part('flashes');
@@ -18549,7 +18550,7 @@ POSSIBILITY OF SUCH DAMAGE. */
         for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(t, () => cb.aimHold(0));
       }
       E.spin.addEventListener('click', e => { const b = e.target.closest('button'); if (b) cb.spin(b.dataset.s); });
-      E.putt.addEventListener('click', e => { const b = e.target.closest('button'); if (b) cb.range(b.dataset.r); });
+      E.putt.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.r === 'tap') cb.tap(); else cb.range(b.dataset.r); });
       E.tools.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.a === 'card') cb.card(); else cb.quit(); });
       return E;
     }
@@ -25254,7 +25255,19 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
     const r = roll(C, pos, vel, s.pin, path, t0);
     return finish(C, b, r, path, D, s);
   }
+  /* 2026-10-20 ("If you're less than 10 feet from the pin, there should be a tap in putt button"): inside TAP_IN
+     (the feet the HUD shows: metres x course.yd x 3) on the green or the fringe a tap-in rolls straight in and drops;
+     anything farther is an ordinary putt */
+  const TAP_IN = 10;   /* feet */
+  function canTap(C, b, pin) { return !!pin && Math.hypot(pin[0] - b.x, pin[1] - b.y) * (C.yd || 4) * 3 <= TAP_IN && 'ge'.includes(C.surf(b.x, b.y)); }
+  function tapIn(C, b, s) {
+    const pin = s.pin, d = Math.hypot(pin[0] - b.x, pin[1] - b.y), T = 0.5 + d * 0.6, path = [];
+    for (let k = 0; k <= 10; k++) { const u = k / 10, e = u * (2 - u), x = b.x + (pin[0] - b.x) * e, y = b.y + (pin[1] - b.y) * e; path.push([x, y, C.height(x, y), u * T]); }
+    const h0 = C.height(pin[0], pin[1]); path.push([pin[0], pin[1], h0 - 0.05, T + 0.1], [pin[0], pin[1], h0 - 0.1, T + 0.22]);
+    return finish(C, b, { x: pin[0], y: pin[1], kind: null, holed: true, lip: false, dry: [pin[0], pin[1]] }, path, 0, s);
+  }
   function putt(C, b, s) {
+    if (s.tap && canTap(C, b, s.pin)) return tapIn(C, b, s);
     const a = s.aim + (s.impact || 0) * 0.045, set = SETS[s.set] || SETS.standard;
     const v0 = Math.sqrt(2 * DECEL.g * (PUTT[s.range] || PUTT_MAX) * Math.max(0, Math.min(1, s.power))) * (1 - 0.06 * Math.min(2, Math.abs(s.impact || 0))) * (set.dist ** 0.15);
     const path = [[b.x, b.y, C.height(b.x, b.y), 0]];
@@ -25342,7 +25355,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
     return { '-3': 'ALBATROSS', '-2': 'EAGLE', '-1': 'BIRDIE', 0: 'PAR', 1: 'BOGEY', 2: 'DOUBLE BOGEY', 3: 'TRIPLE BOGEY' }[d] || (d > 0 ? '+' + d : String(d));
   }
 
-  const API = { CLUBS, SETS, LIE, DECEL, CUP, PUTT_MAX, PUTT, POWER_BONUS, puttRange, MAX_STROKES, makeCourse, shot, lieOf, windFor, pickClub, aimPoint, scoreName, treeShape };
+  const API = { CLUBS, SETS, LIE, DECEL, CUP, PUTT_MAX, PUTT, POWER_BONUS, puttRange, TAP_IN, canTap, MAX_STROKES, makeCourse, shot, lieOf, windFor, pickClub, aimPoint, scoreName, treeShape };
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('golfrules', { api: 1, v: 1, needs: {} }, () => API);
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -25545,7 +25558,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       if (ST.buy > 0) K.send({ c: 'golfstake', s: seat(ST.sn), n: ST.buy });
       MEK = MEK || kit();
       K.cam.save = { yaw: K.cam.yaw, pitch: K.cam.pitch, dist: K.cam.dist }; K.cam.mode = 'golf';
-      E = K.hud.golfOpen({ press, club: cycleClub, aimHold: d => { aimHold = d; }, spin: s => { if (canAim()) { ST.spin = s; hudAll(); } }, range: r => { if (canAim()) { ST.range = r; hudAll(); } }, card: () => showCard(), quit: () => askQuit() });
+      E = K.hud.golfOpen({ press, club: cycleClub, aimHold: d => { aimHold = d; }, spin: s => { if (canAim()) { ST.spin = s; hudAll(); } }, range: r => { if (canAim()) { ST.range = r; hudAll(); } }, tap: tapIn, card: () => showCard(), quit: () => askQuit() });
       if (K.PET && K.PET.away) K.PET.away(true);
       startHole(0);
     }
@@ -25564,7 +25577,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       const h = hole(); ST.phase = 'aim'; ST.meter = 0;
       ST.club = R.pickClub(C, ST.ball, h.pin, ST.set);
       ST.aim = Math.atan2(h.pin[1] - ST.ball.y, h.pin[0] - ST.ball.x);   /* the operator: every stroke starts facing the pin (the dogleg turn it used to pick could point back at the tee) */
-      ST.spin = 'none'; ST.range = R.puttRange(C, ST.ball, h.pin); if (first) ST.camYaw = ST.aim;
+      ST.spin = 'none'; ST.tap = 0; ST.range = R.puttRange(C, ST.ball, h.pin); if (first) ST.camYaw = ST.aim;
       placeBall(MEK, ST.ball.x, ST.ball.y, null, h.pin); MEK.trail.visible = false; hudAll();
     }
     function setPower(m) {
@@ -25587,6 +25600,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       if (ST.phase === 'rise') { setPower(ST.meter); ST.phase = 'fall'; ST.fallAt = t; lastPress = t; presses++; return; }
       if (ST.phase === 'fall') { if (t - ST.fallAt < 120) return; lastPress = t; presses++; ST.impact = -ST.meter / WIN(); goSwing(); }
     }
+    function tapIn() {   /* the operator: within 10 ft a Tap in button knocks the ball in (golfrules canTap/tapIn), one stroke */
+      if (!ST || ST.phase !== 'aim' || !myTurn() || K.hud.golfCardOpen() || !R.canTap(C, ST.ball, hole().pin)) return;
+      ST.club = 'PT'; ST.tap = 1; ST.power = 0.3; ST.impact = 0; ST.stop = 30; ST.aim = Math.atan2(hole().pin[1] - ST.ball.y, hole().pin[0] - ST.ball.x); goSwing();
+    }
     function goSwing() { ST.phase = 'go'; ST.goAt = performance.now(); if (K.playOnce) K.playOnce(K.myEnt, clubObj().id === 'PT' ? 'putt' : 'golfswing'); }
     function stepMeter(dt) {
       const sweep = R.SETS[ST.set].sweep;
@@ -25598,6 +25615,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       if (!ST || ST.phase !== 'go') return;
       const h = hole(), c = clubObj();
       const inp = { club: ST.club, aim: +ST.aim.toFixed(5), power: +ST.power.toFixed(5), impact: +ST.impact.toFixed(5), spin: ST.spin, range: ST.range, set: ST.set };
+      if (ST.tap) inp.tap = 1;
       const res = R.shot(C, ST.ball, Object.assign({ wind: c.id === 'PT' ? [0, 0] : ST.wind, pin: h.pin }, inp));
       ST.strokes += 1; ST.fly = res; ST.flyT = 0; ST.phase = 'fly'; ST.from = { x: ST.ball.x, y: ST.ball.y };
       ST.sw++; ST.shot = { fr: [+ST.from.x.toFixed(3), +ST.from.y.toFixed(3)], i: inp, at: [+res.at[0].toFixed(3), +res.at[1].toFixed(3)], ho: res.holed ? 1 : 0, n: ST.hole };
@@ -25858,6 +25876,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       for (const b of E.spin.querySelectorAll('button')) b.classList.toggle('on', b.dataset.s === ST.spin);
       for (const b of E.putt.querySelectorAll('button')) b.classList.toggle('on', b.dataset.r === ST.range);
       E.spin.style.display = c.id === 'PT' ? 'none' : ''; E.putt.style.display = c.id === 'PT' ? '' : 'none';
+      if (E.tap) E.tap.style.display = c.id === 'PT' && R.canTap(C, ST.ball, h.pin) ? '' : 'none';
       E.lab.textContent = c.id === 'PT' ? ft(R.PUTT[ST.range]) + ' ft' : yd(reachNow()) + ' yd';
       drawMap();
     }

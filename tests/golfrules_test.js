@@ -51,4 +51,10 @@ const pt = R.shot(C, p0, { club: 'PT', aim: Math.PI, power: Math.sqrt(1.4 / R.PU
 console.log('short putt ends', pt.end.map(v => v.toFixed(2)), 'holed', pt.holed);
 const hard = R.shot(C, p0, { club: 'PT', aim: Math.PI, power: 1, impact: 0, spin: 'none', set: 'standard', pin: g.pin });
 ok(!hard.holed, 'a full-power putt from 1.2 m does not drop (too fast)');
+// The operator: a Tap in inside 10 ft (as the HUD shows feet: metres x yd x 3) drops for one stroke; farther it is a plain putt
+const ftm = 1 / (C.yd * 3), near = { x: g.pin[0] + 9.5 * ftm, y: g.pin[1] }, far = { x: g.pin[0] + 10.5 * ftm, y: g.pin[1] };
+const tp = s => R.shot(C, s, { club: 'PT', tap: 1, aim: Math.PI, power: 0.3, impact: 0, spin: 'none', set: 'standard', pin: g.pin });
+ok(R.canTap(C, near, g.pin) && tp(near).holed && tp(near).penalty === 0, 'a tap-in from 9.5 ft drops');
+ok(!R.canTap(C, far, g.pin) && !tp(far).holed, 'no tap-in from 10.5 ft (a plain putt instead)');
+ok(JSON.stringify(tp(near)) === JSON.stringify(tp(near)), 'a tap-in replays the same on every game');
 process.exit(fails ? 1 : 0);

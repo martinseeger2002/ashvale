@@ -15,7 +15,8 @@
 - Saves from the old one-page playtest builds (before the launcher) do not carry over.
 - Fixes are small: one or two module inscriptions, not a whole new game.
 
-## In the current release (v0.8.165)
+## In the current release (v0.8.166)
+- 0.8.166 (2026-10-20): GOLF - a Tap in button beside Short and Long when your ball is on the green within 10 feet of the pin: press it and the ball goes in for one stroke.
 - 0.8.165 (2026-10-20): GOLF FIX - on a long putt the hole (the black cup and its white lip) shows on the green.
 - 0.8.164 (2026-10-20): GOLF FIX - the swing meter's marker now shows on the way back after the power tap; tap in the green
   strike zone to hit straight.

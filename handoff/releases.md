@@ -1273,3 +1273,13 @@ the walk here feature".
   little black hole to be visible"). Now, at the hole you putt at (on the green or holding the putter), the cup and lip draw with
   depthTest off (the course's polygon-offset surface hid them at a low look) and scale 1-3x with distance/5 m; ball renderOrder 6.
 - Module: engolf. golf_pw ALL OK, golf_tap_pw ALL OK. Post chain/post_v08165.txt.
+
+## 0.8.166 - 2026-10-20 (Claude): golf Tap in button - RELEASED (v193 45090cf9)
+- the operator: "If you're less than 10 feet from the pin, there should be a tap in putt button". A "Tap in" button beside
+  Short/Long, shown with the putter on the green/fringe within 10 ft as the HUD shows feet (metres x yd x 3 = ~0.83 m);
+  one stroke, the ball rolls straight in. Shot input carries tap:1; golfrules canTap/tapIn (TAP_IN = 10 ft) replays
+  the same on every game.
+- Modules: hudgolf, golfrules, engolf. Branch claude/golf-tapin, merge f696cda, dist 0dc17f0.
+- Tests: golfrules_test (3 tap checks), golf_pw (Ben's tap-in in a group seen by Ann; Cal 11 ft no button / 9.6 ft
+  button, touch tap holes) and golf_tap_pw ALL OK headed (headless SwiftShader is too slow for golf_pw: false FAILs).
+  check_live v193 no console errors. Card listing_v08166 + listing_ziibiing_v08166, note chain/post_v08166.txt.

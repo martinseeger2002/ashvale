@@ -128,7 +128,19 @@
     const r = roll(C, pos, vel, s.pin, path, t0);
     return finish(C, b, r, path, D, s);
   }
+  /* 2026-10-20 ("If you're less than 10 feet from the pin, there should be a tap in putt button"): inside TAP_IN
+     (the feet the HUD shows: metres x course.yd x 3) on the green or the fringe a tap-in rolls straight in and drops;
+     anything farther is an ordinary putt */
+  const TAP_IN = 10;   /* feet */
+  function canTap(C, b, pin) { return !!pin && Math.hypot(pin[0] - b.x, pin[1] - b.y) * (C.yd || 4) * 3 <= TAP_IN && 'ge'.includes(C.surf(b.x, b.y)); }
+  function tapIn(C, b, s) {
+    const pin = s.pin, d = Math.hypot(pin[0] - b.x, pin[1] - b.y), T = 0.5 + d * 0.6, path = [];
+    for (let k = 0; k <= 10; k++) { const u = k / 10, e = u * (2 - u), x = b.x + (pin[0] - b.x) * e, y = b.y + (pin[1] - b.y) * e; path.push([x, y, C.height(x, y), u * T]); }
+    const h0 = C.height(pin[0], pin[1]); path.push([pin[0], pin[1], h0 - 0.05, T + 0.1], [pin[0], pin[1], h0 - 0.1, T + 0.22]);
+    return finish(C, b, { x: pin[0], y: pin[1], kind: null, holed: true, lip: false, dry: [pin[0], pin[1]] }, path, 0, s);
+  }
   function putt(C, b, s) {
+    if (s.tap && canTap(C, b, s.pin)) return tapIn(C, b, s);
     const a = s.aim + (s.impact || 0) * 0.045, set = SETS[s.set] || SETS.standard;
     const v0 = Math.sqrt(2 * DECEL.g * (PUTT[s.range] || PUTT_MAX) * Math.max(0, Math.min(1, s.power))) * (1 - 0.06 * Math.min(2, Math.abs(s.impact || 0))) * (set.dist ** 0.15);
     const path = [[b.x, b.y, C.height(b.x, b.y), 0]];
@@ -216,7 +228,7 @@
     return { '-3': 'ALBATROSS', '-2': 'EAGLE', '-1': 'BIRDIE', 0: 'PAR', 1: 'BOGEY', 2: 'DOUBLE BOGEY', 3: 'TRIPLE BOGEY' }[d] || (d > 0 ? '+' + d : String(d));
   }
 
-  const API = { CLUBS, SETS, LIE, DECEL, CUP, PUTT_MAX, PUTT, POWER_BONUS, puttRange, MAX_STROKES, makeCourse, shot, lieOf, windFor, pickClub, aimPoint, scoreName, treeShape };
+  const API = { CLUBS, SETS, LIE, DECEL, CUP, PUTT_MAX, PUTT, POWER_BONUS, puttRange, TAP_IN, canTap, MAX_STROKES, makeCourse, shot, lieOf, windFor, pickClub, aimPoint, scoreName, treeShape };
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('golfrules', { api: 1, v: 1, needs: {} }, () => API);
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

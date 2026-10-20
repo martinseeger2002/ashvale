@@ -183,7 +183,7 @@
       if (ST.buy > 0) K.send({ c: 'golfstake', s: seat(ST.sn), n: ST.buy });
       MEK = MEK || kit();
       K.cam.save = { yaw: K.cam.yaw, pitch: K.cam.pitch, dist: K.cam.dist }; K.cam.mode = 'golf';
-      E = K.hud.golfOpen({ press, club: cycleClub, aimHold: d => { aimHold = d; }, spin: s => { if (canAim()) { ST.spin = s; hudAll(); } }, range: r => { if (canAim()) { ST.range = r; hudAll(); } }, card: () => showCard(), quit: () => askQuit() });
+      E = K.hud.golfOpen({ press, club: cycleClub, aimHold: d => { aimHold = d; }, spin: s => { if (canAim()) { ST.spin = s; hudAll(); } }, range: r => { if (canAim()) { ST.range = r; hudAll(); } }, tap: tapIn, card: () => showCard(), quit: () => askQuit() });
       if (K.PET && K.PET.away) K.PET.away(true);
       startHole(0);
     }
@@ -202,7 +202,7 @@
       const h = hole(); ST.phase = 'aim'; ST.meter = 0;
       ST.club = R.pickClub(C, ST.ball, h.pin, ST.set);
       ST.aim = Math.atan2(h.pin[1] - ST.ball.y, h.pin[0] - ST.ball.x);   /* the operator: every stroke starts facing the pin (the dogleg turn it used to pick could point back at the tee) */
-      ST.spin = 'none'; ST.range = R.puttRange(C, ST.ball, h.pin); if (first) ST.camYaw = ST.aim;
+      ST.spin = 'none'; ST.tap = 0; ST.range = R.puttRange(C, ST.ball, h.pin); if (first) ST.camYaw = ST.aim;
       placeBall(MEK, ST.ball.x, ST.ball.y, null, h.pin); MEK.trail.visible = false; hudAll();
     }
     function setPower(m) {
@@ -225,6 +225,10 @@
       if (ST.phase === 'rise') { setPower(ST.meter); ST.phase = 'fall'; ST.fallAt = t; lastPress = t; presses++; return; }
       if (ST.phase === 'fall') { if (t - ST.fallAt < 120) return; lastPress = t; presses++; ST.impact = -ST.meter / WIN(); goSwing(); }
     }
+    function tapIn() {   /* the operator: within 10 ft a Tap in button knocks the ball in (golfrules canTap/tapIn), one stroke */
+      if (!ST || ST.phase !== 'aim' || !myTurn() || K.hud.golfCardOpen() || !R.canTap(C, ST.ball, hole().pin)) return;
+      ST.club = 'PT'; ST.tap = 1; ST.power = 0.3; ST.impact = 0; ST.stop = 30; ST.aim = Math.atan2(hole().pin[1] - ST.ball.y, hole().pin[0] - ST.ball.x); goSwing();
+    }
     function goSwing() { ST.phase = 'go'; ST.goAt = performance.now(); if (K.playOnce) K.playOnce(K.myEnt, clubObj().id === 'PT' ? 'putt' : 'golfswing'); }
     function stepMeter(dt) {
       const sweep = R.SETS[ST.set].sweep;
@@ -236,6 +240,7 @@
       if (!ST || ST.phase !== 'go') return;
       const h = hole(), c = clubObj();
       const inp = { club: ST.club, aim: +ST.aim.toFixed(5), power: +ST.power.toFixed(5), impact: +ST.impact.toFixed(5), spin: ST.spin, range: ST.range, set: ST.set };
+      if (ST.tap) inp.tap = 1;
       const res = R.shot(C, ST.ball, Object.assign({ wind: c.id === 'PT' ? [0, 0] : ST.wind, pin: h.pin }, inp));
       ST.strokes += 1; ST.fly = res; ST.flyT = 0; ST.phase = 'fly'; ST.from = { x: ST.ball.x, y: ST.ball.y };
       ST.sw++; ST.shot = { fr: [+ST.from.x.toFixed(3), +ST.from.y.toFixed(3)], i: inp, at: [+res.at[0].toFixed(3), +res.at[1].toFixed(3)], ho: res.holed ? 1 : 0, n: ST.hole };
@@ -496,6 +501,7 @@
       for (const b of E.spin.querySelectorAll('button')) b.classList.toggle('on', b.dataset.s === ST.spin);
       for (const b of E.putt.querySelectorAll('button')) b.classList.toggle('on', b.dataset.r === ST.range);
       E.spin.style.display = c.id === 'PT' ? 'none' : ''; E.putt.style.display = c.id === 'PT' ? '' : 'none';
+      if (E.tap) E.tap.style.display = c.id === 'PT' && R.canTap(C, ST.ball, h.pin) ? '' : 'none';
       E.lab.textContent = c.id === 'PT' ? ft(R.PUTT[ST.range]) + ' ft' : yd(reachNow()) + ' yd';
       drawMap();
     }

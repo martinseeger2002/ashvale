@@ -32,6 +32,7 @@ ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshade
 GS = 'ASH.golf()._state()'
 COINS = "ASH.me.inv.reduce((s, q) => s + (q && q.id === 'coins' ? q.n : 0), 0)"
 def st(pg): return pg.evaluate(GS)
+TAPVIS = "(b => !!b && getComputedStyle(b).display !== 'none' && getComputedStyle(b.parentNode).display !== 'none')(document.querySelector('.golfp.putt .gtap'))"
 def swing3(pg, how, label):
     """the three presses through the meter: start, power high on the meter, strike when the marker is back near the line"""
     def go():
@@ -142,13 +143,13 @@ with sync_playwright() as p:
     # both balls onto the green, Ann the farther: then putt out in turns
     pin = st(ann)['pin']
     if len(st(ann)['card']) == 0 and len(st(ben)['card']) == 0:
-        for pg, d in ((ann, 2.6), (ben, 1.4)):
+        for pg, d in ((ann, 2.6), (ben, 0.6)):   # Ben 7 ft (1 m shows as 12 ft): inside the tap-in
             ok = pg.evaluate("""d => { const s = ASH.golf()._state(), p = s.pin;
               for (let a = 0; a < 6.3; a += 0.3) { const x = p[0] + Math.cos(a) * d, y = p[1] + Math.sin(a) * d; ASH.golf()._put(x, y); if (ASH.golf()._state().club === 'PT') return true; }
               return false; }""", d)
             check(ok, 'ball put on the green %.1f m from the pin' % d)
         check(wait(ann, GS + ".turn === %d" % A, 10) and wait(ben, GS + ".turn === %d" % A, 10), 'on the green: Ann is farther and putts first on both games')
-    shots = 0; agree = True; farOk = True
+    shots = 0; agree = True; farOk = True; tapped = False
     while shots < 24:
         sa, sb = st(ann), st(ben)
         if len(sa['card']) > 0 and len(sb['card']) > 0: break
@@ -160,6 +161,13 @@ with sync_playwright() as p:
         exp = far()
         if exp != t: farOk = False; print('   turn', t, 'expected the farther', exp)
         pg = ann if t == A else ben; k0 = st(pg)['k']
+        if t == B and not tapped:   # the operator: inside 10 ft the Tap in button knocks it in
+            tapped = True; s0 = st(ben)['strokes']
+            check(ben.evaluate(TAPVIS), 'Ben (%.1f ft) has a Tap in button' % (12 * math.hypot(pin[0] - st(ben)['ball']['x'], pin[1] - st(ben)['ball']['y'])))
+            ben.click('.golfp.putt .gtap'); shots += 1
+            check(wait(ben, "(s => s.k === %d && s.phase === 'done')(%s)" % (k0 + 1, GS), 15) and st(ben)['card'] == [s0 + 1], 'the tap-in drops: one stroke (card %s)' % st(ben)['card'])
+            check(wait(ann, "(s => (s.cards[%d] || []).length === 1)(%s)" % (B, GS), 10), "Ann's game sees Ben's tap-in holed")
+            time.sleep(0.4); continue
         d = math.hypot(pin[0] - st(pg)['ball']['x'], pin[1] - st(pg)['ball']['y'])
         pw = min(1, math.sqrt(max(0.05, d * 1.15) / (6 if st(pg)['club'] == 'PT' and d < 4.5 else 22)))
         if not pg.evaluate("o => ASH.golf()._shoot(o)", {'atPin': True, 'power': pw}): time.sleep(0.3); continue
@@ -207,6 +215,20 @@ with sync_playwright() as p:
     check(wait(cal, GS + ".phase === 'fly'", 6), 'touch: the ball flies')
     if os.environ.get('SHOTS'):
         os.makedirs(os.environ['SHOTS'], exist_ok=True); time.sleep(2); cal.screenshot(path=os.path.join(os.environ['SHOTS'], 'golf_tee.png'))
+    # the tap-in: no button beyond 10 ft, a button inside it, and it drops for one stroke
+    wait(cal, GS + ".phase === 'aim' || " + GS + ".phase === 'done'", 15)
+    def put_at(d):
+        return cal.evaluate("""d => { const s = ASH.golf()._state(), p = s.pin;
+          for (let a = 0; a < 6.3; a += 0.3) { const x = p[0] + Math.cos(a) * d, y = p[1] + Math.sin(a) * d; ASH.golf()._put(x, y); if (ASH.golf()._state().club === 'PT') return true; }
+          return false; }""", d)
+    if st(cal)['phase'] == 'aim':
+        check(put_at(0.9) and not cal.evaluate(TAPVIS), 'Cal 11 ft from the pin: no Tap in button')
+        check(put_at(0.8) and cal.evaluate(TAPVIS), 'Cal 9.6 ft from the pin: a Tap in button')
+        if os.environ.get('SHOTS'): time.sleep(0.6); cal.screenshot(path=os.path.join(os.environ['SHOTS'], 'golf_tapin.png'))
+        s0 = st(cal)['strokes']; bt = cal.evaluate("(r => [r.left + r.width / 2, r.top + r.height / 2])(document.querySelector('.golfp.putt .gtap').getBoundingClientRect())")
+        cal.touchscreen.tap(bt[0], bt[1])
+        check(wait(cal, GS + ".phase === 'done'", 15) and st(cal)['card'][:1] == [s0 + 1], 'touch: the tap-in drops for one stroke (card %s)' % st(cal)['card'])
+    else: check(False, 'Cal back at aim for the tap-in check (phase %s)' % st(cal)['phase'])
     cal.evaluate("ASH.golf()._quit()")
     check(wait(cal, "!ASH.golf()._state() && !document.querySelector('.lay.golf')", 10), 'leaving the round: the HUD is back')
     check(not errs, 'no page errors ' + str(errs[:3]))
