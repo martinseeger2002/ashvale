@@ -308,7 +308,7 @@
       if (lv(p, 'prayer') < q.level) { msg(p, 'You need a Prayer level of ' + q.level + ' to use ' + q.name + '.', 'warn'); return; }
       if ((p.pp | 0) <= 0) { msg(p, 'You need to recharge your Prayer at an altar.', 'warn'); return; }
       for (const a in p.pray) { const o = PRAYERS[a]; if (!o || (q.x || []).indexOf(o.g) >= 0) delete p.pray[a]; }
-      p.pray[id] = 1; ev({ e: 'pray', p: p.id, id, on: 1 });
+      p.pray[id] = 1; ev({ e: 'pray', p: p.id, id, on: 1 }); creditDo(p, 'pray');
       if (q.protect === 'magic') clearMagicFx(p, 'The prayer breaks the shadow magic on you.');
     }
     function prayerTick(p) {
@@ -324,7 +324,7 @@
       p.buryT = S.t + (PRAY.buryTicks || 2); p.act = null; p.path = []; p.skilling = null;
       if (s.n > 1) s.n--; else p.inv[slot] = null;
       msg(p, 'You bury the ' + d.name.toLowerCase() + '.');
-      ev({ e: 'bury', p: p.id, id: s.id }); ev({ e: 'inv', p: p.id });
+      ev({ e: 'bury', p: p.id, id: s.id }); ev({ e: 'inv', p: p.id }); creditDo(p, 'bury');
       addXp(p, 'prayer', d.buryXp);
     }
     function bonuses(p) {
@@ -420,7 +420,7 @@
       for (const [id2, n] of ((homeOf(p) || {}).inv || RU.start.inv)) addItem(p, id2, n);
       if (save) importInto(p, save);
       if (save) placeFrom(p, save);
-      else if (TUT && home === TUT.home && opts.tutorial) { p.x = TUT.spawn[0]; p.y = TUT.spawn[1]; p.tut = 1; }   /* TUTORIAL: a new character starts on the island (the game turns it on: opts.tutorial) */
+      else if (TUT && home === TUT.home && opts.tutorial) { p.x = TUT.spawn[0]; p.y = TUT.spawn[1]; p.tut = 1; if (D.quests.quests[TUT.quest]) p.quests[TUT.quest] = { step: 1, n: 0 }; }   /* begun at once: no offer to accept */   /* TUTORIAL: a new character starts on the island (the game turns it on: opts.tutorial) */
       p.hp = Math.min(p.hp, maxHp(p)); if (!(p.hp > 0)) p.hp = maxHp(p);   /* also a save that kept NaN (stored as null) */
       p.pray = {}; p.pd = 0; p.pp = save && Number.isInteger(save.pp) ? Math.max(0, Math.min(maxPp(p), save.pp)) : maxPp(p);
       return p;
@@ -910,6 +910,7 @@
         case 'use': useItem(p, c.slot | 0); break;
         case 'craft': { const n = M.npcs.find(q => q.id === c.npc), L = n && (Array.isArray(n.craft) ? n.craft : n.craft ? [n.craft] : []), k = L && L[c.i | 0];
           if (k && !p.dead && cheb(p.x, p.y, n.x, n.y) <= 3 && (!k.after || questFinished(p, k.after))) orderCraft(p, n, k); break; }
+        case 'tutdo': { const k = String(c.k || ''); if (((RU.tutorial || {}).clientDos || []).indexOf(k) >= 0) creditDo(p, k); break; }   /* the tutorial's client-seen actions */
         case 'farm': { const o = patchAt(c.x | 0, c.y | 0); if (o && FARM && !p.dead) { p.act = { k: 'farm', x: o.x, y: o.y, op: String(c.op || 'inspect'), seed: c.seed ? String(c.seed) : null }; p.fT = 0; p.skilling = null; closeShop(p); } break; }   /* FARMING */
         case 'trap': { const t = (p.traps || []).find(q => q.x === (c.x | 0) && q.y === (c.y | 0)); if (t && !p.dead) { p.act = { k: 'trap', x: t.x, y: t.y, up: c.up ? 1 : 0 }; p.skilling = null; closeShop(p); } break; }
         case 'arms': { const has = p.inv.concat(Object.values(p.eq || {})).some(s => s && IT[s.id] && IT[s.id].arms); if (!has) { msg(p, 'You need the Lake Castle stone to call the guard.', 'warn'); break; } callToArms(p, !!c.on); break; }
@@ -1098,7 +1099,7 @@
         if (fell) msg(p, 'A hawk carries little: ' + fell + ' thing' + (fell === 1 ? '' : 's') + ' from your lower slots fell to the ground.', 'warn');
         ev({ e: 'inv', p: p.id }); burdenCheck(p);
       }
-      ev({ e: 'equip', p: p.id, id: s.id });
+      ev({ e: 'equip', p: p.id, id: s.id }); creditDo(p, 'equip');
     }
     function takeOff(p, k) {   /* into the chest, not the bag: the piece leaves what you wear */
       const e = p.eq[k]; if (!e) return null;
@@ -1121,7 +1122,7 @@
       if (d.energy) p.energy = Math.min(10000, (p.energy || 0) + d.energy);   /* maple candy: a run's worth of energy */
       p.atk = Math.max(p.atk, 0) + 3;
       msg(p, (d.drink ? 'You drink the ' : 'You eat the ') + d.name.toLowerCase() + '.' + (p.hp > before ? ' It heals some health.' : '') + ((p.pp | 0) > beforeP ? ' It restores some Prayer.' : ''));
-      ev({ e: 'eat', p: p.id, id: s.id, heal: p.hp - before });
+      ev({ e: 'eat', p: p.id, id: s.id, heal: p.hp - before }); creditDo(p, 'eat');
       if (d.cures === 'poison') {
         p.cd = p.cd || {}; p.cd.antidote = S.t + ANTIDOTE_TICKS;   /* three minutes, saved with the other cooldowns */
         if (p.poison) curePoison(p, 'The antidote burns going down. The poison is gone, and it will not take for three minutes.');
@@ -1140,7 +1141,7 @@
         if (!canAdd(p, item, 1) && !(lastCoins && !d.stack)) { msg(p, 'You have no room for that.', 'warn'); break; }
         removeItem(p, 'coins', price); addItem(p, item, 1); bought++;
       }
-      if (bought) { msg(p, 'You buy ' + (bought > 1 ? bought + ' x ' : '') + d.name + ' for ' + bought * price + ' GOLD.', 'trade'); ev({ e: 'trade', p: p.id, buy: item, n: bought }); addXp(p, 'speechcraft', (SPEECH.xpPerGold || 1) * bought * price); burdenCheck(p); }
+      if (bought) { msg(p, 'You buy ' + (bought > 1 ? bought + ' x ' : '') + d.name + ' for ' + bought * price + ' GOLD.', 'trade'); ev({ e: 'trade', p: p.id, buy: item, n: bought }); creditDo(p, 'buy'); addXp(p, 'speechcraft', (SPEECH.xpPerGold || 1) * bought * price); burdenCheck(p); }
     }
     function shopBuys(sh, d) { return d.category !== 'currency' && !d.edition &&   /* a one-of-one (Edition) is never sold to a shop: it would be gone for good */ (sh.buys === 'any' || sh.buys.indexOf(d.category) >= 0 || sh.buys.indexOf(d.category + '/' + d.subcategory) >= 0); }
     function sell(p, shopId, slot, n) {
@@ -1152,7 +1153,7 @@
       if (each > 0 && !canAdd(p, 'coins', 1) && !(s.n === n || !d.stack)) { msg(p, 'You have no room for the GOLD.', 'warn'); return; }
       removeItem(p, id, n); if (each * n > 0) addItem(p, 'coins', each * n);
       msg(p, 'You sell ' + (n > 1 ? n + ' x ' : '') + d.name + ' for ' + each * n + ' GOLD.', 'trade');
-      ev({ e: 'trade', p: p.id, sell: id, n }); addXp(p, 'speechcraft', (SPEECH.xpPerGold || 1) * each * n); burdenCheck(p);
+      ev({ e: 'trade', p: p.id, sell: id, n }); creditDo(p, 'sell'); addXp(p, 'speechcraft', (SPEECH.xpPerGold || 1) * each * n); burdenCheck(p);
     }
 
     // ---------------- combat
@@ -1209,6 +1210,7 @@
       const m = mobByUid(h.dst), p = S.players[h.src]; if (!m || m.dead || (MON[m.key] && MON[m.key].tame)) return;
       const dmg = Math.min(h.dmg, m.hp); m.hp -= dmg;
       ev({ e: 'hit', dst: m.uid, src: h.src, dmg, max: MON[m.key].hp, hp: m.hp, cls: h.cls, dex: !!h.dex, blocked: !!h.blocked });
+      if (p && (h.cls === 'ranged' || h.cls === 'magic')) creditDo(p, h.cls);   /* a tutorial's ranged / magic shot */
       if (h.arrow) dropGround(h.arrow.id, 1, h.arrow.x, h.arrow.y, h.src, 200);
       if (p && !p.puppet) hitXp(p, h.cls, h.xd != null ? Math.min(h.xd, dmg) : dmg, h.xp, h.dex);   /* a hunted animal: XP from the ordinary roll */
       if (p && h.dmg >= 0 && !h.splash) { const w = weaponOf(p); if (w && w.effect && m.hp > 0) applyEffect(m, w, p.id); }
@@ -1724,6 +1726,16 @@
       let r = FD.next() * L.reduce((t, x) => t + x[1], 0);
       for (const [c, w] of L) if ((r -= w) < 0) { const sd = FARM.crops[c].seed; dropGround(sd, 1, p.x, p.y, p.id, 600); msg(p, 'You spot ' + (IT[sd].name.match(/^[aeiou]/i) ? 'an ' : 'a ') + IT[sd].name.toLowerCase() + ' in the grass.'); break; }
     }
+    /* DO goal (2026-10-19, Tutorial Island's stations): {do: action} is met by doing it once - equip, eat, bury, pray, buy, sell, a ranged
+       or magic hit, a chest deposit (bank_in) or withdrawal (bank_out), or what only the client sees: the quest journal opened, the wallet
+       looked at (the 'tutdo' command, rules.tutorial.clientDos) */
+    function creditDo(p, key) {
+      if (!p || !p.quests) return;
+      for (const qid in p.quests) {
+        const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.steps[q.step - 1];
+        if (st && st.goal.do === key && (q.n | 0) < (st.goal.n || 1)) { q.n = (q.n | 0) + 1; msg(p, Q.name + ': done!', 'quest'); }
+      }
+    }
     /* PET goal (2026-10-19, Saltmere's pirates: "find Admiral and pet her"): {pet: monster key} is met by petting one */
     function creditPet(p, key) {
       for (const qid in p.quests) {
@@ -1740,7 +1752,7 @@
     function tutorialTick(p) {
       if (!p.tut || !TUT || p.dead) return;
       const q = p.quests[TUT.quest], Q = D.quests.quests[TUT.quest];
-      if (q && Q && q.step > Q.steps.length) { p.tut = 0; teleport(p, { id: 'ferry', to: spawnOf(p) }, null); msg(p, 'Odo rows you across the water to ' + ((homeOf(p) || {}).name || 'the valley') + '. Welcome to the valley.', 'quest'); return; }
+      if (q && Q && q.step > Q.steps.length) { p.tut = 0; teleport(p, { id: 'ferry', to: spawnOf(p) }, null); msg(p, 'Odo rows you across to ' + ((homeOf(p) || {}).name || 'the valley') + '. Welcome! Talk to Elder Maren by the well for your first quest.', 'quest'); return; }
       if (zoneOf(p.x, p.y) !== TUT.zone) { teleport(p, { id: 'ferry', to: TUT.spawn }, null); msg(p, 'You are not done on the island yet. Finish with the guides, and Ferryman Odo will take you across.', 'warn'); }
     }
     function creditHarvest(p, item, n) {
@@ -1943,7 +1955,8 @@
         msg(p, n.name + ': ' + String(n.giftLine || 'Take this.').replace('{name}', p.name || 'traveller'), 'npc'); msg(p, n.name + ' gives you ' + IT[n.gift].name + '.', 'info');
       }   /* the town chest: the engine opens the wallet view (2026-10-04) */
       if (n.tailor && !(p._trade) && !ends) { ev({ e: 'tailor', p: p.id, npc: n.id }); msg(p, n.name + ': ' + (n.greet || 'Fancy a new look? Pick anything you like.'), 'npc'); return; }
-      if (n.shop && !ends) { const sh = shopOf(n.shop); p.shop = n.shop; ev({ e: 'shop', p: p.id, shop: n.shop, npc: n.id }); msg(p, n.name + ': ' + sh.greet, 'npc'); return; }
+      const shopFirst = ends && (() => { const q2 = p.quests[ends], s3 = q2 && D.quests.quests[ends].steps[q2.step - 1]; return !!(s3 && s3.goal.do && (q2.n | 0) < (s3.goal.n || 1)); })();   /* a step still to be done at this counter (Tutorial Island: buy, then sell, at Milo's) */
+      if (n.shop && (!ends || p._trade || shopFirst)) { const sh = shopOf(n.shop); p.shop = n.shop; ev({ e: 'shop', p: p.id, shop: n.shop, npc: n.id }); msg(p, n.name + ': ' + sh.greet, 'npc'); return; }
       if ((n.trade || n.craft) && !ends && !nextOffered(n, p) && tradeTalk(p, n)) return;   /* a quest of theirs comes first (Ma'iingan's deer hunt before his sinew trade) */
       const idle = npcIdleLines(n, p), offered = nextOffered(n, p);
       const hadQuest = (n.quests || []).concat(n.quest ? [n.quest] : []).some(id => p.quests[id]);
@@ -1976,18 +1989,18 @@
         const counted = (st) => {
           if (st.goal.kills) { let n = 0; for (const k in st.goal.kills) n += Math.min(st.goal.kills[k], (q.kn && q.kn[k]) | 0); return n; }
           if (st.goal.flag) return hasFlag(p, st.goal.flag) ? 1 : 0;
-          return (st.goal.kill || st.goal.cook || st.goal.talk || st.goal.plant || st.goal.light || st.goal.harvest || st.goal.pet) ? (q.n | 0) : (st.goal.bring && bids(st.goal).length ? bringHave(st.goal) : (q.n | 0));
+          return (st.goal.kill || st.goal.cook || st.goal.talk || st.goal.plant || st.goal.light || st.goal.harvest || st.goal.pet || st.goal.do) ? (q.n | 0) : (st.goal.bring && bids(st.goal).length ? bringHave(st.goal) : (q.n | 0));
         };
         const killsMet = (st) => { const K = st.goal.kills; if (!K) return true; for (const k in K) if (((q.kn && q.kn[k]) | 0) < K[k]) return false; return true; };
         const met = (st) => {
           const g = st.goal;
-          if ((g.kill || g.cook || g.talk || g.plant || g.light || g.harvest || g.pet) && (q.n | 0) < need(st)) return false;
+          if ((g.kill || g.cook || g.talk || g.plant || g.light || g.harvest || g.pet || g.do) && (q.n | 0) < need(st)) return false;
           if (g.wait != null && !(natureHours() >= (q.t0 == null ? Infinity : q.t0) + g.wait)) return false;
           if (g.kills && !killsMet(st)) return false;
           if (g.flag && !hasFlag(p, g.flag)) return false;
           if (g.bring && (!bids(g).length || bringHave(g) < bringN(st))) return false;
           if (withs(st).some(([id, k]) => !IT[id] || invCount(p, id) < k)) return false;
-          return !!(g.kill || g.cook || g.talk || g.bring || g.plant || g.kills || g.flag || g.light || g.harvest || g.pet || g.wait != null);
+          return !!(g.kill || g.cook || g.talk || g.bring || g.plant || g.kills || g.flag || g.light || g.harvest || g.pet || g.do || g.wait != null);
         };
         const fill = (L, st) => linesFor(p, L).map(l => String(l).replace(/\{(n|goal|left|name)\}/g, (m, k) => k === 'name' ? (p.name || 'traveller') : !st ? '' : k === 'n' ? counted(st) : k === 'goal' ? need(st) : Math.max(0, need(st) - counted(st))));
         const doneTalk = () => Q.nextAfter && !questFinished(p, Q.nextAfter) ? (Q.nextLocked || Q.done) : (Q.nextReady || Q.done);
@@ -4218,6 +4231,7 @@
     /* owner side: what the host resolved about OUR player */
     function applyHit(pid, dmg, cls, fromMob, fx, fxt) { const p = S.players[pid]; if (!p || p.puppet || p.dead) return; if (fromMob && cls && protects(p, cls)) dmg = 0; else if (fromMob && fx) magicFx(p, fx, fxt || 5); p.hp -= Math.min(dmg, p.hp); if (angelSave(p)) return; if (p.retal && !p.act && !p.path.length) { } if (p.hp <= 0) killPlayer(p); }
     function storeItem(pid, id, n) {
+      if (S.players[pid]) creditDo(S.players[pid], 'bank_in');   /* the chest: a deposit (a tutorial step) */
       const p = S.players[pid]; if (!p || !IT[id] || n <= 0) return 0;
       const had = invCount(p, id); const fromBag = Math.min(n, had); if (fromBag) removeItem(p, id, fromBag);
       let left = n - fromBag;
@@ -4230,6 +4244,7 @@
       return n - left;
     }
     function grantItem(pid, id, n, gUid) {
+      if (S.players[pid] && !gUid) creditDo(S.players[pid], 'bank_out');   /* the chest: a withdrawal (a tutorial step) */
       const p = S.players[pid]; if (!p || !IT[id]) return;
       if (gUid != null) { if (S.took.has(gUid)) return; S.took.add(gUid); }   /* the same death-pile uid must not land twice (host 't' after a local take, 2026-10-09) */
       const left = addItem(p, id, n); if (left) dropGround(id, left, p.x, p.y, null, 300); ev({ e: 'take', p: pid, id, n: n - left });

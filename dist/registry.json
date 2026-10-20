@@ -1062,6 +1062,18 @@
     "api": 1,
     "kind": "json"
    },
+   "char.tut_banker": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.tut_chapel": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.tut_combat": {
     "id": null,
     "v": 1,
@@ -1086,7 +1098,31 @@
     "api": 1,
     "kind": "json"
    },
+   "char.tut_mining": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.tut_quest": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.tut_shop": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.tut_survival": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.tut_wallet": {
     "id": null,
     "v": 1,
     "api": 1,

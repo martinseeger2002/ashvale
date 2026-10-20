@@ -1,0 +1,122 @@
+{
+  "quest_journal": {
+    "talk": [
+      "Hello! I am Loremaster Ilse. Let us begin your story.",
+      "Click the scroll icon on the right to open your Quest Journal.",
+      "This shows your story steps. It always tells you what to do next."
+    ],
+    "hint": "Click the scroll icon on the right side of the screen, then click the first quest step.",
+    "complete": [
+      "Wonderful! You have found your first story step.",
+      "The journal now guides you clearly. You are ready for more!"
+    ]
+  },
+  "mine_ore": {
+    "talk": [
+      "Greetings! I am Prospector Dunn.",
+      "Take this pickaxe. Click the copper rock to mine one ore.",
+      "We will use this ore to make many things later."
+    ],
+    "hint": "Click the pickaxe icon, then click the copper rock to mine it.",
+    "complete": [
+      "Excellent work! You have gathered your first treasure.",
+      "That ore will help you craft great items soon."
+    ]
+  },
+  "equip_sword": {
+    "talk": [
+      "Hello there! I am Sergeant Kade.",
+      "Click the shirt icon to see your gear, or click the sword in your pack.",
+      "Choose Wield to put the sword on your arm."
+    ],
+    "hint": "Click the shirt icon, then click the sword and select Wield.",
+    "complete": [
+      "Perfect! The sword is now ready for your hand.",
+      "You look brave and prepared for any adventure."
+    ]
+  },
+  "eat_food": {
+    "talk": [
+      "You seem a little tired. I am Sergeant Kade.",
+      "Click the bread in your pack and choose Eat to heal.",
+      "Watch the red circle grow as you get stronger."
+    ],
+    "hint": "Click the bread item in your pack, then choose Eat to restore health.",
+    "complete": [
+      "Great job! You feel much better now.",
+      "Your red circle shows you are full of energy."
+    ]
+  },
+  "ranged_shot": {
+    "talk": [
+      "Here is a bow and arrows. I am Sergeant Kade.",
+      "Wield the bow, then click the rat to shoot it once.",
+      "Aim carefully and let the arrow fly!"
+    ],
+    "hint": "Click the bow to wield it, then click the rat to shoot.",
+    "complete": [
+      "Splendid! Your first shot was true and strong.",
+      "You are learning to fight from a distance."
+    ]
+  },
+  "magic_cast": {
+    "talk": [
+      "This staff holds special power. I am Sergeant Kade.",
+      "Wield the staff, then click the rat to cast a spell.",
+      "Watch the magic glow as it hits the target."
+    ],
+    "hint": "Click the staff to wield it, then click the rat to cast a spell.",
+    "complete": [
+      "Amazing! You have cast your first spell successfully.",
+      "Your magic is growing stronger every day."
+    ]
+  },
+  "bank_chest": {
+    "talk": [
+      "Welcome to the safe. I am Banker Corin.",
+      "Click the chest, put one item in, and take it back out.",
+      "The bank keeps your things safe on the blockchain linked to your wallet."
+    ],
+    "hint": "Click the chest, move an item in, then move it back out.",
+    "complete": [
+      "You have secured your items safely!",
+      "The blockchain ensures your things are truly yours."
+    ]
+  },
+  "wallet": {
+    "talk": [
+      "I am Ledger-keeper Asha. Click the Wallet button to see your address.",
+      "Write down your recovery words and never share them.",
+      "Items on the chain belong to you. This is a TEST network, so no real money is used yet."
+    ],
+    "hint": "Click the Wallet button, write down the recovery words, and note the test network status.",
+    "complete": [
+      "Very important! Your wallet is set up correctly.",
+      "Your items are safe, and you know how to protect your keys."
+    ]
+  },
+  "shop": {
+    "talk": [
+      "Hello! I am Trader Milo.",
+      "Click me and choose Trade to buy an item.",
+      "Then sell one item back to learn how the market works."
+    ],
+    "hint": "Click the trader, choose Trade, buy an item, then sell an item.",
+    "complete": [
+      "Well done! You have bought and sold your first items.",
+      "You now understand how to trade in our world."
+    ]
+  },
+  "chapel": {
+    "talk": [
+      "Peace be with you. I am Brother Aldo.",
+      "Click the bones and choose Bury for Prayer experience.",
+      "Open the Prayer button and switch on a prayer to protect yourself."
+    ],
+    "hint": "Click the bones, choose Bury, then open the Prayer menu and turn on a prayer.",
+    "complete": [
+      "Your spirit is strong now. You have gained prayer power.",
+      "May this protection keep you safe in all your quests."
+    ]
+  }
+}

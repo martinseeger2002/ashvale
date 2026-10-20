@@ -255,7 +255,13 @@
       const q = new URLSearchParams(location.search);
       const isTouch = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
       const isPhone = isTouch && Math.min(innerWidth, innerHeight) < 600;
-      const store = opts.store || memoryStore();
+      /* WHO IS PLAYING (2026-10-19, the operator: wallet logins get the tutorial, guests do not; guests are warned that nothing is saved):
+         the Bank room joined before the start (openStore) says whether this browser is signed in with a wallet; ?wallet hints the same.
+         DEVHOST: on the dev build (localhost, viewed through a tunnel) ?tut forces the tutorial and ?notut skips it - nowhere else. */
+      const DEVHOST = /^(localhost|127\.0\.0\.1|\[::1\])$/.test((G.location && G.location.hostname) || '');
+      const WALLET_IN = !!(BANK_LOAD_ROOM && BANK_LOAD_ROOM.me && BANK_LOAD_ROOM.me.address && !BANK_LOAD_ROOM.me.guest) || !!q.get('wallet'), GUEST = !WALLET_IN;
+      const TUT_ON = q.get('home') !== 'tour' && (WALLET_IN ? !(DEVHOST && q.has('notut')) : (DEVHOST && q.has('tut')));
+      const store = GUEST && !DEVHOST ? memoryStore({}, 'memory') : (opts.store || memoryStore());   /* a guest keeps nothing: memory only (the dev build keeps its browser saves) */
       const SAVE = SAVE_KEY, SET = 'ashvale3d.settings.v1';
       let save = null; try { save = JSON.parse(store.get(SAVE) || 'null'); } catch (e) { save = null; }
       if (opts.fresh || q.has('fresh') || q.has('dragonheart')) save = null;
@@ -272,7 +278,7 @@
       /* globe P2: seeded land around the old map (worldgen + globe modules, when the registry has them; ?flat turns it off) */
       { const get = n => G.ASH3D && G.ASH3D.get ? G.ASH3D.get(n) : null, WGM = get('worldgen'), AG = get('globe'), AW = get('world') || G.AshWorld;
         if (WGM && AG && AW && AW.seededWorldgen && !q.has('flat')) { try { D.wg = AW.seededWorldgen(WGM, AG, D); } catch (er) { console.warn('worldgen', er && er.message); } } }
-      const core = AshCore.create(D, { seed, tutorial: !(q.has('notut') || q.get('home') === 'tour') });   /* TUTORIAL: new characters start on the island; ?notut (and the dev tour) start you in the village */
+      const core = AshCore.create(D, { seed, tutorial: TUT_ON });   /* TUTORIAL: a new wallet character starts on the island (WHO IS PLAYING) */
       const PID = 'me';
       /* where a new character is born (handoff/ziibiing_start_plan.md): the Ziibiing card's launcher sets ASH3D_HOME; on this machine's
          preview ?home=ziibiing does the same */
@@ -734,6 +740,64 @@
         for (const [k, g] of gPatches) if (!seen.has(k)) { scene.remove(g); gPatches.delete(k); }
       }
 
+      /* TUTORIAL GUIDE (2026-10-19, the operator: "put hints and signs and other things that help the player along"): while you are on the
+         island, a goal box at the top of the screen says in plain words what to do next (the step's `hint`), and a gold arrow bobs over
+         whatever that is - the next person, the trees, the fishing spot, the patch, a rat. Every step done gets a cheer. */
+      const TUTR = (D.rules && D.rules.tutorial) || null;
+      let tutBox = null, tutArrow = null, tutEdge = null, tutLast = '', tutStep = -1, tutCheer = 0, tutTree = null, tutTreeT = 0;
+      function tutorialGuide(now) {
+        if (!TUTR || !me || !me.tut) { if (tutBox) tutBox.style.display = 'none'; if (tutArrow) tutArrow.visible = false; if (tutEdge) tutEdge.style.display = 'none'; return; }
+        if (!tutBox) { tutBox = document.createElement('div'); tutBox.className = 'tutgoal'; tutBox.style.cssText = 'position:absolute;left:calc((100% - 300px) / 2);top:10px;transform:translateX(-50%);width:max-content;max-width:min(520px,calc(100vw - 340px));padding:8px 16px;background:rgba(36,26,16,.93);border:2px solid #d0a040;border-radius:9px;color:#ffe9a8;font:600 14px/1.35 "Trebuchet MS",Verdana,sans-serif;text-align:center;z-index:40;pointer-events:none;box-shadow:0 3px 12px #000b';
+          (document.querySelector('.ash') || document.body).appendChild(tutBox); }
+        if (!tutArrow) { tutArrow = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.66, 4), new THREE.MeshBasicMaterial({ color: 0xffc030 })); tutArrow.rotation.x = Math.PI; scene.add(tutArrow); }
+        const Q = D.quests.quests[TUTR.quest], q = me.quests && me.quests[TUTR.quest], st = q && Q && Q.steps[q.step - 1], stepNow = q ? q.step : 0;
+        if (tutStep >= 0 && stepNow > tutStep) { tutCheer = now + 4000; burst(myEnt.root.position, 0xffd040); sfx('level'); }
+        tutStep = stepNow;
+        const nearTile = (ch) => { if (now > tutTreeT || !tutTree || tutTree.ch !== ch) { tutTreeT = now + 1500; tutTree = null; let bd = 1e9; for (let dy = -24; dy <= 24; dy++) for (let dx = -24; dx <= 24; dx++) if (core.M.tileAt(me.x + dx, me.y + dy) === ch && dx * dx + dy * dy < bd) { bd = dx * dx + dy * dy; tutTree = { x: me.x + dx, y: me.y + dy, ch }; } } return tutTree; };   /* the nearest tree / rock, looked for every 1.5 s */
+        const npc = id => core.M.npcs.find(n => n.id === id), nm = id => { const n = npc(id); return n ? n.name : id; }, has = id => (me.inv || []).some(s => s && s.id === id);
+        const Z = (D.zones || []).find(z => z.id === TUTR.zone) || {};
+        let text = '', tgt = null, up = 2.6;
+        if (!q) { text = 'Click <b>Guide Elsbeth</b> - under the gold arrow - to talk to her, then choose <b>Yes</b>.'; tgt = npc('tut_guide'); }
+        else if (st) {
+          const g = st.goal, need = g.n == null ? 1 : g.n, met = (q.n | 0) >= need, ends = st.ends || Q.giver;
+          if (met && !g.talk) { text = 'Done! Now go back and talk to <b>' + nm(ends) + '</b>.'; tgt = npc(ends); }
+          else {
+            text = st.hint || (st.progress || [''])[0];
+            if (g.talk) tgt = npc(g.talk);
+            else if (g.light) { if (has('logs')) { text = 'Now click the <b>logs</b> in your pack and choose <b>Light</b>.'; tgt = null; }
+              else { tgt = nearTile('T'); up = 4.6; } }
+            else if (g.cook) { if (has('shrimp_raw')) text = 'Now click your <b>fire</b> to cook the shrimp. (No fire left? Chop logs and light another.)'; else tgt = (Z.fishing || [])[0] || null; }
+            else if (g.harvest) { const o = (Z.objects || []).find(o => o.k === 'farmpatch'); tgt = o ? { x: o.x + 0.5, y: o.y + 0.5 } : null; up = 1.8; }
+            else if (g.kill) { let bd = 1e9; for (const m of core.S.mobs) if (m.key === g.kill && !m.dead) { const d = (m.x - me.x) ** 2 + (m.y - me.y) ** 2; if (d < bd) { bd = d; tgt = m; } } up = 1.6; }
+            else if (g.bring === 'copper_ore') { tgt = nearTile('R'); up = 2.0; }   /* the copper rocks */
+            else if (g.do) {
+              const D2 = { bank_in: 'tut_chest', bank_out: 'tut_chest', wallet: 'tut_chest', buy: 'tut_shop', sell: 'tut_shop' }[g.do];
+              if (D2) tgt = npc(D2);
+              else if (g.do === 'ranged' || g.do === 'magic') { let bd = 1e9; for (const m of core.S.mobs) if (m.key === 'tut_rat' && !m.dead) { const d = (m.x - me.x) ** 2 + (m.y - me.y) ** 2; if (d < bd) { bd = d; tgt = m; } } up = 1.6; }
+            }
+          }
+          text = '<span style="color:#c8b080;font-size:12px">Step ' + q.step + ' of ' + Q.steps.length + '</span><br>' + text;
+        }
+        if (now < tutCheer) text = '<span style="color:#a8f080;font-size:16px">Great job! &#10004;</span><br>' + text;
+        if (text !== tutLast) { tutBox.innerHTML = text; tutLast = text; }
+        tutBox.style.display = text ? 'block' : 'none';
+        if (tgt) { const x = tgt.x + 0.5, z = tgt.y + 0.5; tutArrow.position.set(x, heightAt(x, z) + up + Math.sin(now / 220) * 0.18, z); tutArrow.rotation.y = now / 600; tutArrow.visible = true; } else tutArrow.visible = false;
+        /* off the screen? a big gold pointer at the edge, aimed at it, so there is always something to follow */
+        if (!tutEdge) { tutEdge = document.createElement('div'); tutEdge.style.cssText = 'position:absolute;z-index:39;pointer-events:none;color:#ffc030;font:900 44px/1 sans-serif;text-shadow:0 0 6px #000,0 0 2px #000;display:none;text-align:center';
+          tutEdge.innerHTML = '<div class="a">&#10148;</div><div style="font:700 12px/1.2 Trebuchet MS,sans-serif;color:#ffe9a8;margin-top:2px">walk this way</div>'; (document.querySelector('.ash') || document.body).appendChild(tutEdge); }
+        let edge = false;
+        if (tgt) {
+          const v = new THREE.Vector3(tgt.x + 0.5, tutArrow.position.y, tgt.y + 0.5).project(camera), behind = v.z > 1;
+          if (behind || Math.abs(v.x) > 0.92 || Math.abs(v.y) > 0.88) {
+            let dx = behind ? -v.x : v.x, dy = behind ? v.y : -v.y; const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+            const W = innerWidth, H = innerHeight, k = Math.min((W / 2 - 70) / Math.max(1e-3, Math.abs(dx)), (H / 2 - 70) / Math.max(1e-3, Math.abs(dy)));
+            tutEdge.style.left = (W / 2 + dx * k - 40) + 'px'; tutEdge.style.top = (H / 2 + dy * k - 30) + 'px'; tutEdge.style.width = '80px';
+            tutEdge.firstChild.style.transform = 'rotate(' + Math.atan2(dy, dx) + 'rad)'; edge = true;
+          }
+        }
+        tutEdge.style.display = edge ? 'block' : 'none';
+      }
+
       /* your snares where you set them (core setTrap; 2026-10-09): only yours are drawn, a nagwaagan on the ground */
       const gTraps = new Map();
       function syncTraps() {
@@ -982,7 +1046,7 @@
           case 'boatland': boatShow(e.x, e.y, e.face); docksShow(); if (e.by === PID) { boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, face: e.face, on: 0 }); } break;
           case 'cross': if (e.p === PID) { place(myEnt, e.x, e.y); cam.yaw += e.turn || 0; cam.tyaw += e.turn || 0; cam.snap = true; streamRegions(); TN.key = ''; } break;   /* over a cut edge of the net: the same ground, new map coordinates, the view turned with them */
           case 'boatgone': boatHide(e.x, e.y); docksShow(); if (e.by === PID) boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, on: 1 }); break;
-          case 'chest': if (mine) { const c = ents.get('n:' + e.npc); if (c) c.H.play('open');
+          case 'chest': if (mine) { send({ c: 'tutdo', k: 'wallet' }); if (DEVHOST && !WALLET_IN) { send({ c: 'tutdo', k: 'bank_in' }); send({ c: 'tutdo', k: 'bank_out' }); }   /* the tutorial's wallet step (the chest shows the wallet); on the dev build without a wallet the chest cannot store, so opening it stands in for the bank steps */ const c = ents.get('n:' + e.npc); if (c) c.H.play('open');
             /* [Claude 2026-10-14] whose chest this is: the home whose spawn is nearest (within 3 km; otherwise Ashvale's) - one chest per home */
             const nn = core.M.npcs.find(q => q.id === e.npc), HS = D.rules.homes || {}; let ch = 'ashvale', bd = 3000;
             if (nn) for (const h in HS) { const sp = HS[h] && HS[h].spawn; if (Array.isArray(sp)) { const d = Math.max(Math.abs(sp[0] - nn.x), Math.abs(sp[1] - nn.y)); if (d < bd) { bd = d; ch = h; } } }
@@ -2910,7 +2974,8 @@
         requestAnimationFrame(frame);
         for (const r of regions) if (r.built && r.built.setFloor) r.built.setFloor(me.lv | 0);
         caveTick(performance.now()); torchTick(performance.now());
-        if (MUSIC) MUSIC.frame(me.x, me.y, zoneHere, () => !!core.S.night);   /* the soundtrack follows the area, and the night (it looks every 20 frames) */
+        if (MUSIC) MUSIC.frame(me.x, me.y, zoneHere, () => !!core.S.night);
+        tutorialGuide(performance.now());   /* TUTORIAL: the goal box and the gold arrow */   /* the soundtrack follows the area, and the night (it looks every 20 frames) */
         for (const t of gFlames) { const q = performance.now() / 1000, k = 0.85 + 0.15 * Math.sin(q * 13 + t.ph) + 0.08 * Math.sin(q * 31 + t.ph * 2); t.f.scale.set(1, k, 1); t.f2.scale.set(1, k, 1); }
         /* One clock. The tick loop keeps lastTick on performance.now() and stamps each stride with the tick's own
            time (see doTick), but the rAF argument is the frame's START time, which trails performance.now() by
@@ -3181,6 +3246,9 @@
           newGame: () => { stopped = true; const at = Date.now(); (CLOUD_OK ? bankRoom() : Promise.resolve(null)).then(R => R && R.send(Object.assign(withHome({ t: 'sv', id: at, i: 0, n: 1 }), { d: '' }, CLOUD.base != null ? { base: CLOUD.base } : {}))).catch(() => {}).then(() => store.set(SAVE, '')).then(() => location.reload(), () => location.reload()); },   /* the Bank's copy goes too: an empty save, newer than any */
           helpSeen: () => store.set('ashvale3d.help', '1'),
           savesHere: () => store.backend,
+          tutorial: () => !!(me && me.tut),   /* TUTORIAL: the island's own welcome card */
+          onTab: k => { if (k === 'quest') send({ c: 'tutdo', k: 'journal' }); },   /* the tutorial's quest-journal step */
+          walletPage: () => { try { (G.top || G).location.href = '/wallet'; } catch (e) { G.open('/wallet', '_blank'); } },   /* the guest box: make a wallet / log in */
           home: () => { const HD = (D.rules.homes || {})[core.homeOf(me)]; return HD && HD.help ? HD : null; },
           modulesText: () => 'Players: ' + netStatus + '. Saves: ' + ({ arcade: 'on the arcade', browser: 'in this browser', memory: 'not saved (this session only)' }[store.backend] || store.backend) + '. Modules: ' + (opts.report || []).map(r => r[0] + ' v' + r[1]).join(', '),
           minimapTap: (dx, dy, k, run) => { const c = Math.cos(-cam.yaw), s = Math.sin(-cam.yaw); const tx = Math.floor(myEnt.root.position.x + (dx * c - dy * s) / k), ty = Math.floor(myEnt.root.position.z + (dx * s + dy * c) / k); send({ c: 'walk', x: tx, y: ty, run: runFor(run ? true : !!settings.runToggle) }); flag = [tx, ty]; }
@@ -3407,9 +3475,10 @@
           onDone: (look, name, start) => { cam.spin = 0; send({ c: 'look', look });   /* no name: the @tag is the name (2026-10-15) */ if (start && Object.keys(start).length) send({ c: 'start', pts: start }); cam.mode = null; cam.tyaw = cam.save.yaw; cam.tpitch = cam.save.pitch; cam.tdist = cam.save.dist; if (first) { hud.showHelp(true); } } });
       }
       { const HD = (D.rules.homes || {})[core.homeOf(me)] || {};
-        hud.chat('Welcome to ' + (HD.name || 'Ashvale') + '.', 'sys');
-        if (!save) hud.chat(me && me.tut ? 'You wake on Tutorial Island. Guide Elsbeth is right beside you - tap her to begin.' : (HD.first || 'Elder Maren waits by the well. Tap her to talk.'), 'sys'); }   /* TUTORIAL: a new character's first line points to the island's guide */
+        hud.chat(me && me.tut ? 'Welcome to the valley!' : 'Welcome to ' + (HD.name || 'Ashvale') + '.', 'sys');
+        if (!save) hud.chat(me && me.tut ? 'Welcome to Tutorial Island! Guide Elsbeth is right beside you - click her to begin.' : (HD.first || 'Elder Maren waits by the well. Tap her to talk.'), 'sys'); }   /* TUTORIAL: a new character's first line points to the island's guide */
       if (!save && MOD.outfitStyles && !q.has('nocreator')) { myEnt.yaw = myEnt.tyaw = cam.yaw = cam.tyaw; openWardrobe(true); }
+      else if (GUEST && !TUT_ON && hud.showGuest) hud.showGuest(() => { if (!store.get('ashvale3d.help') || !save) hud.showHelp(true); });   /* a guest is told first that nothing is kept */
       else if (!store.get('ashvale3d.help') || !save) hud.showHelp(true);
       hud.refresh('all');
       /* playtest only (the operator tests new places on his own screen first, e.g. the Spider Cave): ?go=x,y starts you there.

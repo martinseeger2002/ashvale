@@ -53,7 +53,7 @@
     let lines = [], dlgQ = null;
     const TABS = [['combat', 'Combat'], ['skills', 'Skills'], ['quest', 'Quests'], ['friends', 'Friends'], ['inv', 'Inventory'], ['equip', 'Equipment'], ['prayer', 'Prayer'], ['magic', 'Magic'], ['music', 'Music'], ['settings', 'Settings']];   /* no Wallet tab (2026-10-05: the chest shows your wallet) */
     for (const [k, title] of TABS) { const b = el('tab stone', tabs, A.ICON[k], 'button'); b.title = title; b.dataset.k = k; b.onclick = () => { setTab(st.tab === k ? null : k); api.sfx && api.sfx('click'); }; }
-    function setTab(k) { st.tab = k; for (const b of tabs.children) b.classList.toggle('on', b.dataset.k === k); panel.classList.toggle('open', !!k); K.refresh(k); if (k === 'friends' && api.friendsRefresh) api.friendsRefresh(); }
+    function setTab(k) { st.tab = k; if (k && api.onTab) api.onTab(k); for (const b of tabs.children) b.classList.toggle('on', b.dataset.k === k); panel.classList.toggle('open', !!k); K.refresh(k); if (k === 'friends' && api.friendsRefresh) api.friendsRefresh(); }
     function promptSay(text) {
       sayRow.classList.add('on'); sayIn.value = text; sayIn.focus();
       const n = sayIn.value.length; try { sayIn.setSelectionRange(n, n); } catch (e) { /* some browsers */ }
@@ -230,12 +230,27 @@
       help.style.display = 'block'; help.querySelector('.btn').onclick = () => { help.style.display = 'none'; };
     }
 
+    /* ---------- the guest box (2026-10-19, the operator): someone playing as a guest is told, before anything, that nothing will be kept */
+    function showGuest(then) {
+      help.innerHTML = '<h3>You\'re playing as a guest</h3><ul><li><span class="y">Nothing you do will be saved.</span></li><li>We hope you enjoy your time in Ashvale!</li>' +
+        '<li>Make a wallet or log in to the arcade to keep your character, your items and your progress.</li></ul>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn" data-g="make">Make a wallet</button><button class="btn" data-g="login">Log in</button><button class="btn" data-g="play">Keep playing</button></div>';
+      help.style.display = 'block';
+      help.querySelectorAll('[data-g]').forEach(b => { b.onclick = () => { const g = b.dataset.g; help.style.display = 'none'; if (g === 'play') { if (then) then(); } else if (api.walletPage) api.walletPage(g); }; });
+    }
+
     /* ---------- help card */
     function showHelp(on) {
       help.style.display = on ? 'block' : 'none'; if (!on) return;
       /* The store falls to memory when there is no arcade storage bridge and no localStorage, which is
          what a page drawn inside a feed post's sandboxed iframe gets. Only the diagnostics panel said
          so, so a whole session off a feed card could be played and lost without a word about it. */
+      if (api.tutorial && api.tutorial()) {   /* TUTORIAL (2026-10-19): a short, warm card for someone brand new, instead of the village's */
+        help.innerHTML = '<h3>Welcome to the valley!</h3><ul><li>We are so glad you are here. You have arrived on <span class="y">Tutorial Island</span>, where a few friendly guides will show you the basics, one step at a time.</li>' +
+          (api.isTouch ? '<li><b>Tap</b> the ground to walk. <b>Tap</b> a person to talk to them.</li>' : '<li><b>Click</b> the ground to walk. <b>Click</b> a person to talk to them. <b>Right-click</b> anything to see more choices.</li>') +
+          '<li>The <span class="y">gold arrow</span> always points to what to do next, and the <b>box at the top</b> tells you in words.</li><li>Start by ' + (api.isTouch ? 'tapping' : 'clicking') + ' <span class="y">Guide Elsbeth</span>, right beside you.</li></ul><button class="btn">Let\'s go!</button>';
+        help.querySelector('.btn').onclick = () => { showHelp(false); api.helpSeen && api.helpSeen(); }; return;
+      }
       const HM = (api.home && api.home()) || null;   /* the home you were born in (handoff/ziibiing_start_plan.md): its own welcome */
       help.innerHTML = '<h3>Welcome to ' + A.esc(HM ? HM.name : 'Ashvale') + '</h3>' +
         (api.savesHere && api.savesHere() === 'memory' ? '<ul><li><span class="y">This window cannot keep your progress</span> - it ends when you close it. Open ASHVALE from the Games tab and press <b>Play</b> there to keep your character.</li></ul>' : '') +
@@ -378,7 +393,7 @@
     { const r0 = K.refresh; K.refresh = w => { r0(w); if (st.chest) K.drawChest(); }; }   /* the chest window follows the bag and the wallet */
     setTab(st.tab);
     return {
-      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab(api.isPhone ? null : 'inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
+      layer, showGuest, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab(api.isPhone ? null : 'inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       chessOpen: (v, cb) => K.chessOpen(v, cb), chessUpdate: v => K.chessUpdate(v), chessClose: () => K.chessClose(), get chessPromo() { return K.chessPromo; },
       pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(), pokerAnchor: a => K.pokerAnchor && K.pokerAnchor(a), fortuneOpen: (v, cb) => K.fortuneOpen(v, cb), fortuneUpdate: v => K.fortuneUpdate(v), fortuneClose: () => K.fortuneClose(), fortuneDeposit: () => K.fortuneDeposit(), fortunePays: o => K.fortunePays(o), solitaireOpen: o => K.solitaireOpen && K.solitaireOpen(o), solitaireClose: () => K.solitaireClose && K.solitaireClose(), _sol: () => K._sol && K._sol(),

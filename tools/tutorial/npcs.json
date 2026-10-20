@@ -11,9 +11,33 @@
   "name": "Gardener Fen",
   "examine": "Gardener Fen, the island's gardener. There is soil under every fingernail and a radish in every pocket."
  },
+ "tut_quest": {
+  "name": "Loremaster Ilse",
+  "examine": "Loremaster Ilse keeps the island's book of stories, and knows how every one of them ends."
+ },
+ "tut_mining": {
+  "name": "Prospector Dunn",
+  "examine": "Prospector Dunn, who talks to rocks. The rocks, he says, talk back."
+ },
  "tut_combat": {
   "name": "Sergeant Kade",
   "examine": "Sergeant Kade. Shouts like a drill sergeant, which he was, and smiles like a grandfather, which he is."
+ },
+ "tut_banker": {
+  "name": "Banker Corin",
+  "examine": "Banker Corin, who keeps the island's chest and has never lost so much as a button."
+ },
+ "tut_wallet": {
+  "name": "Ledger-keeper Asha",
+  "examine": "Ledger-keeper Asha. She knows where every coin in the valley is, and whose it really is."
+ },
+ "tut_shop": {
+  "name": "Trader Milo",
+  "examine": "Trader Milo, who will sell you anything and buy almost everything back."
+ },
+ "tut_chapel": {
+  "name": "Brother Aldo",
+  "examine": "Brother Aldo of the island chapel, calm as a still pond."
  },
  "tut_ferryman": {
   "name": "Ferryman Odo",

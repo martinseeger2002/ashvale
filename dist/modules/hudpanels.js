@@ -94,7 +94,7 @@
           const g = st && st.goal, need = g ? (g.n == null ? 1 : g.n) : 1;
           const killsLeft = (gg) => { let n = 0; for (const k in gg.kills || {}) n += Math.max(0, gg.kills[k] - ((q && q.kn && q.kn[k]) | 0)); return n; };
           const waited = !(g && g.wait != null) || (core.natureHours && core.natureHours() >= (q.t0 == null ? Infinity : q.t0) + g.wait);
-          const ready = !!(st && g && waited && (!((g.kill || g.cook || g.talk || g.plant || g.light || g.harvest || g.pet) && (q.n | 0) < need)) && !(g.kills && killsLeft(g) > 0) && !(g.bring && held(g.bring) < (g.bn == null ? need : g.bn)) && !wl(g).some(([id, k]) => held(id) < k));
+          const ready = !!(st && g && waited && (!((g.kill || g.cook || g.talk || g.plant || g.light || g.harvest || g.pet || g.do) && (q.n | 0) < need)) && !(g.kills && killsLeft(g) > 0) && !(g.bring && held(g.bring) < (g.bn == null ? need : g.bn)) && !wl(g).some(([id, k]) => held(id) < k));
           if (!q) h += 'Speak to ' + who(Q[id].giver) + '.';
           else if (!st) { h += 'Completed!' + (Q[id].story ? ' +' + Q[id].story + ' story point' + (Q[id].story === 1 ? '' : 's') + '.' : ''); const FL = (core.D.rules && core.D.rules.flags) || {}; for (const k in FL) if (FL[k].quest === id && core.hasFlag(p, k)) h += '<br><span class="g">' + A.esc(A.cap(FL[k].name)) + '</span> is on you.' + (FL[k].desc ? ' ' + A.esc(FL[k].desc.replace(/^[^:]*: /, '')).replace(/^./, c => c.toUpperCase()) : ''); }
           else if (ready) h += 'Return to ' + who(st.ends || Q[id].giver) + '.';
@@ -107,6 +107,7 @@
             }
             else if (g.kill) { const m = core.D.monsters[g.kill]; h += 'Step ' + q.step + ': slay ' + many(A.esc((m ? m.name : g.kill).toLowerCase()), need) + ' (' + have + '/' + need + ').'; }
             else if (g.cook) h += 'Step ' + q.step + ': cook ' + many(iname(g.cook), need) + ' (' + have + '/' + need + ').';
+            else if (g.do) h += 'Step ' + q.step + ': ' + A.esc(String(st.hint || g.do).replace(/<[^>]+>/g, '')) + ((q.n | 0) >= need ? ' (done)' : '');   /* Tutorial Island's stations */
             else if (g.harvest) h += 'Step ' + q.step + ': grow and dig up ' + many(iname(g.harvest), need) + ' in a farming patch (' + have + '/' + need + ').';   /* FARMING */
             else if (g.bring) {
               const bn = g.bn == null ? need : g.bn;

@@ -2611,24 +2611,45 @@
      "id": 1,
      "zone": "tutorial",
      "goal": {
+      "talk": "tut_guide"
+     },
+     "ends": "tut_guide",
+     "reward": "xp:dexterity:50",
+     "talk": [
+      "Welcome to the valley!",
+      "Guide Elsbeth is right beside you."
+     ],
+     "hint": "Click <b>Guide Elsbeth</b>, under the gold arrow, to say hello.",
+     "progress": [
+      "Click Guide Elsbeth, under the gold arrow, to say hello."
+     ],
+     "complete": [
+      "Hello, and welcome! We're so glad you've come. I'm Elsbeth, and I'll help you find your feet.",
+      "To walk, click on the ground. To talk to someone, click on them - just like you did with me! The box at the top always says what to do next."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "tutorial",
+     "goal": {
       "talk": "tut_survival"
      },
      "ends": "tut_survival",
      "reward": "xp:dexterity:50",
      "talk": [
-      "Welcome to the island! Everyone starts here. Click the ground to walk, double-click to run, and click a person to talk to them.",
-      "Right-click anything for more choices. The buttons on the right open your pack, skills, quests and the rest - Quests will tell you what's next.",
-      "First, go and see Survivalist Marlow by the trees to the west. He'll teach you to look after yourself."
+      "Your first stop is Survivalist Marlow, by the trees to the west.",
+      "Follow the gold arrow above his head. Off you go!"
      ],
+     "hint": "Follow the gold arrow to <b>Survivalist Marlow</b> and click him.",
      "progress": [
-      "Walk west to the trees and talk to Survivalist Marlow."
+      "Follow the gold arrow to Survivalist Marlow and click him."
      ],
      "complete": [
-      "Elsbeth sent you? Good. Let's see if you can keep yourself fed and warm."
+      "Hello there! Elsbeth said a new friend was coming. Welcome - you're going to love it here."
      ]
     },
     {
-     "id": 2,
+     "id": 3,
      "zone": "tutorial",
      "goal": {
       "light": "*",
@@ -2644,18 +2665,19 @@
       "xp:firemaking:100"
      ],
      "talk": [
-      "Here's a hatchet and a tinderbox. Click a tree to chop some logs, then use the tinderbox on them - right-click the logs in your pack.",
-      "A fire keeps you warm and cooks your food. Light one, then come back to me."
+      "Let's start with a campfire. I've put a hatchet and a tinderbox in your pack - the bag button on the right shows your pack.",
+      "Click a tree to chop some logs. Then click the logs in your pack and choose Light."
      ],
+     "hint": "Click a <b>tree</b> to chop logs. Then click the <b>logs</b> in your pack and choose <b>Light</b>.",
      "progress": [
-      "Chop logs from a tree with the hatchet, light them with the tinderbox, then talk to Marlow."
+      "Click a tree to chop logs. Then click the logs in your pack and choose Light."
      ],
      "complete": [
-      "A fire! A small one, but a fire. Everybody's first fire is small."
+      "Look at that - your very first fire! Well done. Every adventurer remembers their first fire."
      ]
     },
     {
-     "id": 3,
+     "id": 4,
      "zone": "tutorial",
      "goal": {
       "cook": "shrimp",
@@ -2670,18 +2692,19 @@
       "xp:cooking:100"
      ],
      "talk": [
-      "Now food. Take this net and catch a shrimp at the fishing spot on the shore - click the bubbling water.",
-      "Then cook it on a fire: click the fire with the raw shrimp in your pack, or use the shrimp on the fire. Eat when you're hurt."
+      "Now let's catch some dinner. Here's a fishing net.",
+      "Click the bubbling water on the shore to catch a shrimp, then click your fire to cook it."
      ],
+     "hint": "Click the <b>bubbling water</b> to catch a shrimp. Then click your <b>fire</b> to cook it.",
      "progress": [
-      "Net a shrimp at the shore's fishing spot, cook it on a fire, then talk to Marlow."
+      "Click the bubbling water to catch a shrimp. Then click your fire to cook it."
      ],
      "complete": [
-      "Cooked through, and only a little burnt. You'll live. Gardener Fen by the beds to the north has more for you."
+      "Perfectly cooked! You're a natural."
      ]
     },
     {
-     "id": 4,
+     "id": 5,
      "zone": "tutorial",
      "goal": {
       "harvest": "radish",
@@ -2696,47 +2719,327 @@
      },
      "reward": "xp:farming:150",
      "talk": [
-      "Gardener Fen's beds are just north. Take these to him - a rake, a seed dibber, a spade and two radish seeds. He'll show you how, I just carry the shovels.",
-      "Farming patches are all along the roads in the valley. Each one can be yours: rake the weeds, plant, wait, dig up."
+      "Gardener Fen's garden is just to the north. I've put a rake, a seed dibber, a spade and two radish seeds in your pack.",
+      "Click the farming patch there: Rake it, Plant a seed, wait a moment, then Harvest."
      ],
+     "hint": "Click the <b>farming patch</b>: <b>Rake</b>, then <b>Plant</b> a radish seed, wait, then <b>Harvest</b>. Grow 2 radishes.",
      "progress": [
-      "At the farming patch by Gardener Fen: rake the weeds, plant a radish seed, wait for it to grow, dig it up with the spade. Then talk to Fen."
+      "Click the farming patch: Rake, then Plant a radish seed, wait, then Harvest. Grow 2 radishes."
      ],
      "complete": [
-      "Radishes! Grown with your own hands, in under a minute, which is cheating, but it's my island. Keep the tools; the valley's patches want them.",
-      "Sergeant Kade is past the rocks to the east. He's louder than me. Most things are."
+      "Two radishes, grown by you! Brilliant. There are farming patches all along the valley's roads, and every one can be yours."
      ]
     },
     {
-     "id": 5,
+     "id": 6,
+     "zone": "tutorial",
+     "goal": {
+      "do": "journal"
+     },
+     "ends": "tut_quest",
+     "reward": "xp:speechcraft:100",
+     "talk": [
+      "Next, Loremaster Ilse, by the big stone. She looks after the quest journal.",
+      "Click the Quests button on the right - the one that looks like a scroll - to open it, then go and see her."
+     ],
+     "hint": "Click the <b>Quests</b> button on the right (the scroll), then talk to <b>Loremaster Ilse</b>.",
+     "progress": [
+      "Click the Quests button on the right (the scroll), then talk to Loremaster Ilse."
+     ],
+     "complete": [
+      "That's your quest journal! A quest is a story told in steps. The journal always shows the step you're on, so you never get lost.",
+      "Every quest you finish earns story points. You're already on your first one - this island!"
+     ]
+    },
+    {
+     "id": 7,
+     "zone": "tutorial",
+     "goal": {
+      "bring": "copper_ore",
+      "n": 1
+     },
+     "ends": "tut_mining",
+     "kit": {
+      "pickaxe": 1
+     },
+     "reward": "xp:mining:150",
+     "talk": [
+      "Prospector Dunn is digging by the rocks to the south. Take him this pickaxe.",
+      "Click a copper rock to mine some ore, then bring it to Dunn."
+     ],
+     "hint": "Click a <b>copper rock</b> to mine one copper ore. Then talk to <b>Prospector Dunn</b>.",
+     "progress": [
+      "Click a copper rock to mine one copper ore. Then talk to Prospector Dunn."
+     ],
+     "complete": [
+      "Lovely bit of copper! Ore is how you'll make things one day. You're a miner now, too."
+     ]
+    },
+    {
+     "id": 8,
+     "zone": "tutorial",
+     "goal": {
+      "do": "equip"
+     },
+     "ends": "tut_combat",
+     "kit": {
+      "sword_t1": 1
+     },
+     "reward": "xp:attack:100",
+     "talk": [
+      "Sergeant Kade is waiting to the east, by the rats. He sent you this sword.",
+      "Click the sword in your pack and choose Wield. The Equipment button - the shirt - shows what you're holding and wearing."
+     ],
+     "hint": "Click the <b>sword</b> in your pack and choose <b>Wield</b>. Then talk to <b>Sergeant Kade</b>.",
+     "progress": [
+      "Click the sword in your pack and choose Wield. Then talk to Sergeant Kade."
+     ],
+     "complete": [
+      "There - armed and ready! Now let's put that sword to work."
+     ]
+    },
+    {
+     "id": 9,
      "zone": "tutorial",
      "goal": {
       "kill": "tut_rat",
       "n": 2
      },
      "ends": "tut_combat",
-     "kit": {
-      "sword_t1": 1
-     },
      "reward": [
       "xp:attack:150",
       "xp:strength:150",
       "xp:defence:150"
      ],
      "talk": [
-      "Kade left this sword for you. Wield it from your pack, then go east and see him.",
-      "The island rats over there are fair game. Click one to attack it; your Combat tab picks how you fight."
+      "See those island rats? Click one to fight it. Your sword does the rest.",
+      "Defeat two, then come back to me."
      ],
+     "hint": "Click an <b>island rat</b> to fight it. Defeat <b>2 rats</b>, then talk to <b>Sergeant Kade</b>.",
      "progress": [
-      "Wield the bronze sword, kill two island rats in the east, then talk to Sergeant Kade."
+      "Click an island rat to fight it. Defeat 2 rats, then talk to Sergeant Kade."
      ],
      "complete": [
-      "Two rats! The rats will talk about you. Watch your hitpoints out there - eat before the red orb runs low.",
-      "That's all I've got. Ferryman Odo at the pier will row you to Ashvale. Off you go, and keep the sword."
+      "Ha! Two rats, and barely a scratch on you. You fight like a hero already!"
      ]
     },
     {
-     "id": 6,
+     "id": 10,
+     "zone": "tutorial",
+     "goal": {
+      "do": "eat"
+     },
+     "ends": "tut_combat",
+     "kit": {
+      "bread": 1
+     },
+     "reward": "xp:hitpoints:100",
+     "talk": [
+      "Fighting is hungry work. Your health is the red circle at the top right.",
+      "Click the bread in your pack and choose Eat - food heals you whenever you're hurt."
+     ],
+     "hint": "Click the <b>bread</b> in your pack and choose <b>Eat</b>. Then talk to <b>Sergeant Kade</b>.",
+     "progress": [
+      "Click the bread in your pack and choose Eat. Then talk to Sergeant Kade."
+     ],
+     "complete": [
+      "Good! Always eat before your health gets low. That's the best advice I've got."
+     ]
+    },
+    {
+     "id": 11,
+     "zone": "tutorial",
+     "goal": {
+      "do": "ranged"
+     },
+     "ends": "tut_combat",
+     "kit": {
+      "bow_t1": 1,
+      "arrows_t1": 15
+     },
+     "reward": "xp:ranged:150",
+     "talk": [
+      "Now, from a distance. Here's a bow and some arrows.",
+      "Wield the bow, then click a rat to shoot it."
+     ],
+     "hint": "Click the <b>bow</b> in your pack and choose <b>Wield</b>. Then click a <b>rat</b> to shoot it.",
+     "progress": [
+      "Click the bow in your pack and choose Wield. Then click a rat to shoot it."
+     ],
+     "complete": [
+      "A fine shot! Bows let you fight from far away."
+     ]
+    },
+    {
+     "id": 12,
+     "zone": "tutorial",
+     "goal": {
+      "do": "magic"
+     },
+     "ends": "tut_combat",
+     "kit": {
+      "staff_t1": 1
+     },
+     "reward": "xp:magic:150",
+     "talk": [
+      "And last, magic. Here's a staff - no spellbook needed.",
+      "Wield the staff and click a rat to cast a spell at it."
+     ],
+     "hint": "Click the <b>staff</b> in your pack and choose <b>Wield</b>. Then click a <b>rat</b> to cast a spell.",
+     "progress": [
+      "Click the staff in your pack and choose Wield. Then click a rat to cast a spell."
+     ],
+     "complete": [
+      "Magic! You've tried every way to fight - sword, bow and staff. Keep whichever you like best. I'm proud of you."
+     ]
+    },
+    {
+     "id": 13,
+     "zone": "tutorial",
+     "goal": {
+      "do": "bank_in"
+     },
+     "ends": "tut_banker",
+     "reward": "xp:speechcraft:100",
+     "talk": [
+      "Banker Corin keeps the chest by the jetty. He'll show you how to keep your things safe.",
+      "Click the chest, then click something in your pack to put it in."
+     ],
+     "hint": "Click the <b>bank chest</b>, then click an item in your pack to put it in. Then talk to <b>Banker Corin</b>.",
+     "progress": [
+      "Click the bank chest, then click an item in your pack to put it in. Then talk to Banker Corin."
+     ],
+     "complete": [
+      "Safely stored! The chest keeps your things even when your pack is full."
+     ]
+    },
+    {
+     "id": 14,
+     "zone": "tutorial",
+     "goal": {
+      "do": "bank_out"
+     },
+     "ends": "tut_banker",
+     "reward": "xp:speechcraft:100",
+     "talk": [
+      "Now take it back out. Click the chest, then click the item in the chest.",
+      "Don't worry - nothing gets lost in there."
+     ],
+     "hint": "Click the <b>bank chest</b> and click the item to take it back out. Then talk to <b>Banker Corin</b>.",
+     "progress": [
+      "Click the bank chest and click the item to take it back out. Then talk to Banker Corin."
+     ],
+     "complete": [
+      "Back in your pack! There's a chest like this in every town in the valley, and they're all yours."
+     ]
+    },
+    {
+     "id": 15,
+     "zone": "tutorial",
+     "goal": {
+      "do": "wallet"
+     },
+     "ends": "tut_wallet",
+     "reward": "xp:speechcraft:150",
+     "talk": [
+      "Ledger-keeper Asha is beside the chest. She'll explain your wallet.",
+      "Click the bank chest once more - your wallet is shown there: your address and what you own."
+     ],
+     "hint": "Click the <b>bank chest</b> to see your <b>wallet</b>. Then talk to <b>Ledger-keeper Asha</b>.",
+     "progress": [
+      "Click the bank chest to see your wallet. Then talk to Ledger-keeper Asha."
+     ],
+     "complete": [
+      "That's your wallet: your address, and the things that are truly yours. 'Kept on chain' means they're recorded on the blockchain - they belong to you, not to the game.",
+      "Please back up your wallet: write down your recovery words, keep them somewhere safe, and never share them with anyone - not even me.",
+      "One more thing: right now the valley runs on a test network, so coins and items have no real money value yet. Enjoy learning!"
+     ]
+    },
+    {
+     "id": 16,
+     "zone": "tutorial",
+     "goal": {
+      "do": "buy"
+     },
+     "ends": "tut_shop",
+     "reward": "xp:speechcraft:100",
+     "talk": [
+      "Trader Milo runs the stall by the path. Let's do some shopping.",
+      "Click Milo and choose Trade, then click something on his shelf to buy it."
+     ],
+     "hint": "Click <b>Trader Milo</b>, choose <b>Trade</b>, and click something on his shelf to <b>buy</b> it.",
+     "progress": [
+      "Click Trader Milo, choose Trade, and click something on his shelf to buy it."
+     ],
+     "complete": [
+      "A fine purchase! Shops all over the valley work just the same."
+     ]
+    },
+    {
+     "id": 17,
+     "zone": "tutorial",
+     "goal": {
+      "do": "sell"
+     },
+     "ends": "tut_shop",
+     "reward": "xp:speechcraft:100",
+     "talk": [
+      "Now sell me something back - anything you don't need. Click it in your pack while my shop is open.",
+      "Even a radish is worth a coin or two to me!"
+     ],
+     "hint": "Open <b>Trader Milo's</b> shop again and click something in your pack to <b>sell</b> it.",
+     "progress": [
+      "Open Trader Milo's shop again and click something in your pack to sell it."
+     ],
+     "complete": [
+      "Pleasure doing business! Selling what you don't need is how you'll earn coins."
+     ]
+    },
+    {
+     "id": 18,
+     "zone": "tutorial",
+     "goal": {
+      "do": "bury"
+     },
+     "ends": "tut_chapel",
+     "kit": {
+      "bones": 1
+     },
+     "reward": "xp:prayer:100",
+     "talk": [
+      "Brother Aldo keeps the little chapel to the north-east. Take these bones to him.",
+      "Click the bones in your pack and choose Bury - it trains your Prayer."
+     ],
+     "hint": "Click the <b>bones</b> in your pack and choose <b>Bury</b>. Then talk to <b>Brother Aldo</b>.",
+     "progress": [
+      "Click the bones in your pack and choose Bury. Then talk to Brother Aldo."
+     ],
+     "complete": [
+      "Well done. Burying bones trains your Prayer, and prayers protect you in a fight."
+     ]
+    },
+    {
+     "id": 19,
+     "zone": "tutorial",
+     "goal": {
+      "do": "pray"
+     },
+     "ends": "tut_chapel",
+     "reward": "xp:prayer:100",
+     "talk": [
+      "Open the Prayer button on the right, and click a prayer to switch it on.",
+      "Any one will do - they all help keep you safe in a fight."
+     ],
+     "hint": "Click the <b>Prayer</b> button on the right and click a prayer to switch it on. Then talk to <b>Brother Aldo</b>.",
+     "progress": [
+      "Click the Prayer button on the right and click a prayer to switch it on. Then talk to Brother Aldo."
+     ],
+     "complete": [
+      "There - you're protected. Prayers use prayer points; recharge them at any altar. Go in peace, friend."
+     ]
+    },
+    {
+     "id": 20,
      "zone": "tutorial",
      "goal": {
       "talk": "tut_ferryman"
@@ -2747,20 +3050,21 @@
       "bread:2"
      ],
      "talk": [
-      "Go down to the pier in the south-east. Odo is waiting with the boat.",
-      "Once you're in Ashvale, talk to Elder Maren by the well. She'll have work for you."
+      "You've learned everything you need! Ferryman Odo is waiting at the pier in the south-east.",
+      "Follow the arrow - your adventure in Ashvale is about to begin!"
      ],
+     "hint": "Follow the arrow to <b>Ferryman Odo</b> at the pier and click him.",
      "progress": [
-      "Talk to Ferryman Odo at the pier to sail to Ashvale."
+      "Follow the arrow to Ferryman Odo at the pier and click him."
      ],
      "complete": [
-      "All aboard. Ashvale's a fine place - watch the wolves, mind the road, and don't trust a goblin's smile.",
-      "Hold on, here we go."
+      "You did it - you've finished Tutorial Island! Everyone here is proud of you.",
+      "Hop in. In Ashvale, talk to Elder Maren by the well - she has your first real quest. Welcome to the valley!"
      ]
     }
    ],
    "done": [
-    "You learned the ropes on Tutorial Island."
+    "You learned the basics on Tutorial Island."
    ]
   }
  }
