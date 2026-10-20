@@ -373,10 +373,11 @@
       else msg(p, 'You are no longer overburdened.');
     }
     function speechPermille(p) { return Math.min(SPEECH.maxPermille || 300, (SPEECH.pctPerLevelPermille || 4) * lv(p, 'speechcraft')); }
-    function priceBuy(shopId, id, p) { const sh = shopOf(shopId), base = Math.floor(IT[id].value * sh.sellRate / 100); if (!p || !base) return base; return Math.max(1, Math.floor(base * (1000 - speechPermille(p)) / 1000)); }
+    /* a shop with fixed: true (the Saltmere Links Pro Shop) keeps its prices: no Speechcraft discount, and no Speechcraft bonus when it buys back */
+    function priceBuy(shopId, id, p) { const sh = shopOf(shopId), base = Math.floor(IT[id].value * sh.sellRate / 100); if (!p || !base || sh.fixed) return base; return Math.max(1, Math.floor(base * (1000 - speechPermille(p)) / 1000)); }
     function priceSell(shopId, id, p) {
       const sh = shopOf(shopId), d = IT[id]; if (!shopBuys(sh, d)) return -1;
-      let v = Math.floor(d.value * sh.buyRate / 100); if (p) v = Math.floor(d.value * sh.buyRate * (1000 + speechPermille(p)) / 100000);
+      let v = Math.floor(d.value * sh.buyRate / 100); if (p && !sh.fixed) v = Math.floor(d.value * sh.buyRate * (1000 + speechPermille(p)) / 100000);
       if (p && sh.stock.indexOf(id) >= 0) v = Math.min(v, priceBuy(shopId, id, p) - 1);   /* never sell for more than it costs here */
       return Math.max(0, v);
     }
@@ -452,6 +453,7 @@
       if (typeof s.town === 'string') p.town = s.town;
       if (s.hawkHp != null) p.hawkHp = s.hawkHp | 0;
       if (s.ch && typeof s.ch === 'object' && typeof s.ch.t === 'string' && (s.ch.n | 0) >= 0) p.ch = { t: s.ch.t.slice(0, 32), key: String(s.ch.key || '').slice(0, 48), cs: s.ch.cs | 0, n: Math.min(1000000, s.ch.n | 0), ids: Array.isArray(s.ch.ids) ? s.ch.ids.filter(x => typeof x === 'string').slice(-8) : [], at: 0 };   /* [Claude 2026-10-12] a chess stake still on a table */
+      if (s.gf && typeof s.gf === 'object' && typeof s.gf.s === 'string') p.gf = { s: s.gf.s.slice(0, 48), n: Math.min(1000000, Math.max(0, s.gf.n | 0)), at: +s.gf.at || 0 };   /* [Claude 2026-10-19] a golf stake on a round not yet paid out */
       if (s.pk && typeof s.pk === 'object' && typeof s.pk.t === 'string' && (s.pk.n | 0) >= 0) p.pk = { t: s.pk.t.slice(0, 32), key: String(s.pk.key || '').slice(0, 48), cs: s.pk.cs | 0, n: Math.min(1000000, s.pk.n | 0), ids: Array.isArray(s.pk.ids) ? s.pk.ids.filter(x => typeof x === 'string').slice(-8) : [], at: 0 };   /* [Claude 2026-10-12] an open card-table seat, paid back if the table forgot it */
       if (s.cd) { p.cd = {}; for (const k in s.cd) p.cd[k] = S.t + (s.cd[k] | 0); }
       if (s.gift && typeof s.gift === 'object') { p.gift = {}; for (const k in s.gift) if (IT[k] && s.gift[k] > 0) p.gift[k] = s.gift[k] | 0; }   /* items given by other players (quests do not count them) */   /* cooldowns are saved as ticks left */
@@ -505,6 +507,7 @@
       if ((s.v | 0) >= 2 && Array.isArray(s.pos) && s.pos.length === 3) xy = M.fromFace(s.pos[0] | 0, s.pos[1] | 0, s.pos[2] | 0);
       else if ((s.v | 0) <= 1 && Number.isInteger(s.x) && Number.isInteger(s.y)) xy = [s.x, s.y];
       if (xy) xy = underMove(xy[0], xy[1]);   /* saved inside the Spider Cave or a wigwam before they moved */
+      if (xy) { const zr = (ZINDEX || []).find(z => Array.isArray(z.returnTo) && xy[0] >= z.origin[0] && xy[1] >= z.origin[1] && xy[0] < z.origin[0] + z.size[0] && xy[1] < z.origin[1] + z.size[1]); if (zr) xy = [zr.returnTo[0] | 0, zr.returnTo[1] | 0]; }   /* [Claude 2026-10-20] a zone with returnTo (the golf course - the operator: left mid-round, "when you come back, you should be in the clubhouse") starts you there */
       if (!xy || !inMap(xy[0], xy[1])) return;   /* outside the world: the spawn */
       /* in your canoe when you left (2026-10-07: "if you're in a canoe that needs to save ... so when you reload the game, you're not on
          the shore without your canoe"): you come back sitting in it, on the water where you were */
@@ -525,7 +528,7 @@
     function exportPlayer(id) {
       const p = S.players[id]; if (!p) return null;
       const at = p.dead ? wakeSpot(p).at : [p.x, p.y];
-      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, tp: p.tp || undefined, orders: p.orders || {}, traps: p.traps || [], patches: p.patches || {}, tut: p.tut ? 1 : undefined, bless: p.bless || [], town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, gift: p.gift && Object.keys(p.gift).length ? p.gift : undefined, kills: p.kills || {}, pk: p.pk || undefined, ch: p.ch || undefined, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
+      return JSON.parse(JSON.stringify({ v: 2, pos: M.toFace(at[0], at[1]), home: p.home && p.home !== 'ashvale' ? p.home : undefined, name: p.name, look: p.look, start: p.start || null, xp: p.xp, inv: p.inv, eq: p.eq, styles: p.styles, run: p.run, retal: p.retal, quests: p.quests, hp: p.hp, energy: p.energy, pp: p.pp | 0, lv: p.lv || 0, gifts: p.gifts || {}, flags: p.flags || {}, attuned: p.attuned || {}, tp: p.tp || undefined, orders: p.orders || {}, traps: p.traps || [], patches: p.patches || {}, tut: p.tut ? 1 : undefined, bless: p.bless || [], town: p.town || null, boat: p.boat === 1 && !p.dead ? 1 : 0, face: p.face | 0, hawkHp: p.hawkHp == null ? null : p.hawkHp, gift: p.gift && Object.keys(p.gift).length ? p.gift : undefined, kills: p.kills || {}, pk: p.pk || undefined, gf: p.gf || undefined, ch: p.ch || undefined, cd: Object.fromEntries(Object.entries(p.cd || {}).map(([k, u]) => [k, Math.max(0, u - S.t)]).filter(e => e[1] > 0)) }));
     }
 
     // ---------------- pathfinding: BFS over the tile grid, 8 directions, no corner cutting (RuneScape-style)
@@ -917,6 +920,22 @@
         case 'equip': equip(p, c.slot | 0); break;
         case 'unequip': unequip(p, c.eq); break;
         case 'eat': eat(p, c.slot | 0); break;
+        /* [Claude 2026-10-19] THE SALTMERE LINKS (engolf.js): during a round the avatar goes with its ball (only on the course);
+           a group's stake goes out of the bag into p.gf (the engine sends it to @ashvale - the card table's pkbuy), and the
+           round's share comes back into the bag once (pkcash: the Bank pays it home). A player who leaves forfeits (the operator). */
+        case 'golfgo': { const x = c.x | 0, y = c.y | 0, on = (a, b) => a >= 545 && a < 720 && b >= -398 && b < -104;
+          if (!p.dead && on(p.x, p.y) && on(x, y) && !(M.blocked && M.blocked(x, y))) teleport(p, { id: 'golf', to: [x, y] }, null); break; }
+        case 'golfstake': { const n = c.n | 0, s = String(c.s || '').slice(0, 48);
+          if (!/^golf:[\w-]+:\d$/.test(s) || n <= 0 || n > 1000000 || (p.gf && p.gf.s !== s)) break;
+          if (p.gf) break;   /* already staked on this round */
+          if (invCount(p, 'coins') < n) { msg(p, 'You cannot cover the stake of ' + n + ' GOLD.', 'warn'); ev({ e: 'golfshort', p: p.id, s }); break; }
+          removeItem(p, 'coins', n); p.gf = { s, n, at: Date.now() }; msg(p, 'You put up ' + n + ' GOLD for the round.', 'trade'); ev({ e: 'inv', p: p.id });
+          ev({ e: 'pkbuy', p: p.id, s, n }); break; }
+        case 'golfcash': { const s = String(c.s || ''); if (!p.gf || p.gf.s !== s) break;
+          const n = Math.max(0, Math.min(c.n | 0, p.gf.n * 4)); p.gf = null;   /* at most a four-player pot */
+          if (n > 0) { addItem(p, 'coins', n); ev({ e: 'inv', p: p.id }); }
+          ev({ e: 'pkcash', p: p.id, s, n }); break; }
+        case 'golfforfeit': if (p.gf && p.gf.s === String(c.s || '')) { p.gf = null; msg(p, 'You forfeit your stake on the round.', 'warn'); } break;
         case 'portal': if (c.to === 'back') { const here = M.npcs.find(n => n.portal && cheb(p.x, p.y, n.x, n.y) <= 2), B = p.tp; if (here && B && !p.dead) { delete p.tp; teleport(p, { id: 'townportal', name: B.name, to: [B.x, B.y] }, 'You step back through your town portal, and it closes behind you.'); p.lv = B.lv | 0; } break; } else { const P = portalOf(c.to), here = M.npcs.find(n => n.portal && cheb(p.x, p.y, n.x, n.y) <= 2); if (P && here && here.portal !== P.id && !p.dead && p.attuned && p.attuned[P.id] && p.attuned[here.portal]) teleport(p, P, 'You step through the portal to ' + P.name + '.'); break; }
         case 'perch': {   /* a hawk perches in a tree, on the side you tapped */
           if (!airborne(p)) break; const n = nodeAt(idx(c.x | 0, c.y | 0)); if (!n || nodeDef(n).skill !== 'woodcutting') break;
@@ -1143,7 +1162,10 @@
       }
       if (bought) { msg(p, 'You buy ' + (bought > 1 ? bought + ' x ' : '') + d.name + ' for ' + bought * price + ' GOLD.', 'trade'); ev({ e: 'trade', p: p.id, buy: item, n: bought }); creditDo(p, 'buy'); addXp(p, 'speechcraft', (SPEECH.xpPerGold || 1) * bought * price); burdenCheck(p); }
     }
-    function shopBuys(sh, d) { return d.category !== 'currency' && !d.edition &&   /* a one-of-one (Edition) is never sold to a shop: it would be gone for good */ (sh.buys === 'any' || sh.buys.indexOf(d.category) >= 0 || sh.buys.indexOf(d.category + '/' + d.subcategory) >= 0); }
+    const OWN_BUYER = ['tool/golfset'];   /* kinds only a shop that names them exactly buys back ('any' and a bare 'tool' don't): golf sets go back to the pro shop only */
+    function shopBuys(sh, d) {
+      const kind = d.category + '/' + d.subcategory; if (OWN_BUYER.indexOf(kind) >= 0) return sh.buys !== 'any' && sh.buys.indexOf(kind) >= 0 && !d.edition;
+      return d.category !== 'currency' && !d.edition &&   /* a one-of-one (Edition) is never sold to a shop: it would be gone for good */ (sh.buys === 'any' || sh.buys.indexOf(d.category) >= 0 || sh.buys.indexOf(kind) >= 0); }
     function sell(p, shopId, slot, n) {
       const sh = shopOf(shopId); if (!sh || p.shop !== shopId || !nearKeeper(p, sh)) return;
       const s = p.inv[slot]; if (!s) return; const d = IT[s.id];
@@ -1265,13 +1287,15 @@
     function scoresOf(key) {
       const m = SCORES[key] || {}; let sum = 0; const top = [];
       for (const nm in m) { if (!scoreName(nm)) continue; sum += m[nm] | 0; top.push([nm, m[nm] | 0]); }
-      top.sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+      const low = SCORE_TXT[key] && SCORE_TXT[key].low;   /* golf: the lowest round first */
+      top.sort((a, b) => (low ? a[1] - b[1] : b[1] - a[1]) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
       return { total: sum, top: top.slice(0, 10), names: m };
     }
     /* [Claude 2026-10-11] two boards share the Bank's score channel: the keep's dragon killers and the Chess Park's games won
        (the operator: "quick fix the leaderboard at chess" - the park's board was painting the dragon text). Wins, not Elo: the
        Bank adds up the wins games report, one per name; Elo and the match ledger stay in chess_park_plan phase 2. */
     const SCORE_TXT = { chain_dragon: { title: 'DRAGON KILLERS', sub: n => 'Slain ' + n + (n === 1 ? ' time' : ' times'), read: n => 'The chained dragon has been slain ' + n + ' time' + (n === 1 ? '' : 's') + '.', list: 'The names of its slayers, by how many times:' },
+                        golf_round: { title: 'THE SALTMERE LINKS', sub: n => 'Best rounds (par 71)', read: n => 'The best rounds on the Saltmere Links, lowest first (par 71).', list: 'Best rounds:', low: true },   /* [Claude 2026-10-19] a best round per name (the Bank keeps the lowest) */
                         lily_run: { title: 'THE LILY RUN', sub: n => 'Best scores', read: n => 'The best runs at the Lily Run, frog by frog.', list: 'Best scores:' },   /* [Claude 2026-10-19] a best score per name (the Bank keeps the highest), not a count */
                         chess_wins: { title: 'CHESS CHAMPIONS', sub: n => n + (n === 1 ? ' game won' : ' games won'), read: n => n + ' game' + (n === 1 ? ' has' : 's have') + ' been won at the Chess Park tables.', list: 'The standings, by games won:' } };
     function scoreBoard(key) {
@@ -1928,7 +1952,8 @@
         return;
       }
       if (n.chest) { ev({ e: 'chest', p: p.id, npc: n.id }); return; }
-      if (n.lilyrun) { ev({ e: 'lilyrun', p: p.id, npc: n.id }); return; }   /* [Claude 2026-10-19] the Lily Run's pond-keeper: the engine part (englily.js) talks */
+      if (n.lilyrun) { ev({ e: 'lilyrun', p: p.id, npc: n.id }); return; }
+      if (n.golf) { ev({ e: 'golf', p: p.id, npc: n.id }); return; }   /* [Claude 2026-10-19] Fergus the starter: the engine part (engolf.js) talks */   /* [Claude 2026-10-19] the Lily Run's pond-keeper: the engine part (englily.js) talks */
       if (n.portal) {   /* touching a portal attunes you to it; you can travel to any portal you have touched (2026-10-04) */
         p.attuned = p.attuned || {}; const fresh = !p.attuned[n.portal]; p.attuned[n.portal] = 1; const P0 = portalOf(n.portal);
         if (fresh) msg(p, 'The stones hum as you touch them: you will always find your way back to ' + (P0 ? P0.name : 'here') + ' through any town portal.', 'info');

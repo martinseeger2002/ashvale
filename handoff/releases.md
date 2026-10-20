@@ -1216,3 +1216,60 @@ the walk here feature".
   comes off only when /r/inscription/<id> says a new owner (2541574). The operator chose "Never strip worn gear".
 - Modules: engbank. Tests: core_test ALL OK, chest_ledger_pw ALL OK (new short-read-keeps-worn case). check_live v185, no errors.
 - Card listing_v08158/ and chain/post_v08158.txt ready, held with 0.8.157's until the Frogs collection is listed.
+
+## 0.8.159 - 2026-10-20 (Claude): THE SALTMERE LINKS (golf) - RELEASED (v186 b0499fe9)
+- the operator: an 18-hole course (par 71) north-east of Saltmere: clubhouse, Fergus the starter (rounds alone or groups of 4),
+  Isla's pro shop (club sets 500 / 2,500 / 10,000 / 40,000 GOLD, NFTs of ASHVALE Saltmere Links), wagers (winner takes the pot,
+  per stroke capped at 20 a pair; quitter forfeits), custom golf HUD, best-rounds board (lowest first). Plan: handoff/golf_plan.md;
+  course source tools/golf/course.py -> tools/make_golf.py -> src/golfcourse.js + data/golf.course.json; zones by
+  tools/golf/make_golf_zones.py (the hedge gap + fingerpost live in zone.saltmere, zones never overlap).
+- Modules: golfrules, golfcourse, engolf, hudgolf, core, engine, engbank, hud, models, data/items+shops+rules+assets+zoneindex,
+  zones golf/golfpath/saltmere, parts (4 bags, Fergus, Isla, 5 clothes).
+- Bank (.25 bank-rpc 9c7568e, restarted 22:30): golf rounds pay all at once only when every game agrees and every staked player
+  claimed (else HELD; 6 h fallback), golf_round best boards; icons for the 4 sets copied to .25 chain/bank/icons.
+- Tests: golfrules_test, golf_pw ALL OK (group of two for a 100 pot, stakes, settle, solo leave), proshop_test, core_test ALL OK,
+  bank_golf_test/pk/best/pool/fe ALL OK on .25. check_live v186, no console errors.
+- Cards listing_v08159/ + listing_ziibiing_v08159/ and chain/post_v08159.txt posted (also announces the Lily Run + frog pets: the
+  Doginal Frogs collection is now listed, root 906d769c...). 0.8.157/158 cards and notes never posted separately.
+
+## 0.8.160 - 2026-10-20 (Claude): Lily Run turtles sink slowly
+- the operator: you should be able to hop off a turtle as soon as you see it start to sink. lilyrules: a dive takes 1.5 s, the frog only
+  drops when the turtle is all the way under (sunk >= 0.92). Module: lilyrules. Test: lilyrules_test ALL OK.
+
+## 0.8.161 - 2026-10-20 (Claude): golf turns, phone swing fix, level course, cobbled road - RELEASED (v188)
+- the operator: groups take turns (tee order, then farthest from the pin), everyone's camera on the active shot, waiting golfers
+  stand round to watch; the swing button on phones (a press within 250 ms ignored, the strike only after the marker turns);
+  the course looks like the approved course (zone.flat: level ground; set-piece ponds the world lacks are dug, not hills;
+  zone.turf: no tufts on the course); the hill on the walk is gone (new flat zone golfshore); a 3-wide cobbled road with lamps
+  from Saltmere's cobbles (the lane in zone.saltmere is 'c') to the clubhouse door.
+- Modules: world, scene, hudgolf, golfcourse, engolf, engine, data/zoneindex, zones saltmere/golf/golfpath/golfshore.
+- Tests: golf_pw ALL OK (two-player turns, watchers, phone double tap, settlement), core_test ALL OK, golfrules, lilyrules.
+  check_live v188, no console errors. Post chain/post_v08161.txt.
+
+## 0.8.162 - 2026-10-20 (Claude): SadFrogLTC's pirates, Tutorial Island, cats, Saltmere rework, combat balance - RELEASED (v189 94d2cbbc)
+- the operator: "Merge, test and release" SadFrog's 8 GitHub commits (900da50..6c378d6). Merged on claude/sadfrog-pirates: 3-way diff,
+  code conflicts kept both sides, JSON data merged by structure (dicts by key, lists by id, tile rows by char); the golf lane cobbled
+  (saltmere_rugged_test wants no dirt). Then main (0.8.161 golf) merged in; only zone.saltmere conflicted, merged the same way.
+- Browser tests now pass ?notut (a fresh wallet player starts on Tutorial Island). arcade_pw's multiplayer checks are flaky on the
+  a test machine on main too (4-5 random fails a run). golf_pw's 2 phone-tap fails = the bug Ashvale fixes in 0.8.163.
+- Node suite all green incl. every Thornwatch play test. check_live v189, no console errors.
+- 59 modules changed. Comments in core.js/scene.js name the source game (on chain as comments; not in player text) - asked the operator.
+
+## 0.8.163 - 2026-10-20 (Claude): golf swing on phones, face the pin, back in the clubhouse - RELEASED (v190 bfc03c67)
+- the operator's recording: on his phone SWING gave only the power stroke. Now while the meter runs a tap anywhere is the next press
+  (window touchstart/pointerdown, 250 ms debounce, strike only counts 120 ms after the fall starts); button text only rewritten on change.
+- Every stroke starts aimed at the pin. zone.returnTo: a save on the course loads at the clubhouse (635,-118) - placeFrom in core.js.
+- Modules: core, engolf, data/zoneindex, zones/golf. Tests on the merged build: golf_tap_pw ALL OK, golf_pw ALL OK (branch core_test ALL OK).
+  check_live v190, no console errors. Post chain/post_v08163.txt.
+
+## 0.8.164 - 2026-10-20 (Claude): golf meter marker visible on the accuracy stroke - RELEASED (v191 2c2f27ce)
+- the operator: after the power tap nothing moves on the meter. Cause: the marker's class was 'mark', and hudart's `.ash .mark` (hit
+  markers, animation ashmark: fade to opacity 0 in 0.45 s) applied to it. Playtest page lacked hudart, so it never showed there.
+  Renamed gmark, made it bolder; no other golf HUD class collides with a global `.ash .x` rule (checked).
+- Module: hudgolf. golf_tap_pw (now checks the marker is visible and moving) ALL OK, golf_pw ALL OK. Post chain/post_v08164.txt.
+
+## 0.8.165 - 2026-10-20 (Claude): the hole shows on a long putt - RELEASED (v192 50ee8b40)
+- the operator: "when putting from a distance the hole is not visible"; a gold ring + floating arrow was tried and REJECTED ("I want the
+  little black hole to be visible"). Now, at the hole you putt at (on the green or holding the putter), the cup and lip draw with
+  depthTest off (the course's polygon-offset surface hid them at a low look) and scale 1-3x with distance/5 m; ball renderOrder 6.
+- Module: engolf. golf_pw ALL OK, golf_tap_pw ALL OK. Post chain/post_v08165.txt.

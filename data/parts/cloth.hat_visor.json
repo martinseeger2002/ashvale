@@ -1,0 +1,1 @@
+{"ashvale3d":"part","api":1,"v":1,"id":"cloth.hat_visor","kind":"cloth","slot":"hat","style":"visor","color":"#f0f0f0","hides":[],"homes":[],"shapes":[{"t":"cyl","s":[0.158,0.158,0.035],"c":"$c","p":[0,0.2,0],"seg":14,"open":true,"ds":true,"j":"head"},{"t":"sphere","s":[0.12],"c":"$c:0.92","p":[0,0.185,0.13],"seg":[12,5],"k":[1.1,0.09,0.8],"j":"head"}]}

@@ -488,7 +488,7 @@
       /* the ruined keep's dragon-killer board: the Bank is the ONLY place it is kept (2026-10-12: "the bank is the
          only thing that stores the high score and it doesn't get the high score from the clients"). A game reports ONE kill
          - only WHO, never a count of its own - and asks with 'scores?' for the board, which is all a sign paints from. */
-      const SCORE_KEYS = ['chain_dragon', 'chess_wins', 'lily_run'];
+      const SCORE_KEYS = ['chain_dragon', 'chess_wins', 'lily_run', 'golf_round'];   /* golf_round: the best 18-hole totals, lowest first (the Bank keeps each name's lowest) */
       function scoreTell(e) {
         if (!e || SCORE_KEYS.indexOf(e.key) < 0 || !e.name) return;   /* [Claude 2026-10-11] the chess park's games-won board rides the same channel */
         bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'score', v: 2, k: e.key, n: String(e.name).slice(0, 20), d: 1 }); });

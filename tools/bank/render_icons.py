@@ -4,7 +4,8 @@ Needs the dev server: python3 -m http.server 8731 in ~/ashvale3d. 2026-10-12: fl
 import os, time, base64, sys, json
 os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', '/home/you/.cache/ms-playwright')
 from playwright.sync_api import sync_playwright
-OUT = '/home/you/ashvale3d/chain/bank/icons'; KEYS = sys.argv[1:]
+OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'chain', 'bank', 'icons'); KEYS = sys.argv[1:]   # this tree's chain/bank/icons (~/ashvale3d's in the main tree)
+os.makedirs(OUT, exist_ok=True)
 ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
 with sync_playwright() as p:
     b = p.chromium.launch(args=ARGS); pg = b.new_page(viewport={'width': 720, 'height': 480})

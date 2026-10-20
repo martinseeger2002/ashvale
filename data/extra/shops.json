@@ -62,6 +62,23 @@
    "buyRate": 35,
    "sellRate": 110,
    "greet": "Everything a hero needs and a few things a hero only thinks they need. Prices are fair. Fairly fair."
+  },
+  "proshop": {
+   "name": "Saltmere Links Pro Shop",
+   "keeper": "isla",
+   "stock": [
+    "golf_starter",
+    "golf_standard",
+    "golf_pro",
+    "golf_master"
+   ],
+   "buys": [
+    "tool/golfset"
+   ],
+   "buyRate": 40,
+   "sellRate": 100,
+   "fixed": true,
+   "greet": "Welcome to the Links. You need a set of clubs to play: start with the Starter Set, and come back for a better one when your game asks for it."
   }
  }
 }

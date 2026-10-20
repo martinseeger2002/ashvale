@@ -18,7 +18,7 @@ srv = mock.serve(PORT); threading.Thread(target=srv.serve_forever, daemon=True).
 BASE = 'http://127.0.0.1:%d/' % PORT
 with sync_playwright() as p:
     b = p.chromium.launch(args=ARGS)
-    r = two_players(b, BASE + '?nocreator&seed=a', BASE + '?nocreator&seed=b&guest', os.path.join(OUT, 'arcade_two_players.png'), check, sandbox=True)
+    r = two_players(b, BASE + '?nocreator&notut&seed=a', BASE + '?nocreator&notut&seed=b&guest', os.path.join(OUT, 'arcade_two_players.png'), check, sandbox=True)
     pa = r['pa']
     check('@guest' in pa.evaluate('ASH.net().names'), 'a signed-out player shows as "@guest" (0.8.123: the @tag is the only name): %s' % pa.evaluate('ASH.net().names'))
     print('     room.me on A:', pa.evaluate('JSON.stringify(ASH.net().me)'), '| status:', pa.evaluate('ASH.net().status'))
@@ -41,7 +41,7 @@ with sync_playwright() as p:
     print('     console errors:', r['errs'][:8]); check(not r['errs'], 'no console errors with two players on the arcade page')
     r['ctx'].close()
     from mp_many import many_players
-    many_players(b, lambda i: BASE + '?nocreator&seed=m%d' % i + ('&guest' if i == 3 else ''), check, n=4, sandbox=True, shot=os.path.join(OUT, 'arcade_four_players.png'), trade_check=True)
+    many_players(b, lambda i: BASE + '?nocreator&notut&seed=m%d' % i + ('&guest' if i == 3 else ''), check, n=4, sandbox=True, shot=os.path.join(OUT, 'arcade_four_players.png'), trade_check=True)
     # outside a viewer: storage rejects -> memory only, no errors
     ctx = b.new_context(viewport={'width': 844, 'height': 390}, is_mobile=True, has_touch=True)
     ctx.add_init_script("Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('denied', 'SecurityError'); } });")
