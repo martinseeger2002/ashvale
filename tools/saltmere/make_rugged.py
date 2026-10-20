@@ -9,7 +9,7 @@ rerun):
   - the houses go grimy: salt-stained plaster, patched dark roofs (the town hall keeps its paint);
   - scenery along the streets (data/decor.json kinds, palette 'harbour'): scrap heaps, burning barrels, washing lines, shanties, salvaged
     planks, carts, fences - and by the quay and the beach rope, nets, lobster pots, drying racks and a rowboat past saving - each on the
-    verge beside a street, facing it, kept off doorways, people and the town's own things, never closer than four tiles to another;
+    verge beside a street, facing it, kept off doorways, people and the town's own things, never closer than six tiles to another;
   - the south pier's head (x 511-515, y 72-77) is the pirates': their ship tied alongside, a black flag, two cannon on the walk in, rum, a
     sea chest, a fire in a barrel, and the crew of five (names, looks, lines drafted by the local Qwen model, Qwen3.5-9B, and edited; their
     quest lines are written up for the game's quest code in handoff/saltmere_pirates.md).
@@ -129,7 +129,7 @@ for n in Z['npcs']: mark(n['x'], n['y'], n['x'], n['y'], 1)
 mark(*HEAD, 1)
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 HARBOUR = [('rope_coil', 3), ('net_pile', 3), ('lobster_pots', 3), ('fish_rack', 2), ('plank_pile', 2), ('trash_heap', 1), ('burn_barrel', 1)]
-TOWN = [('trash_heap', 4), ('burn_barrel', 3), ('laundry_line', 2), ('plank_pile', 2), ('shanty', 2), ('rail_fence', 2), ('broken_cart', 1), ('supply_cache', 1), ('stump_axe', 1), ('dead_tree', 1), ('lantern_post', 1)]
+TOWN = [('trash_heap', 2), ('burn_barrel', 2), ('laundry_line', 2), ('plank_pile', 2), ('shanty', 2), ('rail_fence', 2), ('broken_cart', 1), ('supply_cache', 1), ('stump_axe', 1), ('dead_tree', 1), ('lantern_post', 1)]
 h32 = lambda x, y, s=0: ((x * 73856093) ^ (y * 19349663) ^ (s * 83492791)) & 0x7fffffff
 def pick(bag, x, y):
     tot = sum(w for _, w in bag); r = h32(x, y, 7) % tot
@@ -144,8 +144,9 @@ for y in range(OY, OY + len(T)):
         if st: cands.append((h32(x, y), x, y, st[0]))
 cands.sort()
 placed = []
+SPACING = 6   # tiles between two pieces (2026-10-20, the operator: "the junk should be thinned out a bit" - it was 4, and 80 pieces)
 for _, x, y, (dx, dy) in cands:
-    if any(max(abs(x - a), abs(y - b)) < 4 for a, b, _ in placed): continue
+    if any(max(abs(x - a), abs(y - b)) < SPACING for a, b, _ in placed): continue
     harbour = x >= 470 or at(x, y) == 's' or any(at(x + u, y + v) in ('s', '~') for u in (-2, 0, 2) for v in (-2, 0, 2))
     k = pick(HARBOUR, x, y) if harbour else pick(TOWN, x, y)
     if at(x, y) == 's' and h32(x, y, 3) % 3 == 0: k = 'upturned_boat'

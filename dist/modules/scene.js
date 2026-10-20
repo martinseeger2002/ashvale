@@ -1036,7 +1036,7 @@
         for (const m of parts) { m.userData.pick = { kind: 'node', i: K(x, y) }; pickables.push(m); }
       }
       /* ---------- buildings, fences and props */
-      const B = Batcher(group), BF = Batcher(group), anim = [], RICEP = [];   /* RICEP: the wild rice plants, grown by the seasons */   /* BF: the small flora, which the seasons take away and give back */
+      const B = Batcher(group), BF = Batcher(group), BC = Batcher(group), anim = [], RICEP = [];   /* RICEP: the wild rice plants, grown by the seasons */   /* BF: the small flora, which the seasons take away and give back */   /* BC: the cobbles, which cast no shadow (6 cm stones, thousands of them on a cobbled town's streets: 2026-10-20) */
       const roofs = [];
       const floor = HG.floor;
       /* TK - the tower kit (2026-10-18, the operator: "players should be able to enter the wizard tower - model it after the one in osrs"):
@@ -1239,17 +1239,18 @@
           for (const c of rg.children) c.position.y += WH * (FL - 1);
           const st = o.stairsAt || (() => { const dx = o.door ? o.door[0] : -9; return [Math.abs(dx - (o.x + o.w - 2)) > 1 ? o.x + o.w - 2 : o.x + 1, o.y + 1]; })();
           const alt = [st[0] - 1 > o.x ? st[0] - 1 : st[0] + 1, st[1]], P = f => f % 2 ? alt : st;   /* = world.js flightOf: a switchback */
-          const stairs = (into, y0, at) => { for (let k = 0; k < 6; k++) into.add(mesh(new THREE.BoxGeometry(0.9, (k + 1) * WH / 6, 0.16), 0x6a4a2a, at[0] + 0.5, y0 + (k + 1) * WH / 12, at[1] + 0.92 - k * 0.16)); };
+          const SB = new Map(), sb = into => { let b = SB.get(into); if (!b) SB.set(into, b = Batcher(into)); return b; };   /* 2026-10-20: the steps, slabs and rails batched per storey (Saltmere drew ~1300 of them as meshes of their own) */
+          const stairs = (into, y0, at) => { for (let k = 0; k < 6; k++) sb(into).add('box', 0x6a4a2a, at[0] + 0.5, y0 + (k + 1) * WH / 12, at[1] + 0.92 - k * 0.16, 0.9, (k + 1) * WH / 6, 0.16); };
           /* an upper floor: the slab round an opening where the flight from below arrives, a railing on three sides (you
              step off at the north end) and a bobbing amber arrow over it - the way down is never hidden (the operator) */
           const slab = (into, yb, hole) => {
             const ins = o.k === 'wtower' ? 1 : 0, X0 = o.x + ins, X1 = o.x + o.w - ins, Z0 = o.y + ins, Z1 = o.y + o.h - ins, hx = hole ? hole[0] : 0, hz = hole ? hole[1] : 0;   /* ins: the round tower's floors stop at its wall tiles (TK fills out to the curve) */
-            const box = (x0, x1, z0, z1) => { if (x1 - x0 > 0.01 && z1 - z0 > 0.01) into.add(mesh(new THREE.BoxGeometry(x1 - x0 + 0.06, 0.12, z1 - z0 + 0.06), 0x9a7046, (x0 + x1) / 2, yb - 0.04, (z0 + z1) / 2)); };
+            const box = (x0, x1, z0, z1) => { if (x1 - x0 > 0.01 && z1 - z0 > 0.01) sb(into).add('box', 0x9a7046, (x0 + x1) / 2, yb - 0.04, (z0 + z1) / 2, x1 - x0 + 0.06, 0.12, z1 - z0 + 0.06); };
             if (!hole) return box(X0, X1, Z0, Z1);
             box(X0, X1, Z0, hz); box(X0, X1, hz + 1, Z1); box(X0, hx, hz, hz + 1); box(hx + 1, X1, hz, hz + 1);
             const rail = 0x4e3420;
-            for (const [x, z] of [[hx, hz], [hx + 1, hz], [hx, hz + 1], [hx + 1, hz + 1]]) into.add(mesh(new THREE.BoxGeometry(0.07, 0.95, 0.07), rail, x, yb + 0.47, z));
-            into.add(mesh(new THREE.BoxGeometry(0.06, 0.06, 1), rail, hx, yb + 0.92, hz + 0.5), mesh(new THREE.BoxGeometry(0.06, 0.06, 1), rail, hx + 1, yb + 0.92, hz + 0.5), mesh(new THREE.BoxGeometry(1, 0.06, 0.06), rail, hx + 0.5, yb + 0.92, hz + 1));
+            for (const [x, z] of [[hx, hz], [hx + 1, hz], [hx, hz + 1], [hx + 1, hz + 1]]) sb(into).add('box', rail, x, yb + 0.47, z, 0.07, 0.95, 0.07);
+            sb(into).add('box', rail, hx, yb + 0.92, hz + 0.5, 0.06, 0.06, 1); sb(into).add('box', rail, hx + 1, yb + 0.92, hz + 0.5, 0.06, 0.06, 1); sb(into).add('box', rail, hx + 0.5, yb + 0.92, hz + 1, 1, 0.06, 0.06);
             const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.42, 4), new THREE.MeshBasicMaterial({ color: 0xffc040 })); arrow.rotation.x = Math.PI; arrow.position.set(hx + 0.5, yb + 1.55, hz + 0.5); into.add(arrow);
             anim.push({ bob: arrow, y0: yb + 1.55 });
           };
@@ -1261,12 +1262,13 @@
             if (STONEK) SK.keepStorey(sg, o, yb, WH, f, null);
             else if (KT) { const kb = KitBatch(sg); kitWalls(kb, yb, false); kb.flush(); }
             else for (const [L, horiz, fx, fz] of [[o.w, true, 0, o.h / 2], [o.w, true, 0, -o.h / 2], [o.h, false, o.w / 2, 0], [o.h, false, -o.w / 2, 0]]) {
-              sg.add(mesh(new THREE.BoxGeometry(horiz ? L + TH : TH, WH, horiz ? TH : L + TH), wall, cx + fx, yb + WH / 2, cz + fz));
+              sb(sg).add('box', wall, cx + fx, yb + WH / 2, cz + fz, horiz ? L + TH : TH, WH, horiz ? TH : L + TH);
               const nW = Math.max(1, Math.floor(L / 1.6));
-              for (let k = 0; k < nW; k++) { const t = (k + 0.5) / nW - 0.5; for (const side of [-1, 1]) sg.add(mesh(new THREE.BoxGeometry(horiz ? 0.55 : 0.03, 0.6, horiz ? 0.03 : 0.55), 0x2a3a4a, cx + fx + (horiz ? t * L : side * 0.1), yb + WH * 0.55, cz + fz + (horiz ? side * 0.1 : t * L))); }
+              for (let k = 0; k < nW; k++) { const t = (k + 0.5) / nW - 0.5; for (const side of [-1, 1]) sb(sg).add('box', 0x2a3a4a, cx + fx + (horiz ? t * L : side * 0.1), yb + WH * 0.55, cz + fz + (horiz ? side * 0.1 : t * L), horiz ? 0.55 : 0.03, 0.6, horiz ? 0.03 : 0.55); }
             }
             if (o.enter && f < FL - 1) stairs(sg, yb, P(f));
           }
+          for (const b of SB.values()) b.finish();
         }
         if (STONEK) { o._y0 = base; SK.keepTop(rg, o, base + WH * FL); }   /* the keep's battlements, banners and donjon are its roof: hidden while you are inside */
         else if (o.k === 'church') {   /* the church's steeple (2026-10-07): a square bell tower over the door end, a slate spire and a gilt cross */
@@ -2077,7 +2079,7 @@
           for (const [px, pz, t] of pts) {
             const r = H(t + 100), sh = SH[Math.floor(H(t + 200) * SH.length)], w = 0.27 + r * 0.14, st = 0.8 + H(t + 300) * 0.4, sx = x + px, sz = y + pz;
             const tall = sh === 'stone' ? 0.09 : 0.06;
-            B.add(sh, CS[Math.floor(H(t + 400) * CS.length)], sx, heightAt(sx, sz) + tall * 0.35, sz, w * st, tall, w / st, H(t + 500) * 6.283, sh === 'stone' ? (H(t + 600) - 0.5) * 0.3 : 0);
+            BC.add(sh, CS[Math.floor(H(t + 400) * CS.length)], sx, heightAt(sx, sz) + tall * 0.35, sz, w * st, tall, w / st, H(t + 500) * 6.283, sh === 'stone' ? (H(t + 600) - 0.5) * 0.3 : 0);
           }
           continue;
         }
@@ -2087,7 +2089,7 @@
         else if ((c === '.' || c === ',') && r < 0.28) { const fx = x + 0.2 + hash2(x, y + 2) * 0.6, fz = y + 0.2 + hash2(x + 2, y) * 0.6; BF.add('cone', c === ',' ? 0x3a6a26 : 0x4a8a30, fx, heightAt(fx, fz) + 0.1, fz, 0.22, 0.22, 0.22, r * 9); }
         else if (c === ',' && r > 0.965) { const fx = x + 0.3 + hash2(x, y + 7) * 0.4, fz = y + 0.3 + hash2(x + 7, y) * 0.4, fy = heightAt(fx, fz); BF.add('cyl6', 0xe8e0c8, fx, fy + 0.05, fz, 0.05, 0.1, 0.05); BF.add('cone', 0xb83a2a, fx, fy + 0.12, fz, 0.14, 0.07, 0.14); }
       }
-      B.finish();
+      B.finish(); BC.finish(false);
       for (const d of dungeonLayers.values()) d.b.finish();
       { const reg = { sets: BF.finish(), g: group }; FLORA_REG.push(reg); floraSeason(reg); }
       if (RICEP.length) {   /* the manoomin: stalk, a blade off it, and the head on top; tinted per plant by the season */
