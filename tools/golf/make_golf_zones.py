@@ -32,14 +32,22 @@ golf = {'name': 'The Saltmere Links', 'level': 'safe', 'flat': True, 'turf': Tru
     {'k': 'house', 'x': CX, 'y': CY, 'w': CW, 'h': CH, 'door': [637, CY + CH - 1], 'sign': 'The Saltmere Links Clubhouse', 'roof': '#2f5a3a', 'wall': '#ece4cf', 'enter': True, 'floors': 1},
     {'k': 'counter', 'x': 639, 'y': -121, 'w': 3, 'h': 1},
     {'k': 'rack', 'x': 642, 'y': -119, 'w': 1, 'h': 1},
-    {'k': 'bench', 'x': 632, 'y': -121, 'w': 2, 'h': 1},
+    {'k': 'bench', 'x': 636, 'y': -121, 'w': 2, 'h': 1},
+    # 2026-10-20: "a bank of [fortune] machines inside of the clubhouse": four Fortune Engines on the north wall, each
+    # with its seat in front (the card room's machines, the same Bank rule); the town portal is rules.portals 'golf'
+    *[{'k': 'fortune', 'id': 'lk%d' % (i + 1), 'x': 632 + i, 'y': -121, 'seat': [632 + i, -120], 'face': 's', 'w': 1, 'h': 1, 'lv': 0} for i in range(4)],
+    # 2026-10-20: a chess board in the clubhouse (a Chess Park table: the same games, wagers and board)
+    {'k': 'chesstable', 'id': 'links1', 'x': 639, 'y': -118, 'seats': [[639, -119], [639, -117]], 'board': 'driftwood', 'w': 1, 'h': 1},
     {'k': 'wsign', 'x': 634, 'y': -114, 'face': 's', 'board': 'golf', 'title': 'THE SALTMERE LINKS'},
     {'k': 'lamp', 'x': 630, 'y': -114}, {'k': 'lamp', 'x': 644, 'y': -114}],
   'npcs': [
     {'id': 'fergus', 'name': 'Fergus the starter', 'look': 'fergus', 'x': 634, 'y': -118, 'golf': True,
      'examine': 'The starter of the Saltmere Links. He keeps the tee sheet and the scores.'},
     {'id': 'isla', 'name': 'Isla the club pro', 'look': 'isla', 'x': 640, 'y': -120, 'shop': 'proshop',
-     'examine': 'The club pro. She sells the club sets and knows every hole by heart.'}],
+     'examine': 'The club pro. She sells the club sets and knows every hole by heart.'},
+    # 2026-10-20: a bank chest in the clubhouse (the town portal beside it is rules.portals 'golf', tools/make_data.py)
+    {'id': 'links_chest', 'name': 'Clubhouse chest', 'look': 'chest', 'x': 632, 'y': -117, 'chest': True,
+     'examine': 'The clubhouse chest, brass-cornered. Everything you own from Ashvale is kept in your arcade wallet; this is where you see it.'}],
   'spawns': [], 'fishing': []}
 # ---- the path from Saltmere's hedge to the course's south-west corner
 PX0, PY0, PX1, PY1 = 462, -132, 545, -24   # stops at Saltmere's north hedge (zone.saltmere: the gap at 477-478 and the fingerpost are in it; zones never overlap)

@@ -1283,3 +1283,15 @@ the walk here feature".
 - Tests: golfrules_test (3 tap checks), golf_pw (Ben's tap-in in a group seen by Ann; Cal 11 ft no button / 9.6 ft
   button, touch tap holes) and golf_tap_pw ALL OK headed (headless SwiftShader is too slow for golf_pw: false FAILs).
   check_live v193 no console errors. Card listing_v08166 + listing_ziibiing_v08166, note chain/post_v08166.txt.
+
+## 0.8.167 - 2026-10-20 (Claude): the clubhouse - town portal, chest, chess, Fortune Engines - RELEASED (v194 d73e1bce)
+- the operator: "Inside the clubhouse, there should be a town portal and a bank chest ... a chess board; the town portal should
+  only portal to and from Saltmere town portal and must be attuned by going to the clubhouse portal"; "a bank of [fortune]
+  machines inside of the clubhouse". rules.portals 'golf' (637,-119 -> 637,-118, only ['saltmere'], stone false); core.js
+  joins(): an `only` portal joins those alone, both ways; the scroll of town portal skips such portals. zone.golf:
+  links_chest 632,-117, chess table links1 639,-118, Fortune Engines lk1-lk4 632-635,-121 (seats row -120), bench to 636,-121.
+- rules.json patched by hand for the portal only: make_data.py's full output has drifted from the checked-in data.
+- Modules: core, data/rules, data/zoneindex, zones/golf. Branch claude/clubhouse merge 3de569f.
+- Tests: clubhouse_test.js + clubhouse_pw.py (new), core_test, golf_pw, golf_tap_pw, chess_pw ALL OK. fortune_pw could not
+  load its 2nd page (box overloaded; main the same) - the clubhouse machines' sit/bar checked in clubhouse_pw.
+- Next (the operator OK'd staging): second storey with the dice/roulette/blackjack tables as their own modules + Bank rules, playtest first.

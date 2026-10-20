@@ -84,7 +84,7 @@ with sync_playwright() as p:
         pages.append(pg)
     pa, pb = pages
     check(all(wait(pg, 'ASH.me.lv === 1', 60) for pg in pages), 'both up in the card room')
-    objs = ev(pa, 'ASH.core.M.objects.filter(o => o.k === "fortune").map(o => [o.id, o.x, o.y, o.lv, o.seat])')
+    objs = ev(pa, 'ASH.core.M.objects.filter(o => o.k === "fortune" && /^fe/.test(o.id)).map(o => [o.id, o.x, o.y, o.lv, o.seat])')
     check(objs == [['fe1', 453, 25, 1, [453, 26]], ['fe2', 454, 25, 1, [454, 26]], ['fe3', 455, 25, 1, [455, 26]], ['fe4', 456, 25, 1, [456, 26]]], 'four machines on 453-456,25 upstairs, benches on row 26: %s' % objs)
     check(ev(pa, '[453,454,455,456].every(x => ASH.core.furnitureAt ? true : true)'), 'objects loaded')
     check(wait(pa, '["fe1","fe2","fe3","fe4"].every(id => !!ASH.fortune()._machine(id))', 30), 'the scene built all four machines')

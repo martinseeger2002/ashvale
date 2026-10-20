@@ -8,7 +8,7 @@ os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', '/home/you/.cache/ms-playwrigh
 from playwright.sync_api import sync_playwright
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); OUT = os.path.join(ROOT, 'tests', 'shots')
 ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
-URL = 'http://127.0.0.1:8731/dist/ashvale3d.html?fresh&nocreator&loopback&seed=chess%d'
+URL = 'http://127.0.0.1:' + os.environ.get('PORT', '8731') + '/dist/ashvale3d.html?fresh&nocreator&loopback&seed=chess%d'
 fails = []
 def check(c, msg):
     print(('ok   ' if c else 'FAIL ') + msg);
@@ -36,12 +36,12 @@ TABLE = 'salt1'; TX, TY = 465, 35
 FEN = 'ASH.core.chessOf(%s).fen' % json.dumps(TABLE)
 
 with sync_playwright() as p:
-    b = p.chromium.launch(args=ARGS)
+    b = p.chromium.launch(headless=os.environ.get('HEADED') is None, args=ARGS if os.environ.get('HEADED') is None else ['--use-angle=gl'])
     ctx = b.new_context(viewport={'width': 720, 'height': 480}); errs = []   # SwiftShader: a screenshot takes ~30 s at this size
     pa = open_page(ctx, URL % 1, errs, 'A'); ev(pa, 'ASH.core.cmd("me", {c: "look", name: "Ann"}); ASH.teleport(468, 38)'); time.sleep(4)
     check(wait(pa, 'ASH.me.x === 468 && ASH.me.y === 38 && ASH.zones().loaded.indexOf("saltmere") >= 0', 40), 'Ann stands on the quay green with Saltmere loaded')
     time.sleep(2); shot(pa, 'chess_01_park')
-    check(ev(pa, '!!ASH.core.tableById(%s)' % json.dumps(TABLE)) and ev(pa, 'ASH.core.tables().length') == 4, 'the four tables are in the loaded town')
+    check(ev(pa, '!!ASH.core.tableById(%s)' % json.dumps(TABLE)) and ev(pa, 'ASH.core.tables().filter(t => /^salt/.test(t.id)).length') == 4, 'the four tables are in the loaded town')   # (the clubhouse has its own, links1)
     # 1. sit: the first tap option on a free table is the south bench (White)
     check(tap(pa, 'tile', [TX, TY]), 'the table can be tapped')
     check(wait(pa, 'ASH.me.seat && ASH.me.seat.t === %s && ASH.me.seat.s === 1' % json.dumps(TABLE), 25), 'Ann walks to the south bench and sits down as White')
