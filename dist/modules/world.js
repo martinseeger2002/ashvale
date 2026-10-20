@@ -94,7 +94,7 @@
     /* one zone's content into the set-piece lists; returns what it added (area loading adds zones later: M.addZone) */
     function ingest(z) {
       const n0 = npcs.length, s0 = spawns.length, o0 = objects.length;
-      pieces.push({ id: z.id, x0: z.origin[0], y0: z.origin[1], x1: z.origin[0] + z.size[0], y1: z.origin[1] + z.size[1], tiles: decks(z), spot: z.setPiece === false });
+      pieces.push({ id: z.id, x0: z.origin[0], y0: z.origin[1], x1: z.origin[0] + z.size[0], y1: z.origin[1] + z.size[1], tiles: decks(z), spot: z.setPiece === false, flat: !!z.flat, turf: !!z.turf });   /* turf: mown grass, no tufts or flowers (the golf course) */   /* flat: a level ground (the golf course - 2026-10-20: "look like the golf course you showed me") */
       W = Math.max(W, z.origin[0] + z.size[0]); H = Math.max(H, z.origin[1] + z.size[1]);
       for (const n of z.npcs || []) npcs.push(Object.assign({ zone: z.id }, n));
       for (const s of z.spawns || []) spawns.push(Object.assign({ zone: z.id }, s));
@@ -403,7 +403,9 @@
       API, CH, cfg: CFG, key, kx, ky, W, H, pieces, npcs, spawns, objects, nodes, respawn: respawn || [Math.floor(W / 2), Math.floor(H / 2)],
       tileAt, blocked, losAt, wallAt, insideAt, zoneAt, nodeAt, inWorld, addZone, hasZone: (id) => pieces.some(P => P.id === id),
       regionOf: (x, y) => 'vale:' + FACE + ':' + Math.floor((x + GX) / REG) + ':' + Math.floor((y + GY) / REG),
-      seeded: !!WG, inPiece: (x, y) => { const z = chunkAt(x, y).zi[ci(x, y)]; return !!z && !pieces[z - 1].spot; },   /* a spot zone (setPiece: false) stands on the world's own ground: the scene draws it as the land (the great mountain's camps, 2026-10-18) */ underAt, underNear, underStyle, waterKind, iceAt, setIce, latOf,
+      seeded: !!WG, inPiece: (x, y) => { const z = chunkAt(x, y).zi[ci(x, y)]; return !!z && !pieces[z - 1].spot; },
+      flatAt: (x, y) => { const z = chunkAt(x, y).zi[ci(x, y)]; return !!z && !!pieces[z - 1].flat; },
+      turfAt: (x, y) => { const z = chunkAt(x, y).zi[ci(x, y)]; return !!z && !!pieces[z - 1].turf; },   /* a spot zone (setPiece: false) stands on the world's own ground: the scene draws it as the land (the great mountain's camps, 2026-10-18) */ underAt, underNear, underStyle, waterKind, iceAt, setIce, latOf,
       /* seeded land, in the vale frame: sites (camps, ore, fishing; ids and monster uids from worldgen), the ground height
          at a tile corner relative to the set pieces' base height (so the old map keeps its own heights), the biome */
       sitesIn(x0, y0, x1, y1) {
@@ -469,7 +471,7 @@
     const have = new Map((D.zones || []).map(z => [z.id, z]));
     return ZI.filter(onLand).map(e => have.get(e.id) || stubZone(e));   /* an underground area is not on the land */
   }
-  function stubZone(e) { return { id: e.id, origin: e.origin, size: e.size, tiles: e.stub, objects: e.pads || [], ownWays: !!e.ownWays }; }   /* ownWays: as the full zone (wg_paths), or the stub would grow paths the zone does not */
+  function stubZone(e) { return { id: e.id, origin: e.origin, size: e.size, tiles: e.stub, objects: e.pads || [], ownWays: !!e.ownWays, flat: !!e.flat, turf: !!e.turf }; }   /* ownWays: as the full zone (wg_paths), or the stub would grow paths the zone does not */
   /* a zone that arrived after the world was made: worldgen gets its real inside (the stub's place in the list is kept) */
   function arriveWorldgen(W, D, z) {
     if (z && (z.under || z.setPiece === false)) return false;   /* an underground area is not on the land; nor is a spot zone (setPiece: false) */

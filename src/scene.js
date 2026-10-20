@@ -662,6 +662,7 @@
         const pt = PADS.length ? padTop(cx, cy) : null;
         if (pt != null && !(at(cx - 1, cy - 1) === '~' && at(cx, cy - 1) === '~' && at(cx - 1, cy) === '~' && at(cx, cy) === '~')) return pt;
         let h = (vnoise(cx * 0.11, cy * 0.11) - 0.5) * 1.5 + (vnoise(cx * 0.37 + 9, cy * 0.37 + 3) - 0.5) * 0.35;
+        if (map.flatAt && map.flatAt(cx, cy) && map.flatAt(cx - 1, cy - 1)) h = 0.02;   /* a level zone (zone.flat: the golf course and its path): no rolling noise, only the water dug below */
         const adj = [at(cx - 1, cy - 1), at(cx, cy - 1), at(cx - 1, cy), at(cx, cy)];
         /* underground (the Spider Cave): rock rises into walls round a flat floor; wading water sits a little low */
         if (map.underAt && map.underAt(cx, cy) != null) {
@@ -700,7 +701,7 @@
           const sh = map.groundH(cx, cy);
           if (!(P(cx - 1, cy - 1) || P(cx, cy - 1) || P(cx - 1, cy) || P(cx, cy))) return sh;
           const a0 = at(cx - 1, cy - 1), a1 = at(cx, cy - 1), a2 = at(cx - 1, cy), a3 = at(cx, cy);
-          if (a0 === '~' || a1 === '~' || a2 === '~' || a3 === '~' || a0 === 'v' || a1 === 'v' || a2 === 'v' || a3 === 'v') return sh;   /* water beds follow the world itself, even inside a set piece: a parcel of a sea town must not flatten the sea floor into a shelf */
+          if ((a0 === '~' || a1 === '~' || a2 === '~' || a3 === '~' || a0 === 'v' || a1 === 'v' || a2 === 'v' || a3 === 'v') && !(map.flatAt && map.flatAt(cx, cy) && sh > map.waterH())) return sh;   /* [Claude 2026-10-20] in a level zone a pond the world does not have (its land stands above the water line) is dug by own() instead - it showed as a hill (the golf course's ponds) */   /* water beds follow the world itself, even inside a set piece: a parcel of a sea town must not flatten the sea floor into a shelf */
           const t = depth(cx, cy) / 8, w = t * t * (3 - 2 * t);
           return own(cx, cy) * w + sh * (1 - w);
         };
@@ -2062,6 +2063,7 @@
       const FL = [0xe04040, 0xf0d040, 0xf4f4f4, 0xb060d0, 0xff8a3a];
       for (let y = Y0; y < Y1; y++) for (let x = X0; x < X1; x++) {
         if (!mine(x, y)) continue;
+        if (map.turfAt && map.turfAt(x, y)) continue;   /* [Claude 2026-10-20] mown turf (zone.turf, the golf course): no tufts, flowers or toadstools - the operator saw them as bumps on the course */
         const c = at(x, y), r = hash2(x * 5 + 1, y * 7 + 2);
         if (c === 'K') { B.add('box', 0x8c897e, x + 0.5, heightAt(x + 0.5, y + 0.5) + 0.65, y + 0.5, 0.5, 1.3 + r * 0.9, 0.42, r * 6); continue; }   /* standing stones and ruin walls (seeded land) */
         if (c === 'c') {   /* cobbles laid by hand, not by a grid (2026-10-07: "too uniform ... use a seed to generate a random cobble

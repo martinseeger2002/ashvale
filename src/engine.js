@@ -286,6 +286,7 @@
       const me = core.addPlayer(PID, save);
       let FE = null;   /* [Claude 2026-10-16] the Fortune Engines' part (engfortune.js), installed with the Bank client below */
       let LR = null;   /* [Claude 2026-10-19] the Lily Run (englily.js) */
+      let GF = null;   /* [Claude 2026-10-19] the Saltmere Links (engolf.js) */
       let PET = null;  /* [Claude 2026-10-17] pets from Doginals (engpet.js): a Doginal Dog or an Anti Doginal Dog in the wallet walks at your heel */
       let PET_PICK = save && typeof save.pet === 'string' ? save.pet : null;   /* [Claude 2026-10-19] the operator: the pet you chose stays chosen next session, any device: it rides in the save the Bank keeps ('frog:4242') */
       if (!/^@/.test(String(me.name || ''))) me.name = '@guest';   /* [Claude 2026-10-15] no chosen names any more: '@guest' until the arcade says your @tag (the operator: "There's no need for two names") */
@@ -351,7 +352,7 @@
       const PH = {}, PH_SENT = {};   /* the dealer's sealed set per table: {h, items: [[ref, blob]...]} - sent on its own small message (Ph) */
       function phSend(t, force) { const P = PH[t]; if (!P || !P.done) return; const now = performance.now(); if (!force && now - (PH_SENT[t] || 0) < 3000) return; PH_SENT[t] = now; netSendBig({ Ph: [t, P.h, MYPK, P.items] }, tRoom(t)); }
       const bounded = (m, n) => { while (m.size > n) m.delete(m.keys().next().value); };
-      const SCORE_KEYS = ['chain_dragon', 'chess_wins', 'lily_run'], SCORE_BOARD = { chain_dragon: 'dragon', chess_wins: 'chess', lily_run: 'lily' };   /* [Claude 2026-10-11] score key -> the sign it paints */
+      const SCORE_KEYS = ['chain_dragon', 'chess_wins', 'lily_run', 'golf_round'], SCORE_BOARD = { chain_dragon: 'dragon', chess_wins: 'chess', lily_run: 'lily', golf_round: 'golf' };   /* [Claude 2026-10-11] score key -> the sign it paints */
       /* 2026-10-12 (the operator: "the bank is the only thing that stores the high score and it doesn't get the high score from
          the clients"): what a sign shows comes only from the Bank's answer. Nothing is read from this device's storage and
          nothing from the character's own kill counts - either would repaint a board the Bank has cleared. */
@@ -819,6 +820,7 @@
       const projs = [];
       function entOf(id) { return typeof id === 'number' ? ents.get('m:' + id) : id === PID ? ents.get('p:' + id) : typeof id === 'string' && id.indexOf('n:') === 0 ? ents.get(id) : ents.get('r:' + id); }   /* n:<id> = an NPC fighting (the castle guard) */
       function onImpact(e, name) {
+        if (name === 'golfswing' || name === 'putt') { if (GF) GF.impact(e, name); return; }   /* [Claude 2026-10-19] the Saltmere Links: the shot leaves at the swing's impact */
         if (/chop|mine|fish|cook/.test(name)) { sfx(name === 'mine' ? 'mine' : name === 'chop' ? 'chop' : name === 'fish' ? 'splash' : 'sizzle', e); return; }
         const rec = e.impacts.find(r => !r.fired); if (!rec) return;
         fireImpact(e, rec);
@@ -1038,7 +1040,7 @@
           } break;
           case 'angels': { const t = ents.get('p:' + e.p); if (t) { angelFlare(t.root.position); if (t.H && t.H.play) t.H.play('cast', { loop: false }); } if (mine) sfx('level'); break; }
           case 'teleport': if (mine) {
-            if (e.to !== 'gate') {   /* the screen goes up FIRST and gets painted; the heavy part (building the cave, the wigwam or the land) follows behind it */
+            if (e.to !== 'gate' && e.to !== 'golf') {   /* (golf: walking the course with your ball, no travel screen) the screen goes up FIRST and gets painted; the heavy part (building the cave, the wigwam or the land) follows behind it */
               const uz = core.M.underAt && core.M.underAt(e.x, e.y), zi2 = (uz && ZINDEX && ZINDEX.find(z => z.id === uz)) || zoneAtIndex(e.x, e.y);
               travelScreen(PASSK[e.to] || null, zi2 ? zi2.name : PASSK[e.to] === 'down' ? 'cave' : '', false);
               CAVE.hold = true; TRAVEL.hold = true; requestAnimationFrame(() => setTimeout(() => { CAVE.hold = false; place(myEnt, e.x, e.y); cam.snap = true; streamRegions(true); sfx('equip'); arriveCheck(); TRAVEL.warm = true; let k = 0; const settle = () => { if (++k < 3) requestAnimationFrame(settle); else TRAVEL.hold = false; }; requestAnimationFrame(settle); }, 30));   /* and it stays until the new place has been built and drawn a few frames (the first draw compiles its materials) */
@@ -1049,6 +1051,8 @@
           case 'cross': if (e.p === PID) { place(myEnt, e.x, e.y); cam.yaw += e.turn || 0; cam.tyaw += e.turn || 0; cam.snap = true; streamRegions(); TN.key = ''; } break;   /* over a cut edge of the net: the same ground, new map coordinates, the view turned with them */
           case 'boatgone': boatHide(e.x, e.y); docksShow(); if (e.by === PID) boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, on: 1 }); break;
           case 'lilyrun': if (mine && LR) LR.talk(); break;   /* [Claude 2026-10-19] Pondkeeper Bram */
+          case 'golf': if (mine && GF) GF.talk(); break;   /* [Claude 2026-10-19] Fergus the starter */
+          case 'golfshort': if (mine && GF) GF.event(e); break;
           case 'chest': if (mine) { send({ c: 'tutdo', k: 'wallet' }); if (DEVHOST && !WALLET_IN) { send({ c: 'tutdo', k: 'bank_in' }); send({ c: 'tutdo', k: 'bank_out' }); }   /* the tutorial's wallet step (the chest shows the wallet); on the dev build without a wallet the chest cannot store, so opening it stands in for the bank steps */ const c = ents.get('n:' + e.npc); if (c) c.H.play('open');
             /* [Claude 2026-10-14] whose chest this is: the home whose spawn is nearest (within 3 km; otherwise Ashvale's) - one chest per home */
             const nn = core.M.npcs.find(q => q.id === e.npc), HS = D.rules.homes || {}; let ch = 'ashvale', bd = 3000;
@@ -1568,7 +1572,8 @@
           if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
           if (myEnt.root.visible) { myEnt.root.visible = false; FPV.hid = true; }   /* your own head would fill the view */
         }
-        if (cam.mode === 'lilyrun' && LR) LR.camera(camera, dt);   /* [Claude 2026-10-19] THE LILY RUN: behind the frog on the board */
+        if (cam.mode === 'lilyrun' && LR) LR.camera(camera, dt);
+        if (cam.mode === 'golf' && GF) GF.camera(camera, dt);   /* [Claude 2026-10-19] behind the ball on the Saltmere Links */   /* [Claude 2026-10-19] THE LILY RUN: behind the frog on the board */
         if (cam.mode === 'fortune' && FE) FE.camera(camera, dt);   /* [Claude 2026-10-16] THE FORTUNE ENGINE: first person on the bench, the head turned by a drag */
         if (cam.mode === 'poker' && POKERV && POKERV.eye) {   /* THE POKER TABLE: first person at the felt, leaning a little over your own side of it */
           const E = POKERV.eye, L = POKERV.look; camera.position.set(E.x, E.y, E.z); camera.lookAt(L.x, L.y, L.z);
@@ -1696,9 +1701,9 @@
         }
         if (t.kind === 'sign') {
           const o = core.signAt(t.x, t.y); if (!o) return [];
-          const nm = '<span class="c">' + (o.board === 'chess' ? 'Champions board' : o.board === 'lily' ? 'Lily Run board' : 'Wooden sign') + '</span>', sk = o.board === 'chess' ? 'chess_wins' : o.board === 'lily' ? 'lily_run' : 'chain_dragon';
+          const nm = '<span class="c">' + (o.board === 'chess' ? 'Champions board' : o.board === 'lily' ? 'Lily Run board' : o.board === 'golf' ? 'Course record board' : 'Wooden sign') + '</span>', sk = o.board === 'chess' ? 'chess_wins' : o.board === 'lily' ? 'lily_run' : o.board === 'golf' ? 'golf_round' : 'chain_dragon';
           return [{ html: 'Read ' + nm, fn: () => { scoresAsk(true); core.scoreRead(sk).forEach(l => hud.chat(l, 'sys')); }, red: 1 },
-                  { html: 'Examine ' + nm, fn: () => hud.chat(o.board === 'lily' ? 'A painted board by the booth. The best scores at the Lily Run are chalked on it, highest first.' : o.board === 'chess' ? 'An oak board on two posts by the tables. The names of those who have won games here are chalked on it, most wins first.' : 'A weathered oak board nailed to the ruin wall. Names of those who have slain the chained dragon are carved into it.', 'sys') }];
+                  { html: 'Examine ' + nm, fn: () => hud.chat(o.board === 'golf' ? 'A green board by the clubhouse door. The best rounds on the Saltmere Links are painted on it, lowest first.' : o.board === 'lily' ? 'A painted board by the booth. The best scores at the Lily Run are chalked on it, highest first.' : o.board === 'chess' ? 'An oak board on two posts by the tables. The names of those who have won games here are chalked on it, most wins first.' : 'A weathered oak board nailed to the ruin wall. Names of those who have slain the chained dragon are carved into it.', 'sys') }];
         }
         /* [Claude 2026-10-15] A GOLD wager asks first (the operator: "There should be a confirmation button when joining a game
            that has a gold wager"): joining a staked chess game or a card table with a buy-in, or sitting first and setting
@@ -1844,6 +1849,7 @@
       const runFor = (base) => shiftHeld ? !base : base;   /* Shift inverts whatever the click would otherwise do */
       function tapAt(cx, cy) {
         if (LR && LR.tap()) return;   /* [Claude 2026-10-19] the frog is on the Lily Run board: taps never walk (the operator) */
+        if (GF && GF.tap()) return;   /* a round of golf: a drag aims, a tap never walks */
         if (FE && FE.tap(cx, cy)) return;   /* [Claude 2026-10-16] seated at a Fortune Engine: only its reels, lever, slot and knobs */
         const now = performance.now();
         if (lastTap && now - lastTap.t < 300 && Math.hypot(cx - lastTap.x, cy - lastTap.y) < 40 && lastTap.act) {
@@ -1856,6 +1862,7 @@
       }
       function menuAt(cx, cy) {
         if (LR && LR.tap()) return;   /* no menus while the frog runs */
+        if (GF && GF.tap()) return;
         const ts = targetsAt(cx, cy), list = [];
         MENU_MODE = true; try { for (const t of ts) for (const o of optionsFor(t)) list.push(o); } finally { MENU_MODE = false; }
         if (!ts.some(t => t.kind === 'ground')) { const g = groundAt(cx, cy); if (g) list.push({ html: 'Walk here', act: { c: 'walk', x: g.x, y: g.y } }); }
@@ -1994,7 +2001,7 @@
         if (me.boat !== 1) { carryTell(r, 0); hud.chat((r.name || 'Your partner') + ' is left on the bank here until they come back.', 'sys'); dropRemote(id, true); return; }   /* ashore: they wait on the bank */
         if (now - r.offline.told > 15000) { r.offline.told = now; carryTell(r, 1); }
       }
-      function dropRemote(id, hard, keep) { const r = remotes.get(id); if (PET) PET.drop(id); if (LR) LR.drop(id);
+      function dropRemote(id, hard, keep) { const r = remotes.get(id); if (PET) PET.drop(id); if (LR) LR.drop(id); if (GF) GF.drop(id);
         if (!hard && r && !r.offline && ghostable(r, id)) { makeGhost(id, r); return; } if (r) { if (r.name && r.name !== 'Adventurer') knewName.set(id, r.name); removeEnt(r.e); remotes.delete(id); } if (core.S.players[id] && core.S.players[id].puppet) coreCall(() => core.removePlayer(id, keep)); }   /* [Claude 2026-10-14] coreCall: its events (a card-table cashout to the Bank) are handled, not lost */
       function dropRemotes(keep) { for (const id of Array.from(remotes.keys())) dropRemote(id, false, keep); }   /* keep [Claude 2026-10-12]: OUR room dropped - their chess seats wait for the host's word */
       /* fighting a monster of another area (the operator: attackers can be attacked back across borders): we tell the room which
@@ -2314,6 +2321,14 @@
       /* [Claude 2026-10-19] THE LILY RUN (englily.js): the fenced frog board on the trail into Saltmere, its keeper, the frog-follow camera and the arcade HUD */
       LR = deps.englily && deps.lilyrules && PET ? deps.englily.install({ THREE, scene, core, hud, PID, cam, camera, renderer, myEnt, FPV, send, netSend: o => netSendBig(o, null, 'lr'), PET, rules: deps.lilyrules, heightAt, CHAR,
         playOnce: (e, name) => { if (!e.dead && !e.oneShot) playOnce(e, name); }, bestTell: (...a) => ENGBANK && ENGBANK.bestTell && ENGBANK.bestTell(...a), scoresAsk: f => scoresAsk(f), get me() { return me; } }) : null;
+      /* [Claude 2026-10-19] THE SALTMERE LINKS (engolf.js): the course drawn on its zone, Fergus the starter, rounds alone or in groups (stakes through @ashvale, as at the card table), the golf HUD */
+      GF = deps.engolf && deps.golfrules && deps.golfcourse ? deps.engolf.install({ THREE, scene, core, hud, PID, cam, camera, renderer, myEnt, send, netSend: o => netSendBig(o, null, 'gf'), PET, rules: deps.golfrules, course: deps.golfcourse, heightAt,
+        playOnce: (e, name) => { if (!e.dead) playOnce(e, name); }, bestTell: (...a) => ENGBANK && ENGBANK.bestTell && ENGBANK.bestTell(...a), scoresAsk: f => scoresAsk(f), get me() { return me; },
+        netId: () => myNetId, boardWho: () => boardWho(), myAddr: () => walletState.address || null, coins: () => core.invCount(me, 'coins'),
+        owns: id => core.invCount(me, id) > 0 || Object.values(me.eq || {}).some(v => v === id || (v && v.id === id)) || !!(walletState.data && walletState.data.gear && (walletState.data.gear[id] || []).length),
+        remoteEnt: id => { const r = remotes.get(id) || remotes.get(String(id)); return r ? r.e : null; },
+        pkEvent: (e, addrOf) => ENGBANK && ENGBANK.pkEvent && ENGBANK.pkEvent(e, addrOf),
+        esc: s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])) }) : null;
       function boardWho() {   /* the keep board is the arcade @tag, not the default Adventurer (2026-10-10) */
         const t = (room && room.me && room.me.tag) || hintedTag || me.tag;
         if (t) { const h = String(t).replace(/^@/, '').replace(/[^\w]/g, '').slice(0, 16); if (h.length >= 2 && !/^adventurer$/i.test(h)) return '@' + h; }
@@ -2508,6 +2523,7 @@
         if (d.g && typeof d.g === 'object' && sameSet(d.g, r.e.H.gear) === false) r.e.H.setGear(d.g);
         if (d.g && typeof d.g === 'object') hawkify(r.e, d.g.ring);   /* another player's hawk ring */
         if ('pt' in d && PET) PET.net(id, d.pt, r.e);
+        if ('gf' in d && GF) GF.net(id, d.gf);   /* [Claude 2026-10-19] their round on the Saltmere Links */
         if ('lr' in d && LR) LR.net(id, d.lr);   /* [Claude 2026-10-19] their frog on the Lily Run board */   /* [Claude 2026-10-17] their pet dog */
         if (d.ptp && PET && PET.petted) PET.petted(id);   /* [Claude 2026-10-18] they petted their dog: hearts over it here too */
         if (d.o && typeof d.o === 'object' && r.e.H.setOutfit && sameSet(d.o, r.e.H.outfit || {}) === false) { r.e.H.setOutfit(d.o); r.dressed = 1; }
@@ -3031,7 +3047,7 @@
         for (const g of fires.values()) { const u = g.userData, sc = 0.8 + 0.25 * Math.sin(now / 70 + u.ph) + 0.1 * Math.sin(now / 23 + u.ph); u.f1.scale.set(1, sc, 1); u.f2.scale.set(1, 1.1 * sc, 1); }
         if (wxMod && wxMod.update && !CAVE.on) wxMod.update(elapsed);
         if (!CAVE.on) dayTick(); else { if (STARS.pts) STARS.pts.visible = false; underSeason(); }   /* day and night on top of the weather's sky */   /* underground the cave sets the fog and the sky */
-        updateRemotes(now, dt); pokerClock(now); if (FE) FE.frame(now, dt); if (PET) PET.frame(now, dt); if (LR) LR.frame(now, dt);
+        updateRemotes(now, dt); pokerClock(now); if (FE) FE.frame(now, dt); if (PET) PET.frame(now, dt); if (LR) LR.frame(now, dt); if (GF) GF.frame(now, dt);
         for (let i = projs.length - 1; i >= 0; i--) {
           const p = projs[i]; p.t += dt; const k = Math.min(1, p.t / p.dur);
           const to = p.tgt.root.position.clone(); to.y += p.tgt.hawk ? 0.25 : (p.tgt.H.height || 1.2) * p.tgt.scale * 0.55;   /* up at the hawk itself in the sky */
@@ -3043,7 +3059,7 @@
         for (let i = arrivedProjs.length - 1; i >= 0; i--) if (now - (arrivedProjs[i].tA || (arrivedProjs[i].tA = now)) > 1500) arrivedProjs.splice(i, 1);
         for (let i = bursts.length - 1; i >= 0; i--) { const m = bursts[i]; m.userData.t += dt; m.userData.v.y -= 6 * dt; m.position.addScaledVector(m.userData.v, dt); if (m.userData.t > (m.userData.life || 1.2)) { scene.remove(m); bursts.splice(i, 1); } }
         for (const r of regions) if (r.built) r.built.update(dt, tSec);
-        if (PAD && !(LR && LR.playing())) PAD.poll(now, dt);   /* the Lily Run reads the pad itself */
+        if (PAD && !(LR && LR.playing()) && !(GF && GF.playing())) PAD.poll(now, dt);   /* the Lily Run reads the pad itself */
         updateCamera(dt);
         /* overlays: splats, HP bars, name tags */
         const tagSpots = [];
@@ -3536,7 +3552,7 @@
         progInfo: () => { const P = renderer.info.programs || [], I = renderer.info; return { n: P.length, calls: I.render.calls, tris: I.render.triangles, geos: I.memory.geometries, tex: I.memory.textures, applyMs: SEASON.applyMs, applies: SEASON.applies }; },
         tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },
         fortune: () => FE,   /* [Claude 2026-10-16] tests: the Fortune Engines' part */
-        lily: () => LR, pet: () => PET, petToggle: () => hudApi().toggle('showPet'),   /* [Claude 2026-10-17] tests: the pets part, the Settings toggle */
+        lily: () => LR, golf: () => GF, heightAt: (x, z) => heightAt(x, z), pet: () => PET, petToggle: () => hudApi().toggle('showPet'),   /* [Claude 2026-10-17] tests: the pets part, the Settings toggle */
         pokerNetRow: t => pkNet(core.pokerRow(t)), _pokerModel: t => pokerModel(t), _pokerView: t => pokerView(t), _pokerClock: () => JSON.parse(JSON.stringify(PKT)), solitaire: () => openSolitaire(), _dropNext: k => { DROP_NEXT = k; }, pokerKey: () => MYPK, pokerSealed: t => PH[t] || null,   /* [Claude 2026-10-12] tests: the row as it leaves this dealer */   /* a test taps a thing as a player would (first option) */
         travelShown: () => { const el = host.querySelector('.travel'); return el && el.style.display !== 'none' ? el.className + ' | ' + el.querySelector('.tt').textContent : null; },
         say, store, models: MOD, allowedAsset, wallet: walletApi(DATA.items.items), walletState: () => walletState, walletRefresh,
@@ -3555,5 +3571,5 @@
     }
     return { api: 1, start, openStore };
   }
-  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engine', { api: 1, v: 2, needs: { three: 160, core: 2, models: 1, scene: 2, hud: 1, net: 2, trade: 1, wallet: 1, trip: 2, audit: 1, gamepad: 1, data: 1, engsky: 1, engbank: 1, engfortune: 1, engpet: 1, engmusic: 1, englily: 1, lilyrules: 1 } }, engineFactory);
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engine', { api: 1, v: 2, needs: { three: 160, core: 2, models: 1, scene: 2, hud: 1, net: 2, trade: 1, wallet: 1, trip: 2, audit: 1, gamepad: 1, data: 1, engsky: 1, engbank: 1, engfortune: 1, engpet: 1, engmusic: 1, englily: 1, lilyrules: 1, engolf: 1, golfrules: 1, golfcourse: 1 } }, engineFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

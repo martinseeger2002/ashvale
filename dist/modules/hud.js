@@ -382,7 +382,8 @@
       chessOpen() { }, chessUpdate() { }, chessClose() { }, chessPromo: null,
       pokerOpen() { }, pokerUpdate() { }, pokerClose() { }, pokerAnchor() { },
       fortuneOpen() { }, fortuneUpdate() { }, fortuneClose() { }, fortuneDeposit() { }, fortunePays() { },
-      lilyOpen() { }, lilyUpdate() { }, lilyFlash() { }, lilyOver() { }, lilyClose() { } };   /* [Claude 2026-10-19] the Lily Run (hudlily) */   /* [Claude 2026-10-16] the Fortune Engine (hudfortune) */
+      lilyOpen() { }, lilyUpdate() { }, lilyFlash() { }, lilyOver() { }, lilyClose() { },
+      golfOpen: () => null, golfFlash() { }, golfCard: () => null, golfCardClose() { }, golfClose() { }, golfCardOpen: () => false };   /* [Claude 2026-10-19] the Saltmere Links (hudgolf) */   /* [Claude 2026-10-19] the Lily Run (hudlily) */   /* [Claude 2026-10-16] the Fortune Engine (hudfortune) */
     for (const part of PARTS) part.install(K);
     K.onChestClose = () => { if (st.tabWas === undefined) return; const back = st.tabWas; st.tabWas = undefined; setTab(back); };
     /* a quest's story so far, in the words of the one who gave it (2026-10-06): every step you finished - what they
@@ -410,11 +411,11 @@
       layer, showGuest, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, cards, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab(api.isPhone ? null : 'inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       chessOpen: (v, cb) => K.chessOpen(v, cb), chessUpdate: v => K.chessUpdate(v), chessClose: () => K.chessClose(), get chessPromo() { return K.chessPromo; },
-      pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(), pokerAnchor: a => K.pokerAnchor && K.pokerAnchor(a), lilyOpen: (v, cb) => K.lilyOpen(v, cb), lilyUpdate: v => K.lilyUpdate(v), lilyFlash: (t, k) => K.lilyFlash(t, k), lilyOver: o => K.lilyOver(o), lilyClose: () => K.lilyClose(), fortuneOpen: (v, cb) => K.fortuneOpen(v, cb), fortuneUpdate: v => K.fortuneUpdate(v), fortuneClose: () => K.fortuneClose(), fortuneDeposit: () => K.fortuneDeposit(), fortunePays: o => K.fortunePays(o), solitaireOpen: o => K.solitaireOpen && K.solitaireOpen(o), solitaireClose: () => K.solitaireClose && K.solitaireClose(), _sol: () => K._sol && K._sol(),
+      pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(), pokerAnchor: a => K.pokerAnchor && K.pokerAnchor(a), lilyOpen: (v, cb) => K.lilyOpen(v, cb), lilyUpdate: v => K.lilyUpdate(v), lilyFlash: (t, k) => K.lilyFlash(t, k), lilyOver: o => K.lilyOver(o), lilyClose: () => K.lilyClose(), golfOpen: cb => K.golfOpen(cb), golfFlash: (t, k, ms) => K.golfFlash(t, k, ms), golfCard: (h, b, p) => K.golfCard(h, b, p), golfCardClose: () => K.golfCardClose(), golfClose: () => K.golfClose(), golfCardOpen: () => K.golfCardOpen(), fortuneOpen: (v, cb) => K.fortuneOpen(v, cb), fortuneUpdate: v => K.fortuneUpdate(v), fortuneClose: () => K.fortuneClose(), fortuneDeposit: () => K.fortuneDeposit(), fortunePays: o => K.fortunePays(o), solitaireOpen: o => K.solitaireOpen && K.solitaireOpen(o), solitaireClose: () => K.solitaireClose && K.solitaireClose(), _sol: () => K._sol && K._sol(),
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };
   }
 
-  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('hud', { api: 1, v: 4, needs: { hudart: 1, hudpanels: 1, hudshop: 1, huddrag: 1, hudcreator: 1, hudchest: 1, hudchess: 1, hudpoker: 1, hudfortune: 1, hudlily: 1 } },
-    deps => { A = deps.hudart; PARTS = [deps.hudpanels, deps.hudshop, deps.huddrag, deps.hudcreator, deps.hudchest, deps.hudchess, deps.hudpoker, deps.hudfortune, deps.hudlily]; return { api: 1, create }; });
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('hud', { api: 1, v: 4, needs: { hudart: 1, hudpanels: 1, hudshop: 1, huddrag: 1, hudcreator: 1, hudchest: 1, hudchess: 1, hudpoker: 1, hudfortune: 1, hudlily: 1, hudgolf: 1 } },
+    deps => { A = deps.hudart; PARTS = [deps.hudpanels, deps.hudshop, deps.huddrag, deps.hudcreator, deps.hudchest, deps.hudchess, deps.hudpoker, deps.hudfortune, deps.hudlily, deps.hudgolf].filter(Boolean); return { api: 1, create }; });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

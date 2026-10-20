@@ -73,7 +73,8 @@
     "spade",
     "wateringcan",
     "scroll",
-    "hammer"
+    "hammer",
+    "golfset"
    ],
    "food": [
     "bread",
@@ -104,6 +105,7 @@
    "Prayer seconds": "prayerSec",
    "Prayer hold": "ppHold",
    "Teleport from step": "teleFrom",
+   "Set": "golfSet",
    "Magic penalty": "magicPen",
    "Ranged penalty": "rangedPen"
   },

@@ -1,0 +1,42 @@
+"""[Claude 2026-10-20] The golf swing on a phone (the operator's recording: after SWING the POWER and HIT taps never arrived). In a
+phone context (touch): SWING starts the meter; a tap anywhere on the screen sets the power, another anywhere strikes; the ball
+flies; a double touch counts once; and every stroke starts facing the pin.  python3 tests/golf_tap_pw.py  (PORT, HEADED=1)"""
+import os, time, math
+os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', '/home/you/.cache/ms-playwright')
+from playwright.sync_api import sync_playwright
+fails = []
+def check(c, m): print(('ok   ' if c else 'FAIL ') + m, flush=True); c or fails.append(m)
+PORT = os.environ.get('PORT', '8775')
+GS = 'ASH.golf()._state()'
+with sync_playwright() as p:
+    b = p.chromium.launch(headless=os.environ.get('HEADED') is None, args=['--use-angle=gl'] if os.environ.get('HEADED') else ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
+    ctx = b.new_context(viewport={'width': 390, 'height': 844}, has_touch=True, is_mobile=True); pg = ctx.new_page(); errs = []
+    pg.on('pageerror', lambda e: errs.append(str(e)))
+    pg.goto('http://127.0.0.1:%s/dist/ashvale3d.html?fresh&nocreator&loopback&seed=gtap&go=637,-117' % PORT, wait_until='domcontentloaded', timeout=120000)
+    t0 = time.time()
+    while time.time() - t0 < 120 and not pg.evaluate('!!(window.ASH && ASH.golf && ASH.golf())'): time.sleep(.5)
+    time.sleep(6); pg.keyboard.press('Escape')
+    pg.evaluate("(() => { ASH.me.inv[0] = { id: 'golf_standard', n: 1 }; ASH.golf()._begin({ rid: 'tap1', f: 'free', a: 0, m: [[ASH.golf()._me(), 'M', '', 1]] }); })()")
+    time.sleep(4)
+    s = pg.evaluate(GS); pin = s['pin'] if 'pin' in s and s['pin'] else pg.evaluate("ASH.golf()._state().pin")
+    want = math.atan2(pin[1] - s['ball']['y'], pin[0] - s['ball']['x']) if pin else None
+    check(want is not None and abs(math.atan2(math.sin(s['aim'] - want), math.cos(s['aim'] - want))) < 0.01, 'the stroke starts facing the pin')
+    bb = pg.locator('.golfp .swingbtn').bounding_box(); bx, by = bb['x'] + bb['width'] / 2, bb['y'] + bb['height'] / 2
+    pg.touchscreen.tap(bx, by); time.sleep(0.15)
+    check(pg.evaluate(GS + ".phase") == 'rise', 'SWING starts the meter')
+    time.sleep(0.5); pg.touchscreen.tap(195, 420); time.sleep(0.1)
+    check(pg.evaluate(GS + ".phase") == 'fall', 'a tap anywhere on the screen sets the power (phase %s)' % pg.evaluate(GS + ".phase"))
+    t0 = time.time()
+    while pg.evaluate(GS + ".meter") > 1 and time.time() - t0 < 4: time.sleep(0.01)
+    pg.touchscreen.tap(195, 300); time.sleep(0.2)
+    ph = pg.evaluate(GS + ".phase")
+    check(ph in ('go', 'fly'), 'a tap anywhere strikes (phase %s)' % ph)
+    t0 = time.time()
+    while pg.evaluate(GS + ".phase") != 'aim' and time.time() - t0 < 25: time.sleep(0.3)
+    s2 = pg.evaluate(GS)
+    check(s2['strokes'] == 1 and math.hypot(s2['ball']['x'] - s['ball']['x'], s2['ball']['y'] - s['ball']['y']) > 10, 'the ball flew and came to rest (one stroke)')
+    pin2 = s2.get('pin') or pin; w2 = math.atan2(pin2[1] - s2['ball']['y'], pin2[0] - s2['ball']['x'])
+    check(abs(math.atan2(math.sin(s2['aim'] - w2), math.cos(s2['aim'] - w2))) < 0.01, 'the next stroke faces the pin again')
+    check(not errs, 'no page errors %s' % errs[:2])
+    b.close()
+print('ALL OK' if not fails else '%d FAILED' % len(fails))

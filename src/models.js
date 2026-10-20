@@ -26,6 +26,7 @@
      H.setOutfit(patch)            change or add outfit parts (hair, beard, hat, shirt, pants, boots, gloves, belt, cape...);
                                    H.outfit reads it back (save it with the player). M.outfitStyles / M.palette list choices
      H.play(name, {loop, speed})   idle walk run slash stab crush block hit death bow cast chop mine fish cook pickup eat
+                                   golfaddress golfswing golffinish puttaddress putt
                                    (animals map slash/stab/crush/bite to a bite). Loops keep running; a one-shot plays and
                                    returns to the last loop, except death, which holds its last frame.
      H.attackAnim(itemId)          the attack anim for a weapon (sword slash, bow, staff cast, unarmed crush)
@@ -226,14 +227,19 @@ export function createModels(THREE, opts) {
     function placeJoints() { for (const name in body.joints) { const q = evs(body.joints[name][1], V0); J[name].position.set(q[0], q[1], q[2]); } }
     placeJoints();
     for (const name in body.joints) { const par = body.joints[name][0]; (par ? J[par] : root).add(J[name]); }
+    if (J.hipL && J.hipR) J.hipL.rotation.order = J.hipR.rotation.order = 'YXZ';   /* a hip's y undoes the pelvis turn after its swing (golf: the feet stay planted); with y = 0, as in every other animation, nothing changes */
     J.head.scale.setScalar(ev(body.headScale || 1, V0));
     const rot = obj => ({ kind: 'rot', o: obj, r0: [obj.rotation.x, obj.rotation.y, obj.rotation.z] });
     const joints = {
       torso: rot(J.torso), neck: rot(J.neck), shL: rot(J.shL), elL: rot(J.elL), shR: rot(J.shR), elR: rot(J.elR),
       hipL: rot(J.hipL), kneeL: rot(J.kneeL), hipR: rot(J.hipR), kneeR: rot(J.kneeR), cape: rot(J.cape),
-      lift: { kind: 'y', o: J.hips, p0: J.hips.position.y }, fall: { kind: 'rx', o: J.body }
+      pelvis: rot(J.hips),   /* the hips' turn (golf); every other animation leaves it at 0 */
+      lift: { kind: 'y', o: J.hips, p0: J.hips.position.y }, fall: { kind: 'rx', o: J.body },
+      club: { kind: 'val', v: [0, 0, 0] }   /* golf: [wrist hinge of the club (radians toward the target), how much the head sits at the ball], read by the engine */
     };
     const H = character(root, joints, HUMAN);
+    H.clubHinge = () => joints.club.v[0];
+    H.clubToBall = () => joints.club.v[1];   /* 1 = the clubhead sits at the ball (address, impact, putting) */
     const gear = { head: null, body: null, legs: null, weapon: null, shield: null, ammo: null, cape: null, pack: null, feet: null, ring: null };
     let tool = null, tip = null, made = [];
     const place = jn => jn ? J[jn] || null : root;
@@ -315,7 +321,7 @@ export function createModels(THREE, opts) {
     H.muzzle = function (out) { out = out || new THREE.Vector3(); (tip || J.handR).getWorldPosition(out); return out; };
     Object.defineProperty(H, 'height', { get: () => (body.height || 1.86) * root.scale.y });
     RS.v = ev(body.rootScale || 1, V0); root.scale.setScalar(RS.v);
-    H._parts = { head: J.head, torso: J.torso };
+    H._parts = { head: J.head, torso: J.torso, handL: J.handL, handR: J.handR, shL: J.shL, shR: J.shR };   /* hands and shoulders: golf draws the club from them */
     rebuild();
     H.play('idle'); H.update(0);
     return H;
@@ -359,6 +365,53 @@ export function createModels(THREE, opts) {
   const K = (...pairs) => { const keys = []; for (let i = 0; i < pairs.length; i += 2) keys.push({ t: pairs[i], p: pairs[i + 1] }); return keyed(keys); };
   function withBase(base, p) { const o = {}; for (const n in base) o[n] = vec(base[n]); for (const n in p) o[n] = vec(p[n]); return o; }
 
+  /* golf (2026-10-19, the Saltmere Links). The ball lies in front of the feet, the target to the golfer's left (+x).
+     The operator: the first swing looked floppy - it stopped at every key and only the arms moved. This one follows a real swing:
+     the hips turn about half as far as the shoulders (pelvis), the spine keeps its tilt to impact, the left arm stays
+     straight, the right elbow folds, the wrists cock on the way back and hold their angle into the downswing (the lag),
+     release at the ball, then the body stands up into a full finish facing the target, right heel up. The tempo is slow
+     back, quicker down: the keys are passed through on a smooth curve (no stop at each key). club: [wrist hinge toward the
+     target, how much the head sits at the ball] - the engine draws the club from the hands. */
+  const plant = (pel, o) => Object.assign({ pelvis: [0, pel, 0] }, o, { hipL: [(o.hipL || [-0.3])[0], -pel, (o.hipL || [0, 0, 0.08])[2] || 0.08], hipR: [(o.hipR || [-0.3])[0], -pel, (o.hipR || [0, 0, -0.08])[2] || -0.08] });   /* feet stay put while the pelvis turns */
+  const G_ADDR = plant(0, { torso: [0.62, 0, 0], neck: [-0.45, 0, 0], kneeL: [0.38], kneeR: [0.38], lift: [-0.07],
+    shL: [-0.42, 0, -0.3], elL: [-0.04], shR: [-0.38, 0, 0.34], elR: [-0.22], club: [0.12, 1] });
+  const G_TAKE = plant(-0.12, { torso: [0.62, -0.3, 0], neck: [-0.45, 0.38, 0], kneeL: [0.4], kneeR: [0.36], lift: [-0.07],
+    shL: [-0.6, 0, -0.44], elL: [-0.02], shR: [-0.52, 0, 0.26], elR: [-0.3], club: [0.25, 0.55] });
+  const G_HALF = plant(-0.35, { torso: [0.6, -0.6, 0], neck: [-0.43, 0.8, 0], kneeL: [0.45], kneeR: [0.33], lift: [-0.07],
+    shL: [-1.05, 0, -0.62], elL: [0], shR: [-0.95, 0, 0.12], elR: [-0.85], club: [1.05, 0] });
+  const G_TOP = plant(-0.6, { torso: [0.56, -0.8, 0], neck: [-0.4, 1.25, 0], kneeL: [0.5], kneeR: [0.3], lift: [-0.07],
+    shL: [-1.85, 0, -0.85], elL: [-0.04], shR: [-1.6, 0, -0.05], elR: [-1.75], club: [2.05, 0] });
+  const G_TRANS = plant(-0.35, { torso: [0.58, -0.82, 0], neck: [-0.42, 1.08, 0], kneeL: [0.42], kneeR: [0.34], lift: [-0.075],
+    shL: [-1.7, 0, -0.8], elL: [-0.03], shR: [-1.5, 0, 0], elR: [-1.7], club: [2.15, 0] });
+  const G_DOWN = plant(0.1, { torso: [0.62, -0.5, 0], neck: [-0.45, 0.4, 0], kneeL: [0.3], kneeR: [0.42], lift: [-0.075],
+    shL: [-0.95, 0, -0.55], elL: [0], shR: [-0.85, 0, 0.22], elR: [-1.0], club: [1.45, 0.15] });
+  const G_HIT = plant(0.5, { torso: [0.6, -0.42, 0], neck: [-0.45, -0.08, 0], kneeL: [0.2], kneeR: [0.48], lift: [-0.07],
+    shL: [-0.45, 0, -0.3], elL: [0], shR: [-0.42, 0, 0.36], elR: [-0.12], club: [0, 1] });
+  const G_REL = plant(0.75, { torso: [0.55, -0.15, 0], neck: [-0.42, -0.45, 0], kneeL: [0.14], kneeR: [0.55], lift: [-0.06],
+    shL: [-0.8, 0, -0.1], elL: [-0.15], shR: [-0.85, 0, 0.5], elR: [0], club: [-0.6, 0.2] });
+  const G_THRU = plant(1.05, { torso: [0.38, 0.15, 0], neck: [-0.3, -0.9, 0], kneeL: [0.08], kneeR: [0.65], lift: [-0.04],
+    shL: [-1.7, 0, 0.15], elL: [-0.9], shR: [-1.75, 0, 0.6], elR: [-0.15], club: [-1.4, 0] });
+  const G_FIN = plant(1.3, { torso: [0.12, 0.35, 0], neck: [-0.12, -1.1, 0], kneeL: [0.05], kneeR: [0.75], hipR: [-0.35, 0, -0.04], lift: [-0.03],
+    shL: [-2.65, 0, 0.3], elL: [-1.6], shR: [-2.75, 0, 0.6], elR: [-1.0], club: [-2.3, 0] });
+  const PUTT_ADDR = sw => ({ club: [0, 1], torso: [0.7, sw * 0.08, 0], neck: [-0.55, -sw * 0.08, 0], hipL: [-0.15, 0, 0.05], hipR: [-0.15, 0, -0.05], kneeL: [0.18], kneeR: [0.18], lift: [-0.04],
+    shL: [-0.45 - Math.max(0, sw) * 0.2, 0, -0.32 + sw * 0.5], elL: [-0.35], shR: [-0.42 - Math.max(0, -sw) * 0.2, 0, 0.34 + sw * 0.5], elR: [-0.45] });
+  /* keys passed through on a Catmull-Rom curve: the motion flows through each key instead of easing to a stop at it */
+  function smoothKeyed(keys) {
+    return function (t, base) {
+      let i = 0; while (i < keys.length - 2 && t > keys[i + 1].t) i++;
+      const k0 = keys[Math.max(0, i - 1)], k1 = keys[i], k2 = keys[i + 1], k3 = keys[Math.min(keys.length - 1, i + 2)];
+      const u = Math.min(1, Math.max(0, (t - k1.t) / ((k2.t - k1.t) || 1))), u2 = u * u, u3 = u2 * u;
+      const out = {}, names = new Set([...Object.keys(k1.p), ...Object.keys(k2.p), ...Object.keys(base)]);
+      const val = (k, n) => vec(k.p[n]) || vec(base[n]) || [0, 0, 0];
+      for (const n of names) {
+        const a = val(k0, n), b = val(k1, n), c = val(k2, n), d = val(k3, n), o = [0, 0, 0];
+        for (let q = 0; q < 3; q++) o[q] = 0.5 * (2 * b[q] + (c[q] - a[q]) * u + (2 * a[q] - 5 * b[q] + 4 * c[q] - d[q]) * u2 + (3 * b[q] - a[q] - 3 * c[q] + d[q]) * u3);
+        out[n] = o;
+      }
+      return out;
+    };
+  }
+  const KS = (...pairs) => { const keys = []; for (let i = 0; i < pairs.length; i += 2) keys.push({ t: pairs[i], p: pairs[i + 1] }); return smoothKeyed(keys); };
   const HUMAN = {
     idle: { loop: true, dur: 3, fn: (t, b) => { const s = Math.sin(TAU * t); return withBase(b, { torso: [0.02 * s, 0, 0], shL: b.shL || [0.04, 0, 0.09], shR: b.shR || [0.04, 0, -0.09], elL: b.elL || [-0.15], elR: b.elR || [-0.15], neck: [0.02 * s, 0, 0], cape: [0.05 + 0.02 * s] }); } },
     walk: { loop: true, dur: 0.9, fn: (t, b) => { const s = Math.sin(TAU * t), c = Math.cos(TAU * t);
@@ -430,6 +483,15 @@ export function createModels(THREE, opts) {
         shR: [-0.9 + 0.7 * s, 0, -0.25], elR: [-0.5], shL: [-1.3 - 0.4 * s, 0, 0.3], elL: [-0.7] }); } },
     cook: { loop: true, dur: 1.6, impact: 0.5, fn: (t, b) => { const s = Math.sin(TAU * t);
       return withBase(b, { lift: [-0.2], hipL: [-1], hipR: [-0.9], kneeL: [1.45], kneeR: [1.35], torso: [0.35], shR: [-1 + 0.1 * s, 0.15 * s, -0.1], elR: [-0.6], shL: [-0.9, 0, 0.15], elL: [-0.7] }); } },
+    /* golf (2026-10-19, the Saltmere Links): the ball lies in front of the feet, the target to the golfer's left (+x).
+       golfaddress holds the stance; golfswing goes back (torso turned away, hands over the right shoulder), down through the
+       ball ('impact' event) and up into the finish, then golffinish holds that pose while the ball flies. The engine draws
+       the club from the hands. putt is a short pendulum from the shoulders. */
+    golfaddress: { loop: true, dur: 3, fn: (t, b) => { const s = Math.sin(TAU * t); return withBase(b, Object.assign({}, G_ADDR, { torso: [0.62 + 0.004 * s, 0, 0] })); } },
+    golfswing: { dur: 1.7, impact: 0.69, fn: KS(0, G_ADDR, 0.16, G_TAKE, 0.33, G_HALF, 0.5, G_TOP, 0.56, G_TRANS, 0.64, G_DOWN, 0.69, G_HIT, 0.74, G_REL, 0.84, G_THRU, 1, G_FIN) },
+    golffinish: { loop: true, dur: 3, fn: (t, b) => withBase(b, G_FIN) },
+    puttaddress: { loop: true, dur: 3, fn: (t, b) => withBase(b, PUTT_ADDR(0)) },
+    putt: { dur: 1.2, impact: 0.55, fn: KS(0, PUTT_ADDR(0), 0.42, PUTT_ADDR(-0.3), 0.55, PUTT_ADDR(0), 0.78, PUTT_ADDR(0.28), 1, PUTT_ADDR(0.3)) },
     pickup: { dur: 0.6, impact: 0.5, fn: K(0, {}, 0.5, { torso: [0.9], neck: [0.2], shR: [-1, 0, -0.1], elR: [-0.2], hipL: [-0.4], hipR: [-0.4], kneeL: [0.6], kneeR: [0.6], lift: [-0.12] }, 1, {}) },
     eat: { dur: 0.9, impact: 0.5, fn: K(0, {}, 0.45, { shR: [-2.1, 0.4, 0], elR: [-2.3], neck: [0.1] }, 0.7, { shR: [-2.1, 0.4, 0], elR: [-2.3], neck: [0.1] }, 1, {}) }
   };
@@ -490,6 +552,7 @@ export function createModels(THREE, opts) {
         else if (j.kind === 'z') j.o.position.z = j.p0 + v[0];
         else if (j.kind === 'rx') j.o.rotation.x = v[0];
         else if (j.kind === 'rz') j.o.rotation.z = v[0];
+        else if (j.kind === 'val') j.v = v;
       }
     }
     H.play = function (name, o) {

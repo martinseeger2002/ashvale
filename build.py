@@ -20,7 +20,7 @@ SRC, DATA, DIST = os.path.join(ROOT, 'src'), os.path.join(ROOT, 'data'), os.path
 ESB = os.path.join(ROOT, 'tools', 'esb')
 THREE_V = '0.160.0'
 THREE_ARCADE_ID = '374cfd2b2f114e9da4ade8add495fe8aa0b2b996a710fb538759a956f15f9539'   # Pip's on-chain three.module.min.js r160 (official, unmodified)
-JS_MODULES = ['netretry', 'net', 'trade', 'wallet', 'trip', 'world', 'chesslib', 'holdemlib', 'core', 'audit', 'castle', 'fortune', 'scene', 'hudart', 'hudpanels', 'hudshop', 'hudchest', 'huddrag', 'hudcreator', 'hudchess', 'hudpoker', 'hudfortune', 'hudlily', 'hud', 'models', 'gamepad', 'engine']   # the HUD is split in parts (2026-10-02)
+JS_MODULES = ['netretry', 'net', 'trade', 'wallet', 'trip', 'world', 'chesslib', 'holdemlib', 'core', 'audit', 'castle', 'fortune', 'scene', 'hudart', 'hudpanels', 'hudshop', 'hudchest', 'huddrag', 'hudcreator', 'hudchess', 'hudpoker', 'hudfortune', 'hudlily', 'hudgolf', 'hud', 'models', 'gamepad', 'engine']   # the HUD is split in parts (2026-10-02)
 if os.environ.get('ASH_NO_CASTLE') == '1': JS_MODULES = [m for m in JS_MODULES if m != 'castle']
 if os.path.exists(os.path.join(SRC, 'weather.js')):   # weather visuals (local agent, task 6): its own module/inscription
     JS_MODULES.insert(JS_MODULES.index('engine'), 'weather')      # load order does not matter (factories), kept stable
@@ -34,6 +34,7 @@ JS_MODULES.insert(JS_MODULES.index('engine'), 'engfortune')   # [Claude 2026-10-
 JS_MODULES.insert(JS_MODULES.index('engine'), 'engpet')   # [Claude 2026-10-17] pets from Doginals (a Doginal Dog or ADD in the wallet)
 JS_MODULES.insert(JS_MODULES.index('engine'), 'lilyrules')   # [Claude 2026-10-19] the Lily Run: its rules (pure)
 JS_MODULES.insert(JS_MODULES.index('engine'), 'englily')   # [Claude 2026-10-19] the Lily Run: board, keeper, camera, the run
+for _m in ('golfrules', 'golfcourse', 'engolf'): JS_MODULES.insert(JS_MODULES.index('engine'), _m)   # [Claude 2026-10-19] the Saltmere Links: rules (pure), the course data (tools/make_golf.py), the engine part
 if os.path.exists(os.path.join(SRC, 'sky.js')):
     JS_MODULES.insert(JS_MODULES.index('engine'), 'sky')
 if os.path.exists(os.path.join(SRC, 'skyview.js')):   # the sky drawn as a 3D scene of its own: sun, moon, stars (2026-10-07)
@@ -52,7 +53,7 @@ if os.path.exists(os.path.join(SRC, 'worldgen.js')):
     DATA_MODULES.append('wg_tables')
 DATA_MODULES.append('atlas_palette')   # the Atlas's colours (src/earth.js PAL): the Atlas boots from the game's registry since 2026-10-11
 DATA_PATHS = {'wg_tables': 'atlas/wg_tables', 'atlas_palette': 'atlas/atlas_palette'}   # data modules that live in a subfolder of data/
-ZONES = ['village', 'eastend', 'whisperwood', 'saltmere', 'castle', 'wolfden', 'cavemouth', 'spidercave', 'ancientchapel', 'lilyrun', 'lilyrunpath', 'evengrove', 'ziibiing', 'lodges', 'ricelake', 'sugarcamp', 'flintbank', 'obsidianbank', 'willowbank', 'dragonapproach', 'dragonkeep']   # ziibiing + lodges: the Ojibwe village on the river and its wigwams' insides (tools/make_zone_ziibiing.py)   # castle: the lake castle 4 km out (tools/castle/make_castle.js)   # dragonapproach: Squire Elian at -11,-78; dragonkeep: the ruined keep at -54,-99
+ZONES = ['village', 'eastend', 'whisperwood', 'saltmere', 'castle', 'wolfden', 'cavemouth', 'spidercave', 'ancientchapel', 'lilyrun', 'lilyrunpath', 'golf', 'golfpath', 'golfshore', 'evengrove', 'ziibiing', 'lodges', 'ricelake', 'sugarcamp', 'flintbank', 'obsidianbank', 'willowbank', 'dragonapproach', 'dragonkeep']   # ziibiing + lodges: the Ojibwe village on the river and its wigwams' insides (tools/make_zone_ziibiing.py)   # castle: the lake castle 4 km out (tools/castle/make_castle.js)   # dragonapproach: Squire Elian at -11,-78; dragonkeep: the ruined keep at -54,-99
 ZONES = ZONES + ['thornwatch', 'redmoor', 'hollowden', 'sistersbarrow', 'fivestones', 'gloamwood', 'emberfall', 'blackmere', 'towercellars', 'abbey', 'crypts']   # Thornwatch Camp, the Red Moor, the Hollow Den under it and the Sisters' Barrow south of it (tools/thornwatch/, 2026-10-18)
 ZONES = ZONES + ['mt_lodge', 'mt_shrine', 'mt_ledge', 'mt_warden', 'mt_crags', 'mt_pass', 'mt_farside', 'mt_tower', 'tutorial']   # the great mountain's camps (tools/mountain/make_camps.js, 2026-10-18)   # saltmere: the second town, on the sea shore 3.4 km east (tools/make_zone_saltmere.mjs)
 if os.environ.get('ASH_NO_CASTLE') == '1':   # 2026-10-05: "forget about this castle for now" - a release without it
@@ -113,7 +114,7 @@ def zone_index(zones):
                 and ox <= o['x'] < ox + w and oy <= o['y'] < oy + h]
         e = {'id': zid, 'name': z.get('name', zid), 'origin': z['origin'], 'size': z['size'], 'stub': zone_stub_tiles(z), 'pads': pads,
              'npcs': [{'id': n['id'], 'name': n.get('name', n['id']), 'x': n['x'], 'y': n['y']} for n in z.get('npcs') or []]}
-        for k in ('level', 'ground', 'respawn', 'weather', 'under', 'setPiece', 'style', 'surface', 'surfaceOffset', 'ownWays'):   # ownWays: no paths grow from its edges (src/wg_paths.js), so the stubs must know it too (Thornwatch, 2026-10-18)   # setPiece: false keeps a zone off worldgen (Claude 2026-10-16)   # under: a cave area outside the land (surface = its entrance up top)
+        for k in ('level', 'ground', 'respawn', 'weather', 'under', 'setPiece', 'style', 'surface', 'surfaceOffset', 'ownWays', 'flat', 'turf', 'returnTo'):   # ownWays: no paths grow from its edges (src/wg_paths.js), so the stubs must know it too (Thornwatch, 2026-10-18)   # setPiece: false keeps a zone off worldgen (Claude 2026-10-16)   # under: a cave area outside the land (surface = its entrance up top)
             if k in z: e[k] = z[k]
         out.append(e)
     return {"ashvale3d": "module", "name": "zoneindex", "api": 1, "v": 1, "data": {"zones": out}}

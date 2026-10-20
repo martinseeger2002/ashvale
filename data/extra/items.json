@@ -2672,6 +2672,78 @@
      "value": 3000
     }
    ]
+  },
+  "golf_starter": {
+   "name": "Starter Set",
+   "description": "A canvas bag of plain steel clubs, the set every golfer at Saltmere Links starts with. Forgiving enough to learn on; the ball does not go far.",
+   "examine": "A canvas bag of plain steel clubs, the set every golfer at Saltmere Links starts with. Forgiving enough to learn on; the ball does not go far.",
+   "collection": "ASHVALE Saltmere Links",
+   "game": "ashvale",
+   "category": "tool",
+   "subcategory": "golfset",
+   "weight": 8000,
+   "model": "item.golf_starter",
+   "value": 500,
+   "attributes": [
+    {
+     "trait_type": "Set",
+     "value": "Starter"
+    }
+   ]
+  },
+  "golf_standard": {
+   "name": "Standard Set",
+   "description": "A leather bag of well-made clubs. Longer off the tee than the Starter Set, with a little more time to pick your power.",
+   "examine": "A leather bag of well-made clubs. Longer off the tee than the Starter Set, with a little more time to pick your power.",
+   "collection": "ASHVALE Saltmere Links",
+   "game": "ashvale",
+   "category": "tool",
+   "subcategory": "golfset",
+   "weight": 7500,
+   "model": "item.golf_standard",
+   "value": 2500,
+   "attributes": [
+    {
+     "trait_type": "Set",
+     "value": "Standard"
+    }
+   ]
+  },
+  "golf_pro": {
+   "name": "Pro Set",
+   "description": "A navy tour bag with covered woods and forged irons. It hits further again, with a wider sweet spot and more spin to stop the ball.",
+   "examine": "A navy tour bag with covered woods and forged irons. It hits further again, with a wider sweet spot and more spin to stop the ball.",
+   "collection": "ASHVALE Saltmere Links",
+   "game": "ashvale",
+   "category": "tool",
+   "subcategory": "golfset",
+   "weight": 7000,
+   "model": "item.golf_pro",
+   "value": 10000,
+   "attributes": [
+    {
+     "trait_type": "Set",
+     "value": "Pro"
+    }
+   ]
+  },
+  "golf_master": {
+   "name": "Master Set",
+   "description": "A white-and-gold bag of the finest clubs Isla stocks. The longest shots on the course, the widest sweet spot and the most control.",
+   "examine": "A white-and-gold bag of the finest clubs Isla stocks. The longest shots on the course, the widest sweet spot and the most control.",
+   "collection": "ASHVALE Saltmere Links",
+   "game": "ashvale",
+   "category": "tool",
+   "subcategory": "golfset",
+   "weight": 6500,
+   "model": "item.golf_master",
+   "value": 40000,
+   "attributes": [
+    {
+     "trait_type": "Set",
+     "value": "Master"
+    }
+   ]
   }
  }
 }

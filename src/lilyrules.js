@@ -34,7 +34,7 @@
     for (let i = 0; i < L.at.length; i++) {
       const [s, len] = L.at[i]; let x = mod(s + shift, L.P); if (x > COLS) x -= L.P;   /* a piece wraps through the hidden part of the period */
       let sunk = 0;
-      if (L.dive && L.dive.indexOf(i) >= 0) { const c = mod(t + i * 1.7, 7); sunk = c < 4.5 ? 0 : c < 5 ? (c - 4.5) / 0.5 : c < 6.3 ? 1 : 1 - (c - 6.3) / 0.7; }   /* a diving group: under for about 1.3 s of every 7 */
+      if (L.dive && L.dive.indexOf(i) >= 0) { const c = mod(t + i * 1.7, 7); sunk = c < 4 ? 0 : c < 5.5 ? (c - 4) / 1.5 : c < 6.4 ? 1 : 1 - (c - 6.4) / 0.6; }   /* a diving group: it starts going down slowly (1.5 s you can see), is under about 0.9 s of every 7 (the operator: you must be able to hop off as soon as they start to sink) */
       out.push({ x, len, sunk, i });
     }
     return out;
@@ -74,7 +74,7 @@
     if (!g.hop || g.hop.u > 0.5) {
       if (ROAD(g.r)) { /* carts: checked above, every frame */ }
       else if (RIVER(g.r) && !g.hop) {
-        let on = null; for (const p of pieces(g.r, t, g.lv)) if (p.sunk < 0.6 && g.c + 0.5 + 0.2 > p.x && g.c + 0.5 - 0.2 < p.x + p.len) { on = p; break; }
+        let on = null; for (const p of pieces(g.r, t, g.lv)) if (p.sunk < 0.92 && g.c + 0.5 + 0.2 > p.x && g.c + 0.5 - 0.2 < p.x + p.len) { on = p; break; }
         if (!on) return die(g, 'splash', ev);
         g.c += laneV(g.r, g.lv) * dt;   /* riding */
         if (g.c < -0.4 || g.c > COLS - 0.6) return die(g, 'swept', ev);

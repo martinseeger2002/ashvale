@@ -15,11 +15,29 @@
 - Saves from the old one-page playtest builds (before the launcher) do not carry over.
 - Fixes are small: one or two module inscriptions, not a whole new game.
 
-## In the current release (v0.8.158)
+## In the current release (v0.8.163)
+- 0.8.163 (2026-10-20): GOLF FIX - while the swing meter runs, a tap anywhere on the screen counts (phones missed the strike tap
+  before); every stroke starts facing the pin; leaving mid-round brings you back in the Saltmere Links clubhouse.
+- 0.8.162 (2026-10-20, by SadFrogLTC): SALTMERE REBUILT - cobbled streets, run-down houses and real piers. Pirates hold the south
+  pier: four quest lines, a pet to earn and a Speechcraft talk check. TUTORIAL ISLAND: a new character with a wallet starts on the island;
+  Guide Elsbeth, a gold arrow and a goal box walk them through every station, then Odo the ferryman rows them home (guests skip it).
+  Cats on a new four-legged model; a stone bridge on the mountain trail. Metal armour now hampers spells and arrows; five tiers of
+  mage robes and of ranged armour.
+- 0.8.159 (2026-10-19): THE SALTMERE LINKS - an 18-hole golf course (par 71) on the coast north-east of Saltmere. Take the path north
+  out of Saltmere through the gap in the hedge (a fingerpost marks it) to the clubhouse. Isla the club pro sells four club sets:
+  Starter 500, Standard 2,500, Pro 10,000, Master 40,000 GOLD (better sets hit further and give more room on the meter; she buys
+  them back at 40%). You need a set to play; the best one you own is used. Fergus the starter sends you out alone, or opens a group
+  of up to four: just for fun, winner takes the pot (100 / 1,000 / 10,000 GOLD each), or per stroke (10 / 100 / 1,000 GOLD a
+  stroke, at most 20 strokes between two players). The @ashvale Bank holds the stakes and pays out when every player's game
+  agrees on the result. A player who leaves mid-round forfeits (their stake stays in the pot / they count 20 strokes behind).
+  The swing: press to start, press to set the power (the gold MAX mark is full power, right on it a bonus, past it a little
+  less), press on the line at the right for a clean strike (early or late curves the ball). Spin top/none/back; on the green
+  Short and Long putts, and drifting dots that show the break; the red flag on the meter marks the power for the pin. Water
+  costs a stroke (drop where it went in), out of bounds a stroke (replay), ten strokes picks up. The best rounds go on the
+  board by the clubhouse door, lowest first.
+- The Doginal Frogs collection is now listed on the arcade (2026-10-19): frog pets and the Lily Run work for frog holders.
 - 0.8.158 (2026-10-19): what you wear stays on when you come back. A slow or short wallet read no longer takes worn gear off
   and puts it in the chest; a worn piece comes off only when the arcade says it now belongs to someone else (sold or sent).
-- NOTE for @ashvale: Doginal Frog pets and the Lily Run need the Doginal Frogs collection listed on the arcade. Until it is, a frog
-  in the wallet is not recognised; say it is coming soon if asked.
 - 0.8.157 (2026-10-19): THE LILY RUN - take the path south off the trail into Saltmere (a fingerpost marks it) to Pondkeeper Bram's booth
   in a little model mountain. Players with a Doginal Frog in their wallet set it down at the booth and hop it over the cart road and across
   the river on logs and diving turtles into five lily-pad homes; all five raise the level. Three frogs a run, one more at 10,000. One player

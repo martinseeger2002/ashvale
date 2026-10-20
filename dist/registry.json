@@ -189,6 +189,12 @@
    "api": 1,
    "kind": "js"
   },
+  "hudgolf": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
   "hud": {
    "id": null,
    "v": "4",
@@ -274,6 +280,24 @@
    "kind": "js"
   },
   "englily": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "golfrules": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "golfcourse": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "engolf": {
    "id": null,
    "v": "1",
    "api": 1,
@@ -678,6 +702,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.fergus": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.gale": {
     "id": null,
     "v": 1,
@@ -817,6 +847,12 @@
     "kind": "json"
    },
    "char.iria": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.isla": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1524,6 +1560,12 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.hat_flatcap": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.hat_hood": {
     "id": null,
     "v": 1,
@@ -1560,6 +1602,12 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.hat_visor": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.hat_wizard": {
     "id": null,
     "v": 1,
@@ -1579,6 +1627,12 @@
     "kind": "json"
    },
    "cloth.pants_jingle": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "cloth.pants_pleated": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1638,6 +1692,12 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.shirt_polo": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.shirt_ribbon": {
     "id": null,
     "v": 1,
@@ -1663,6 +1723,12 @@
     "kind": "json"
    },
    "cloth.shirt_tunic": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "cloth.shirt_tweed": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -2154,6 +2220,30 @@
     "api": 1,
     "kind": "json"
    },
+   "item.golf_master": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.golf_pro": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.golf_standard": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "item.golf_starter": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "item.hero_bones": {
     "id": null,
     "v": 1,
@@ -2477,6 +2567,24 @@
     "kind": "json"
    },
    "lilyrunpath": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "golf": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "golfpath": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "golfshore": {
     "id": null,
     "v": 1,
     "api": 1,

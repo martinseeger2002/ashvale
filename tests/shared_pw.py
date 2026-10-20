@@ -422,7 +422,7 @@ with sync_playwright() as p:
     if which in ('all', 'arcade'):
         sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'arcade_mock')); import server as mock
         srv = mock.serve(8736); threading.Thread(target=srv.serve_forever, daemon=True).start()
-        session(b, lambda i: 'http://127.0.0.1:8736/?nocreator&seed=x%d' % i, 'arcade mock', sandbox=True)
+        session(b, lambda i: 'http://127.0.0.1:8736/?nocreator&notut&seed=x%d' % i, 'arcade mock', sandbox=True)
         srv.shutdown()
     b.close()
 print('FAILED: %d' % len(fails) if fails else 'ALL OK')
