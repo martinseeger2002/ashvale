@@ -440,8 +440,11 @@
       let Wd = 1, H = 1;
       function resize() { Wd = Math.max(1, host.clientWidth); H = Math.max(1, host.clientHeight); renderer.setSize(Wd, H, false); camera.aspect = Wd / H; camera.updateProjectionMatrix(); }
       window.addEventListener('resize', resize); resize();
-      let last = performance.now();
+      let last = performance.now(), due = 0;
+      const FRAME_MS = 1000 / 60;   /* [Claude 2026-10-19] at most 60 frames a second, whatever the screen (the operator: a fast monitor must not speed the game up; this loop counts frames) */
       function tick(now) {
+        if (now < due - 1) { requestAnimationFrame(tick); return; }
+        due += FRAME_MS; if (due < now - FRAME_MS) due = now;
         const dt = Math.min(0.1, (now - last) / 1000); last = now; frame++;
         if (cam.fly) stepFly(dt);
         if (walkAfter && !cam.fly) enterWalk(walkAfter);

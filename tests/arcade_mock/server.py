@@ -21,6 +21,9 @@ class H(http.server.BaseHTTPRequestHandler):
         if not r and path.startswith(VIEWS):
             b = b'[]'; self.send_response(200); self.send_header('Content-Type', 'application/json'); self.send_header('Access-Control-Allow-Origin', '*')
             self.send_header('Content-Length', str(len(b))); self.end_headers(); self.wfile.write(b); return
+        if not r and path.startswith('/r/doginals/'):   # [2026-10-19] the pets' wallet read (engpet.js): a signed-in account holding no Doginals
+            b = ('{"address": "%s", "items": [], "unknown": 0}' % path.rsplit('/', 1)[-1]).encode(); self.send_response(200); self.send_header('Content-Type', 'application/json'); self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Content-Length', str(len(b))); self.end_headers(); self.wfile.write(b); return
         if not r: self.send_response(404); self.end_headers(); return
         b = open(r[0], 'rb').read(); self.send_response(200); self.send_header('Content-Type', r[1]); self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Content-Length', str(len(b))); self.end_headers(); self.wfile.write(b)

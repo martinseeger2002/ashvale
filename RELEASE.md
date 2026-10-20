@@ -153,7 +153,7 @@ If two_players_live shows nobody seeing anybody once, run it again (joining can 
    The newest card replaces the old one on the Games tab automatically.
 3. Release note as @ashvale: write `chain/post_vNN.txt` (paragraphs separated by a blank line, each ≤ 280 characters,
    plain words, what players will notice; no other games named), then
-   `/home/you/cartoon-toolkit/ghost-devs/tools/venv/bin/python tools/ashvale_daily.py --post chain/post_vNN.txt`.
+   `~/arcade-work/venv/bin/python tools/ashvale_daily.py --post chain/post_vNN.txt`.
    Small fixes can share one note.
 4. Write a short entry in `handoff/releases.md`: date, version, modules, registry id, what it fixed, tests run.
 

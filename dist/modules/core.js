@@ -1260,6 +1260,7 @@
        (the operator: "quick fix the leaderboard at chess" - the park's board was painting the dragon text). Wins, not Elo: the
        Bank adds up the wins games report, one per name; Elo and the match ledger stay in chess_park_plan phase 2. */
     const SCORE_TXT = { chain_dragon: { title: 'DRAGON KILLERS', sub: n => 'Slain ' + n + (n === 1 ? ' time' : ' times'), read: n => 'The chained dragon has been slain ' + n + ' time' + (n === 1 ? '' : 's') + '.', list: 'The names of its slayers, by how many times:' },
+                        lily_run: { title: 'THE LILY RUN', sub: n => 'Best scores', read: n => 'The best runs at the Lily Run, frog by frog.', list: 'Best scores:' },   /* [Claude 2026-10-19] a best score per name (the Bank keeps the highest), not a count */
                         chess_wins: { title: 'CHESS CHAMPIONS', sub: n => n + (n === 1 ? ' game won' : ' games won'), read: n => n + ' game' + (n === 1 ? ' has' : 's have') + ' been won at the Chess Park tables.', list: 'The standings, by games won:' } };
     function scoreBoard(key) {
       const s = scoresOf(key), T = SCORE_TXT[key] || SCORE_TXT.chain_dragon, L = [T.title, T.sub(s.total)];
@@ -1885,6 +1886,7 @@
         return;
       }
       if (n.chest) { ev({ e: 'chest', p: p.id, npc: n.id }); return; }
+      if (n.lilyrun) { ev({ e: 'lilyrun', p: p.id, npc: n.id }); return; }   /* [Claude 2026-10-19] the Lily Run's pond-keeper: the engine part (englily.js) talks */
       if (n.portal) {   /* touching a portal attunes you to it; you can travel to any portal you have touched (2026-10-04) */
         p.attuned = p.attuned || {}; const fresh = !p.attuned[n.portal]; p.attuned[n.portal] = 1; const P0 = portalOf(n.portal);
         if (fresh) msg(p, 'The stones hum as you touch them: you will always find your way back to ' + (P0 ? P0.name : 'here') + ' through any town portal.', 'info');
@@ -1974,7 +1976,10 @@
         }
         if (!q) {   /* a quest begins only when the player says yes; the first talk is the offer */
           lines = fill(Q.steps[0].talk, Q.steps[0]).concat(Q.ask ? fill([Q.askSay || 'You will offer what you ask with when you say yes.'], null) : []);
-          ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines, offer: qid, warn: Q.steps[0] && Q.steps[0].summon ? 1 : 0 });
+          /* a fighting quest names the combat level it is made for, before you say yes (2026-10-18: "they should be informed
+             of a minimum recommended combat level"); quest data `combat` */
+          if (Q.combat) { const cl = combatLevel(p); lines.push('Recommended combat level: ' + Q.combat + '. Yours is ' + cl + (cl < Q.combat ? ' - this will be a hard fight.' : '.')); }
+          ev({ e: 'dialog', p: p.id, npc: n.id, name: n.name, lines, offer: qid, combat: Q.combat || 0, warn: Q.steps[0] && Q.steps[0].summon ? 1 : 0 });
           return;
         }
         else {

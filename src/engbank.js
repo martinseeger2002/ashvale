@@ -70,6 +70,25 @@
       const ledgerDrop = () => { ledger = null; };   /* the tests' lost count */
       const ledgerSnap = () => ledger && { addr: ledger.addr, bag: ledger.bag, spent: ledger.spent, pend: ledger.pend, pspent: ledger.pspent, out: ledger.out || {}, gone: ledger.gone || {}, autoTake: ledger.autoTake || {}, pchest: ledger.pchest || {}, lchest: ledger.lchest || {}, seen: ledger.seen || {}, pkb: ledger.pkb || [] };   /* seen, pkb [Claude 2026-10-14]: the wallet's last look, and card-table buy-ins still to send */
       const ledgerSave = () => { if (!ledger) return; try { G.localStorage.setItem(CKEY(ledger.addr), JSON.stringify(ledgerSnap())); } catch (e) { /* private window */ } };
+      /* [Claude 2026-10-19] WHAT YOU WEAR STAYS ON over a bad wallet read (the operator: after the arcade restarted, @apple's whole outfit went
+         into the chest). Two short reads used to be enough to take a worn piece off - right for a sale on the arcade exchange (2026-10-09:
+         a sold helmet stayed on the seller's head), wrong for a read that came back short while the arcade restarted. Now a worn piece
+         only comes off once the arcade says that very inscription has another owner; until then nothing about it changes (no loose
+         piece for the Bank to mint again). A read that names no missing piece is a bad read, and asks nothing. */
+      const asking = {};
+      function wornWait(L, k) {   /* true: keep waiting */
+        if (!Object.values(me.eq || {}).some(q => q && q.id === k)) return false;
+        if (L.goneOk && L.goneOk[k]) return false;
+        const at = walletState.data.at || Date.now(); if (asking[k] && at - asking[k] < 20000) return true;   /* once per fresh wallet read, at most every 20 s */
+        asking[k] = at;
+        const now = (walletState.data.gear && walletState.data.gear[k]) || [], gone = ((L.ids && L.ids[k]) || []).filter(i => now.indexOf(i) < 0);
+        if (!gone.length) return true;
+        Promise.all(gone.slice(0, 3).map(id => fetch('/r/inscription/' + encodeURIComponent(id), { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null).catch(() => null))).then(rs => {
+          if (!rs.some(j => j && j.owner && j.owner !== walletState.address && j.held !== false)) return;
+          L.goneOk = L.goneOk || {}; L.goneOk[k] = 1; asking[k] = 0; chestState();
+        });
+        return true;
+      }
       function chestState() {
         if (!walletState.data || !walletState.address) return { chest: {}, loose: {}, bank, arriving: bank.arriving };
         const L = ledgerFor(walletState.address), w = walCounts(), keys = new Set(Object.keys(w).concat(Object.keys(L.bag), Object.keys(L.spent), Object.keys(L.pend), Object.keys(L.pspent), Object.keys(L.gone), Object.keys(L.autoTake), Object.keys(L.pchest), Object.keys(L.lchest)));
@@ -80,6 +99,7 @@
         const g = (o, k) => o[k] || 0, put = (o, k, v) => { if (v > 0) o[k] = v; else delete o[k]; };
         for (const k of keys) {
           let c = carriedOf(k); const wk = w[k] || 0;
+          { const ids = walletState.data.gear && walletState.data.gear[k]; if (ids && ids.length) { L.ids = L.ids || {}; const u = new Set(L.ids[k] || []); for (const i of ids) u.add(i); L.ids[k] = [...u].slice(-20); } }   /* the pieces this wallet has shown (to ask about one that seems to have left) */
           let bag = g(L.bag, k), spent = g(L.spent, k), pend = g(L.pend, k), pspent = g(L.pspent, k), gone = g(L.gone, k), pch = g(L.pchest, k);
           /* 1. used up (eaten, sold, dropped): promised units first, then delivered ones */
           let x = bag + pend - c;
@@ -103,7 +123,7 @@
           let over = bag + spent + gone - wk;
           if (over > 0) { const gd = Math.min(over, gone); gone -= gd; over -= gd; }   /* a trade settled on chain */
           if (over > 0) { const d = Math.min(over, spent); spent -= d; over -= d;
-            if (over > 0 && bag > 0) { L.short = L.short || {}; const sh = L.short[k]; if (sh && sh.n === over && walletState.data.at - sh.at > 20000) { const want = Math.min(over, bag); let m = Math.min(want, core.invCount(me, k)); if (m > 0) core.storeItem(PID, k, m); for (const slot of Object.keys(me.eq || {})) { if (m >= want) break; const q = me.eq[slot]; if (q && q.id === k && core.takeOff && core.takeOff(PID, slot)) m++; } if (m > 0) { c -= m; hud.chat('Your ' + core.item(k).name + ' went to its new owner.', 'info'); } delete L.short[k]; bag -= Math.min(over, bag); } else if (!sh || sh.n !== over) L.short[k] = { n: over, at: walletState.data.at }; over = 0; }   /* a trade on the arcade: the item leaves your bag once two wallet reads agree */
+            if (over > 0 && bag > 0) { L.short = L.short || {}; const sh = L.short[k]; if (sh && sh.n === over && walletState.data.at - sh.at > 20000 && wornWait(L, k)) { /* a worn piece: nothing changes until the arcade says it has a new owner */ } else if (sh && sh.n === over && walletState.data.at - sh.at > 20000) { const want = Math.min(over, bag); let m = Math.min(want, core.invCount(me, k)); if (m > 0) core.storeItem(PID, k, m); for (const slot of Object.keys(me.eq || {})) { if (m >= want) break; const q = me.eq[slot]; if (q && q.id === k && core.takeOff && core.takeOff(PID, slot)) m++; } if (m > 0) { c -= m; hud.chat('Your ' + core.item(k).name + ' went to its new owner.', 'info'); } delete L.short[k]; if (L.goneOk) delete L.goneOk[k]; bag -= Math.min(over, bag); } else if (!sh || sh.n !== over) L.short[k] = { n: over, at: walletState.data.at }; over = 0; }   /* a trade on the arcade: the item leaves your bag once two wallet reads agree */
             bag -= Math.min(over, bag);
             if (d && L.out && L.out[k]) { let r = d; L.out[k] = L.out[k].filter(o => { if (r > 0 && o.st === 'sent') { r -= o.n; return false; } return true; }); } }   /* a return landed */
           /* traded in: the piece goes into your bag as soon as your wallet shows it (the operator: trade from and into your inventory) */
@@ -468,11 +488,18 @@
       /* the ruined keep's dragon-killer board: the Bank is the ONLY place it is kept (2026-10-12: "the bank is the
          only thing that stores the high score and it doesn't get the high score from the clients"). A game reports ONE kill
          - only WHO, never a count of its own - and asks with 'scores?' for the board, which is all a sign paints from. */
-      const SCORE_KEYS = ['chain_dragon', 'chess_wins'];
+      const SCORE_KEYS = ['chain_dragon', 'chess_wins', 'lily_run'];
       function scoreTell(e) {
         if (!e || SCORE_KEYS.indexOf(e.key) < 0 || !e.name) return;   /* [Claude 2026-10-11] the chess park's games-won board rides the same channel */
         bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'score', v: 2, k: e.key, n: String(e.name).slice(0, 20), d: 1 }); });
         setTimeout(() => scoresAsk(true), 800);   /* then put the Bank's new number on the sign */
+      }
+      /* [Claude 2026-10-19] the Lily Run's board is a BEST score per name, not a count: a finished run says who, the score, how
+         long it took and the level reached; the Bank keeps the highest and refuses a score that run could not have made */
+      function bestTell(key, name, s, ms, lv) {
+        if (SCORE_KEYS.indexOf(key) < 0 || !name || !(s > 0)) return;
+        bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'best', v: 1, k: key, n: String(name).slice(0, 20), s: s | 0, ms: ms | 0, lv: lv | 0 }); });
+        setTimeout(() => scoresAsk(true), 1200);
       }
       let scoreT = 0; const scoreGot = {};
       function scoresAsk(force) {
@@ -645,7 +672,7 @@
       let pkAskT = 0;
       function pkAsk() { pkAskT = Date.now(); bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'pk?', v: 1 }); }).catch(() => {}); }
       setInterval(() => { const P = core.S.players[PID]; if (P && P.pk && P.pk.sn && !(P.seat && P.seat.k === 'pk') && Date.now() - pkAskT > 30000) pkAsk(); }, 5000);
-    return { feHear: fn => { FE_HEAR = fn; }, setChestHome, chestsAsk, chestsHeard, chestHomes: () => JSON.parse(JSON.stringify(CS.by)), pkEvent, pkAsk, CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
+    return { bestTell, feHear: fn => { FE_HEAR = fn; }, setChestHome, chestsAsk, chestsHeard, chestHomes: () => JSON.parse(JSON.stringify(CS.by)), pkEvent, pkAsk, CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engbank', { api: 1, v: 2, needs: {} }, () => ({ api: 1, install }));
   if (typeof module !== 'undefined' && module.exports) module.exports = { install };

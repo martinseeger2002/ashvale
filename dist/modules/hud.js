@@ -229,6 +229,19 @@
       help.style.display = 'block'; help.querySelector('.btn').onclick = () => { help.style.display = 'none'; };
     }
 
+    /* [Claude 2026-10-19] the operator: "a choose pet option that opens a new hud with all of your available pet inscriptions, each on
+       their own card along with their original image artwork". items: [{ label, sub, img: {src, flip}, cur }] -> onPick(i) */
+    function cards(title, items, onPick, note) {
+      help.innerHTML = '<h3>' + A.esc(title) + '</h3>' + (note ? '<p style="margin:0 0 10px;line-height:1.4">' + A.esc(note) + '</p>' : '') + '<div class="pcards">' +
+        items.map((it, i) => '<button type="button" class="pcard' + (it.cur ? ' cur' : '') + '" data-i="' + i + '">' +
+          (it.img ? '<img alt="" src="' + A.esc(it.img.src) + '"' + (it.img.flip ? ' style="filter:invert(100%);transform:scaleX(-1)"' : '') + '>' : '<span class="noimg"></span>') +
+          '<span class="nm">' + A.esc(it.label) + '</span>' + (it.sub ? '<span class="sub">' + A.esc(it.sub) + '</span>' : '') + '</button>').join('') +
+        '</div><button class="btn" data-a="close">Close</button>';
+      help.style.display = 'block';
+      help.querySelectorAll('.pcard').forEach(b => { b.onclick = (ev) => { ev.stopPropagation(); help.style.display = 'none'; onPick && onPick(+b.getAttribute('data-i')); }; });
+      help.querySelector('[data-a=close]').onclick = () => { help.style.display = 'none'; };
+    }
+
     /* ---------- help card */
     function showHelp(on) {
       help.style.display = on ? 'block' : 'none'; if (!on) return;
@@ -352,7 +365,8 @@
       refresh() { }, drawShop() { }, openShop() { }, closeShop() { }, openChest() { }, closeChest() { }, drawChest() { }, invPointer() { }, creator() { }, creatorOpen: () => false,
       chessOpen() { }, chessUpdate() { }, chessClose() { }, chessPromo: null,
       pokerOpen() { }, pokerUpdate() { }, pokerClose() { }, pokerAnchor() { },
-      fortuneOpen() { }, fortuneUpdate() { }, fortuneClose() { }, fortuneDeposit() { }, fortunePays() { } };   /* [Claude 2026-10-16] the Fortune Engine (hudfortune) */
+      fortuneOpen() { }, fortuneUpdate() { }, fortuneClose() { }, fortuneDeposit() { }, fortunePays() { },
+      lilyOpen() { }, lilyUpdate() { }, lilyFlash() { }, lilyOver() { }, lilyClose() { } };   /* [Claude 2026-10-19] the Lily Run (hudlily) */   /* [Claude 2026-10-16] the Fortune Engine (hudfortune) */
     for (const part of PARTS) part.install(K);
     K.onChestClose = () => { if (st.tabWas === undefined) return; const back = st.tabWas; st.tabWas = undefined; setTab(back); };
     /* a quest's story so far, in the words of the one who gave it (2026-10-06): every step you finished - what they
@@ -377,14 +391,14 @@
     { const r0 = K.refresh; K.refresh = w => { r0(w); if (st.chest) K.drawChest(); }; }   /* the chest window follows the bag and the wallet */
     setTab(st.tab);
     return {
-      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab(api.isPhone ? null : 'inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
+      layer, refresh: w => K.refresh(w), chat: chatLine, bubble, fxSplat, setOnline(on) { sayRow.classList.toggle('on', !!on); }, menu, hideMenu, dialog, confirm, playerStats, cards, travel, netLost, newVersion, elsewhere, overhead, setPos, setPoison, promptSay, openShop: id => K.openShop(id), closeShop: () => K.closeShop(), openChest: () => { if (!st.chest) st.tabWas = st.tab; K.openChest(); setTab(api.isPhone ? null : 'inv'); }, closeChest: () => K.closeChest(), drawChest: () => K.drawChest(), get shopOpen() { return st.shopId; }, showHelp, splat, hpBar, tag, marker, xpDrop, levelUp, death, setOpp, setHover, fatal,
       drawMinimap, setTab, creator: o => K.creator(o), get creatorOpen() { return K.creatorOpen(); }, get tab() { return st.tab; }, examine, itemOptions,
       chessOpen: (v, cb) => K.chessOpen(v, cb), chessUpdate: v => K.chessUpdate(v), chessClose: () => K.chessClose(), get chessPromo() { return K.chessPromo; },
-      pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(), pokerAnchor: a => K.pokerAnchor && K.pokerAnchor(a), fortuneOpen: (v, cb) => K.fortuneOpen(v, cb), fortuneUpdate: v => K.fortuneUpdate(v), fortuneClose: () => K.fortuneClose(), fortuneDeposit: () => K.fortuneDeposit(), fortunePays: o => K.fortunePays(o), solitaireOpen: o => K.solitaireOpen && K.solitaireOpen(o), solitaireClose: () => K.solitaireClose && K.solitaireClose(), _sol: () => K._sol && K._sol(),
+      pokerOpen: (v, cb) => K.pokerOpen(v, cb), pokerUpdate: v => K.pokerUpdate(v), pokerClose: () => K.pokerClose(), pokerAnchor: a => K.pokerAnchor && K.pokerAnchor(a), lilyOpen: (v, cb) => K.lilyOpen(v, cb), lilyUpdate: v => K.lilyUpdate(v), lilyFlash: (t, k) => K.lilyFlash(t, k), lilyOver: o => K.lilyOver(o), lilyClose: () => K.lilyClose(), fortuneOpen: (v, cb) => K.fortuneOpen(v, cb), fortuneUpdate: v => K.fortuneUpdate(v), fortuneClose: () => K.fortuneClose(), fortuneDeposit: () => K.fortuneDeposit(), fortunePays: o => K.fortunePays(o), solitaireOpen: o => K.solitaireOpen && K.solitaireOpen(o), solitaireClose: () => K.solitaireClose && K.solitaireClose(), _sol: () => K._sol && K._sol(),
       isUI(t) { return t && t !== host && !t.classList.contains('gl') && ui.contains(t); }
     };
   }
 
-  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('hud', { api: 1, v: 4, needs: { hudart: 1, hudpanels: 1, hudshop: 1, huddrag: 1, hudcreator: 1, hudchest: 1, hudchess: 1, hudpoker: 1, hudfortune: 1 } },
-    deps => { A = deps.hudart; PARTS = [deps.hudpanels, deps.hudshop, deps.huddrag, deps.hudcreator, deps.hudchest, deps.hudchess, deps.hudpoker, deps.hudfortune]; return { api: 1, create }; });
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('hud', { api: 1, v: 4, needs: { hudart: 1, hudpanels: 1, hudshop: 1, huddrag: 1, hudcreator: 1, hudchest: 1, hudchess: 1, hudpoker: 1, hudfortune: 1, hudlily: 1 } },
+    deps => { A = deps.hudart; PARTS = [deps.hudpanels, deps.hudshop, deps.huddrag, deps.hudcreator, deps.hudchest, deps.hudchess, deps.hudpoker, deps.hudfortune, deps.hudlily]; return { api: 1, create }; });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

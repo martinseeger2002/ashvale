@@ -1,0 +1,86 @@
+{
+ "ashvale3d": "module",
+ "name": "zone.lilyrun",
+ "api": 1,
+ "v": 1,
+ "data": {
+  "name": "The Lily Run",
+  "level": "safe",
+  "origin": [
+   344,
+   98
+  ],
+  "size": [
+   21,
+   23
+  ],
+  "ground": "grass",
+  "setPiece": false,
+  "tiles": [
+   "........pp...........",
+   "........pp...........",
+   "........pppp.........",
+   "..........pp.X.......",
+   "..........pp.........",
+   "...FFFFFFFFFFFFFFF...",
+   ".XXXXXXXXXXXXXXXXXXX.",
+   ".XXXXXXXXXXXXXXXXXXX.",
+   ".XXXXXXXXXXXXXXXXXXX.",
+   ".XXXXXXXXXXXXXXXXXXX.",
+   ".XXXXXXXXXXXXXXXXXXX.",
+   ".XXXXXXXXXXXXXXXXXXX.",
+   ".XXXXXXXXXXXXXXXXXXX.",
+   ".XXXXXXXXXXXXXXXXXXX.",
+   ".XXXXXXXXXXXXXXXXXXX.",
+   ".XXXXXXXXXXXXXXXXXXX.",
+   ".XXXXXXXXXXXXXXXXXXX.",
+   ".XXXXXXXXXXXXXXXXXXX.",
+   ".XXXXXXXXXXXXXXXXXXX.",
+   ".XXXXXXXXXXXXXXXXXXX.",
+   ".XXXXXXXXXXXXXXXXXXX.",
+   ".XXXXXXXXXXXXXXXXXXX.",
+   ".XXXXXXXXXXXXXXXXXXX."
+  ],
+  "objects": [
+   {
+    "k": "stall",
+    "x": 354,
+    "y": 102,
+    "w": 1,
+    "h": 1,
+    "lilyrun": true
+   },
+   {
+    "k": "wsign",
+    "x": 357,
+    "y": 101,
+    "face": "n",
+    "board": "lily",
+    "title": "THE LILY RUN"
+   },
+   {
+    "k": "torch",
+    "x": 346,
+    "y": 101
+   },
+   {
+    "k": "torch",
+    "x": 362,
+    "y": 101
+   }
+  ],
+  "npcs": [
+   {
+    "id": "bram",
+    "name": "Pondkeeper Bram",
+    "look": "aled",
+    "x": 352,
+    "y": 101,
+    "lilyrun": true,
+    "examine": "An old pond-keeper with mud on his boots. He minds the Lily Run."
+   }
+  ],
+  "spawns": [],
+  "fishing": []
+ }
+}

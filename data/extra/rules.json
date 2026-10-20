@@ -68,7 +68,8 @@
     "dibber",
     "spade",
     "wateringcan",
-    "scroll"
+    "scroll",
+    "hammer"
    ],
    "food": [
     "bread",
@@ -291,6 +292,46 @@
    "name": "the restored Dragon Heart",
    "quest": "dragon_heart",
    "desc": "The power beneath the ruined keep is steady again."
+  },
+  "seer_scroll": {
+   "name": "the hollow oak's scroll",
+   "quest": "caged_seer",
+   "desc": "You took Hollin's scroll from the hollow oak."
+  },
+  "fivestones_1": {
+   "name": "the Hawk stone",
+   "quest": "caged_seer",
+   "desc": "The first of the Fivestones is awake."
+  },
+  "fivestones_2": {
+   "name": "the Hound stone",
+   "quest": "caged_seer",
+   "desc": "The second of the Fivestones is awake."
+  },
+  "fivestones_3": {
+   "name": "the Hart stone",
+   "quest": "caged_seer",
+   "desc": "The third of the Fivestones is awake."
+  },
+  "fivestones_4": {
+   "name": "the Hare stone",
+   "quest": "caged_seer",
+   "desc": "The fourth of the Fivestones is awake."
+  },
+  "stones_open": {
+   "name": "the red ring",
+   "quest": "caged_seer",
+   "desc": "The Fivestones are awake; their ring leads to Emberfall."
+  },
+  "seer_freed": {
+   "name": "Hollin's freedom",
+   "quest": "caged_seer",
+   "desc": "You freed Old Hollin from the gibbet in Emberfall."
+  },
+  "maiden_slain": {
+   "name": "the Thornwatch's thanks",
+   "quest": "thorn_maiden",
+   "desc": "You put Maelis, Maiden of Thorns, back in the ground. The road east is open."
   }
  },
  "portals": [
@@ -332,6 +373,16 @@
    "to": [
     133,
     85
+   ]
+  },
+  {
+   "id": "abbey",
+   "name": "The Abbey Yard",
+   "x": 366,
+   "y": 514,
+   "to": [
+    366,
+    515
    ]
   }
  ],

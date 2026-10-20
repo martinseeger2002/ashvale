@@ -97,7 +97,7 @@ if LOCAL:
         def inscribe_here(d, path, json_text=None): return 'local' + sha(path)[:59]
     R = _R
     def browser(): return None
-import urllib.request, re as _re
+import urllib.request, urllib.error, http.client, re as _re
 def send_only(d, path, json_text=None):
     """inscribe_here without waiting for the block: upload, sign, wait until every piece is SENT (seconds), return.
     The id is resolved later by content hash from /r/inscriptions (batch mode: ~20 sends per block, not 1)."""
@@ -190,7 +190,12 @@ def give_up(d):
         b[0].click(); time.sleep(3); R.confirm_card(d); time.sleep(2)
 def ids_by_sha(want):
     """{sha: id} for our recent inscriptions (newest 300)."""
-    L = json.load(urllib.request.urlopen('https://app.dogecoinarcade.com/r/inscriptions?creator=' + ASHVALE + '&limit=300', timeout=30))
+    # the arcade restarts often during its own updates (2026-10-19): a 502 or a body cut off mid-read is a restart, so wait it out
+    for attempt in range(12):
+        try: L = json.load(urllib.request.urlopen('https://app.dogecoinarcade.com/r/inscriptions?creator=' + ASHVALE + '&limit=300', timeout=60)); break
+        except (urllib.error.URLError, http.client.HTTPException, ConnectionError, TimeoutError, ValueError) as ex:
+            if attempt == 11: raise
+            print('   arcade lookup failed (%s), retrying in %d s' % (str(ex)[:60], 15 * (attempt + 1)), flush=True); time.sleep(15 * (attempt + 1))
     return {p['sha256']: p['id'] for p in L if p.get('sha256') in want}
 if '--atlas-launcher' in sys.argv:
     # THE ATLAS LAUNCHER (2026-10-11: "a better way for the Atlas to render so that it always automatically integrates

@@ -608,7 +608,7 @@
       if (mesh.material && mesh.material.map) mesh.material.map.needsUpdate = true;
     }
     function boardDefault(id, title) {   /* [Claude 2026-10-11] what a board says before the Bank has answered: its own title, not the keep's */
-      return id === 'chess' ? ['CHESS CHAMPIONS', '0 games won', '', 'None yet.'] : [title || 'DRAGON KILLERS', 'Slain 0 times', '', 'None yet.'];
+      return id === 'chess' ? ['CHESS CHAMPIONS', '0 games won', '', 'None yet.'] : id === 'lily' ? ['THE LILY RUN', 'Best scores', '', 'None yet.'] : [title || 'DRAGON KILLERS', 'Slain 0 times', '', 'None yet.'];
     }
     function boardPaint(id, lines) {
       const B = BOARDS[id] = BOARDS[id] || { lines: boardDefault(id), faces: [] };
@@ -1376,6 +1376,8 @@
           }
           case 'mechanism': {
             const lv = o.lv | 0, by = y + lv * 3.2, L = lv < 0 ? dungeonLayer(lv) : null, DB = L ? L.b : B, parent = L ? L.g : group, C = o.id === 'dragon_heart' ? 0xb050e8 : o.skill === 'mining' ? 0x8b9298 : o.skill === 'prayer' ? 0xe8d890 : o.skill === 'firemaking' ? 0xe86a28 : 0x668ee8;
+            if (o.hidden) { /* its look is a decor piece on the same tile (a standing stone, an old oak): only the pick */ }
+            else {
             DB.add('cyl', 0x55514b, x, by + 0.32, z, 0.72, 0.64, 0.72);
             DB.add('cyl', 0x777168, x, by + 0.69, z, 0.5, 0.12, 0.5);
             if (o.id === 'dragon_heart') {
@@ -1383,6 +1385,7 @@
             } else {
               { const ring = new THREE.Mesh(new THREE.TorusGeometry(0.29, 0.045, 6, 18), new THREE.MeshLambertMaterial({ color: C })); ring.position.set(x, by + 0.82, z); ring.rotation.x = Math.PI / 2; parent.add(ring); }
               DB.add('box', C, x, by + 0.86, z, 0.08, 0.08, 0.52, Math.PI / 4);
+            }
             }
             const pk = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.58, 1.5, 8), new THREE.MeshBasicMaterial({ visible: false })); pk.position.set(x, by + 0.75, z); pk.userData.pick = { kind: 'mechanism', x: o.x, y: o.y, lv }; parent.add(pk); pickables.push(pk);
             break;
@@ -1776,6 +1779,32 @@
             const glow = new THREE.Mesh(new THREE.ConeGeometry(1.4, 2.4, 14, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff2c8, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
             glow.rotation.x = Math.PI / 2; glow.position.set(x, y + 0.8, z + 0.9); group.add(glow);
             const pk = new THREE.Mesh(new THREE.BoxGeometry(1.8, 2.2, 1.2), new THREE.MeshBasicMaterial({ visible: false })); pk.position.set(x, y + 1.1, z); pk.userData.pick = { kind: 'passage', x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
+            break;
+          }
+          case 'stairs': case 'stairsup': {   /* (2026-10-19) a stone stair: down into a cellar through an arch on the surface or a floor above
+               (stairs), or up out of one (stairsup: the steps rise to a doorway with daylight beyond). o.ry turns it */
+            const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = o.ry || 0; group.add(g);
+            const ST = new THREE.MeshLambertMaterial({ color: 0x77736a }), DK = new THREE.MeshLambertMaterial({ color: 0x4e4b45 }), up = o.k === 'stairsup';
+            const box = (m, px, py, pz, sx, sy, sz) => { const b = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), m); b.position.set(px, py, pz); g.add(b); };
+            box(DK, -0.7, 1.05, -0.1, 0.3, 2.1, 0.5); box(DK, 0.7, 1.05, -0.1, 0.3, 2.1, 0.5); box(ST, 0, 2.2, -0.1, 1.8, 0.3, 0.56);
+            if (up) { for (let i = 0; i < 4; i++) box(ST, 0, 0.1 + i * 0.2, 0.5 - i * 0.22, 1.1, 0.2, 0.3);
+              const day = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.9), new THREE.MeshBasicMaterial({ color: 0xfff1cc })); day.position.set(0, 1.0, -0.3); g.add(day); }
+            else { const hole = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.9), new THREE.MeshBasicMaterial({ color: 0x0c0a08 })); hole.position.set(0, 1.0, -0.3); g.add(hole);
+              for (let i = 0; i < 3; i++) box(ST, 0, 0.02 - i * 0.001, 0.45 - i * 0.25, 1.1, 0.04, 0.24); }
+            const pk = new THREE.Mesh(new THREE.BoxGeometry(1.8, 2.4, 1.2), new THREE.MeshBasicMaterial({ visible: false })); pk.position.set(x, y + 1.2, z); pk.userData.pick = { kind: 'passage', x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
+            break;
+          }
+          case 'portalgate': {   /* a standing ring of light, a way between two places (2026-10-19, Thornwatch's stone ring); o.color, o.ry */
+            const C = new THREE.Color(o.color || '#d0402a'), g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = o.ry || 0; group.add(g);
+            const rim = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.09, 8, 28), new THREE.MeshBasicMaterial({ color: C })); rim.scale.set(1, 1.35, 1); rim.position.y = 1.45; g.add(rim);
+            const sheet = new THREE.Mesh(new THREE.CircleGeometry(0.92, 28), new THREE.MeshBasicMaterial({ color: C, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide })); sheet.scale.set(1, 1.35, 1); sheet.position.y = 1.45; g.add(sheet);
+            const core2 = new THREE.Mesh(new THREE.CircleGeometry(0.55, 20), new THREE.MeshBasicMaterial({ color: C.clone().lerp(new THREE.Color(0xffffff), 0.5), transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide })); core2.scale.set(1, 1.35, 1); core2.position.y = 1.45; g.add(core2);
+            torches.push({ f: core2, ph: hash2(o.x, o.y) * 10, glow: true, x, y: y + 1.45, z, lv: 0 });
+            { /* a frame of dressed stones round the light, standing on a low step, so it reads as a thing from the side too */
+              const SM = new THREE.MeshLambertMaterial({ color: 0x77736c }), n = 12;
+              for (let k = 0; k < n; k++) { const a = k / n * Math.PI * 2, b = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.36, 0.5), SM); b.position.set(Math.cos(a) * 1.08, 1.45 + Math.sin(a) * 1.08 * 1.35, 0); b.rotation.z = a; g.add(b); }
+              const step = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.2, 1.1), SM); step.position.y = 0.1; g.add(step); }
+            const pk = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.8, 1.0), new THREE.MeshBasicMaterial({ visible: false })); pk.position.set(x, y + 1.4, z); pk.userData.pick = { kind: 'passage', x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
             break;
           }
           case 'web': {   /* spokes and rings of silk, hung upright */

@@ -822,6 +822,1108 @@
     }
    ],
    "hint": "A walker that burned and kept walking. It is the reason the den is warm."
+  },
+  "risen_dead": {
+   "name": "Risen dead",
+   "level": 25,
+   "hp": 64,
+   "att": 23,
+   "def": 18,
+   "attb": 18,
+   "defb": 10,
+   "max": 5,
+   "speed": 6,
+   "aggro": 5,
+   "respawn": 120,
+   "anim": "crush",
+   "look": "barrow_dead",
+   "animal": false,
+   "roam": 2,
+   "gold": 18,
+   "ownDice": true,
+   "ai": {
+    "kind": "humanoid",
+    "faction": "barrow",
+    "rally": 0,
+    "leash": 9
+   },
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "helmet_t3",
+     "one_in": 28
+    },
+    {
+     "item": "shield_t3",
+     "one_in": 28
+    },
+    {
+     "item": "potion",
+     "one_in": 9
+    }
+   ],
+   "hint": "Slow to rise, slow to walk, and in no hurry to lie back down."
+  },
+  "corva": {
+   "name": "Sister Corva",
+   "level": 38,
+   "hp": 150,
+   "att": 27,
+   "def": 26,
+   "attb": 20,
+   "defb": 18,
+   "max": 7,
+   "speed": 4,
+   "aggro": 9,
+   "respawn": 2000,
+   "anim": "slash",
+   "look": "corva",
+   "animal": false,
+   "roam": 3,
+   "gold": 240,
+   "ownDice": true,
+   "hunter": true,
+   "ai": {
+    "kind": "humanoid",
+    "faction": "barrow",
+    "rally": 10,
+    "leash": 12,
+    "keep": [
+     4,
+     6
+    ]
+   },
+   "drops": [
+    {
+     "item": "potion",
+     "n": [
+      2,
+      2
+     ],
+     "one_in": 1
+    },
+    {
+     "item": "arrows_t4",
+     "n": [
+      10,
+      25
+     ],
+     "one_in": 1
+    },
+    {
+     "item": "bow_t4",
+     "one_in": 3
+    },
+    {
+     "item": "body_t4",
+     "one_in": 5
+    },
+    {
+     "item": "legs_t4",
+     "one_in": 5
+    },
+    {
+     "item": "bones",
+     "one_in": 1
+    }
+   ],
+   "hint": "The best eye in the Thornwatch, once. Get close and stay close."
+  },
+  "grove_ashling": {
+   "name": "Grove ashling",
+   "level": 27,
+   "hp": 44,
+   "att": 20,
+   "def": 20,
+   "attb": 14,
+   "defb": 10,
+   "max": 5,
+   "speed": 4,
+   "aggro": 6,
+   "respawn": 90,
+   "anim": "stab",
+   "look": "ashling",
+   "animal": false,
+   "roam": 3,
+   "gold": 18,
+   "ownDice": true,
+   "ai": {
+    "kind": "humanoid",
+    "faction": "grove",
+    "rally": 6,
+    "leash": 10,
+    "keep": [
+     3,
+     5
+    ],
+    "fleePct": 40
+   },
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "arrows_t4",
+     "n": [
+      3,
+      8
+     ],
+     "one_in": 6
+    },
+    {
+     "item": "dagger_t4",
+     "one_in": 30
+    }
+   ],
+   "hint": "Moss-green and quicker than the moor's. Still runs when the pack breaks."
+  },
+  "thornback": {
+   "name": "Thornback",
+   "level": 28,
+   "hp": 56,
+   "att": 21,
+   "def": 20,
+   "attb": 12,
+   "defb": 12,
+   "max": 5,
+   "speed": 4,
+   "aggro": 5,
+   "respawn": 90,
+   "anim": "bite",
+   "look": "boar",
+   "animal": true,
+   "roam": 4,
+   "gold": 0,
+   "ownDice": true,
+   "cast": {
+    "name": "Quill volley",
+    "range": 4,
+    "att": 18,
+    "attb": 12,
+    "max": 4
+   },
+   "drops": [
+    {
+     "item": "boar_raw",
+     "one_in": 1
+    },
+    {
+     "item": "boar_hide",
+     "one_in": 2
+    }
+   ],
+   "hint": "A boar grown a back of quills. It shakes them loose at anything that stares."
+  },
+  "gloom_brute": {
+   "name": "Gloom brute",
+   "level": 31,
+   "hp": 90,
+   "att": 24,
+   "def": 24,
+   "attb": 18,
+   "defb": 16,
+   "max": 7,
+   "speed": 5,
+   "aggro": 5,
+   "respawn": 120,
+   "anim": "crush",
+   "look": "gloom_brute",
+   "animal": false,
+   "roam": 2,
+   "gold": 40,
+   "ownDice": true,
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "mace_t4",
+     "one_in": 12
+    },
+    {
+     "item": "potion",
+     "one_in": 4
+    }
+   ],
+   "hint": "It sits so still in the shade you take it for a stump. Then the stump stands up."
+  },
+  "gnarlbark": {
+   "name": "Gnarlbark",
+   "level": 42,
+   "hp": 180,
+   "att": 29,
+   "def": 30,
+   "attb": 22,
+   "defb": 20,
+   "max": 8,
+   "speed": 6,
+   "aggro": 9,
+   "respawn": 2000,
+   "anim": "crush",
+   "look": "gnarlbark",
+   "animal": false,
+   "roam": 1,
+   "gold": 260,
+   "ownDice": true,
+   "relentless": true,
+   "hunter": true,
+   "drops": [
+    {
+     "item": "potion",
+     "n": [
+      2,
+      2
+     ],
+     "one_in": 1
+    },
+    {
+     "item": "staff_t5",
+     "one_in": 4
+    },
+    {
+     "item": "shield_t5",
+     "one_in": 6
+    },
+    {
+     "item": "bones",
+     "one_in": 1
+    }
+   ],
+   "hint": "The oak's keeper, more root than man. Slow, and it does not stop."
+  },
+  "stone_ashling": {
+   "name": "Ashling",
+   "level": 28,
+   "hp": 46,
+   "att": 21,
+   "def": 21,
+   "attb": 14,
+   "defb": 10,
+   "max": 5,
+   "speed": 4,
+   "aggro": 6,
+   "respawn": 90,
+   "anim": "stab",
+   "look": "ashling",
+   "animal": false,
+   "roam": 2,
+   "gold": 18,
+   "ownDice": true,
+   "ai": {
+    "kind": "humanoid",
+    "faction": "rakkas",
+    "rally": 6,
+    "leash": 10,
+    "keep": [
+     3,
+     5
+    ],
+    "fleePct": 40
+   },
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "arrows_t4",
+     "n": [
+      3,
+      8
+     ],
+     "one_in": 6
+    },
+    {
+     "item": "potion",
+     "one_in": 12
+    }
+   ]
+  },
+  "field_walker": {
+   "name": "Field walker",
+   "level": 28,
+   "hp": 72,
+   "att": 24,
+   "def": 19,
+   "attb": 18,
+   "defb": 10,
+   "max": 5,
+   "speed": 6,
+   "aggro": 4,
+   "respawn": 120,
+   "anim": "slash",
+   "look": "moor_walker",
+   "animal": false,
+   "roam": 2,
+   "gold": 22,
+   "ownDice": true,
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "legs_t4",
+     "one_in": 40
+    },
+    {
+     "item": "potion",
+     "one_in": 10
+    }
+   ],
+   "hint": "It walked here from the barrow, and it is in no hurry."
+  },
+  "rakkas": {
+   "name": "Rakkas the Sparking",
+   "level": 43,
+   "hp": 170,
+   "att": 29,
+   "def": 29,
+   "attb": 22,
+   "defb": 20,
+   "max": 8,
+   "speed": 4,
+   "aggro": 8,
+   "respawn": 900,
+   "anim": "stab",
+   "look": "rakkas",
+   "animal": false,
+   "roam": 2,
+   "gold": 300,
+   "ownDice": true,
+   "hunter": true,
+   "cast": {
+    "name": "Spark",
+    "range": 4,
+    "att": 26,
+    "attb": 20,
+    "max": 7
+   },
+   "ai": {
+    "kind": "humanoid",
+    "faction": "rakkas",
+    "rally": 10,
+    "leash": 12
+   },
+   "drops": [
+    {
+     "item": "potion",
+     "n": [
+      2,
+      2
+     ],
+     "one_in": 1
+    },
+    {
+     "item": "sword_t5",
+     "one_in": 5
+    },
+    {
+     "item": "helmet_t5",
+     "one_in": 6
+    },
+    {
+     "item": "bones",
+     "one_in": 1
+    }
+   ],
+   "hint": "An ashling chief who found the stones' lightning and kept a little for himself."
+  },
+  "cinder_dead": {
+   "name": "Cinder dead",
+   "level": 30,
+   "hp": 76,
+   "att": 25,
+   "def": 21,
+   "attb": 18,
+   "defb": 12,
+   "max": 6,
+   "speed": 6,
+   "aggro": 5,
+   "respawn": 150,
+   "anim": "crush",
+   "look": "cinder_dead",
+   "animal": false,
+   "roam": 2,
+   "gold": 24,
+   "ownDice": true,
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "potion",
+     "one_in": 8
+    },
+    {
+     "item": "body_t4",
+     "one_in": 30
+    }
+   ],
+   "hint": "Emberfall's own people. They are still burning, and do not seem to mind."
+  },
+  "ember_ashling": {
+   "name": "Ember ashling",
+   "level": 29,
+   "hp": 46,
+   "att": 22,
+   "def": 21,
+   "attb": 14,
+   "defb": 10,
+   "max": 5,
+   "speed": 4,
+   "aggro": 6,
+   "respawn": 90,
+   "anim": "stab",
+   "look": "ashling",
+   "animal": false,
+   "roam": 3,
+   "gold": 20,
+   "ownDice": true,
+   "ai": {
+    "kind": "humanoid",
+    "faction": "emberfall",
+    "rally": 6,
+    "leash": 10,
+    "keep": [
+     3,
+     5
+    ],
+    "fleePct": 40
+   },
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "town_portal_scroll",
+     "one_in": 14
+    },
+    {
+     "item": "dagger_t4",
+     "one_in": 30
+    }
+   ]
+  },
+  "mire_dead": {
+   "name": "Mire dead",
+   "level": 32,
+   "hp": 82,
+   "att": 26,
+   "def": 23,
+   "attb": 20,
+   "defb": 12,
+   "max": 6,
+   "speed": 6,
+   "aggro": 5,
+   "respawn": 120,
+   "anim": "crush",
+   "look": "mire_dead",
+   "animal": false,
+   "roam": 2,
+   "gold": 26,
+   "ownDice": true,
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "potion",
+     "one_in": 8
+    },
+    {
+     "item": "legs_t4",
+     "one_in": 30
+    }
+   ],
+   "hint": "The bog keeps what it takes. Sometimes it gives it back, walking."
+  },
+  "bog_stalker": {
+   "name": "Bog stalker",
+   "level": 33,
+   "hp": 64,
+   "att": 27,
+   "def": 22,
+   "attb": 16,
+   "defb": 14,
+   "max": 7,
+   "speed": 3,
+   "aggro": 6,
+   "respawn": 100,
+   "anim": "bite",
+   "look": "timber_wolf",
+   "animal": true,
+   "roam": 4,
+   "gold": 0,
+   "ownDice": true,
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    }
+   ],
+   "hint": "Low and quick through the reeds. You hear it before you see it, if you are lucky."
+  },
+  "tower_shade": {
+   "name": "Tower shade",
+   "level": 34,
+   "hp": 44,
+   "att": 24,
+   "def": 26,
+   "attb": 20,
+   "defb": 16,
+   "max": 6,
+   "speed": 4,
+   "aggro": 6,
+   "respawn": 2000,
+   "anim": "slash",
+   "look": "tower_shade",
+   "animal": false,
+   "roam": 1,
+   "gold": 30,
+   "ownDice": true,
+   "drops": [
+    {
+     "item": "town_portal_scroll",
+     "one_in": 12
+    },
+    {
+     "item": "prayer_potion",
+     "one_in": 6
+    }
+   ],
+   "hint": "One of the village girls she drowned. It does not remember its name."
+  },
+  "bone_guard": {
+   "name": "Bone guard",
+   "level": 35,
+   "hp": 68,
+   "att": 24,
+   "def": 29,
+   "attb": 20,
+   "defb": 20,
+   "max": 6,
+   "speed": 5,
+   "aggro": 5,
+   "respawn": 2000,
+   "anim": "slash",
+   "look": "bone_guard",
+   "animal": false,
+   "roam": 1,
+   "gold": 40,
+   "ownDice": true,
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "town_portal_scroll",
+     "one_in": 12
+    },
+    {
+     "item": "shield_t4",
+     "one_in": 20
+    },
+    {
+     "item": "potion",
+     "one_in": 5
+    }
+   ],
+   "hint": "The tower's old guard. Death did not end their watch."
+  },
+  "blood_maid": {
+   "name": "Blood maid",
+   "level": 36,
+   "hp": 60,
+   "att": 25,
+   "def": 26,
+   "attb": 22,
+   "defb": 16,
+   "max": 6,
+   "speed": 4,
+   "aggro": 7,
+   "respawn": 2000,
+   "anim": "stab",
+   "look": "blood_maid",
+   "animal": false,
+   "roam": 1,
+   "gold": 50,
+   "ownDice": true,
+   "ai": {
+    "kind": "humanoid",
+    "faction": "morwen",
+    "rally": 8,
+    "leash": 10
+   },
+   "drops": [
+    {
+     "item": "town_portal_scroll",
+     "one_in": 10
+    },
+    {
+     "item": "potion",
+     "one_in": 4
+    },
+    {
+     "item": "dagger_t5",
+     "one_in": 30
+    }
+   ],
+   "hint": "She carries the Countess's basin. Do not ask what is in it."
+  },
+  "morwen": {
+   "name": "Countess Morwen",
+   "level": 50,
+   "hp": 260,
+   "att": 33,
+   "def": 33,
+   "attb": 26,
+   "defb": 24,
+   "max": 9,
+   "speed": 5,
+   "aggro": 9,
+   "respawn": 2000,
+   "anim": "slash",
+   "look": "morwen",
+   "animal": false,
+   "roam": 2,
+   "gold": 1500,
+   "ownDice": true,
+   "hunter": true,
+   "cast": {
+    "name": "Blood bolt",
+    "range": 5,
+    "att": 30,
+    "attb": 22,
+    "max": 9
+   },
+   "ai": {
+    "kind": "humanoid",
+    "faction": "morwen",
+    "rally": 12,
+    "leash": 14,
+    "keep": [
+     3,
+     5
+    ]
+   },
+   "drops": [
+    {
+     "item": "potion",
+     "n": [
+      3,
+      3
+     ],
+     "one_in": 1
+    },
+    {
+     "item": "coins",
+     "n": [
+      800,
+      1600
+     ],
+     "one_in": 1
+    },
+    {
+     "item": "staff_t5",
+     "one_in": 5
+    },
+    {
+     "item": "legs_t5",
+     "one_in": 5
+    },
+    {
+     "item": "bones",
+     "one_in": 1
+    }
+   ],
+   "hint": "She bathed in the village to stay young. It worked, after a fashion."
+  },
+  "bregan": {
+   "name": "Bregan the smith",
+   "level": 46,
+   "hp": 220,
+   "att": 31,
+   "def": 31,
+   "attb": 24,
+   "defb": 22,
+   "max": 9,
+   "speed": 6,
+   "aggro": 8,
+   "respawn": 2000,
+   "anim": "crush",
+   "look": "bregan",
+   "animal": false,
+   "roam": 1,
+   "gold": 360,
+   "ownDice": true,
+   "relentless": true,
+   "hunter": true,
+   "drops": [
+    {
+     "item": "town_portal_scroll",
+     "one_in": 2
+    },
+    {
+     "item": "potion",
+     "n": [
+      2,
+      2
+     ],
+     "one_in": 1
+    },
+    {
+     "item": "mace_t5",
+     "one_in": 3
+    },
+    {
+     "item": "body_t5",
+     "one_in": 6
+    },
+    {
+     "item": "bones",
+     "one_in": 1
+    }
+   ],
+   "hint": "Emberfall's smith. The fire took his house and left him his hammer."
+  },
+  "abbey_ghoul": {
+   "name": "Abbey ghoul",
+   "level": 38,
+   "hp": 92,
+   "att": 32,
+   "def": 28,
+   "attb": 20,
+   "defb": 18,
+   "max": 8,
+   "speed": 5,
+   "aggro": 5,
+   "respawn": 150,
+   "anim": "crush",
+   "look": "abbey_ghoul",
+   "animal": false,
+   "roam": 2,
+   "gold": 34,
+   "ownDice": true,
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "potion",
+     "one_in": 6
+    },
+    {
+     "item": "body_t4",
+     "one_in": 30
+    }
+   ],
+   "hint": "It was a lay brother once. Now it is mostly appetite."
+  },
+  "fallen_sister": {
+   "name": "Fallen sister",
+   "level": 39,
+   "hp": 80,
+   "att": 33,
+   "def": 27,
+   "attb": 22,
+   "defb": 18,
+   "max": 8,
+   "speed": 4,
+   "aggro": 8,
+   "respawn": 150,
+   "anim": "slash",
+   "look": "fallen_sister",
+   "animal": false,
+   "roam": 2,
+   "gold": 40,
+   "ownDice": true,
+   "ai": {
+    "kind": "humanoid",
+    "faction": "abbey",
+    "rally": 6,
+    "leash": 10,
+    "keep": [
+     4,
+     6
+    ]
+   },
+   "drops": [
+    {
+     "item": "arrows_t4",
+     "n": [
+      6,
+      14
+     ],
+     "one_in": 2
+    },
+    {
+     "item": "bow_t4",
+     "one_in": 24
+    },
+    {
+     "item": "potion",
+     "one_in": 6
+    }
+   ],
+   "hint": "A sister of the Thornwatch who stayed when the others ran. Her aim is as good as ever."
+  },
+  "gorrath": {
+   "name": "Gorrath the forgekeeper",
+   "level": 54,
+   "hp": 320,
+   "att": 37,
+   "def": 35,
+   "attb": 26,
+   "defb": 24,
+   "max": 11,
+   "speed": 6,
+   "aggro": 8,
+   "respawn": 2000,
+   "anim": "crush",
+   "look": "gorrath",
+   "animal": false,
+   "roam": 1,
+   "gold": 600,
+   "ownDice": true,
+   "relentless": true,
+   "hunter": true,
+   "drops": [
+    {
+     "item": "gwens_hammer",
+     "one_in": 1
+    },
+    {
+     "item": "potion",
+     "n": [
+      2,
+      2
+     ],
+     "one_in": 1
+    },
+    {
+     "item": "mace_t5",
+     "one_in": 4
+    },
+    {
+     "item": "helmet_t5",
+     "one_in": 6
+    },
+    {
+     "item": "bones",
+     "one_in": 1
+    }
+   ],
+   "hint": "He kept the abbey forge for thirty years. He keeps it still, and he has taken a liking to Gwen's hammer."
+  },
+  "crypt_ghoul": {
+   "name": "Crypt ghoul",
+   "level": 42,
+   "hp": 66,
+   "att": 28,
+   "def": 30,
+   "attb": 22,
+   "defb": 20,
+   "max": 7,
+   "speed": 5,
+   "aggro": 5,
+   "respawn": 2000,
+   "anim": "crush",
+   "look": "abbey_ghoul",
+   "animal": false,
+   "roam": 1,
+   "gold": 40,
+   "ownDice": true,
+   "drops": [
+    {
+     "item": "bones",
+     "one_in": 1
+    },
+    {
+     "item": "town_portal_scroll",
+     "one_in": 10
+    },
+    {
+     "item": "potion",
+     "one_in": 5
+    }
+   ]
+  },
+  "crypt_sister": {
+   "name": "Crypt sister",
+   "level": 43,
+   "hp": 58,
+   "att": 28,
+   "def": 29,
+   "attb": 24,
+   "defb": 20,
+   "max": 8,
+   "speed": 4,
+   "aggro": 8,
+   "respawn": 2000,
+   "anim": "slash",
+   "look": "fallen_sister",
+   "animal": false,
+   "roam": 1,
+   "gold": 46,
+   "ownDice": true,
+   "ai": {
+    "kind": "humanoid",
+    "faction": "maelis",
+    "rally": 6,
+    "leash": 10,
+    "keep": [
+     4,
+     6
+    ]
+   },
+   "drops": [
+    {
+     "item": "arrows_t5",
+     "n": [
+      4,
+      10
+     ],
+     "one_in": 3
+    },
+    {
+     "item": "town_portal_scroll",
+     "one_in": 10
+    },
+    {
+     "item": "potion",
+     "one_in": 5
+    }
+   ]
+  },
+  "thorn_wraith": {
+   "name": "Thorn wraith",
+   "level": 44,
+   "hp": 56,
+   "att": 28,
+   "def": 30,
+   "attb": 24,
+   "defb": 20,
+   "max": 7,
+   "speed": 4,
+   "aggro": 7,
+   "respawn": 2000,
+   "anim": "slash",
+   "look": "thorn_wraith",
+   "animal": false,
+   "roam": 1,
+   "gold": 44,
+   "ownDice": true,
+   "venom": {
+    "chance": 15,
+    "ticks": 20,
+    "dmg": 1
+   },
+   "ai": {
+    "kind": "humanoid",
+    "faction": "maelis",
+    "rally": 8,
+    "leash": 10
+   },
+   "drops": [
+    {
+     "item": "town_portal_scroll",
+     "one_in": 10
+    },
+    {
+     "item": "antidote",
+     "one_in": 4
+    },
+    {
+     "item": "potion",
+     "one_in": 5
+    }
+   ],
+   "hint": "A sister the thorns grew through. They are still growing."
+  },
+  "maelis": {
+   "name": "Maelis, Maiden of Thorns",
+   "level": 60,
+   "hp": 360,
+   "att": 38,
+   "def": 38,
+   "attb": 30,
+   "defb": 28,
+   "max": 11,
+   "speed": 5,
+   "aggro": 10,
+   "respawn": 2000,
+   "anim": "slash",
+   "look": "maelis",
+   "animal": false,
+   "roam": 2,
+   "gold": 3000,
+   "ownDice": true,
+   "hunter": true,
+   "relentless": true,
+   "venom": {
+    "chance": 35,
+    "ticks": 40,
+    "dmg": 3
+   },
+   "cast": {
+    "name": "Thorn spray",
+    "range": 5,
+    "att": 34,
+    "attb": 26,
+    "max": 10
+   },
+   "ai": {
+    "kind": "humanoid",
+    "faction": "maelis",
+    "rally": 14,
+    "leash": 16
+   },
+   "drops": [
+    {
+     "item": "potion",
+     "n": [
+      3,
+      3
+     ],
+     "one_in": 1
+    },
+    {
+     "item": "coins",
+     "n": [
+      2000,
+      4000
+     ],
+     "one_in": 1
+    },
+    {
+     "item": "longsword_t5",
+     "one_in": 4
+    },
+    {
+     "item": "body_t5",
+     "one_in": 4
+    },
+    {
+     "item": "shield_t5",
+     "one_in": 4
+    },
+    {
+     "item": "bones",
+     "one_in": 1
+    }
+   ],
+   "hint": "What woke under the abbey. The thorns are hers, and so, now, are the sisters."
   }
  }
 }

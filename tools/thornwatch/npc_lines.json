@@ -9,6 +9,11 @@
  },
  "tavish": {
   "examine": "Tavish the caravan master, whose wagons have not rolled since the road east closed.",
+  "linesOpen": [
+   "The road east is open! The thorns across it went black overnight and fell to dust. I'm told I have you to thank.",
+   "Wagons are loaded. Horses are fed. If you're ever going east, there's a seat up front with your name on it.",
+   "Three summers I sat here. Three. I'm going to miss the porridge, and nothing else."
+  ],
   "lines": [
    "Three wagons, two horses, one road east, and that road's shut. So here I sit.",
    "The Sisters feed us and we keep their stores dry. It's a fair trade. It's the only trade going.",
@@ -21,6 +26,20 @@
    "Bridge is clear. For now.",
    "Ashlings were at the fence-line at dusk. They always come back.",
    "Keep to the trail and you'll see them before they see you."
+  ]
+ },
+ "hollin": {
+  "examine": "Old Hollin, the last of the seers, with a blanket round his shoulders and a bowl in his lap.",
+  "lines": [
+   "The stones remembered me. I wasn't sure they would.",
+   "Sit, sit. My eyes are poor but I see well enough what's coming.",
+   "Mind the fire. I have had enough of fire for one lifetime."
+  ]
+ },
+ "hollin_caged": {
+  "examine": "An old man in a blue robe, hung up in an iron cage. He's alive. Just.",
+  "lines": [
+   "Help... is someone there? Kill the smith. He has the key. He has the key in him."
   ]
  },
  "briar": {

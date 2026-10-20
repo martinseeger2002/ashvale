@@ -139,6 +139,13 @@
 .ash .help h3{margin:0 0 8px;color:#ff981f;font:700 20px Georgia,serif}
 .ash .help ul{margin:4px 0 10px 18px;padding:0} .ash .help li{margin:3px 0}
 .ash .help .btn{margin-top:8px}
+.ash .help .pcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:10px;margin:4px 0 6px}
+.ash .help .pcard{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px;background:#0005;border:2px solid #8a7650;border-radius:6px;color:#f3e6c4;font:600 13px Georgia,serif;cursor:pointer;min-width:0}
+.ash .help .pcard:hover,.ash .help .pcard:focus-visible{border-color:#ffcf6a;outline:none}
+.ash .help .pcard.cur{border-color:#ff981f;box-shadow:0 0 0 2px #ff981f66}
+.ash .help .pcard img,.ash .help .pcard .noimg{display:block;width:100%;aspect-ratio:1;border-radius:4px;image-rendering:pixelated;background:#0006}
+.ash .help .pcard .nm{text-align:center;line-height:1.2;overflow-wrap:anywhere}
+.ash .help .pcard .sub{font:400 11px Georgia,serif;color:#c8b88a}
 .ash .mark{position:absolute;width:18px;height:18px;transform:translate(-50%,-50%);pointer-events:none;font:900 18px/18px sans-serif;text-align:center;text-shadow:0 0 2px #000;animation:ashmark .45s ease-out forwards}
 @keyframes ashmark{0%{transform:translate(-50%,-50%) scale(1.4)}100%{transform:translate(-50%,-50%) scale(.6);opacity:0}}
 .ash .cc{position:absolute;left:8px;top:8px;max-height:calc(100% - 16px);width:min(340px,46vw);padding:10px 12px;overflow:auto;display:none;z-index:7;color:#f3e6c4}

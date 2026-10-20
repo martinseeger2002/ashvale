@@ -61,7 +61,8 @@ p.pray = { protect_from_melee: 1, protect_from_magic: 1 };
 dr.hp = 1; dr.tgt = 0; dr.back = 0; dr.wind = null;
 core.cmd('p1', { c: 'attack', uid: dr.uid });
 let died = 0; const told = [], by = {};
-for (let i = 0; i < 40; i++) { p.hp = core.maxHp(p); for (const e of core.tick()) { if (e.e === 'die' && e.mob === dr.uid) died++; if (e.e === 'score' && e.key === 'chain_dragon') { told.push(e.name); by[e.name] = e.p; } } if (dr.dead) break; }
+const SIDES = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+for (let i = 0; i < 200; i++) { if (i && i % 25 === 0 && !dr.dead) { const sd = SIDES[(i / 25) % 4]; p.x = dr.x + sd[0]; p.y = dr.y + sd[1]; core.cmd('p1', { c: 'attack', uid: dr.uid }); } p.hp = core.maxHp(p); for (const e of core.tick()) { if (e.e === 'die' && e.mob === dr.uid) died++; if (e.e === 'score' && e.key === 'chain_dragon') { told.push(e.name); by[e.name] = e.p; } } if (dr.dead) break; }   /* [Claude 2026-10-19] the dragon's spawn spot comes from the seeded dice (they shift whenever monsters are added), and from some sides a chain post or wall edge keeps Maren's blow off it, so she tries each side in turn */
 ok(died && dr.dead, 'the chained dragon can fall without putting Maren in danger (protections, full hitpoints each tick)');
 ok(told.indexOf('Maren') >= 0, 'her kill is told to the Bank under Maren');
 ok(by.Maren === 'p1', 'and it names which player killed, so exactly one game tells the Bank and not every page that watched');

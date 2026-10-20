@@ -8,13 +8,13 @@ const fs = require('fs'), path = require('path'), ROOT = path.join(__dirname, '.
 const AshCore = require(path.join(ROOT, 'src', 'core.js'));
 const mod = n => JSON.parse(fs.readFileSync(path.join(ROOT, 'data', n + '.json'), 'utf8')).data;
 const A = +(process.argv[2] || 30), [WT, AT] = (process.argv[3] || '4,3').split(',').map(Number), TRIALS = 24;
-const KEYS = process.env.KEYS ? process.env.KEYS.split(',') : ['quill_rat', 'ashling', 'moor_walker', 'den_ashling', 'den_shaman', 'den_walker', 'den_brute', 'cinderhide'];
+const KEYS = process.env.KEYS ? process.env.KEYS.split(',') : ['quill_rat', 'ashling', 'moor_walker', 'den_ashling', 'den_shaman', 'den_walker', 'den_brute', 'cinderhide', 'risen_dead', 'corva'];
 const rows = [];
 for (const key of KEYS) {
   let wins = 0, tk = 0, lost = 0, ate = 0;
   for (let t = 0; t < TRIALS; t++) {
     const mons = JSON.parse(JSON.stringify(mod('monsters').monsters)); for (const k in mons) { mons[k].aggro = 0; delete mons[k].ai; }
-    const z = Object.assign({ id: 'hollowden' }, mod('zone.hollowden')); z.spawns = [{ m: key, x: 24328, y: 24036 }];
+    const z = Object.assign({ id: 'hollowden' }, mod('zone.hollowden')); z.spawns = [Object.assign({ m: key, x: 24328, y: 24036 }, key === 'corva' ? { carry: { arrows_t4: 40 } } : {})];   /* Corva shoots while her quiver lasts */
     const D = { items: mod('items').items, monsters: mons, shops: mod('shops'), quests: mod('quests'), rules: mod('rules'), zones: [Object.assign({ id: 'village' }, mod('zone.village')), z], globecfg: mod('globecfg') };
     const XP = D.rules.xp, L = { attack: A, strength: A, defence: A, hitpoints: A + 2, ranged: 15, magic: 10, prayer: 15, dexterity: 5, speechcraft: 5, woodcutting: 10, mining: 10, fishing: 10, cooking: 10, firemaking: 8 };
     const xp = {}; for (const s in L) xp[s] = XP[L[s]] * 10;

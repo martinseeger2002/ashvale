@@ -1,0 +1,121 @@
+{
+ "ashvale3d": "module",
+ "name": "zone.lilyrunpath",
+ "api": 1,
+ "v": 1,
+ "data": {
+  "name": "Lily Run path",
+  "level": "safe",
+  "origin": [
+   352,
+   25
+  ],
+  "size": [
+   5,
+   73
+  ],
+  "ground": "grass",
+  "ownWays": true,
+  "tiles": [
+   "ccccc",
+   ".pp.X",
+   ".pp..",
+   ".pp..",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   ".pp..",
+   ".pp..",
+   ".pp..",
+   ".pp..",
+   ".pp..",
+   ".pp..",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   ".pp..",
+   ".pp..",
+   ".pp..",
+   ".pp..",
+   ".pp..",
+   ".pp..",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   "..pp.",
+   ".pp..",
+   ".pp..",
+   ".pp..",
+   ".pp..",
+   ".pp..",
+   ".pp..",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp...",
+   "pp..."
+  ],
+  "objects": [
+   {
+    "k": "signpost",
+    "x": 356,
+    "y": 26,
+    "w": 1,
+    "h": 1,
+    "arms": [
+     {
+      "t": "The Lily Run",
+      "a": 1.571
+     },
+     {
+      "t": "Saltmere",
+      "a": 0
+     },
+     {
+      "t": "Ashvale",
+      "a": 3.142
+     }
+    ]
+   }
+  ],
+  "npcs": [],
+  "spawns": [],
+  "fishing": []
+ }
+}

@@ -15,7 +15,9 @@ if (process.env.TUNE) { const T = JSON.parse(process.env.TUNE); for (const k in 
 const SEED = process.argv[2] || 'den-play', MAX_TRIPS = +(process.env.TRIPS || 5), FOOD = process.env.FOOD || 'potion', FOOD_N = +(process.env.FOOD_N || 22);   /* Isolde: "Elin sells my potions by the gate. Take more than you think you need." */
 const core = AshCore.create(D, { seed: SEED });
 const A = +(process.env.ATT || 30), AT = process.env.ARM || '3', WT = process.env.WPN || '4';
-const XP = D.rules.xp, L = { attack: A, strength: A, defence: A, hitpoints: A + 2, ranged: 15, magic: 10, prayer: 15 };
+const APPLE = process.env.PROFILE === 'apple';   /* @apple's own levels (the operator's screenshot 2026-10-18: combat 39, total 368) - a caster */
+const XP = D.rules.xp, L = APPLE ? { attack: 25, strength: 12, defence: 37, hitpoints: 32, ranged: 18, magic: 40, prayer: 18, dexterity: 31, speechcraft: 25, woodcutting: 16, mining: 45, fishing: 25, cooking: 28, firemaking: 16 }
+  : { attack: A, strength: A, defence: A, hitpoints: A + 2, ranged: 15, magic: 10, prayer: 15 };
 const xp = {}; for (const s of D.rules.skills) xp[s] = XP[L[s] || 8] * 10;
 const p = core.addPlayer('p1', { name: 'Tester', xp });
 let fails = 0; const ok = (yes, text) => { if (!yes) fails++; console.log(yes ? 'ok  ' : 'FAIL', text); };
@@ -28,14 +30,16 @@ const slotOf = id => p.inv.findIndex(s => s && s.id === id);
 
 /* kit: what the camp sells, paid for like a player would */
 p.inv = new Array(28).fill(null); p.inv[0] = { id: 'coins', n: 20000 };
-const buy = (shop, id, n) => { if (n <= 0) return; const k = D.shops.shops[shop].keeper; talk(k); if (p.shop !== shop) { p.shop = shop; } core.cmd('p1', { c: 'buy', shop, item: id, n }); tick(); };   /* talking to the keeper opens the shop */
-const KIT = ['sword_t' + WT, 'helmet_t' + AT, 'body_t' + AT, 'legs_t' + AT, 'shield_t' + AT];
+const buy = (shop, id, n) => { if (n <= 0) return; const cs = p.inv.findIndex(x => x && x.id === 'coins'); if (cs >= 0) p.inv[cs].n = 20000; else p.inv[p.inv.indexOf(null)] = { id: 'coins', n: 20000 };   /* coins weigh 2 g: the purse comes from the chest for the shopping */ const k = D.shops.shops[shop].keeper; talk(k); if (p.shop !== shop) { p.shop = shop; } core.cmd('p1', { c: 'buy', shop, item: id, n }); tick(); };   /* talking to the keeper opens the shop */
+const KIT = [APPLE ? 'staff_t' + (process.env.STAFF || 4) : 'sword_t' + WT, 'helmet_t' + AT, 'body_t' + AT, 'legs_t' + AT, 'shield_t' + AT];
+if (APPLE) { const forge = D.shops.shops.thornwatch_forge; forge.stock = forge.stock.concat([KIT[0]]); }   /* a staff from the forge, for the test (the forge sells none) */
 for (const id of KIT) buy('thornwatch_forge', id, 1);
 for (const id of KIT) { const s = slotOf(id); if (s >= 0) { core.cmd('p1', { c: 'equip', slot: s }); tick(); } }
 ok(p.eq.weapon && p.eq.weapon.id === KIT[0] && p.eq.body && p.eq.body.id === KIT[2], 'bought and wore the camp forge\'s sword and armour (' + Object.values(p.eq).map(e => e && e.id).join(', ') + ')');
 const PP_N = +(process.env.PP_N || 0);   /* prayer potions: Protect from Melee is a level-1 prayer every player has */
-const stock = () => { for (const id of KIT) if (!p.eq[{ sword: 'weapon', helmet: 'head', body: 'body', legs: 'legs', shield: 'shield' }[id.split('_')[0]]]) { buy('thornwatch_forge', id, 1); const s = slotOf(id); if (s >= 0) { core.cmd('p1', { c: 'equip', slot: s }); tick(); } }   /* lost it all dying: buy it again */
+const stock = () => { for (const id of KIT) if (!p.eq[{ sword: 'weapon', staff: 'weapon', helmet: 'head', body: 'body', legs: 'legs', shield: 'shield' }[id.split('_')[0]]]) { buy('thornwatch_forge', id, 1); const s = slotOf(id); if (s >= 0) { core.cmd('p1', { c: 'equip', slot: s }); tick(); } }   /* lost it all dying: buy it again */
   buy('thornwatch_herbs', FOOD, Math.max(0, FOOD_N - core.invCount(p, FOOD))); if (PP_N) buy('thornwatch_herbs', 'prayer_potion', Math.max(0, PP_N - core.invCount(p, 'prayer_potion'))); return core.invCount(p, FOOD); };
+const purse = () => { const cs = p.inv.findIndex(x => x && x.id === 'coins'); if (cs >= 0) p.inv[cs] = null; };   /* and goes back in the chest before the walk */
 p.pp = 15; ok(stock() >= FOOD_N - 2, 'and ' + core.invCount(p, FOOD) + ' ' + FOOD + 's from the herbalist');
 
 /* the quest */
@@ -51,6 +55,7 @@ const done = () => Q().step > 1 || (Q().n | 0) >= goal.n;
 while (trips < MAX_TRIPS && !done()) {
   trips++;
   if (trips > 1) stock();
+  purse();
   beside(mouth); p.hp = Math.max(p.hp, 1); core.cmd('p1', { c: 'enter', x: mouth.x, y: mouth.y }); for (let i = 0; i < 20 && !inDen(p); i++) tick();
   if (!inDen(p)) { ok(false, 'trip ' + trips + ': could not go down the cave mouth'); break; }
   const hp0 = core.maxHp(p); if (PP_N) { core.cmd('p1', { c: 'pray', id: 'protect_from_melee', on: true }); tick(); }
