@@ -16,7 +16,7 @@ How it runs:
 Run:  python3 tools/bank/bank.py            (systemd user unit ashvale-bank)
       python3 tools/bank/bank.py --status   (queue summary)
 Never prints @ashvale's words, password or keys."""
-import sys, os, re, json, time, sqlite3, struct, zlib, threading, traceback, urllib.request
+import sys, os, re, json, time, sqlite3, struct, zlib, base64, threading, traceback, urllib.request
 HERE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(HERE, 'tools'))
 os.environ.setdefault('PLAYWRIGHT_BROWSERS_PATH', '/home/you/.cache/ms-playwright')
@@ -375,6 +375,49 @@ def handle_save(c, addr, msg):
     b, N = r['blob'], 340
     parts = [b[k:k + N] for k in range(0, len(b), N)] or ['']
     return [{'t': 'ld', 'to': addr, 'id': r['id'], 'i': k, 'n': len(parts), 'd': p} for k, p in enumerate(parts)]
+# PUBLIC STATS (SadFrog, 2026-10-20: "a public view of everything like stats and highscores", the Ashvale site's player
+# page). 'stats?' {a: address}: ANY signed-in player may ask about ANY address, and gets a summary read from that player's
+# Ashvale save: XP per skill, the quests they have finished, their kills, what they wear and how they look. Nothing else in
+# the save ever leaves the Bank: not the backpack, where they stand, their town, hitpoints, flags, gifts, orders or when they
+# last played, and never a second home's character (an 'addr#home' row). Read when asked, so no new table and no backfill.
+# Reply: pieces {t: 'stats', to, a, i, n, d} packed like a save ('z' + base64 deflate-raw), n 0 when there is nothing.
+_QUEST_STEPS = None
+def quest_steps():
+    global _QUEST_STEPS
+    if _QUEST_STEPS is None:
+        try:
+            q = json.load(open(os.path.join(HERE, 'data', 'quests.json')))
+            q = q.get('data', q); q = q.get('quests', q)
+            _QUEST_STEPS = {k: len(v.get('steps') or []) for k, v in q.items() if isinstance(v, dict)}
+        except Exception:
+            _QUEST_STEPS = {}
+    return _QUEST_STEPS
+def unpack_save(blob):
+    raw = base64.b64decode(blob[1:])
+    return (raw if blob[:1] == 'j' else zlib.decompress(raw, -15)).decode('utf-8')
+def pack_json(o):
+    z = zlib.compressobj(9, zlib.DEFLATED, -15)
+    return 'z' + base64.b64encode(z.compress(json.dumps(o, separators=(',', ':')).encode()) + z.flush()).decode()
+def public_summary(save):
+    steps = quest_steps()
+    done = [k for k, q in (save.get('quests') or {}).items()
+            if isinstance(q, dict) and k in steps and int(q.get('step') or 0) > steps[k]]
+    eq = {s: e['id'] for s, e in (save.get('eq') or {}).items() if isinstance(e, dict) and e.get('id')}
+    xp = {k: int(v) for k, v in (save.get('xp') or {}).items() if isinstance(v, (int, float))}
+    kills = {k: int(v) for k, v in (save.get('kills') or {}).items() if isinstance(v, (int, float)) and v > 0}
+    return {'v': 1, 'xp': xp, 'quests': done, 'kills': kills, 'eq': eq, 'look': save.get('look')}
+def handle_stats(c, addr, msg):
+    a = str(msg.get('a') or '')
+    if not re.fullmatch(r'[1-9A-HJ-NP-Za-km-z]{25,40}', a): return None
+    r = c.execute('select blob from saves where addr=?', (a,)).fetchone()
+    pub = None
+    if r and r['blob']:
+        try: pub = public_summary(json.loads(unpack_save(r['blob'])))
+        except Exception as e: log('STATS UNREADABLE', a, str(e)[:80])
+    if not pub: return {'t': 'stats', 'to': addr, 'a': a, 'n': 0}
+    b, N = pack_json(pub), 340
+    parts = [b[k:k + N] for k in range(0, len(b), N)]
+    return [{'t': 'stats', 'to': addr, 'a': a, 'i': k, 'n': len(parts), 'd': p} for k, p in enumerate(parts)]
 def handle_holds(c, addr, msg):
     """ONE CHEST, TWO BAGS: 'hold' {h?, b: {key: n}} - what this character carries of the wallet (bag + worn, as its game counts
     it); 'holds?' {h?} -> {t: 'holds', to, h, o: {key: n} summed over the wallet's OTHER characters, multi: another exists}."""
@@ -420,6 +463,7 @@ def handle(c, addr, msg):
     if msg.get('t') in ('book', 'friends?', 'pals?'): return handle_contacts(c, addr, msg)
     if msg.get('t') in ('sv', 'ld?'): return handle_save(c, addr, msg)
     if msg.get('t') in ('hold', 'holds?'): return handle_holds(c, addr, msg)
+    if msg.get('t') == 'stats?': return handle_stats(c, addr, msg)
     rid = str(msg.get('id') or '')[:40]
     if not rid: return None
     old = c.execute('select paid from reqs where addr=? and id=?', (addr, rid)).fetchone()
@@ -696,7 +740,7 @@ def room_loop(stop):
                     if fr.evaluate("window.__bankClosed || null"): raise RuntimeError('room closed')
                     for m in fr.evaluate("window.__bankQ.splice(0)"):
                         d, f = m.get('data') or {}, m.get('from') or {}
-                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'boat', 'boats?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'pals?', 'sv', 'ld?', 'mark', 'marks?', 'carry', 'carried?', 'hold', 'holds?', 'offer', 'unoffer', 'score', 'scores?'): continue
+                        if not isinstance(d, dict) or d.get('t') not in ('dep', 'drop', 'fell', 'felled?', 'boat', 'boats?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'pals?', 'sv', 'ld?', 'mark', 'marks?', 'carry', 'carried?', 'hold', 'holds?', 'offer', 'unoffer', 'score', 'scores?', 'stats?'): continue
                         if f.get('guest') or not f.get('address'): continue
                         try: rep = handle(c, f['address'], d)
                         except Exception: log('HANDLE ERROR', traceback.format_exc()[-400:]); rep = {'t': 'dep', 'id': d.get('id'), 'to': f['address'], 'ok': False, 'note': 'The bank hit an error; try again later.'}
