@@ -183,6 +183,12 @@
    "api": 1,
    "kind": "js"
   },
+  "hudlily": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
   "hud": {
    "id": null,
    "v": "4",
@@ -258,6 +264,18 @@
   "engpet": {
    "id": null,
    "v": "2",
+   "api": 1,
+   "kind": "js"
+  },
+  "lilyrules": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "englily": {
+   "id": null,
+   "v": "1",
    "api": 1,
    "kind": "js"
   },
@@ -384,6 +402,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.abbey_ghoul": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.aldith": {
     "id": null,
     "v": 1,
@@ -438,13 +462,37 @@
     "api": 1,
     "kind": "json"
    },
+   "char.barrow_dead": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.bela": {
     "id": null,
     "v": 1,
     "api": 1,
     "kind": "json"
    },
+   "char.blood_maid": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.boar": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.bone_guard": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.bram": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -457,6 +505,12 @@
     "kind": "json"
    },
    "char.brannoc": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.bregan": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -540,6 +594,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.cinder_dead": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.cinderhide": {
     "id": null,
     "v": 1,
@@ -547,6 +607,12 @@
     "kind": "json"
    },
    "char.cobb": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.corva": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -600,6 +666,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.fallen_sister": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.fennick": {
     "id": null,
     "v": 1,
@@ -630,6 +702,18 @@
     "api": 1,
     "kind": "json"
    },
+   "char.gloom_brute": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.gnarlbark": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.goat": {
     "id": null,
     "v": 1,
@@ -649,6 +733,12 @@
     "kind": "json"
    },
    "char.goblin_shaman": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.gorrath": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -708,6 +798,18 @@
     "api": 1,
     "kind": "json"
    },
+   "char.hollin": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.hollin_caged": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.hollis": {
     "id": null,
     "v": 1,
@@ -762,6 +864,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.maelis": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.maiingan": {
     "id": null,
     "v": 1,
@@ -798,6 +906,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.mire_dead": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.mishoomis": {
     "id": null,
     "v": 1,
@@ -817,6 +931,12 @@
     "kind": "json"
    },
    "char.moor_walker": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.morwen": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -907,6 +1027,12 @@
     "kind": "json"
    },
    "char.queen_maelis": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.rakkas": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1032,6 +1158,12 @@
     "api": 1,
     "kind": "json"
    },
+   "char.thorn_wraith": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "char.timber_wolf": {
     "id": null,
     "v": 1,
@@ -1051,6 +1183,12 @@
     "kind": "json"
    },
    "char.tolly": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.tower_shade": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -2332,6 +2470,18 @@
     "api": 1,
     "kind": "json"
    },
+   "lilyrun": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "lilyrunpath": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "evengrove": {
     "id": null,
     "v": 1,
@@ -2405,6 +2555,54 @@
     "kind": "json"
    },
    "hollowden": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "sistersbarrow": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "fivestones": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "gloamwood": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "emberfall": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "blackmere": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "towercellars": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "abbey": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "crypts": {
     "id": null,
     "v": 1,
     "api": 1,

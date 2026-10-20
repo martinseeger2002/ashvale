@@ -53,8 +53,10 @@ with sync_playwright() as p:
     ben.evaluate("ASH.pet().choose({ k: 'dd', n: 2608, i: '%s' })" % ID[2608])
     check(wait(ann, "%s.some(x => x.k.startsWith('r:') && x.d.k === 'dd' && x.d.n === 2608)" % PETS, 30), "Ann's page draws Ben's Doginal Dog #2608")
     m = ann.evaluate("ASH.pet().menu({ kind: 'pet', id: 'me' }).map(o => o.html.replace(/<[^>]+>/g, ''))")
-    check('Show Doginal Dog #2608' in m and 'Inspect Anti Doginal Dog #165' in m, "Ann's own pet menu: show her other dog, inspect " + str(m))
-    ann.evaluate("ASH.pet().menu({ kind: 'pet', id: 'me' }).find(o => /Show/.test(o.html)).fn()")
+    check('Choose pet' in m and 'Inspect Anti Doginal Dog #165' in m, "Ann's own pet menu: Choose pet, inspect " + str(m))
+    ann.evaluate("ASH.pet().menu({ kind: 'pet', id: 'me' }).find(o => /Choose pet/.test(o.html)).fn()")   # [2026-10-19] a card per pet
+    check(wait(ann, "document.querySelectorAll('.help .pcard').length === 2", 10), 'Choose pet: a card per dog')
+    ann.evaluate("[...document.querySelectorAll('.help .pcard')].find(c => /2608/.test(c.textContent)).click()")
     check(wait(ann, "(() => { const d = ASH.pet().desc(); return d && d.k === 'dd' && d.n === 2608; })()", 5), 'choosing it shows Doginal Dog #2608')
     check(wait(ben, "%s.some(x => x.k.startsWith('r:') && x.d.k === 'dd' && x.d.n === 2608 && !x.d.bogus)" % PETS, 30), "Ben's page follows Ann's change")
     rk = ben.evaluate("(%s.find(x => x.k.startsWith('r:') && x.d.n === 2608) || {}).k" % PETS)

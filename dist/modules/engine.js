@@ -252,7 +252,7 @@
     function start(host, opts) {
       if (G.ASH_LOAD) G.ASH_LOAD.claimed = true;   /* [Claude 2026-10-13] the game holds the loading screen until its first frame */
       opts = opts || {};
-      const q = new URLSearchParams(location.search);
+      const q = new URLSearchParams(location.search + (typeof G.ASH_QS === 'string' ? '&' + G.ASH_QS : ''));   /* [Claude 2026-10-19] a playtest page that cannot carry a query string sets window.ASH_QS */
       const isTouch = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
       const isPhone = isTouch && Math.min(innerWidth, innerHeight) < 600;
       /* WHO IS PLAYING (2026-10-19, the operator: wallet logins get the tutorial, guests do not; guests are warned that nothing is saved):
@@ -285,7 +285,9 @@
       if (HOME && core.setNewHome) core.setNewHome(HOME);
       const me = core.addPlayer(PID, save);
       let FE = null;   /* [Claude 2026-10-16] the Fortune Engines' part (engfortune.js), installed with the Bank client below */
+      let LR = null;   /* [Claude 2026-10-19] the Lily Run (englily.js) */
       let PET = null;  /* [Claude 2026-10-17] pets from Doginals (engpet.js): a Doginal Dog or an Anti Doginal Dog in the wallet walks at your heel */
+      let PET_PICK = save && typeof save.pet === 'string' ? save.pet : null;   /* [Claude 2026-10-19] the operator: the pet you chose stays chosen next session, any device: it rides in the save the Bank keeps ('frog:4242') */
       if (!/^@/.test(String(me.name || ''))) me.name = '@guest';   /* [Claude 2026-10-15] no chosen names any more: '@guest' until the arcade says your @tag (the operator: "There's no need for two names") */
       /* Purpose-built local playtest for The Heart Below. It never runs in the framed arcade and always starts from a fresh,
          disposable character: all combat and dungeon-check skills at 99, prerequisite stories complete, and top-tier kit. */
@@ -349,7 +351,7 @@
       const PH = {}, PH_SENT = {};   /* the dealer's sealed set per table: {h, items: [[ref, blob]...]} - sent on its own small message (Ph) */
       function phSend(t, force) { const P = PH[t]; if (!P || !P.done) return; const now = performance.now(); if (!force && now - (PH_SENT[t] || 0) < 3000) return; PH_SENT[t] = now; netSendBig({ Ph: [t, P.h, MYPK, P.items] }, tRoom(t)); }
       const bounded = (m, n) => { while (m.size > n) m.delete(m.keys().next().value); };
-      const SCORE_KEYS = ['chain_dragon', 'chess_wins'], SCORE_BOARD = { chain_dragon: 'dragon', chess_wins: 'chess' };   /* [Claude 2026-10-11] score key -> the sign it paints */
+      const SCORE_KEYS = ['chain_dragon', 'chess_wins', 'lily_run'], SCORE_BOARD = { chain_dragon: 'dragon', chess_wins: 'chess', lily_run: 'lily' };   /* [Claude 2026-10-11] score key -> the sign it paints */
       /* 2026-10-12 (the operator: "the bank is the only thing that stores the high score and it doesn't get the high score from
          the clients"): what a sign shows comes only from the Bank's answer. Nothing is read from this device's storage and
          nothing from the character's own kill counts - either would repaint a board the Bank has cleared. */
@@ -1046,6 +1048,7 @@
           case 'boatland': boatShow(e.x, e.y, e.face); docksShow(); if (e.by === PID) { boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, face: e.face, on: 0 }); } break;
           case 'cross': if (e.p === PID) { place(myEnt, e.x, e.y); cam.yaw += e.turn || 0; cam.tyaw += e.turn || 0; cam.snap = true; streamRegions(); TN.key = ''; } break;   /* over a cut edge of the net: the same ground, new map coordinates, the view turned with them */
           case 'boatgone': boatHide(e.x, e.y); docksShow(); if (e.by === PID) boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, on: 1 }); break;
+          case 'lilyrun': if (mine && LR) LR.talk(); break;   /* [Claude 2026-10-19] Pondkeeper Bram */
           case 'chest': if (mine) { send({ c: 'tutdo', k: 'wallet' }); if (DEVHOST && !WALLET_IN) { send({ c: 'tutdo', k: 'bank_in' }); send({ c: 'tutdo', k: 'bank_out' }); }   /* the tutorial's wallet step (the chest shows the wallet); on the dev build without a wallet the chest cannot store, so opening it stands in for the bank steps */ const c = ents.get('n:' + e.npc); if (c) c.H.play('open');
             /* [Claude 2026-10-14] whose chest this is: the home whose spawn is nearest (within 3 km; otherwise Ashvale's) - one chest per home */
             const nn = core.M.npcs.find(q => q.id === e.npc), HS = D.rules.homes || {}; let ch = 'ashvale', bd = 3000;
@@ -1565,6 +1568,7 @@
           if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
           if (myEnt.root.visible) { myEnt.root.visible = false; FPV.hid = true; }   /* your own head would fill the view */
         }
+        if (cam.mode === 'lilyrun' && LR) LR.camera(camera, dt);   /* [Claude 2026-10-19] THE LILY RUN: behind the frog on the board */
         if (cam.mode === 'fortune' && FE) FE.camera(camera, dt);   /* [Claude 2026-10-16] THE FORTUNE ENGINE: first person on the bench, the head turned by a drag */
         if (cam.mode === 'poker' && POKERV && POKERV.eye) {   /* THE POKER TABLE: first person at the felt, leaning a little over your own side of it */
           const E = POKERV.eye, L = POKERV.look; camera.position.set(E.x, E.y, E.z); camera.lookAt(L.x, L.y, L.z);
@@ -1692,9 +1696,9 @@
         }
         if (t.kind === 'sign') {
           const o = core.signAt(t.x, t.y); if (!o) return [];
-          const nm = '<span class="c">' + (o.board === 'chess' ? 'Champions board' : 'Wooden sign') + '</span>', sk = o.board === 'chess' ? 'chess_wins' : 'chain_dragon';
+          const nm = '<span class="c">' + (o.board === 'chess' ? 'Champions board' : o.board === 'lily' ? 'Lily Run board' : 'Wooden sign') + '</span>', sk = o.board === 'chess' ? 'chess_wins' : o.board === 'lily' ? 'lily_run' : 'chain_dragon';
           return [{ html: 'Read ' + nm, fn: () => { scoresAsk(true); core.scoreRead(sk).forEach(l => hud.chat(l, 'sys')); }, red: 1 },
-                  { html: 'Examine ' + nm, fn: () => hud.chat(o.board === 'chess' ? 'An oak board on two posts by the tables. The names of those who have won games here are chalked on it, most wins first.' : 'A weathered oak board nailed to the ruin wall. Names of those who have slain the chained dragon are carved into it.', 'sys') }];
+                  { html: 'Examine ' + nm, fn: () => hud.chat(o.board === 'lily' ? 'A painted board by the booth. The best scores at the Lily Run are chalked on it, highest first.' : o.board === 'chess' ? 'An oak board on two posts by the tables. The names of those who have won games here are chalked on it, most wins first.' : 'A weathered oak board nailed to the ruin wall. Names of those who have slain the chained dragon are carved into it.', 'sys') }];
         }
         /* [Claude 2026-10-15] A GOLD wager asks first (the operator: "There should be a confirmation button when joining a game
            that has a gold wager"): joining a staked chess game or a card table with a buy-in, or sitting first and setting
@@ -1839,6 +1843,7 @@
       let lastTap = null, shiftHeld = false;
       const runFor = (base) => shiftHeld ? !base : base;   /* Shift inverts whatever the click would otherwise do */
       function tapAt(cx, cy) {
+        if (LR && LR.tap()) return;   /* [Claude 2026-10-19] the frog is on the Lily Run board: taps never walk (the operator) */
         if (FE && FE.tap(cx, cy)) return;   /* [Claude 2026-10-16] seated at a Fortune Engine: only its reels, lever, slot and knobs */
         const now = performance.now();
         if (lastTap && now - lastTap.t < 300 && Math.hypot(cx - lastTap.x, cy - lastTap.y) < 40 && lastTap.act) {
@@ -1850,6 +1855,7 @@
         hud.hideMenu();
       }
       function menuAt(cx, cy) {
+        if (LR && LR.tap()) return;   /* no menus while the frog runs */
         const ts = targetsAt(cx, cy), list = [];
         MENU_MODE = true; try { for (const t of ts) for (const o of optionsFor(t)) list.push(o); } finally { MENU_MODE = false; }
         if (!ts.some(t => t.kind === 'ground')) { const g = groundAt(cx, cy); if (g) list.push({ html: 'Walk here', act: { c: 'walk', x: g.x, y: g.y } }); }
@@ -1988,7 +1994,7 @@
         if (me.boat !== 1) { carryTell(r, 0); hud.chat((r.name || 'Your partner') + ' is left on the bank here until they come back.', 'sys'); dropRemote(id, true); return; }   /* ashore: they wait on the bank */
         if (now - r.offline.told > 15000) { r.offline.told = now; carryTell(r, 1); }
       }
-      function dropRemote(id, hard, keep) { const r = remotes.get(id); if (PET) PET.drop(id);
+      function dropRemote(id, hard, keep) { const r = remotes.get(id); if (PET) PET.drop(id); if (LR) LR.drop(id);
         if (!hard && r && !r.offline && ghostable(r, id)) { makeGhost(id, r); return; } if (r) { if (r.name && r.name !== 'Adventurer') knewName.set(id, r.name); removeEnt(r.e); remotes.delete(id); } if (core.S.players[id] && core.S.players[id].puppet) coreCall(() => core.removePlayer(id, keep)); }   /* [Claude 2026-10-14] coreCall: its events (a card-table cashout to the Bank) are handled, not lost */
       function dropRemotes(keep) { for (const id of Array.from(remotes.keys())) dropRemote(id, false, keep); }   /* keep [Claude 2026-10-12]: OUR room dropped - their chess seats wait for the host's word */
       /* fighting a monster of another area (the operator: attackers can be attacked back across borders): we tell the room which
@@ -2292,7 +2298,7 @@
       scoreTell = ENGBANK.scoreTell; scoresAsk = ENGBANK.scoresAsk;
       /* [Claude 2026-10-16] THE FORTUNE ENGINES (src/engfortune.js): seat, first-person view, the machine's taps and the Bank's words */
       FE = deps.engfortune ? deps.engfortune.install({ THREE, SCENE, core, hud, PID, ENGBANK, cam, camera, canvas, host, FPV, myEnt, send, netSend, walletRefresh, walletState, get me() { return me; }, get settings() { return settings; } }) : null;
-      PET = deps.engpet ? deps.engpet.install({ THREE, scene, CHAR, footY, myEnt, netSend: o => netSendBig(o, null, 'pt' in o ? 'pet' : null),
+      PET = deps.engpet ? deps.engpet.install({ THREE, scene, CHAR, footY, myEnt, netSend: o => netSendBig(o, null, 'pt' in o ? 'pet' : null), savedPet: () => PET_PICK, petChosen: k => { PET_PICK = k; persist('now'); },
         playOnce: (e, name) => { if (!e.dead && !e.oneShot && !e.prone && !e.held && !e.canoe) playOnce(e, name); },   /* [Claude 2026-10-18] petting: the engine's own one-shot, so the walk/idle loop comes back after it */
         groundY: (x, z, e, fy) => {   /* [Claude 2026-10-18] the pet's own ground (the operator: on a slope it sank into it); upstairs its owner's floor, a big step (a wall walk) its owner's height */
           const rr = e === myEnt ? null : remotes.get(String(e.key || '').slice(2)), lv = e === myEnt ? (me.lv | 0) : rr ? (rr.lvR | 0) : 0;
@@ -2305,6 +2311,9 @@
           if (lv) { const b = core.M.buildingAt ? core.M.buildingAt(Math.floor(o.x), Math.floor(o.z), lv) : -1; return b >= 0 && core.M.buildingAt(tx, ty, lv) === b; }
           return !core.M.blocked(tx, ty) || (core.M.liftAt && core.M.liftAt(tx, ty) > 0);
         },   /* [Claude 2026-10-18] a pet message carries its picture (~900 bytes): split, the newest replacing a queued one */ walletState, hud, base: arcadeBase, get settings() { return settings; }, ownerName: id => { const r = remotes.get(id); return r ? label(r.name, r.from) : ''; } }) : null;
+      /* [Claude 2026-10-19] THE LILY RUN (englily.js): the fenced frog board on the trail into Saltmere, its keeper, the frog-follow camera and the arcade HUD */
+      LR = deps.englily && deps.lilyrules && PET ? deps.englily.install({ THREE, scene, core, hud, PID, cam, camera, renderer, myEnt, FPV, send, netSend: o => netSendBig(o, null, 'lr'), PET, rules: deps.lilyrules, heightAt, CHAR,
+        playOnce: (e, name) => { if (!e.dead && !e.oneShot) playOnce(e, name); }, bestTell: (...a) => ENGBANK && ENGBANK.bestTell && ENGBANK.bestTell(...a), scoresAsk: f => scoresAsk(f), get me() { return me; } }) : null;
       function boardWho() {   /* the keep board is the arcade @tag, not the default Adventurer (2026-10-10) */
         const t = (room && room.me && room.me.tag) || hintedTag || me.tag;
         if (t) { const h = String(t).replace(/^@/, '').replace(/[^\w]/g, '').slice(0, 16); if (h.length >= 2 && !/^adventurer$/i.test(h)) return '@' + h; }
@@ -2498,7 +2507,8 @@
            wrong (a missed message) must be corrected by the 10 s refresh */
         if (d.g && typeof d.g === 'object' && sameSet(d.g, r.e.H.gear) === false) r.e.H.setGear(d.g);
         if (d.g && typeof d.g === 'object') hawkify(r.e, d.g.ring);   /* another player's hawk ring */
-        if ('pt' in d && PET) PET.net(id, d.pt, r.e);   /* [Claude 2026-10-17] their pet dog */
+        if ('pt' in d && PET) PET.net(id, d.pt, r.e);
+        if ('lr' in d && LR) LR.net(id, d.lr);   /* [Claude 2026-10-19] their frog on the Lily Run board */   /* [Claude 2026-10-17] their pet dog */
         if (d.ptp && PET && PET.petted) PET.petted(id);   /* [Claude 2026-10-18] they petted their dog: hearts over it here too */
         if (d.o && typeof d.o === 'object' && r.e.H.setOutfit && sameSet(d.o, r.e.H.outfit || {}) === false) { r.e.H.setOutfit(d.o); r.dressed = 1; }
         else if (!r.dressed && typeof d.h === 'string' && d.h !== r.home && r.e.H.setOutfit) { r.home = d.h; const L = homeLook(d.h); if (L) r.e.H.setOutfit(L); }   /* no outfit heard yet: their home's defaults */
@@ -2969,9 +2979,16 @@
       function toScreen(pos, up) { tmpV.set(pos.x, pos.y + (up || 0), pos.z).project(camera); if (tmpV.z > 1) return null; const w = host.clientWidth, h = host.clientHeight; return { x: (tmpV.x + 1) / 2 * w, y: (1 - tmpV.y) / 2 * h }; }
       let last = performance.now(), frames = 0, mmT = 0;
       let FIRST_DRAWN = false;
+      /* [Claude 2026-10-19] the operator: "make sure the game runs at the same frame rate regardless of the frame rate of someone's monitor,
+         so that somebody with a higher frame rate monitor the game doesn't speed up". At most 60 frames a second: a 120 or 144 Hz
+         screen skips the frames in between (the next one is due a 60th of a second after the last, so 144 Hz still averages 60),
+         and anything that counts frames rather than time runs exactly as it does on a 60 Hz screen. A slower machine is not
+         held back: falling behind, the next frame is due at once. */
+      const FPS_CAP = 60, FRAME_MS = 1000 / FPS_CAP; let frameDue = 0;
       function frame(rafNow) {
         if (stopped) return;
         requestAnimationFrame(frame);
+        { const t = performance.now(); if (t < frameDue - 1) return; frameDue += FRAME_MS; if (frameDue < t - FRAME_MS) frameDue = t; }
         for (const r of regions) if (r.built && r.built.setFloor) r.built.setFloor(me.lv | 0);
         caveTick(performance.now()); torchTick(performance.now());
         if (MUSIC) MUSIC.frame(me.x, me.y, zoneHere, () => !!core.S.night);
@@ -3014,7 +3031,7 @@
         for (const g of fires.values()) { const u = g.userData, sc = 0.8 + 0.25 * Math.sin(now / 70 + u.ph) + 0.1 * Math.sin(now / 23 + u.ph); u.f1.scale.set(1, sc, 1); u.f2.scale.set(1, 1.1 * sc, 1); }
         if (wxMod && wxMod.update && !CAVE.on) wxMod.update(elapsed);
         if (!CAVE.on) dayTick(); else { if (STARS.pts) STARS.pts.visible = false; underSeason(); }   /* day and night on top of the weather's sky */   /* underground the cave sets the fog and the sky */
-        updateRemotes(now, dt); pokerClock(now); if (FE) FE.frame(now, dt); if (PET) PET.frame(now, dt);
+        updateRemotes(now, dt); pokerClock(now); if (FE) FE.frame(now, dt); if (PET) PET.frame(now, dt); if (LR) LR.frame(now, dt);
         for (let i = projs.length - 1; i >= 0; i--) {
           const p = projs[i]; p.t += dt; const k = Math.min(1, p.t / p.dur);
           const to = p.tgt.root.position.clone(); to.y += p.tgt.hawk ? 0.25 : (p.tgt.H.height || 1.2) * p.tgt.scale * 0.55;   /* up at the hawk itself in the sky */
@@ -3026,7 +3043,7 @@
         for (let i = arrivedProjs.length - 1; i >= 0; i--) if (now - (arrivedProjs[i].tA || (arrivedProjs[i].tA = now)) > 1500) arrivedProjs.splice(i, 1);
         for (let i = bursts.length - 1; i >= 0; i--) { const m = bursts[i]; m.userData.t += dt; m.userData.v.y -= 6 * dt; m.position.addScaledVector(m.userData.v, dt); if (m.userData.t > (m.userData.life || 1.2)) { scene.remove(m); bursts.splice(i, 1); } }
         for (const r of regions) if (r.built) r.built.update(dt, tSec);
-        if (PAD) PAD.poll(now, dt);
+        if (PAD && !(LR && LR.playing())) PAD.poll(now, dt);   /* the Lily Run reads the pad itself */
         updateCamera(dt);
         /* overlays: splats, HP bars, name tags */
         const tagSpots = [];
@@ -3216,6 +3233,7 @@
         if (stopped) return;
         try { tellHere(leaving === true); } catch (e) { /* the Bank is out of reach: the next save */ }
         const P = core.exportPlayer(PID), LS = ledgerSnap(); if (P && LS) P.chestLedger = LS;   /* the chest ledger saves with the bag it describes */
+        if (P && PET_PICK) P.pet = PET_PICK;   /* the chosen pet (engpet) */
         const json = JSON.stringify(P); if (json !== CLOUD.last) { CLOUD.at = Date.now(); CLOUD.last = json; } if (P) { P.at = CLOUD.at; if (CLOUD.base != null) P.base = CLOUD.base; if (CLOUD.mine != null) P.mine = CLOUD.mine; }
         cloudPush(json, leaving === true || leaving === 'now');   /* 'now' [Claude 2026-10-12]: straight to the Bank, not after the 20 s wait */
         Promise.resolve(store.set(SAVE, JSON.stringify(P))).then(ok => {   /* false: the arcade did not take it */
@@ -3487,7 +3505,7 @@
          the Spider Cave at his own levels); ?kit=1 adds a staff, armour and food. Never inside the arcade. */
       if (!(G.parent && G.parent !== G) && q.get('lv')) { for (const kv of q.get('lv').split(',')) { const [k, v] = kv.split(':'); if (me.xp[k] != null && +v > 0) me.xp[k] = core.xpFor(+v) * 10; } me.hp = core.lv(me, 'hitpoints'); hud.refresh('all'); }
       if (!(G.parent && G.parent !== G) && q.get('kit')) setTimeout(() => { for (const [id, n] of [['staff_t3', 1], ['body_t2', 1], ['helmet_t2', 1], ['salmon', 8], ['potion', 2], ['antidote', 2]]) if (core.item(id)) game.give(id, n); hud.refresh('all'); }, 900);
-      if (q.get('go') && !(G.parent && G.parent !== G)) { const gg = q.get('go').split(',').map(Number); if (gg.length === 2 && gg.every(Number.isFinite)) setTimeout(() => game.teleport(gg[0], gg[1]), 800); }
+      if (q.get('go') && (!(G.parent && G.parent !== G) || typeof G.ASH_QS === 'string')) { const gg = q.get('go').split(',').map(Number); if (gg.length === 2 && gg.every(Number.isFinite)) setTimeout(() => game.teleport(gg[0], gg[1]), 800); }
       netRoom();
       if (hintedAddr || hintedTag) walletRefresh().then(() => { if (q.has('chest')) hud.openChest(); });
       /* controller (src/gamepad.js): stick walks, A = the left-click option of the target near you, X attack, Y bag */
@@ -3518,7 +3536,7 @@
         progInfo: () => { const P = renderer.info.programs || [], I = renderer.info; return { n: P.length, calls: I.render.calls, tris: I.render.triangles, geos: I.memory.geometries, tex: I.memory.textures, applyMs: SEASON.applyMs, applies: SEASON.applies }; },
         tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },
         fortune: () => FE,   /* [Claude 2026-10-16] tests: the Fortune Engines' part */
-        pet: () => PET, petToggle: () => hudApi().toggle('showPet'),   /* [Claude 2026-10-17] tests: the pets part, the Settings toggle */
+        lily: () => LR, pet: () => PET, petToggle: () => hudApi().toggle('showPet'),   /* [Claude 2026-10-17] tests: the pets part, the Settings toggle */
         pokerNetRow: t => pkNet(core.pokerRow(t)), _pokerModel: t => pokerModel(t), _pokerView: t => pokerView(t), _pokerClock: () => JSON.parse(JSON.stringify(PKT)), solitaire: () => openSolitaire(), _dropNext: k => { DROP_NEXT = k; }, pokerKey: () => MYPK, pokerSealed: t => PH[t] || null,   /* [Claude 2026-10-12] tests: the row as it leaves this dealer */   /* a test taps a thing as a player would (first option) */
         travelShown: () => { const el = host.querySelector('.travel'); return el && el.style.display !== 'none' ? el.className + ' | ' + el.querySelector('.tt').textContent : null; },
         say, store, models: MOD, allowedAsset, wallet: walletApi(DATA.items.items), walletState: () => walletState, walletRefresh,
@@ -3537,5 +3555,5 @@
     }
     return { api: 1, start, openStore };
   }
-  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engine', { api: 1, v: 2, needs: { three: 160, core: 2, models: 1, scene: 2, hud: 1, net: 2, trade: 1, wallet: 1, trip: 2, audit: 1, gamepad: 1, data: 1, engsky: 1, engbank: 1, engfortune: 1, engpet: 1, engmusic: 1 } }, engineFactory);
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engine', { api: 1, v: 2, needs: { three: 160, core: 2, models: 1, scene: 2, hud: 1, net: 2, trade: 1, wallet: 1, trip: 2, audit: 1, gamepad: 1, data: 1, engsky: 1, engbank: 1, engfortune: 1, engpet: 1, engmusic: 1, englily: 1, lilyrules: 1 } }, engineFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

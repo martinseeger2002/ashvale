@@ -2639,6 +2639,39 @@
      "value": 1
     }
    ]
+  },
+  "gwens_hammer": {
+   "name": "Gwen's hammer",
+   "description": "Gwen's hammer, tool hammer. Her master's hammer, and his master's: the haft is black with three smiths' hands. Gwen would very much like it back.",
+   "collection": "ASHVALE Items",
+   "game": "ashvale",
+   "category": "tool",
+   "subcategory": "hammer",
+   "weight": 2200,
+   "model": "gear.mace",
+   "value": 0,
+   "attributes": []
+  },
+  "abbey_stone": {
+   "name": "Abbey stone",
+   "description": "Abbey stone, tool stone. Teleport abbey, Cooldown ticks 3000. Made in the valley of Ashvale.",
+   "collection": "ASHVALE Portal Stones",
+   "game": "ashvale",
+   "category": "tool",
+   "subcategory": "stone",
+   "weight": 200,
+   "model": "item.stone",
+   "value": 0,
+   "attributes": [
+    {
+     "trait_type": "Teleport",
+     "value": "abbey"
+    },
+    {
+     "trait_type": "Cooldown ticks",
+     "value": 3000
+    }
+   ]
   }
  }
 }

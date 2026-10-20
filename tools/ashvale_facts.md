@@ -15,7 +15,25 @@
 - Saves from the old one-page playtest builds (before the launcher) do not carry over.
 - Fixes are small: one or two module inscriptions, not a whole new game.
 
-## In the current release (v0.8.130)
+## In the current release (v0.8.158)
+- 0.8.158 (2026-10-19): what you wear stays on when you come back. A slow or short wallet read no longer takes worn gear off
+  and puts it in the chest; a worn piece comes off only when the arcade says it now belongs to someone else (sold or sent).
+- NOTE for @ashvale: Doginal Frog pets and the Lily Run need the Doginal Frogs collection listed on the arcade. Until it is, a frog
+  in the wallet is not recognised; say it is coming soon if asked.
+- 0.8.157 (2026-10-19): THE LILY RUN - take the path south off the trail into Saltmere (a fingerpost marks it) to Pondkeeper Bram's booth
+  in a little model mountain. Players with a Doginal Frog in their wallet set it down at the booth and hop it over the cart road and across
+  the river on logs and diving turtles into five lily-pad homes; all five raise the level. Three frogs a run, one more at 10,000. One player
+  on the board at a time, anyone at the rail can watch, and each player's best score goes on the Lily Run board (kept by the @ashvale Bank).
+  Arrow keys, W A S D, the on-screen pad or a gamepad; Esc or Quit to stop.
+- 0.8.157: Doginal Frogs walk with you as pets (their own hop). Long-press your pet -> Choose pet shows every pet inscription in your wallet
+  on a card with its own picture; the choice is saved with your game, so it carries to your next session.
+- 0.8.157: the game runs at the same speed on every screen - a 120 or 144 Hz monitor no longer speeds it up (at most 60 frames a second).
+- 0.8.156 (2026-10-19): the Thornwatch's story goes on - five more chapters south of the Red Moor, each names the combat level it
+  wants: The Sisters' Barrow; The Caged Seer (Gloamwood hollow oak, five standing stones, a red portal to burned Emberfall); The
+  Drowned Tower (Blackmere bog, four cellars); The Smith's Hammer (Gorrath at the abbey barracks forge); The Thorn Maiden (four
+  crypts under the cathedral). Every waypoint has a chest beside it.
+- 0.8.156: FARMING (by SadFrogLTC) - a new skill. Patches by the roads, eight crops that grow in phases, seeds dropped by beasts,
+  farming tools at the general stores, three farming quests.
 - 0.8.130 (2026-10-16): standing up from a Fortune Engine (or Cash out) puts the GOLD left on it straight back in your pack.
 - 0.8.129 (2026-10-16): Fortune Engine credit shows the moment GOLD goes in the slot; at the card tables the turn
   always passes to the next player round from the one who just acted, also after a raise.

@@ -9,6 +9,8 @@ def ok(c, m):
     print(('ok   ' if c else 'FAIL ') + m, flush=True); fails += 0 if c else 1
 with sync_playwright() as p:
     b = p.chromium.launch(args=ARGS); pg = b.new_page()
+    OWNER = {'h1': 'nLEDGER'}   # [2026-10-19] who the arcade says holds a piece (/r/inscription/<id>)
+    pg.route('**/r/inscription/**', lambda r: r.fulfill(status=200, content_type='application/json', body=json.dumps({'owner': OWNER.get(r.request.url.rsplit('/', 1)[-1], 'nLEDGER'), 'held': True})))
     pg.goto(URL + '?fresh&nocreator&seed=ledger', wait_until='domcontentloaded', timeout=120000); pg.wait_for_timeout(9000)
     E = lambda js: pg.evaluate(js)
     E("localStorage.removeItem('ashvale3d.chest.nLEDGER')")
@@ -70,12 +72,20 @@ with sync_playwright() as p:
     ok(E("!!(ASH.me.eq.head && ASH.me.eq.head.id === 'helmet_t1')"), 'the helmet is worn and in the wallet')
     E("(() => { const D = ASH.walletState().data; D.gear = {}; D.at = Date.now() + 90000; })()"); S()
     ok(E("!!(ASH.me.eq.head && ASH.me.eq.head.id === 'helmet_t1')"), 'one wallet read without it: still worn')
-    E("(() => { const D = ASH.walletState().data; D.gear = {}; D.at = Date.now() + 120000; })()"); s = S()
+    # [2026-10-19] the operator: an arcade restart's short reads took @apple's whole outfit into the chest. Reads keep coming back
+    # without the helmet, but the arcade still says it is his: it stays on, and nothing about it changes (not loose, no deposit)
+    for t in (120000, 150000, 180000):
+        E("(() => { const D = ASH.walletState().data; D.gear = {}; D.at = Date.now() + %d; })()" % t); S(); time.sleep(0.6); s = S()
+    ok(E("!!(ASH.me.eq.head && ASH.me.eq.head.id === 'helmet_t1')") and not s['loose'].get('helmet_t1'), 'short reads while the arcade still says it is yours: the helmet stays on, nothing loose (%s)' % json.dumps(s['loose']))
+    # sold on the arcade exchange: the arcade says the piece has a new owner -> it comes off
+    OWNER['h1'] = 'nSOMEONEELSE'
+    E("(() => { const D = ASH.walletState().data; D.gear = {}; D.at = Date.now() + 250000; })()"); S(); time.sleep(0.8)
+    E("(() => { const D = ASH.walletState().data; D.gear = {}; D.at = Date.now() + 260000; })()"); s = S(); time.sleep(0.8); s = S()
     ok(E("!(ASH.me.eq.head && ASH.me.eq.head.id === 'helmet_t1')") and E("ASH.core.invCount(ASH.me, 'helmet_t1')") == 0 and not s['loose'].get('helmet_t1'), 'a second read agrees: it comes off your head and is gone, nothing deposited again')
     # [Claude 2026-10-14] the operator: 630 GOLD from mithril, paid by the Bank but not landed yet, put in a chest that already held 5,678:
     # the chest showed 5,678 until the payout landed - a promise counted as delivered because the chest's own Gold looked like an arrival
-    E("(() => { const D = ASH.walletState().data; D.at = Date.now() + 150000; })()"); c0 = S()['chest'].get('coins', 0)
-    E("(() => { ASH.give('coins', 30); ASH.chest.promise({ coins: 30 }); const D = ASH.walletState().data; D.at = Date.now() + 160000; })()"); s = S()
+    E("(() => { const D = ASH.walletState().data; D.at = Date.now() + 300000; })()"); c0 = S()['chest'].get('coins', 0)
+    E("(() => { ASH.give('coins', 30); ASH.chest.promise({ coins: 30 }); const D = ASH.walletState().data; D.at = Date.now() + 310000; })()"); s = S()
     ok(s['chest'].get('coins', 0) == c0 and not s['loose'].get('coins'), 'Gold the Bank has promised is in the bag, the chest still holds %d (%s), nothing to deposit' % (c0, s['chest'].get('coins')))
     E("ASH.chest.store('coins', 30)"); s = S()
     ok(s['chest'].get('coins', 0) == c0 + 30, 'stored before it lands: the chest shows %d at once (%s)' % (c0 + 30, s['chest'].get('coins')))

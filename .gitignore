@@ -41,3 +41,6 @@ __pycache__/
 
 # isolated local-agent generations; never publish with the game
 qwen-output/
+
+# a worktree symlink to another checkout's node_modules (the slash form above does not match a link)
+node_modules

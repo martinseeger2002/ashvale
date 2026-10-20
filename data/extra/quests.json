@@ -2136,6 +2136,7 @@
    "name": "The Hollow Den",
    "giver": "isolde",
    "story": 1,
+   "combat": 36,
    "steps": [
     {
      "id": 1,
@@ -3065,6 +3066,319 @@
    ],
    "done": [
     "You learned the basics on Tutorial Island."
+   ]
+  },
+  "sisters_barrow": {
+   "name": "The Sisters' Barrow",
+   "giver": "rhosyn",
+   "story": 2,
+   "after": "hollow_den",
+   "combat": 40,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "sistersbarrow",
+     "goal": {
+      "kills": {
+       "risen_dead": 20,
+       "corva": 1
+      },
+      "n": 21
+     },
+     "at": [
+      263,
+      178
+     ],
+     "mark": "The Sisters' Barrow",
+     "reward": [
+      "xp:ranged:12000",
+      "bow_t4",
+      "arrows_t4:60"
+     ],
+     "talk": [
+      "So Isolde's den is quiet. Good. Then you can stand to hear the rest of it.",
+      "South of the moor, past the last of the fences, is the barrow where the Thornwatch buries its own. A week ago I sent Corva out to bury the sisters we lost on the road. Best eye in the camp.",
+      "She came back at dusk with a quiver full of black arrows and put two of them through the sentry on the bridge. She never said a word.",
+      "Now the barrow's dead are up out of their graves, and she walks among them like a shepherd with her flock. Whatever woke under the abbey has her.",
+      "Lay a dozen of the dead back down, so the barrow can hold its own again, and then put Corva down. Cleanly. She was my sister. Do it, and the Thornwatch will teach you to shoot like one of us. Cross the moor south; the iron gate stands open."
+     ],
+     "progress": [
+      "{left} still walk in the barrow, {name}. A dozen of the dead, and Corva.",
+      "Corva is still out there, {name}. Close the distance; she will not let you stand off and trade arrows with her.",
+      "Strike her and every corpse near her comes running. Thin out the graves first, or fight with your back to the railing.",
+      "Elin has potions by the gate. You will want them."
+     ],
+     "complete": [
+      "It's done, then. I thought I would feel something. Maybe later.",
+      "Here: a shortbow of the sisters' yew, and arrows to go with it. Hold it like this. No, lower. You'll learn.",
+      "The Thornwatch will remember who gave Corva her rest."
+     ]
+    }
+   ],
+   "done": [
+    "The barrow is quiet. Some nights I walk out and sit by her grave. The dead don't trouble me there any more."
+   ]
+  },
+  "caged_seer": {
+   "name": "The Caged Seer",
+   "giver": "isolde",
+   "story": 3,
+   "after": "sisters_barrow",
+   "combat": 44,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "gloamwood",
+     "goal": {
+      "flag": "seer_scroll"
+     },
+     "at": [
+      288,
+      384
+     ],
+     "mark": "The hollow oak",
+     "reward": [
+      "xp:prayer:3000"
+     ],
+     "talk": [
+      "The barrow is quiet, and Rhosyn sleeps again. Thank you for that. Now I need you further south than any of us have dared.",
+      "There was a man named Hollin, the last of the old seers. He lived in Emberfall, a hamlet past the woods. When the abbey fell he sent us word, and then nothing.",
+      "Hollin would have known what woke under the abbey. If he is alive, we need him.",
+      "Emberfall cannot be reached by any road now. But the seers kept a way: five old stones in the field below the barrow, and a scroll that wakes them.",
+      "The scroll was hidden in the hollow oak, deep in the Gloamwood, past the stone field. Bring it to me. Whatever keeps the oak will not give it up kindly."
+     ],
+     "progress": [
+      "The hollow oak stands at the far end of the Gloamwood, {name}, past the stone field and down the old path.",
+      "Reach into the hollow. Be ready when the tree answers.",
+      "Elin has potions by the gate. The wood eats the careless."
+     ],
+     "complete": [
+      "Let me see it. Bark-paper, red thread. Hollin's own knot.",
+      "Five stones, five beasts cut in them, and the order to wake them: the Hawk first, then the Hound, then the Hart, then the Hare, and the Heron last.",
+      "Wake them in that order and they will open a way to Emberfall. Touch the wrong one and it will only stay cold."
+     ]
+    },
+    {
+     "id": 2,
+     "zone": "emberfall",
+     "goal": {
+      "kills": {
+       "rakkas": 1,
+       "bregan": 1
+      },
+      "n": 2
+     },
+     "ends": "hollin_caged",
+     "at": [
+      268,
+      280
+     ],
+     "mark": "The Fivestones",
+     "reward": [
+      "flag:seer_freed"
+     ],
+     "talk": [
+      "An ashling chief has taken the stones for his own. Rakkas, the scouts call him; he spits lightning. He will not let you near them while he lives.",
+      "Hawk, Hound, Hart, Hare, Heron. Then step through, find Hollin, and bring him home."
+     ],
+     "progress": [
+      "Rakkas keeps the stones and Bregan keeps the cage, {name}. Both must fall before the old man walks free.",
+      "Hawk, Hound, Hart, Hare, Heron. The ring in the middle opens when the last one wakes."
+     ],
+     "complete": [
+      "You're not one of them. You're real. Oh, thank the stars.",
+      "Bregan had the key. He was our smith; I watched him try to put the fire out with his hands. It got into him instead.",
+      "There. Help me down. My legs have forgotten what they are for."
+     ]
+    },
+    {
+     "id": 3,
+     "zone": "thornwatch",
+     "goal": {
+      "talk": "isolde"
+     },
+     "at": [
+      125,
+      75
+     ],
+     "mark": "Thornwatch Camp",
+     "reward": [
+      "xp:attack:10000",
+      "xp:strength:10000",
+      "xp:defence:10000",
+      "helmet_t5"
+     ],
+     "talk": [
+      "I know the way to your camp; the stones will take me. Go ahead and tell Isolde that Hollin is coming. Slowly, but coming.",
+      "And tell her the abbey's bells rang the night it fell. I heard them from here. Bells do not ring themselves."
+     ],
+     "progress": [
+      "Hollin has gone ahead to the camp, {name}. Speak to Mother Isolde."
+     ],
+     "complete": [
+      "Hollin is by the fire, eating as if he has not eaten in a month, which he hasn't. You brought him out of the fire.",
+      "Take this helm. It was made in the abbey's forge, before the abbey fell. It suits you better than it suited the wall it hung on.",
+      "He says he knows what woke under the abbey. He wants to speak to you himself."
+     ]
+    }
+   ],
+   "done": [
+    "Hollin talks to the fire more than to us. Go and sit with him, {name}. He has more to tell."
+   ]
+  },
+  "drowned_tower": {
+   "name": "The Drowned Tower",
+   "giver": "hollin",
+   "story": 4,
+   "after": "caged_seer",
+   "combat": 48,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "towercellars",
+     "goal": {
+      "kills": {
+       "morwen": 1
+      },
+      "n": 1
+     },
+     "at": [
+      366,
+      452
+     ],
+     "mark": "The drowned tower",
+     "reward": [
+      "coins:5000",
+      "xp:attack:14000",
+      "xp:strength:14000",
+      "xp:defence:14000"
+     ],
+     "talk": [
+      "Sit a moment. I have been reading the stones' old book while you were gone, and it tells of the Blackmere, past the Gloamwood.",
+      "There was a village in that bog once, and a tower over it. The lady of the tower was Morwen, a countess, and she was afraid of growing old.",
+      "The book says she bathed in what she took from the village girls, and the bog rose and drowned it all. Her and the tower with it.",
+      "She is down there still, at the bottom of the cellars, and whatever woke under the abbey has woken her too. She sits on a hoard the size of a hayrick.",
+      "Go through the Gloamwood past the oak and out its far side into the bog. The tower's stair goes down four levels. Bring her down, and the hoard is yours."
+     ],
+     "progress": [
+      "Morwen is at the bottom of the tower, {name}. Four levels down.",
+      "Her maids come running when she calls. Fight them in a doorway if you can.",
+      "Take Mother Isolde's potions. The bog is no place to run short."
+     ],
+     "complete": [
+      "You're back, and you smell of the bog. So it is done.",
+      "Keep the gold; she will not miss it. And take this from me, for what it is worth: you are the first in three hundred years to come up out of that tower.",
+      "There is more in the book. Gwen has been asking after you too; something about her hammer."
+     ]
+    }
+   ],
+   "done": [
+    "The Blackmere is only a bog again. Let it be."
+   ]
+  },
+  "smiths_hammer": {
+   "name": "The Smith's Hammer",
+   "giver": "rhosyn",
+   "story": 5,
+   "after": "drowned_tower",
+   "combat": 52,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "abbey",
+     "goal": {
+      "bring": "gwens_hammer",
+      "n": 1
+     },
+     "at": [
+      360,
+      556
+     ],
+     "mark": "The abbey barracks",
+     "reward": [
+      "longsword_t5",
+      "abbey_stone",
+      "xp:attack:18000",
+      "xp:strength:18000",
+      "xp:defence:18000"
+     ],
+     "talk": [
+      "A word, before Gwen sees us talking. She will never ask you herself; she is too proud, and it is her own fault.",
+      "When we ran from the abbey she left her hammer on the anvil. Her master's hammer, and his master's. She has worked with borrowed tools ever since, and it shows.",
+      "The abbey is south of the Blackmere: follow the way out of the bog past the tower. Our old forgekeeper, Gorrath, kept the barracks forge. He turned with the rest.",
+      "Scouts say he is still at the anvil, hammering at nothing, day and night. With her hammer.",
+      "Bring it back to me and I will see it gets to her. And mind the sisters on the walls; they have not forgotten how to shoot."
+     ],
+     "progress": [
+      "The barracks are against the abbey's west wall, {name}. Gorrath is at the forge.",
+      "Bring me Gwen's hammer. He will not give it up while he can stand.",
+      "The sisters keep their distance and shoot. Close in, or fight them round a corner."
+     ],
+     "complete": [
+      "That's it. That's the hammer. Gwen! Gwen, come here.",
+      "...She will not say anything, but look at her face. She has been at the anvil since you walked in.",
+      "There. A longsword, out of the abbey's own steel, with her own hammer. And the stone to the abbey's portal stand in the yard: hold it and you can come and go.",
+      "One more thing is left, {name}. Mother Isolde wants you. It is about what lies under the abbey."
+     ]
+    }
+   ],
+   "done": [
+    "Gwen sings at the anvil now. Badly. Nobody minds."
+   ]
+  },
+  "thorn_maiden": {
+   "name": "The Thorn Maiden",
+   "giver": "isolde",
+   "story": 5,
+   "after": "smiths_hammer",
+   "combat": 58,
+   "steps": [
+    {
+     "id": 1,
+     "zone": "crypts",
+     "goal": {
+      "kills": {
+       "maelis": 1
+      },
+      "n": 1
+     },
+     "at": [
+      412,
+      582
+     ],
+     "mark": "The crypt stair",
+     "reward": [
+      "body_t5",
+      "legs_t5",
+      "shield_t5",
+      "xp:attack:25000",
+      "xp:strength:25000",
+      "xp:defence:25000",
+      "xp:hitpoints:20000",
+      "flag:maiden_slain"
+     ],
+     "talk": [
+      "Hollin has told me what woke under the abbey, and I believe him, because I have felt it every night since we ran.",
+      "Her name is Maelis. The Maiden of Thorns. She was a sister of ours once, three hundred years ago, buried in the crypts with a thorn through her heart for what she did.",
+      "Someone pulled the thorn. Now her thorns are in our sisters, and they do what she wants.",
+      "The crypt stair is behind the altar in the cathedral. Four levels down she waits. Her thorns are poisoned; carry antidotes, and Elin's potions, as many as you can.",
+      "Put her back in the ground, {name}, and the Thornwatch can go home."
+     ],
+     "progress": [
+      "Maelis is at the bottom of the crypts, {name}. Four levels under the cathedral.",
+      "Her thorns poison. Elin sells antidotes. Take them.",
+      "The stone Gwen's hammer bought you brings you to the abbey yard. Use it."
+     ],
+     "complete": [
+      "I felt her go. All of us did. Rhosyn sat down in the mud and laughed until she cried.",
+      "Take this armour. It was the abbey's best, and it belongs to whoever brought the abbey back.",
+      "Tavish says the road east is open again; the thorns that closed it are dead. The Thornwatch goes home tomorrow. Some of us, anyway.",
+      "Thank you, {name}. The Sisters will remember your name for as long as there are Sisters."
+     ]
+    }
+   ],
+   "done": [
+    "The bells rang this morning. Nobody pulled the ropes. I think they were glad."
    ]
   }
  }

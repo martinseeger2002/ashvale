@@ -1189,3 +1189,30 @@ the walk here feature".
 - engfortune: fein events while the ledger is unknown are queued (HELD_EV); a 30 s sweep calls off a deposit with no tx after
   5 min (feinx + back to the pack, gone undone); a spin unanswered for 30 s puts the wager back on the credit and frees the machine.
 - fortune_pw ALL OK; check_live v168, no console errors. Feed note posted.
+
+## 0.8.156 - 2026-10-19 (Claude): Thornwatch chapters 2-6 + SadFrog's Farming - RELEASED (v183 66fa174f; cards c73734ca ASHVALE, 03ef9cb5 Ziibiing)
+- the operator: "See if sad frog has any commits merge his commits with our code ... publish push and make a new card" -> SadFrogLTC's
+  3 farming commits imported as c1cd777 (manual 3-way apply; generated data re-made), claude/seer merged (1ff217d), 89fcba8 untracks
+  a node_modules symlink. Thornwatch: Sisters' Barrow, Caged Seer, Drowned Tower, Smith's Hammer, Thorn Maiden; abbey chest.
+- Tests: full node suite green after fixes (dragon_sign tries every side, story_points 109, abbey chest); chapter 3-6 play tests ok.
+- Release needed 4 tries: the arcade's /r/inscriptions 502'd during its deploy restarts (16:16, 16:49) and cut a body off at 17:02.
+  9cebd8b: ids_by_sha now retries ~20 min. Arcade says ?after=<number> gives only new rows (switch to it later).
+- check_live v183, no console errors. Feed note posted (ghost-devs venv is gone: ashvale_daily.py now runs on ~/arcade-work/venv).
+- GitHub sync timer still STOPPED until Ashvale's 0.8.157 is out; then add the 3 farming SHAs to chain/github_bridge.json imported.
+
+## 0.8.157 - 2026-10-19 (Claude): the Lily Run, Doginal Frog pets, Choose pet, 60 fps cap - RELEASED (v184 64efd13e)
+- the operator: a frog-crossing mini game for Doginal Frog owners (Pondkeeper Bram's booth off the trail into Saltmere, one player at a
+  time, watchers at the rail, a Bank 'best' board), frog pets with their own hop, long-press -> Choose pet cards (choice in the Bank
+  save), and "the game runs at the same frame rate regardless of the monitor" (60 fps cap). Bank on .25: fa79ab6 ('best' message).
+- Modules: lilyrules, englily, hudlily, engine, engpet, engbank, earth, core, hud, scene, zone.lilyrun, zone.lilyrunpath (+ index).
+- Tests: lilyrules_test, lilyrun_pw, lilyrun_camera_pw, frog_pet_pw, pet_pw, chest_ledger_pw. check_live v184, no console errors.
+  two_players_live timed out at 300 s in its sign-in (not rerun).
+- Cards and feed note NOT posted yet: the Doginal Frogs collection is not listed on the arcade (/r/collection-item answers "no
+  collection this arcade knows"), so frog pets and the Lily Run do nothing for players until the Arcade publishes it (the operator's
+  "yes" in the Arcade session). listing_v08157/ + chain/post_v08157.txt are ready (card text now keeps the older history).
+
+## 0.8.158 - 2026-10-19 (Claude): worn gear stays on after a restart - RELEASED (v185 7fa0e98f)
+- the operator (@apple, live): restarting put all worn items into the chest. engbank: a short wallet read keeps worn pieces on; one
+  comes off only when /r/inscription/<id> says a new owner (2541574). The operator chose "Never strip worn gear".
+- Modules: engbank. Tests: core_test ALL OK, chest_ledger_pw ALL OK (new short-read-keeps-worn case). check_live v185, no errors.
+- Card listing_v08158/ and chain/post_v08158.txt ready, held with 0.8.157's until the Frogs collection is listed.
