@@ -77,6 +77,10 @@
       cloth.userData.base = Float32Array.from(cg.attributes.position.array); f.userData.cloth = cloth;
       const rim = new THREE.Mesh(new THREE.RingGeometry(0.075, 0.09, 24), new THREE.MeshBasicMaterial({ color: 0xffffff })); rim.rotation.x = -Math.PI / 2; rim.position.y = 0.05; f.add(rim);
       const cup = new THREE.Mesh(new THREE.CircleGeometry(0.075, 24), new THREE.MeshBasicMaterial({ color: 0x111111 })); cup.rotation.x = -Math.PI / 2; cup.position.y = 0.048; f.add(cup);
+      /* The operator ("when putting from a distance the hole is not visible", "I want the little black hole to be visible"): the cup
+         and its lip sat 5 cm over the green, under the course's offset surface at a low look, so they are drawn over the grass */
+      for (const m of [rim, cup]) m.renderOrder = 4;   /* drawn over the grass only at the hole you putt at (frame): elsewhere a hill still hides it */
+      f.userData.lip = [rim, cup];
       return f;
     }
     function waveFlags(now, wind) {
@@ -91,7 +95,7 @@
     const CUT = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     function kit() {
       const ballMat = new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 60 });
-      const ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 14, 10), ballMat);
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 14, 10), ballMat); ball.renderOrder = 6;   /* after the cup, which is drawn over the grass while you putt */
       const shadow = new THREE.Mesh(new THREE.CircleGeometry(BALL_R * 1.2, 12), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35 })); shadow.rotation.x = -Math.PI / 2;
       const trail = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 })); trail.visible = false;
       const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.006, 1, 6), new THREE.MeshLambertMaterial({ color: 0xc9cbd0 }));
@@ -628,7 +632,7 @@
       if (PENDING) { ST = PENDING; settle(); if (ST.settled) PENDING = null; ST = null; }
       waveFlags(nowMs, ST ? ST.wind : [2, 1]);
       drawRemotes(dt);
-      if (!ST) { hideMarks(); if (built) for (const f of built.flags) f.userData.stick.visible = true; return; }
+      if (!ST) { hideMarks(); if (built) for (const f of built.flags) { f.userData.stick.visible = true; for (const m of f.userData.lip) { m.scale.setScalar(1); m.material.depthTest = true; } } return; }
       if (ST.buy > 0 && ST.done) settle();
       for (const x of ST.m) if (x[3] !== ST.sn && !ST.quit[x[3]] && Date.now() - (ST.heard[x[3]] || 0) > 180000) { ST.quit[x[3]] = 1; K.hud.chat(x[1] + ' has gone from the course: they forfeit.', 'sys'); settle(); }   /* the operator: leaving (or dropping) forfeits */
       ST.turn = turnOf(ST.hole);
@@ -660,7 +664,11 @@
         drawClub(MEK, e.H, e.root, [gb.x, gb.y], ST.aim, ST.club, ST.phase === 'aim');
       }
       drawMarks(dt);
-      if (built) for (const f of built.flags) f.userData.stick.visible = !(f === built.flags[ST.hole] && C.surf(gb.x, gb.y) === 'g');   /* the operator: the flag comes out while you putt */
+      if (built) for (const f of built.flags) {
+        const out = f === built.flags[ST.hole] && (C.surf(gb.x, gb.y) === 'g' || c.id === 'PT'); f.userData.stick.visible = !out;   /* the operator: the flag comes out while you putt */
+        let sc = 1; if (out) { const d = Math.hypot(h.pin[0] - gb.x, h.pin[1] - gb.y); sc = Math.min(3, Math.max(1, d / 5)); }   /* a long putt: the hole a touch bigger so it reads from the ball */
+        for (const m of f.userData.lip) { m.scale.setScalar(sc); m.material.depthTest = !out; }
+      }
       hudLive(); if (ST.phase === 'aim') drawMap();
       tell(false);
     }

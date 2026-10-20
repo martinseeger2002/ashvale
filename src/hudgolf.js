@@ -43,7 +43,8 @@
 .ash .golfp .meter .fill{background:linear-gradient(270deg,#e8c13a,#d64b3a)}
 .ash .golfp .meter .sweet{background:#5fbf4a88;border-left:1px solid #b8f5a0;border-right:1px solid #b8f5a0}
 .ash .golfp .meter .zero{width:2px;background:#fff}
-.ash .golfp .meter .mark{top:-2px;bottom:-2px;width:4px;margin-left:-2px;background:#fff;box-shadow:0 0 6px #fff}
+/* gmark, never mark: hudart's .ash .mark (the hit markers) fades out in 0.45 s and took the meter's marker with it (the operator: no accuracy stroke) */
+.ash .golfp .meter .gmark{top:0;bottom:0;width:6px;margin-left:-3px;background:#fff;border:1px solid #000;box-sizing:border-box;box-shadow:0 0 6px #fff;z-index:2}
 .ash .golfp .meter .pow{width:3px;margin-left:-1px;background:#ff5a3a}
 .ash .golfp .meter .max{background:#ffe08acc;box-shadow:0 0 5px #ffe08a;border-left:1px solid #fff6c8;border-right:1px solid #fff6c8;box-sizing:border-box}
 .ash .golfp .meter .max::after{content:'MAX';position:absolute;top:1px;left:calc(100% + 3px);font-size:9px;color:#ffe08a;font-style:normal}
@@ -83,10 +84,10 @@
       E.aim = part('aim', '<button data-a="aimL" aria-label="Aim left">&#8630;</button><button data-a="aimR" aria-label="Aim right">&#8631;</button>');
       E.spin = part('spin', '<button data-s="top">Top</button><button data-s="none">None</button><button data-s="back">Back</button>');
       E.putt = part('putt', '<button data-r="short">Short</button><button data-r="long">Long</button>');
-      E.swing = part('swing', '<div class="meter"><i class="sweet"></i><i class="fill"></i><i class="zero"></i><i class="max"></i><i class="pin"></i><i class="pow"></i><i class="mark"></i><i class="lab"></i></div><button class="swingbtn">SWING</button>');
+      E.swing = part('swing', '<div class="meter"><i class="sweet"></i><i class="fill"></i><i class="zero"></i><i class="max"></i><i class="pin"></i><i class="pow"></i><i class="gmark"></i><i class="lab"></i></div><button class="swingbtn">SWING</button>');
       E.waitMsg = part('waitm');   /* a group's turns: Waiting: <name> is playing */
       E.flashes = flashes = part('flashes');
-      for (const k of ['sweet', 'fill', 'zero', 'max', 'pin', 'pow', 'mark', 'lab']) E[k] = E.swing.querySelector('.' + k);
+      for (const k of ['sweet', 'fill', 'zero', 'max', 'pin', 'pow', 'mark', 'lab']) E[k] = E.swing.querySelector('.' + (k === 'mark' ? 'gmark' : k));
       E.meter = E.swing.querySelector('.meter'); E.swingBtn = E.swing.querySelector('.swingbtn');
       const down = (n, f) => n.addEventListener('pointerdown', e => { e.preventDefault(); f(e); });
       down(E.swingBtn, () => cb.press()); down(E.meter, () => cb.press());

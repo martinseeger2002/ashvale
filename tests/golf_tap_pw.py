@@ -26,6 +26,10 @@ with sync_playwright() as p:
     check(pg.evaluate(GS + ".phase") == 'rise', 'SWING starts the meter')
     time.sleep(0.5); pg.touchscreen.tap(195, 420); time.sleep(0.1)
     check(pg.evaluate(GS + ".phase") == 'fall', 'a tap anywhere on the screen sets the power (phase %s)' % pg.evaluate(GS + ".phase"))
+    MK = "(() => { const m = document.querySelector('.golfp .swing .meter i:nth-of-type(7)') || document.querySelector('.golfp .gmark'), c = getComputedStyle(m), r = m.getBoundingClientRect(); return [+c.opacity, c.display, r.width, r.left]; })()"
+    a = pg.evaluate(MK); time.sleep(0.4); b2 = pg.evaluate(MK)
+    check(a[0] > 0.9 and b2[0] > 0.9 and a[1] != 'none' and b2[2] >= 4, 'the marker shows on the way back (opacity %s, width %s)' % (b2[0], b2[2]))
+    check(b2[3] - a[3] > 10, 'the marker runs back across the meter (%d px)' % (b2[3] - a[3]))
     t0 = time.time()
     while pg.evaluate(GS + ".meter") > 1 and time.time() - t0 < 4: time.sleep(0.01)
     pg.touchscreen.tap(195, 300); time.sleep(0.2)

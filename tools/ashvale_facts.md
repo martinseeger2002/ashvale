@@ -15,7 +15,10 @@
 - Saves from the old one-page playtest builds (before the launcher) do not carry over.
 - Fixes are small: one or two module inscriptions, not a whole new game.
 
-## In the current release (v0.8.163)
+## In the current release (v0.8.165)
+- 0.8.165 (2026-10-20): GOLF FIX - on a long putt the hole (the black cup and its white lip) shows on the green.
+- 0.8.164 (2026-10-20): GOLF FIX - the swing meter's marker now shows on the way back after the power tap; tap in the green
+  strike zone to hit straight.
 - 0.8.163 (2026-10-20): GOLF FIX - while the swing meter runs, a tap anywhere on the screen counts (phones missed the strike tap
   before); every stroke starts facing the pin; leaving mid-round brings you back in the Saltmere Links clubhouse.
 - 0.8.162 (2026-10-20, by SadFrogLTC): SALTMERE REBUILT - cobbled streets, run-down houses and real piers. Pirates hold the south

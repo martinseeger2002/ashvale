@@ -1261,3 +1261,15 @@ the walk here feature".
 - Every stroke starts aimed at the pin. zone.returnTo: a save on the course loads at the clubhouse (635,-118) - placeFrom in core.js.
 - Modules: core, engolf, data/zoneindex, zones/golf. Tests on the merged build: golf_tap_pw ALL OK, golf_pw ALL OK (branch core_test ALL OK).
   check_live v190, no console errors. Post chain/post_v08163.txt.
+
+## 0.8.164 - 2026-10-20 (Claude): golf meter marker visible on the accuracy stroke - RELEASED (v191 2c2f27ce)
+- the operator: after the power tap nothing moves on the meter. Cause: the marker's class was 'mark', and hudart's `.ash .mark` (hit
+  markers, animation ashmark: fade to opacity 0 in 0.45 s) applied to it. Playtest page lacked hudart, so it never showed there.
+  Renamed gmark, made it bolder; no other golf HUD class collides with a global `.ash .x` rule (checked).
+- Module: hudgolf. golf_tap_pw (now checks the marker is visible and moving) ALL OK, golf_pw ALL OK. Post chain/post_v08164.txt.
+
+## 0.8.165 - 2026-10-20 (Claude): the hole shows on a long putt - RELEASED (v192 50ee8b40)
+- the operator: "when putting from a distance the hole is not visible"; a gold ring + floating arrow was tried and REJECTED ("I want the
+  little black hole to be visible"). Now, at the hole you putt at (on the green or holding the putter), the cup and lip draw with
+  depthTest off (the course's polygon-offset surface hid them at a low look) and scale 1-3x with distance/5 m; ball renderOrder 6.
+- Module: engolf. golf_pw ALL OK, golf_tap_pw ALL OK. Post chain/post_v08165.txt.
