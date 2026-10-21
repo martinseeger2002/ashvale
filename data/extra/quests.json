@@ -2856,7 +2856,7 @@
      "ends": "tut_combat",
      "kit": {
       "bow_t1": 1,
-      "arrows_t1": 15
+      "arrows_t1": 40
      },
      "reward": "xp:ranged:150",
      "talk": [

@@ -80,7 +80,7 @@ STEPS = [
      ["Good! Always eat before your health gets low. That's the best advice I've got."], "xp:hitpoints:100", {"bread": 1}),
     ({"do": "ranged"}, C, ["Now, from a distance. Here's a bow and some arrows.", "Wield the bow, then click a rat to shoot it."],
      "Click the <b>bow</b> in your pack and choose <b>Wield</b>. Then click a <b>rat</b> to shoot it.",
-     ["A fine shot! Bows let you fight from far away."], "xp:ranged:150", {"bow_t1": 1, "arrows_t1": 15}),
+     ["A fine shot! Bows let you fight from far away."], "xp:ranged:150", {"bow_t1": 1, "arrows_t1": 40}),
     ({"do": "magic"}, C, ["And last, magic. Here's a staff - no spellbook needed.", "Wield the staff and click a rat to cast a spell at it."],
      "Click the <b>staff</b> in your pack and choose <b>Wield</b>. Then click a <b>rat</b> to cast a spell.",
      ["Magic! You've tried every way to fight - sword, bow and staff. Keep whichever you like best. I'm proud of you."], "xp:magic:150", {"staff_t1": 1}),

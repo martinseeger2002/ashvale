@@ -1766,7 +1766,10 @@
       if (!p || !p.quests) return;
       for (const qid in p.quests) {
         const q = p.quests[qid], Q = D.quests.quests[qid], st = Q && Q.steps[q.step - 1];
-        if (st && st.goal.do === key && (q.n | 0) < (st.goal.n || 1)) { q.n = (q.n | 0) + 1; msg(p, Q.name + ': done!', 'quest'); }
+        if (st && st.goal.do === key && (q.n | 0) < (st.goal.n || 1)) {
+          q.n = (q.n | 0) + 1; const n = M.npcs.find(x => x.id === (st.ends || Q.giver));   /* not "done!": a new player read that as the whole quest finished (2026-10-21 playtest) */
+          msg(p, Q.name + ': well done, that part is finished.' + (n ? ' Now talk to ' + n.name + '.' : ''), 'quest');
+        }
       }
     }
     /* PET goal (2026-10-19, Saltmere's pirates: "find Admiral and pet her"): {pet: monster key} is met by petting one */

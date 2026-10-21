@@ -63,7 +63,13 @@ if (pierAt) sign(pierAt[0] - 2, pierAt[1] - 1, [['Ferry to Ashvale', pierAt]]);
 sign(cx - 4, cy - 4, [['Quests', npcAt('tut_quest')], ['Mining', npcAt('tut_mining')], ['Chapel', npcAt('tut_chapel')]]);
 sign(cx + 9, cy + 10, [['Bank', npcAt('tut_chest')], ['Shop', npcAt('tut_shop')], ['Ferry', pierAt]]);
 deco('standing_stone', cx - 5, cy - 9); deco('stall', cx - 12, cy + 11); deco('altar', cx + 12, cy - 13); deco('lantern_post', cx + 10, cy - 12); deco('boulders', cx + 4, cy + 17); deco('lantern_post', cx + 2, cy + 6); deco('stone_bench', spawn[0] + 3, spawn[1] + 2, { ry: 0 });
-for (const o of objects) if (['tent', 'woodpile', 'crate', 'stall', 'altar'].includes(o.k)) put(o.x, o.y, 'X');
+for (const o of objects) if (['tent', 'woodpile', 'crate', 'stall', 'altar', 'signpost', 'standing_stone', 'lantern_post', 'boulders', 'stone_bench'].includes(o.k)) put(o.x, o.y, 'X');   /* solid: you walk round them (2026-10-21 playtest: "can walk through things") */
+{ /* and nothing may cut a station off: every person and the pier are reached from the spawn round the props */
+  const seen = new Set(), st = [L(spawn[0], spawn[1])], ok = c => c === '.' || c === 's' || c === 'B';
+  while (st.length) { const [x, y] = st.pop(), k = x + ',' + y; if (seen.has(k) || !ok(at(x, y))) continue; seen.add(k); st.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]); }
+  const cut = npcs.filter(n => { const [x, y] = L(n.x, n.y); return ![[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => seen.has((x + dx) + ',' + (y + dy))); });
+  if (cut.length) throw new Error('cut off by the props: ' + cut.map(n => n.id).join(', '));
+}
 const zone = { ashvale3d: 'module', name: 'zone.tutorial', api: 1, v: 2, data: { name: 'Tutorial Island', level: 'safe', origin: [X0, Y0], size: [N, N], ground: 'grass',
   tiles: T.map(r => r.join('')), objects, npcs, spawns, fishing, spawn, weather: { kinds: { clear: 80, fog: 20 }, min: 300, max: 900 } } };
 fs.writeFileSync(path.join(ROOT, 'data', 'zone.tutorial.json'), JSON.stringify(zone));

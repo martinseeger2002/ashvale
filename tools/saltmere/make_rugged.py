@@ -163,6 +163,29 @@ for tx, ty in ((452, 21), (420, 21)):   # wanted boards on the high street's ver
     if best:
         _, x, y, (dx, dy) = best
         Z['objects'].append({'k': 'notice_board', 'x': x, 'y': y, 'w': 1, 'h': 1, 'pal': 'harbour', 'ry': round(math.atan2(dx, dy), 3), 'tag': 'rugged', 'solid': True}); placed.append((x, y, 'notice_board'))
+# ---- the town's own props stand in the way (2026-10-21 playtest: "can walk through things"): an 'X' under each crate, barrel, stall, table,
+# lamp and sign on open ground (not the pier's boards, which the decking above reads, nor the cobbles) - one at a time, and only if every tile you could reach before is still reached (no street, door or person cut off)
+BLOCKS = set(json.load(open(os.path.join(ROOT, 'data', 'rules.json'), encoding='utf-8'))['data']['tiles']['block'])
+SOLID = ('crate', 'barrel', 'stall', 'table', 'lamp', 'signpost', 'wsign')
+doors = {tuple(o['door']) for o in Z['objects'] if o.get('door')}
+def reach(T):
+    W, H = len(T[0]), len(T); x0, y0 = next((x, y) for y in range(H) for x in range(W) if T[y][x] == 'c'); seen = {(x0, y0)}; st = [(x0, y0)]
+    while st:
+        x, y = st.pop()
+        for dx, dy in D4:
+            u, v = x + dx, y + dy
+            if 0 <= u < W and 0 <= v < H and (u, v) not in seen and T[v][u] not in BLOCKS: seen.add((u, v)); st.append((u, v))
+    return seen
+T = [list(r) for r in Z['tiles']]; R0 = reach(T); nsolid = 0
+for o in sorted(Z['objects'], key=lambda o: (o['y'], o['x'])):
+    if o['k'] not in SOLID or o.get('w', 1) * o.get('h', 1) > 1: continue
+    x, y = o['x'] - OX, o['y'] - OY
+    if not (0 <= y < len(T) and 0 <= x < len(T[0])) or T[y][x] in BLOCKS or T[y][x] in ('B', 'c') or (o['x'], o['y']) in doors or (o['x'], o['y']) in NPCAT: continue
+    was = T[y][x]; T[y][x] = 'X'
+    if reach(T) != R0 - {(x, y)}: T[y][x] = was; continue
+    R0 = R0 - {(x, y)}; nsolid += 1
+Z['tiles'] = [''.join(r) for r in T]
+print('saltmere: %d props made solid' % nsolid)
 with open(ZP, 'w', encoding='utf-8') as f:
     json.dump(J, f, separators=(',', ':'), ensure_ascii=False)
 from collections import Counter

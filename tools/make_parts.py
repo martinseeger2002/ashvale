@@ -70,7 +70,7 @@ part('body.human', 'body',
      headScale="small ? 1.25 : 1", rootScale="(small ? 0.7 : big ? 1.08 : 1)*(1-0.04*fem)", height=1.86,
      segments=[
          dict(cyl("0.205*W*(1-0.2*fem)", "0.168*W*(1-0.08*fem)", 0.5, "$skin", 0, 0.25, 0, seg=9, k=[1, 1, 0.62]), name="torso", j="torso"),
-         dict(sph(0.062, "$skin", 0.06, 0.335, 0.058, 10, 8, k=[1.05, 0.82, 0.62], mirror=True, **{"if": "fem"}), name="bust", j="torso"),
+         # no bust shape: on the flat-shaded torso any bump read badly (2026-10-21 playtest: "change the tits?") - a woman is her narrower shoulders and wider hips
          dict(sph(0.06, "$skin", 0, 0.53, 0, 8, 6), name="neck", j="torso"),
          dict(cyl("0.17*W*(1+0.14*fem)", "0.16*W*(1+0.22*fem)", 0.16, "#5a4630", 0, -0.03, 0, seg=9, k=[1, 1, 0.7]), name="pelvis", j="hips"),
          dict(sph(0.075, "$skin", 0, 0, 0, 8, 6), name="shoulder", j="sh*"),
@@ -112,6 +112,15 @@ part('cloth.hair_mohawk', 'cloth', slot='hair', style='mohawk', shapes=[dict(box
 part('cloth.hair_curly', 'cloth', slot='hair', style='curly', shapes=[dict(hair_cap, j="head")] + [
      dict(sph(0.05, "$hair", round(math.sin(-1.4 + i * 0.47) * 0.13, 4), round(0.23 + 0.03 * math.cos(-1.4 + i * 0.47), 4), round(math.cos(-1.4 + i * 0.47) * 0.1 - 0.04, 4), 6, 5), j="head") for i in range(7)])
 part('cloth.hair_bald', 'cloth', slot='hair', style='bald', shapes=[])
+# more styles for the creator (2026-10-21 playtest: "get styles"): pigtails, a braid down the back, a side sweep
+part('cloth.hair_pigtails', 'cloth', slot='hair', style='pigtails', shapes=[dict(hair_cap, j="head")] + [
+     dict(cap(0.035, 0.16, "$hair", sx * 0.14, 0.05, -0.06, r=[0.25, 0, sx * 0.35]), j="head") for sx in (1, -1)] + [
+     dict(sph(0.03, "$hair:0.7", sx * 0.13, 0.17, -0.06, 6, 5), j="head") for sx in (1, -1)])
+part('cloth.hair_braid', 'cloth', slot='hair', style='braid', shapes=[dict(hair_cap, j="head")] + [
+     dict(sph(0.042 - 0.004 * i, "$hair" if i % 2 == 0 else "$hair:0.85", 0, round(0.12 - 0.075 * i, 3), round(-0.16 - 0.012 * i, 3), 7, 5, k=[1, 1.15, 0.9]), j="head") for i in range(5)] + [
+     dict(sph(0.02, "$hair:0.6", 0, -0.22, -0.21, 6, 4), j="head")])
+part('cloth.hair_swept', 'cloth', slot='hair', style='swept', shapes=[dict(hair_cap, j="head"),
+     dict(sph(0.1, "$hair", 0.06, 0.24, 0.05, 10, 6, k=[1.3, 0.55, 1.05], r=[0.1, 0, -0.35]), j="head")])
 part('cloth.beard_full', 'cloth', slot='beard', style='full', shapes=[dict(sph(0.118, "$beard", 0, 0.04, 0.035, 10, 7, k=[1, 0.86, 0.9]), j="head"),
      dict(box(0.1, 0.02, 0.02, "$beard", 0, 0.083, 0.13), j="head"), dict(box(0.05, 0.012, 0.012, "$skin:0.6", 0, 0.064, 0.137), j="head")])
 part('cloth.beard_goatee', 'cloth', slot='beard', style='goatee', shapes=[dict(box(0.05, 0.07, 0.04, "$beard", 0, 0.02, 0.11), j="head")])
@@ -219,10 +228,14 @@ C = "$c"
 part('cloth.shirt_tunic', 'cloth', slot='shirt', style='tunic', paint={"torso": C, "bust": C, "shoulder": C, "upperArm": C},
      shapes=[dict(cyl("0.176*W*(1+0.16*fem)", "0.2*W*(1+0.18*fem)", 0.2, C, 0, -0.08, 0, seg=9, k=[1, 1, 0.72]), j="hips")])
 part('cloth.shirt_shirt', 'cloth', slot='shirt', style='shirt', paint={"torso": C, "bust": C, "shoulder": C, "upperArm": C, "lowerArm": C})
-part('cloth.shirt_vest', 'cloth', slot='shirt', style='vest', paint={"torso": C, "bust": C}, shapes=[dict(box(0.07, 0.3, 0.02, "$skin", 0, 0.36, 0.105), j="torso")])
+part('cloth.shirt_jerkin', 'cloth', slot='shirt', style='jerkin', paint={"torso": C, "bust": C, "shoulder": C, "upperArm": "$c:1.25", "lowerArm": "$c:1.25"},   # a laced jerkin over a lighter shirt (2026-10-21)
+     shapes=[dict(cyl("0.172*W*(1+0.14*fem)", "0.19*W*(1+0.16*fem)", 0.1, "$c:0.75", 0, -0.04, 0, seg=9, k=[1, 1, 0.72]), j="hips")] + [
+     dict(box(0.06, 0.012, 0.01, "$leather", 0, round(0.2 + 0.07 * i, 3), "0.12-0.016*fem"), j="torso") for i in range(4)])
+part('cloth.shirt_vest', 'cloth', slot='shirt', style='vest', paint={"torso": C, "bust": C}, shapes=[dict(box(0.07, 0.3, 0.02, "$skin", 0, 0.36, 0.105), j="torso", **{"if": "!fem"})])   # the open front: men only (it stood proud of a woman's narrower torso)
 part('cloth.shirt_robe', 'cloth', slot='shirt', style='robe', tags=["robeTop"], paint={"torso": C, "bust": C, "shoulder": C, "upperArm": C, "lowerArm": C},
      shapes=[dict(cyl(0.07, 0.085, 0.12, C, 0, -0.2, 0, seg=8), j="el*"), dict(cyl("0.18*W*(1+0.16*fem)", "0.26*W*(1+0.1*fem)", 0.78, C, 0, -0.4, 0, seg=10, k=[1, 1, 0.75]), j="hips")])
 part('cloth.pants_trousers', 'cloth', slot='pants', style='trousers', paint={"pelvis": C, "thigh": C, "shin": C})
+part('cloth.pants_breeches', 'cloth', slot='pants', style='breeches', paint={"pelvis": C, "thigh": C, "shin": "#e2dccb"})   # knee breeches and pale hose (2026-10-21)
 part('cloth.pants_shorts', 'cloth', slot='pants', style='shorts', paint={"pelvis": C, "thigh": C})
 part('cloth.pants_skirt', 'cloth', slot='pants', style='skirt', paint={"pelvis": C}, shapes=[dict(cyl("0.18*W*(1+0.16*fem)", "0.25*W*(1+0.1*fem)", 0.42, C, 0, -0.22, 0, seg=10, k=[1, 1, 0.75]), j="hips")])
 part('cloth.pants_robe', 'cloth', slot='pants', style='robe', paint={"pelvis": C, "thigh": C, "shin": C}, shapes=[dict(cyl("0.18*W*(1+0.16*fem)", "0.26*W*(1+0.1*fem)", 0.78, C, 0, -0.4, 0, seg=10, k=[1, 1, 0.75]), j="hips")])
@@ -326,7 +339,7 @@ part('gear.mace', 'gear', slot='weapon', family='metal', items="mace_t{t}", tier
              ring(0.044, 0.035, "$tier:0.8", 0, 0.3, 0), cyl("0.055+0.004*t", "0.055+0.004*t", 0.14, T, 0, 0.38, 0, seg=8)] + MACE_FLANGES +
             [ring("0.055+0.004*t", 0.03, "$gold", 0, "0.455", 0, **{"if": "t>=4"})])
 part('gear.staff', 'gear', slot='weapon', family='cloth', items="staff_t{t}", tiers=[1, 5], attack='cast',
-     mount={"j": "handR"}, ground={"p": [0, 0.05, 0], "r": [-PI / 2, 0, 0]},
+     mount={"j": "handR", "p": [0, 0, 0.06], "r": [0.32, 0, 0]}, ground={"p": [0, 0.05, 0], "r": [-PI / 2, 0, 0]},   # the mount: forward of the forearm and tilted out - on the arm's own axis it ran inside it (2026-10-21 playtest)
      shapes=[cyl(0.025, 0.03, 1.5, "#6b4a2b", 0, 0.12, 0, seg=6), box(0.07, 0.16, 0.07, T, 0, 0.6, 0),
              cyl(0.05, 0.03, 0.12, "#5a3d22", 0, 0.84, 0, seg=6, **{"if": "t<4"}), cyl(0.05, 0.03, 0.12, "$gold", 0, 0.84, 0, seg=6, **{"if": "t>=4"}),
              ico("0.07+0.008*t", T, 0, 0.95, 0, 1, name="tip", **{"if": "t<3"}), ico("0.07+0.008*t", T, 0, 0.95, 0, 1, name="tip", glow=True, **{"if": "t>=3"})])
@@ -462,7 +475,7 @@ part('gear.ghostlight', 'gear', slot='head', items={"ghostlight": "#9fe0ff"}, mo
              box(0.028, 0.026, 0.014, "$c:1.15", 0.047, 0.152, 0.138, glow=True, mirror=True),
              ring(0.135, 0.008, "$c", 0, 0.315, -0.01, glow=True, shadow=False)])
 part('gear.staff_verdant', 'gear', slot='weapon', items={"staff_verdant": "#3fe08a"}, attack='cast',
-     mount={"j": "handR"}, ground={"p": [0, 0.05, 0], "r": [-PI / 2, 0, 0]},
+     mount={"j": "handR", "p": [0, 0, 0.06], "r": [0.32, 0, 0]}, ground={"p": [0, 0.05, 0], "r": [-PI / 2, 0, 0]},
      shapes=[cyl(0.025, 0.032, 1.5, "$wood", 0, 0.12, 0, seg=6), sph(0.045, "$wood:0.8", 0, 0.52, 0.02, 8, 6),
              cyl(0.05, 0.032, 0.13, "#3a3040", 0, 0.845, 0, seg=6),
              cone(0.02, 0.11, "#3a3040", 0.055, 0.9, 0, seg=4, r=[0, 0, -0.5], mirror=True),
@@ -471,7 +484,7 @@ part('gear.staff_verdant', 'gear', slot='weapon', items={"staff_verdant": "#3fe0
 # Frost staff (v0.4 effects): pale ash shaft, silver collar, an ice crystal cluster on top, so it reads apart from the
 # verdant and tier staffs at a glance. Its freeze is data (items.json effects), the look is only this part.
 part('gear.staff_frost', 'gear', slot='weapon', items={"staff_frost": "#9fd8ff"}, attack='cast',
-     mount={"j": "handR"}, ground={"p": [0, 0.05, 0], "r": [-PI / 2, 0, 0]},
+     mount={"j": "handR", "p": [0, 0, 0.06], "r": [0.32, 0, 0]}, ground={"p": [0, 0.05, 0], "r": [-PI / 2, 0, 0]},
      shapes=[cyl(0.024, 0.03, 1.5, "#c9c2b4", 0, 0.12, 0, seg=6), box(0.06, 0.12, 0.06, "#7f8ea0", 0, 0.6, 0),
              cyl(0.052, 0.03, 0.1, "#d8dde6", 0, 0.835, 0, seg=6),
              cone(0.045, 0.24, C, 0, 1.0, 0, seg=5, name="tip", glow=True),
@@ -481,7 +494,7 @@ part('gear.staff_frost', 'gear', slot='weapon', items={"staff_frost": "#9fd8ff"}
 # Each its own look, read apart from the tier weapons at a glance; their effects are data (items.json), the look only this.
 # Ember staff: charred blackwood, an iron collar, a burning tip - a hot core inside three licking flames.
 part('gear.staff_ember', 'gear', slot='weapon', items={"staff_ember": "#ff7a1a"}, attack='cast',
-     mount={"j": "handR"}, ground={"p": [0, 0.05, 0], "r": [-PI / 2, 0, 0]},
+     mount={"j": "handR", "p": [0, 0, 0.06], "r": [0.32, 0, 0]}, ground={"p": [0, 0.05, 0], "r": [-PI / 2, 0, 0]},
      shapes=[cyl(0.025, 0.031, 1.5, "#2e2420", 0, 0.12, 0, seg=6), box(0.062, 0.1, 0.062, "#4a3a32", 0, 0.58, 0),
              cyl(0.052, 0.032, 0.11, "#5d5a57", 0, 0.84, 0, seg=6),
              cone(0.016, 0.09, "#5d5a57", 0.05, 0.9, 0, seg=4, r=[0, 0, -0.55], mirror=True),
@@ -491,7 +504,7 @@ part('gear.staff_ember', 'gear', slot='weapon', items={"staff_ember": "#ff7a1a"}
              cone(0.028, 0.12, "$c:0.8", -0.03, 0.96, -0.02, seg=5, r=[0.2, 0, 0.35], glow=True)])
 # Storm staff: dark iron shaft, a brass cage of three prongs round a pale blue crackling crystal, a spark off each prong.
 part('gear.staff_storm', 'gear', slot='weapon', items={"staff_storm": "#8fc8ff"}, attack='cast',
-     mount={"j": "handR"}, ground={"p": [0, 0.05, 0], "r": [-PI / 2, 0, 0]},
+     mount={"j": "handR", "p": [0, 0, 0.06], "r": [0.32, 0, 0]}, ground={"p": [0, 0.05, 0], "r": [-PI / 2, 0, 0]},
      shapes=[cyl(0.023, 0.03, 1.5, "#3d4148", 0, 0.12, 0, seg=6), box(0.058, 0.14, 0.058, "#c9a43a", 0, 0.6, 0),
              cyl(0.05, 0.03, 0.09, "#c9a43a", 0, 0.83, 0, seg=6),
              cone(0.012, 0.2, "#c9a43a", 0.05, 0.95, 0, seg=4, r=[0, 0, 0.18], mirror=True),
@@ -549,7 +562,7 @@ part('gear.bow_evenflight', 'gear', slot='weapon', items={"bow_evenflight": "#32
 
 # Stillwind is slower than a plain staff: two silver gyres hold a bright, motionless core that can briefly stun a target.
 part('gear.staff_stillwind', 'gear', slot='weapon', items={"staff_stillwind": "#8edff2"}, attack='cast',
-     mount={"j": "handR"}, ground={"p": [0, 0.05, 0], "r": [-PI / 2, 0, 0]},
+     mount={"j": "handR", "p": [0, 0, 0.06], "r": [0.32, 0, 0]}, ground={"p": [0, 0.05, 0], "r": [-PI / 2, 0, 0]},
      shapes=[cyl(0.024, 0.031, 1.5, "#8a9ba5", 0, 0.12, 0, seg=7),
              cyl(0.05, 0.032, 0.12, "#c7d0d6", 0, 0.81, 0, seg=8),
              S('torus', [0.105, 0.012], "#dce5e9", [0, 0.98, 0], seg=[6, 14], r=[PI / 2, 0, 0]),

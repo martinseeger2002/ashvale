@@ -116,6 +116,9 @@
 .ash .dlg .ln{font-size:14px;font-weight:600;line-height:1.35}
 .ash .dlg .go{color:#00c;font-size:12px;margin-top:6px}
 .ash .dlg .go .btn{margin:4px 4px 0;cursor:pointer}
+.ash .tutgoal{position:absolute;left:calc((100% - 300px) / 2);top:10px;transform:translateX(-50%);width:max-content;max-width:min(520px,calc(100vw - 340px));padding:8px 16px;background:linear-gradient(#d8c8a0,#c4b386);box-shadow:inset 0 0 0 2px #8a7650,0 3px 8px #000a;color:#000;font:600 14px/1.35 "Trebuchet MS",Verdana,sans-serif;text-align:center;z-index:40;pointer-events:none;display:none}
+.ash .tutgoal b{color:#801}.ash .tutgoal .st{color:#5a4428;font-size:12px}.ash .tutgoal .ok{color:#1e6a10;font-size:16px}
+@media (max-width:700px),(max-height:520px){.ash .tutgoal{left:8px;right:calc(var(--mm) + var(--tab) + 22px);transform:none;width:auto;max-width:none;padding:6px 10px;font-size:13px}}
 .ash .ctx{position:absolute;display:none;min-width:150px;padding:2px;background:#5d5447;border:1px solid #000;box-shadow:0 2px 8px #000b;border-radius:3px;z-index:9}
 .ash .ctx .h{background:#000;color:#5d5447;padding:2px 6px;font-size:12px}
 .ash .ctx div.opt{padding:5px 8px;color:#fff;cursor:pointer;white-space:nowrap;font-size:13px}
@@ -221,7 +224,7 @@
   const ICON = {
     combat: SV('M4 3l9 9-2 2 2 2 2-2 2 2-2 2 3 3 2-2-3-3 2-2-2-2-2 2-2-2 9-9-3 0-8 8-8-8z', '#d9c9a0'),
     skills: SV('M3 20h3V12H3zm5 0h3V6H8zm5 0h3V9h-3zm5 0h3V3h-3z', '#7fd06a'),
-    quest: SV('M5 3h11l3 3v15H5z M8 8h8M8 12h8M8 16h5', '#e8dcb0'),
+    quest: SV('M6 4h12v16H6z M4 3.5a1.5 1.5 0 011.5-1.5h13a1.5 1.5 0 010 3h-13A1.5 1.5 0 014 3.5z M4 20.5a1.5 1.5 0 011.5-1.5h13a1.5 1.5 0 010 3h-13A1.5 1.5 0 014 20.5z M8.5 9h7M8.5 12h7M8.5 15h5', '#e8dcb0'),   // a scroll, rolled top and bottom (2026-10-21 playtest: the tutorial calls it the scroll)
     friends: SV('M8 11a3 3 0 100-6 3 3 0 000 6zM2 19c0-3 2.5-5 6-5s6 2 6 5M16 11a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM14 14c2.8 0 6 1.6 6 4.5', '#7dcea0'),
     wallet: SV('M3 7h16v12H3z M3 7l3-3h11v3 M15 12h4v3h-4z', '#e8b54a'),
     inv: SV('M7 7c0-3 2-4 5-4s5 1 5 4h2l1 14H4L5 7zm2 0h6c0-2-1-2-3-2S9 5 9 7z', '#b8874a'),

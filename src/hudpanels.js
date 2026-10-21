@@ -136,6 +136,7 @@
         for (const r of F.rows || []) h += '<button class="frnd' + (r.online ? ' on' : '') + '" data-tag="' + A.esc(r.tag) + '">' + A.esc(r.tag) + '</button>';
         h += '</div>';
         if (!(F.rows || []).length && !F.note) h += '<div class="info">Looking up your contacts…</div>';
+        h += '<div class="info" style="margin-top:6px">To add a friend, right-click (or press and hold) another player and choose <b>Add friend</b>. Click a name to send them a message.</div>';
         panel.innerHTML = h;
         for (const b of panel.querySelectorAll('.frnd')) b.onclick = () => { if (K.promptSay) K.promptSay('/@' + b.dataset.tag + ' '); };
       } else if (ST.tab === 'prayer') {

@@ -1446,6 +1446,12 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.hair_braid": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.hair_braids": {
     "id": null,
     "v": 1,
@@ -1488,6 +1494,12 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.hair_pigtails": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.hair_ponytail": {
     "id": null,
     "v": 1,
@@ -1495,6 +1507,12 @@
     "kind": "json"
    },
    "cloth.hair_short": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "cloth.hair_swept": {
     "id": null,
     "v": 1,
     "api": 1,
@@ -1620,6 +1638,12 @@
     "api": 1,
     "kind": "json"
    },
+   "cloth.pants_breeches": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
    "cloth.pants_buckskinskirt": {
     "id": null,
     "v": 1,
@@ -1681,6 +1705,12 @@
     "kind": "json"
    },
    "cloth.shirt_buckskin": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "cloth.shirt_jerkin": {
     "id": null,
     "v": 1,
     "api": 1,

@@ -68,7 +68,7 @@
     /* ---------- saves: arcade.storage inside an arcade viewer (inscribed pages have NO localStorage, it throws),
        else this browser's localStorage, else memory only. Reads come from a cache filled before start(); writes go
        through and never throw (setItem rejects outside a viewer). */
-    const STORE_KEYS = ['ashvale3d.save.v1', 'ashvale3d.settings.v1', 'ashvale3d.help', 'ashvale3d.music.v1'];   /* music.v1 (src/engmusic.js: on/off, volume, mode, unlocked tracks): it was written but never read back, so every visit began with the music on at 60% (2026-10-18) */
+    const STORE_KEYS = ['ashvale3d.save.v1', 'ashvale3d.settings.v1', 'ashvale3d.help', 'ashvale3d.music.v1', 'ashvale3d.friends.v1'];   /* friends.v1: the players you added in the game (FRIENDS LIST) */   /* music.v1 (src/engmusic.js: on/off, volume, mode, unlocked tracks): it was written but never read back, so every visit began with the music on at 60% (2026-10-18) */
     function memoryStore(cache, backend, S) {
       cache = cache || {}; let warned = false;
       const warn = e => { if (!warned) { warned = true; console.warn('ASHVALE: saving failed (' + (e && e.message || e) + '); progress is kept until you close the page.'); } };
@@ -517,7 +517,7 @@
       minimapFor();
 
       /* ---------- characters */
-      const ents = new Map(), proxies = [];
+      const ents = new Map(), proxies = [], SOLO = new Set();   /* SOLO: who the character creator hid */
       const proxyMat = new THREE.MeshBasicMaterial({ visible: false });
       const blobGeo = new THREE.CircleGeometry(0.42, 12).rotateX(-PI / 2), blobMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false });
       function gearOf(p) { const g = {}; for (const k of ['head', 'cape', 'pack', 'body', 'legs', 'weapon', 'shield', 'ammo', 'feet', 'ring']) g[k] = p.eq[k] ? p.eq[k].id : null; return g; }
@@ -750,7 +750,7 @@
       let tutBox = null, tutArrow = null, tutEdge = null, tutLast = '', tutStep = -1, tutCheer = 0, tutTree = null, tutTreeT = 0;
       function tutorialGuide(now) {
         if (!TUTR || !me || !me.tut) { if (tutBox) tutBox.style.display = 'none'; if (tutArrow) tutArrow.visible = false; if (tutEdge) tutEdge.style.display = 'none'; return; }
-        if (!tutBox) { tutBox = document.createElement('div'); tutBox.className = 'tutgoal'; tutBox.style.cssText = 'position:absolute;left:calc((100% - 300px) / 2);top:10px;transform:translateX(-50%);width:max-content;max-width:min(520px,calc(100vw - 340px));padding:8px 16px;background:rgba(36,26,16,.93);border:2px solid #d0a040;border-radius:9px;color:#ffe9a8;font:600 14px/1.35 "Trebuchet MS",Verdana,sans-serif;text-align:center;z-index:40;pointer-events:none;box-shadow:0 3px 12px #000b';
+        if (!tutBox) { tutBox = document.createElement('div'); tutBox.className = 'tutgoal stone';   /* styled like the quest dialogue (hudart.js .tutgoal; 2026-10-21 playtest: "the steps on mobile are styled terrible") */
           (document.querySelector('.ash') || document.body).appendChild(tutBox); }
         if (!tutArrow) { tutArrow = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.66, 4), new THREE.MeshBasicMaterial({ color: 0xffc030 })); tutArrow.rotation.x = Math.PI; scene.add(tutArrow); }
         const Q = D.quests.quests[TUTR.quest], q = me.quests && me.quests[TUTR.quest], st = q && Q && Q.steps[q.step - 1], stepNow = q ? q.step : 0;
@@ -763,7 +763,7 @@
         if (!q) { text = 'Click <b>Guide Elsbeth</b> - under the gold arrow - to talk to her, then choose <b>Yes</b>.'; tgt = npc('tut_guide'); }
         else if (st) {
           const g = st.goal, need = g.n == null ? 1 : g.n, met = (q.n | 0) >= need, ends = st.ends || Q.giver;
-          if (met && !g.talk) { text = 'Done! Now go back and talk to <b>' + nm(ends) + '</b>.'; tgt = npc(ends); }
+          if (met && !g.talk) { text = 'Well done, that part is finished! Now go back and talk to <b>' + nm(ends) + '</b>.'; tgt = npc(ends); }
           else {
             text = st.hint || (st.progress || [''])[0];
             if (g.talk) tgt = npc(g.talk);
@@ -779,12 +779,12 @@
               else if (g.do === 'ranged' || g.do === 'magic') { let bd = 1e9; for (const m of core.S.mobs) if (m.key === 'tut_rat' && !m.dead) { const d = (m.x - me.x) ** 2 + (m.y - me.y) ** 2; if (d < bd) { bd = d; tgt = m; } } up = 1.6; }
             }
           }
-          text = '<span style="color:#c8b080;font-size:12px">Step ' + q.step + ' of ' + Q.steps.length + '</span><br>' + text;
+          text = '<span class="st">Step ' + q.step + ' of ' + Q.steps.length + '</span><br>' + text;
         }
-        if (now < tutCheer) text = '<span style="color:#a8f080;font-size:16px">Great job! &#10004;</span><br>' + text;
+        if (now < tutCheer) text = '<span class="ok">Great job! &#10004;</span><br>' + text;
         if (text !== tutLast) { tutBox.innerHTML = text; tutLast = text; }
-        tutBox.style.display = text ? 'block' : 'none';
-        if (tgt) { const x = tgt.x + 0.5, z = tgt.y + 0.5; tutArrow.position.set(x, heightAt(x, z) + up + Math.sin(now / 220) * 0.18, z); tutArrow.rotation.y = now / 600; tutArrow.visible = true; } else tutArrow.visible = false;
+        tutBox.style.display = text && cam.mode !== 'creator' ? 'block' : 'none';   /* not over the character creator */
+        if (tgt) { const x = tgt.x + 0.5, z = tgt.y + 0.5; tutArrow.position.set(x, heightAt(x, z) + up + Math.sin(now / 220) * 0.18, z); tutArrow.rotation.y = now / 600; tutArrow.visible = cam.mode !== 'creator'; } else tutArrow.visible = false;
         /* off the screen? a big gold pointer at the edge, aimed at it, so there is always something to follow */
         if (!tutEdge) { tutEdge = document.createElement('div'); tutEdge.style.cssText = 'position:absolute;z-index:39;pointer-events:none;color:#ffc030;font:900 44px/1 sans-serif;text-shadow:0 0 6px #000,0 0 2px #000;display:none;text-align:center';
           tutEdge.innerHTML = '<div class="a">&#10148;</div><div style="font:700 12px/1.2 Trebuchet MS,sans-serif;color:#ffe9a8;margin-top:2px">walk this way</div>'; (document.querySelector('.ash') || document.body).appendChild(tutEdge); }
@@ -798,7 +798,7 @@
             tutEdge.firstChild.style.transform = 'rotate(' + Math.atan2(dy, dx) + 'rad)'; edge = true;
           }
         }
-        tutEdge.style.display = edge ? 'block' : 'none';
+        tutEdge.style.display = edge && cam.mode !== 'creator' ? 'block' : 'none';
       }
 
       /* your snares where you set them (core setTrap; 2026-10-09): only yours are drawn, a nagwaagan on the ground */
@@ -1774,6 +1774,7 @@
           /* their own levels as their game sent them; not here yet (2026-10-07: a first look showed every skill at 1, a blank copy):
              ask their game for them and open the panel when they come */
           o.push({ html: 'View stats ' + nm, fn: () => { if (r.skills) { hud.playerStats(label(r.name, r.from), r.skills, cb, r.story); return; } hud.chat('Asking ' + label(r.name, r.from) + ' for their stats\u2026', 'sys'); r.wantStats = { at: Date.now(), name: label(r.name, r.from), cb }; netSend({ GQ: 1 }); } });
+          if (room && !room.me.guest && r.from && r.from.address && r.from.tag && !r.from.guest) o.push(isFriend(r.from.address) ? { html: 'Remove friend ' + nm, fn: () => setFriend(r.from, false) } : { html: 'Add friend ' + nm, fn: () => setFriend(r.from, true) });
           o.push({ html: 'Examine ' + nm, fn: () => hud.chat(label(r.name, r.from) + ': another adventurer on the arcade.', 'sys') });
           return o;
         }
@@ -3061,6 +3062,10 @@
         for (const r of regions) if (r.built) r.built.update(dt, tSec);
         if (PAD && !(LR && LR.playing()) && !(GF && GF.playing())) PAD.poll(now, dt);   /* the Lily Run reads the pad itself */
         updateCamera(dt);
+        /* the character creator is a room of your own (2026-10-21 playtest: "view is blocked by an npc", "if 2 people start at the same time they
+           can't see their character"): while it is open everyone else - people, monsters, other players, pets - is hidden, and comes back after */
+        if (cam.mode === 'creator') { for (const e of ents.values()) if (e !== myEnt && e.root.visible) { e.root.visible = false; SOLO.add(e); } if (tutArrow) tutArrow.visible = false; }
+        else if (SOLO.size) { for (const e of SOLO) if (ents.get(e.key) === e) e.root.visible = true; SOLO.clear(); }
         /* overlays: splats, HP bars, name tags */
         const tagSpots = [];
         for (const e of ents.values()) {
@@ -3197,34 +3202,49 @@
       async function reportBook() {
         if (!(G.parent && G.parent !== G) || !/^https?:/.test(location.protocol) || stopped) return;
         if (!(G.arcade && G.arcade.contacts)) await new Promise(ok => { const s = G.document.createElement('script'); s.src = '/r/contacts.js'; s.onload = s.onerror = () => ok(); G.document.head.appendChild(s); setTimeout(ok, 8000); });
-        if (!(G.arcade && G.arcade.contacts)) return;
-        let L = []; try { L = await G.arcade.contacts.list(); } catch (e) { return; }
-        const addrs = (Array.isArray(L) ? L : []).map(c => c && c.address).filter(a => typeof a === 'string' && a.length >= 25);
+        let L = []; try { L = G.arcade && G.arcade.contacts ? await G.arcade.contacts.list() : []; } catch (e) { L = []; }
+        const addrs = Array.from(new Set((Array.isArray(L) ? L : []).map(c => c && c.address).concat(FRIENDS.map(f => f.a)).filter(a => typeof a === 'string' && a.length >= 25)));   /* the Bank tells you who of these is playing */
         if (!addrs.length) return;
         const R = await bankRoom(); if (!R || !R.me || R.me.guest) return;
         for (let i = 0; i < addrs.length; i += 10) { R.send({ t: 'book', v: 1, a: addrs.slice(i, i + 10) }); await new Promise(ok => setTimeout(ok, 400)); }
       }
-      /* FRIENDS LIST: wallet contacts who also have an Ashvale save. Green when their game said where they stand
-         recently; red otherwise. Clicking a name fills /@tag in the chat box. */
+      /* FRIENDS LIST: wallet contacts who also have an Ashvale save, and the players you added in the game (right-click a player: Add friend;
+         2026-10-21 playtest: "able to add in game friends"), kept in 'ashvale3d.friends.v1' as [{a: address, tag}]. Green when their game said
+         where they stand recently (or they are in sight now); red otherwise. Clicking a name fills /@tag in the chat box. */
       const PALS = { tags: new Map(), on: new Map(), rows: [], note: '', q: 0, wait: 0 };
+      let FRIENDS = []; try { const F = JSON.parse(store.get('ashvale3d.friends.v1') || '[]'); if (Array.isArray(F)) FRIENDS = F.filter(f => f && typeof f.a === 'string' && f.a.length >= 25 && f.tag).slice(0, 200); } catch (e) { FRIENDS = []; }
+      const isFriend = a => FRIENDS.some(f => f.a === a);
+      function setFriend(from, on) {
+        const a = from && from.address, tag = from && from.tag ? String(from.tag).replace(/^@/, '') : ''; if (!a || !tag) return;
+        FRIENDS = FRIENDS.filter(f => f.a !== a); if (on) FRIENDS.push({ a, tag });
+        store.set('ashvale3d.friends.v1', JSON.stringify(FRIENDS));
+        hud.chat(on ? '@' + tag + ' is now on your friends list (the Friends tab).' : '@' + tag + ' is off your friends list.', 'sys');
+        if (on) { PALS.tags.set(a, tag); PALS.on.set(a, true); } else if (!PALS.book || !PALS.book.has(a)) { PALS.tags.delete(a); PALS.on.delete(a); }
+        PALS.rows = palRows(); if (PALS.rows.length) PALS.note = '';
+        if (hud.tab === 'friends') hud.refresh('friends');
+        reportBook().then(() => loadPals()).catch(() => {});
+      }
+      function palRows() {
+        const seen = new Set(Array.from(remotes.values()).map(r => r.from && r.from.address).filter(Boolean)), rows = [];
+        for (const [a, tag] of PALS.tags) if (PALS.on.has(a) || isFriend(a)) rows.push({ tag, online: !!PALS.on.get(a) || seen.has(a), game: isFriend(a) });
+        return rows.sort((a, b) => (b.online - a.online) || a.tag.localeCompare(b.tag));
+      }
       function palsHeard(d) {
         if (String(d.q || '') !== String(PALS.q)) return;
         for (const row of d.p || []) if (row && PALS.tags.has(row[0])) PALS.on.set(row[0], !!row[1]);
         PALS.wait--; if (PALS.wait > 0) return;
-        const rows = [];
-        for (const [a, tag] of PALS.tags) if (PALS.on.has(a)) rows.push({ tag, online: PALS.on.get(a) });
-        rows.sort((a, b) => (b.online - a.online) || a.tag.localeCompare(b.tag));
-        PALS.rows = rows; PALS.note = rows.length ? '' : 'None of your contacts have an Ashvale save yet.';
+        const rows = palRows();
+        PALS.rows = rows; PALS.note = rows.length ? '' : 'None of your contacts have an Ashvale save yet. Right-click another player and choose Add friend.';
         if (hud.tab === 'friends') hud.refresh('friends');
       }
       async function loadPals() {
-        if (!(G.parent && G.parent !== G) || !/^https?:/.test(location.protocol)) { PALS.note = 'Sign in on the arcade to see your contacts.'; PALS.rows = []; return; }
+        if (!(G.parent && G.parent !== G) || !/^https?:/.test(location.protocol)) { PALS.tags = new Map(FRIENDS.map(f => [f.a, f.tag])); PALS.rows = palRows(); PALS.note = PALS.rows.length ? '' : 'Sign in on the arcade to see your contacts.'; return; }
         if (!(G.arcade && G.arcade.contacts)) await new Promise(ok => { const s = G.document.createElement('script'); s.src = '/r/contacts.js'; s.onload = s.onerror = () => ok(); G.document.head.appendChild(s); setTimeout(ok, 8000); });
-        if (!(G.arcade && G.arcade.contacts)) { PALS.note = 'Sign in on the arcade to see your contacts.'; PALS.rows = []; return; }
-        let L = []; try { L = await G.arcade.contacts.list(); } catch (e) { PALS.note = 'Could not read your contacts.'; PALS.rows = []; return; }
-        PALS.tags = new Map(); PALS.on = new Map();
-        for (const c of Array.isArray(L) ? L : []) if (c && typeof c.address === 'string' && c.address.length >= 25 && c.tag) PALS.tags.set(c.address, String(c.tag).replace(/^@/, ''));
-        if (!PALS.tags.size) { PALS.rows = []; PALS.note = 'Your address book is empty.'; if (hud.tab === 'friends') hud.refresh('friends'); return; }
+        let L = []; try { L = G.arcade && G.arcade.contacts ? await G.arcade.contacts.list() : []; } catch (e) { L = []; }
+        PALS.tags = new Map(); PALS.on = new Map(); PALS.book = new Set();
+        for (const c of Array.isArray(L) ? L : []) if (c && typeof c.address === 'string' && c.address.length >= 25 && c.tag) { PALS.tags.set(c.address, String(c.tag).replace(/^@/, '')); PALS.book.add(c.address); }
+        for (const f of FRIENDS) PALS.tags.set(f.a, f.tag);
+        if (!PALS.tags.size) { PALS.rows = []; PALS.note = 'No friends yet. Right-click another player and choose Add friend.'; if (hud.tab === 'friends') hud.refresh('friends'); return; }
         const R = await bankRoom(); if (!R || !R.me || R.me.guest) { PALS.note = 'Sign in to see which contacts play Ashvale.'; PALS.rows = []; return; }
         await reportBook().catch(() => {});
         const all = Array.from(PALS.tags.keys()); PALS.q = (PALS.q + 1) % 100000; PALS.wait = Math.ceil(all.length / 8);
