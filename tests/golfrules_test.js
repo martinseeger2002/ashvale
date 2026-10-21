@@ -51,4 +51,20 @@ const pt = R.shot(C, p0, { club: 'PT', aim: Math.PI, power: Math.sqrt(1.4 / R.PU
 console.log('short putt ends', pt.end.map(v => v.toFixed(2)), 'holed', pt.holed);
 const hard = R.shot(C, p0, { club: 'PT', aim: Math.PI, power: 1, impact: 0, spin: 'none', set: 'standard', pin: g.pin });
 ok(!hard.holed, 'a full-power putt from 1.2 m does not drop (too fast)');
+// The operator: a Tap in inside 10 ft (as the HUD shows feet: metres x yd x 3) drops for one stroke; farther it is a plain putt
+const ftm = 1 / (C.yd * 3), near = { x: g.pin[0] + 9.5 * ftm, y: g.pin[1] }, far = { x: g.pin[0] + 10.5 * ftm, y: g.pin[1] };
+const tp = s => R.shot(C, s, { club: 'PT', tap: 1, aim: Math.PI, power: 0.3, impact: 0, spin: 'none', set: 'standard', pin: g.pin });
+ok(R.canTap(C, near, g.pin) && tp(near).holed && tp(near).penalty === 0, 'a tap-in from 9.5 ft drops');
+ok(!R.canTap(C, far, g.pin) && !tp(far).holed, 'no tap-in from 10.5 ft (a plain putt instead)');
+ok(JSON.stringify(tp(near)) === JSON.stringify(tp(near)), 'a tap-in replays the same on every game');
+// 2026-10-20: struck on the centre line the ball flies straight; left of it (early, a negative impact) it bends right,
+// right of it (late) it bends left; the better the set, the less it bends
+const h1 = C.holes[0], t1 = { x: h1.pts[0][0], y: h1.pts[0][1] }, aim1 = Math.atan2(h1.pts[1][1] - t1.y, h1.pts[1][0] - t1.x);
+const side = (imp, set) => { const s = R.shot(C, t1, { club: '1W', aim: aim1, power: 0.9, impact: imp, spin: 'none', set, wind: [0, 0], pin: h1.pin }), q = s.path[s.path.length - 1];
+  return (q[0] - t1.x) * -Math.sin(aim1) + (q[1] - t1.y) * Math.cos(aim1); };   /* metres to the player's right */
+ok(Math.abs(side(0, 'standard')) < 0.05, 'on the centre line the drive flies straight (' + side(0, 'standard').toFixed(2) + ' m)');
+ok(side(-0.8, 'standard') > 1, 'struck left of centre it bends right (' + side(-0.8, 'standard').toFixed(1) + ' m)');
+ok(side(0.8, 'standard') < -1, 'struck right of centre it bends left (' + side(0.8, 'standard').toFixed(1) + ' m)');
+ok(Math.abs(side(0.8, 'master')) < Math.abs(side(0.8, 'pro')) && Math.abs(side(0.8, 'pro')) < Math.abs(side(0.8, 'standard')) && Math.abs(side(0.8, 'standard')) < Math.abs(side(0.8, 'starter')),
+  'the better the set, the less it bends: starter ' + ['starter', 'standard', 'pro', 'master'].map(k => Math.abs(side(0.8, k)).toFixed(1)).join(' > '));
 process.exit(fails ? 1 : 0);

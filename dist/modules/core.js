@@ -108,6 +108,14 @@
     /* town portals (2026-10-04): rules.portals, one standing-stone ring per town; use one to travel to another */
     const PORTALS = (RU.portals || []).filter(P => P && P.id && Array.isArray(P.to));
     const portalOf = id => PORTALS.find(P => P.id === id) || null;
+    /* [Claude 2026-10-20] a portal's `only` list (the Saltmere Links clubhouse - the operator: "only portal to and from Saltmere"):
+       it joins those portals alone, both ways; portals without one join each other */
+    const joins = (a, b) => !!a && !!b && a.id !== b.id && (!a.only || a.only.indexOf(b.id) >= 0) && (!b.only || b.only.indexOf(a.id) >= 0);
+    /* [Claude 2026-10-20] a `free` portal (Tutorial Island - the operator: "leave tutorial Island at any point in time and be teleported
+       to Ashvale. And the Ashvale town portal should have a portal to tutorial Island. Neither of these need attunement"): a hop to
+       or from it needs no attunement at either end, and it is no town to wake in */
+    const freeHop = (a, b) => !!(a && b && (a.free || b.free));
+    const canHop = (p, a, b) => joins(a, b) && (freeHop(a, b) || !!(p.attuned && p.attuned[a.id] && p.attuned[b.id]));
     /* where you wake after dying (2026-10-05: "instead of spawning in the spawn spot they should be brought to the town
        portal of the town that they were most recently in"): each portal's town is the zone it stands in; p.town = the last
        town zone you were in; the wake-up spot is that town's portal, else the old spawn (the Ashvale well) */
@@ -137,7 +145,7 @@
     function wakeSpot(p) { const P = p.town && !(homeOf(p) && homeOf(p).wake === 'home') ? portalOf(p.town) : null; return P ? { at: P.to, name: P.name } : { at: spawnOf(p), name: null }; }   /* a home with wake: 'home' always wakes you there (Ziibiing: your mother's wigwam) */
     function townCheck(p) {
       if (!M.zoneAt || (S.t + String(p.id).length) % 5) return;
-      if (!PORTAL_ZONE) { PORTAL_ZONE = {}; for (const P of PORTALS) { const z = LAZY ? zoneRectAt(P.x, P.y) : M.zoneAt(P.x, P.y); if (z) PORTAL_ZONE[z] = P.id; } }
+      if (!PORTAL_ZONE) { PORTAL_ZONE = {}; for (const P of PORTALS) { if (P.free) continue; const z = LAZY ? zoneRectAt(P.x, P.y) : M.zoneAt(P.x, P.y); if (z) PORTAL_ZONE[z] = P.id; } }
       const z = M.zoneAt(p.x, p.y), id = z && PORTAL_ZONE[z]; if (id && p.town !== id) p.town = id;
     }
     const M = worldMod().createWorld(D, opts.world);
@@ -936,7 +944,7 @@
           if (n > 0) { addItem(p, 'coins', n); ev({ e: 'inv', p: p.id }); }
           ev({ e: 'pkcash', p: p.id, s, n }); break; }
         case 'golfforfeit': if (p.gf && p.gf.s === String(c.s || '')) { p.gf = null; msg(p, 'You forfeit your stake on the round.', 'warn'); } break;
-        case 'portal': if (c.to === 'back') { const here = M.npcs.find(n => n.portal && cheb(p.x, p.y, n.x, n.y) <= 2), B = p.tp; if (here && B && !p.dead) { delete p.tp; teleport(p, { id: 'townportal', name: B.name, to: [B.x, B.y] }, 'You step back through your town portal, and it closes behind you.'); p.lv = B.lv | 0; } break; } else { const P = portalOf(c.to), here = M.npcs.find(n => n.portal && cheb(p.x, p.y, n.x, n.y) <= 2); if (P && here && here.portal !== P.id && !p.dead && p.attuned && p.attuned[P.id] && p.attuned[here.portal]) teleport(p, P, 'You step through the portal to ' + P.name + '.'); break; }
+        case 'portal': if (c.to === 'back') { const here = M.npcs.find(n => n.portal && cheb(p.x, p.y, n.x, n.y) <= 2), B = p.tp; if (here && B && !p.dead) { delete p.tp; teleport(p, { id: 'townportal', name: B.name, to: [B.x, B.y] }, 'You step back through your town portal, and it closes behind you.'); p.lv = B.lv | 0; } break; } else { const P = portalOf(c.to), here = M.npcs.find(n => n.portal && cheb(p.x, p.y, n.x, n.y) <= 2); if (P && here && !p.dead && canHop(p, portalOf(here.portal), P)) { if (p.tut && portalOf(here.portal).free) p.tut = 0;   /* off the island by its portal: the tutorial lets you go */ teleport(p, P, 'You step through the portal to ' + P.name + '.'); } break; }
         case 'perch': {   /* a hawk perches in a tree, on the side you tapped */
           if (!airborne(p)) break; const n = nodeAt(idx(c.x | 0, c.y | 0)); if (!n || nodeDef(n).skill !== 'woodcutting') break;
           p.path = findPath(p.x, p.y, (x, y) => x === n.x && y === n.y, n.x, n.y, 80); p.act = null; p.skilling = null;
@@ -980,7 +988,7 @@
       if (M.npcs.some(n => n.portal && (p.lv | 0) === 0 && cheb(p.x, p.y, n.x, n.y) <= 30)) { msg(p, 'You are in town already. The scroll keeps.', 'warn'); return; }
       let sx = p.x, sy = p.y;
       if (M.underAt && M.underAt(p.x, p.y) != null) { let best = null, bd = 1e9; for (const o of M.objects || []) if (o.k === 'caveexit' && o.to) { const d = cheb(o.x, o.y, p.x, p.y); if (d < bd) { bd = d; best = o; } } if (best) { sx = best.to[0]; sy = best.to[1]; } }
-      let P = null, pd = 1e18; for (const q of PORTALS) { const d = (q.to[0] - sx) ** 2 + (q.to[1] - sy) ** 2; if (d < pd) { pd = d; P = q; } }
+      let P = null, pd = 1e18; for (const q of PORTALS) { if (q.only) continue;   /* a portal joined to one town alone (the clubhouse) is no town to read your way to */ const d = (q.to[0] - sx) ** 2 + (q.to[1] - sy) ** 2; if (d < pd) { pd = d; P = q; } }
       const uz = M.underAt ? M.underAt(p.x, p.y) : null, zu = uz != null ? (D.zones || []).find(q => q.id === uz) : null, z = zu || zoneOf(p.x, p.y), here = (z && (z.name || z.id)) || 'where you read it';
       const back = { x: p.x, y: p.y, lv: p.lv | 0, name: String(here) };
       removeItem(p, p.inv[slot].id, 1); p.attuned = p.attuned || {}; p.attuned[P.id] = 1;
@@ -1956,8 +1964,8 @@
       if (n.golf) { ev({ e: 'golf', p: p.id, npc: n.id }); return; }   /* [Claude 2026-10-19] Fergus the starter: the engine part (engolf.js) talks */   /* [Claude 2026-10-19] the Lily Run's pond-keeper: the engine part (englily.js) talks */
       if (n.portal) {   /* touching a portal attunes you to it; you can travel to any portal you have touched (2026-10-04) */
         p.attuned = p.attuned || {}; const fresh = !p.attuned[n.portal]; p.attuned[n.portal] = 1; const P0 = portalOf(n.portal);
-        if (fresh) msg(p, 'The stones hum as you touch them: you will always find your way back to ' + (P0 ? P0.name : 'here') + ' through any town portal.', 'info');
-        ev({ e: 'portal', p: p.id, npc: n.id, here: n.portal, to: PORTALS.filter(P => P.id !== n.portal && p.attuned[P.id]).map(P => ({ id: P.id, name: P.name })), unknown: PORTALS.filter(P => !p.attuned[P.id]).map(P => P.name), back: p.tp ? p.tp.name : null }); return; }   /* back: a read Scroll of town portal's one way back */
+        if (fresh) msg(p, 'The stones hum as you touch them: you will always find your way back to ' + (P0 ? P0.name : 'here') + (P0 && P0.only ? ' through the ' + P0.only.map(id => (portalOf(id) || { name: id }).name).join(' or the ') + ' portal.' : ' through any town portal.'), 'info');
+        ev({ e: 'portal', p: p.id, npc: n.id, here: n.portal, to: PORTALS.filter(P => canHop(p, P0, P)).map(P => ({ id: P.id, name: P.name })), unknown: PORTALS.filter(P => joins(P0, P) && !canHop(p, P0, P)).map(P => P.name), back: p.tp ? p.tp.name : null }); return; }   /* back: a read Scroll of town portal's one way back */
       const ga = n.giftAfter, giftOk = !ga || ((p.quests[ga.quest] || {}).step || 0) > ga.step;   /* a gift can wait for a quest step (the Ashvale stone: after the Goblin Chief) */
       /* a "go and speak to so-and-so" step is met by speaking to them, wherever they happen to stand (the operator
          2026-10-05: quest goals are data, not code). Checked before their shop or their own lines, so an errand

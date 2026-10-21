@@ -24,10 +24,10 @@
      (meter units either side of the line); line is how wide the MAX power zone is (meter units either side of it; the operator:
      better clubs widen both zones and drive further); spin scales top- and backspin */
   const SETS = {
-    starter: { name: 'Starter Set', price: 500, dist: 0.88, sweep: 1.45, window: 4, line: 1, spin: 0.8 },
-    standard: { name: 'Standard Set', price: 2500, dist: 1, sweep: 1.65, window: 5, line: 1.6, spin: 1 },
-    pro: { name: 'Pro Set', price: 10000, dist: 1.09, sweep: 1.85, window: 6, line: 2.3, spin: 1.2 },
-    master: { name: 'Master Set', price: 40000, dist: 1.18, sweep: 2.05, window: 7, line: 3, spin: 1.45 }
+    starter: { name: 'Starter Set', price: 500, dist: 0.88, sweep: 1.45, window: 4, line: 1, spin: 0.8, hook: 1.25 },
+    standard: { name: 'Standard Set', price: 2500, dist: 1, sweep: 1.65, window: 5, line: 1.6, spin: 1, hook: 1 },
+    pro: { name: 'Pro Set', price: 10000, dist: 1.09, sweep: 1.85, window: 6, line: 2.3, spin: 1.2, hook: 0.75 },
+    master: { name: 'Master Set', price: 40000, dist: 1.18, sweep: 2.05, window: 7, line: 3, spin: 1.45, hook: 0.5 }
   };
   /* the lie: how much of a full shot a ground lets you make (shown as a % on the HUD) */
   const LIE = { t: 1, f: 1, e: 0.95, g: 0.9, r: 0.8, h: 0.62, s: 0.6, x: 0.8 };   /* x: the path to the clubhouse, played as rough */
@@ -95,7 +95,9 @@
     const surf0 = C.surf(b.x, b.y);
     const D = club.carry * set.dist * Math.max(0, Math.min(POWER_BONUS, s.power)) * lieOf(surf0, club) * impactLoss(s.impact || 0);
     const dx = Math.cos(s.aim), dy = Math.sin(s.aim), rx = -dy, ry = dx;
-    const L = curve(s.impact || 0) * D;                          /* the hook or slice at landing, metres */
+    /* 2026-10-20: the strike's centre line flies straight; struck left of it the ball bends right, right of it left (an
+       early strike, the marker still left of centre, is a negative impact); the better the set, the less it bends (set.hook) */
+    const L = -curve(s.impact || 0) * (set.hook || 1) * D;       /* the bend at landing, metres (+ to the player's right) */
     const T = Math.max(0.6, (1.6 + club.loft / 18) * Math.sqrt(Math.max(0.05, D / club.carry)));   /* time in the air */
     const W = s.wind || [0, 0], drift = 0.3 * T;
     const Hm = Math.max(1.2, D * (0.08 + club.loft / 250));
@@ -128,7 +130,19 @@
     const r = roll(C, pos, vel, s.pin, path, t0);
     return finish(C, b, r, path, D, s);
   }
+  /* 2026-10-20 ("If you're less than 10 feet from the pin, there should be a tap in putt button"): inside TAP_IN
+     (the feet the HUD shows: metres x course.yd x 3) on the green or the fringe a tap-in rolls straight in and drops;
+     anything farther is an ordinary putt */
+  const TAP_IN = 10;   /* feet */
+  function canTap(C, b, pin) { return !!pin && Math.hypot(pin[0] - b.x, pin[1] - b.y) * (C.yd || 4) * 3 <= TAP_IN && 'ge'.includes(C.surf(b.x, b.y)); }
+  function tapIn(C, b, s) {
+    const pin = s.pin, d = Math.hypot(pin[0] - b.x, pin[1] - b.y), T = 0.5 + d * 0.6, path = [];
+    for (let k = 0; k <= 10; k++) { const u = k / 10, e = u * (2 - u), x = b.x + (pin[0] - b.x) * e, y = b.y + (pin[1] - b.y) * e; path.push([x, y, C.height(x, y), u * T]); }
+    const h0 = C.height(pin[0], pin[1]); path.push([pin[0], pin[1], h0 - 0.05, T + 0.1], [pin[0], pin[1], h0 - 0.1, T + 0.22]);
+    return finish(C, b, { x: pin[0], y: pin[1], kind: null, holed: true, lip: false, dry: [pin[0], pin[1]] }, path, 0, s);
+  }
   function putt(C, b, s) {
+    if (s.tap && canTap(C, b, s.pin)) return tapIn(C, b, s);
     const a = s.aim + (s.impact || 0) * 0.045, set = SETS[s.set] || SETS.standard;
     const v0 = Math.sqrt(2 * DECEL.g * (PUTT[s.range] || PUTT_MAX) * Math.max(0, Math.min(1, s.power))) * (1 - 0.06 * Math.min(2, Math.abs(s.impact || 0))) * (set.dist ** 0.15);
     const path = [[b.x, b.y, C.height(b.x, b.y), 0]];
@@ -216,7 +230,7 @@
     return { '-3': 'ALBATROSS', '-2': 'EAGLE', '-1': 'BIRDIE', 0: 'PAR', 1: 'BOGEY', 2: 'DOUBLE BOGEY', 3: 'TRIPLE BOGEY' }[d] || (d > 0 ? '+' + d : String(d));
   }
 
-  const API = { CLUBS, SETS, LIE, DECEL, CUP, PUTT_MAX, PUTT, POWER_BONUS, puttRange, MAX_STROKES, makeCourse, shot, lieOf, windFor, pickClub, aimPoint, scoreName, treeShape };
+  const API = { CLUBS, SETS, LIE, DECEL, CUP, PUTT_MAX, PUTT, POWER_BONUS, puttRange, TAP_IN, canTap, MAX_STROKES, makeCourse, shot, lieOf, windFor, pickClub, aimPoint, scoreName, treeShape };
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('golfrules', { api: 1, v: 1, needs: {} }, () => API);
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

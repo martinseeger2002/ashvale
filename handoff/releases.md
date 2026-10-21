@@ -1273,3 +1273,52 @@ the walk here feature".
   little black hole to be visible"). Now, at the hole you putt at (on the green or holding the putter), the cup and lip draw with
   depthTest off (the course's polygon-offset surface hid them at a low look) and scale 1-3x with distance/5 m; ball renderOrder 6.
 - Module: engolf. golf_pw ALL OK, golf_tap_pw ALL OK. Post chain/post_v08165.txt.
+
+## 0.8.166 - 2026-10-20 (Claude): golf Tap in button - RELEASED (v193 45090cf9)
+- the operator: "If you're less than 10 feet from the pin, there should be a tap in putt button". A "Tap in" button beside
+  Short/Long, shown with the putter on the green/fringe within 10 ft as the HUD shows feet (metres x yd x 3 = ~0.83 m);
+  one stroke, the ball rolls straight in. Shot input carries tap:1; golfrules canTap/tapIn (TAP_IN = 10 ft) replays
+  the same on every game.
+- Modules: hudgolf, golfrules, engolf. Branch claude/golf-tapin, merge f696cda, dist 0dc17f0.
+- Tests: golfrules_test (3 tap checks), golf_pw (Ben's tap-in in a group seen by Ann; Cal 11 ft no button / 9.6 ft
+  button, touch tap holes) and golf_tap_pw ALL OK headed (headless SwiftShader is too slow for golf_pw: false FAILs).
+  check_live v193 no console errors. Card listing_v08166 + listing_ziibiing_v08166, note chain/post_v08166.txt.
+
+## 0.8.167 - 2026-10-20 (Claude): the clubhouse - town portal, chest, chess, Fortune Engines - RELEASED (v194 d73e1bce)
+- the operator: "Inside the clubhouse, there should be a town portal and a bank chest ... a chess board; the town portal should
+  only portal to and from Saltmere town portal and must be attuned by going to the clubhouse portal"; "a bank of [fortune]
+  machines inside of the clubhouse". rules.portals 'golf' (637,-119 -> 637,-118, only ['saltmere'], stone false); core.js
+  joins(): an `only` portal joins those alone, both ways; the scroll of town portal skips such portals. zone.golf:
+  links_chest 632,-117, chess table links1 639,-118, Fortune Engines lk1-lk4 632-635,-121 (seats row -120), bench to 636,-121.
+- rules.json patched by hand for the portal only: make_data.py's full output has drifted from the checked-in data.
+- Modules: core, data/rules, data/zoneindex, zones/golf. Branch claude/clubhouse merge 3de569f.
+- Tests: clubhouse_test.js + clubhouse_pw.py (new), core_test, golf_pw, golf_tap_pw, chess_pw ALL OK. fortune_pw could not
+  load its 2nd page (box overloaded; main the same) - the clubhouse machines' sit/bar checked in clubhouse_pw.
+- Next (the operator OK'd staging): second storey with the dice/roulette/blackjack tables as their own modules + Bank rules, playtest first.
+
+## 0.8.168 - 2026-10-20 (Claude): the Links railing, cobbles, clubhouse layout, greens, two-tap putts, the strike line - RELEASED (v195 32c0a8d3)
+- the operator: "the iron fence from the graveyard around the golf course so people can't wander on it" -> iron_fence round the course box
+  (make_golf_zones.py), solid + ry (the graveyard's is NOT solid: decor only); the south run (y -116) meets the clubhouse walls.
+  Blocking-tile letters (worldgen BLOCK) get no railing. Walk tests stop at it on all sides.
+- "the trail to the clubhouse should be cobblestone for the last stretch that is still dirt": scene.js turf skip (0.8.161) also
+  dropped the 'c' cobbles; the skip now spares 'c'.
+- Clubhouse (the operator): Fortune Engines dz -0.3 (scene honours o.dx/o.dz), chess table 634,-117 seats E-W with benches (scene chess:
+  the board faces seats[1] = White via set.d; bench face e/w), chest 632,-119, Fergus 638,-119, SE corner 640-641,-118..-117 kept
+  for the other session's stairs; portal rules.portals golf -> 647,-114 (to 647,-113) OUTSIDE, trees there cleared.
+- "weird grass that covers your ball near one of the greens": green tilt dips below the world ground on its low side (hole 4);
+  engolf gY adds a per-green lift (its deepest dip, faded like the tilt) - drawing only, rules untouched.
+- "hard to click three times for a short putt": the putter is two taps (impact 0). Button PUTT/HIT.
+- "a line right in the very center ... left of center hook right ... right of center hook left ... higher class less hook":
+  golfrules L = -curve(impact) * set.hook (1.25/1/0.75/0.5); hudgolf centre line 4 px, strike zone drawn over the fill.
+- Modules: scene, hudgolf, golfrules, engolf, data/rules, data/zoneindex, zones/golf. Tests: golfrules_test (4 bend checks),
+  clubhouse_test (portal outside, solid railing, stairs corner), clubhouse_pw, chess_pw, golf_tap_pw (two-tap putt), golf_pw, core_test
+  ALL OK. Post chain/post_v08168.txt.
+
+## 0.8.169 - 2026-10-20 (Claude): the ball's smooth arc, the avatar after an app switch - RELEASED (v196 34b39dbc)
+- the operator: "the flight path ... drops down following the contour of the river bed ... should be a smooth parabola": engolf pathY -
+  in the air the ball's ground is a straight line from its start to its first landing (bounces and roll follow the ground); the
+  aim arc too. Measured over hole 18's pond: 0.3 -> 8.7 -> 0.05 m, no dip over the 0.75 m-deep bed. Drawing only.
+- the operator: "my avatar despawns ... mostly when I move off of the PWA into another app and then look back": the swipe tilted the
+  hidden orbit camera (cam.pitch < 0.13 = first person) and the first-person rule hid myEnt for good. engine fp = 0 in cam.mode
+  'golf'. golf_tap_pw tilts to pitch 0.02 mid-round and checks _meSeen (FAILS without the fix, checked).
+- Modules: engolf, engine. golf_pw, golf_tap_pw, golfrules_test ALL OK. Post chain/post_v08169.txt.

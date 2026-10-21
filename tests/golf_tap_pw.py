@@ -41,6 +41,25 @@ with sync_playwright() as p:
     check(s2['strokes'] == 1 and math.hypot(s2['ball']['x'] - s['ball']['x'], s2['ball']['y'] - s['ball']['y']) > 10, 'the ball flew and came to rest (one stroke)')
     pin2 = s2.get('pin') or pin; w2 = math.atan2(pin2[1] - s2['ball']['y'], pin2[0] - s2['ball']['x'])
     check(abs(math.atan2(math.sin(s2['aim'] - w2), math.cos(s2['aim'] - w2))) < 0.01, 'the next stroke faces the pin again')
+    # 2026-10-20: after a swipe to another app and back, his avatar was gone for the rest of the round (the swipe tilted the
+    # hidden orbit camera to first person, and first person hides your own avatar)
+    pg.evaluate("ASH.setCam(null, 0.02, null)"); time.sleep(1.2)
+    seen = pg.evaluate("ASH.golf()._meSeen()")
+    check(seen.get('vis') and seen.get('inScene'), 'a camera tilted to first person mid-round still draws my avatar (%s)' % seen)
+    pg.evaluate("ASH.setCam(null, 0.45, null)")
+    # 2026-10-20 ("hard to click three times for a short putt"): a putt is two taps, start and strength
+    ok = pg.evaluate("""(() => { const p = ASH.golf()._state().pin; for (let a = 0; a < 6.3; a += 0.3) { ASH.golf()._put(p[0] + Math.cos(a) * 2.5, p[1] + Math.sin(a) * 2.5); if (ASH.golf()._state().club === 'PT') return true; } return false; })()""")
+    time.sleep(1); bb = pg.locator('.golfp .swingbtn').bounding_box(); bx, by = bb['x'] + bb['width'] / 2, bb['y'] + bb['height'] / 2
+    check(ok and pg.locator('.golfp .swingbtn').inner_text().strip() == 'PUTT', 'on the green the button says PUTT')
+    pg.touchscreen.tap(bx, by); time.sleep(0.4)
+    check(pg.evaluate(GS + ".phase") == 'rise', 'the first tap starts the putt')
+    pg.touchscreen.tap(195, 420); time.sleep(0.2)
+    ph = pg.evaluate(GS + ".phase")
+    check(ph in ('go', 'fly'), 'the second tap putts - no third tap (phase %s)' % ph)
+    # 2026-10-20: "If somebody leaves the game, they should be transported back into the clubhouse"
+    pg.evaluate("ASH.golf()._quit()"); time.sleep(2)
+    me = pg.evaluate("(() => { const S = ASH.core.S, id = Object.keys(S.players).find(k => !S.players[k].puppet); return [S.players[id].x, S.players[id].y]; })()")
+    check(me == [635, -118] and not pg.evaluate("!!ASH.golf()._state()"), 'leaving the round puts you inside the clubhouse (%s)' % me)
     check(not errs, 'no page errors %s' % errs[:2])
     b.close()
 print('ALL OK' if not fails else '%d FAILED' % len(fails))

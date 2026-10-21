@@ -2,7 +2,7 @@
    (zone 'golf', its path 'golfpath'; the holes, ponds and the burn from the operator's map, tools/make_golf.py). Fergus the starter
    in the clubhouse sends you out, alone or with a group of up to four; Isla's pro shop sells the club sets (you need one to
    play; the best you own is used). While you play the golf HUD takes over (hudgolf.js), taps no longer walk, and the camera
-   stands behind your ball. The swing: press to start, press to set the power (the MAX zone), press on the line to strike.
+   stands behind your ball. The swing: press to start, press to set the power (the MAX zone), press on the line to strike (a putt: press to start, press for its strength).
    The rules are src/golfrules.js: a shot is a pure function of the swing, so the others draw your flight from your swing
    and your ball's resting place (which your game decides, and sends with it).
    A group may play for GOLF (the operator): "winner takes the pot" (equal stakes, the lowest total wins, ties split) or "per
@@ -22,7 +22,16 @@
     const [BX0, BY0, BX1, BY1] = D.box;
     const yd = m => Math.round(m * YD), ft = m => Math.round(m * YD * 3);
     const ME = () => String(K.netId ? K.netId() : K.PID);   /* who I am to the others (the room's id; the game's own player id is the same 'me' everywhere) */
-    const gY = (x, z) => K.heightAt(x, z) + C.height(x, z);   /* where the course is drawn: the world's ground plus the greens' tilt */
+    /* 2026-10-20 ("weird grass that covers your ball near one of the greens"): a green's tilt dips up to ~10 cm below the
+       world's ground on its low side, and there the world's own grass drew over the course and the ball. Drawn, each green is
+       lifted by its deepest dip, fading out with the tilt (the rules' heights are untouched: every game plays the same shots) */
+    const smoothT = t => t * t * (3 - 2 * t);
+    const LIFT = C.holes.map(h => { let lo = 0;
+      for (let dx = -10; dx <= 10; dx += 0.25) for (let dy = -10; dy <= 10; dy += 0.25) { const r = Math.hypot(dx, dy); if (r > 10) continue;
+        lo = Math.min(lo, h.slope[0] * dx + h.slope[1] * dy + h.swell * Math.cos(Math.min(1, r / 7.6) * Math.PI / 2) ** 2 - 0.006); }
+      return -lo + 0.005; });
+    const lift = (x, z) => { for (let i = 0; i < C.holes.length; i++) { const g = C.holes[i].green, r = Math.hypot(x - g[0], z - g[1]); if (r > 10) continue; return LIFT[i] * (r < 7.6 ? 1 : 1 - smoothT((r - 7.6) / 2.4)); } return 0; };
+    const gY = (x, z) => K.heightAt(x, z) + C.height(x, z) + lift(x, z);   /* where the course is drawn: the world's ground plus the greens' tilt, never under the ground */
     const nearCourse = (x, y) => x > BX0 - 80 && x < BX1 + 80 && y > BY0 - 80 && y < BY1 + 120;
     let built = null;
     /* ---------- the course drawn on the ground: fairways, greens, tees, bunkers, rough (the world's own trees and water around) */
@@ -105,13 +114,22 @@
       return { ball, shadow, trail, shaft, grip, head, stand: 0.8, fly: null, flyT: 0, cut: CUT.clone() };
     }
     function dropKit(k) { if (!k) return; for (const m of [k.ball, k.shadow, k.trail, k.shaft, k.grip, k.head]) { K.scene.remove(m); if (m.geometry) m.geometry.dispose(); } }
-    function placeBall(k, x, z, y, pin) {
-      const gy = gY(x, z); k.ball.position.set(x, (y == null ? gy : gY(x, z) - C.height(x, z) + y) + BALL_R, z); k.shadow.position.set(x, gy + 0.05, z);
+    function placeBall(k, x, z, y, pin, wy) {   /* wy: the ball's foot in world y (a flight, pathY), else from the ground */
+      const gy = gY(x, z); k.ball.position.set(x, (wy != null ? wy : y == null ? gy : gY(x, z) - C.height(x, z) + y) + BALL_R, z); k.shadow.position.set(x, gy + 0.05, z);
       const inCup = pin && Math.hypot(x - pin[0], z - pin[1]) < 0.1 && y != null && y < C.height(x, z);
       k.ball.material.clippingPlanes = inCup ? [k.cut] : null; k.cut.constant = -(gY(pin ? pin[0] : x, pin ? pin[1] : z) + 0.046); k.shadow.visible = !inCup;
     }
+    /* 2026-10-20 ("the flight path ... drops down following the contour of the river bed ... should be a smooth parabola"):
+       in the air the ball's ground is a straight line from where it left the ground to where it first comes down, the arc on it;
+       from that first landing on (bounces, the roll) it follows the ground. World y of the ball's foot at each point of a path. */
+    function pathY(path) {
+      const air = p => p[2] - C.height(p[0], p[1]); let L = path.length - 1;
+      for (let k = 1; k < path.length; k++) if (air(path[k]) < 0.02) { L = k; break; }
+      const p0 = path[0], pL = path[L], g0 = gY(p0[0], p0[1]), gL = gY(pL[0], pL[1]), tL = pL[3] - p0[3];
+      return path.map((p, k) => k <= L ? g0 + (gL - g0) * (tL > 0 ? (p[3] - p0[3]) / tL : 1) + air(p) : gY(p[0], p[1]) - C.height(p[0], p[1]) + p[2]);
+    }
     function trailOf(k, path) {
-      const pos = []; for (const p of path) pos.push(p[0], gY(p[0], p[1]) - C.height(p[0], p[1]) + p[2] + BALL_R, p[1]);
+      const Y = pathY(path), pos = []; path.forEach((p, i) => pos.push(p[0], Y[i] + BALL_R, p[1]));
       k.trail.geometry.dispose(); k.trail.geometry = new THREE.BufferGeometry(); k.trail.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3)); k.trail.geometry.setDrawRange(0, 0);
     }
     const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _m = new THREE.Vector3(), _s = new THREE.Vector3(), _d = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _q = new THREE.Quaternion();
@@ -183,7 +201,7 @@
       if (ST.buy > 0) K.send({ c: 'golfstake', s: seat(ST.sn), n: ST.buy });
       MEK = MEK || kit();
       K.cam.save = { yaw: K.cam.yaw, pitch: K.cam.pitch, dist: K.cam.dist }; K.cam.mode = 'golf';
-      E = K.hud.golfOpen({ press, club: cycleClub, aimHold: d => { aimHold = d; }, spin: s => { if (canAim()) { ST.spin = s; hudAll(); } }, range: r => { if (canAim()) { ST.range = r; hudAll(); } }, card: () => showCard(), quit: () => askQuit() });
+      E = K.hud.golfOpen({ press, club: cycleClub, aimHold: d => { aimHold = d; }, spin: s => { if (canAim()) { ST.spin = s; hudAll(); } }, range: r => { if (canAim()) { ST.range = r; hudAll(); } }, tap: tapIn, card: () => showCard(), quit: () => askQuit() });
       if (K.PET && K.PET.away) K.PET.away(true);
       startHole(0);
     }
@@ -202,7 +220,7 @@
       const h = hole(); ST.phase = 'aim'; ST.meter = 0;
       ST.club = R.pickClub(C, ST.ball, h.pin, ST.set);
       ST.aim = Math.atan2(h.pin[1] - ST.ball.y, h.pin[0] - ST.ball.x);   /* the operator: every stroke starts facing the pin (the dogleg turn it used to pick could point back at the tee) */
-      ST.spin = 'none'; ST.range = R.puttRange(C, ST.ball, h.pin); if (first) ST.camYaw = ST.aim;
+      ST.spin = 'none'; ST.tap = 0; ST.range = R.puttRange(C, ST.ball, h.pin); if (first) ST.camYaw = ST.aim;
       placeBall(MEK, ST.ball.x, ST.ball.y, null, h.pin); MEK.trail.visible = false; hudAll();
     }
     function setPower(m) {
@@ -222,13 +240,18 @@
       if (!ST || K.hud.golfCardOpen()) return;
       const t = performance.now(); if (t - lastPress < 250) return;
       if (ST.phase === 'aim') { if (!myTurn()) return; ST.phase = 'rise'; ST.meter = 0; lastPress = t; presses++; return; }
+      if (ST.phase === 'rise' && clubObj().id === 'PT') { setPower(ST.meter); ST.impact = 0; lastPress = t; presses++; goSwing(); return; }   /* 2026-10-20 ("hard to click three times for a short putt"): a putt is two taps, start and strength; it rolls along the aim */
       if (ST.phase === 'rise') { setPower(ST.meter); ST.phase = 'fall'; ST.fallAt = t; lastPress = t; presses++; return; }
       if (ST.phase === 'fall') { if (t - ST.fallAt < 120) return; lastPress = t; presses++; ST.impact = -ST.meter / WIN(); goSwing(); }
+    }
+    function tapIn() {   /* the operator: within 10 ft a Tap in button knocks the ball in (golfrules canTap/tapIn), one stroke */
+      if (!ST || ST.phase !== 'aim' || !myTurn() || K.hud.golfCardOpen() || !R.canTap(C, ST.ball, hole().pin)) return;
+      ST.club = 'PT'; ST.tap = 1; ST.power = 0.3; ST.impact = 0; ST.stop = 30; ST.aim = Math.atan2(hole().pin[1] - ST.ball.y, hole().pin[0] - ST.ball.x); goSwing();
     }
     function goSwing() { ST.phase = 'go'; ST.goAt = performance.now(); if (K.playOnce) K.playOnce(K.myEnt, clubObj().id === 'PT' ? 'putt' : 'golfswing'); }
     function stepMeter(dt) {
       const sweep = R.SETS[ST.set].sweep;
-      if (ST.phase === 'rise') { ST.meter += dt * 100 / sweep * 1.6; if (ST.meter >= 100) { ST.meter = 100; setPower(100); ST.phase = 'fall'; ST.fallAt = performance.now(); } }
+      if (ST.phase === 'rise') { ST.meter += dt * 100 / sweep * 1.6; if (ST.meter >= 100) { ST.meter = 100; setPower(100); if (clubObj().id === 'PT') { ST.impact = 0; goSwing(); } else { ST.phase = 'fall'; ST.fallAt = performance.now(); } } }
       else if (ST.phase === 'fall') { ST.meter -= dt * 100 / sweep * 1.2; if (ST.meter <= -14) { ST.impact = 14 / WIN(); K.hud.golfFlash('MISHIT', 'bad', 900); goSwing(); } }
       else if (ST.phase === 'go' && performance.now() - ST.goAt > 3000) swing();   /* the impact frame never came (a hidden tab): hit anyway */
     }
@@ -236,6 +259,7 @@
       if (!ST || ST.phase !== 'go') return;
       const h = hole(), c = clubObj();
       const inp = { club: ST.club, aim: +ST.aim.toFixed(5), power: +ST.power.toFixed(5), impact: +ST.impact.toFixed(5), spin: ST.spin, range: ST.range, set: ST.set };
+      if (ST.tap) inp.tap = 1;
       const res = R.shot(C, ST.ball, Object.assign({ wind: c.id === 'PT' ? [0, 0] : ST.wind, pin: h.pin }, inp));
       ST.strokes += 1; ST.fly = res; ST.flyT = 0; ST.phase = 'fly'; ST.from = { x: ST.ball.x, y: ST.ball.y };
       ST.sw++; ST.shot = { fr: [+ST.from.x.toFixed(3), +ST.from.y.toFixed(3)], i: inp, at: [+res.at[0].toFixed(3), +res.at[1].toFixed(3)], ho: res.holed ? 1 : 0, n: ST.hole };
@@ -311,8 +335,8 @@
       if (!ST) return;
       if (!ST.done && ST.buy > 0) K.send({ c: 'golfforfeit', s: seat(ST.sn) });   /* the operator: a player who leaves forfeits */
       if (K.netSend) K.netSend({ gf: { t: 'st', rid: ST.rid, sn: ST.sn, q: 1 } });
-      endView(); ST = null;
-      if (!silent) K.hud.chat('You leave the round.', 'sys');
+      endView(); ST = null; toClubhouse();
+      if (!silent) K.hud.chat('You leave the round and walk back into the clubhouse.', 'sys');
     }
     function endView() {
       K.hud.golfClose(); E = null;
@@ -342,7 +366,15 @@
         if (typeof g.g !== 'string' || !Array.isArray(g.m)) return;
         if (g.x) { OPEN.delete(g.g); if (LOBBY && LOBBY.g === g.g && String(LOBBY.host) !== ME()) { LOBBY = null; K.hud.golfCardClose(); K.hud.chat('The group was called off.', 'sys'); } return; }
         OPEN.set(g.g, { g: g.g, host: id, hn: String(g.h || '').slice(0, 20), f: FMT[g.f] ? g.f : 'free', a: Math.max(0, Math.min(100000, g.a | 0)), m: g.m.slice(0, 4), at: Date.now() });
-        if (LOBBY && LOBBY.g === g.g && String(LOBBY.host) !== ME()) { LOBBY.m = g.m.slice(0, 4); if (!LOBBY.m.some(x => String(x[0]) === ME())) { LOBBY = null; K.hud.golfCardClose(); K.hud.chat('The group is full.', 'sys'); } else lobbyCard(); }
+        if (LOBBY && LOBBY.g === g.g && String(LOBBY.host) !== ME()) {
+          /* 2026-10-20 ("party mode is not cycling"): the host says the group every 2 s; one said before my join reached the host
+             does not list me yet - that is not "full". Not listed: ask again (my join may be lost); only a group of four for a while,
+             or no answer in 15 s, sends me away (it dropped a third golfer, who then never teed off) */
+          const listed = g.m.some(x => String(x[0]) === ME()), wait = Date.now() - (LOBBY.at || 0);
+          if (listed) { LOBBY.m = g.m.slice(0, 4); lobbyCard(); }
+          else if ((g.m.length >= 4 && wait > 6000) || wait > 15000) { LOBBY = null; K.hud.golfCardClose(); K.hud.chat(g.m.length >= 4 ? 'The group is full.' : 'The group did not hear you join - try again.', 'sys'); }
+          else if (K.netSend && Date.now() - (LOBBY.asked || 0) > 1500) { LOBBY.asked = Date.now(); K.netSend({ gf: { t: 'join', g: LOBBY.g, nm: myName(), ad: K.myAddr() || '' } }); }
+        }
         return;
       }
       if (g.t === 'join' && LOBBY && String(LOBBY.host) === ME() && g.g === LOBBY.g) {
@@ -354,6 +386,12 @@
       if (g.t === 'st') {
         if (g.go && typeof g.go === 'object') teeOff(g.go);   /* the host's first 'st's repeat the 'go' (a lost 'go' never leaves a member behind) */
         const x = RM.get(id) || { at: 0 }; x.g = g; x.at = Date.now(); RM.set(id, x);
+        if (g.sh && g.sw != null && (!x.rest || x.rest.sw !== g.sw)) {   /* a new swing: where it comes to rest and when (pinfo: a golfer gone quiet after it has still landed) - worked out as it is heard, not as it is drawn (a hidden game draws nothing) */
+          const sh = g.sh, inp = sh.i || {}, h2 = C.holes[Math.max(0, Math.min(17, sh.n | 0))]; let T = 0;
+          try { const res = R.shot(C, { x: +sh.fr[0], y: +sh.fr[1] }, Object.assign({}, inp, { wind: inp.club === 'PT' ? [0, 0] : R.windFor(g.rid, h2.n), pin: h2.pin })); T = res.path.length ? res.path[res.path.length - 1][3] : 0; } catch (err) { T = 6; }
+          if (Array.isArray(sh.at)) { x.rest = { sw: g.sw, n: sh.n | 0, b: sh.at, ho: !!sh.ho, at: Date.now() + (T / (inp.club === 'PT' ? 1 : 1.25) + 1.2) * 1000 };
+            if (ST && g.rid === ST.rid) (ST.rest = ST.rest || {})[g.sn] = x.rest; }   /* kept with the round: a golfer's presence can come and go (a hidden tab, a phone asleep) and take its entry with it */
+        }
         if (ST && g.rid === ST.rid && ST.m.some(m => m[3] === g.sn && String(m[0]) === String(id))) {
           ST.heard[g.sn] = Date.now(); ST.st[g.sn] = g;
           if (g.q) { ST.quit[g.sn] = 1; K.hud.chat(nameOf(g.sn) + ' leaves the round.', 'sys'); }
@@ -378,6 +416,14 @@
     function pinfo(sn) {
       if (sn === ST.sn) return { n: ST.hole, k: ST.k, b: [+ST.ball.x.toFixed(2), +ST.ball.y.toFixed(2)], ph: ST.phase, c: ST.card };
       const g = ST.st[sn] || {};
+      /* 2026-10-20 ("party mode is not cycling through the players"): a golfer whose game goes quiet after a swing (a phone
+         locked, another app) never sends the 'st' that says the ball came to rest, and the group waited on a ball "in the air" for
+         ever. The swing itself says where it comes to rest (sh.at, sh.ho, replayed here): once its flight is over, it has landed */
+      if ((g.ph === 'go' || g.ph === 'fly') && g.sw != null) {
+        const R0 = ST.rest && ST.rest[sn]; if (R0 && R0.sw === g.sw && Date.now() >= R0.at) {
+        const c = (ST.cards[sn] || []).slice(); if (R0.ho && !(c[R0.n] > 0)) c[R0.n] = g.s | 0;
+        return { n: g.n | 0, k: (g.k | 0) + 1, b: [+R0.b[0], +R0.b[1]], ph: R0.ho ? 'done' : 'aim', c }; }
+      }
       return { n: g.n | 0, k: g.k | 0, b: Array.isArray(g.b) ? [+g.b[0], +g.b[1]] : null, ph: g.ph, c: ST.cards[sn] || [] };
     }
     function teeOrder(i) {
@@ -481,7 +527,12 @@
         else if (id === 'end' && ST) { const keep = ST.buy > 0 && !ST.settled; if (keep) { K.hud.chat('The stakes are paid when the others finish - stay in sight of the course, or come back later.', 'sys'); } finishLeave(); }
       });
     }
-    function finishLeave() { const P = ST; endView(); PENDING = P && P.buy > 0 && !P.settled ? P : null; ST = null; K.send({ c: 'golfgo', x: 637, y: -114 }); }
+    /* 2026-10-20 ("if somebody leaves the game, they should be transported back into the clubhouse"): leaving a round - the
+       Leave button or the card at the end - puts you inside the clubhouse (zone.golf returnTo, where a save made on the course loads),
+       never out on the course behind the railing */
+    const CLUBHOUSE = [635, -118];
+    const toClubhouse = () => K.send({ c: 'golfgo', x: CLUBHOUSE[0], y: CLUBHOUSE[1] });
+    function finishLeave() { const P = ST; endView(); PENDING = P && P.buy > 0 && !P.settled ? P : null; ST = null; toClubhouse(); }
     let PENDING = null;   /* a finished round whose stakes wait for the others: settled in the background */
     /* ---------- the HUD's numbers ---------- */
     function hudAll() {
@@ -496,6 +547,7 @@
       for (const b of E.spin.querySelectorAll('button')) b.classList.toggle('on', b.dataset.s === ST.spin);
       for (const b of E.putt.querySelectorAll('button')) b.classList.toggle('on', b.dataset.r === ST.range);
       E.spin.style.display = c.id === 'PT' ? 'none' : ''; E.putt.style.display = c.id === 'PT' ? '' : 'none';
+      if (E.tap) E.tap.style.display = c.id === 'PT' && R.canTap(C, ST.ball, h.pin) ? '' : 'none';
       E.lab.textContent = c.id === 'PT' ? ft(R.PUTT[ST.range]) + ' ft' : yd(reachNow()) + ' yd';
       drawMap();
     }
@@ -515,7 +567,7 @@
       E.zero.style.left = pct(toX(0)); E.sweet.style.left = pct(toX(WIN())); E.sweet.style.width = pct(toX(-WIN()) - toX(WIN()));
       E.meter.classList.toggle('live', ST.phase === 'rise' || ST.phase === 'fall');
       const wait = ST.m.length > 1 && ST.turn != null && ST.turn !== ST.sn;   /* someone else's shot: my meter and buttons rest */
-      const bt = wait ? 'WAIT' : ST.phase === 'aim' ? 'SWING' : ST.phase === 'rise' ? 'POWER' : ST.phase === 'fall' ? 'HIT' : '…';
+      const bt = wait ? 'WAIT' : ST.phase === 'aim' ? (clubObj().id === 'PT' ? 'PUTT' : 'SWING') : ST.phase === 'rise' ? (clubObj().id === 'PT' ? 'HIT' : 'POWER') : ST.phase === 'fall' ? 'HIT' : '…';
       if (E.swingBtn.textContent !== bt) E.swingBtn.textContent = bt;   /* only when it changes: a node rewritten every frame under the finger can swallow a tap on a phone */
       if (E.swing) E.swing.classList.toggle('off', wait);
       for (const n of [E.club, E.aim, E.spin, E.putt]) if (n) n.classList.toggle('off', wait || ST.phase !== 'aim');
@@ -565,7 +617,7 @@
       if (aiming) {
         const reach = reachNow(), tx = ST.ball.x + Math.cos(ST.aim) * reach, tz = ST.ball.y + Math.sin(ST.aim) * reach;
         M.ring.position.set(tx, gY(tx, tz) + 0.08, tz); M.ring.scale.setScalar(c.id === 'PT' ? 0.3 : 1 + reach / 60);
-        const pts = []; for (let k = 0; k <= 30; k++) { const u = k / 30, x = ST.ball.x + (tx - ST.ball.x) * u, z = ST.ball.y + (tz - ST.ball.y) * u, arc = c.id === 'PT' ? 0 : Math.sin(u * Math.PI) * reach * 0.05; pts.push(new THREE.Vector3(x, gY(x, z) + 0.09 + arc, z)); }
+        const gY0 = gY(ST.ball.x, ST.ball.y), gY1 = gY(tx, tz), pts = []; for (let k = 0; k <= 30; k++) { const u = k / 30, x = ST.ball.x + (tx - ST.ball.x) * u, z = ST.ball.y + (tz - ST.ball.y) * u, arc = c.id === 'PT' ? 0 : Math.sin(u * Math.PI) * reach * 0.05; pts.push(new THREE.Vector3(x, (c.id === 'PT' ? gY(x, z) : gY0 + (gY1 - gY0) * u) + 0.09 + arc, z)); }   /* in the air a smooth arc, not the ground's contour (a putt hugs the green) */
         M.line.geometry.dispose(); M.line.geometry = new THREE.BufferGeometry().setFromPoints(pts); M.line.computeLineDistances();
       }
       const putting = aiming && c.id === 'PT' && 'ge'.includes(C.surf(ST.ball.x, ST.ball.y));
@@ -650,7 +702,8 @@
         const r = ST.fly, PP = r.path, speed = c.id === 'PT' ? 1 : 1.25; ST.flyT += dt * speed;
         let k = 0; while (k < PP.length - 1 && PP[k + 1][3] <= ST.flyT) k++;
         const a = PP[k], b = PP[Math.min(PP.length - 1, k + 1)], u = b[3] > a[3] ? Math.min(1, (ST.flyT - a[3]) / (b[3] - a[3])) : 1;
-        placeBall(MEK, a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u, h.pin); MEK.trail.geometry.setDrawRange(0, k + 1);
+        const FY = r.fy || (r.fy = pathY(PP));
+        placeBall(MEK, a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u, h.pin, FY[k] + (FY[Math.min(PP.length - 1, k + 1)] - FY[k]) * u); MEK.trail.geometry.setDrawRange(0, k + 1);
         if (ST.flyT >= PP[PP.length - 1][3]) { ST.wait += dt; if (ST.wait > (c.id === 'PT' ? 0.5 : 0.9)) { ST.wait = 0; landed(); } }
       }
       /* my avatar at the ball (the game's tile is the ball's tile; here it stands where a golfer stands) */
@@ -690,7 +743,8 @@
         if (x.fly) {
           x.flyT += dt * (g.cl === 'PT' ? 1 : 1.25); const PP = x.fly; let k = 0; while (k < PP.length - 1 && PP[k + 1][3] <= x.flyT) k++;
           const a = PP[k], b = PP[Math.min(PP.length - 1, k + 1)], u = b[3] > a[3] ? Math.min(1, (x.flyT - a[3]) / (b[3] - a[3])) : 1;
-          placeBall(x.k, a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u, hl.pin); x.k.trail.geometry.setDrawRange(0, k + 1);
+          const FY = x.fy && x.fyOf === PP ? x.fy : (x.fyOf = PP, x.fy = pathY(PP));
+          placeBall(x.k, a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u, hl.pin, FY[k] + (FY[Math.min(PP.length - 1, k + 1)] - FY[k]) * u); x.k.trail.geometry.setDrawRange(0, k + 1);
           if (x.flyT > PP[PP.length - 1][3] + 1) { x.fly = null; x.k.trail.visible = false; }
         } else placeBall(x.k, bx, bz, null, hl.pin);
         x.k.ball.visible = !(g.ph === 'done' && !x.fly); if (!x.k.ball.visible) x.k.shadow.visible = false;   /* holed out: the ball is in the cup */
@@ -744,7 +798,10 @@
       event(e) { if (e && e.e === 'golfshort' && ST && e.s === seat(ST.sn)) { K.hud.chat('You cannot cover the stake, so you leave the round.', 'warn'); quitRound(true); } },
       net(id, d) { if (d == null) { this.drop(id); return; } heard(id, d); },
       drop(id) { const x = RM.get(id); if (x) { dropKit(x.k); RM.delete(id); } },
-      _state: () => ST && { phase: ST.phase, hole: ST.hole, strokes: ST.strokes, card: ST.card.slice(), ball: ST.ball, aim: ST.aim, club: ST.club, set: ST.set, buy: ST.buy, f: ST.f, settled: ST.settled, m: ST.m, cards: ST.cards, quit: ST.quit, sn: ST.sn, rid: ST.rid, k: ST.k, turn: turnOf(ST.hole), order: teeOrder(ST.hole), pin: hole().pin, meter: ST.meter },   /* tests */
+      _state: () => ST && { st: ST.st, rests: Array.from(RM.values()).map(x => ({ sn: x.g && x.g.sn, sw: x.g && x.g.sw, ph: x.g && x.g.ph, rest: x.rest || null, now: Date.now() })), phase: ST.phase, hole: ST.hole, strokes: ST.strokes, card: ST.card.slice(), ball: ST.ball, aim: ST.aim, club: ST.club, set: ST.set, buy: ST.buy, f: ST.f, settled: ST.settled, m: ST.m, cards: ST.cards, quit: ST.quit, sn: ST.sn, rid: ST.rid, k: ST.k, turn: turnOf(ST.hole), order: teeOrder(ST.hole), pin: hole().pin, meter: ST.meter },   /* tests */
+      _ballY: () => MEK && MEK.ball ? [+MEK.ball.position.x.toFixed(2), +MEK.ball.position.y.toFixed(3), +MEK.ball.position.z.toFixed(2)] : null,   /* tests: where my ball is drawn */
+      _meSeen() { const e = K.myEnt; if (!e || !e.root) return { e: false }; let o = e.root, vis = true, top = null; while (o) { if (!o.visible) vis = false; top = o; o = o.parent; }
+        return { e: true, vis, inScene: top === K.scene, x: +e.root.position.x.toFixed(2), y: +e.root.position.y.toFixed(2), z: +e.root.position.z.toFixed(2) }; },   /* tests: is my avatar drawn */
       _avatarOf(sn) { if (!ST) return null; const m = ST.m.find(x => x[3] === sn); if (!m) return null; const r = sn === ST.sn ? { e: K.myEnt } : remoteOf(m[0]), e = r && r.e; return e && e.root ? { x: +e.root.position.x.toFixed(2), z: +e.root.position.z.toFixed(2), pose: e.restPose || null } : null; },
       _camTarget: () => ST && ST.camAt ? Object.assign({}, ST.camAt) : null, _presses: () => presses,
       _shoot(o) { if (!canAim()) return false; o = o || {}; if (o.club) ST.club = o.club; if (o.range) ST.range = o.range; if (o.aim != null) ST.aim = o.aim; else if (o.atPin) { const p = hole().pin; ST.aim = Math.atan2(p[1] - ST.ball.y, p[0] - ST.ball.x); } ST.power = o.power == null ? 1 : o.power; ST.impact = o.impact || 0; goSwing(); return true; },   /* tests: a swing with these inputs, only on my turn */

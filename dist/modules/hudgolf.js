@@ -32,7 +32,7 @@
 .ash .golfp.club .cw{text-align:center;min-width:118px}
 .ash .golfp.club .cn{font:bold 14px Georgia,serif;color:#cfe9c0}.ash .golfp.club .cd{font-size:15px;color:#ffe08a;font-weight:bold}
 .ash .golfp.spin,.ash .golfp.putt{right:calc(8px + env(safe-area-inset-right,0px));bottom:calc(92px + env(safe-area-inset-bottom,0px));display:flex;gap:4px;padding:4px}
-.ash .golfp.spin button,.ash .golfp.putt button{font-size:12px;min-width:48px}.ash .golfp.putt button{min-width:64px}
+.ash .golfp.spin button,.ash .golfp.putt button{font-size:12px;min-width:48px}.ash .golfp.putt button{min-width:64px}.ash .golfp.putt .gtap{background:#2f7a3a;color:#fff;font-weight:bold}
 .ash .golfp button.on,.ash .golfp button:active{background:linear-gradient(#5d9a6a,#2e5b3f);color:#fff}
 .ash .golfp.aim{right:calc(8px + env(safe-area-inset-right,0px));bottom:calc(146px + env(safe-area-inset-bottom,0px));display:flex;gap:4px;padding:4px}
 .ash .golfp.aim button{min-width:52px;font-size:20px}
@@ -41,10 +41,10 @@
 .ash .golfp .meter.live{outline:2px solid #ffe08a}
 .ash .golfp .meter i{position:absolute;top:0;bottom:0;display:block}
 .ash .golfp .meter .fill{background:linear-gradient(270deg,#e8c13a,#d64b3a)}
-.ash .golfp .meter .sweet{background:#5fbf4a88;border-left:1px solid #b8f5a0;border-right:1px solid #b8f5a0}
-.ash .golfp .meter .zero{width:2px;background:#fff}
+.ash .golfp .meter .sweet{background:#4fbf3acc;border-left:2px solid #b8f5a0;border-right:2px solid #b8f5a0;box-sizing:border-box;z-index:1}   /* over the power fill: the whole strike zone shows, its centre line in the middle */
+.ash .golfp .meter .zero{width:4px;margin-left:-2px;background:#fff;box-shadow:0 0 0 1px #0a1610;z-index:2}   /* the strike's centre line: on it the ball flies straight (the operator) */
 /* gmark, never mark: hudart's .ash .mark (the hit markers) fades out in 0.45 s and took the meter's marker with it (the operator: no accuracy stroke) */
-.ash .golfp .meter .gmark{top:0;bottom:0;width:6px;margin-left:-3px;background:#fff;border:1px solid #000;box-sizing:border-box;box-shadow:0 0 6px #fff;z-index:2}
+.ash .golfp .meter .gmark{top:0;bottom:0;width:6px;margin-left:-3px;background:#fff;border:1px solid #000;box-sizing:border-box;box-shadow:0 0 6px #fff;z-index:3}
 .ash .golfp .meter .pow{width:3px;margin-left:-1px;background:#ff5a3a}
 .ash .golfp .meter .max{background:#ffe08acc;box-shadow:0 0 5px #ffe08a;border-left:1px solid #fff6c8;border-right:1px solid #fff6c8;box-sizing:border-box}
 .ash .golfp .meter .max::after{content:'MAX';position:absolute;top:1px;left:calc(100% + 3px);font-size:9px;color:#ffe08a;font-style:normal}
@@ -83,7 +83,8 @@
       E.lie = part('lie'); E.club = part('club', '<button data-a="prev" aria-label="Longer club">&#9664;</button><div class="cw"><div class="cn"></div><div class="cd"></div></div><button data-a="next" aria-label="Shorter club">&#9654;</button>');
       E.aim = part('aim', '<button data-a="aimL" aria-label="Aim left">&#8630;</button><button data-a="aimR" aria-label="Aim right">&#8631;</button>');
       E.spin = part('spin', '<button data-s="top">Top</button><button data-s="none">None</button><button data-s="back">Back</button>');
-      E.putt = part('putt', '<button data-r="short">Short</button><button data-r="long">Long</button>');
+      E.putt = part('putt', '<button data-r="short">Short</button><button data-r="long">Long</button><button data-r="tap" class="gtap">Tap in</button>');
+      E.tap = E.putt.querySelector('.gtap');   /* within 10 ft of the pin: the ball is knocked in */
       E.swing = part('swing', '<div class="meter"><i class="sweet"></i><i class="fill"></i><i class="zero"></i><i class="max"></i><i class="pin"></i><i class="pow"></i><i class="gmark"></i><i class="lab"></i></div><button class="swingbtn">SWING</button>');
       E.waitMsg = part('waitm');   /* a group's turns: Waiting: <name> is playing */
       E.flashes = flashes = part('flashes');
@@ -98,7 +99,7 @@
         for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(t, () => cb.aimHold(0));
       }
       E.spin.addEventListener('click', e => { const b = e.target.closest('button'); if (b) cb.spin(b.dataset.s); });
-      E.putt.addEventListener('click', e => { const b = e.target.closest('button'); if (b) cb.range(b.dataset.r); });
+      E.putt.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.r === 'tap') cb.tap(); else cb.range(b.dataset.r); });
       E.tools.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.a === 'card') cb.card(); else cb.quit(); });
       return E;
     }
