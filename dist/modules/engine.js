@@ -1535,7 +1535,7 @@
            view"): tilting on past the lowest view slides the camera forward into your character's eyes, and from there you look up -
            to the sun, the moon, the stars, straight overhead. Tilt back down and it slides out again. */
         const hawkFP = !!myEnt.hawk && !((me.burden || 0) > 0) && cam.mode !== 'creator';
-        const fp = cam.mode === 'creator' || (myEnt.hawk && !hawkFP) ? 0 : hawkFP ? 1 : Math.min(1, Math.max(0, (0.3 - cam.pitch) / 0.2)), fpEl = hawkFP ? Math.max(-1.45, Math.min(1.5, (0.1 - cam.pitch) * 1.07)) : Math.min(1.5, Math.max(0, 0.1 - cam.pitch) * 1.07);   /* the hawk looks down at the ground as well as up */
+        const fp = cam.mode === 'creator' || cam.mode === 'golf' || (myEnt.hawk && !hawkFP) ? 0 : hawkFP ? 1 : Math.min(1, Math.max(0, (0.3 - cam.pitch) / 0.2)), fpEl = hawkFP ? Math.max(-1.45, Math.min(1.5, (0.1 - cam.pitch) * 1.07)) : Math.min(1.5, Math.max(0, 0.1 - cam.pitch) * 1.07);   /* the hawk looks down at the ground as well as up */
         /* looking up, the zoom is a pair of binoculars: the view narrows down to a few degrees, and the sun and the moon (half a degree
            each, as ours) fill it */
         if (FPV.fov0 == null) FPV.fov0 = camera.fov;
@@ -1573,7 +1573,7 @@
           if (myEnt.root.visible) { myEnt.root.visible = false; FPV.hid = true; }   /* your own head would fill the view */
         }
         if (cam.mode === 'lilyrun' && LR) LR.camera(camera, dt);
-        if (cam.mode === 'golf' && GF) GF.camera(camera, dt);   /* [Claude 2026-10-19] behind the ball on the Saltmere Links */   /* [Claude 2026-10-19] THE LILY RUN: behind the frog on the board */
+        if (cam.mode === 'golf' && GF) GF.camera(camera, dt);   /* [Claude 2026-10-19] behind the ball on the Saltmere Links; never first person (fp 0 above: 2026-10-20, a swipe to another app tilted the hidden orbit camera down and the first-person rule hid his avatar for the rest of the round) */   /* [Claude 2026-10-19] THE LILY RUN: behind the frog on the board */
         if (cam.mode === 'fortune' && FE) FE.camera(camera, dt);   /* [Claude 2026-10-16] THE FORTUNE ENGINE: first person on the bench, the head turned by a drag */
         if (cam.mode === 'poker' && POKERV && POKERV.eye) {   /* THE POKER TABLE: first person at the felt, leaning a little over your own side of it */
           const E = POKERV.eye, L = POKERV.look; camera.position.set(E.x, E.y, E.z); camera.lookAt(L.x, L.y, L.z);

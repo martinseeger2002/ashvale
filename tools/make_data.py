@@ -1808,7 +1808,8 @@ module('rules', 3, {
                 {"id": "castle", "name": "the Lake Castle", "x": -14, "y": 486, "to": [-13, 487]},
                 # 2026-10-20: "Inside the clubhouse, there should be a town portal ... only portal to and from Saltmere town
                 # portal and must be attuned by going to the clubhouse portal": `only` = the portals it joins (both ways)
-                {"id": "golf", "name": "the Saltmere Links", "x": 637, "y": -119, "to": [637, -118], "only": ["saltmere"], "stone": False}],   # no stone at Ziibiing (2026-10-11: "I didn't ask for a town portal")   # the lake castle's portal, here for good (2026-10-08: make_castle.js added it, every later make_data run dropped it, and the castle stone said "Nothing happens")
+                {"id": "golf", "name": "the Saltmere Links", "x": 647, "y": -114, "to": [647, -113], "only": ["saltmere"], "stone": False},
+                {"id": "tutorial", "name": "Tutorial Island", "x": 704, "y": 45, "to": [704, 46], "only": ["ashvale"], "free": True, "stone": False}],   # no stone at Ziibiing (2026-10-11: "I didn't ask for a town portal")   # the lake castle's portal, here for good (2026-10-08: make_castle.js added it, every later make_data run dropped it, and the castle stone said "Nothing happens")
     # 2026-10-04: "logs, pelts arrows potions should all de spawn. Only Gear and tools and Gold should persist."
     # 2026-10-06: "Gold, and valuable items should stay there until somebody picks them up" (by value, 100 GOLD);
     # "All teleport or rune stone must always persist". The @ashvale Bank keeps them in the world across sessions.

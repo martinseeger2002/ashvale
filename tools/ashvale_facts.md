@@ -15,7 +15,13 @@
 - Saves from the old one-page playtest builds (before the launcher) do not carry over.
 - Fixes are small: one or two module inscriptions, not a whole new game.
 
-## In the current release (v0.8.167)
+## In the current release (v0.8.169)
+- 0.8.169 (2026-10-20): GOLF FIX - the ball flies a smooth arc over rivers and ponds (no dip toward the water); your golfer no
+  longer vanishes after switching to another app and back.
+- 0.8.168 (2026-10-20): THE LINKS - an iron railing round the course (the clubhouse is the one way in), cobbles all the way to the
+  clubhouse door, the clubhouse laid out again (Fortune Engines on the wall, the chess table with benches, the chest on the west wall),
+  the town portal to Saltmere outside the door. A putt is two taps. The strike zone's centre line flies straight; early bends right,
+  late bends left; better club sets bend less. Greens no longer hide a ball under patches of grass.
 - 0.8.167 (2026-10-20): THE CLUBHOUSE at the Saltmere Links now has a town portal (it joins Saltmere's portal only; touch it once in the clubhouse to use it), a chest, a chess table and four Fortune Engines.
 - 0.8.166 (2026-10-20): GOLF - a Tap in button beside Short and Long when your ball is on the green within 10 feet of the pin: press it and the ball goes in for one stroke.
 - 0.8.165 (2026-10-20): GOLF FIX - on a long putt the hole (the black cup and its white lip) shows on the green.

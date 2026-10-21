@@ -24,10 +24,10 @@
      (meter units either side of the line); line is how wide the MAX power zone is (meter units either side of it; the operator:
      better clubs widen both zones and drive further); spin scales top- and backspin */
   const SETS = {
-    starter: { name: 'Starter Set', price: 500, dist: 0.88, sweep: 1.45, window: 4, line: 1, spin: 0.8 },
-    standard: { name: 'Standard Set', price: 2500, dist: 1, sweep: 1.65, window: 5, line: 1.6, spin: 1 },
-    pro: { name: 'Pro Set', price: 10000, dist: 1.09, sweep: 1.85, window: 6, line: 2.3, spin: 1.2 },
-    master: { name: 'Master Set', price: 40000, dist: 1.18, sweep: 2.05, window: 7, line: 3, spin: 1.45 }
+    starter: { name: 'Starter Set', price: 500, dist: 0.88, sweep: 1.45, window: 4, line: 1, spin: 0.8, hook: 1.25 },
+    standard: { name: 'Standard Set', price: 2500, dist: 1, sweep: 1.65, window: 5, line: 1.6, spin: 1, hook: 1 },
+    pro: { name: 'Pro Set', price: 10000, dist: 1.09, sweep: 1.85, window: 6, line: 2.3, spin: 1.2, hook: 0.75 },
+    master: { name: 'Master Set', price: 40000, dist: 1.18, sweep: 2.05, window: 7, line: 3, spin: 1.45, hook: 0.5 }
   };
   /* the lie: how much of a full shot a ground lets you make (shown as a % on the HUD) */
   const LIE = { t: 1, f: 1, e: 0.95, g: 0.9, r: 0.8, h: 0.62, s: 0.6, x: 0.8 };   /* x: the path to the clubhouse, played as rough */
@@ -95,7 +95,9 @@
     const surf0 = C.surf(b.x, b.y);
     const D = club.carry * set.dist * Math.max(0, Math.min(POWER_BONUS, s.power)) * lieOf(surf0, club) * impactLoss(s.impact || 0);
     const dx = Math.cos(s.aim), dy = Math.sin(s.aim), rx = -dy, ry = dx;
-    const L = curve(s.impact || 0) * D;                          /* the hook or slice at landing, metres */
+    /* 2026-10-20: the strike's centre line flies straight; struck left of it the ball bends right, right of it left (an
+       early strike, the marker still left of centre, is a negative impact); the better the set, the less it bends (set.hook) */
+    const L = -curve(s.impact || 0) * (set.hook || 1) * D;       /* the bend at landing, metres (+ to the player's right) */
     const T = Math.max(0.6, (1.6 + club.loft / 18) * Math.sqrt(Math.max(0.05, D / club.carry)));   /* time in the air */
     const W = s.wind || [0, 0], drift = 0.3 * T;
     const Hm = Math.max(1.2, D * (0.08 + club.loft / 250));

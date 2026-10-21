@@ -41,10 +41,10 @@
 .ash .golfp .meter.live{outline:2px solid #ffe08a}
 .ash .golfp .meter i{position:absolute;top:0;bottom:0;display:block}
 .ash .golfp .meter .fill{background:linear-gradient(270deg,#e8c13a,#d64b3a)}
-.ash .golfp .meter .sweet{background:#5fbf4a88;border-left:1px solid #b8f5a0;border-right:1px solid #b8f5a0}
-.ash .golfp .meter .zero{width:2px;background:#fff}
+.ash .golfp .meter .sweet{background:#4fbf3acc;border-left:2px solid #b8f5a0;border-right:2px solid #b8f5a0;box-sizing:border-box;z-index:1}   /* over the power fill: the whole strike zone shows, its centre line in the middle */
+.ash .golfp .meter .zero{width:4px;margin-left:-2px;background:#fff;box-shadow:0 0 0 1px #0a1610;z-index:2}   /* the strike's centre line: on it the ball flies straight (the operator) */
 /* gmark, never mark: hudart's .ash .mark (the hit markers) fades out in 0.45 s and took the meter's marker with it (the operator: no accuracy stroke) */
-.ash .golfp .meter .gmark{top:0;bottom:0;width:6px;margin-left:-3px;background:#fff;border:1px solid #000;box-sizing:border-box;box-shadow:0 0 6px #fff;z-index:2}
+.ash .golfp .meter .gmark{top:0;bottom:0;width:6px;margin-left:-3px;background:#fff;border:1px solid #000;box-sizing:border-box;box-shadow:0 0 6px #fff;z-index:3}
 .ash .golfp .meter .pow{width:3px;margin-left:-1px;background:#ff5a3a}
 .ash .golfp .meter .max{background:#ffe08acc;box-shadow:0 0 5px #ffe08a;border-left:1px solid #fff6c8;border-right:1px solid #fff6c8;box-sizing:border-box}
 .ash .golfp .meter .max::after{content:'MAX';position:absolute;top:1px;left:calc(100% + 3px);font-size:9px;color:#ffe08a;font-style:normal}

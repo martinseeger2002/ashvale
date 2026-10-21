@@ -40,10 +40,14 @@
       PIECE_GEO[type] = mergeGeos(parts.map(geo => ({ geo }))); return PIECE_GEO[type];   /* the scene's own merger (further down): {geo, m} items */
     }
     const sqOf = (sq) => [sq.charCodeAt(0) - 97, +sq[1] - 1];   /* 'e4' -> [4, 3] */
-    function sqPos(set, sq) { const [f, r] = sqOf(sq); return [set.ox - 3.5 * SQ + f * SQ, set.oy, set.oz + 3.5 * SQ - r * SQ]; }   /* White sits south (+z): rank 1 nearest him, file a on his left (-x) */
+    /* White sits at the table's second seat (south, +z, unless the seats run east-west: 2026-10-20, the clubhouse table turned
+       90 degrees): rank 1 nearest him, file a on his left. d: towards White, rt: his right hand */
+    const sqAt = (set, f, r, y) => { const d = set.d || [0, 1], rt = [d[1], -d[0]], a = (f - 3.5) * SQ, b = (3.5 - r) * SQ; return [set.ox + rt[0] * a + d[0] * b, y, set.oz + rt[1] * a + d[1] * b]; };
+    function sqPos(set, sq) { const [f, r] = sqOf(sq); return sqAt(set, f, r, set.oy); }
     function chessSquare(id, point) {   /* which square a world point over the board is, or null */
       const set = CHESS[id]; if (!set || !point) return null;
-      const f = Math.floor((point.x - (set.ox - 4 * SQ)) / SQ), r = Math.floor(((set.oz + 4 * SQ) - point.z) / SQ);
+      const d = set.d || [0, 1], vx = point.x - set.ox, vz = point.z - set.oz;
+      const f = Math.floor((vx * d[1] - vz * d[0]) / SQ + 4), r = Math.floor(4 - (vx * d[0] + vz * d[1]) / SQ);
       return f >= 0 && f < 8 && r >= 0 && r < 8 ? String.fromCharCode(97 + f) + (r + 1) : null;
     }
     function fenBoard(fen) {   /* { sq: 'wP' ... } from the first FEN field */
@@ -53,7 +57,7 @@
     }
     function makePiece(set, code, sq) {
       const m = new THREE.Mesh(pieceGeo(code[1]), lam(code[0] === 'w' ? CHESS_LIGHT : CHESS_DARK, code[0] === 'w' ? PIECE_OPTS.light : PIECE_OPTS.dark)); m.castShadow = true;
-      const [x, y, z] = sqPos(set, sq); m.position.set(x, y, z); if (code[1] === 'n') m.rotation.y = code[0] === 'w' ? 0 : Math.PI;   /* the knights face the enemy */
+      const [x, y, z] = sqPos(set, sq); m.position.set(x, y, z); if (code[1] === 'n') m.rotation.y = (code[0] === 'w' ? 0 : Math.PI) + Math.atan2((set.d || [0, 1])[0], (set.d || [0, 1])[1]);   /* the knights face the enemy */
       set.group.add(m); const pc = { m, code, sq }; set.pieces.push(pc); return pc;
     }
     function dropPiece(set, pc) { set.group.remove(pc.m); set.pieces.splice(set.pieces.indexOf(pc), 1); }
@@ -1887,6 +1891,7 @@
           case 'table': { const fl = floorY(o, y), w = (o.w || 1) - 0.2, d = (o.h || 1) - 0.2; B.add('box', 0x8a5a30, x, fl + 0.62, z, w, 0.07, d); for (const sx of [-1, 1]) for (const sz of [-1, 1]) B.add('box', 0x5a3a1e, x + sx * (w / 2 - 0.06), fl + 0.3, z + sz * (d / 2 - 0.06), 0.07, 0.6, 0.07); B.add('cyl', 0xd8d0b8, x + 0.1, fl + 0.7, z, 0.18, 0.06, 0.18); B.add('box', 0xf4eccc, x - 0.15, fl + 0.75, z - 0.1, 0.05, 0.16, 0.05); break; }
           case 'bench': {   /* a chess-park bench: a tarred plank on two sandstone blocks, its long side east-west */
             const fl = floorY(o, y);
+            if (o.face === 'e' || o.face === 'w') { B.add('box', 0x4a3626, x, fl + 0.42, z, 0.34, 0.06, 0.98); for (const dz of [-0.36, 0.36]) B.add('box', 0x9a8c78, x, fl + 0.2, z + dz, 0.28, 0.4, 0.16); break; }   /* its long side north-south, at a table turned east-west */
             B.add('box', 0x4a3626, x, fl + 0.42, z, 0.98, 0.06, 0.34); for (const dx of [-0.36, 0.36]) B.add('box', 0x9a8c78, x + dx, fl + 0.2, z, 0.16, 0.4, 0.28);
             break;
           }
@@ -1894,8 +1899,9 @@
             const fl = floorY(o, y), top = fl + 0.78;
             B.add('box', 0x9a8c78, x, fl + 0.36, z, 0.5, 0.72, 0.5); B.add('box', 0x8a7c68, x, fl + 0.04, z, 0.9, 0.08, 0.9);
             B.add('box', 0x3c4047, x, top - 0.03, z, 1.18, 0.06, 1.18);   /* the slate slab */
-            for (let r = 0; r < 8; r++) for (let f = 0; f < 8; f++) B.add('box', (f + r) % 2 ? 0xdccfae : 0x414950, x - 3.5 * SQ + f * SQ, top + 0.005, z + 3.5 * SQ - r * SQ, SQ, 0.01, SQ);   /* sandstone / slate, the slate a shade lighter than the dark set */
-            const id = o.id || ('t' + o.x + ',' + o.y), set = CHESS[id] = { ox: x, oy: top + 0.01, oz: z, pieces: [], group: new THREE.Group() };
+            const s1 = o.seats && o.seats[1], dd = s1 ? [Math.sign(s1[0] - o.x), Math.sign(s1[1] - o.y)] : [0, 1], d = dd[0] && !dd[1] ? dd : [0, dd[1] || 1];
+            for (let r = 0; r < 8; r++) for (let f = 0; f < 8; f++) { const q = sqAt({ ox: x, oz: z, d }, f, r, top + 0.005); B.add('box', (f + r) % 2 ? 0xdccfae : 0x414950, q[0], q[1], q[2], SQ, 0.01, SQ); }   /* sandstone / slate, the slate a shade lighter than the dark set */
+            const id = o.id || ('t' + o.x + ',' + o.y), set = CHESS[id] = { ox: x, oy: top + 0.01, oz: z, d, pieces: [], group: new THREE.Group() };
             group.add(set.group);
             chessApply(id, (CHESS_FEN[id] || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'), null);
             const pk = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.75, 1.3), new THREE.MeshBasicMaterial({ visible: false })); pk.position.set(x, fl + 0.38, z); pk.userData.pick = { kind: 'chesstable', id, x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
@@ -1910,7 +1916,7 @@
             const into = rfUp && rfUp.storeys && rfUp.storeys[lv - 1] ? rfUp.storeys[lv - 1] : group;
             const fl = floorY(o, y) + lv * storeyH(o, lv), id = o.id || ('f' + o.x + ',' + o.y);
             const m = FM.build(THREE, { wrap: seeThrough });
-            m.group.position.set(x, fl, z); m.group.rotation.y = ({ s: 0, n: Math.PI, e: Math.PI / 2, w: -Math.PI / 2 })[o.face || 's'] || 0;
+            m.group.position.set(x + (o.dx || 0), fl, z + (o.dz || 0)); m.group.rotation.y = ({ s: 0, n: Math.PI, e: Math.PI / 2, w: -Math.PI / 2 })[o.face || 's'] || 0;
             into.add(m.group);
             m.body.userData.pick = { kind: 'fortune', id, x: o.x, y: o.y, lv }; pickables.push(m.body);
             for (const h of m.hot) h.userData.pick = { kind: 'fehot', id, act: h.userData.fe.act, i: h.userData.fe.i, x: o.x, y: o.y, lv };
@@ -2063,8 +2069,8 @@
       const FL = [0xe04040, 0xf0d040, 0xf4f4f4, 0xb060d0, 0xff8a3a];
       for (let y = Y0; y < Y1; y++) for (let x = X0; x < X1; x++) {
         if (!mine(x, y)) continue;
-        if (map.turfAt && map.turfAt(x, y)) continue;   /* [Claude 2026-10-20] mown turf (zone.turf, the golf course): no tufts, flowers or toadstools - the operator saw them as bumps on the course */
         const c = at(x, y), r = hash2(x * 5 + 1, y * 7 + 2);
+        if (c !== 'c' && map.turfAt && map.turfAt(x, y)) continue;   /* [Claude 2026-10-20] mown turf (zone.turf, the golf course): no tufts, flowers or toadstools - the operator saw them as bumps on the course; its road keeps its cobbles (the operator: the last stretch to the clubhouse was dirt) */
         if (c === 'K') { B.add('box', 0x8c897e, x + 0.5, heightAt(x + 0.5, y + 0.5) + 0.65, y + 0.5, 0.5, 1.3 + r * 0.9, 0.42, r * 6); continue; }   /* standing stones and ruin walls (seeded land) */
         if (c === 'c') {   /* cobbles laid by hand, not by a grid (2026-10-07: "too uniform ... use a seed to generate a random cobble
           pattern and a handful of random shapes"): from the tile's own seed, 9 to 12 stones scattered by dart-throwing (kept apart,

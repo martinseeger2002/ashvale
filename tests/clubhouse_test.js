@@ -18,7 +18,12 @@ const G = D.rules.portals.find(P => P.id === 'golf'), S = D.rules.portals.find(P
 ok(!!G && G.only && G.only.join() === 'saltmere', 'the clubhouse portal joins Saltmere alone');
 const golf = zones.find(z => z.id === 'golf'), H = golf.objects.find(o => o.k === 'house');
 const inside = (x, y) => x > H.x && x < H.x + H.w - 1 && y > H.y && y < H.y + H.h - 1;
-ok(inside(G.x, G.y) && inside(G.to[0], G.to[1]), 'it stands inside the clubhouse (' + G.x + ',' + G.y + ')');
+const outside = (x, y) => !(x >= H.x && x < H.x + H.w && y >= H.y && y < H.y + H.h) && y > H.y + H.h - 1;   /* south of the clubhouse's back wall line: off the course */
+const tileAt = (x, y) => golf.tiles[y - golf.origin[1]][x - golf.origin[0]];
+ok(outside(G.x, G.y) && outside(G.to[0], G.to[1]) && ',.s'.includes(tileAt(G.x, G.y)) && ',.s'.includes(tileAt(G.to[0], G.to[1])), 'it stands outside the clubhouse, off the course, in the open (the operator: "put the town portal outside") (' + G.x + ',' + G.y + ')');
+const rail = golf.objects.filter(o => o.k === 'iron_fence');
+ok(rail.length > 500 && rail.every(o => o.solid && (o.ry === 0 || o.ry === 1.5708)), 'an iron railing round the course, every section solid (' + rail.length + ')');
+ok(!golf.objects.some(o => o.x >= 640 && o.x <= 641 && o.y >= -118 && o.y <= -117 && o.k !== 'house') && !golf.npcs.some(n => n.x >= 640 && n.x <= 641 && n.y >= -118 && n.y <= -117), 'the south-east corner stays clear for the stairs');
 const chest = golf.npcs.find(n => n.chest), chess = golf.objects.filter(o => o.k === 'chesstable'), fe = golf.objects.filter(o => o.k === 'fortune');
 ok(!!chest && inside(chest.x, chest.y), 'a bank chest inside the clubhouse');
 ok(chess.length === 1 && inside(chess[0].x, chess[0].y) && chess[0].seats.every(s => inside(s[0], s[1])), 'a chess table with both seats inside');
