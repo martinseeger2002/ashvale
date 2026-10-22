@@ -29,10 +29,10 @@
      lookup, same rule) and start every module still to come, PREFETCH_N at a time, in the order the loader will
      want them; when the loader asks, it gets the download already in flight or done. Anything that goes wrong here
      only means the loader fetches that file itself, exactly as before. */
-  const PREFETCH_N = 8, CREATOR = 'nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c', early = new Map(), asked = new Set();
+  const PREFETCH_N = 16, CREATOR = 'nmrRmZASYVZXA7hbzxXY4J3BYTPKgfea9c', early = new Map(), asked = new Set();
   const abs = u => { try { return new URL(String(u), G.location.href).href; } catch (e) { return String(u); } };
   const stats = { started: 0, used: 0, failed: 0, ms: 0 };
-  if (G.fetch && G.fetch.__ashRetry && !G.fetch.__ashEarly && G.ASH3D && G.ASH3D._defs && G.location && /^https?:/.test(G.location.protocol) && /(^|\.)dogecoinarcade\.com$/.test(G.location.hostname)) {   /* only where /r/ and /content/ exist */
+  if (G.fetch && G.fetch.__ashRetry && !G.fetch.__ashEarly && G.ASH3D && G.ASH3D._defs && G.location && /^https?:/.test(G.location.protocol) && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(G.location.hostname)) {   /* wherever the game is served from an arcade: /r/ and /content/ (2026-10-22: it asked for dogecoinarcade.com, so on pages.pepecoinarcade.com - and so ashvale.party - the ~450 files came one at a time, 140 s; a host without them only costs the one failed lookup) */
     const retrying = G.fetch;
     const early_fetch = function (url, opts) {
       if (!opts && typeof url === 'string') {
@@ -131,5 +131,5 @@
     const watch = () => { const b = D.getElementById('boot'); if (!b) return; const ob = new MutationObserver(() => { if (/could not/i.test(b.textContent || '')) { say.textContent = b.textContent; say.style.color = '#ff8a7a'; } }); ob.observe(b, { childList: true, characterData: true, subtree: true }); };
     if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', watch); else watch();
   }
-  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('netretry', { api: API, v: 4 }, () => ({ on: !!(G.fetch && G.fetch.__ashRetry), early: stats }));
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('netretry', { api: API, v: 5 }, () => ({ on: !!(G.fetch && G.fetch.__ashRetry), early: stats }));
 })(typeof globalThis !== 'undefined' ? globalThis : this);
