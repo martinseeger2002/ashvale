@@ -136,9 +136,16 @@
         for (const r of F.rows || []) h += '<button class="frnd' + (r.online ? ' on' : '') + '" data-tag="' + A.esc(r.tag) + '">' + A.esc(r.tag) + '</button>';
         h += '</div>';
         if (!(F.rows || []).length && !F.note) h += '<div class="info">Looking up your contacts…</div>';
-        h += '<div class="info" style="margin-top:6px">To add a friend, right-click (or press and hold) another player and choose <b>Add friend</b>. Click a name to send them a message.</div>';
+        /* add a friend: into the arcade's own address book, the same as its Address book page (engine friendAdd; 2026-10-21) */
+        h += '<h4 style="margin-top:10px">Add a friend</h4><form class="addf" style="display:flex;gap:4px"><input class="addtag" type="text" maxlength="41" placeholder="@name" autocomplete="off" spellcheck="false" style="flex:1;min-width:0">' +
+          '<button class="btn" type="submit" style="width:auto;margin:0">Add</button></form>';
+        if (F.addMsg) h += '<div class="info" style="margin-top:4px;color:' + (F.addMsg.ok ? '#8fd88a' : '#ff9a8a') + '">' + A.esc(F.addMsg.msg) + '</div>';
+        h += '<div class="info" style="margin-top:6px">Adds them to your arcade address book. You can also right-click (or press and hold) a player and choose <b>Add friend</b>. Click a friend\'s name to message them.</div>';
         panel.innerHTML = h;
         for (const b of panel.querySelectorAll('.frnd')) b.onclick = () => { if (K.promptSay) K.promptSay('/@' + b.dataset.tag + ' '); };
+        const af = panel.querySelector('.addf');
+        if (af) af.onsubmit = e => { e.preventDefault(); const inp = af.querySelector('.addtag'), v = inp.value.trim(); if (!v || !api.friendAdd) return;
+          const bt = af.querySelector('button'); bt.disabled = true; bt.textContent = '…'; api.friendAdd(v).then(res => { if (!res.ok) { const i2 = panel.querySelector('.addtag'); if (i2) i2.value = v; } }); };
       } else if (ST.tab === 'prayer') {
         /* the prayer book (2026-10-07): the three overhead protections, melee 1 / missiles 4 / magic 15. Tap one to switch it on or off. */
         const L = core.lv(p, 'prayer'), mx = core.maxPp(p), pv = p.pp | 0;

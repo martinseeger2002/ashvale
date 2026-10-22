@@ -17231,6 +17231,7 @@ POSSIBILITY OF SUCH DAMAGE. */
 .ash .dlg .go{color:#00c;font-size:12px;margin-top:6px}
 .ash .dlg .go .btn{margin:4px 4px 0;cursor:pointer}
 .ash .tutgoal{position:absolute;left:calc((100% - 300px) / 2);top:10px;transform:translateX(-50%);width:max-content;max-width:min(520px,calc(100vw - 340px));padding:8px 16px;background:linear-gradient(#d8c8a0,#c4b386);box-shadow:inset 0 0 0 2px #8a7650,0 3px 8px #000a;color:#000;font:600 14px/1.35 "Trebuchet MS",Verdana,sans-serif;text-align:center;z-index:40;pointer-events:none;display:none}
+.ash .addf input{padding:4px 6px;border:1px solid #1b1610;border-radius:4px;background:#2a231b;color:#f3e7cc;font:inherit;box-shadow:inset 0 1px 3px #0008}.ash .addf input:focus{outline:1px solid #c8a050}
 .ash .tutgoal b{color:#801}.ash .tutgoal .st{color:#5a4428;font-size:12px}.ash .tutgoal .ok{color:#1e6a10;font-size:16px}
 @media (max-width:700px),(max-height:520px){.ash .tutgoal{left:8px;right:calc(var(--mm) + var(--tab) + 22px);transform:none;width:auto;max-width:none;padding:6px 10px;font-size:13px}}
 .ash .ctx{position:absolute;display:none;min-width:150px;padding:2px;background:#5d5447;border:1px solid #000;box-shadow:0 2px 8px #000b;border-radius:3px;z-index:9}
@@ -17571,9 +17572,16 @@ POSSIBILITY OF SUCH DAMAGE. */
         for (const r of F.rows || []) h += '<button class="frnd' + (r.online ? ' on' : '') + '" data-tag="' + A.esc(r.tag) + '">' + A.esc(r.tag) + '</button>';
         h += '</div>';
         if (!(F.rows || []).length && !F.note) h += '<div class="info">Looking up your contacts…</div>';
-        h += '<div class="info" style="margin-top:6px">To add a friend, right-click (or press and hold) another player and choose <b>Add friend</b>. Click a name to send them a message.</div>';
+        /* add a friend: into the arcade's own address book, the same as its Address book page (engine friendAdd; 2026-10-21) */
+        h += '<h4 style="margin-top:10px">Add a friend</h4><form class="addf" style="display:flex;gap:4px"><input class="addtag" type="text" maxlength="41" placeholder="@name" autocomplete="off" spellcheck="false" style="flex:1;min-width:0">' +
+          '<button class="btn" type="submit" style="width:auto;margin:0">Add</button></form>';
+        if (F.addMsg) h += '<div class="info" style="margin-top:4px;color:' + (F.addMsg.ok ? '#8fd88a' : '#ff9a8a') + '">' + A.esc(F.addMsg.msg) + '</div>';
+        h += '<div class="info" style="margin-top:6px">Adds them to your arcade address book. You can also right-click (or press and hold) a player and choose <b>Add friend</b>. Click a friend\'s name to message them.</div>';
         panel.innerHTML = h;
         for (const b of panel.querySelectorAll('.frnd')) b.onclick = () => { if (K.promptSay) K.promptSay('/@' + b.dataset.tag + ' '); };
+        const af = panel.querySelector('.addf');
+        if (af) af.onsubmit = e => { e.preventDefault(); const inp = af.querySelector('.addtag'), v = inp.value.trim(); if (!v || !api.friendAdd) return;
+          const bt = af.querySelector('button'); bt.disabled = true; bt.textContent = '…'; api.friendAdd(v).then(res => { if (!res.ok) { const i2 = panel.querySelector('.addtag'); if (i2) i2.value = v; } }); };
       } else if (ST.tab === 'prayer') {
         /* the prayer book (2026-10-07): the three overhead protections, melee 1 / missiles 4 / magic 15. Tap one to switch it on or off. */
         const L = core.lv(p, 'prayer'), mx = core.maxPp(p), pv = p.pp | 0;
@@ -28407,7 +28415,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           /* their own levels as their game sent them; not here yet (2026-10-07: a first look showed every skill at 1, a blank copy):
              ask their game for them and open the panel when they come */
           o.push({ html: 'View stats ' + nm, fn: () => { if (r.skills) { hud.playerStats(label(r.name, r.from), r.skills, cb, r.story); return; } hud.chat('Asking ' + label(r.name, r.from) + ' for their stats\u2026', 'sys'); r.wantStats = { at: Date.now(), name: label(r.name, r.from), cb }; netSend({ GQ: 1 }); } });
-          if (room && !room.me.guest && r.from && r.from.address && r.from.tag && !r.from.guest) o.push(isFriend(r.from.address) ? { html: 'Remove friend ' + nm, fn: () => setFriend(r.from, false) } : { html: 'Add friend ' + nm, fn: () => setFriend(r.from, true) });
+          if (room && !room.me.guest && r.from && r.from.address && r.from.tag && !r.from.guest) o.push(isFriend(r.from.address) || (PALS.book && PALS.book.has(r.from.address)) ? { html: 'Remove friend ' + nm, fn: () => friendRemove(r.from) } : { html: 'Add friend ' + nm, fn: () => friendAdd(r.from).then(res => { if (!res.ok) hud.chat(res.msg, 'warn'); }) });
           o.push({ html: 'Examine ' + nm, fn: () => hud.chat(label(r.name, r.from) + ': another adventurer on the arcade.', 'sys') });
           return o;
         }
@@ -29857,6 +29865,44 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (hud.tab === 'friends') hud.refresh('friends');
         reportBook().then(() => loadPals()).catch(() => {});
       }
+      /* ADD A FRIEND (2026-10-21, the operator: "the same thing as adding someone to your address book on the actual arcade page"): through
+         the arcade's own address book - arcade.contacts.add, which shows the player a card to say yes to and keeps the person in the same book
+         as the arcade's Address book page. An arcade without add (older nodes) or a page outside the arcade keeps them in the game's own list. */
+      async function contactsApi() {
+        if (!(G.arcade && G.arcade.contacts) && G.parent && G.parent !== G && /^https?:/.test(location.protocol))
+          await new Promise(ok => { const s = G.document.createElement('script'); s.src = '/r/contacts.js'; s.onload = s.onerror = () => ok(); G.document.head.appendChild(s); setTimeout(ok, 8000); });
+        return G.arcade && G.arcade.contacts || null;
+      }
+      async function tagAddress(tag) { try { const j = await (await fetch('/r/tag/' + encodeURIComponent(tag))).json(); return j && j.address || null; } catch (e) { return null; } }
+      async function friendAdd(who) {
+        const tag = String((who && who.tag) || who || '').trim().replace(/^@/, '');
+        if (!/^[A-Za-z0-9_.-]{1,40}$/.test(tag)) return { ok: false, msg: 'Type their arcade name, like @alice.' };
+        if (room && room.me && room.me.guest) return { ok: false, msg: 'Sign in to the arcade to add friends.' };
+        const C = await contactsApi();
+        if (C && C.add) {
+          try {
+            const r = await C.add({ address: '@' + tag });
+            const msg = r && r.status === 'already' ? '@' + tag + ' is already in your address book.' : '@' + tag + ' is now in your address book, and on your friends list.';
+            const a = (who && who.address) || await tagAddress(tag);   /* listed even before they have an Ashvale save (the list shows book contacts only once the Bank knows them) */
+            if (a && !isFriend(a)) { FRIENDS.push({ a, tag }); store.set('ashvale3d.friends.v1', JSON.stringify(FRIENDS)); }
+            hud.chat(msg, 'sys'); reportBook().then(() => loadPals()).catch(() => {}); return { ok: true, msg };
+          } catch (e) {
+            const m = String((e && e.message) || e || '');
+            if (!/^no viewer/.test(m)) return { ok: false, msg: m === 'declined' ? 'You said no, so nothing changed.' : m.charAt(0).toUpperCase() + m.slice(1) };
+          }
+        }
+        const a = (who && who.address) || await tagAddress(tag);
+        if (!a) return { ok: false, msg: 'There is no @' + tag + ' on the arcade.' };
+        setFriend({ address: a, tag }, true);
+        return { ok: true, msg: '@' + tag + ' is on your friends list in the game (this arcade cannot add to your address book from a game yet).' };
+      }
+      async function friendRemove(from) {
+        const a = from && from.address; if (!a) return;
+        if (PALS.book && PALS.book.has(a)) { const C = await contactsApi();
+          if (C && C.remove) { try { await C.remove(a); PALS.book.delete(a); } catch (e) { const m = String((e && e.message) || e || ''); if (m !== 'declined') hud.chat('Could not remove them: ' + m, 'warn'); return; } } }
+        if (isFriend(a)) setFriend(from, false);
+        else { PALS.tags.delete(a); PALS.on.delete(a); PALS.rows = palRows(); hud.chat('@' + String(from.tag || '').replace(/^@/, '') + ' is off your friends list.', 'sys'); if (hud.tab === 'friends') hud.refresh('friends'); }
+      }
       function palRows() {
         const seen = new Set(Array.from(remotes.values()).map(r => r.from && r.from.address).filter(Boolean)), rows = [];
         for (const [a, tag] of PALS.tags) if (PALS.on.has(a) || isFriend(a)) rows.push({ tag, online: !!PALS.on.get(a) || seen.has(a), game: isFriend(a) });
@@ -29918,7 +29964,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           core, pid: PID, isPhone, isTouch, theme: () => ((D.rules.homes || {})[core.homeOf(me)] || {}).hud || null,
           walletState: () => walletState, walletRefresh: () => walletRefresh(), pid: PID,
           chestState: (...a) => { const C = chestState(...a); return C && C.here ? Object.assign({}, C, { chest: C.here }) : C; },   /* [Claude 2026-10-14] the chest window shows this home's chest */ chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a), depositInv: () => depositInv(), depositWorn: () => depositWorn(), withdrawAll: () => withdrawAll(),   /* the Bank part installs after the HUD is made */
-          friends: () => ({ rows: PALS.rows.slice(), note: PALS.note }),
+          friends: () => ({ rows: PALS.rows.slice(), note: PALS.note, addMsg: PALS.addMsg || null }),
+          friendAdd: tag => friendAdd(tag).then(res => { PALS.addMsg = res; if (hud.tab === 'friends') hud.refresh('friends'); return res; }),
           friendsRefresh: () => { loadPals().then(() => { if (hud.tab === 'friends') hud.refresh('friends'); }); },
           walletTake: (id) => chestTake(id, 1),   /* the same ledger as the chest (it bypassed it and could duplicate an NFT) */
           icon: id => { try { return MOD.icon(id, 64); } catch (e) { return null; } },

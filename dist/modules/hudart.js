@@ -117,6 +117,7 @@
 .ash .dlg .go{color:#00c;font-size:12px;margin-top:6px}
 .ash .dlg .go .btn{margin:4px 4px 0;cursor:pointer}
 .ash .tutgoal{position:absolute;left:calc((100% - 300px) / 2);top:10px;transform:translateX(-50%);width:max-content;max-width:min(520px,calc(100vw - 340px));padding:8px 16px;background:linear-gradient(#d8c8a0,#c4b386);box-shadow:inset 0 0 0 2px #8a7650,0 3px 8px #000a;color:#000;font:600 14px/1.35 "Trebuchet MS",Verdana,sans-serif;text-align:center;z-index:40;pointer-events:none;display:none}
+.ash .addf input{padding:4px 6px;border:1px solid #1b1610;border-radius:4px;background:#2a231b;color:#f3e7cc;font:inherit;box-shadow:inset 0 1px 3px #0008}.ash .addf input:focus{outline:1px solid #c8a050}
 .ash .tutgoal b{color:#801}.ash .tutgoal .st{color:#5a4428;font-size:12px}.ash .tutgoal .ok{color:#1e6a10;font-size:16px}
 @media (max-width:700px),(max-height:520px){.ash .tutgoal{left:8px;right:calc(var(--mm) + var(--tab) + 22px);transform:none;width:auto;max-width:none;padding:6px 10px;font-size:13px}}
 .ash .ctx{position:absolute;display:none;min-width:150px;padding:2px;background:#5d5447;border:1px solid #000;box-shadow:0 2px 8px #000b;border-radius:3px;z-index:9}

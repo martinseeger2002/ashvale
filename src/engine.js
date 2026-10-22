@@ -1774,7 +1774,7 @@
           /* their own levels as their game sent them; not here yet (2026-10-07: a first look showed every skill at 1, a blank copy):
              ask their game for them and open the panel when they come */
           o.push({ html: 'View stats ' + nm, fn: () => { if (r.skills) { hud.playerStats(label(r.name, r.from), r.skills, cb, r.story); return; } hud.chat('Asking ' + label(r.name, r.from) + ' for their stats\u2026', 'sys'); r.wantStats = { at: Date.now(), name: label(r.name, r.from), cb }; netSend({ GQ: 1 }); } });
-          if (room && !room.me.guest && r.from && r.from.address && r.from.tag && !r.from.guest) o.push(isFriend(r.from.address) ? { html: 'Remove friend ' + nm, fn: () => setFriend(r.from, false) } : { html: 'Add friend ' + nm, fn: () => setFriend(r.from, true) });
+          if (room && !room.me.guest && r.from && r.from.address && r.from.tag && !r.from.guest) o.push(isFriend(r.from.address) || (PALS.book && PALS.book.has(r.from.address)) ? { html: 'Remove friend ' + nm, fn: () => friendRemove(r.from) } : { html: 'Add friend ' + nm, fn: () => friendAdd(r.from).then(res => { if (!res.ok) hud.chat(res.msg, 'warn'); }) });
           o.push({ html: 'Examine ' + nm, fn: () => hud.chat(label(r.name, r.from) + ': another adventurer on the arcade.', 'sys') });
           return o;
         }
@@ -3224,6 +3224,44 @@
         if (hud.tab === 'friends') hud.refresh('friends');
         reportBook().then(() => loadPals()).catch(() => {});
       }
+      /* ADD A FRIEND (2026-10-21, the operator: "the same thing as adding someone to your address book on the actual arcade page"): through
+         the arcade's own address book - arcade.contacts.add, which shows the player a card to say yes to and keeps the person in the same book
+         as the arcade's Address book page. An arcade without add (older nodes) or a page outside the arcade keeps them in the game's own list. */
+      async function contactsApi() {
+        if (!(G.arcade && G.arcade.contacts) && G.parent && G.parent !== G && /^https?:/.test(location.protocol))
+          await new Promise(ok => { const s = G.document.createElement('script'); s.src = '/r/contacts.js'; s.onload = s.onerror = () => ok(); G.document.head.appendChild(s); setTimeout(ok, 8000); });
+        return G.arcade && G.arcade.contacts || null;
+      }
+      async function tagAddress(tag) { try { const j = await (await fetch('/r/tag/' + encodeURIComponent(tag))).json(); return j && j.address || null; } catch (e) { return null; } }
+      async function friendAdd(who) {
+        const tag = String((who && who.tag) || who || '').trim().replace(/^@/, '');
+        if (!/^[A-Za-z0-9_.-]{1,40}$/.test(tag)) return { ok: false, msg: 'Type their arcade name, like @alice.' };
+        if (room && room.me && room.me.guest) return { ok: false, msg: 'Sign in to the arcade to add friends.' };
+        const C = await contactsApi();
+        if (C && C.add) {
+          try {
+            const r = await C.add({ address: '@' + tag });
+            const msg = r && r.status === 'already' ? '@' + tag + ' is already in your address book.' : '@' + tag + ' is now in your address book, and on your friends list.';
+            const a = (who && who.address) || await tagAddress(tag);   /* listed even before they have an Ashvale save (the list shows book contacts only once the Bank knows them) */
+            if (a && !isFriend(a)) { FRIENDS.push({ a, tag }); store.set('ashvale3d.friends.v1', JSON.stringify(FRIENDS)); }
+            hud.chat(msg, 'sys'); reportBook().then(() => loadPals()).catch(() => {}); return { ok: true, msg };
+          } catch (e) {
+            const m = String((e && e.message) || e || '');
+            if (!/^no viewer/.test(m)) return { ok: false, msg: m === 'declined' ? 'You said no, so nothing changed.' : m.charAt(0).toUpperCase() + m.slice(1) };
+          }
+        }
+        const a = (who && who.address) || await tagAddress(tag);
+        if (!a) return { ok: false, msg: 'There is no @' + tag + ' on the arcade.' };
+        setFriend({ address: a, tag }, true);
+        return { ok: true, msg: '@' + tag + ' is on your friends list in the game (this arcade cannot add to your address book from a game yet).' };
+      }
+      async function friendRemove(from) {
+        const a = from && from.address; if (!a) return;
+        if (PALS.book && PALS.book.has(a)) { const C = await contactsApi();
+          if (C && C.remove) { try { await C.remove(a); PALS.book.delete(a); } catch (e) { const m = String((e && e.message) || e || ''); if (m !== 'declined') hud.chat('Could not remove them: ' + m, 'warn'); return; } } }
+        if (isFriend(a)) setFriend(from, false);
+        else { PALS.tags.delete(a); PALS.on.delete(a); PALS.rows = palRows(); hud.chat('@' + String(from.tag || '').replace(/^@/, '') + ' is off your friends list.', 'sys'); if (hud.tab === 'friends') hud.refresh('friends'); }
+      }
       function palRows() {
         const seen = new Set(Array.from(remotes.values()).map(r => r.from && r.from.address).filter(Boolean)), rows = [];
         for (const [a, tag] of PALS.tags) if (PALS.on.has(a) || isFriend(a)) rows.push({ tag, online: !!PALS.on.get(a) || seen.has(a), game: isFriend(a) });
@@ -3285,7 +3323,8 @@
           core, pid: PID, isPhone, isTouch, theme: () => ((D.rules.homes || {})[core.homeOf(me)] || {}).hud || null,
           walletState: () => walletState, walletRefresh: () => walletRefresh(), pid: PID,
           chestState: (...a) => { const C = chestState(...a); return C && C.here ? Object.assign({}, C, { chest: C.here }) : C; },   /* [Claude 2026-10-14] the chest window shows this home's chest */ chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a), depositInv: () => depositInv(), depositWorn: () => depositWorn(), withdrawAll: () => withdrawAll(),   /* the Bank part installs after the HUD is made */
-          friends: () => ({ rows: PALS.rows.slice(), note: PALS.note }),
+          friends: () => ({ rows: PALS.rows.slice(), note: PALS.note, addMsg: PALS.addMsg || null }),
+          friendAdd: tag => friendAdd(tag).then(res => { PALS.addMsg = res; if (hud.tab === 'friends') hud.refresh('friends'); return res; }),
           friendsRefresh: () => { loadPals().then(() => { if (hud.tab === 'friends') hud.refresh('friends'); }); },
           walletTake: (id) => chestTake(id, 1),   /* the same ledger as the chest (it bypassed it and could duplicate an NFT) */
           icon: id => { try { return MOD.icon(id, 64); } catch (e) { return null; } },
