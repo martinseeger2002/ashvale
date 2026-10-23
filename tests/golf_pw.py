@@ -32,7 +32,7 @@ ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshade
 GS = 'ASH.golf()._state()'
 COINS = "ASH.me.inv.reduce((s, q) => s + (q && q.id === 'coins' ? q.n : 0), 0)"
 def st(pg): return pg.evaluate(GS)
-TAPVIS = "(b => !!b && getComputedStyle(b).display !== 'none' && getComputedStyle(b.parentNode).display !== 'none')(document.querySelector('.golfp.putt .gtap'))"
+TAPVIS = "(b => !!b && b.textContent === 'TAP IN' && !document.querySelector('.golfp.putt .gtap'))(document.querySelector('.golfp .swingbtn'))"   # the operator: inside 10 ft the swing button is the tap-in
 def swing3(pg, how, label):
     """the three presses through the meter: start, power high on the meter, strike when the marker is back near the line"""
     def go():
@@ -50,7 +50,7 @@ def swing3(pg, how, label):
     go()
     check(wait(pg, GS + ".phase === 'go' || " + GS + ".phase === 'fly'", 3), label + ': the strike press swings')
 with sync_playwright() as p:
-    b = p.chromium.launch(headless=os.environ.get('HEADED') is None, args=ARGS if os.environ.get('HEADED') is None else ['--use-angle=gl']); errs = []
+    b = p.chromium.launch(headless=os.environ.get('HEADED') is None, args=ARGS if os.environ.get('HEADED') is None else ['--use-gl=egl']); errs = []
     ctx = b.new_context(viewport={'width': 1000, 'height': 640})
     phone = b.new_context(viewport={'width': 390, 'height': 844}, has_touch=True, is_mobile=True, device_scale_factor=2)
     pages = []
@@ -81,7 +81,7 @@ with sync_playwright() as p:
     if not (okA and okB): print('   ann me', ann.evaluate('ASH.golf()._me()'), 'ben me', ben.evaluate('ASH.golf()._me()'), 'ann lobby', ann.evaluate('ASH.golf()._lobby()'), 'ben lobby', ben.evaluate('ASH.golf()._lobby()')); b.close(); raise SystemExit(1)
     check(ann.evaluate(GS + ".rid") == ben.evaluate(GS + ".rid"), 'the same round id on both')
     check(ann.evaluate("!!document.querySelector('.lay.golf') && !!document.querySelector('.golfp.swing')"), 'the golf HUD replaces the HUD')
-    check(wait(ann, COINS + " === 4900", 10) and wait(ben, COINS + " === 4900", 10), 'the 100 GOLD stakes leave both bags')
+    check(wait(ann, COINS + " === 4850", 10) and wait(ben, COINS + " === 4850", 10), "the 100 GOLD stakes and the 50 GOLD green fee leave both bags")
     check(ann.evaluate("__pkEv.some(e => e.e === 'pkbuy' && /^golf:/.test(e.s) && e.n === 100)"), 'pkbuy: the stake goes to @ashvale')
     A, B = st(ann)['sn'], st(ben)['sn']
     NM = {x[3]: x[1] for x in st(ann)['m']}   # the names the games go by (the board name)
@@ -163,8 +163,8 @@ with sync_playwright() as p:
         pg = ann if t == A else ben; k0 = st(pg)['k']
         if t == B and not tapped:   # the operator: inside 10 ft the Tap in button knocks it in
             tapped = True; s0 = st(ben)['strokes']
-            check(ben.evaluate(TAPVIS), 'Ben (%.1f ft) has a Tap in button' % (12 * math.hypot(pin[0] - st(ben)['ball']['x'], pin[1] - st(ben)['ball']['y'])))
-            ben.click('.golfp.putt .gtap'); shots += 1
+            check(ben.evaluate(TAPVIS), 'Ben (%.1f ft): the swing button reads TAP IN' % (12 * math.hypot(pin[0] - st(ben)['ball']['x'], pin[1] - st(ben)['ball']['y'])))
+            ben.click('.golfp .swingbtn'); shots += 1
             check(wait(ben, "(s => s.k === %d && s.phase === 'done')(%s)" % (k0 + 1, GS), 15) and st(ben)['card'] == [s0 + 1], 'the tap-in drops: one stroke (card %s)' % st(ben)['card'])
             check(wait(ann, "(s => (s.cards[%d] || []).length === 1)(%s)" % (B, GS), 10), "Ann's game sees Ben's tap-in holed")
             time.sleep(0.4); continue
@@ -191,8 +191,8 @@ with sync_playwright() as p:
     check(wait(ann, GS + ".settled", 20) and wait(ben, GS + ".settled", 20), 'both games settle once both have finished')
     ev = ann.evaluate("__pkEv.filter(e => e.e === 'pkcash' || e.e === 'pkout')"); evb = ben.evaluate("__pkEv.filter(e => e.e === 'pkcash' || e.e === 'pkout')")
     print('   ann events', ev); print('   ben events', evb)
-    check(wait(ann, COINS + " === 5100", 10), "Ann's bag gets the pot (5100)")
-    check(ben.evaluate(COINS) == 4900, 'Ben is down his stake (4900)')
+    check(wait(ann, COINS + " === 5050", 10), "Ann's bag gets the pot (5000 - 50 fee + 100)")
+    check(ben.evaluate(COINS) == 4850, "Ben is down his stake and the fee (4850)")
     check(wait(ann, "__pkEv.some(e => e.e === 'pkcash' && e.n === 200)", 10) and wait(ben, "__pkEv.some(e => e.e === 'pkcash' && e.n === 0)", 10),'each game claims its own share (pkcash 200 / 0)')
     # Cal on a phone: alone, touch taps on the swing button
     cal.evaluate("ASH.golf()._begin({ rid: 'c' + Date.now().toString(36), f: 'free', a: 0, m: [[ASH.golf()._me(), 'Cal', '', 1]] })")
@@ -222,10 +222,10 @@ with sync_playwright() as p:
           for (let a = 0; a < 6.3; a += 0.3) { const x = p[0] + Math.cos(a) * d, y = p[1] + Math.sin(a) * d; ASH.golf()._put(x, y); if (ASH.golf()._state().club === 'PT') return true; }
           return false; }""", d)
     if st(cal)['phase'] == 'aim':
-        check(put_at(0.9) and not cal.evaluate(TAPVIS), 'Cal 11 ft from the pin: no Tap in button')
-        check(put_at(0.8) and cal.evaluate(TAPVIS), 'Cal 9.6 ft from the pin: a Tap in button')
+        check(put_at(0.9) and wait(cal, "document.querySelector('.golfp .swingbtn').textContent === 'PUTT'", 3), 'Cal 11 ft from the pin: the button reads PUTT')
+        check(put_at(0.8) and wait(cal, TAPVIS, 3), 'Cal 9.6 ft from the pin: the swing button reads TAP IN')
         if os.environ.get('SHOTS'): time.sleep(0.6); cal.screenshot(path=os.path.join(os.environ['SHOTS'], 'golf_tapin.png'))
-        s0 = st(cal)['strokes']; bt = cal.evaluate("(r => [r.left + r.width / 2, r.top + r.height / 2])(document.querySelector('.golfp.putt .gtap').getBoundingClientRect())")
+        s0 = st(cal)['strokes']; bt = cal.evaluate("(r => [r.left + r.width / 2, r.top + r.height / 2])(document.querySelector('.golfp .swingbtn').getBoundingClientRect())")
         cal.touchscreen.tap(bt[0], bt[1])
         check(wait(cal, GS + ".phase === 'done'", 15) and st(cal)['card'][:1] == [s0 + 1], 'touch: the tap-in drops for one stroke (card %s)' % st(cal)['card'])
     else: check(False, 'Cal back at aim for the tap-in check (phase %s)' % st(cal)['phase'])

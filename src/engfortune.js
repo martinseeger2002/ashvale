@@ -163,12 +163,12 @@
       };
       try {
         const r = await fetch('/r/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-          body: JSON.stringify({ to: '@ashvale', label: 'ASHVALE', note: 'Fortune Engine', silent: true, kind: 'token', propertyid: pid, amount: String(b.n) }) });   /* [Claude 2026-10-16] the operator: "We're not supposed to have these prompts in the game all transactions should happen automatically" - silent: the arcade signs a game's own GOLD back to it with no card */
+          body: JSON.stringify({ to: '@ashvale', label: 'ASHVALE', note: 'Fortune Engine', silent: true, kind: 'token', propertyid: pid, amount: String(b.n), ref: id + (b.rf ? ':' + b.rf : '') }) });   /* [Claude 2026-10-20] ref: the arcade files one send per ref (a repeat answers 200 + repeat with the first send), so a retry after a lost answer (Safari's 'Load failed' on the operator's phone) never sends the GOLD twice; a send the arcade said failed is tried again under a new ref (b.rf) */   /* [Claude 2026-10-16] the operator: "We're not supposed to have these prompts in the game all transactions should happen automatically" - silent: the arcade signs a game's own GOLD back to it with no card */
         const j = await r.json().catch(() => ({}));
-        if (r.status !== 202 || !j.id || j.status === 'failed') { fail(j.error || ('the arcade said ' + r.status)); return; }
+        if (!(r.status === 202 || (r.status === 200 && j.repeat)) || !j.id || j.status === 'failed' || j.status === 'expired') { if (j.id) b.rf = (b.rf | 0) + 1; fail(j.error || j.status || ('the arcade said ' + r.status)); return; }
         let st = j;
         for (let i = 0; i < 200 && st && st.status !== 'sent' && st.status !== 'failed'; i++) { await new Promise(ok => setTimeout(ok, 3000)); st = await fetch('/r/send/' + encodeURIComponent(j.id), { credentials: 'same-origin' }).then(x => x.json()).catch(() => null) || st; }
-        if (!st || st.status !== 'sent' || !st.txid) { fail((st && (st.error || st.status)) || 'no answer from the wallet'); return; }
+        if (!st || st.status !== 'sent' || !st.txid) { if (st && (st.status === 'failed' || st.status === 'expired')) b.rf = (b.rf | 0) + 1; fail((st && (st.error || st.status)) || 'no answer from the wallet'); return; }
         b.tx = st.txid; b.sentAt = Date.now(); if (oo) { oo.st = 'sent'; oo.t = Date.now(); } ENGBANK.ledgerSave(); setTimeout(K.walletRefresh, 60000);
         bankSend(b.s + '|tx|' + b.id, { t: 'fein', v: 1, s: b.s, n: b.n, id: b.id, tx: b.tx });   /* the proof of a deposit the Bank already credited */
         L.feb = L.feb.filter(x => !((x.tx || x.failed) && Date.now() - (x.at || 0) > 7 * 86400000));

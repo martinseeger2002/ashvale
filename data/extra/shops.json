@@ -79,6 +79,32 @@
    "sellRate": 100,
    "fixed": true,
    "greet": "Welcome to the Links. You need a set of clubs to play: start with the Starter Set, and come back for a better one when your game asks for it."
+  },
+  "golfwear": {
+   "name": "Saltmere Links Golfwear",
+   "keeper": "rhona",
+   "stock": [
+    "golfwear_flatcap",
+    "golfwear_visor",
+    "golfwear_polo_white",
+    "golfwear_polo_navy",
+    "golfwear_polo_green",
+    "golfwear_polo_red",
+    "golfwear_tweed",
+    "golfwear_trousers_khaki",
+    "golfwear_trousers_navy",
+    "golfwear_trousers_grey",
+    "golfwear_skirt_white",
+    "golfwear_skirt_navy"
+   ],
+   "buys": [
+    "cosmetic/shirt",
+    "cosmetic/trousers"
+   ],
+   "buyRate": 40,
+   "sellRate": 100,
+   "fixed": true,
+   "greet": "Dress for the Links! Polos, jackets, trousers and skirts, and a cap for the wind. Try anything on."
   }
  }
 }

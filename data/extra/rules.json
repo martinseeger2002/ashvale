@@ -31,7 +31,9 @@
    "cosmetic": [
     "hat",
     "cape",
-    "robe"
+    "robe",
+    "shirt",
+    "trousers"
    ],
    "resource": [
     "logs",
@@ -94,7 +96,9 @@
    "armour/hood": "head",
    "armour/coif": "head",
    "armour/hidebody": "body",
-   "armour/chaps": "legs"
+   "armour/chaps": "legs",
+   "cosmetic/shirt": "body",
+   "cosmetic/trousers": "legs"
   },
   "traits": {
    "Prayer XP": [

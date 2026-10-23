@@ -57,6 +57,12 @@ const tp = s => R.shot(C, s, { club: 'PT', tap: 1, aim: Math.PI, power: 0.3, imp
 ok(R.canTap(C, near, g.pin) && tp(near).holed && tp(near).penalty === 0, 'a tap-in from 9.5 ft drops');
 ok(!R.canTap(C, far, g.pin) && !tp(far).holed, 'no tap-in from 10.5 ft (a plain putt instead)');
 ok(JSON.stringify(tp(near)) === JSON.stringify(tp(near)), 'a tap-in replays the same on every game');
+{ /* 2026-10-20: the tap never has more pace than it needs - it reaches the cup slow enough to drop, where a firm putt skips over */
+  const P = tp(near).path, a = P[9], b = P[10], v = Math.hypot(b[0] - a[0], b[1] - a[1]) / (b[3] - a[3]);
+  ok(v < 0.4, 'the tap-in reaches the cup at ' + v.toFixed(2) + ' m/s (a walking-pace drop)');
+  const firm = R.shot(C, near, { club: 'PT', range: 'long', aim: Math.atan2(g.pin[1] - near.y, g.pin[0] - near.x), power: 1, impact: 0, spin: 'none', set: 'standard', pin: g.pin });
+  ok(!firm.holed, 'a full long putt from the same spot skips over the hole (' + (firm.lip ? 'lipped' : 'past') + ')');
+}
 // 2026-10-20: struck on the centre line the ball flies straight; left of it (early, a negative impact) it bends right,
 // right of it (late) it bends left; the better the set, the less it bends
 const h1 = C.holes[0], t1 = { x: h1.pts[0][0], y: h1.pts[0][1] }, aim1 = Math.atan2(h1.pts[1][1] - t1.y, h1.pts[1][0] - t1.x);

@@ -7,7 +7,7 @@ const AshCore = require('../src/core.js');
 const DD = path.join(__dirname, '..', 'data');
 const mod = n => JSON.parse(fs.readFileSync(path.join(DD, n + '.json'), 'utf8')).data;
 const zones = fs.readdirSync(DD).filter(f => /^zone\..*\.json$/.test(f)).map(f => Object.assign({ id: f.slice(5, -5) }, mod(f.slice(0, -5))));
-const D = { items: mod('items').items, monsters: mod('monsters').monsters, shops: mod('shops'), quests: mod('quests'), rules: mod('rules'), zones, globecfg: mod('globecfg') };
+const D = { items: mod('items').items, monsters: mod('monsters').monsters, shops: mod('shops'), quests: mod('quests'), rules: mod('rules'), zones, globecfg: mod('globecfg'), decor: mod('decor') };   /* decor: the railing's sections block (world.js stampDecor) */
 let fails = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); if (!c) fails++; };
 const core = AshCore.create(D, { seed: 'clubhouse' });
 const p = core.addPlayer('p1', {});
@@ -27,7 +27,8 @@ ok(!golf.objects.some(o => o.x >= 640 && o.x <= 641 && o.y >= -118 && o.y <= -11
 const chest = golf.npcs.find(n => n.chest), chess = golf.objects.filter(o => o.k === 'chesstable'), fe = golf.objects.filter(o => o.k === 'fortune');
 ok(!!chest && inside(chest.x, chest.y), 'a bank chest inside the clubhouse');
 ok(chess.length === 1 && inside(chess[0].x, chess[0].y) && chess[0].seats.every(s => inside(s[0], s[1])), 'a chess table with both seats inside');
-ok(fe.length === 4 && fe.every(o => inside(o.x, o.y) && inside(o.seat[0], o.seat[1])), 'a bank of four Fortune Engines with their seats inside');
+ok(fe.length === 9 && fe.every(o => inside(o.x, o.y) && inside(o.seat[0], o.seat[1]) && (o.lv | 0) === 1 && o.x === H.x + 1 && o.face === 'e'), 'Fortune Engines along the whole west wall upstairs (the operator), nine, each with its seat inside');
+ok(!fe.some(o => !(o.lv | 0)), 'and none downstairs any more');
 const taken = new Set([G.x + ',' + G.y, chest.x + ',' + chest.y, ...chess.map(o => o.x + ',' + o.y), ...chess.flatMap(o => o.seats.map(s => s.join())), ...fe.map(o => o.x + ',' + o.y), ...fe.map(o => o.seat.join()), ...golf.npcs.map(n => n.x + ',' + n.y)]);
 ok(!taken.has(golf.returnTo.join()) && !taken.has('637,-117') && !taken.has(H.door[0] + ',' + (H.door[1] - 1)), 'the tiles a save and a golfer start on, and inside the door, stay clear');
 // in Saltmere, never been to the clubhouse: Saltmere's portal does not offer it (it says it is not yet attuned)
@@ -53,4 +54,12 @@ const A = D.rules.portals.find(P => P.id === 'ashvale'); at(A.to[0], A.to[1]); e
 ok(e && !e.to.some(t => t.id === 'golf') && e.unknown.indexOf(G.name) < 0, 'Ashvale\'s portal never offers it');
 core.cmd('p1', { c: 'portal', to: 'golf' }); run(5);
 ok(Math.max(Math.abs(p.x - A.to[0]), Math.abs(p.y - A.to[1])) <= 2, 'nor takes you there');
+// 2026-10-20: "a door in the back of the clubhouse that allows people to walk from the golf course into the clubhouse, but not
+// from the clubhouse into the golf course"
+const BD = H.backdoor;
+ok(!!BD && BD[1] === H.y && BD[0] > H.x && BD[0] < H.x + H.w - 1, 'a back door in the north wall, facing the course');
+const walkTo = (x, y, n) => { core.cmd('p1', { c: 'walk', x, y }); run(n || 60); return p.x === x && p.y === y; };
+at(BD[0], BD[1] - 2); ok(walkTo(BD[0], BD[1] + 2), 'from the course you walk in through the back door (' + p.x + ',' + p.y + ')');
+at(BD[0], BD[1] + 1); walkTo(BD[0], BD[1] - 2);
+ok(p.x >= H.x && p.x < H.x + H.w && p.y >= H.y && p.y < H.y + H.h, 'from inside it does not let you out onto the course - you stay in the clubhouse (' + p.x + ',' + p.y + ')');
 process.exit(fails ? 1 : 0);

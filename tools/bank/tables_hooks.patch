@@ -1,0 +1,36 @@
+--- a/tools/bank/bank.py	2026-10-20 17:37:03.978744001 -0500
++++ b/tools/bank/bank.py	2026-10-20 17:37:08.865990178 -0500
+@@ -807,6 +807,7 @@
+     if msg.get('t') in ('pkbuy', 'pkout', 'pk?'): return handle_pk(c, addr, msg)
+     if msg.get('t') in ('cput', 'ctake', 'chests?'): return handle_chests(c, addr, msg)
+     if msg.get('t') in ('fein', 'feinx', 'fespin', 'feout', 'fe?'): return handle_fe(c, addr, msg)
++    if msg.get('t') in TB.TB_TYPES: return TB.handle_tb(c, addr, msg)   # [Claude 2026-10-20] the clubhouse tables (tools/bank/tables.py)
+     rid = str(msg.get('id') or '')[:40]
+     if not rid: return None
+     old = c.execute('select paid from reqs where addr=? and id=?', (addr, rid)).fetchone()
+@@ -1019,6 +1020,7 @@
+         c.execute('insert or replace into given values(?,?,?,?)', (piece, addr, k, time.time())); c.commit()
+         r = self.W.nft_send(piece, addr)
+         return (r or {}).get('txid'), piece
++import tables as TB; TB.bind(sys.modules[__name__])   # [Claude 2026-10-20] the clubhouse tables: sittings, the clock, the rules worker (tools/bank/tables.py)
+ OUTQ = []   # [Claude 2026-10-12] words for the room from the deliverer thread (the room loop sends them): {t:'paid', to, item, units, txid}
+ SENT = os.path.join(HERE, 'chain', 'bank', 'sent.jsonl')   # [Claude 2026-10-12] the journal: written and fsynced BEFORE a broadcast (handoff/bank_rpc_plan.md 7)
+ RATE_CAP, BATCH_CAP = 40, 10000   # sends per minute; units one coalesced send may carry (a bigger one is held for a human)
+@@ -1202,7 +1204,7 @@
+         except Exception as e:
+             log('ROOM DOWN', str(e)[:200]); room.token = None; room._said = 0
+             stop.wait(10)
+-ROOM_TYPES = ('dep', 'drop', 'fell', 'felled?', 'boat', 'boats?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'pals?', 'sv', 'ld?', 'mark', 'marks?', 'carry', 'carried?', 'hold', 'holds?', 'offer', 'unoffer', 'score', 'scores?', 'best', 'pkbuy', 'pkout', 'pk?', 'cput', 'ctake', 'chests?', 'fein', 'feinx', 'fespin', 'feout', 'fe?')
++ROOM_TYPES = TB.TB_TYPES + ('dep', 'drop', 'fell', 'felled?', 'boat', 'boats?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'pals?', 'sv', 'ld?', 'mark', 'marks?', 'carry', 'carried?', 'hold', 'holds?', 'offer', 'unoffer', 'score', 'scores?', 'best', 'pkbuy', 'pkout', 'pk?', 'cput', 'ctake', 'chests?', 'fein', 'feinx', 'fespin', 'feout', 'fe?')
+ def room_loop(stop):
+     from pw_send import AshvaleBrowser
+     L = BANK_PAGE   # its own tiny page (chain/bank/bank_room.html), not the game: @ashvale never enters the world (2026-10-05: "@ashvale keeps popping into the game")
+@@ -1226,6 +1228,8 @@
+                         try: rep = handle(c, f['address'], d)
+                         except Exception: log('HANDLE ERROR', traceback.format_exc()[-400:]); rep = {'t': 'dep', 'id': d.get('id'), 'to': f['address'], 'ok': False, 'note': 'The bank hit an error; try again later.'}
+                         for r1 in (rep if isinstance(rep, list) else [rep] if rep else []): fr.evaluate("o => window.__bank.send(o)", r1)
++                    try: TB.tb_tick(c)   # [Claude 2026-10-20] the clubhouse tables' clock: every table moves on by itself
++                    except Exception: log('TB TICK ERROR', traceback.format_exc()[-300:])
+                     while OUTQ:   # [Claude 2026-10-12] 'paid' words from the deliverer
+                         try: fr.evaluate("o => window.__bank.send(o)", OUTQ.pop(0))
+                         except Exception as e: log('PAID WORD FAILED', str(e)[:120]); break

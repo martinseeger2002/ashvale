@@ -19,11 +19,20 @@ def file_of(name, group):
     if group == 'data': return os.path.join(MOD, name + '.json')
     return os.path.join(MOD, name + '.js')
 served = {}   # fake id -> (path, content type)
+GZ = '--gz' in sys.argv   # [Claude 2026-10-23] served gzipped, as the release now inscribes every changed module (netretry unpacks them; its own entry gz)
+def gzbytes(path):
+    raw = open(path, 'rb').read()
+    try:
+        import zopfli.gzip as ZG; return ZG.compress(raw, numiterations=15)
+    except ImportError:
+        import gzip; return gzip.compress(raw, 9, mtime=0)
 def fill(key, path, e):
     live = ST['modules'].get(key)
     if live and live.get('sha') == sha(path): e['id'] = live['id']; return False
-    fid = 'cand' + hashlib.sha256((key + sha(path)).encode()).hexdigest()[:60]
-    served[fid] = (path, 'application/json' if path.endswith('.json') else 'application/javascript'); e['id'] = fid; return True
+    fid = ('' if GZ else 'cand') + hashlib.sha256((key + sha(path)).encode()).hexdigest()[:64 if GZ else 60]
+    served[fid] = (path, 'application/gzip' if GZ else 'application/json' if path.endswith('.json') else 'application/javascript'); e['id'] = fid
+    if GZ and key == 'netretry': e['gz'] = 1
+    return True
 changed = []
 for k, e in REG['modules'].items():
     if k == 'three': e.update({'id': THREE_ID, 'v': '0.160.0', 'api': 160, 'kind': 'esm'}); continue
@@ -58,10 +67,11 @@ with sync_playwright() as p:
         route.fulfill(status=200, headers={'content-type': 'application/json', 'access-control-allow-origin': '*'}, body=json.dumps([{'id': 'candidate', 'json': REG}] + (L or [])))
     def content(route):
         fid = route.request.url.rsplit('/', 1)[-1]
-        if fid in served: route.fulfill(status=200, headers={'content-type': served[fid][1], 'access-control-allow-origin': '*'}, body=open(served[fid][0], 'rb').read())
+        if fid in served: route.fulfill(status=200, headers={'content-type': served[fid][1], 'access-control-allow-origin': '*'}, body=gzbytes(served[fid][0]) if GZ else open(served[fid][0], 'rb').read())
         else: route.fallback()
     ctx.route('**/r/inscriptions?creator=*', lookup)
     ctx.route('**/content/cand*', content)
+    if GZ: ctx.route(lambda u: u.rsplit('/', 1)[-1] in served, content)
     t0 = time.time()
     pg.goto('https://app.dogecoinarcade.com/inscriptions/' + ST['launcher'] + '/full')
     g = None

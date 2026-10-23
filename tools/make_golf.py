@@ -13,10 +13,15 @@ RAW = json.load(open(os.path.join(HERE, 'golf', 'raw_tiles.json')))   # the worl
 SX0, SY0 = RAW['x0'], RAW['y0']
 TREE, ROCK = set('TPOWMYELQU'), set('RNICGASVr^K')
 SITE = [''.join('~' if c == '~' else 'T' if c in TREE else 'R' if c in ROCK else '.' for c in r) for r in RAW['rows']]
-CLUBHOUSE = (631, -122, 12, 7)   # x, y, w, h (tiles): between the 1st tee and the 18th green, door on the south side
+CLUBHOUSE = (627, -126, 16, 11)   # x, y, w, h (tiles): south of the 6th green and the 1st tee, door on the south side; 2026-10-20 (his floor plan): 16 wide, grown west and north (was 631, -122, 12 x 7) so the four tables and their pit fit upstairs; [Claude 2026-10-22] the course moved off it (course.py DX, DY), the 1st tee is 20 m north-east of its back wall
 DOOR = (637, -116)
 PATH = [(x, y) for x in range(545, 640) for y in (-114, -113, -112)] + [(x, y) for x in (636, 637, 638) for y in range(-115, -111)]   # the cobbled road (3 wide) from the path zone's end along the shore to the door (2026-10-20)
-X0, Y0, X1, Y1 = 545, -398, 720, -104   # the course box (tiles = metres)
+# [Claude 2026-10-22] the walk out to the 1st tee, now 20 m out past the clubhouse's north-east corner (the operator: "move the course back from the
+# clubhouse ... further away from the clubhouse along the shoreline"): a cobbled path two wide from the back door (635,-126) north, then
+# east along to the back of the tee box. Only where the course is not (it plays as rough there).
+TEE1 = C.out[0]['pts'][0]
+TEEPATH = [(x, y) for x in (634, 635) for y in range(TEE1[1] + 4, -126)] + [(x, y) for x in range(634, TEE1[0] + 1) for y in (TEE1[1] + 4, TEE1[1] + 5)]
+X0, Y0, X1, Y1 = 545, -418, 740, -104   # the course box (tiles = metres); [Claude 2026-10-22] grown 20 east and 20 north with the course (course.py DX, DY: the operator, "further away from the clubhouse along the shoreline"); the west side and the south (the clubhouse, the road) stay
 Q = 2                           # cells per metre
 W, H = (X1 - X0) * Q, (Y1 - Y0) * Q
 yy, xx = np.mgrid[0:H, 0:W].astype(np.float64)
@@ -71,6 +76,26 @@ wat |= dpoly(C.BURN) < 2.4 + .6 * np.sin(ty * .25)
 course = rough | fringe
 g = np.full(tx.shape, 'h', '<U1')
 g[course] = 'r'; g[fair] = 'f'; g[fringe] = 'e'; g[green] = 'g'; g[tee] = 't'; g[sand] = 's'
+# [Claude 2026-10-22] the course moved (course.py DX, DY): a pond of the world's own (water that does not reach the edge of the tile
+# survey: not the sea) under a tee, a fairway or a green is filled in - the old pond the 1st green and the 2nd tee now stand on; the
+# designed ponds (C.PONDS) moved with the holes. Other ponds stay water.
+from collections import deque
+lab = [[0] * len(SITE[0]) for _ in SITE]; ponds = []
+for j0, r in enumerate(SITE):
+    for i0, c in enumerate(r):
+        if c != '~' or lab[j0][i0]: continue
+        k = len(ponds) + 1; lab[j0][i0] = k; q = deque([(i0, j0)]); edge = False; cells_ = []
+        while q:
+            i, j = q.popleft(); cells_.append((i, j))
+            if i in (0, len(r) - 1) or j in (0, len(SITE) - 1): edge = True
+            for a, b in ((i + 1, j), (i - 1, j), (i, j + 1), (i, j - 1)):
+                if 0 <= a < len(r) and 0 <= b < len(SITE) and SITE[b][a] == '~' and not lab[b][a]: lab[b][a] = k; q.append((a, b))
+        ponds.append((edge, cells_))
+pid = np.array(lab)[si, sj] * inside
+play = tee | fair | fringe | green
+for k, (edge, cells_) in enumerate(ponds, 1):
+    m = pid == k
+    if not edge and (m & play).any(): bay &= ~m
 # the bay is out of bounds unless it is the old pond (north of y -200)
 g[bay & (ty > -200)] = 'o'; g[bay & (ty <= -200)] = 'w'
 wat &= ~(green | tee); g[wat] = 'w'
@@ -79,6 +104,8 @@ cx0, cy0, cw, chh = CLUBHOUSE
 g[(tx >= cx0) & (tx < cx0 + cw) & (ty >= cy0) & (ty < cy0 + chh)] = 'c'
 for (px, py) in PATH:
     g[(np.floor(tx) == px) & (np.floor(ty) == py)] = 'x'
+for (px, py) in TEEPATH:
+    m = (np.floor(tx) == px) & (np.floor(ty) == py); g[m & (g == 'h')] = 'x'
 rows = [''.join(r) for r in g]
 trees = []
 for j, r in enumerate(SITE):

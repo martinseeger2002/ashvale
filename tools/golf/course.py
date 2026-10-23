@@ -54,6 +54,19 @@ PONDS = [
 ]
 BURN = [(603,-398),(606,-370),(612,-352),(606,-336),(616,-300),(628,-282),(636,-266),(650,-236),(664,-214),(670,-192),(686,-180),(698,-150),(713,-128),(720,-108)]
 CLUB = (638, -116); HALF = (580, -364)
+# [Claude 2026-10-22] the operator: "The clubhouse is entirely in the way of hole one tee off. Can we move the clubhouse?" - "Or actually move
+# the course back from the clubhouse a bit" - "Further away from the clubhouse along the shoreline". The clubhouse stays where it is
+# (CLUB, make_golf.CLUBHOUSE); the whole course moves DX east along the shore and DY north, back from it: the 1st tee (was 626,-128,
+# right behind the clubhouse's north wall, the camera inside it) is now 646,-148, past its north-east corner, with nothing behind the
+# golfer but grass. The coordinates above are the layout as the operator approved it; every hole, pond, the burn and the halfway house move
+# together. The burn runs on to the bay (its old mouth would be inland now). The 11th's middle comes 2 m in from the sea at the point.
+DX, DY = 20, -20
+mv = lambda p: (p[0] + DX, p[1] + DY)
+H = [(par, [mv(p) for p in pts]) for par, pts in H]
+H[10] = (H[10][0], [H[10][1][0], (H[10][1][1][0] - 2, H[10][1][1][1]), H[10][1][2]])
+PONDS = [(cx + DX, cy + DY, rx, ry, a) for cx, cy, rx, ry, a in PONDS]
+BURN = [mv(p) for p in BURN[:-1]] + [(738, -132), (733, -116)]
+HALF = mv(HALF)
 def L(pts): return sum(math.dist(a, b) for a, b in zip(pts, pts[1:]))
 out = []
 for n, (par, pts) in enumerate(H, 1):

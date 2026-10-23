@@ -163,6 +163,10 @@
     const wset = (x, y, b) => { const k = key(x, y); wall.set(k, (wall.get(k) || 0) | b); touched.add(k); };   /* anywhere: not only the old map's rectangle (the operator: walls you could walk through) */
     const wclr = (x, y, b) => { const k = key(x, y); wall.set(k, (wall.get(k) || 0) & ~b); touched.add(k); };
     const touched = new Set();   /* tile keys whose wall / inside / open state a zone set (baked into chunks below) */
+    /* 2026-10-20 ("a door in the back of the clubhouse that allows people to walk from the golf course into the clubhouse, but not from
+       the clubhouse into the golf course"): a house's backdoor keeps its wall but the tile outside it may step through, inward only.
+       oneWay(x, y): the edge bits (N1 E2 S4 W8) a step FROM this tile may cross although a wall stands there */
+    const ONEWAY = new Map(), oneWay = (x, y) => ONEWAY.get(key(x, y)) | 0;
     const walls = (objs, npcList) => { for (const o of objs) if (o.enter && !o.basementOnly) {
       const x1 = o.x + o.w - 1, y1 = o.y + o.h - 1;
       for (let x = o.x; x <= x1; x++) { wset(x, o.y, 1); wset(x, o.y - 1, 4); wset(x, y1, 4); wset(x, y1 + 1, 1); }
@@ -171,6 +175,10 @@
         const [dx, dy] = o.door;
         if (dy === o.y) { wclr(dx, dy, 1); wclr(dx, dy - 1, 4); } else if (dy === y1) { wclr(dx, dy, 4); wclr(dx, dy + 1, 1); }
         else if (dx === o.x) { wclr(dx, dy, 8); wclr(dx - 1, dy, 2); } else { wclr(dx, dy, 2); wclr(dx + 1, dy, 8); }
+      }
+      if (o.backdoor) {   /* the tile outside the wall, and the side it steps in through */
+        const [bx, by] = o.backdoor, out = by === o.y ? [bx, by - 1, 4] : by === y1 ? [bx, by + 1, 1] : bx === o.x ? [bx - 1, by, 2] : [bx + 1, by, 8];
+        ONEWAY.set(key(out[0], out[1]), (ONEWAY.get(key(out[0], out[1])) | 0) | out[2]);
       }
       for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) inside.add(key(x, y));   /* monsters never wander into buildings */
     }
@@ -401,7 +409,7 @@
 
     return {
       API, CH, cfg: CFG, key, kx, ky, W, H, pieces, npcs, spawns, objects, nodes, respawn: respawn || [Math.floor(W / 2), Math.floor(H / 2)],
-      tileAt, blocked, losAt, wallAt, insideAt, zoneAt, nodeAt, inWorld, addZone, hasZone: (id) => pieces.some(P => P.id === id),
+      tileAt, blocked, losAt, wallAt, oneWay, insideAt, zoneAt, nodeAt, inWorld, addZone, hasZone: (id) => pieces.some(P => P.id === id),
       regionOf: (x, y) => 'vale:' + FACE + ':' + Math.floor((x + GX) / REG) + ':' + Math.floor((y + GY) / REG),
       seeded: !!WG, inPiece: (x, y) => { const z = chunkAt(x, y).zi[ci(x, y)]; return !!z && !pieces[z - 1].spot; },
       flatAt: (x, y) => { const z = chunkAt(x, y).zi[ci(x, y)]; return !!z && !!pieces[z - 1].flat; },

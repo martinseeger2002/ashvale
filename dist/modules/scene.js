@@ -90,7 +90,8 @@
        the bets and the button, and a card travels out to its seat on a TWEEN, as a chess piece slides. The last model
        a table was shown is kept in PK_STATE, so rebuilding the region puts the hand back on the felt. */
     const POKER = Object.create(null), PK_STATE = Object.create(null);
-    const FORTUNE = Object.create(null);   /* [Claude 2026-10-16] the Fortune Engines by id (src/fortune.js builds each; the engine drives them) */
+    const FORTUNE = Object.create(null);
+    const GAMETABLE = Object.create(null);   /* [Claude 2026-10-20] the clubhouse tables by id (each game's own module, <game>table.js, builds one) */   /* [Claude 2026-10-16] the Fortune Engines by id (src/fortune.js builds each; the engine drives them) */
     const CARD_W = 0.15, CARD_H = 0.212, PW = 96, PH = 144, PBACK = 63, CARD_Y = 0.007;
     const PRANKS = '23456789TJQKA', PINK = ['#20202a', '#b23a30', '#b23a30', '#20202a'];
     /* [Claude 2026-10-11] the operator: "It shouldn't be chips. It should be gold coins" - a bet is a pile of coins toward the middle
@@ -507,9 +508,9 @@
         Object.assign(sh.uniforms, SEE);
         sh.vertexShader = 'varying float vSeeY;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  { vec4 sp = vec4(transformed, 1.0);\n  #ifdef USE_INSTANCING\n  sp = instanceMatrix * sp;\n  #endif\n  vSeeY = (modelMatrix * sp).y; }');
         sh.fragmentShader = 'uniform vec2 uSeeP;\nuniform float uSeeR;\nuniform float uSeeD;\nuniform float uSeeY;\nvarying float vSeeY;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>',
-          '#include <clipping_planes_fragment>\n  if (uSeeR > 0.0 && vSeeY > uSeeY) { float vd = length(vViewPosition); if (vd < uSeeD) { float f = smoothstep(uSeeD - 0.25, uSeeD, vd); float nz = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453); if (nz > f) discard; } }');
+          '#include <clipping_planes_fragment>\n  if (uSeeR > 0.0 && vSeeY > uSeeY) { float vd = length(vViewPosition), sr = distance(gl_FragCoord.xy, uSeeP); if (vd < uSeeD && sr < uSeeR) { float f = max(smoothstep(uSeeD - 0.25, uSeeD, vd), smoothstep(uSeeR * 0.72, uSeeR, sr)); float nz = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453); if (nz > f) discard; } }');
       };
-      m.customProgramCacheKey = () => 'see2';
+      m.customProgramCacheKey = () => 'see3';   /* [Claude 2026-10-22] only inside the circle round the avatar on screen (uSeeP, uSeeR), as the engine meant: everything nearer than the avatar used to dissolve, anywhere (the operator: on the first tee the clubhouse's inside showed through) */
       return m;
     }
     function lam(color, o) { const k = color + JSON.stringify(o || {}); if (!matCache.has(k)) matCache.set(k, seeThrough(new THREE.MeshLambertMaterial(Object.assign({ color, flatShading: true }, o || {})))); return matCache.get(k); }
@@ -1041,7 +1042,7 @@
         for (const m of parts) { m.userData.pick = { kind: 'node', i: K(x, y) }; pickables.push(m); }
       }
       /* ---------- buildings, fences and props */
-      const B = Batcher(group), BF = Batcher(group), BC = Batcher(group), anim = [], RICEP = [];   /* RICEP: the wild rice plants, grown by the seasons */   /* BF: the small flora, which the seasons take away and give back */   /* BC: the cobbles, which cast no shadow (6 cm stones, thousands of them on a cobbled town's streets: 2026-10-20) */
+      const B = Batcher(group), BF = Batcher(group), anim = [], RICEP = [];   /* RICEP: the wild rice plants, grown by the seasons */   /* BF: the small flora, which the seasons take away and give back */
       const roofs = [];
       const floor = HG.floor;
       /* TK - the tower kit (2026-10-18, the operator: "players should be able to enter the wizard tower - model it after the one in osrs"):
@@ -1168,6 +1169,8 @@
         let side = 's', dpos = 0;
         if (o.door) { const [dx, dy] = o.door; side = dy === o.y + o.h - 1 && o.h > 1 ? 's' : dy === o.y ? 'n' : dx === o.x ? 'w' : 'e'; dpos = (side === 's' || side === 'n') ? dx + 0.5 : dy + 0.5; }
         const sides = { n: [x0, z0, x1, z0], s: [x0, z1, x1, z1], w: [x0, z0, x0, z1], e: [x1, z0, x1, z1] };
+        let side2 = null, dpos2 = 0;   /* a back door (world.js oneWay: in from outside only), drawn as a second doorway */
+        if (o.backdoor && o.door) { const [bx, by] = o.backdoor; side2 = by === o.y + o.h - 1 && o.h > 1 ? 's' : by === o.y ? 'n' : bx === o.x ? 'w' : 'e'; dpos2 = (side2 === 's' || side2 === 'n') ? bx + 0.5 : by + 0.5; if (side2 === side) side2 = null; }
         /* the house kit: plaster (or, for the smithy, stone) walls with windows and the door piece on the door tile,
            corner posts, the tiled roof that fits the footprint, brick gables; each house in its own roof/wall colours */
         const KT = STONEK ? { pieces: {}, palette: [], tile: '', plaster: '' } : kitData(), S0 = WH / 3.12, stone = o.k === 'smithy';
@@ -1187,7 +1190,8 @@
               if (l1 - l0 < 0.2) return; const n = Math.max(1, Math.round((l1 - l0) / 1.25)), w = (l1 - l0) / n;
               for (let k = 0; k < n; k++) { const byDoor = (doorAt < 0 && k === n - 1) || (doorAt > 0 && k === 0); put(!byDoor && (n === 1 ? l1 - l0 > 1 : k % 2 === 1) ? WALL.win : WALL.plain, l0 + k * w, l0 + (k + 1) * w); }
             };
-            if (withDoor && sd === side) { const d0 = Math.max(L0 + 0.15, Math.min(L1 - 1.65, dpos - 0.75)); fill(L0, d0, -1); put(WALL.door, d0, d0 + 1.5); fill(d0 + 1.5, L1, 1); }
+            const dAt = withDoor ? (sd === side ? dpos : sd === side2 ? dpos2 : null) : null;
+            if (dAt != null) { const d0 = Math.max(L0 + 0.15, Math.min(L1 - 1.65, dAt - 0.75)); fill(L0, d0, -1); put(WALL.door, d0, d0 + 1.5); fill(d0 + 1.5, L1, 1); }
             else fill(L0, L1, 0);
           }
           for (const [px, pz] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) kb.add(WALL.corner, px, y0, pz, 0, S0, S0, S0, tint);
@@ -1209,6 +1213,8 @@
               hangSign(g, o.sign, horiz ? at : ax, base + WH + 0.15, horiz ? az : at, out);
             }
           }
+          if (sd === side2) { const off = horiz ? [dpos2 - 0.42, base + 0.65, az + (sd === 's' ? -0.4 : 0.4)] : [ax + (sd === 'e' ? -0.4 : 0.4), base + 0.65, dpos2 - 0.42];
+            B.add('box', 0x5a3a1e, off[0], off[1], off[2], horiz ? 0.07 : 0.8, 1.25, horiz ? 0.8 : 0.07); }   /* the back door, swung open inward */
           /* windows (dark glass + sill) on both faces, away from the door */
           const len = L1 - L0, nW = KT ? 0 : len > 4.5 ? 2 : len > 2.5 ? 1 : 0;
           for (let k = 0; k < nW; k++) {
@@ -1244,18 +1250,17 @@
           for (const c of rg.children) c.position.y += WH * (FL - 1);
           const st = o.stairsAt || (() => { const dx = o.door ? o.door[0] : -9; return [Math.abs(dx - (o.x + o.w - 2)) > 1 ? o.x + o.w - 2 : o.x + 1, o.y + 1]; })();
           const alt = [st[0] - 1 > o.x ? st[0] - 1 : st[0] + 1, st[1]], P = f => f % 2 ? alt : st;   /* = world.js flightOf: a switchback */
-          const SB = new Map(), sb = into => { let b = SB.get(into); if (!b) SB.set(into, b = Batcher(into)); return b; };   /* 2026-10-20: the steps, slabs and rails batched per storey (Saltmere drew ~1300 of them as meshes of their own) */
-          const stairs = (into, y0, at) => { for (let k = 0; k < 6; k++) sb(into).add('box', 0x6a4a2a, at[0] + 0.5, y0 + (k + 1) * WH / 12, at[1] + 0.92 - k * 0.16, 0.9, (k + 1) * WH / 6, 0.16); };
+          const stairs = (into, y0, at) => { for (let k = 0; k < 6; k++) into.add(mesh(new THREE.BoxGeometry(0.9, (k + 1) * WH / 6, 0.16), 0x6a4a2a, at[0] + 0.5, y0 + (k + 1) * WH / 12, at[1] + 0.92 - k * 0.16)); };
           /* an upper floor: the slab round an opening where the flight from below arrives, a railing on three sides (you
              step off at the north end) and a bobbing amber arrow over it - the way down is never hidden (the operator) */
           const slab = (into, yb, hole) => {
             const ins = o.k === 'wtower' ? 1 : 0, X0 = o.x + ins, X1 = o.x + o.w - ins, Z0 = o.y + ins, Z1 = o.y + o.h - ins, hx = hole ? hole[0] : 0, hz = hole ? hole[1] : 0;   /* ins: the round tower's floors stop at its wall tiles (TK fills out to the curve) */
-            const box = (x0, x1, z0, z1) => { if (x1 - x0 > 0.01 && z1 - z0 > 0.01) sb(into).add('box', 0x9a7046, (x0 + x1) / 2, yb - 0.04, (z0 + z1) / 2, x1 - x0 + 0.06, 0.12, z1 - z0 + 0.06); };
+            const box = (x0, x1, z0, z1) => { if (x1 - x0 > 0.01 && z1 - z0 > 0.01) into.add(mesh(new THREE.BoxGeometry(x1 - x0 + 0.06, 0.12, z1 - z0 + 0.06), 0x9a7046, (x0 + x1) / 2, yb - 0.04, (z0 + z1) / 2)); };
             if (!hole) return box(X0, X1, Z0, Z1);
             box(X0, X1, Z0, hz); box(X0, X1, hz + 1, Z1); box(X0, hx, hz, hz + 1); box(hx + 1, X1, hz, hz + 1);
             const rail = 0x4e3420;
-            for (const [x, z] of [[hx, hz], [hx + 1, hz], [hx, hz + 1], [hx + 1, hz + 1]]) sb(into).add('box', rail, x, yb + 0.47, z, 0.07, 0.95, 0.07);
-            sb(into).add('box', rail, hx, yb + 0.92, hz + 0.5, 0.06, 0.06, 1); sb(into).add('box', rail, hx + 1, yb + 0.92, hz + 0.5, 0.06, 0.06, 1); sb(into).add('box', rail, hx + 0.5, yb + 0.92, hz + 1, 1, 0.06, 0.06);
+            for (const [x, z] of [[hx, hz], [hx + 1, hz], [hx, hz + 1], [hx + 1, hz + 1]]) into.add(mesh(new THREE.BoxGeometry(0.07, 0.95, 0.07), rail, x, yb + 0.47, z));
+            into.add(mesh(new THREE.BoxGeometry(0.06, 0.06, 1), rail, hx, yb + 0.92, hz + 0.5), mesh(new THREE.BoxGeometry(0.06, 0.06, 1), rail, hx + 1, yb + 0.92, hz + 0.5), mesh(new THREE.BoxGeometry(1, 0.06, 0.06), rail, hx + 0.5, yb + 0.92, hz + 1));
             const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.42, 4), new THREE.MeshBasicMaterial({ color: 0xffc040 })); arrow.rotation.x = Math.PI; arrow.position.set(hx + 0.5, yb + 1.55, hz + 0.5); into.add(arrow);
             anim.push({ bob: arrow, y0: yb + 1.55 });
           };
@@ -1267,13 +1272,12 @@
             if (STONEK) SK.keepStorey(sg, o, yb, WH, f, null);
             else if (KT) { const kb = KitBatch(sg); kitWalls(kb, yb, false); kb.flush(); }
             else for (const [L, horiz, fx, fz] of [[o.w, true, 0, o.h / 2], [o.w, true, 0, -o.h / 2], [o.h, false, o.w / 2, 0], [o.h, false, -o.w / 2, 0]]) {
-              sb(sg).add('box', wall, cx + fx, yb + WH / 2, cz + fz, horiz ? L + TH : TH, WH, horiz ? TH : L + TH);
+              sg.add(mesh(new THREE.BoxGeometry(horiz ? L + TH : TH, WH, horiz ? TH : L + TH), wall, cx + fx, yb + WH / 2, cz + fz));
               const nW = Math.max(1, Math.floor(L / 1.6));
-              for (let k = 0; k < nW; k++) { const t = (k + 0.5) / nW - 0.5; for (const side of [-1, 1]) sb(sg).add('box', 0x2a3a4a, cx + fx + (horiz ? t * L : side * 0.1), yb + WH * 0.55, cz + fz + (horiz ? side * 0.1 : t * L), horiz ? 0.55 : 0.03, 0.6, horiz ? 0.03 : 0.55); }
+              for (let k = 0; k < nW; k++) { const t = (k + 0.5) / nW - 0.5; for (const side of [-1, 1]) sg.add(mesh(new THREE.BoxGeometry(horiz ? 0.55 : 0.03, 0.6, horiz ? 0.03 : 0.55), 0x2a3a4a, cx + fx + (horiz ? t * L : side * 0.1), yb + WH * 0.55, cz + fz + (horiz ? side * 0.1 : t * L))); }
             }
             if (o.enter && f < FL - 1) stairs(sg, yb, P(f));
           }
-          for (const b of SB.values()) b.finish();
         }
         if (STONEK) { o._y0 = base; SK.keepTop(rg, o, base + WH * FL); }   /* the keep's battlements, banners and donjon are its roof: hidden while you are inside */
         else if (o.k === 'church') {   /* the church's steeple (2026-10-07): a square bell tower over the door end, a slate spire and a gilt cross */
@@ -1290,13 +1294,13 @@
           rg.add(mesh(new THREE.BoxGeometry(0.38, 1.4, 0.38), 0x6a625a, chx, base + WH * FL + rh * 0.55 + 0.25, chz));
           if (o.k === 'smithy') anim.push({ smoke: true, x: chx, y: base + WH + rh * 0.55 + 1.0, z: chz, parts: [] });
         }
-        roofs.push({ g: rg, x0: o.x, y0: o.y, x1: o.x + o.w - 1, y1: o.y + o.h - 1, storeys });
+        roofs.push({ g: rg, x0: o.x, y0: o.y, x1: o.x + o.w - 1, y1: o.y + o.h - 1, storeys, top: base + WH * FL + rh + 0.4 });   /* top: the camera keeps out from under it (engine updateCamera) */
       }
       /* the castle kit lives in its own module (src/castle.js) so a castle change is a small inscription */
       let CK = null; try { const CM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('castle'); if (CM && CM.create) CK = CM.create({ THREE, B, Batcher, KitBatch, kitData, heightAt, group, pickables }); } catch (e) { console.warn('castle module', e && e.message); }
       const surfOfMap = (tx, ty) => { const Hh = heightsOf(map); return Hh.surf ? Hh.surf(tx, ty) : heightAt(tx + 0.5, ty + 0.5); };
       const mounts = [];   /* items hung on walls: {obj, item, quest, untilStep} */
-      const torches = [], street = [], fortunes = [], mills = [];
+      const torches = [], street = [], fortunes = [], mills = [], roomLights = [];   /* roomLights: lamps indoors that light their room (joined to `lights` below) */
       const dungeonLayers = new Map();
       function dungeonLayer(lv) {
         lv |= 0; let d = dungeonLayers.get(lv); if (d) return d;
@@ -1632,6 +1636,17 @@
             });
             break;
           }
+          case 'pendant': {   /* [Claude 2026-10-21] a lantern hung from the ceiling on a chain, lighting its room (the operator: "It's dark in there I thought the lights would light stuff up") */
+            const lv = o.lv | 0, fl = floorY(o, y) + lv * storeyH(o, lv), top = fl + storeyH(o, lv) - 0.02, ly = top - 0.6, IR = 0x2a2016;
+            B.add('cyl', IR, x, (top + ly + 0.2) / 2, z, 0.012, top - ly - 0.2, 0.012);
+            const glMat = LAMPG.clone(); glMat.color.copy(LAMP_ON); const gl = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.26, 0.22), glMat); gl.position.set(x, ly, z); group.add(gl);
+            for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) B.add('box', IR, x + dx * 0.12, ly, z + dz * 0.12, 0.025, 0.3, 0.025);
+            const cap = mesh(new THREE.ConeGeometry(0.2, 0.14, 4), IR, x, ly + 0.2, z); cap.rotation.y = Math.PI / 4; group.add(cap);
+            const L = new THREE.PointLight(0xffd49a, 0, 8, 1.2); L.position.set(x, ly - 0.1, z); group.add(L); L.userData.lamp = 1;
+            const rf = roofs.find(r => o.x >= r.x0 && o.x <= r.x1 && o.y >= r.y0 && o.y <= r.y1); if (rf) L.userData.room = { x0: rf.x0, y0: rf.y0, x1: rf.x1, y1: rf.y1, lv };
+            roomLights.push(L);
+            break;
+          }
           case 'lamp': {   /* a gas street lamp on the verge of a trail (2026-10-07): iron post, glass lantern, pyramid cap */
             const IR = 0x23272b;
             B.add('box', IR, x, y + 0.14, z, 0.3, 0.28, 0.3);
@@ -1836,6 +1851,18 @@
             break;
           }
           case 'anvil': B.add('box', 0x3a3a3e, x, y + 0.25, z, 0.3, 0.5, 0.3); B.add('box', 0x45454a, x, y + 0.55, z, 0.7, 0.16, 0.32); B.add('cone', 0x45454a, x + 0.42, y + 0.55, z, 0.14, 0.3, 0.14, 0, 0, Math.PI / 2); B.add('box', 0x5a3c24, x, y + 0.06, z, 0.6, 0.12, 0.5); break;
+          case 'clothesrack': {   /* [Claude 2026-10-20] golfwear on hangers (the operator: "a golf outfit, clothing rack"): a rail on two posts, the
+               clothes in the colours the zone gives (o.cols), shirts or (o.long) trousers and skirts; along the wall it stands against */
+            const fy = floorY(o, y), cols = Array.isArray(o.cols) && o.cols.length ? o.cols : ['#f2f0ea', '#2a3a5e', '#2f6a4a', '#a83030'];
+            const pole = 0x8a8a90, n = cols.length, long = !!o.long;
+            for (const s of [-0.44, 0.44]) { B.add('box', pole, x + s, fy + 0.8, z, 0.04, 1.6, 0.04); B.add('box', pole, x + s, fy + 0.02, z, 0.06, 0.04, 0.4); }
+            B.add('box', pole, x, fy + 1.58, z, 0.92, 0.03, 0.03);
+            for (let k = 0; k < n; k++) { const gx = x - 0.32 + k * (0.64 / Math.max(1, n - 1)), c = new THREE.Color(cols[k]).getHex();
+              B.add('box', 0x3a2a1a, gx, fy + 1.52, z, 0.02, 0.08, 0.02);   /* the hanger's hook */
+              if (long) B.add('box', c, gx, fy + 1.12, z, 0.1, 0.8, 0.26);   /* trousers or a skirt, hung by the waist */
+              else { B.add('box', c, gx, fy + 1.24, z, 0.1, 0.52, 0.36); B.add('box', c, gx, fy + 1.4, z, 0.08, 0.14, 0.5); } }   /* a shirt and its sleeves */
+            break;
+          }
           case 'rack': y = floorY(o, y); B.add('box', 0x5a3c24, x - 0.4, y + 0.6, z, 0.08, 1.2, 0.08); B.add('box', 0x5a3c24, x + 0.4, y + 0.6, z, 0.08, 1.2, 0.08); B.add('box', 0x5a3c24, x, y + 1.1, z, 0.9, 0.08, 0.08);
             for (let k = 0; k < 3; k++) { B.add('box', [0xb8763b, 0x77777a, 0xc4c8cf][k], x - 0.25 + k * 0.25, y + 0.62, z + 0.05, 0.05, 0.85, 0.02); B.add('box', 0x3a2410, x - 0.25 + k * 0.25, y + 0.22, z + 0.05, 0.16, 0.04, 0.06); }
             break;
@@ -1932,6 +1959,37 @@
             }
             m.ceil = rfUp ? rfUp.feCeil : null;
             m.id = id; FORTUNE[id] = m; fortunes.push(m);
+            break;
+          }
+          case 'gametable': {   /* [Claude 2026-10-20] A CLUBHOUSE TABLE (the operator: the dice table, the wheel and the twenty-one tables upstairs, "their own
+               modules"): found by name, <game>table (src/dicetable.js ...), so a new table game needs no scene change. Built in its own frame -
+               the footprint's middle, the dealer's side -z (north), the players' rail +z - into the storey it stands on. */
+            const TMOD = G.ASH3D && G.ASH3D.get && G.ASH3D.get(String(o.game || '') + 'table'); if (!TMOD || !TMOD.build) break;
+            const lv = o.lv | 0, rfUp = lv > 0 ? roofs.find(r => o.x >= r.x0 && o.x <= r.x1 && o.y >= r.y0 && o.y <= r.y1) : null;
+            const into = rfUp && rfUp.storeys && rfUp.storeys[lv - 1] ? rfUp.storeys[lv - 1] : group;
+            const fl = floorY(o, y) + lv * storeyH(o, lv), id = o.id;
+            const T = TMOD.build(THREE, { wrap: seeThrough, coinPile, cardMesh, cardFace, cardMat: () => { const m = new THREE.MeshBasicMaterial({ map: cardKit(), side: THREE.DoubleSide }); m.userData.shared = true; return m; }, CARD_W, CARD_H, o });
+            T.group.position.set(o.x + (o.w || 1) / 2, fl, o.y + (o.h || 1) / 2); T.group.rotation.y = -(o.rot | 0) * Math.PI / 2; into.add(T.group);   /* rot: quarter turns clockwise on the map (the operator's floor plan) */
+            T.body.userData.pick = { kind: 'gametable', id, x: o.x, y: o.y, lv }; pickables.push(T.body);
+            for (const h of T.hot || []) h.userData.pick = Object.assign({ kind: 'tbhot', id, x: o.x, y: o.y, lv }, h.userData.tb || {});
+            T.id = id; T.o = o; T.floorY = fl; GAMETABLE[id] = T; fortunes.push(T);   /* (fortunes: the list whose update(dt, t) runs every frame) */
+            { /* 2026-10-21: "It's dark in there I thought the lights would light stuff up" - the lantern over the table lights the room
+                 round it (a warm light, lit only while you are on that storey of that building; A FIXED NUMBER OF LIGHTS keeps the count) */
+              const lan = T.group.getObjectByName('lantern'), rf = rfUp || roofs.find(r => o.x >= r.x0 && o.x <= r.x1 && o.y >= r.y0 && o.y <= r.y1);
+              if (lan) { const L = new THREE.PointLight(0xffd49a, 0, 8, 1.2); L.position.set(0, -0.15, 0); lan.add(L); if (rf) L.userData.room = { x0: rf.x0, y0: rf.y0, x1: rf.x1, y1: rf.y1, lv }; L.userData.lamp = 1; roomLights.push(L); } }
+            break;
+          }
+          case 'velvetrope': {   /* [Claude 2026-10-20] the operator: "velvet ropes, keeping the players out of the Black Jack Pit" - brass posts a metre apart
+               along a tile edge (x1,y1 - x2,y2, corners of tiles) and a red cord sagging between them, on the storey `lv` */
+            const lv = o.lv | 0, mx = Math.min(o.x1, o.x2), my = Math.min(o.y1, o.y2);
+            const rfUp = lv > 0 ? roofs.find(r => mx >= r.x0 - 1 && mx <= r.x1 + 1 && my >= r.y0 - 1 && my <= r.y1 + 1) : null;
+            const into = rfUp && rfUp.storeys && rfUp.storeys[lv - 1] ? rfUp.storeys[lv - 1] : group;
+            const fl = floorY({ x: mx, y: my }, y) + lv * storeyH({ x: mx, y: my }, lv), n = Math.max(1, Math.round(Math.hypot(o.x2 - o.x1, o.y2 - o.y1)));
+            const velvet = new THREE.MeshLambertMaterial({ color: 0x8a1f2b });
+            const pts = []; for (let i = 0; i <= n; i++) pts.push([o.x1 + (o.x2 - o.x1) * i / n, o.y1 + (o.y2 - o.y1) * i / n]);
+            for (const [px, pz] of pts) { into.add(mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.82, 8), 0xc9a24a, px, fl + 0.41, pz)); into.add(mesh(new THREE.SphereGeometry(0.04, 8, 6), 0xc9a24a, px, fl + 0.84, pz)); into.add(mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.03, 12), 0xc9a24a, px, fl + 0.015, pz)); }
+            for (let i = 0; i < n; i++) { const a = pts[i], b = pts[i + 1], c = new THREE.QuadraticBezierCurve3(new THREE.Vector3(a[0], fl + 0.78, a[1]), new THREE.Vector3((a[0] + b[0]) / 2, fl + 0.6, (a[1] + b[1]) / 2), new THREE.Vector3(b[0], fl + 0.78, b[1]));
+              into.add(new THREE.Mesh(new THREE.TubeGeometry(c, 10, 0.018, 6, false), velvet)); }
             break;
           }
           case 'pokertable': {   /* the felt, the rail and the eight chairs; pokerShow (called by the engine, and again
@@ -2087,7 +2145,7 @@
           for (const [px, pz, t] of pts) {
             const r = H(t + 100), sh = SH[Math.floor(H(t + 200) * SH.length)], w = 0.27 + r * 0.14, st = 0.8 + H(t + 300) * 0.4, sx = x + px, sz = y + pz;
             const tall = sh === 'stone' ? 0.09 : 0.06;
-            BC.add(sh, CS[Math.floor(H(t + 400) * CS.length)], sx, heightAt(sx, sz) + tall * 0.35, sz, w * st, tall, w / st, H(t + 500) * 6.283, sh === 'stone' ? (H(t + 600) - 0.5) * 0.3 : 0);
+            B.add(sh, CS[Math.floor(H(t + 400) * CS.length)], sx, heightAt(sx, sz) + tall * 0.35, sz, w * st, tall, w / st, H(t + 500) * 6.283, sh === 'stone' ? (H(t + 600) - 0.5) * 0.3 : 0);
           }
           continue;
         }
@@ -2097,7 +2155,7 @@
         else if ((c === '.' || c === ',') && r < 0.28) { const fx = x + 0.2 + hash2(x, y + 2) * 0.6, fz = y + 0.2 + hash2(x + 2, y) * 0.6; BF.add('cone', c === ',' ? 0x3a6a26 : 0x4a8a30, fx, heightAt(fx, fz) + 0.1, fz, 0.22, 0.22, 0.22, r * 9); }
         else if (c === ',' && r > 0.965) { const fx = x + 0.3 + hash2(x, y + 7) * 0.4, fz = y + 0.3 + hash2(x + 7, y) * 0.4, fy = heightAt(fx, fz); BF.add('cyl6', 0xe8e0c8, fx, fy + 0.05, fz, 0.05, 0.1, 0.05); BF.add('cone', 0xb83a2a, fx, fy + 0.12, fz, 0.14, 0.07, 0.14); }
       }
-      B.finish(); BC.finish(false);
+      B.finish();
       for (const d of dungeonLayers.values()) d.b.finish();
       { const reg = { sets: BF.finish(), g: group }; FLORA_REG.push(reg); floraSeason(reg); }
       if (RICEP.length) {   /* the manoomin: stalk, a blade off it, and the head on top; tinted per plant by the season */
@@ -2120,6 +2178,7 @@
            building belongs to its room: lit only while the viewer stands in that building on that storey (update below). It is
            dimmed, never hidden - see A FIXED NUMBER OF LIGHTS in engine.js */
         const rf = roofs.find(r => t.tx >= r.x0 && t.tx <= r.x1 && t.ty >= r.y0 && t.ty <= r.y1); if (rf) L.userData.room = { x0: rf.x0, y0: rf.y0, x1: rf.x1, y1: rf.y1, lv: t.lv | 0 }; }
+      for (const L of roomLights) lights.push(L);   /* the indoor lamps: room-gated like a torch indoors; a lamp burns steady (no gutter) */
 
       const smokeGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12), smokeMat = new THREE.MeshLambertMaterial({ color: 0xc8c8c8, transparent: true, opacity: 0.35, depthWrite: false });
       const steamMat = new THREE.MeshLambertMaterial({ color: 0xf2f6fa, transparent: true, opacity: 0.22, depthWrite: false });   /* boiling sap: whiter and thinner than a fire's smoke */
@@ -2176,7 +2235,7 @@
           for (const L of lights) {   /* [Claude 2026-10-11] a flame's light gutters: three unrelated rhythms and a dip now and then, not one smooth wave */
             const p = L.position.x * 1.7 + L.position.z * 0.3, g = Math.sin(time * 9.1 + p) * 0.22 + Math.sin(time * 23.7 + p * 1.9) * 0.11 + Math.sin(time * 41.3 + p * 3.1) * 0.07, dip = Math.sin(time * 1.3 + p) > 0.93 ? -0.45 : 0;
             const R = L.userData.room, v = R && VIEWQ ? VIEWQ() : null;
-            L.intensity = R && !(v && v[0] >= R.x0 && v[0] <= R.x1 && v[1] >= R.y0 && v[1] <= R.y1 && v[2] === R.lv) ? 0 : 2.5 + g + dip;
+            L.intensity = R && !(v && v[0] >= R.x0 && v[0] <= R.x1 && v[1] >= R.y0 && v[1] <= R.y1 && v[2] === R.lv) ? 0 : L.userData.lamp ? 7 + g * 0.3 : 2.5 + g + dip;
           }
           for (const s of spots) { const ice = !!(map.iceAt && map.iceAt(s.x, s.y)); s.rings.forEach(r => { r.visible = !ice; }); }   /* a frozen pond does not ripple: you fish through the ice */
           for (const s of spots) if (s.rings[0].visible) s.rings.forEach((r, k) => { const p = ((time * 0.6 + s.ph + k / 3) % 1); r.scale.setScalar(0.6 + p * 2.2); r.material.opacity = 0.75 * (1 - p); });
@@ -2206,7 +2265,7 @@
       }
       return mm;
     }
-    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, viewQuery: fn => { VIEWQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerTimer, pokerSpots, cardAtlas: () => { const t = cardKit(); return t && t.image && t.image.toDataURL ? t.image.toDataURL('image/png') : null; }, fortuneAt: id => { const m = FORTUNE[id]; return m && m.group.parent ? m : null; }, fortuneLib: () => deps.fortune || null, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
+    return { api: 2, build, minimap, heights: map => heightsOf(map).heightAt, surface: map => heightsOf(map).surf, WATER_Y, see: SEE, lampGlow, lampQuery: fn => { LAMPQ = fn; }, fireQuery: fn => { FIREQ = fn; }, viewQuery: fn => { VIEWQ = fn; }, steamQuery: fn => { STEAMQ = fn; }, canoeMesh, seasonApply, boardPaint, chessApply, chessSquare, chessMark, chessAt: id => CHESS[id] ? { x: CHESS[id].ox, y: CHESS[id].oy, z: CHESS[id].oz } : null, pokerShow, pokerTimer, pokerSpots, cardAtlas: () => { const t = cardKit(); return t && t.image && t.image.toDataURL ? t.image.toDataURL('image/png') : null; }, fortuneAt: id => { const m = FORTUNE[id]; return m && m.group.parent ? m : null; }, gameTableAt: id => { const T = GAMETABLE[id]; return T && T.group.parent ? T : null; }, cardKitMat: () => new THREE.MeshBasicMaterial({ map: cardKit(), side: THREE.DoubleSide }), fortuneLib: () => deps.fortune || null, pokerAt: id => POKER[id] ? { x: POKER[id].ox, y: POKER[id].oy, z: POKER[id].oz } : null, docks: () => { for (let i = DOCKS.length - 1; i >= 0; i--) if (!DOCKS[i].parent) DOCKS.splice(i, 1); return DOCKS; } };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('scene', { api: 2, v: 2, needs: { three: 160, fortune: 1 } }, sceneFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

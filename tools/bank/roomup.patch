@@ -1,0 +1,20 @@
+--- a/tools/bank/bank.py
++++ b/tools/bank/bank.py
+@@ -1266,7 +1266,7 @@
+     while not stop.is_set():
+         try:
+             for ev in room.events(stop):
+-                if room.me and not getattr(room, '_said', 0): log('BANK OPEN in room bank as', room.me.get('tag'), '(certificate, no browser)'); room._said = 1
++                if room.me and not getattr(room, '_said', 0): log('BANK OPEN in room bank as', room.me.get('tag'), '(certificate, no browser)'); room._said = 1; TB.room_up(True)   # [Claude 2026-10-22] the tables count a player's silence only while the room is up
+                 while OUTQ: room.send(OUTQ.pop(0))
+                 if ev.get('type') != 'message': continue
+                 f = ev.get('member') or {}
+@@ -1283,7 +1283,7 @@
+                 for r1 in (rep if isinstance(rep, list) else [rep] if rep else []): room.send(r1)
+             room._said = 0
+         except Exception as e:
+-            log('ROOM DOWN', str(e)[:200]); room.token = None; room._said = 0
++            log('ROOM DOWN', str(e)[:200]); room.token = None; room._said = 0; TB.room_up(False)
+             stop.wait(10)
+ ROOM_TYPES = TB.TB_TYPES + ('dep', 'drop', 'fell', 'felled?', 'boat', 'boats?', 'took', 'ground?', 'here', 'where?', 'book', 'friends?', 'pals?', 'sv', 'ld?', 'mark', 'marks?', 'carry', 'carried?', 'hold', 'holds?', 'offer', 'unoffer', 'score', 'scores?', 'best', 'pkbuy', 'pkout', 'pk?', 'cput', 'ctake', 'chests?', 'fein', 'feinx', 'fespin', 'feout', 'fe?', 'stats?')
+ # [Claude 2026-10-21] GUESTS MAY ASK, NEVER ACT (the operator approved, the Ashvale site's public player page): a guest (no address) gets

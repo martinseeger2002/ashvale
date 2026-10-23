@@ -1322,3 +1322,98 @@ the walk here feature".
   hidden orbit camera (cam.pitch < 0.13 = first person) and the first-person rule hid myEnt for good. engine fp = 0 in cam.mode
   'golf'. golf_tap_pw tilts to pitch 0.02 mid-round and checks _meSeen (FAILS without the fix, checked).
 - Modules: engolf, engine. golf_pw, golf_tap_pw, golfrules_test ALL OK. Post chain/post_v08169.txt.
+
+## 0.8.170 - 2026-10-20 (Claude): golf group turns, leave to the clubhouse, the Tutorial Island portal - RELEASED (v197 d4f1889e)
+- the operator: "party mode is not cycling through the players ... Each player should tee off one after the next ... real golf rules".
+  tests/golf_turns3_pw.py (three golfers) found: (1) a joiner dropped as "full" by the host's member list said before its join
+  arrived - the third golfer often never teed off: now asks again, only full-for-6 s or 15 s silence drops it; (2) a golfer whose
+  game went quiet after a swing (hidden tab / phone asleep) left the others waiting on a ball "in the air": the swing's sh.at/sh.ho
+  is kept with the round (ST.rest, set as heard), and once the flight is over pinfo treats it as landed. 8 runs ALL OK.
+- the operator: "if somebody leaves the game, they should be transported back into the clubhouse": Leave (quitRound) did not move you at
+  all - stuck on the course behind the new railing; the end card went outside the door. Both now golfgo 635,-118 (returnTo).
+- the operator: "a town portal where you can leave tutorial Island at any point ... and the Ashvale town portal should have a portal to
+  tutorial Island. Neither ... attunement": rules.portals 'tutorial' at 704,45 (free, only ['ashvale']); core canHop/freeHop;
+  taking it clears p.tut; a free portal is no wake town. tests/portal_tutorial_test.js ALL OK.
+- Modules: core, engolf, data/rules. golf_pw, golf_tap_pw, golfrules, clubhouse_test, portal test, core_test ALL OK.
+  The machine crashed mid-release after the three modules were sent; release_modular --no-build resumed by hash (no repaid pieces) and inscribed the registry.
+
+## 0.8.171 - 2026-10-20 (Claude): the ball on the grass and bouncing, TAP IN on the swing button, golfers' feet on the grass - RELEASED (v198 3234cb40)
+- the operator: "the ball sometimes looks like it's sunken into the ground ... it should bounce off the ground hard": the turf is drawn
+  0.035 m over gY on a 1 m triangle grid, the ball sat on gY (half under); engolf turfY puts it on the drawn triangle + 0.012. A shot
+  now hops before it rolls (pathY: up to 3 smaller copies of the flight, e by the landing ground, squeezed into short rolls) -
+  drawing only, the rest point and the rules are unchanged.
+- the operator: "instead of adding a third option of tap in ... turn the swing button into a tapping button so that it is automatic ...
+  the power of the tapping doesn't over exceed the power needed": the Tap in button by Short/Long is gone; inside 10 ft with the
+  putter the swing button reads TAP IN (green), one press knocks it in (tapIn eases to 0.08 m/s at the lip; a firm putt lips out).
+- the operator: "avatar's feet are sunken into the ground": standAt/watchAt on turfY.
+- Modules: engolf, hudgolf. golfrules_test, golf_pw, golf_tap_pw ALL OK.
+
+## 0.8.172 - 2026-10-21 (Claude): green fees and nines, the railing without gaps, safe Fortune Engine retries - RELEASED (v199 5f9ad201)
+- the operator: "a price per game and a selection for front nine or back nine in both the solo player or group player golf rounds, charge
+  25 gold each player for the front nine or the back nine or 50 gold each per player for the full 18": Fergus asks which holes (solo
+  and group; the lobby carries it); core golffee takes 25/50 GOLD as the round starts; cards indexed by hole, the round ends after its
+  last hole, totals/settle count the nine played, the card shows that nine, best rounds only for eighteen. tests/golf_nines_pw.py.
+- the operator: "remove any trees or rocks that are in the way of the fence around the golf course so that nobody can wander in": the
+  railing ran round every tree/rock on its line (gaps); they are cleared, 639 -> 857 sections, only water keeps its gap.
+- the operator's phone: "Your wallet did not send the 1,000 GOLD to the @ashvale Bank yet: Load failed" - a lost answer could make a retry
+  send twice: Fortune Engine sends carry ref fe:<deposit> (arcade duplicate guard beb4d8f, answers 200 + repeat).
+- Modules: core, engfortune, engolf, data/zoneindex, zones/golf. golf_pw, golf_tap_pw, golf_turns3_pw, golf_nines_pw, golfrules,
+  clubhouse_test, core_test ALL OK; fortune_pw deposit checks OK (reel-stop timing fails the same on 0.8.171).
+
+## 0.8.173 - 2026-10-22 (Claude): the Saltmere Links clubhouse - the tables upstairs, Rhona's golfwear, the back door - RELEASED (registry v200 5895b506, feed d58b7ea8)
+- the operator's floor plan: upstairs a dice table, the wheel and two twenty-one tables, shared rounds run by the @ashvale Bank
+  (bank-rpc 45be285 on .25: tb sittings, Bank clock, HMAC(round secret, table:round), payouts from the game's own rules files).
+- From the operator's playtest: top-down layouts (your own half plus the centre at the dice table), pinch zoom/pan, real 12-ft dice
+  table, bets on the side you tapped, card corners overlap 3/4 in, totals on the felt and the bar, card clock 5 s + 1 s a player,
+  insurance clock, long-press for a seat, realistic dealing; the wheel's corner view, number pop-up, ball physics; players at the
+  betting layout; avatars and dealers belly up only at a spot, watch the dice/ball, win/lose/excited poses (/cheer /fistpump
+  /clap /excited /slump), animated bets; upstairs cards/bets hidden from below (and in the Tap); lamps light the room; landscape HUD.
+- Downstairs: Rhona's golfwear (garment-shaped icons). The back door lets you in from the course only.
+- Modules: core, engine, scene, hud, engbank, models, world, items/assets/rules/shops, zones, + engtables, hudtables, dicetable,
+  dicethrows, wheeltable, twentyonetable, dicerules, wheelrules, twentyonerules, part.char.rhona, golfwear parts. core_test,
+  clubhouse_test, dice/wheel/twentyone/golf rules, bank_tables_test ALL OK.
+
+## 0.8.174 - 2026-10-22 (Claude): the tables keep your bets, 15 s to come back, golf rejoin in 2 min, the stick, the clubhouse roof - RELEASED (registry v201 b8bb686c)
+- Bank (.25 bank-rpc, all live before this release): 83726a7 the tables' clock in the no-browser room (the operator: "All of the tables
+  upstairs wait on players before they start dealing" - no table had ever dealt live); fe4d350 vital threads (the payout thread died
+  silently at 13:49 and nothing was paid for 3.5 h), the tag lookup retried, tbback, 15 s for v:2 games (120 s for older ones), silence
+  counted only while the room is up.
+- the operator: "If you leave the table with a bet on the table and you come back ... that needs to be yours" / "15 seconds to reconnect" /
+  "if it's the bets open time it should just be removed from the table": tbback hands back a sitting still open or moves bets still
+  working into the new one (books hold); the spot is kept in localStorage and a reload walks back; heartbeat 5 s (tb? v:2).
+- the operator: a 420 bet on red then "try again" ("The table lost count"): table words one at a time, chips coalesced, an out-of-order
+  refusal resent once with the Bank's count.
+- the operator: "Long click on a bet and remove it": engine menuAt -> TBP.hold; a line bet on the point "stays up until it is decided".
+- the operator: "the dealer should collect them with a stick so that the mini view can read the dice total": dicetable gather + the total
+  in the corner view.
+- the operator: golf "120 seconds to reconnect": engolf saves the round (ashvale3d.golf.v1), round token re-identifies a new netId, the
+  group holds the seat 120 s then it is a leave (forfeit); tests/golf_rejoin_pw.py 49 ok.
+- the operator: from the first tee "Inside shows through": the see-through shader dissolved everything in front of the avatar anywhere on
+  screen; now only in the circle round it (as meant); a camera inside another house comes in toward you.
+- Modules: engine, scene, engtables, dicetable, engolf. Tests: core, clubhouse, dice/wheel/twentyone/golf rules ALL OK;
+  bank_tables_back/clock/vital + bank_tables_test ALL OK (here and .25); golf_rejoin_pw ALL OK; golf_pw/golf_turns3_pw fail the
+  same on 0.8.173 (load: the ball never comes to rest at ~1 fps).
+
+## 0.8.175 - 2026-10-23 (Claude): bets show at a busy table; SadFrogLTC's Add a friend, playtest fixes, parallel downloads - RELEASED (registry v202 26419714, feed cf02ee85 for 0.8.174 + 0.8.175)
+- the operator: "Bets aren't showing up on the roulette table" / GOLD lost: every table word over 512 bytes was refused by the room and
+  dropped the Bank's whole room (39 times since the clock first ran); a 420 deposit was lost in one drop - refunded (job 4592,
+  ee2d9e60). Bank 67f8d80: a big table word goes as a short 'tbs' + one 'tbp' a sitting; engbank lets 'tbp' through, engtables
+  reassembles. tests/bank_tables_pieces_test.py.
+- the operator: "publish SadFrog's commits": imported from GitHub under SadFrogLTC - 44979c2b playtest fixes (creator, solid props,
+  tutorial wording, friends, models), 422c11b3 Friends tab: Add a friend into the arcade address book (arcade.contacts.add, the
+  player says yes on the arcade's card; long-press/right-click a player: Add friend), 4bcd1c0f parallel downloads on every arcade.
+  Generated data merged by structure (make_data.py never run); one engine.js line by hand (golf.v1 + friends.v1 storage keys).
+- The first run stopped at 19/25 (bad-txns-inputs-spent: the Bank's refund spent the coin the publisher had chosen; the index had not
+  seen it) - resumed after the next block.
+- Course move (claude/golf-move 0eb3ae1, merged into claude/tables 1dc401f) NOT in this release: awaits the operator's playtest.
+
+## 0.8.176 - 2026-10-23 (Claude): the Saltmere Links moved along the shore; modules gzipped on chain - RELEASED (registry v203 8d8cd51a)
+- the operator: "The clubhouse is entirely in the way of hole one tee off" -> "move the course back from the clubhouse a bit ... further away
+  from the clubhouse along the shoreline": the whole course +20 m east, +20 m north (claude/golf-move 0eb3ae1: 18 holes, ponds, the burn
+  to the bay, the halfway house; holes/par/yardages unchanged; a pond under the 1st green filled; a cobbled path from the back door to
+  the new 1st tee 646,-148; core's golf area check widened). The 11th now has the sea along its right at the headland.
+- the operator (after @liteworldsquest's "3x smaller on chain"): "Everything should be gzipped that is changed": release_modular inscribes
+  every changed module gzipped (zopfli, application/gzip); netretry (first module, its own entry gz - every launcher on chain unpacks
+  that) unpacks every /content/ file starting 1f 8b for the launcher and the engine. 884 KB -> 182 KB (21%) this release.
+- Tests: core, clubhouse, golfrules ALL OK; golf_rejoin_pw and golf_nines_pw ALL OK on the move (subagent); candidate_live --gz booted
+  the live launcher with the gzipped candidate (the gzipped golf zone reads).
