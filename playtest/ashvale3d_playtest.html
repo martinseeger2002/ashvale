@@ -17616,15 +17616,38 @@ POSSIBILITY OF SUCH DAMAGE. */
           '<button class="btn ' + (S.showPet !== false ? 'on' : '') + '" data-a="showpet">Pet: ' + (S.showPet !== false ? 'Shown' : 'Hidden') + '</button>' +   /* [Claude 2026-10-17] a Doginal / ADD pet at your heel */
           '<button class="btn" data-a="cam">Reset camera</button><button class="btn" data-a="help">Controls &amp; help</button>' +
           '<button class="btn" data-a="new">' + (ST.newGameArm ? 'Tap again: start over' : 'New character') + '</button>' +
+          accessHtml() +
           '<div class="info" style="font-size:10px;color:#c8b48a">' + A.esc(api.modulesText()) + '</div>';
         for (const b of panel.querySelectorAll('.btn')) b.onclick = () => {
           const a = b.dataset.a;
           if (a === 'run') api.cmd({ c: 'run', on: !p.run }); else if (a === 'runtoggle') api.toggle('runToggle'); else if (a === 'sound') api.toggle('sound'); else if (a === 'shadows') api.toggle('shadows'); else if (a === 'showpet') api.toggle('showPet');
           else if (a === 'cam') api.resetCamera(); else if (a === 'help') K.showHelp(true);
+          else if (a === 'wallet' && api.accessWallet) api.accessWallet();
+          else if (a === 'servers' && api.accessNodes) { ST.serversShown = 1; api.accessNodes(); }
+          else if (a === 'move' && api.accessMove) api.accessMove(b.dataset.base);
           else if (a === 'new') { if (ST.newGameArm) api.newGame(); else { ST.newGameArm = 1; setTimeout(() => { ST.newGameArm = 0; refresh('settings'); }, 3000); } }
           setTimeout(() => refresh('settings'), 50);
         };
       }
+    }
+    /* wallet access and the arcade you play on (2026-10-23, engine ARCADE ACCESS): asked of the arcade when Settings opens */
+    function accessHtml() {
+      if (!api.access) return '';
+      const X = api.access(), st = X.st;
+      if (!ST.accessAsked) { ST.accessAsked = 1; api.accessStatus().then(() => { if (ST.tab === 'settings') refresh('settings'); }); }
+      let h = '<h4 style="margin-top:8px">Wallet &amp; server</h4>';
+      if (!st) return h + '<div class="info">Open Ashvale on the arcade to manage wallet access and pick a server.</div>';
+      h += st.signedIn ? (st.wallet ? '<div class="info">Wallet access: <b>on</b>. Trades and payments still ask you each time.</div>'
+                                    : '<button class="btn" data-a="wallet">Wallet access: off - allow it</button>')
+                       : '<div class="info">Sign in on the arcade to use your wallet in Ashvale.</div>';
+      const N = X.nodes, here = N && N.find(n => n.here);
+      h += '<div class="info">Playing on <b>' + A.esc(st.node || '') + '</b>' + (here && here.ms != null ? ' (' + here.ms + ' ms)' : '') + '.</div>';
+      if (!ST.serversShown) return h + '<button class="btn" data-a="servers">Other servers</button>';
+      if (!N) return h + '<div class="info">Timing the servers...</div>';
+      const others = N.filter(n => n.arcade && !n.here);
+      if (!others.length) return h + '<div class="info">No affiliated arcade answered.</div>';
+      for (const n of others) h += '<button class="btn" data-a="move" data-base="' + A.esc(n.base) + '">Play on ' + A.esc(n.name ? n.name + ' - ' + n.host : n.host) + (n.ms != null ? ' (' + n.ms + ' ms)' : ' (no answer)') + '</button>';
+      return h + '<div class="info" style="font-size:10px">These are the arcades this one lists as affiliates. Moving asks you first; there you sign in again, and that arcade keeps its own copy of your encrypted wallet.</div>';
     }
     function weightBar(p) {
       if (!core.carried || !core.capacity) return '';
@@ -29903,6 +29926,52 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
         if (isFriend(a)) setFriend(from, false);
         else { PALS.tags.delete(a); PALS.on.delete(a); PALS.rows = palRows(); hud.chat('@' + String(from.tag || '').replace(/^@/, '') + ' is off your friends list.', 'sys'); if (hud.tab === 'friends') hud.refresh('friends'); }
       }
+      /* ARCADE ACCESS (2026-10-23, SadFrog: wallet access asked "in the game", and a game that "can switch nodes based on
+         location/ping"): arcade.access (/r/access.js) -- status(), wallet() (the arcade's own card over the game, naming
+         Ashvale's publisher), nodes() (the arcades the one we are on knows, timed from this browser) and move() (the
+         arcade's card says what signing in there means). The launcher asks once, after the tutorial; Settings shows both. */
+      const ACC = { st: null, nodes: null, asked: false };
+      async function accessApi() {
+        if (!(G.arcade && G.arcade.access) && G.parent && G.parent !== G && /^https?:/.test(location.protocol))
+          await new Promise(ok => { const s = G.document.createElement('script'); s.src = '/r/access.js'; s.onload = s.onerror = () => ok(); G.document.head.appendChild(s); setTimeout(ok, 8000); });
+        return G.arcade && G.arcade.access || null;
+      }
+      async function accessStatus() {
+        const A = await accessApi(); if (!A) return null;
+        try { ACC.st = await A.status(); } catch (e) { ACC.st = null; }
+        if (hud.tab === 'settings') hud.refresh('settings');
+        return ACC.st;
+      }
+      async function accessWallet() {
+        const A = await accessApi(); if (!A) { hud.chat('Wallet access is asked through the arcade: open Ashvale there.', 'warn'); return; }
+        try { const r = await A.wallet(); hud.chat(r.wallet ? 'Ashvale has wallet access: trades and payments still ask you each time.' : 'Wallet access stays off. You can allow it any time in Settings.', 'sys'); }
+        catch (e) { hud.chat('Wallet access: ' + String((e && e.message) || e), 'warn'); }
+        accessStatus();
+      }
+      async function accessNodes() {
+        const A = await accessApi(); if (!A) return [];
+        try { ACC.nodes = await A.nodes(); } catch (e) { ACC.nodes = []; }
+        if (hud.tab === 'settings') hud.refresh('settings');
+        return ACC.nodes;
+      }
+      async function accessMove(base) {
+        const A = await accessApi(); if (!A) return;
+        try { const r = await A.move(base); if (r.status === 'moving') { hud.chat('Taking you to ' + String(base).replace(/^https:\/\//, '') + '...', 'sys'); persist(true); } }
+        catch (e) { hud.chat('Could not move: ' + String((e && e.message) || e), 'warn'); }
+      }
+      /* the launcher's ask: a signed-in player, past Tutorial Island and the creator, once per browser (then Settings) */
+      setTimeout(function launcherAsk() {
+        if (ACC.asked || settings.walletAsked || GUEST) return;
+        if (me.tut || cam.mode === 'creator') { setTimeout(launcherAsk, 30000); return; }
+        ACC.asked = true;
+        accessStatus().then(st => {
+          if (!st || !st.signedIn || st.wallet) return;
+          settings.walletAsked = true; store.set(SET, JSON.stringify(settings));
+          hud.confirm('Let Ashvale use your wallet?', 'Ashvale can ask your arcade wallet to trade items with other players and to keep what you win. ' +
+            'The arcade shows its own card next, naming Ashvale\'s publisher, and every trade or payment still asks you first. You can change this any time in Settings.',
+            'Continue', 'Not now', () => accessWallet());
+        });
+      }, 20000);
       function palRows() {
         const seen = new Set(Array.from(remotes.values()).map(r => r.from && r.from.address).filter(Boolean)), rows = [];
         for (const [a, tag] of PALS.tags) if (PALS.on.has(a) || isFriend(a)) rows.push({ tag, online: !!PALS.on.get(a) || seen.has(a), game: isFriend(a) });
@@ -29966,6 +30035,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           chestState: (...a) => { const C = chestState(...a); return C && C.here ? Object.assign({}, C, { chest: C.here }) : C; },   /* [Claude 2026-10-14] the chest window shows this home's chest */ chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a), depositInv: () => depositInv(), depositWorn: () => depositWorn(), withdrawAll: () => withdrawAll(),   /* the Bank part installs after the HUD is made */
           friends: () => ({ rows: PALS.rows.slice(), note: PALS.note, addMsg: PALS.addMsg || null }),
           friendAdd: tag => friendAdd(tag).then(res => { PALS.addMsg = res; if (hud.tab === 'friends') hud.refresh('friends'); return res; }),
+          access: () => ({ st: ACC.st, nodes: ACC.nodes }), accessStatus, accessWallet, accessNodes, accessMove,
           friendsRefresh: () => { loadPals().then(() => { if (hud.tab === 'friends') hud.refresh('friends'); }); },
           walletTake: (id) => chestTake(id, 1),   /* the same ledger as the chest (it bypassed it and could duplicate an NFT) */
           icon: id => { try { return MOD.icon(id, 64); } catch (e) { return null; } },

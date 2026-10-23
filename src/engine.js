@@ -3262,6 +3262,52 @@
         if (isFriend(a)) setFriend(from, false);
         else { PALS.tags.delete(a); PALS.on.delete(a); PALS.rows = palRows(); hud.chat('@' + String(from.tag || '').replace(/^@/, '') + ' is off your friends list.', 'sys'); if (hud.tab === 'friends') hud.refresh('friends'); }
       }
+      /* ARCADE ACCESS (2026-10-23, SadFrog: wallet access asked "in the game", and a game that "can switch nodes based on
+         location/ping"): arcade.access (/r/access.js) -- status(), wallet() (the arcade's own card over the game, naming
+         Ashvale's publisher), nodes() (the arcades the one we are on knows, timed from this browser) and move() (the
+         arcade's card says what signing in there means). The launcher asks once, after the tutorial; Settings shows both. */
+      const ACC = { st: null, nodes: null, asked: false };
+      async function accessApi() {
+        if (!(G.arcade && G.arcade.access) && G.parent && G.parent !== G && /^https?:/.test(location.protocol))
+          await new Promise(ok => { const s = G.document.createElement('script'); s.src = '/r/access.js'; s.onload = s.onerror = () => ok(); G.document.head.appendChild(s); setTimeout(ok, 8000); });
+        return G.arcade && G.arcade.access || null;
+      }
+      async function accessStatus() {
+        const A = await accessApi(); if (!A) return null;
+        try { ACC.st = await A.status(); } catch (e) { ACC.st = null; }
+        if (hud.tab === 'settings') hud.refresh('settings');
+        return ACC.st;
+      }
+      async function accessWallet() {
+        const A = await accessApi(); if (!A) { hud.chat('Wallet access is asked through the arcade: open Ashvale there.', 'warn'); return; }
+        try { const r = await A.wallet(); hud.chat(r.wallet ? 'Ashvale has wallet access: trades and payments still ask you each time.' : 'Wallet access stays off. You can allow it any time in Settings.', 'sys'); }
+        catch (e) { hud.chat('Wallet access: ' + String((e && e.message) || e), 'warn'); }
+        accessStatus();
+      }
+      async function accessNodes() {
+        const A = await accessApi(); if (!A) return [];
+        try { ACC.nodes = await A.nodes(); } catch (e) { ACC.nodes = []; }
+        if (hud.tab === 'settings') hud.refresh('settings');
+        return ACC.nodes;
+      }
+      async function accessMove(base) {
+        const A = await accessApi(); if (!A) return;
+        try { const r = await A.move(base); if (r.status === 'moving') { hud.chat('Taking you to ' + String(base).replace(/^https:\/\//, '') + '...', 'sys'); persist(true); } }
+        catch (e) { hud.chat('Could not move: ' + String((e && e.message) || e), 'warn'); }
+      }
+      /* the launcher's ask: a signed-in player, past Tutorial Island and the creator, once per browser (then Settings) */
+      setTimeout(function launcherAsk() {
+        if (ACC.asked || settings.walletAsked || GUEST) return;
+        if (me.tut || cam.mode === 'creator') { setTimeout(launcherAsk, 30000); return; }
+        ACC.asked = true;
+        accessStatus().then(st => {
+          if (!st || !st.signedIn || st.wallet) return;
+          settings.walletAsked = true; store.set(SET, JSON.stringify(settings));
+          hud.confirm('Let Ashvale use your wallet?', 'Ashvale can ask your arcade wallet to trade items with other players and to keep what you win. ' +
+            'The arcade shows its own card next, naming Ashvale\'s publisher, and every trade or payment still asks you first. You can change this any time in Settings.',
+            'Continue', 'Not now', () => accessWallet());
+        });
+      }, 20000);
       function palRows() {
         const seen = new Set(Array.from(remotes.values()).map(r => r.from && r.from.address).filter(Boolean)), rows = [];
         for (const [a, tag] of PALS.tags) if (PALS.on.has(a) || isFriend(a)) rows.push({ tag, online: !!PALS.on.get(a) || seen.has(a), game: isFriend(a) });
@@ -3325,6 +3371,7 @@
           chestState: (...a) => { const C = chestState(...a); return C && C.here ? Object.assign({}, C, { chest: C.here }) : C; },   /* [Claude 2026-10-14] the chest window shows this home's chest */ chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a), depositInv: () => depositInv(), depositWorn: () => depositWorn(), withdrawAll: () => withdrawAll(),   /* the Bank part installs after the HUD is made */
           friends: () => ({ rows: PALS.rows.slice(), note: PALS.note, addMsg: PALS.addMsg || null }),
           friendAdd: tag => friendAdd(tag).then(res => { PALS.addMsg = res; if (hud.tab === 'friends') hud.refresh('friends'); return res; }),
+          access: () => ({ st: ACC.st, nodes: ACC.nodes }), accessStatus, accessWallet, accessNodes, accessMove,
           friendsRefresh: () => { loadPals().then(() => { if (hud.tab === 'friends') hud.refresh('friends'); }); },
           walletTake: (id) => chestTake(id, 1),   /* the same ledger as the chest (it bypassed it and could duplicate an NFT) */
           icon: id => { try { return MOD.icon(id, 64); } catch (e) { return null; } },

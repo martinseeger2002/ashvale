@@ -180,15 +180,38 @@
           '<button class="btn ' + (S.showPet !== false ? 'on' : '') + '" data-a="showpet">Pet: ' + (S.showPet !== false ? 'Shown' : 'Hidden') + '</button>' +   /* [Claude 2026-10-17] a Doginal / ADD pet at your heel */
           '<button class="btn" data-a="cam">Reset camera</button><button class="btn" data-a="help">Controls &amp; help</button>' +
           '<button class="btn" data-a="new">' + (ST.newGameArm ? 'Tap again: start over' : 'New character') + '</button>' +
+          accessHtml() +
           '<div class="info" style="font-size:10px;color:#c8b48a">' + A.esc(api.modulesText()) + '</div>';
         for (const b of panel.querySelectorAll('.btn')) b.onclick = () => {
           const a = b.dataset.a;
           if (a === 'run') api.cmd({ c: 'run', on: !p.run }); else if (a === 'runtoggle') api.toggle('runToggle'); else if (a === 'sound') api.toggle('sound'); else if (a === 'shadows') api.toggle('shadows'); else if (a === 'showpet') api.toggle('showPet');
           else if (a === 'cam') api.resetCamera(); else if (a === 'help') K.showHelp(true);
+          else if (a === 'wallet' && api.accessWallet) api.accessWallet();
+          else if (a === 'servers' && api.accessNodes) { ST.serversShown = 1; api.accessNodes(); }
+          else if (a === 'move' && api.accessMove) api.accessMove(b.dataset.base);
           else if (a === 'new') { if (ST.newGameArm) api.newGame(); else { ST.newGameArm = 1; setTimeout(() => { ST.newGameArm = 0; refresh('settings'); }, 3000); } }
           setTimeout(() => refresh('settings'), 50);
         };
       }
+    }
+    /* wallet access and the arcade you play on (2026-10-23, engine ARCADE ACCESS): asked of the arcade when Settings opens */
+    function accessHtml() {
+      if (!api.access) return '';
+      const X = api.access(), st = X.st;
+      if (!ST.accessAsked) { ST.accessAsked = 1; api.accessStatus().then(() => { if (ST.tab === 'settings') refresh('settings'); }); }
+      let h = '<h4 style="margin-top:8px">Wallet &amp; server</h4>';
+      if (!st) return h + '<div class="info">Open Ashvale on the arcade to manage wallet access and pick a server.</div>';
+      h += st.signedIn ? (st.wallet ? '<div class="info">Wallet access: <b>on</b>. Trades and payments still ask you each time.</div>'
+                                    : '<button class="btn" data-a="wallet">Wallet access: off - allow it</button>')
+                       : '<div class="info">Sign in on the arcade to use your wallet in Ashvale.</div>';
+      const N = X.nodes, here = N && N.find(n => n.here);
+      h += '<div class="info">Playing on <b>' + A.esc(st.node || '') + '</b>' + (here && here.ms != null ? ' (' + here.ms + ' ms)' : '') + '.</div>';
+      if (!ST.serversShown) return h + '<button class="btn" data-a="servers">Other servers</button>';
+      if (!N) return h + '<div class="info">Timing the servers...</div>';
+      const others = N.filter(n => n.arcade && !n.here);
+      if (!others.length) return h + '<div class="info">No affiliated arcade answered.</div>';
+      for (const n of others) h += '<button class="btn" data-a="move" data-base="' + A.esc(n.base) + '">Play on ' + A.esc(n.name ? n.name + ' - ' + n.host : n.host) + (n.ms != null ? ' (' + n.ms + ' ms)' : ' (no answer)') + '</button>';
+      return h + '<div class="info" style="font-size:10px">These are the arcades this one lists as affiliates. Moving asks you first; there you sign in again, and that arcade keeps its own copy of your encrypted wallet.</div>';
     }
     function weightBar(p) {
       if (!core.carried || !core.capacity) return '';
