@@ -28915,16 +28915,35 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
        again could hand back the room just left, which still sends but no longer hears - so the Bank's replies (svok, ground,
        felled, boats) almost never arrived */
     let BANK_LOAD_ROOM = null;
+    /* NEVER A NEW CHARACTER OVER A SAVED HERO (SadFrog, 2026-10-24: a signed-in player's hero was "gone"). A sign-in whose Bank
+       answered after the 20 s below got a new character; this device kept it as the newer save, and the next load handed it to the
+       Bank over the real one. So: a save this device never synced with the Bank (no 'base', no 'mine': a character started here
+       while the Bank had not answered) never outranks the Bank's; and a signed-in player with no synced save here waits for the
+       Bank (BANK_WAIT, the loading screen counting) instead of starting fresh. The save it replaces is not lost: the arcade keeps
+       a page's last 10 values of each key (wallet.js storageDoor history). */
+    const BANK_WAIT = 90000;
+    const savedWithBank = l => !!(l && (l.base != null || l.mine != null));
+    /* the Bank answered with its save `at`: true = play the Bank's, false = this device's own (see cloudLoad) */
+    const cloudWins = (local, at) => !savedWithBank(local) ? at > 0
+      : local.base != null ? at !== +local.base && !(local.mine != null && at === +local.mine)   /* the Bank holding this device's own last save (its 'svok' lost on the way): this device's copy is as new or newer */
+      : at !== +local.mine;
+    let BANK_MISSED = false;   /* signed in, and the Bank never answered: this character is fresh and nothing of it is kept (CLOUD_OK stays false) */
     function cloudLoad(st) {
       if (!G.arcade || !net || !net.join) return Promise.resolve();
       let local = null; try { local = JSON.parse(st.get(SAVE_KEY) || 'null'); } catch (e) { local = null; }
+      const synced = savedWithBank(local);
       return new Promise(done => {
-        let R = null, fin = false; const parts = {};
-        const end = () => { if (fin) return; fin = true; clearTimeout(tm); if (R) BANK_LOAD_ROOM = R; done(); };
-        const tm = setTimeout(end, local ? 8000 : 20000);   /* no Bank in time: this device's save. With no save here (a new device) it waits longer - a cold sign-in takes the realtime room 10 s and more, and giving up would start a new character */
+        let R = null, fin = false, counting = null; const parts = {};
+        const end = () => { if (fin) return; fin = true; clearTimeout(tm); clearInterval(counting); if (R) BANK_LOAD_ROOM = R; done(); };
+        let tm = setTimeout(end, synced ? 8000 : 20000);   /* no Bank in time: this device's save. With no save here (a new device) it waits longer - a cold sign-in takes the realtime room 10 s and more */
         net.join('bank', { game: 'ashvale' }).then(res => {
           if (fin || !res || !res.online) return end();
           R = res.room; const me = R.me && R.me.address; if (!me) return end();
+          if (!synced) {   /* signed in, with nothing of ours to play: wait for the Bank's answer, saying so */
+            const t0 = Date.now(); clearTimeout(tm);
+            tm = setTimeout(() => { BANK_MISSED = true; console.warn('ASHVALE: the Bank did not answer in ' + BANK_WAIT / 1000 + ' s: a fresh character, not kept'); end(); }, BANK_WAIT);
+            counting = setInterval(() => { if (G.ASH_LOAD) G.ASH_LOAD.set(0.72, 'Asking the Bank for your hero… ' + Math.round((Date.now() - t0) / 1000) + ' s'); }, 1000);
+          }
           R.on('message', ({ from, data }) => {
             if (fin || !data || data.t !== 'ld' || data.to !== me || !bankSays(from) || !homeIs(data)) return;
             if (!data.n) { CLOUD_OK = true; return end(); }   /* the Bank holds no save for this address */
@@ -28935,8 +28954,9 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
               const cloud = json ? JSON.parse(json) : null, at = +data.id || 0;
               /* which to play (2026-10-07: gear changed on another device was gone back on this one): the Bank's, whenever it is not
                  the very save this device last synced with ('base') - some other device has played since; this device's own, when it
-                 is (it may hold play the Bank has not had yet). A save from before 'base' existed: the newer by its time, as before. */
-              const takeCloud = local && local.base != null ? at !== +local.base && !(local.mine != null && at === +local.mine) : at > ((local && local.at) || 0);   /* the Bank holding this device's own last save (its 'svok' lost on the way): this device's copy is as new or newer */
+                 is (it may hold play the Bank has not had yet). A save this device never synced (2026-10-24, above): the Bank's,
+                 whatever the clocks say. */
+              const takeCloud = cloudWins(local, at);
               if (!takeCloud && local && at) return st.set(SAVE_KEY, JSON.stringify(Object.assign(local, { base: at })));   /* ours goes on from the Bank's current one */
               if (takeCloud) {   /* play the Bank's ('' = a New character was made) */
                 console.info('ASHVALE: the save from the Bank (' + new Date(at).toISOString() + ') is newer than this device\'s');
@@ -31905,7 +31925,7 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
             scene.background = bg; renderer.autoClear = true;
           } else renderer.render(scene, camera);
           if (cam.mode === 'tables' && TBP && TBP.inset) TBP.inset(renderer, scene);   /* [Claude 2026-10-21] the corner view of the dice or the wheel (the operator) */
-          if (!FIRST_DRAWN) { FIRST_DRAWN = true; if (G.ASH_LOAD) setTimeout(() => G.ASH_LOAD.done(), 120); }   /* [Claude 2026-10-13] the world is on screen: the loading screen goes */
+          if (!FIRST_DRAWN) { FIRST_DRAWN = true; if (G.ASH_LOAD) setTimeout(() => G.ASH_LOAD.done(), 120); if (BANK_MISSED) hud.chat('The Bank did not answer, so your hero was not loaded. This is a fresh character and nothing you do now is kept. Reload the page to try again.', 'sys'); }   /* [Claude 2026-10-13] the world is on screen: the loading screen goes */
         }   /* behind a loading screen nothing is drawn: the frame time goes to building the place you are going to */
         scene.fog.near = fn0; scene.fog.far = ff0;
       }
