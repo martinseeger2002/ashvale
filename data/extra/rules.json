@@ -679,6 +679,7 @@
    700,
    48
   ],
+  "treeRegrow": 50,
   "note": "a new character of this home starts at spawn with the quest begun, and is brought back if they stray off the island before the quest is done; done, they wake at the home's own spawn (src/core.js TUTORIAL)",
   "dos": [
    "equip",

@@ -26,5 +26,21 @@ const old = core.addPlayer('old', { home: 'ashvale', xp: { hitpoints: 1200 } });
 ok(!old.tut, 'a saved character is not sent to the island');
 const c2 = AshCore.create(D, { seed: 'tut2' }), p2 = c2.addPlayer('dev', null);
 ok(!p2.tut && c2.M.zoneAt(p2.x, p2.y) !== T.zone, 'without the game asking (?notut, a test, a tool) a new character starts in the village');
+// the island's trees grow back (2026-10-24): every new player fells one for the first campfire
+{
+  const c3 = AshCore.create(D, { seed: 'tut3', tutorial: true }), q = c3.addPlayer('chopper', null);
+  let tree = null;
+  for (let y = Z.origin[1]; y < Z.origin[1] + Z.size[1] && !tree; y++) for (let x = Z.origin[0]; x < Z.origin[0] + Z.size[0] && !tree; x++)
+    if (c3.M.tileAt(x, y) === 'T' && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => !c3.M.blocked(x + dx, y + dy))) tree = [x, y];
+  ok(!!tree, 'the island has a tree to chop');
+  const [tx, ty] = tree, side = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dy]) => !c3.M.blocked(tx + dx, ty + dy)), k = c3.M.key(tx, ty);
+  q.inv[0] = { id: 'hatchet', n: 1 }; q.x = tx + side[0]; q.y = ty + side[1]; q.path = [];
+  for (let n = 0; n < 3000 && !c3.S.dep[k]; n++) { if (!q.act) c3.cmd(q.id, { c: 'gather', x: tx, y: ty }); c3.tick(); }
+  ok(!!c3.S.dep[k] && c3.S.dep[k] - c3.S.t <= (T.treeRegrow || 50) && !c3.S.fell[k], 'an island tree felled is down for a while, not for good');
+  for (let n = 0; n < (T.treeRegrow || 50) + 2; n++) c3.tick();
+  ok(!c3.S.dep[k], 'and it stands again');
+  c3.setFelled([[tx, ty]]);
+  ok(!c3.S.dep[k], "the Bank's shared list of felled trees does not fell it for good");
+}
 console.log(fails ? fails + ' FAILED' : 'all ok');
 process.exit(fails ? 1 : 0);

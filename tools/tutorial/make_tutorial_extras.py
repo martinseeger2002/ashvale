@@ -17,6 +17,7 @@ from make_castle_extras import overlay, load, DD, EX, PARTS   # noqa: E402
 
 ISLAND = json.load(open(os.path.join(HERE, 'island.json')))
 TUTORIAL = {"quest": "tutorial_island", "zone": "tutorial", "home": "ashvale", "spawn": [ISLAND["x"], ISLAND["y"] + 8],
+            "treeRegrow": 50,   # ticks until a felled island tree stands again (~30 s; src/core.js tutTree, 2026-10-24)
             "note": "a new character of this home starts at spawn with the quest begun, and is brought back if they stray off the island before the quest is done; done, they wake at the home's own spawn (src/core.js TUTORIAL)"}
 RADISH = {"lvl": 1, "tier": 1, "phases": 3, "blocks": 0.25, "yield": [2, 3], "xpPlant": 4, "xpHarvest": 4, "seed": "radish_seed", "crop": "radish",
           "leaf": "#4a8a34", "fruit": "#d84a6a"}
