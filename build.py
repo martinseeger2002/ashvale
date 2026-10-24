@@ -34,7 +34,10 @@ JS_MODULES.insert(JS_MODULES.index('engine'), 'engfortune')   # [Claude 2026-10-
 JS_MODULES.insert(JS_MODULES.index('engine'), 'engpet')   # [Claude 2026-10-17] pets from Doginals (a Doginal Dog or ADD in the wallet)
 JS_MODULES.insert(JS_MODULES.index('engine'), 'lilyrules')   # [Claude 2026-10-19] the Lily Run: its rules (pure)
 JS_MODULES.insert(JS_MODULES.index('engine'), 'englily')   # [Claude 2026-10-19] the Lily Run: board, keeper, camera, the run
-for _m in ('golfrules', 'golfcourse', 'engolf'): JS_MODULES.insert(JS_MODULES.index('engine'), _m)   # [Claude 2026-10-19] the Saltmere Links: rules (pure), the course data (tools/make_golf.py), the engine part
+for _m in ('golfrules', 'golfcourse', 'engolf'): JS_MODULES.insert(JS_MODULES.index('engine'), _m)
+# [Claude 2026-10-20] the clubhouse tables (the operator: "their own modules"): each game's rules (the same files the Bank runs), its table, the
+# dice table's recorded throws, the shared engine part and the shared bar - found by name, so the engine, scene and hud never list them
+for _m in ('dicerules', 'wheelrules', 'twentyonerules', 'dicethrows', 'dicetable', 'wheeltable', 'twentyonetable', 'engtables', 'hudtables'): JS_MODULES.insert(JS_MODULES.index('engine'), _m)   # [Claude 2026-10-19] the Saltmere Links: rules (pure), the course data (tools/make_golf.py), the engine part
 if os.path.exists(os.path.join(SRC, 'sky.js')):
     JS_MODULES.insert(JS_MODULES.index('engine'), 'sky')
 if os.path.exists(os.path.join(SRC, 'skyview.js')):   # the sky drawn as a 3D scene of its own: sun, moon, stars (2026-10-07)

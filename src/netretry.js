@@ -131,5 +131,29 @@
     const watch = () => { const b = D.getElementById('boot'); if (!b) return; const ob = new MutationObserver(() => { if (/could not/i.test(b.textContent || '')) { say.textContent = b.textContent; say.style.color = '#ff8a7a'; } }); ob.observe(b, { childList: true, characterData: true, subtree: true }); };
     if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', watch); else watch();
   }
-  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('netretry', { api: API, v: 5 }, () => ({ on: !!(G.fetch && G.fetch.__ashRetry), early: stats }));
+  /* [Claude 2026-10-23] GZIPPED MODULES (the operator: "Everything should be gzipped that is changed", after @liteworldsquest's "3x smaller on
+     chain"): a release inscribes each changed module gzipped (application/gzip, no base64). The launcher (never re-inscribed) unpacks only
+     what its registry entry marks gz, and reads data, zones and parts as plain JSON - so the outermost fetch here unpacks every /content/
+     file that starts with gzip's two bytes (1f 8b) and hands the launcher and the engine the plain file, exactly as before. This module
+     itself is the one the launcher unpacks (its entry carries gz). A file served already unpacked passes through untouched. */
+  const gzStats = { files: 0, packed: 0, plain: 0 };
+  if (G.fetch && !G.fetch.__ashGz && typeof G.DecompressionStream === 'function' && typeof G.Response === 'function') {
+    const inner = G.fetch;
+    const gz_fetch = async function (url, opts) {
+      const r = await inner(url, opts);
+      const u = typeof url === 'string' ? url : (url && url.url) || '';
+      if (!r || !r.ok || !/\/content\/[0-9a-f]{64}/.test(u)) return r;
+      const buf = new Uint8Array(await r.arrayBuffer());
+      gzStats.files++;
+      if (buf.length > 2 && buf[0] === 0x1f && buf[1] === 0x8b) {
+        gzStats.packed += buf.length;
+        const plain = await new Response(new Blob([buf]).stream().pipeThrough(new G.DecompressionStream('gzip'))).arrayBuffer();
+        return new Response(plain, { status: 200, headers: { 'Content-Type': 'application/octet-stream' } });
+      }
+      gzStats.plain += buf.length;
+      return new Response(buf, { status: r.status, statusText: r.statusText, headers: r.headers });
+    };
+    gz_fetch.__ashRetry = true; gz_fetch.__ashEarly = !!inner.__ashEarly; gz_fetch.__ashGz = true; G.fetch = gz_fetch;
+  }
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('netretry', { api: API, v: 6 }, () => ({ on: !!(G.fetch && G.fetch.__ashRetry), early: stats, gz: gzStats }));
 })(typeof globalThis !== 'undefined' ? globalThis : this);

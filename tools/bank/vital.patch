@@ -1,0 +1,73 @@
+--- a/tools/bank/bank.py
++++ b/tools/bank/bank.py
+@@ -1226,6 +1226,20 @@
+   if (r.online) r.on('closed', why => { window.__bankClosed = String(why || 'closed'); });
+   return { online: r.online, why: r.why || null, me: r.me || null };
+ }"""
++def vital(name, fn, stop, *args, exit=os._exit):
++    """[Claude 2026-10-22] a thread the Bank cannot work without (the payouts, the tables' clock): if it ever ends while the Bank is
++    meant to run - an error, or a SystemExit, which a thread drops without a word - the whole Bank exits and systemd starts it again
++    (Restart=always, 20 s). 2026-10-22 13:49: the deliver thread died at start and the room stayed up, so the Bank looked alive
++    while it paid nothing for 3.5 h. A clean stop (stop set) is no failure."""
++    try: fn(stop, *args); why = 'returned'
++    except BaseException: why = traceback.format_exc()[-400:]
++    if not stop.is_set():
++        log('VITAL THREAD STOPPED', name, why, '- the Bank exits so systemd starts it again')
++        stop.set()   # every loop ends at its next turn: a payout being sent is finished first (deliver_loop looks at stop between sends)
++        d = DELIVER_T
++        if d is not None and d is not threading.current_thread(): d.join(120)
++        exit(3)
++DELIVER_T = None   # the payouts' thread (set in main), waited for before a vital failure exits
+ def tables_clock(stop, room, every=0.5):
+     """[Claude 2026-10-22] the clubhouse tables' clock for the room with no browser (the operator: "All of the tables upstairs wait on players
+     before they start dealing, but only one player is required" - cert_room_loop never called TB.tb_tick, so no table ever left idle).
+@@ -1248,7 +1262,7 @@
+     import rpc_wallet
+     secret = int(open(rpc_wallet.KEY).read().strip(), 16)
+     c = db(); room = CertRoom(secret, ASHVALE, 'ashvale', 'bank')
+-    threading.Thread(target=tables_clock, args=(stop, room), daemon=True).start()   # [Claude 2026-10-22] this room only wakes on a message or the server's heartbeat
++    threading.Thread(target=vital, args=('tables_clock', tables_clock, stop, room), daemon=True).start()   # [Claude 2026-10-22] this room only wakes on a message or the server's heartbeat
+     while not stop.is_set():
+         try:
+             for ev in room.events(stop):
+@@ -1370,6 +1384,6 @@
+             if tx.get('error') or (tx.get('confirmations') is None and not tx.get('txid')): bad += 1; print('BANK AUDIT: job', r['n'], r['addr'], r['item'], r['units'], 'txid', r['txid'], '->', tx.get('error') or 'unknown to the index')
+         print('audit: %d problem(s)' % bad); sys.exit(1 if bad else 0)
+     stop = threading.Event()
+-    t = threading.Thread(target=deliver_loop, args=(stop,), daemon=True); t.start()
++    t = DELIVER_T = threading.Thread(target=vital, args=('deliver_loop', deliver_loop, stop), daemon=True); t.start()
+     try: (cert_room_loop if os.environ.get('ASH_ROOM') == 'cert' else room_loop)(stop)
+-    finally: stop.set()
++    finally: stop.set(); t.join(120)   # [Claude 2026-10-22] a payout being sent is finished before the process ends (its thread is a daemon)
+--- a/tools/bank/rpc_wallet.py
++++ b/tools/bank/rpc_wallet.py
+@@ -21,6 +21,20 @@
+ INDEX = os.environ.get('ASH_BANK_INDEX', os.path.expanduser('~/.dogecoinarcade/test-ledger.sqlite'))
+ def _get(path, timeout=60): return json.load(urllib.request.urlopen(APP + path, timeout=timeout))
+ 
++def tag_address(tries=20, wait=15, sleep=time.sleep):
++    """[Claude 2026-10-22] @ashvale's address as the arcade names it. A lookup that FAILS (the arcade restarting, a timeout, an answer
++    with no address) is asked again, every `wait` s for ~5 min: on 2026-10-22 13:49 the Bank started while the arcade restarted, this
++    check refused at once, and the payout thread was gone for 3.5 h. Only a real answer can refuse: it is returned as it is."""
++    for i in range(tries):
++        try:
++            a = (_get('/r/tag/ashvale', timeout=20) or {}).get('address')
++            if a: return a
++            why = 'no address in the answer'
++        except Exception as e: why = str(e)[:120]
++        say = getattr(sys.modules.get('__main__'), 'log', None) or print
++        say('TAG LOOKUP FAILED (%d of %d): %s - asking again in %d s' % (i + 1, tries, why, wait))
++        if i + 1 < tries: sleep(wait)
++    return None
+ class RpcWallet:
+     def __init__(self, journal, dry=False, say=None):
+         if ARCADE not in sys.path: sys.path.insert(0, ARCADE)
+@@ -30,7 +44,7 @@
+         self.P, self.dry, self.say = publish, dry, (say or (lambda s: None))
+         key = publish.Key.from_file(KEY)
+         self.address = key.address(TESTNET)
+-        if self.address != ASHVALE or (_get('/r/tag/ashvale') or {}).get('address') != ASHVALE:
++        if self.address != ASHVALE or tag_address() != ASHVALE:
+             raise SystemExit('REFUSING: the key at %s is not @ashvale\'s' % KEY)
+         user, _, password = open(COOKIE).read().strip().partition(':')
+         host, _, port = NODE.rpartition('://')[2].partition(':')

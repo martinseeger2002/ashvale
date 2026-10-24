@@ -68,7 +68,7 @@
     /* ---------- saves: arcade.storage inside an arcade viewer (inscribed pages have NO localStorage, it throws),
        else this browser's localStorage, else memory only. Reads come from a cache filled before start(); writes go
        through and never throw (setItem rejects outside a viewer). */
-    const STORE_KEYS = ['ashvale3d.save.v1', 'ashvale3d.settings.v1', 'ashvale3d.help', 'ashvale3d.music.v1', 'ashvale3d.friends.v1'];   /* friends.v1: the players you added in the game (FRIENDS LIST) */   /* music.v1 (src/engmusic.js: on/off, volume, mode, unlocked tracks): it was written but never read back, so every visit began with the music on at 60% (2026-10-18) */
+    const STORE_KEYS = ['ashvale3d.save.v1', 'ashvale3d.settings.v1', 'ashvale3d.help', 'ashvale3d.music.v1', 'ashvale3d.golf.v1', 'ashvale3d.friends.v1'];   /* friends.v1 (SadFrogLTC): the players you added in the game (FRIENDS LIST) */   /* golf.v1 [Claude 2026-10-22]: the round in progress on the Saltmere Links (engolf: rejoin within 2 min) */   /* music.v1 (src/engmusic.js: on/off, volume, mode, unlocked tracks): it was written but never read back, so every visit began with the music on at 60% (2026-10-18) */
     function memoryStore(cache, backend, S) {
       cache = cache || {}; let warned = false;
       const warn = e => { if (!warned) { warned = true; console.warn('ASHVALE: saving failed (' + (e && e.message || e) + '); progress is kept until you close the page.'); } };
@@ -285,6 +285,7 @@
       if (HOME && core.setNewHome) core.setNewHome(HOME);
       const me = core.addPlayer(PID, save);
       let FE = null;   /* [Claude 2026-10-16] the Fortune Engines' part (engfortune.js), installed with the Bank client below */
+      let TBP = null;   /* [Claude 2026-10-20] the clubhouse tables' part (engtables.js, found by name: a table game never needs an engine change) */
       let LR = null;   /* [Claude 2026-10-19] the Lily Run (englily.js) */
       let GF = null;   /* [Claude 2026-10-19] the Saltmere Links (engolf.js) */
       let PET = null;  /* [Claude 2026-10-17] pets from Doginals (engpet.js): a Doginal Dog or an Anti Doginal Dog in the wallet walks at your heel */
@@ -1001,13 +1002,13 @@
           /* THE POKER TABLE (handoff/poker_plan.md): psit/pstand is "you are (no longer) in a chair at the felt", said
              the same way whether the table seated you or a host's row did; poker is the felt changing - cards, chips,
              the button, whose turn. The row itself carries everything the page draws. */
-          case 'fein': case 'feback': if (FE) FE.event(e); break;   /* [Claude 2026-10-16] a Fortune Engine's GOLD in and back */
+          case 'fein': case 'feback': if (/^tb:/.test(String(e.s || ''))) { if (TBP) TBP.event(e); } else if (FE) FE.event(e); break;   /* [Claude 2026-10-16] a Fortune Engine's GOLD in and back */
           case 'psit': if (mine) pokerEnter(e.t); break;
           case 'pstand': if (mine) pokerLeave(e.t); break;
           case 'pkbuy': case 'pkout': case 'pkcash': if (Array.isArray(G.__pkEv)) G.__pkEv.push(Object.assign({}, e));   /* a test watches these */
             ENGBANK.pkEvent(e, pid => pid === PID ? (walletState.address || null) : (((remotes.get(pid) || {}).from || {}).address || PK_ADDR.get(pid) || null)); break;   /* [Claude 2026-10-14] the card table's GOLD through @ashvale */
           case 'poker': {
-            if (SCENE.pokerShow) SCENE.pokerShow(e.t, pokerModel(e.t));
+            if (SCENE.pokerShow) { SCENE.pokerShow(e.t, pokerModel(e.t)); reShade.at = 0; reShade(); }   /* chips and cards on a hidden storey hide at once */
             pokerChat(e.t);
             if (me.seat && me.seat.t === e.t && me.seat.k === 'pk') { pokerFx(e.t, e); if (hud.pokerUpdate) hud.pokerUpdate(pokerView(e.t)); }
             const T = core.pokerTableById(e.t); if (T && iDeal(T)) pkSendRow(e.t);   /* [Claude 2026-10-13] a delta when it pays */
@@ -1155,8 +1156,16 @@
       function lightBudget() {
         let n = 0, sum = 0;
         for (const r of regions) { const b = r.built; if (!b) continue; if (b._pl == null) { b._pl = []; b.group.traverse(o => { if (o.isPointLight) b._pl.push(o); }); } sum += b._pl.length; }
-        if (sum === LBUD.key) return; LBUD.key = sum;
-        for (const r of regions) { const b = r.built; if (!b) continue; for (const L of b._pl) { L.visible = n < LBUD.n; if (L.visible) n++; } }
+        /* [Claude 2026-10-21] the lamps of the room you stand in come first (the operator: "It's dark in there I thought the lights would light stuff up"),
+           then lights out of doors, then other rooms' (unlit anyway) */
+        const inRoom = L => { const R = L.userData.room; return R && me.x >= R.x0 && me.x <= R.x1 && me.y >= R.y0 && me.y <= R.y1 && (me.lv | 0) === R.lv; };
+        const rank = L => L.userData.room ? (inRoom(L) ? 0 : 2) : 1;
+        let sig = sum; for (const r of regions) { const b = r.built; if (b) for (const L of b._pl) if (rank(L) === 0) sig += 1000; }
+        sig += ':' + me.x + ',' + me.y + ',' + (me.lv | 0);
+        if (sig === LBUD.key) return; LBUD.key = sig;
+        const all = []; for (const r of regions) { const b = r.built; if (b) for (const L of b._pl) all.push(L); }
+        all.sort((a, b) => rank(a) - rank(b));
+        for (const L of all) { L.visible = n < LBUD.n; if (L.visible) n++; }
         LBUD.pad.forEach((L, k) => { L.visible = k < LBUD.n - n; });
       }
       function caveTick(now) {
@@ -1403,11 +1412,15 @@
          from the geometry (DoubleSide, so a one-sided roof plane still blocks the sun from above). The own material is
          kept on the piece and put back when you walk out. A piece that casts no shadow (glass) is simply not drawn. */
       const HIDE_MAT = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, side: THREE.DoubleSide });
+      let shadeAgain = 0;
       function shadeGroup(g, hide) {
-        if (!g || !!g.userData.shut === hide) return;
+        /* [Claude 2026-10-21] a hidden storey is gone over again four times a second (reShade): what was put on it since (the tables' cards, GOLD and
+           labels, the card table's chips) hides too (the operator: "The bets and cards on the second story are visible when you're on the first story") */
+        if (!g || (!!g.userData.shut === hide && !(hide && shadeAgain))) return;
         g.userData.shut = hide;
         g.traverse(o => {
           if (o.layers.mask !== 1) o.layers.set(0);   /* pieces the old fix left on SHADOWED come back */
+          if (o.isSprite) { const u = o.userData; if (hide) { if (u.vis0 === undefined) { u.vis0 = o.visible; o.visible = false; } } else if (u.vis0 !== undefined) { o.visible = u.vis0; delete u.vis0; } return; }
           if (!o.isMesh) return;
           const u = o.userData;
           if (hide) {
@@ -1418,6 +1431,11 @@
             if (u.vis0 !== undefined) { o.visible = u.vis0; delete u.vis0; }
           }
         });
+      }
+      function reShade() {   /* four times a second, from the frame: hidden storeys and roofs gone over again for pieces added since */
+        const t = performance.now(); if (t - (reShade.at || 0) < 250) return; reShade.at = t; shadeAgain = 1;
+        for (const r of regions) if (r.built) for (const rf of r.built.roofs) { if (rf.g.userData.shut) shadeGroup(rf.g, true); for (const sg of rf.storeys || []) if (sg.userData.shut) shadeGroup(sg, true); }
+        shadeAgain = 0;
       }
       function roofCheck() {
         floorBarCheck();
@@ -1518,7 +1536,8 @@
           const side = host.clientWidth > 500 ? 0.55 : 0.4; tg.x -= Math.cos(cam.yaw) * side; tg.z += Math.sin(cam.yaw) * side;
         }
         if (cam.mode === 'chess' && CHESSV) { tg.set(CHESSV.x, CHESSV.y, CHESSV.z); cam.tyaw = CHESSV.yaw + CHESS_TURN; cam.tpitch = isPhone ? 1.32 : 1.22; cam.tdist = isPhone ? 1.9 : 1.55; }   /* seated at a chess table: close over the board, your side nearest */
-        if (cam.mode === 'fortune' && FE) FE.target(tg);   /* [Claude 2026-10-16] */
+        if (cam.mode === 'fortune' && FE) FE.target(tg);
+        if (cam.mode === 'tables' && TBP) TBP.target(tg);   /* [Claude 2026-10-20] at a clubhouse table */   /* [Claude 2026-10-16] */
         if (cam.mode === 'poker' && POKERV) { tg.set(POKERV.x, POKERV.y, POKERV.z); cam.tyaw = POKERV.yaw; cam.tpitch = 1.2; cam.tdist = 1.4; }   /* seated at the felt: the light centre is the middle of the table */
         if (cam.snap || cam.film) camT.copy(tg); else camT.lerp(tg, Math.min(1, dt * 12));
         cam.snap = false;
@@ -1530,6 +1549,18 @@
         if (!cam.film && cam.mode !== 'chess' && cam.mode !== 'poker') for (const t of [0.25, 0.5, 0.75]) {
           const lx = camT.x + (camera.position.x - camT.x) * t, lz = camT.z + (camera.position.z - camT.z) * t, need = heightAt(lx, lz) + 0.8;
           const ly = camT.y + (camera.position.y - camT.y) * t; if (ly < need) camera.position.y = camT.y + (need - camT.y) / t;
+        }
+        /* [Claude 2026-10-22] and out of other buildings (the operator: on the first tee "Inside shows through" - the camera behind you hung inside the
+           clubhouse's roof, whose faces only show from outside): a camera that would sit within a house you are not in, below its roof top,
+           comes in toward you until it is clear */
+        if (!cam.film && cam.mode !== 'chess' && cam.mode !== 'poker' && cam.mode !== 'tables' && cam.mode !== 'fortune') {
+          const inB = (x, y, z) => { for (const r of regions) if (r.built) for (const rf of r.built.roofs) { if (rf.top == null || rf.g.userData.shut) continue;
+            if (x > rf.x0 - 0.45 && x < rf.x1 + 1.45 && z > rf.y0 - 0.45 && z < rf.y1 + 1.45 && y < rf.top) return true; } return false; };
+          const cx0 = camera.position.x, cy0 = camera.position.y, cz0 = camera.position.z;
+          if (inB(cx0, cy0, cz0)) for (let t = 0.92; t > 0.1; t -= 0.06) {
+            const x = camT.x + (cx0 - camT.x) * t, y = camT.y + (cy0 - camT.y) * t, z = camT.z + (cz0 - camT.z) * t;
+            if (!inB(x, y, z)) { camera.position.set(x, Math.max(y, heightAt(x, z) + 0.6), z); break; }
+          }
         }
         /* LOOK UP AT THE SKY (2026-10-07: "look up past the point where it is currently limited to slide the camera into first person
            view"): tilting on past the lowest view slides the camera forward into your character's eyes, and from there you look up -
@@ -1575,6 +1606,7 @@
         if (cam.mode === 'lilyrun' && LR) LR.camera(camera, dt);
         if (cam.mode === 'golf' && GF) GF.camera(camera, dt);   /* [Claude 2026-10-19] behind the ball on the Saltmere Links; never first person (fp 0 above: 2026-10-20, a swipe to another app tilted the hidden orbit camera down and the first-person rule hid his avatar for the rest of the round) */   /* [Claude 2026-10-19] THE LILY RUN: behind the frog on the board */
         if (cam.mode === 'fortune' && FE) FE.camera(camera, dt);   /* [Claude 2026-10-16] THE FORTUNE ENGINE: first person on the bench, the head turned by a drag */
+        if (cam.mode === 'tables' && TBP) TBP.camera(camera, dt);   /* [Claude 2026-10-20] first person at your spot by the rail */
         if (cam.mode === 'poker' && POKERV && POKERV.eye) {   /* THE POKER TABLE: first person at the felt, leaning a little over your own side of it */
           const E = POKERV.eye, L = POKERV.look; camera.position.set(E.x, E.y, E.z); camera.lookAt(L.x, L.y, L.z);
           const aspect = (host.clientWidth || 1) / (host.clientHeight || 1), d = Math.hypot(L.x - E.x, L.y - E.y, L.z - E.z), half = 0.66;
@@ -1730,7 +1762,8 @@
           return out;
         }
         if (t.kind === 'pet') return PET ? PET.menu(t) : [];   /* [Claude 2026-10-17] a pet: choose yours / inspect */
-        if ((t.kind === 'fortune' || t.kind === 'fehot') && FE) return FE.menu(t);   /* [Claude 2026-10-16] a Fortune Engine */
+        if ((t.kind === 'fortune' || t.kind === 'fehot') && FE) return FE.menu(t);
+        if ((t.kind === 'gametable' || t.kind === 'tbhot') && TBP) return TBP.menu(t);   /* [Claude 2026-10-20] a clubhouse table */   /* [Claude 2026-10-16] a Fortune Engine */
         if (t.kind === 'pokertable') {   /* THE POKER TABLE: six chairs round one felt in the Saltmere tap room; once you are sitting, the panel in front of you does the talking */
           const T = core.pokerTableById(t.id); if (!T) return [];
           if ((T.lv | 0) !== (me.lv | 0)) return [{ html: 'Card table <span class="c">(' + ((T.lv | 0) > (me.lv | 0) ? 'up the stairs' : 'downstairs') + ')</span>', fn: () => hud.chat('The poker table is ' + ((T.lv | 0) > (me.lv | 0) ? 'up the tavern stairs.' : 'downstairs.'), 'sys') }];   /* [Claude] */
@@ -1851,7 +1884,8 @@
       function tapAt(cx, cy) {
         if (LR && LR.tap()) return;   /* [Claude 2026-10-19] the frog is on the Lily Run board: taps never walk (the operator) */
         if (GF && GF.tap()) return;   /* a round of golf: a drag aims, a tap never walks */
-        if (FE && FE.tap(cx, cy)) return;   /* [Claude 2026-10-16] seated at a Fortune Engine: only its reels, lever, slot and knobs */
+        if (FE && FE.tap(cx, cy)) return;
+        if (TBP && TBP.tap(cx, cy)) return;   /* [Claude 2026-10-20] at a clubhouse table: the felt and the table's buttons */   /* [Claude 2026-10-16] seated at a Fortune Engine: only its reels, lever, slot and knobs */
         const now = performance.now();
         if (lastTap && now - lastTap.t < 300 && Math.hypot(cx - lastTap.x, cy - lastTap.y) < 40 && lastTap.act) {
           const up = Object.assign({}, lastTap.act, { run: runFor(true) }); lastTap = null; send(up); hud.hideMenu(); return;
@@ -1864,6 +1898,7 @@
       function menuAt(cx, cy) {
         if (LR && LR.tap()) return;   /* no menus while the frog runs */
         if (GF && GF.tap()) return;
+        if (TBP && TBP.hold && TBP.hold(cx, cy)) return;   /* [Claude 2026-10-22] seated at a clubhouse table: a long-press takes a bet down (the operator: "Should be able to Long click on a bet and remove it from the table") */
         const ts = targetsAt(cx, cy), list = [];
         MENU_MODE = true; try { for (const t of ts) for (const o of optionsFor(t)) list.push(o); } finally { MENU_MODE = false; }
         if (!ts.some(t => t.kind === 'ground')) { const g = groundAt(cx, cy); if (g) list.push({ html: 'Walk here', act: { c: 'walk', x: g.x, y: g.y } }); }
@@ -1906,11 +1941,12 @@
         const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY; p.moved += Math.abs(dx) + Math.abs(dy);
         if (ptrs.size >= 2 && pinch) {
           const [a, b] = Array.from(ptrs.values()), d = Math.hypot(a.x - b.x, a.y - b.y), ang = Math.atan2(b.y - a.y, b.x - a.x), my = (a.y + b.y) / 2;
+          if (cam.mode === 'tables' && TBP && TBP.pinch) { const mx = (a.x + b.x) / 2, l = pinch.l || { d: pinch.d, x: mx, y: my }; TBP.pinch(Math.max(20, d) / Math.max(20, l.d), mx - l.x, my - l.y); pinch.l = { d, x: mx, y: my }; return; }   /* [Claude 2026-10-21] at a table: pinch zooms and slides (the operator) */
           cam.tdist = pinch.dist * pinch.d / Math.max(20, d); let da = ang - pinch.ang; if (da > PI) da -= 2 * PI; if (da < -PI) da += 2 * PI;
           cam.tyaw = pinch.yaw - da; cam.tpitch = pinch.pitch + (my - pinch.my) * 0.005; return;
         }
         const rotating = p.b === 1 || (p.moved > (p.type === 'mouse' ? 5 : 9));
-        if (rotating) { clearTimeout(lpTimer); if (cam.mode === 'fortune' && FE && FE.look(dx, dy)) { /* [Claude 2026-10-16] seated at a Fortune Engine: the head turns */ } else if (cam.mode === 'chess' && CHESSV) CHESS_TURN = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, CHESS_TURN - dx * 0.006));   /* [Claude] seated at chess: press and drag turns the view round the board, a quarter turn each way (the operator) */
+        if (rotating) { clearTimeout(lpTimer); if ((cam.mode === 'fortune' && FE && FE.look(dx, dy)) || (cam.mode === 'tables' && TBP && TBP.look(dx, dy))) { /* [Claude 2026-10-16] seated at a Fortune Engine: the head turns */ } else if (cam.mode === 'chess' && CHESSV) CHESS_TURN = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, CHESS_TURN - dx * 0.006));   /* [Claude] seated at chess: press and drag turns the view round the board, a quarter turn each way (the operator) */
           else { cam.tyaw -= dx * 0.0085; cam.tpitch += dy * 0.006; } }
       });
       const endPtr = e => {
@@ -1921,7 +1957,7 @@
         if (ptrs.size === 0) suppressTap = false;
       };
       canvas.addEventListener('pointerup', endPtr); canvas.addEventListener('pointercancel', endPtr);
-      canvas.addEventListener('wheel', e => { e.preventDefault(); cam.tdist *= e.deltaY > 0 ? 1.12 : 1 / 1.12; }, { passive: false });
+      canvas.addEventListener('wheel', e => { e.preventDefault(); if (cam.mode === 'tables' && TBP && TBP.zoom && TBP.zoom(e.deltaY > 0 ? 1 / 1.15 : 1.15)) return; cam.tdist *= e.deltaY > 0 ? 1.12 : 1 / 1.12; }, { passive: false });
       window.addEventListener('keydown', e => { if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return; if (e.key === 'Shift') shiftHeld = true; if (/^Arrow/.test(e.key)) { cam.keys[e.key] = true; e.preventDefault(); } });
       window.addEventListener('keyup', e => { cam.keys[e.key] = false; if (e.key === 'Shift') shiftHeld = false; });
       window.addEventListener('blur', () => { cam.keys = {}; shiftHeld = false; });
@@ -2306,6 +2342,9 @@
       scoreTell = ENGBANK.scoreTell; scoresAsk = ENGBANK.scoresAsk;
       /* [Claude 2026-10-16] THE FORTUNE ENGINES (src/engfortune.js): seat, first-person view, the machine's taps and the Bank's words */
       FE = deps.engfortune ? deps.engfortune.install({ THREE, SCENE, core, hud, PID, ENGBANK, cam, camera, canvas, host, FPV, myEnt, send, netSend, walletRefresh, walletState, get me() { return me; }, get settings() { return settings; } }) : null;
+      /* [Claude 2026-10-20] THE CLUBHOUSE TABLES (src/engtables.js, by name): spots, first person, the felt, the Bank's rounds */
+      { const TM = G.ASH3D && G.ASH3D.get && G.ASH3D.get('engtables');
+        TBP = TM && TM.install ? TM.install({ THREE, SCENE, reShade: () => { reShade.at = 0; reShade(); }, core, hud, PID, ENGBANK, MOD, cam, camera, canvas, host, FPV, myEnt, send, netSend, walletRefresh, walletState, get me() { return me; }, get settings() { return settings; } }) : null; }
       PET = deps.engpet ? deps.engpet.install({ THREE, scene, CHAR, footY, myEnt, netSend: o => netSendBig(o, null, 'pt' in o ? 'pet' : null), savedPet: () => PET_PICK, petChosen: k => { PET_PICK = k; persist('now'); },
         playOnce: (e, name) => { if (!e.dead && !e.oneShot && !e.prone && !e.held && !e.canoe) playOnce(e, name); },   /* [Claude 2026-10-18] petting: the engine's own one-shot, so the walk/idle loop comes back after it */
         groundY: (x, z, e, fy) => {   /* [Claude 2026-10-18] the pet's own ground (the operator: on a slope it sank into it); upstairs its owner's floor, a big step (a wall walk) its owner's height */
@@ -2326,6 +2365,10 @@
       GF = deps.engolf && deps.golfrules && deps.golfcourse ? deps.engolf.install({ THREE, scene, core, hud, PID, cam, camera, renderer, myEnt, send, netSend: o => netSendBig(o, null, 'gf'), PET, rules: deps.golfrules, course: deps.golfcourse, heightAt,
         playOnce: (e, name) => { if (!e.dead) playOnce(e, name); }, bestTell: (...a) => ENGBANK && ENGBANK.bestTell && ENGBANK.bestTell(...a), scoresAsk: f => scoresAsk(f), get me() { return me; },
         netId: () => myNetId, boardWho: () => boardWho(), myAddr: () => walletState.address || null, coins: () => core.invCount(me, 'coins'),
+        /* [Claude 2026-10-22] the round kept for a rejoin (the operator: "if you accidentally close the application while playing a round of golf, you
+           should be able to rejoin that game"): the game's store; a guest's memory-only store (and a test's own key) falls back to this browser's */
+        keep: { get: k => { const v = store.get(k); if (v != null && v !== '') return v; if (store.backend === 'arcade') return v; try { return G.localStorage.getItem(k); } catch (e) { return null; } },
+          set: (k, v) => { store.set(k, v); if (store.backend === 'memory' || STORE_KEYS.indexOf(k) < 0) try { G.localStorage.setItem(k, v); } catch (e) { /* none */ } } },
         owns: id => core.invCount(me, id) > 0 || Object.values(me.eq || {}).some(v => v === id || (v && v.id === id)) || !!(walletState.data && walletState.data.gear && (walletState.data.gear[id] || []).length),
         remoteEnt: id => { const r = remotes.get(id) || remotes.get(String(id)); return r ? r.e : null; },
         pkEvent: (e, addrOf) => ENGBANK && ENGBANK.pkEvent && ENGBANK.pkEvent(e, addrOf),
@@ -2445,6 +2488,9 @@
         const now = performance.now(); while (sayTimes.length && now - sayTimes[0] > 10000) sayTimes.shift();
         if (sayTimes.length >= 5 || (sayTimes.length && now - sayTimes[sayTimes.length - 1] < 1200)) { hud.chat("You're talking too fast.", 'warn'); return; }
         sayTimes.push(now);
+        const emo = /^\/(cheer|fistpump|clap|excited|slump)$/i.exec(text);   /* [Claude 2026-10-21] the operator: the reactions "should carry over to player avatars in the actual game" - played on you, seen by others (the animation rides your position messages) */
+        if (emo) { playOnce(myEnt, emo[1].toLowerCase()); return; }
+        if (/^\/(emotes?|help emotes)$/i.test(text)) { hud.chat('Emotes: /cheer /fistpump /clap /excited /slump', 'sys'); return; }
         const dmTo = /^\/@([A-Za-z0-9_]{1,32})\s+(\S.*)$/.exec(text);   /* "/@tag message": a direct message, no distance limit */
         if (dmTo) { sendDm(dmTo[1], dmTo[2]); return; }
         if (text.startsWith('/@')) { hud.chat('To send a direct message: /@name your message', 'sys'); return; }
@@ -2876,7 +2922,8 @@
         /* the felt: a chair asked for, a player getting up, an action, or the host's word on a table. Same rules as the
            chess park: only the host of the area the table stands in answers, and a row only counts from that host. */
         pkMsg(id, d);   /* [Claude 2026-10-13] the card-table words (also heard in a table's own room: tblHeard) */
-        if (FE && Array.isArray(d.FE)) FE.net(id, d.FE);   /* [Claude 2026-10-16] a Fortune Engine's counter and spins */
+        if (FE && Array.isArray(d.FE)) FE.net(id, d.FE);
+        if (TBP && Array.isArray(d.TB)) TBP.net(id, d.TB);   /* [Claude 2026-10-20] who stands at which table spot */   /* [Claude 2026-10-16] a Fortune Engine's counter and spins */
         if (Array.isArray(d.X)) { const x = d.X; if (core.item(x[0]) && iHostAt(x[2], x[3])) coreCall(() => core.hostDrop({ id: x[0], n: Math.max(1, x[1] | 0), x: x[2] | 0, y: x[3] | 0, life: x[4] | 0, from: x[5] ? fromNet(x[5]) : null, diedAt: x[6] | 0, lv: x[7] | 0 })); }
         /* below: only the word of the host of the area concerned counts */
         if (Array.isArray(d.M)) { const rows = d.M.filter(w => Array.isArray(w) && fromHostOf(id, mobArea(w[0]))); if (rows.length) coreCall(() => core.applyMobs(rows)); }
@@ -2967,10 +3014,14 @@
           /* [Claude 2026-10-12] the operator: "When someone is on one of the upper floors of one of the buildings, they should only be
              visible to people on the same floor" - from below, the storeys above are see-through and they stood in the air. */
           r.lvR = lvR;   /* torchTick: a torch carried on another storey does not light this one */
-          const offFloor = lvR !== (me.lv | 0);
+          /* [Claude 2026-10-20] the operator: "when playing slots someone shouldn't be able to stand where you are sitting because they block your
+             view" - seated at a Fortune Engine or standing at a clubhouse table, anyone on or right beside your own spot is not drawn for you */
+          const crowd = ((FE && FE.seated()) || (TBP && TBP.seated())) && Math.hypot(x - (me.x + 0.5), z - (me.y + 0.5)) < 0.9;
+          const offFloor = lvR !== (me.lv | 0) || crowd;
           if (offFloor) { if (r.e.root.visible) { r.e.root.visible = false; r.floorHid = true; } }
           else if (r.floorHid) { r.e.root.visible = true; r.floorHid = false; }
           r.e.root.position.set(x, (r.e.canoe ? waterY(x, z) + (r.anim === 'pole' || r.anim === 'idle' ? 0.14 : 0) : heightAt(x, z) + seatLift(r.e) + upR) + (r.e.alt || 0), z); r.e.tyaw = Bs.f + turnS;   /* a chess player sits on the bench */
+          if (TBP && TBP.pose) TBP.pose(r.e, lvR, dt);   /* [Claude 2026-10-21] at a clubhouse table: up at the rail, facing the felt (the operator) */
           /* [Claude 2026-10-14] the feet follow the body actually drawn, not the newest message: their last sample says 'idle' at the
              spot they stopped, and playing it at once slid the avatar the last stretch standing still. While the drawn body moves,
              walk (or run), at a pace matched to how fast it goes; stand only once it has come to rest. */
@@ -3029,6 +3080,7 @@
           if (e.key.charAt(0) === 'r') continue;
           const a = Math.min(1, (now - e.t0) / e.dur);
           if (!e.dead || a < 1) { e.root.position.lerpVectors(e.from, e.to, a); smoothPos(e, elapsed, a < 1); e.root.position.y = (e.canoe ? waterY(e.root.position.x, e.root.position.z) + (e.ricing ? 0.14 : 0) : footY(e.root.position.x, e.root.position.z) + liftOf(e, a) + seatLift(e)) + hawkAlt(e); }   /* the poler stands on the canoe's floor; a chess player sits on the bench */   /* on an upper floor; a hawk over the trees */
+          if (TBP && TBP.pose && e.key.charCodeAt(0) === 112) TBP.pose(e, e === myEnt ? me.lv | 0 : ((core.S.players[e.key.slice(2)] || {}).lv | 0), dt);   /* [Claude 2026-10-21] at a clubhouse table: up at the rail, facing the felt, watching (the operator) */
           let d = e.tyaw - e.yaw; d = ((d + PI) % (2 * PI) + 2 * PI) % (2 * PI) - PI; e.yaw += d * Math.min(1, dt * 12); e.root.rotation.y = e.yaw + (e === myEnt && cam.mode === 'creator' ? cam.spin || 0 : 0);   /* the creator's Turn spins only the model; the camera stays (walls) */
           const moving = a < 1 && e.from.distanceToSquared(e.to) > 1e-4;
           if (!e.dead && !e.oneShot && !e.prone && !e.held) { const want = e.boatRole === 2 ? (e.knocking ? 'knock' : moving ? 'paddle' : 'sit') : e.canoe ? (e.ricing ? (moving ? 'pole' : 'idle') : moving ? 'paddle' : 'sit') : moving ? (e.running ? 'run' : 'walk') : (e.restPose || e.skill || 'idle'); if (want !== e.loco) { e.loco = want; e.H.play(want, { loop: true }); } }
@@ -3048,7 +3100,7 @@
         for (const g of fires.values()) { const u = g.userData, sc = 0.8 + 0.25 * Math.sin(now / 70 + u.ph) + 0.1 * Math.sin(now / 23 + u.ph); u.f1.scale.set(1, sc, 1); u.f2.scale.set(1, 1.1 * sc, 1); }
         if (wxMod && wxMod.update && !CAVE.on) wxMod.update(elapsed);
         if (!CAVE.on) dayTick(); else { if (STARS.pts) STARS.pts.visible = false; underSeason(); }   /* day and night on top of the weather's sky */   /* underground the cave sets the fog and the sky */
-        updateRemotes(now, dt); pokerClock(now); if (FE) FE.frame(now, dt); if (PET) PET.frame(now, dt); if (LR) LR.frame(now, dt); if (GF) GF.frame(now, dt);
+        updateRemotes(now, dt); pokerClock(now); if (FE) FE.frame(now, dt); if (TBP) TBP.frame(now, dt); reShade(); if (PET) PET.frame(now, dt); if (LR) LR.frame(now, dt); if (GF) GF.frame(now, dt);
         for (let i = projs.length - 1; i >= 0; i--) {
           const p = projs[i]; p.t += dt; const k = Math.min(1, p.t / p.dur);
           const to = p.tgt.root.position.clone(); to.y += p.tgt.hawk ? 0.25 : (p.tgt.H.height || 1.2) * p.tgt.scale * 0.55;   /* up at the hawk itself in the sky */
@@ -3069,7 +3121,7 @@
         /* overlays: splats, HP bars, name tags */
         const tagSpots = [];
         for (const e of ents.values()) {
-          const top = (e.H.height || 1.6) * e.scale;
+          const top = (e.H.height || 1.6) * e.scale, seen = e.root.visible && !(TBP && TBP.tagHidden && TBP.tagHidden(e));   /* [Claude 2026-10-21] from above a table, the names of those round it stay off the felt */
           if (e.splats.length) {
             const s0 = e.root.visible ? toScreen(e.root.position, top * 0.55) : null;
             for (let i = e.splats.length - 1; i >= 0; i--) {
@@ -3092,13 +3144,13 @@
             else if (!near && e.tag) { e.tag.remove(); e.tag = null; }
           }
           if (e.tag) {
-            const s = e.root.visible ? toScreen(e.root.position, top + 0.45) : null; e.tag.style.display = s ? 'block' : 'none';
+            const s = seen ? toScreen(e.root.position, top + 0.45) : null; e.tag.style.display = s ? 'block' : 'none';
             if (s) { let y = s.y; for (let k = 0; k < 8 && tagSpots.some(q => Math.abs(q[0] - s.x) < 90 && Math.abs(q[1] - y) < 13); k++) y -= 14; tagSpots.push([s.x, y]); e.tag.style.left = s.x + 'px'; e.tag.style.top = y + 'px'; }   /* players on one tile: stack their name tags */
           }
           const ok = e.proxy && e.proxy.userData.pick, opl = ok && ok.kind === 'self' ? me : ok && ok.kind === 'remote' ? core.S.players[ok.id] : null, oid = opl && !opl.dead && e.root.visible ? core.overhead(opl) : null;   /* the overhead prayer icon (2026-10-07) */
           if (oid !== (e.ohId || null)) { if (e.ohd) { e.ohd.remove(); e.ohd = null; } e.ohId = oid; if (oid) e.ohd = hud.overhead(core.prayer(oid)); }
-          if (e.ohd) { const s = e.root.visible ? toScreen(e.root.position, top + (e.tag ? 0.75 : 0.62)) : null; e.ohd.style.display = s ? 'block' : 'none'; if (s) { e.ohd.style.left = s.x + 'px'; e.ohd.style.top = (e.tag ? Math.min(s.y, parseFloat(e.tag.style.top) - 12) : s.y) + 'px'; } }
-          if (e.bub) { const s = now - e.bub.t < 4000 && e.root.visible ? toScreen(e.root.position, top + (e.tag ? 0.85 : 0.5)) : null; if (now - e.bub.t >= 4000) { e.bub.el.remove(); e.bub = null; } else { e.bub.el.style.display = s ? 'block' : 'none'; if (s) { e.bub.el.style.left = s.x + 'px'; e.bub.el.style.top = s.y + 'px'; } } }
+          if (e.ohd) { const s = seen ? toScreen(e.root.position, top + (e.tag ? 0.75 : 0.62)) : null; e.ohd.style.display = s ? 'block' : 'none'; if (s) { e.ohd.style.left = s.x + 'px'; e.ohd.style.top = (e.tag ? Math.min(s.y, parseFloat(e.tag.style.top) - 12) : s.y) + 'px'; } }
+          if (e.bub) { const s = now - e.bub.t < 4000 && seen ? toScreen(e.root.position, top + (e.tag ? 0.85 : 0.5)) : null; if (now - e.bub.t >= 4000) { e.bub.el.remove(); e.bub = null; } else { e.bub.el.style.display = s ? 'block' : 'none'; if (s) { e.bub.el.style.left = s.x + 'px'; e.bub.el.style.top = s.y + 'px'; } } }
         }
         /* opponent box */
         if (lastOpp && now - lastOpp.t < 6000) { const m = typeof lastOpp.uid === 'number' ? core.mobByUid(lastOpp.uid) : null; if (m) hud.setOpp({ name: D.monsters[m.key].name, hp: m.hp, max: D.monsters[m.key].hp }); else hud.setOpp(null); } else hud.setOpp(null);
@@ -3127,6 +3179,7 @@
             renderer.render(scene, camera);
             scene.background = bg; renderer.autoClear = true;
           } else renderer.render(scene, camera);
+          if (cam.mode === 'tables' && TBP && TBP.inset) TBP.inset(renderer, scene);   /* [Claude 2026-10-21] the corner view of the dice or the wheel (the operator) */
           if (!FIRST_DRAWN) { FIRST_DRAWN = true; if (G.ASH_LOAD) setTimeout(() => G.ASH_LOAD.done(), 120); }   /* [Claude 2026-10-13] the world is on screen: the loading screen goes */
         }   /* behind a loading screen nothing is drawn: the frame time goes to building the place you are going to */
         scene.fog.near = fn0; scene.fog.far = ff0;
@@ -3657,7 +3710,7 @@
         wx: () => Object.assign({ season: SEASON.name, snowy: SEASON.snowy }, wxMod && wxMod.state ? wxMod.state() : {}),
         progInfo: () => { const P = renderer.info.programs || [], I = renderer.info; return { n: P.length, calls: I.render.calls, tris: I.render.triangles, geos: I.memory.geometries, tex: I.memory.textures, applyMs: SEASON.applyMs, applies: SEASON.applies }; },
         tapTarget: (t) => { const o = optionsFor(t)[0]; if (o) doAct(o); return o ? o.html : null; },
-        fortune: () => FE,   /* [Claude 2026-10-16] tests: the Fortune Engines' part */
+        fortune: () => FE, tables: () => TBP,   /* [Claude 2026-10-20] tests: the clubhouse tables' part */   /* [Claude 2026-10-16] tests: the Fortune Engines' part */
         lily: () => LR, golf: () => GF, heightAt: (x, z) => heightAt(x, z), pet: () => PET, petToggle: () => hudApi().toggle('showPet'),   /* [Claude 2026-10-17] tests: the pets part, the Settings toggle */
         pokerNetRow: t => pkNet(core.pokerRow(t)), _pokerModel: t => pokerModel(t), _pokerView: t => pokerView(t), _pokerClock: () => JSON.parse(JSON.stringify(PKT)), solitaire: () => openSolitaire(), _dropNext: k => { DROP_NEXT = k; }, pokerKey: () => MYPK, pokerSealed: t => PH[t] || null,   /* [Claude 2026-10-12] tests: the row as it leaves this dealer */   /* a test taps a thing as a player would (first option) */
         travelShown: () => { const el = host.querySelector('.travel'); return el && el.style.display !== 'none' ? el.className + ' | ' + el.querySelector('.tt').textContent : null; },

@@ -32,7 +32,7 @@
 .ash .golfp.club .cw{text-align:center;min-width:118px}
 .ash .golfp.club .cn{font:bold 14px Georgia,serif;color:#cfe9c0}.ash .golfp.club .cd{font-size:15px;color:#ffe08a;font-weight:bold}
 .ash .golfp.spin,.ash .golfp.putt{right:calc(8px + env(safe-area-inset-right,0px));bottom:calc(92px + env(safe-area-inset-bottom,0px));display:flex;gap:4px;padding:4px}
-.ash .golfp.spin button,.ash .golfp.putt button{font-size:12px;min-width:48px}.ash .golfp.putt button{min-width:64px}.ash .golfp.putt .gtap{background:#2f7a3a;color:#fff;font-weight:bold}
+.ash .golfp.spin button,.ash .golfp.putt button{font-size:12px;min-width:48px}.ash .golfp.putt button{min-width:64px}.ash .golfp.swing.tapin .swingbtn{background:linear-gradient(#3f9a4a,#2f7a3a);color:#fff}
 .ash .golfp button.on,.ash .golfp button:active{background:linear-gradient(#5d9a6a,#2e5b3f);color:#fff}
 .ash .golfp.aim{right:calc(8px + env(safe-area-inset-right,0px));bottom:calc(146px + env(safe-area-inset-bottom,0px));display:flex;gap:4px;padding:4px}
 .ash .golfp.aim button{min-width:52px;font-size:20px}
@@ -83,8 +83,7 @@
       E.lie = part('lie'); E.club = part('club', '<button data-a="prev" aria-label="Longer club">&#9664;</button><div class="cw"><div class="cn"></div><div class="cd"></div></div><button data-a="next" aria-label="Shorter club">&#9654;</button>');
       E.aim = part('aim', '<button data-a="aimL" aria-label="Aim left">&#8630;</button><button data-a="aimR" aria-label="Aim right">&#8631;</button>');
       E.spin = part('spin', '<button data-s="top">Top</button><button data-s="none">None</button><button data-s="back">Back</button>');
-      E.putt = part('putt', '<button data-r="short">Short</button><button data-r="long">Long</button><button data-r="tap" class="gtap">Tap in</button>');
-      E.tap = E.putt.querySelector('.gtap');   /* within 10 ft of the pin: the ball is knocked in */
+      E.putt = part('putt', '<button data-r="short">Short</button><button data-r="long">Long</button>');
       E.swing = part('swing', '<div class="meter"><i class="sweet"></i><i class="fill"></i><i class="zero"></i><i class="max"></i><i class="pin"></i><i class="pow"></i><i class="gmark"></i><i class="lab"></i></div><button class="swingbtn">SWING</button>');
       E.waitMsg = part('waitm');   /* a group's turns: Waiting: <name> is playing */
       E.flashes = flashes = part('flashes');

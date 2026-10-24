@@ -542,6 +542,7 @@
     // ---------------- pathfinding: BFS over the tile grid, 8 directions, no corner cutting (RuneScape-style)
     function edgeOpen(x, y, dx, dy) {   /* orthogonal step: no wall on this tile's side or the neighbour's facing side */
       const b = dx === 1 ? 2 : dx === -1 ? 8 : dy === 1 ? 4 : 1, ob = dx === 1 ? 8 : dx === -1 ? 2 : dy === 1 ? 1 : 4;
+      if (M.oneWay && (M.oneWay(x, y) & b)) return true;   /* a back door: in from outside only (world.js oneWay) */
       return !(M.wallAt(x, y) & b) && !(M.wallAt(x + dx, y + dy) & ob);
     }
     function stepClear(x, y, dx, dy) {   /* walls and corner-cutting only (the target tile itself may be occupied) */
@@ -807,8 +808,9 @@
         case 'fein': {   /* [Claude 2026-10-16] A FORTUNE ENGINE'S COIN SLOT (the operator: "a token slot on the machine where a player can tap and deposit
              Gold. Any amount ... transferred to the Asheville bank until cash out"): n GOLD out of the pack, on its way to the @ashvale
              Bank as that machine's credit (the engine sends it and tells the Bank; the Bank holds the credit and decides every spin) */
-          const o = (M.objects || []).find(q => q.k === 'fortune' && q.id === String(c.m || '')), n = Math.floor(+c.n || 0), s = String(c.s || '').slice(0, 48);
-          if (!o || p.dead || (o.lv | 0) !== (p.lv | 0) || !(n > 0 && n <= 10000000) || !/^fe:[a-z0-9]{1,12}:[0-9a-f]{8,32}$/.test(s)) break;
+          /* [Claude 2026-10-20] and a clubhouse table's credit (engtables.js: s = 'tb:<table>:<hex>', the object a 'gametable') */
+          const tb = /^tb:/.test(String(c.s || '')), o = (M.objects || []).find(q => q.k === (tb ? 'gametable' : 'fortune') && q.id === String(c.m || '')), n = Math.floor(+c.n || 0), s = String(c.s || '').slice(0, 48);
+          if (!o || p.dead || (o.lv | 0) !== (p.lv | 0) || !(n > 0 && n <= 10000000) || !/^(fe|tb):[a-z0-9]{1,12}:[0-9a-f]{8,32}$/.test(s) || (tb && s.split(':')[1] !== o.id)) break;
           if (invCount(p, 'coins') < n) { msg(p, 'You do not have ' + n + ' GOLD in your pack.', 'warn'); break; }
           removeItem(p, 'coins', n); ev({ e: 'fein', p: p.id, m: o.id, s, n }); ev({ e: 'inv', p: p.id });
           break;
@@ -816,9 +818,9 @@
         case 'feback': {   /* [Claude 2026-10-16] the Bank paid a Fortune Engine sitting home (cash out, stand up, a lost connection): that GOLD back
              in the pack, as a card table's stack comes back (the engine counts it as on its way to the wallet) */
           const n = Math.floor(+c.n || 0), s = String(c.s || '').slice(0, 48);
-          if (!(n > 0 && n <= 100000000) || !/^fe:[a-z0-9]{1,12}:[0-9a-f]{8,32}$/.test(s)) break;
+          if (!(n > 0 && n <= 100000000) || !/^(fe|tb):[a-z0-9]{1,12}:[0-9a-f]{8,32}$/.test(s)) break;
           if (addItem(p, 'coins', n)) dropGround('coins', n, p.x, p.y, p.id, 600);
-          msg(p, n + ' GOLD comes back to you from the Fortune Engine.', 'trade'); ev({ e: 'feback', p: p.id, s, n }); ev({ e: 'inv', p: p.id });
+          msg(p, n + ' GOLD comes back to you from the ' + (/^tb:/.test(s) ? 'table' : 'Fortune Engine') + '.', 'trade'); ev({ e: 'feback', p: p.id, s, n }); ev({ e: 'inv', p: p.id });
           break;
         }
         case 'pact': {   /* fold / check / call / raise to N / all-in: the host of the area deals, as with a chess move */
@@ -931,8 +933,12 @@
         /* [Claude 2026-10-19] THE SALTMERE LINKS (engolf.js): during a round the avatar goes with its ball (only on the course);
            a group's stake goes out of the bag into p.gf (the engine sends it to @ashvale - the card table's pkbuy), and the
            round's share comes back into the bag once (pkcash: the Bank pays it home). A player who leaves forfeits (the operator). */
-        case 'golfgo': { const x = c.x | 0, y = c.y | 0, on = (a, b) => a >= 545 && a < 720 && b >= -398 && b < -104;
+        case 'golfgo': { const x = c.x | 0, y = c.y | 0, on = (a, b) => a >= 545 && a < 740 && b >= -418 && b < -104;   /* the course box (data/golf.course.json box); [Claude 2026-10-22] 20 east and 20 north with the course (the operator: "further away from the clubhouse along the shoreline") */
           if (!p.dead && on(p.x, p.y) && on(x, y) && !(M.blocked && M.blocked(x, y))) teleport(p, { id: 'golf', to: [x, y] }, null); break; }
+        case 'golffee': { const n = c.n | 0;   /* 2026-10-20: the green fee - 25 GOLD a nine, 50 for all eighteen - paid to the club as the round starts */
+          if ((n !== 25 && n !== 50) || p.dead || !(p.x >= 545 && p.x < 740 && p.y >= -418 && p.y < -104)) break;
+          if (invCount(p, 'coins') < n) { msg(p, 'You cannot pay the green fee of ' + n + ' GOLD.', 'warn'); break; }
+          removeItem(p, 'coins', n); msg(p, 'You pay the green fee: ' + n + ' GOLD.', 'trade'); ev({ e: 'inv', p: p.id }); break; }
         case 'golfstake': { const n = c.n | 0, s = String(c.s || '').slice(0, 48);
           if (!/^golf:[\w-]+:\d$/.test(s) || n <= 0 || n > 1000000 || (p.gf && p.gf.s !== s)) break;
           if (p.gf) break;   /* already staked on this round */
@@ -2864,7 +2870,7 @@
       const objs = M.objects || [];
       if (FURN_N !== objs.length) {
         FURN = new Map(); FURN_N = objs.length;
-        for (const o of objs) if (o.k === 'chesstable' || o.k === 'pokertable' || o.k === 'fortune') {   /* fortune [Claude 2026-10-16]: a Fortune Engine's cabinet */ const w = o.w || 1, h = o.h || 1; for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) FURN.set((o.x + i) + ',' + (o.y + j), o.lv | 0); }
+        for (const o of objs) if (o.k === 'chesstable' || o.k === 'pokertable' || o.k === 'fortune' || o.k === 'gametable' || o.k === 'pit') {   /* pit [Claude 2026-10-20]: the clubhouse dealers' pit, roped off (the operator) */   /* fortune [Claude 2026-10-16]: a Fortune Engine's cabinet; gametable [Claude 2026-10-20]: a clubhouse table and its dealer's tile */ const w = o.w || 1, h = o.h || 1; for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) FURN.set((o.x + i) + ',' + (o.y + j), o.lv | 0); if (Array.isArray(o.dealer)) FURN.set(o.dealer[0] + ',' + o.dealer[1], o.lv | 0); }
       }
       const l = FURN.get(x + ',' + y); return l != null && l === (lv | 0);
     }

@@ -250,10 +250,14 @@ export function createModels(THREE, opts) {
       const fem = outfit.body === 'female' ? 1 : 0;
       if (fem !== V0.fem) { const k = root.scale.x / (RS.v || 1); V0.fem = fem; placeJoints(); RS.v = ev(body.rootScale || 1, V0); root.scale.setScalar(RS.v * k); joints.lift.p0 = J.hips.position.y; }   /* keep the size the engine gave the figure (2026-10-09: Random in the creator flipped the body and the character doubled in size) */
       const O = Object.assign({}, outfit);
-      const hatI = info(gear.head), capeI = info(gear.cape), bodyI = info(gear.body);
+      const hatI = info(gear.head), capeI = info(gear.cape), bodyI = info(gear.body), legsI = info(gear.legs);
       if (hatI.slot === 'hat') O.hat = { style: hatI.part.style, color: hatI.color };
       if (capeI.slot === 'cape') O.cape = capeI.color;
       V0.dragon = gear.cape === 'dragon_cape' ? 1 : 0;   /* white dragon mark on the orange cape's back */
+      /* [Claude 2026-10-20] worn clothes (the operator: golf clothing at the Saltmere Links): a cosmetic shirt on the body or trousers on the
+         legs is drawn as your shirt or trousers, cut and colour from its part (tools/golf/make_golfwear.py) */
+      if (bodyI.slot === 'shirt') O.shirt = { style: bodyI.part.style, color: bodyI.color };
+      if (legsI.slot === 'pants') O.pants = { style: legsI.part.style, color: legsI.color };
       if (bodyI.slot === 'robe') {
         O.shirt = { style: 'robe', color: bodyI.color }; O.pants = { style: 'robe', color: bodyI.color };
         if (gear.body === 'vorthan_robe') O.hat = { style: 'hood', color: bodyI.color };
@@ -411,6 +415,7 @@ export function createModels(THREE, opts) {
       return out;
     };
   }
+  const D_IDLE = { torso: [0.2], neck: [0.08], shL: [-0.62, 0, 0.14], shR: [-0.62, 0, -0.14], elL: [-0.8], elR: [-0.8] };   /* a dealer's hands resting on the table edge */
   const KS = (...pairs) => { const keys = []; for (let i = 0; i < pairs.length; i += 2) keys.push({ t: pairs[i], p: pairs[i + 1] }); return smoothKeyed(keys); };
   const HUMAN = {
     idle: { loop: true, dur: 3, fn: (t, b) => { const s = Math.sin(TAU * t); return withBase(b, { torso: [0.02 * s, 0, 0], shL: b.shL || [0.04, 0, 0.09], shR: b.shR || [0.04, 0, -0.09], elL: b.elL || [-0.15], elR: b.elR || [-0.15], neck: [0.02 * s, 0, 0], cape: [0.05 + 0.02 * s] }); } },
@@ -493,7 +498,48 @@ export function createModels(THREE, opts) {
     puttaddress: { loop: true, dur: 3, fn: (t, b) => withBase(b, PUTT_ADDR(0)) },
     putt: { dur: 1.2, impact: 0.55, fn: KS(0, PUTT_ADDR(0), 0.42, PUTT_ADDR(-0.3), 0.55, PUTT_ADDR(0), 0.78, PUTT_ADDR(0.28), 1, PUTT_ADDR(0.3)) },
     pickup: { dur: 0.6, impact: 0.5, fn: K(0, {}, 0.5, { torso: [0.9], neck: [0.2], shR: [-1, 0, -0.1], elR: [-0.2], hipL: [-0.4], hipR: [-0.4], kneeL: [0.6], kneeR: [0.6], lift: [-0.12] }, 1, {}) },
-    eat: { dur: 0.9, impact: 0.5, fn: K(0, {}, 0.45, { shR: [-2.1, 0.4, 0], elR: [-2.3], neck: [0.1] }, 0.7, { shR: [-2.1, 0.4, 0], elR: [-2.3], neck: [0.1] }, 1, {}) }
+    eat: { dur: 0.9, impact: 0.5, fn: K(0, {}, 0.45, { shR: [-2.1, 0.4, 0], elR: [-2.3], neck: [0.1] }, 0.7, { shR: [-2.1, 0.4, 0], elR: [-2.3], neck: [0.1] }, 1, {}) },
+    /* [Claude 2026-10-21] reactions any game can play (the operator: "animations for when they lose win or get excited. These animations should carry
+       over to player avatars in the actual game"): the clubhouse tables play them from each result, and anyone can /cheer /fistpump /clap
+       /excited /slump in the chat; one-shot, back to what you were doing after */
+    cheer: { dur: 1.7, fn: KS(0, {}, 0.18, { shL: [-2.6, 0, 0.5], shR: [-2.6, 0, -0.5], elL: [-0.5], elR: [-0.5], kneeL: [0.35], kneeR: [0.35], lift: [-0.05], torso: [-0.05] },
+      0.34, { shL: [-3.0, 0, 0.35], shR: [-3.0, 0, -0.35], elL: [-0.1], elR: [-0.1], lift: [0.07], neck: [-0.35], torso: [-0.12] },
+      0.5, { shL: [-2.9, 0, 0.45], shR: [-2.9, 0, -0.45], elL: [-0.2], elR: [-0.2], kneeL: [0.25], kneeR: [0.25], lift: [-0.03], neck: [-0.25] },
+      0.66, { shL: [-3.0, 0, 0.35], shR: [-3.0, 0, -0.35], elL: [-0.1], elR: [-0.1], lift: [0.05], neck: [-0.3] }, 0.84, { shL: [-2.4, 0, 0.4], shR: [-2.4, 0, -0.4], elL: [-0.6], elR: [-0.6] }, 1, {}) },
+    fistpump: { dur: 1.5, fn: KS(0, {}, 0.2, { shR: [-1.2, 0, -0.35], elR: [-2.3], torso: [0.08, -0.15, 0], kneeL: [0.15], kneeR: [0.15] },
+      0.38, { shR: [-0.35, 0, -0.25], elR: [-2.4], torso: [0.22, -0.2, 0], neck: [0.1], kneeL: [0.25], kneeR: [0.25], lift: [-0.03] },
+      0.55, { shR: [-1.3, 0, -0.35], elR: [-2.3], torso: [0.05, -0.15, 0] }, 0.72, { shR: [-0.35, 0, -0.25], elR: [-2.4], torso: [0.22, -0.2, 0], neck: [0.1], lift: [-0.03] }, 1, {}) },
+    clap: { dur: 1.6, fn: (t, b) => { const e = Math.min(1, t / 0.15, (1 - t) / 0.15), c = Math.max(0, Math.sin(TAU * t * 4));   /* four claps, the hands meeting in front of the chest */
+      return withBase(b, { shL: [-1.25 * e, 0, (0.1 - 0.42 * c) * e], shR: [-1.25 * e, 0, (-0.1 + 0.42 * c) * e], elL: [-1.05 * e], elR: [-1.05 * e], neck: [-0.12 * e], torso: [-0.04 * e] }); } },
+    excited: { dur: 1.8, fn: (t, b) => { const e = Math.min(1, t / 0.12, (1 - t) / 0.15), h = Math.max(0, Math.sin(TAU * t * 3)), c = Math.max(0, Math.sin(TAU * t * 6));   /* hopping and clapping above the head */
+      return withBase(b, { shL: [-2.7 * e, 0, (0.15 - 0.3 * c) * e], shR: [-2.7 * e, 0, (-0.15 + 0.3 * c) * e], elL: [-0.7 * e], elR: [-0.7 * e], lift: [0.08 * h * e - 0.03 * (1 - h) * e],
+        kneeL: [0.3 * (1 - h) * e], kneeR: [0.3 * (1 - h) * e], hipL: [-0.15 * (1 - h) * e], hipR: [-0.15 * (1 - h) * e], neck: [-0.3 * e] }); } },
+    slump: { dur: 2.4, fn: KS(0, {}, 0.18, { torso: [0.32], neck: [0.5], shL: [-0.25, 0, 0.1], shR: [-0.25, 0, -0.1], elL: [-0.2], elR: [-0.2], kneeL: [0.12], kneeR: [0.12] },
+      0.4, { torso: [0.38], neck: [0.55], shL: [-2.05, 0, -0.2], shR: [-2.05, 0, 0.2], elL: [-2.35], elR: [-2.35], kneeL: [0.12], kneeR: [0.12] },
+      0.72, { torso: [0.4, 0.06, 0], neck: [0.55, -0.1, 0], shL: [-2.05, 0, -0.2], shR: [-2.05, 0, 0.2], elL: [-2.35], elR: [-2.35], kneeL: [0.12], kneeR: [0.12] },
+      0.88, { torso: [0.25], neck: [0.35], shL: [-0.2, 0, 0.1], shR: [-0.2, 0, -0.1] }, 1, {}) },
+    /* [Claude 2026-10-21] a dealer at a table (the operator: "Also belly up the dealers and give them animations"): dealeridle leans on the
+       table edge, hands resting on it, the weight shifting; deal flicks a card off the right hand, flip turns one over, sweep draws the
+       lost bets in, pay pushes GOLD out, spin sets a wheel going and sends the ball, nomore waves over the layout, point shows the dice,
+       push slides the dice to the shooter - one-shot, back to dealeridle. Reusable at any game table. */
+    dealeridle: { loop: true, dur: 5, fn: (t, b) => { const s = Math.sin(TAU * t), c = Math.sin(TAU * t * 2);
+      return withBase(b, Object.assign({}, D_IDLE, { torso: [0.2 + 0.015 * c, 0.05 * s, 0.025 * s], hipL: [0.04 * s], hipR: [-0.04 * s], kneeL: [0.05 + 0.05 * Math.max(0, s)], kneeR: [0.05 + 0.05 * Math.max(0, -s)] })); } },
+    deal: { dur: 0.5, fn: KS(0, D_IDLE, 0.3, Object.assign({}, D_IDLE, { torso: [0.3], shR: [-1.3, 0, -0.08], elR: [-0.15] }), 0.55, Object.assign({}, D_IDLE, { torso: [0.32], shR: [-1.45, 0, -0.02], elR: [-0.02] }), 1, D_IDLE) },
+    flip: { dur: 0.75, fn: KS(0, D_IDLE, 0.35, Object.assign({}, D_IDLE, { torso: [0.3], shR: [-1.15, 0, 0.12], elR: [-0.45] }), 0.6, Object.assign({}, D_IDLE, { torso: [0.3], shR: [-1.35, 0.7, 0.12], elR: [-0.7] }), 1, D_IDLE) },
+    sweep: { dur: 1.3, fn: KS(0, D_IDLE, 0.25, { torso: [0.42], neck: [-0.1], shR: [-1.35, 0, -0.6], elR: [-0.15], shL: [-0.75, 0, 0.12], elL: [-0.7] },
+      0.7, { torso: [0.4], neck: [-0.1], shR: [-1.3, 0, 0.3], elR: [-0.45], shL: [-0.75, 0, 0.12], elL: [-0.7] }, 1, D_IDLE) },
+    pay: { dur: 1.0, fn: KS(0, D_IDLE, 0.4, { torso: [0.38], neck: [-0.12], shR: [-1.45, 0, -0.1], elR: [-0.05], shL: [-1.1, 0, 0.12], elL: [-0.5] },
+      0.65, { torso: [0.38], neck: [-0.12], shR: [-1.45, 0, -0.1], elR: [-0.05], shL: [-1.1, 0, 0.12], elL: [-0.5] }, 1, D_IDLE) },
+    spin: { dur: 1.3, fn: KS(0, D_IDLE, 0.25, { torso: [0.3], shR: [-0.95, 0, -0.45], elR: [-0.65], shL: D_IDLE.shL, elL: D_IDLE.elL }, 0.45, { torso: [0.3], shR: [-1.05, 0, 0.1], elR: [-0.35], shL: D_IDLE.shL, elL: D_IDLE.elL },
+      0.62, { torso: [0.28], shR: [-1.5, 0, -0.35], elR: [-0.1], shL: D_IDLE.shL, elL: D_IDLE.elL }, 1, D_IDLE) },
+    nomore: { dur: 1.3, fn: (t, b) => { const e = Math.min(1, t / 0.2, (1 - t) / 0.2), w = Math.sin(TAU * t * 2);
+      return withBase(b, { torso: [0.2 + 0.08 * e], neck: [-0.05], shL: D_IDLE.shL, elL: D_IDLE.elL, shR: [D_IDLE.shR[0] + (-1.4 - D_IDLE.shR[0]) * e, 0, -0.12 + 0.32 * w * e], elR: [D_IDLE.elR[0] + (-0.12 - D_IDLE.elR[0]) * e] }); } },
+    point: { dur: 1.0, fn: KS(0, D_IDLE, 0.3, Object.assign({}, D_IDLE, { torso: [0.26], shR: [-1.55, 0, -0.05], elR: [0] }), 0.75, Object.assign({}, D_IDLE, { torso: [0.26], shR: [-1.55, 0, -0.05], elR: [0] }), 1, D_IDLE) },
+    push: { dur: 1.2, fn: KS(0, D_IDLE, 0.3, { torso: [0.35], shR: [-1.1, 0, -0.05], elR: [-0.7], shL: [-1.1, 0, 0.05], elL: [-0.7] },
+      0.75, { torso: [0.48], shR: [-1.5, 0, -0.05], elR: [-0.05], shL: [-1.5, 0, 0.05], elL: [-0.05] }, 1, D_IDLE) },
+    /* a bet put down (2026-10-21: "can we have the avatars placement of bets be an animated?"): lean in, the right hand out over the felt and back */
+    reach: { dur: 1.0, fn: KS(0, {}, 0.3, { torso: [0.42], neck: [-0.15], shR: [-1.15, 0, -0.08], elR: [-0.35], hipL: [-0.12], hipR: [-0.12] },
+      0.5, { torso: [0.5], neck: [-0.22], shR: [-1.4, 0, -0.04], elR: [-0.05], hipL: [-0.15], hipR: [-0.15] }, 0.62, { torso: [0.48], neck: [-0.2], shR: [-1.3, 0, -0.06], elR: [-0.2], hipL: [-0.14], hipR: [-0.14] }, 1, {}) }
   };
   const BEAST = {
     idle: { loop: true, dur: 2, fn: t => ({ tail: [0.3, 0.35 * Math.sin(TAU * t), 0], neck: [0.04 * Math.sin(TAU * t)] }) },
@@ -588,6 +634,10 @@ export function createModels(THREE, opts) {
         p = q;
       }
       apply(p);
+      if (H.add) for (const n in H.add) {   /* [Claude 2026-10-21] a turn laid over whatever is playing (a head following the dice, the body turned to the wheel) */
+        const j = joints[n], a = H.add[n]; if (!j || !a) continue;
+        if (j.kind === 'rot') { j.o.rotation.x += a[0] || 0; j.o.rotation.y += a[1] || 0; j.o.rotation.z += a[2] || 0; }
+      }
     };
     function emit(type, name) { for (const f of listeners) { try { f(type, name); } catch (e) { /* listener errors stay out of the animation */ } } }
     H.onEvent = fn => { listeners.push(fn); return H; };
@@ -1097,7 +1147,8 @@ export function createModels(THREE, opts) {
       iconR.setSize(size, size, false);
       const sc = new THREE.Scene(); sc.add(new THREE.AmbientLight(0xffffff, 1.1)); const dl = new THREE.DirectionalLight(0xffffff, 1.6); dl.position.set(2, 4, 3); sc.add(dl);
       const obj = item(id); sc.add(obj);
-      const I = info(id); if (I.kind === 'helmet') obj.rotation.y = 0.6; else obj.rotation.y = -0.7;
+      const I = info(id), ir = I.part && I.part.iconRot;   /* iconRot: a part's own turn for its icon (golfwear laid flat faces you) */
+      if (ir) obj.rotation.set(ir[0], ir[1], ir[2]); else if (I.kind === 'helmet') obj.rotation.y = 0.6; else obj.rotation.y = -0.7;
       const bb = new THREE.Box3().setFromObject(obj), ctr = bb.getCenter(new THREE.Vector3()), r = bb.getSize(new THREE.Vector3()).length() / 2 || 0.2;
       const cam = new THREE.PerspectiveCamera(30, 1, 0.01, 50);
       cam.position.copy(ctr).add(new THREE.Vector3(0, 1.1, 1).normalize().multiplyScalar(r / Math.sin(15 * Math.PI / 180) * 0.92)); cam.lookAt(ctr);

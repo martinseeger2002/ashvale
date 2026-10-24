@@ -14,7 +14,7 @@ const M = AshWorld.createWorld(Object.assign({}, D, { wg: AshWorld.seededWorldge
 const [OX, OY] = Z.origin, tiles = Z.tiles.join('');
 ok(!tiles.includes('p') && (tiles.match(/c/g) || []).length > 700, 'every street is cobbled (' + (tiles.match(/c/g) || []).length + ' tiles, no dirt left)');
 const rug = Z.objects.filter(o => o.tag === 'rugged'), pir = Z.objects.filter(o => o.tag === 'pirates');
-ok(rug.length >= 40 && rug.length <= 70 && rug.every(o => K[o.k]), rug.length + ' pieces of scenery along the streets (thinned 2026-10-20: 40 to 70), every one a decor kind');
+ok(rug.length >= 60 && rug.every(o => K[o.k]), rug.length + ' pieces of scenery along the streets, every one a decor kind');
 ok(['trash_heap', 'burn_barrel', 'laundry_line', 'shanty', 'rope_coil', 'lobster_pots'].every(k => rug.some(o => o.k === k)) && ['broken_cart', 'rail_fence', 'supply_cache'].some(k => rug.some(o => o.k === k)), 'new pieces and old ones both');
 ok(Z.objects.filter(o => o.k === 'house' && o.sign !== 'Town Hall').every(o => /^#[89ab]/.test(o.wall) && /^#[234]/.test(o.roof)), 'the houses are salt-stained and patched');
 /* the pirates' end of the south pier */

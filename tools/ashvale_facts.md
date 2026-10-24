@@ -15,7 +15,25 @@
 - Saves from the old one-page playtest builds (before the launcher) do not carry over.
 - Fixes are small: one or two module inscriptions, not a whole new game.
 
-## In the current release (v0.8.169)
+## In the current release (v0.8.176)
+- 0.8.176 (2026-10-23): GOLF - the Saltmere Links moved along the shore, away from the clubhouse: a cobbled path from the
+  clubhouse back door leads to the new first tee, and the 11th now runs along the sea. Releases are now gzipped on chain (smaller, cheaper).
+- 0.8.175 (2026-10-23): bets show at a busy table again; ADD A FRIEND - type their @name in the Friends tab, or press and hold
+  (right-click) a player and choose Add friend: they go into your arcade address book (from SadFrogLTC); faster downloads on every arcade.
+- 0.8.174 (2026-10-22): THE TABLES - come back within 15 s and your sitting is yours again; bets still working when you left are
+  yours when you return; long-press a bet to take it down; quick chips all land; the dealer draws the dice in with a stick and the
+  corner view shows the total. GOLF - lose your connection mid-round and you have 2 minutes to rejoin the same round. The clubhouse
+  roof no longer opens up from the first tee.
+- 0.8.173 (2026-10-22): THE CLUBHOUSE TABLES - upstairs in the Saltmere Links clubhouse a dice table, the wheel and two
+  twenty-one tables, played for GOLD with everyone at the table (shared rounds); Rhona sells golfwear downstairs; a back door
+  from the course.
+- 0.8.172 (2026-10-21): GOLF GREEN FEES - Fergus asks: the front nine or the back nine for 25 GOLD, all eighteen for 50 GOLD,
+  solo or in a group (each player pays as the round starts); the iron railing round the course has no gaps any more.
+- 0.8.171 (2026-10-20): GOLF - the ball sits on the grass and bounces off the ground before it rolls; inside 10 ft the swing
+  button turns into TAP IN (one press, the ball drops); golfers' feet stand on the grass.
+- 0.8.170 (2026-10-20): golf groups tee off one after another and take turns reliably (a joiner is no longer dropped; a golfer whose
+  phone sleeps after a swing no longer stalls the group); leaving a round puts you inside the clubhouse. TUTORIAL ISLAND PORTAL: a
+  portal on the island takes you to Ashvale any time (the tutorial lets you go); Ashvale's portal goes to the island; no attunement.
 - 0.8.169 (2026-10-20): GOLF FIX - the ball flies a smooth arc over rivers and ponds (no dip toward the water); your golfer no
   longer vanishes after switching to another app and back.
 - 0.8.168 (2026-10-20): THE LINKS - an iron railing round the course (the clubhouse is the one way in), cobbles all the way to the

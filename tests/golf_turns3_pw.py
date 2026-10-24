@@ -23,7 +23,7 @@ with sync_playwright() as p:
     for i in range(3):
         pg = ctx.new_page(); pg.on('pageerror', lambda e: errs.append(str(e))); pg.goto(URL % i, wait_until='domcontentloaded', timeout=120000)
         check(wait(pg, '!!(window.ASH && ASH.golf && ASH.golf())', 120), 'game %d up' % i); pg.keyboard.press('Escape')
-        pg.evaluate("n => { ASH.me.name = n; ASH.me.inv[0] = { id: 'golf_standard', n: 1 }; }", 'P%d' % i); pgs.append(pg)
+        pg.evaluate("n => { ASH.me.name = n; ASH.me.inv[0] = { id: 'golf_standard', n: 1 }; ASH.give('coins', 100); }", 'P%d' % i); pgs.append(pg)
     A = pgs[0]; A.evaluate("ASH.golf()._openGroup('free', 0)")
     for pg in pgs[1:]:
         check(wait(pg, "ASH.golf()._open().length > 0", 20), 'hears the open group'); pg.evaluate("g => ASH.golf()._join(g)", pg.evaluate("ASH.golf()._open()[0].g"))

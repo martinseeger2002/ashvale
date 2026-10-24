@@ -1,0 +1,32 @@
+--- a/tools/bank/bank.py
++++ b/tools/bank/bank.py
+@@ -1226,6 +1226,21 @@
+   if (r.online) r.on('closed', why => { window.__bankClosed = String(why || 'closed'); });
+   return { online: r.online, why: r.why || null, me: r.me || null };
+ }"""
++def tables_clock(stop, room, every=0.5):
++    """[Claude 2026-10-22] the clubhouse tables' clock for the room with no browser (the operator: "All of the tables upstairs wait on players
++    before they start dealing, but only one player is required" - cert_room_loop never called TB.tb_tick, so no table ever left idle).
++    Its own connection; TB.LOCK keeps it and the players' words in turn. The tables' words (and 'paid' words) go out from here as
++    soon as they are made, while the room is joined; otherwise they wait in OUTQ for the room loop."""
++    c = db()
++    while not stop.is_set():
++        try: TB.tb_tick(c)
++        except Exception: log('TB TICK ERROR', traceback.format_exc()[-300:])
++        while OUTQ and room.token is not None and room.me:
++            try: w = OUTQ.pop(0)   # one atomic take: the room loop drains OUTQ too, and a word goes out once
++            except IndexError: break
++            try: room.send(w)
++            except Exception as e: OUTQ.insert(0, w); log('TB WORD FAILED', str(e)[:120]); break
++        stop.wait(every)
+ def cert_room_loop(stop):
+     """[Claude 2026-10-13] the room with no browser (tools/bank/cert_room.py): joined through the door as @ashvale by its
+     certificate, signed with the same key that pays. The same messages, the same answers as room_loop."""
+@@ -1233,6 +1248,7 @@
+     import rpc_wallet
+     secret = int(open(rpc_wallet.KEY).read().strip(), 16)
+     c = db(); room = CertRoom(secret, ASHVALE, 'ashvale', 'bank')
++    threading.Thread(target=tables_clock, args=(stop, room), daemon=True).start()   # [Claude 2026-10-22] this room only wakes on a message or the server's heartbeat
+     while not stop.is_set():
+         try:
+             for ev in room.events(stop):

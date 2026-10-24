@@ -80,6 +80,29 @@ for k, e in reg['modules'].items():
 for k, e in (reg.get('lazy') or {}).items():   # zones that load by area (handoff/area_loading.md): same keys, same inscriptions
     for n, sub in e.items(): todo.append((k + '/' + n, file_of(n, k, sub), sub))
 changed = [(key, p, e) for key, p, e in todo if st['modules'].get(key, {}).get('sha') != sha(p)]
+# [Claude 2026-10-23] GZIPPED (the operator: "Everything should be gzipped that is changed", after @liteworldsquest's "3x smaller on chain"):
+# every changed module goes on chain gzipped (application/gzip, no base64), zopfli when it is installed. Changes are still spotted by
+# the plain file's hash; the inscription is found again by the gzipped file's. netretry (loaded first) unpacks every /content/ file
+# that starts with 1f 8b, so the launcher and the engine read plain files as before; netretry itself is unpacked by the launcher,
+# whose loader does that for an entry marked gz.
+GZ = os.path.join(HERE, 'dist', 'gz'); os.makedirs(GZ, exist_ok=True)
+def gz_of(p):
+    q = os.path.join(GZ, os.path.basename(p) + '.gz'); raw = open(p, 'rb').read()
+    try:
+        import zopfli.gzip as ZG; z = ZG.compress(raw, numiterations=15)
+    except ImportError:
+        import gzip as _g, io as _io; bio = _io.BytesIO()
+        with _g.GzipFile(fileobj=bio, mode='wb', compresslevel=9, mtime=0) as f: f.write(raw)
+        z = bio.getvalue()
+    if not os.path.exists(q) or open(q, 'rb').read() != z: open(q, 'wb').write(z)
+    return q
+GZP = {key: gz_of(p) for key, p, e in changed} if '--plain' not in sys.argv else {}
+for key, p, e in todo:
+    if key == 'netretry' and key in GZP: e['gz'] = 1
+    elif key == 'netretry' and st['modules'].get(key, {}).get('gz'): e['gz'] = 1   # already on chain gzipped
+_raw_total = sum(os.path.getsize(p) for _, p, _ in changed); _gz_total = sum(os.path.getsize(q) for q in GZP.values())
+if GZP: print('gzipped: %.1f KB -> %.1f KB (%.0f%%)' % (_raw_total / 1024, _gz_total / 1024, 100 * _gz_total / max(1, _raw_total)), flush=True)
+def sendp(key, p): return GZP.get(key, p)
 print(len(todo), 'modules,', len(changed), 'changed:', ', '.join(k for k, _, _ in changed[:12]) + (' ...' if len(changed) > 12 else ''), flush=True)
 if DRY and '--atlas-launcher' not in sys.argv: sys.exit()
 
@@ -151,7 +174,7 @@ if not LOCAL and os.environ.get('ASH_PUBLISH'):
                                say=lambda m: print('      ' + m, flush=True))
         return _P
     def send_only(d, path, json_text=None):
-        r = d.inscribe(open(path, 'rb').read(), '', json_text or '', os.path.basename(path))
+        r = d.inscribe(open(path, 'rb').read(), 'application/gzip' if path.endswith('.gz') else '', json_text or '', os.path.basename(path))
         print('   inscribed %s -> %s%s' % (os.path.basename(path), (r.get('id') or '?')[:16], ' (resumed)' if r.get('resumed') else ''), flush=True); return True
 elif not LOCAL and os.environ.get('ASH_FIREFOX') != '1' and os.environ.get('ASH_BROWSER') != 'chromium':
     # the standalone @ashvale wallet (2026-10-04): no browser at all - the node builds, the wallet signs
@@ -221,9 +244,10 @@ BATCH = 999   # keep sending (2026-10-01: "Shouldn't be a problem to keep tx-ing
 try:
     pending = list(changed)
     if not LOCAL:   # anything already on chain from an interrupted run (sent, not yet recorded) is picked up by hash
-        found = ids_by_sha({sha(p) for _, p, _ in pending})
+        found = ids_by_sha({sha(sendp(key, p)) for key, p, _ in pending})
         for key, p, e in list(pending):
-            if sha(p) in found: st['modules'][key] = {'id': found[sha(p)], 'sha': sha(p), 'v': e.get('v'), 'bytes': os.path.getsize(p)}; pending.remove((key, p, e))
+            q = sendp(key, p)
+            if sha(q) in found: st['modules'][key] = {'id': found[sha(q)], 'sha': sha(p), 'v': e.get('v'), 'bytes': os.path.getsize(p), **({'gz': sha(q), 'gzbytes': os.path.getsize(q)} if q != p else {})}; pending.remove((key, p, e))
         save()
     done = len(changed) - len(pending)
     while pending:
@@ -235,7 +259,7 @@ try:
         for key, p, e in batch:
             ok = None
             for attempt in range(3):   # a browser that crashes mid-send (2026-10-04: "Failed to decode response from marionette" under memory pressure) is restarted and the file retried
-                try: ok = send_only(browser(), p); break
+                try: ok = send_only(browser(), sendp(key, p)); break
                 except Exception as ex:
                     print('   browser crashed (%s), restarting it (try %d of 3)' % (str(ex).splitlines()[0][:80], attempt + 1), flush=True)
                     try: (_PW.__exit__(None, None, None) if '_PW' in globals() and _PW else (d.quit() if hasattr(d, 'quit') else None))
@@ -244,12 +268,12 @@ try:
             if ok is None: raise SystemExit('the browser kept crashing; re-run later (resumable)')
             if not ok: pending = [x for x in batch if x not in sent] + pending; print('waiting for a block before sending more', flush=True); break
             sent.append((key, p, e)); print('   sent %-28s' % key, flush=True)
-        want = {sha(p): (key, p, e) for key, p, e in sent}
+        want = {sha(sendp(key, p)): (key, p, e) for key, p, e in sent}
         for _ in range(40):   # one block (~1 min on testnet), then they're listed
             time.sleep(30); found = ids_by_sha(set(want))
             if len(found) == len(want): break
         for h, (key, p, e) in want.items():
-            if h in found: st['modules'][key] = {'id': found[h], 'sha': h, 'v': e.get('v'), 'bytes': os.path.getsize(p)}; done += 1
+            if h in found: q = sendp(key, p); st['modules'][key] = {'id': found[h], 'sha': sha(p), 'v': e.get('v'), 'bytes': os.path.getsize(p), **({'gz': h, 'gzbytes': os.path.getsize(q)} if q != p else {})}; done += 1
             else: pending.append((key, p, e)); print('not listed yet, will retry:', key, flush=True)
         save(); print('%d/%d modules on chain' % (done, len(changed)), flush=True)
     # the registry with every id filled in

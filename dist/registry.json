@@ -11,7 +11,7 @@
   },
   "netretry": {
    "id": null,
-   "v": "5",
+   "v": "6",
    "api": 1,
    "kind": "js"
   },
@@ -298,6 +298,60 @@
    "kind": "js"
   },
   "engolf": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "dicerules": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "wheelrules": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "twentyonerules": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "dicethrows": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "dicetable": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "wheeltable": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "twentyonetable": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "engtables": {
+   "id": null,
+   "v": "1",
+   "api": 1,
+   "kind": "js"
+  },
+  "hudtables": {
    "id": null,
    "v": "1",
    "api": 1,
@@ -1075,6 +1129,12 @@
     "kind": "json"
    },
    "char.rat": {
+    "id": null,
+    "v": 1,
+    "api": 1,
+    "kind": "json"
+   },
+   "char.rhona": {
     "id": null,
     "v": 1,
     "api": 1,

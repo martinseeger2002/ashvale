@@ -16,7 +16,7 @@ with sync_playwright() as p:
     t0 = time.time()
     while time.time() - t0 < 120 and not pg.evaluate('!!(window.ASH && ASH.golf && ASH.golf())'): time.sleep(.5)
     time.sleep(6); pg.keyboard.press('Escape')
-    pg.evaluate("(() => { ASH.me.inv[0] = { id: 'golf_standard', n: 1 }; ASH.golf()._begin({ rid: 'tap1', f: 'free', a: 0, m: [[ASH.golf()._me(), 'M', '', 1]] }); })()")
+    pg.evaluate("(() => { ASH.me.inv[0] = { id: 'golf_standard', n: 1 }; ASH.give('coins', 100); ASH.golf()._begin({ rid: 'tap1', f: 'free', a: 0, m: [[ASH.golf()._me(), 'M', '', 1]] }); })()")
     time.sleep(4)
     s = pg.evaluate(GS); pin = s['pin'] if 'pin' in s and s['pin'] else pg.evaluate("ASH.golf()._state().pin")
     want = math.atan2(pin[1] - s['ball']['y'], pin[0] - s['ball']['x']) if pin else None
