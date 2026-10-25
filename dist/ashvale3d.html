@@ -16320,15 +16320,15 @@ POSSIBILITY OF SUCH DAMAGE. */
             break;
           }
           case 'dungeonroom': {   /* one chamber directly under the same keep footprint; lv is negative */
-            const lv = o.lv | 0, by = y + lv * 3.2, w = o.w || 8, h = o.h || 8, L = dungeonLayer(lv), DB = L.b, ST = lv === -4 ? 0x363040 : 0x4a4742, FL = lv === -4 ? 0x292331 : 0x363532;
+            const lv = o.lv | 0, by = y + lv * 3.2, w = o.w || 8, h = o.h || 8, L = dungeonLayer(lv), DB = L.b, ST = lv === -4 ? 0x4a4058 : 0x4a4742, FL = lv === -4 ? 0x3a3148 : 0x363532;   /* the Heart's stone a little lighter (2026-10-25: it was too dark to see in) */
             DB.add('box', FL, o.x + w / 2, by - 0.09, o.y + h / 2, w, 0.18, h);
             DB.add('box', 0x1b1a1c, o.x + w / 2, by + 3.05, o.y + h / 2, w + 0.5, 0.2, h + 0.5);   /* a real ceiling: no sky, weather or upper floor leaks through */
-            for (let tz = 1; tz < h - 1; tz++) for (let tx = 1; tx < w - 1; tx++) if ((tx + tz) % 2 === 0) DB.add('box', lv === -4 ? 0x332b3c : 0x403e39, o.x + tx + 0.5, by + 0.015, o.y + tz + 0.5, 0.94, 0.04, 0.94);
+            for (let tz = 1; tz < h - 1; tz++) for (let tx = 1; tx < w - 1; tx++) if ((tx + tz) % 2 === 0) DB.add('box', lv === -4 ? 0x463d55 : 0x403e39, o.x + tx + 0.5, by + 0.015, o.y + tz + 0.5, 0.94, 0.04, 0.94);
             for (let i = 0; i < w; i++) { DB.add('box', ST, o.x + i + 0.5, by + 1.5, o.y + 0.08, 1, 3, 0.22); DB.add('box', ST, o.x + i + 0.5, by + 1.5, o.y + h - 0.08, 1, 3, 0.22); }
             for (let i = 0; i < h; i++) { DB.add('box', ST, o.x + 0.08, by + 1.5, o.y + i + 0.5, 0.22, 3, 1); DB.add('box', ST, o.x + w - 0.08, by + 1.5, o.y + i + 0.5, 0.22, 3, 1); }
             for (const [dx, dz] of [[1.2,1.2],[w-1.2,1.2],[1.2,h-1.2],[w-1.2,h-1.2]]) { DB.add('cyl', 0x5b5650, o.x + dx, by + 1.45, o.y + dz, 0.55, 2.9, 0.55); DB.add('box', 0x716a61, o.x + dx, by + 2.85, o.y + dz, 0.9, 0.18, 0.9); }
             for (const [dx, dz] of [[1, 1], [w / 2, 1], [w - 1, 1], [w - 1, h / 2], [w - 1, h - 1], [w / 2, h - 1], [1, h - 1], [1, h / 2]]) {
-              const f = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.42, 6), new THREE.MeshBasicMaterial({ color: lv === -4 ? 0xb06cff : 0xff8a20 })); f.position.set(o.x + dx, by + 1.55, o.y + dz); L.g.add(f); torches.push({ f, ph: dx + dz + lv, x: o.x + dx, y: by + 1.5, z: o.y + dz, lv });
+              const f = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.42, 6), new THREE.MeshBasicMaterial({ color: lv === -4 ? 0xc8a2ff : 0xff8a20 })); f.position.set(o.x + dx, by + 1.55, o.y + dz); L.g.add(f); torches.push({ f, ph: dx + dz + lv, x: o.x + dx, y: by + 1.5, z: o.y + dz, lv });
             }
             break;
           }
@@ -17337,6 +17337,7 @@ POSSIBILITY OF SUCH DAMAGE. */
 .ash .dlg .go{color:#00c;font-size:12px;margin-top:6px}
 .ash .dlg .go .btn{margin:4px 4px 0;cursor:pointer}
 .ash .tutgoal{position:absolute;left:calc((100% - 300px) / 2);top:10px;transform:translateX(-50%);width:max-content;max-width:min(520px,calc(100vw - 340px));padding:8px 16px;background:linear-gradient(#d8c8a0,#c4b386);box-shadow:inset 0 0 0 2px #8a7650,0 3px 8px #000a;color:#000;font:600 14px/1.35 "Trebuchet MS",Verdana,sans-serif;text-align:center;z-index:40;pointer-events:none;display:none}
+.ash.nohud>:not(canvas.gl){display:none!important}   /* ?nohud, ASH.film.hud(false): the 3D view alone (2026-10-25) */
 .ash .addf input{padding:4px 6px;border:1px solid #1b1610;border-radius:4px;background:#2a231b;color:#f3e7cc;font:inherit;box-shadow:inset 0 1px 3px #0008}.ash .addf input:focus{outline:1px solid #c8a050}
 .ash .tutgoal b{color:#801}.ash .tutgoal .st{color:#5a4428;font-size:12px}.ash .tutgoal .ok{color:#1e6a10;font-size:16px}
 @media (max-width:700px),(max-height:520px){.ash .tutgoal{left:8px;right:calc(var(--mm) + var(--tab) + 22px);transform:none;width:auto;max-width:none;padding:6px 10px;font-size:13px}}
@@ -23534,7 +23535,9 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       };
       el.oninput = (e) => { if (e.target.dataset && e.target.dataset.ma === 'vol') { S.vol = (+e.target.value || 0) / 100; if (master) master.gain.value = S.vol; save(); } };
     }
-    return { frame, panel, state: () => ({ playing: cur && cur.id, area: areaTrack, unlocked: S.unlocked.slice(), mode: S.mode, on: S.on, ctx: ctx ? ctx.state : null }), _play: play };
+    return { frame, panel, state: () => ({ playing: cur && cur.id, area: areaTrack, unlocked: S.unlocked.slice(), mode: S.mode, on: S.on, ctx: ctx ? ctx.state : null }), _play: play,
+      /* for ASH.music (the film API, 2026-10-25): a track on loop whether or not it is unlocked, back to the area's, and the sound woken */
+      _loop: id => { if (!D.tracks[id]) return; S.mode = 'loop'; S.loop = id; play(id); }, _auto: () => { S.mode = 'auto'; S.loop = null; if (areaTrack) play(areaTrack); }, _wake: wake };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engmusic', { api: 1, v: 1, needs: {} }, () => ({ api: 1, install }));
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -29902,6 +29905,9 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
         GLOW.mesh.count = n; GLOW.mesh.instanceMatrix.needsUpdate = true; if (GLOW.mesh.instanceColor) GLOW.mesh.instanceColor.needsUpdate = true;
       }
       const CAVE = { on: false, t: 0, me: null, pool: [], keep: null };
+      /* underground, the dark between the flames is never quite black (2026-10-25, the operator: "a player should be able to always see");
+         it was 0.14, which left anything away from a flame unseen. Still no light of your own (2026-10-07) */
+      const CAVE_AMBIENT = 0.42;
       /* A FIXED NUMBER OF LIGHTS. three.js builds every material's shader for the number of lights in the scene; one light more
          or fewer and every material in sight is compiled again (52 programs - that was most of the wait going into the cave or
          a wigwam, and a stall each time a town's area loaded). So the lights are all there from the start and are only ever
@@ -29933,7 +29939,7 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
           if (inCave) {
             CAVE.keep = { bg: scene.background.getHex(), fc: scene.fog.color.getHex(), fn: scene.fog.near, ff: scene.fog.far, hemi: hemi.intensity, sun: sun.intensity };
             if (wxMod && wxMod.set) try { wxMod.set('clear', 0, { instant: true }); } catch (e) { /* weather module */ }
-            scene.background.setHex(0x030303); scene.fog.color.setHex(0x030303); scene.fog.near = fullDungeon ? 28 : 5; scene.fog.far = fullDungeon ? 44 : 16; hemi.intensity = 0.14; sun.intensity = 0.04;
+            scene.background.setHex(0x030303); scene.fog.color.setHex(0x030303); scene.fog.near = fullDungeon ? 28 : 5; scene.fog.far = fullDungeon ? 44 : 16; hemi.intensity = CAVE_AMBIENT; sun.intensity = 0.04;
             /* no light of your own (2026-10-07: "The player should not give off any light. The only light should be coming from the torches") */
           } else {
             const K = CAVE.keep || {}; scene.background.setHex(K.bg != null ? K.bg : SKY); scene.fog.color.setHex(K.fc != null ? K.fc : SKY); scene.fog.near = K.fn || 24; scene.fog.far = K.ff || 52;
@@ -29953,15 +29959,17 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
              trails between them, sadfrog 2026-10-07), ranges, campfires, and torches dropped on the ground (2026-10-07) */
           /* every light out to the edge of what you can see (2026-10-07: "The light from the illumination should load
              farther out"): the nearest few are real lights, every one of them gets a pool of light on the ground (GLOW) */
-          const R = inCave ? 24 : Math.min(viewR(), 90), LT = { torch: 1.6, sconce: 1.5, lamp: 2.6, range: 0.9, campfire: 0.9 }, near = [], add = o => { if ((o.lv | 0) !== (me.lv | 0) || !LT[o.k] || Math.abs(o.x - me.x) >= R || Math.abs(o.y - me.y) >= R) return; if (core.lampLit && !core.lampLit(o.x, o.y)) return; if (o.litIn && core.fireLit && !core.fireLit(o.x, o.y)) return;   /* a fire that lights only in one season (zone data `litIn`): out of it, the ring is cold, and cold stones light nothing */ near.push([o.x, o.y, LT[o.k], o.k === 'lamp' ? 0xffd27a : 0xff9a3c, o.k === 'lamp']); };
+          const R = inCave ? 24 : Math.min(viewR(), 90), LT = { torch: 1.6, sconce: 1.5, lamp: 2.6, range: 0.9, campfire: 0.9, tripod_brazier: 1.5, burn_barrel: 1.05, ember_heap: 0.5, lantern_post: 1.25, camp_gate: 2.55, wayshrine: 1.48, abbey_altar: 1.7 },   /* the decor fires light too (2026-10-25: the Hollow Den, the Drowned Tower and the crypts were lit only by braziers that lit nothing) */ near = [], add = o => { if ((o.lv | 0) !== (me.lv | 0) || !LT[o.k] || Math.abs(o.x - me.x) >= R || Math.abs(o.y - me.y) >= R) return; if (core.lampLit && !core.lampLit(o.x, o.y)) return; if (o.litIn && core.fireLit && !core.fireLit(o.x, o.y)) return;   /* a fire that lights only in one season (zone data `litIn`): out of it, the ring is cold, and cold stones light nothing */ near.push([o.x, o.y, LT[o.k], o.k === 'lamp' ? 0xffd27a : 0xff9a3c, o.k === 'lamp']); };
           for (const o of core.M.objects || []) {
             if (o.k !== 'dungeonroom' || (o.lv | 0) !== (me.lv | 0)) { add(o); continue; }
             const w = o.w || 8, h = o.h || 8, lv = o.lv | 0;
             const lamps = [[1, 1], [w / 2, 1], [w - 1, 1], [w - 1, h / 2], [w - 1, h - 1], [w / 2, h - 1], [1, h - 1], [1, h / 2]];
             for (const a of lamps) {
               const lx = o.x + a[0], ly = o.y + a[1];
-              if (Math.abs(lx - me.x) < R && Math.abs(ly - me.y) < R) near.push([lx, ly, 1.55 + lv * 3.2, lv === -4 ? 0xb06cff : 0xff9a3c, false, lv * 3.2]);
+              if (Math.abs(lx - me.x) < R && Math.abs(ly - me.y) < R) near.push([lx, ly, 1.55 + lv * 3.2, lv === -4 ? 0xc8a2ff : 0xff9a3c, false, lv * 3.2]);
             }
+            /* the Heart's chamber: the heart itself lights the middle of the room (2026-10-25, the operator: "a player should be able to always see") */
+            if (lv === -4 && Math.abs(o.x + w / 2 - me.x) < R && Math.abs(o.y + h / 2 - me.y) < R) near.push([o.x + w / 2 - 0.5, o.y + h / 2 - 0.5, 1.4 + lv * 3.2, 0xe0c4ff, true, lv * 3.2]);
           }
           if (!inCave && core.M.roadTorchesIn) for (const o of core.M.roadTorchesIn(me.x - R, me.y - R, me.x + R, me.y + R)) add(o);
           for (const f of fires.values()) { const q = f.position; if (Math.abs(q.x - me.x) < R && Math.abs(q.z - me.y) < R) near.push([q.x - 0.5, q.z - 0.5, 0.8, 0xff9a3c]); }
@@ -29994,6 +30002,17 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
       const ENGSKY = deps.engsky.install({ THREE, DATA, PI, SCENE, CAVE, D, PID, SKY, camera, core, coreCall, hemi, hud, isPhone, me, myEnt, q, say, scene, send, showWeather, sun, zoneHere,
         pineSnow, get cam() { return cam; }, get wxMod() { return wxMod; }, get wxShown() { return wxShown; }, set wxShown(v) { wxShown = v; } });
       const { DAY_S, DEMO, NS, SEASON, SEASONS, SKYM, SKYV, STARS, SUNL, SUN_EPOCH, TL, dayTick, underSeason, dot3, moonAt, skyNow, sunAt, sunTime } = ENGSKY;
+      /* FILM (2026-10-25, for the promo-video studio and tests; the Marketing session's list): a camera of its own (ASH.film.camera),
+         the HUD off (?nohud, ASH.film.hud), a local hour (?hour=H, ASH.film.hour), an instanced area by name (?enter=<zone>[:floor],
+         ASH.enter) and a promise for when the land around is built (ASH.zonesReady). Nothing changes for a player who asks for none. */
+      const FILM = { cam: null, focus: new THREE.Vector3(), fov0: camera.fov };
+      const HOUR = { want: q.has('hour') ? +q.get('hour') : null };
+      function applyHour() {   /* the sky's clock moved so it is hour H where you stand (noon = the sun highest here) */
+        const B = SUNL.b, H = HOUR.want; HOUR.want = null; if (!B || !isFinite(H)) return;
+        const DMS = DAY_S * 1000, t = skyNow(); let best = -2, noon = t;
+        for (let k = 0; k < 192; k++) { const tt = t + k * DMS / 192, v = dot3(sunAt(tt), B.u); if (v > best) { best = v; noon = tt; } }
+        TL.off += noon + (((H % 24) + 24) % 24 - 12) / 24 * DMS - t; TL.noon = null;
+      }
       /* ---------- HAND TORCHES (2026-10-07: "a torch ... hold it at night and illuminate his surroundings"): whoever holds
          one (the off hand) carries a warm flickering light of its Light radius - you, and up to three players near you */
       const TORCH = { me: new THREE.PointLight(0xffa040, 0, 8, 1.3), pool: [] };   /* made now, not on first use: see A FIXED NUMBER OF LIGHTS */
@@ -30300,10 +30319,13 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
         cam.snap = false;
         const cp = Math.max(0.3, cam.pitch);
         camera.position.set(camT.x + Math.sin(cam.yaw) * Math.cos(cp) * cam.dist, camT.y + Math.sin(cp) * cam.dist, camT.z + Math.cos(cam.yaw) * Math.cos(cp) * cam.dist);
-        const gy = heightAt(camera.position.x, camera.position.z) + 0.6; if (camera.position.y < gy) camera.position.y = gy;
+        /* below the ground (a keep's dungeon floors, me.lv < 0) the surface overhead is not the floor: the camera stays above YOUR floor, not the
+           land's - it was pushed up to the ruins far above, and the Heart's chambers sank into the fog (2026-10-25) */
+        const deep = (me.lv | 0) < 0, floorY = (x, z) => deep ? camT.y - 1 : heightAt(x, z);
+        const gy = floorY(camera.position.x, camera.position.z) + 0.6; if (camera.position.y < gy) camera.position.y = gy;
         /* and the ground between: on a cliff (the great mountain's ledges, 2026-10-18) the slope between the camera and you would fill the
            view, so the camera rises until its line down to you clears the ground at a quarter, half and three-quarters of the way */
-        if (!cam.film && cam.mode !== 'chess' && cam.mode !== 'poker') for (const t of [0.25, 0.5, 0.75]) {
+        if (!cam.film && !deep && cam.mode !== 'chess' && cam.mode !== 'poker') for (const t of [0.25, 0.5, 0.75]) {
           const lx = camT.x + (camera.position.x - camT.x) * t, lz = camT.z + (camera.position.z - camT.z) * t, need = heightAt(lx, lz) + 0.8;
           const ly = camT.y + (camera.position.y - camT.y) * t; if (ly < need) camera.position.y = camT.y + (need - camT.y) / t;
         }
@@ -31871,6 +31893,11 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
         for (const r of regions) if (r.built) r.built.update(dt, tSec);
         if (PAD && !(LR && LR.playing()) && !(GF && GF.playing())) PAD.poll(now, dt);   /* the Lily Run reads the pad itself */
         updateCamera(dt);
+        if (FILM.cam) {   /* a film shot (ASH.film.camera): eye, look and lens, over the game's own camera */
+          camera.position.set(FILM.cam.eye[0], FILM.cam.eye[1], FILM.cam.eye[2]); camera.lookAt(FILM.focus);
+          const fov = FILM.cam.fov || FILM.fov0; if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+        }
+        if (HOUR.want != null && SUNL.b) applyHour();
         /* the character creator is a room of your own (2026-10-21 playtest: "view is blocked by an npc", "if 2 people start at the same time they
            can't see their character"): while it is open everyone else - people, monsters, other players, pets - is hidden, and comes back after */
         if (cam.mode === 'creator') { for (const e of ents.values()) if (e !== myEnt && e.root.visible) { e.root.visible = false; SOLO.add(e); } if (tutArrow) tutArrow.visible = false; }
@@ -31916,7 +31943,8 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
         netPos(now); netNeighbours(now); tblTick(now); flushNet();
         if (fogMod && myEnt) fogMod.focus(myEnt.root.position);
         if (wxMod && wxMod.focus && myEnt) wxMod.focus(myEnt.root.position);
-        if (SCENE.see && myEnt) {   /* see-through: a circle round the avatar's chest on screen, for anything 2 m or more in front of it */
+        if (SCENE.see && myEnt && (!myEnt.root.visible || FILM.cam)) SCENE.see.uSeeR.value = 0;   /* no circle round a hidden avatar or in a film shot (2026-10-25) */
+        else if (SCENE.see && myEnt) {   /* see-through: a circle round the avatar's chest on screen, for anything 2 m or more in front of it */
           const S = SCENE.see, hp = _seeV.copy(myEnt.root.position); hp.y += 1.0;
           const d = camera.position.distanceTo(hp); hp.project(camera);
           const sz = renderer.getDrawingBufferSize(_seeS);
@@ -31925,7 +31953,7 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
         /* FOGV: the fog's distances are meant from the player; three measures them from the camera, which stands cam.dist
            behind - so they are pushed out by that much for the draw (and a hawk sees further), then put back for whoever
            set them (the weather module, the cave, the plain fog) */
-        const fn0 = scene.fog.near, ff0 = scene.fog.far, fk = CAVE.on ? 1 : viewR() / VIEW, back = cam.dist;
+        const fn0 = scene.fog.near, ff0 = scene.fog.far, fk = CAVE.on ? 1 : viewR() / VIEW, back = FILM.cam ? camera.position.distanceTo(FILM.focus) : cam.dist;   /* a film shot: from what it looks at */
         scene.fog.near = fn0 * fk + back; scene.fog.far = ff0 * fk + back;
         { const cf = Math.max(90, scene.fog.far + 8); if (Math.abs(camera.far - cf) > 2) { camera.far = cf; camera.updateProjectionMatrix(); } }
         lightBudget();
@@ -32437,6 +32465,8 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
          the Spider Cave at his own levels); ?kit=1 adds a staff, armour and food. Never inside the arcade. */
       if (!(G.parent && G.parent !== G) && q.get('lv')) { for (const kv of q.get('lv').split(',')) { const [k, v] = kv.split(':'); if (me.xp[k] != null && +v > 0) me.xp[k] = core.xpFor(+v) * 10; } me.hp = core.lv(me, 'hitpoints'); hud.refresh('all'); }
       if (!(G.parent && G.parent !== G) && q.get('kit')) setTimeout(() => { for (const [id, n] of [['staff_t3', 1], ['body_t2', 1], ['helmet_t2', 1], ['salmon', 8], ['potion', 2], ['antidote', 2]]) if (core.item(id)) game.give(id, n); hud.refresh('all'); }, 900);
+      if (q.has('nohud')) host.classList.add('nohud');   /* = ASH.film.hud(false) (game is defined below) */
+      if (q.get('enter') && (!(G.parent && G.parent !== G) || typeof G.ASH_QS === 'string')) { const [zid, fl] = q.get('enter').split(':'); setTimeout(() => game.enter(zid, +fl || 1).catch(e => hud.chat(e.message, 'warn')), 800); }
       if (q.get('go') && (!(G.parent && G.parent !== G) || typeof G.ASH_QS === 'string')) { const gg = q.get('go').split(',').map(Number); if (gg.length === 2 && gg.every(Number.isFinite)) setTimeout(() => game.teleport(gg[0], gg[1]), 800); }
       netRoom();
       if (hintedAddr || hintedTag) walletRefresh().then(() => { if (q.has('chest')) hud.openChest(); });
@@ -32451,6 +32481,56 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
         give(id, n) { const p = me; for (let k = 0; k < (core.item(id).stack ? 1 : n || 1); k++) { const f = p.inv.indexOf(null); if (core.item(id).stack) { const i = p.inv.findIndex(s => s && s.id === id); if (i >= 0) { p.inv[i].n += n || 1; break; } } if (f < 0) break; p.inv[f] = { id, n: core.item(id).stack ? n || 1 : 1 }; } hud.refresh('all'); },
         setLevel(skill, L) { me.xp[skill] = core.xpFor(L) * 10; if (skill === 'hitpoints') me.hp = L; hud.refresh('all'); },
         teleport(x, y) { me.x = x; me.y = y; me.path = []; place(myEnt, x, y); cam.snap = true; streamRegions(); arriveCheck(); },
+        /* an instanced area by its zone id (crypts, towercellars, spidercave, hollowden ...), where its stairs or cave mouth lands you;
+           floor: 1 the way in, 2+ the levels below (each level's own stairs down, in order). Resolves where you were put. */
+        async enter(zoneId, floor) {
+          const zi = ZINDEX && ZINDEX.find(z => z.id === zoneId), z = zi ? await fetchZone(zoneId) : (D.zones || []).find(q => q.id === zoneId);
+          if (!z || !z.origin) throw new Error('no area ' + zoneId);
+          const [ox, oy] = z.origin, [w, h] = z.size, inside = (x, y) => x >= ox && y >= oy && x < ox + w && y < oy + h;
+          const lands = [];
+          for (const zz of (D.zones || []).concat(Object.values(LZ))) for (const o of zz.objects || [])   /* ways in and down only: an up-stair lands at the floor above's foot */
+            if (Array.isArray(o.to) && inside(o.to[0], o.to[1]) && o.k !== 'stairsup' && o.k !== 'caveexit') lands.push([o.to[0] | 0, o.to[1] | 0, inside(o.x, o.y) ? 1 : 0]);
+          const ways = [...new Map(lands.sort((a, b) => a[2] - b[2] || a[0] - b[0]).map(t => [t[0] + ',' + t[1], t])).values()];
+          const fl = Math.max(1, floor | 0), at = ways[fl - 1] || ways[0] || (z.spawn ? [ox + z.spawn[0], oy + z.spawn[1]] : [ox + (w >> 1), oy + (h >> 1)]);
+          game.teleport(at[0], at[1]); return { zone: zoneId, floor: ways[fl - 1] ? fl : 1, x: at[0], y: at[1] };
+        },
+        /* resolves true once the area you stand in is here and the land around you is built (false after `ms`, 60 s by default) */
+        zonesReady(ms) {
+          const until = performance.now() + (ms || 60000);
+          return new Promise(res => {
+            const look = () => {
+              const zi = zoneAtIndex(me.x, me.y), here = !zi || core.hasZone(zi.id);
+              const pcx = me.x >> 6, pcy = me.y >> 6;
+              let built = here && !travelling && !TRAVEL.on && FIRST_DRAWN && regions.filter(r => !r.chunk && regionDist(r, me.x, me.y) <= LOAD_D).every(r => r.built);
+              if (built && SEEDED) for (let cy = pcy - 1; cy <= pcy + 1 && built; cy++) for (let cx = pcx - 1; cx <= pcx + 1; cx++) {
+                const rect = [cx * 64, cy * 64, 64, 64]; if (regionDist({ rect }, me.x, me.y) <= CH_NEAR && !chunkRegs.has(cx + ',' + cy)) { built = false; break; }
+              }
+              if (built) setTimeout(() => res(true), 400); else if (performance.now() > until) res(false); else setTimeout(look, 250);
+            };
+            look();
+          });
+        },
+        /* the film API: a camera of its own, the HUD off, a local hour. Scripted players are _inject(id, data, keep): data is a net
+           state - p [x, z] tile position (floats), a 'walk' | 'run' | 'idle' ..., s the sender's clock in ms (later wins), l the FLOOR
+           (0 ground, 1 upstairs, -1 a cellar: not a level), o an outfit, g gear {weapon, body, ...}, n a name, h a home, k a tool */
+        film: {
+          camera(o) {
+            if (!o || !Array.isArray(o.eye) || !Array.isArray(o.look)) throw new Error('film.camera needs eye [x, y, z] and look [x, y, z]');
+            FILM.cam = { eye: o.eye.map(Number), look: o.look.map(Number), fov: +o.fov || 0 }; FILM.focus.set(FILM.cam.look[0], FILM.cam.look[1], FILM.cam.look[2]);
+          },
+          release() { FILM.cam = null; camera.fov = FILM.fov0; camera.updateProjectionMatrix(); cam.snap = true; },
+          hud(on) { host.classList.toggle('nohud', on === false); },
+          hour(H) { HOUR.want = +H; },
+          get active() { return !!FILM.cam; }
+        },
+        /* the soundtrack, scripted: play a track (by id, as data/music.json names it), back to the area's own, or start the sound
+           without a click (a browser allows that only where the page may autoplay, e.g. a capture run with autoplay allowed) */
+        music: {
+          play(id) { if (MUSIC && MUSIC._loop) MUSIC._loop(String(id)); },
+          auto() { if (MUSIC && MUSIC._auto) MUSIC._auto(); },
+          start() { if (MUSIC && MUSIC._wake) MUSIC._wake(); },
+          state: () => (MUSIC ? MUSIC.state() : null)
+        },
         paintScores,
         netHealth: () => ({ online: !!room, lost: NW.lost, heardAgo: NW.heard ? Math.round(performance.now() - NW.heard) : null, fails: NW.fails, saveFails }), _netBreak: () => { if (room) { const R = room; R.send = () => Promise.resolve(false); } },
         zones: () => ({ loaded: (core.D.zones || []).map(z => z.id), index: ZINDEX ? ZINDEX.map(z => z.id) : null, waiting: Object.keys(LZ_WAIT), travelling }),
@@ -32479,7 +32559,7 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
           resetLedgerForTest: () => { if (!walletState.address) return; ledgerDrop(); save = null; try { G.localStorage.removeItem(CKEY(walletState.address)); } catch (e) { /* none */ } ledgerFor(walletState.address); },   /* a lost count: the tests' worst case */
           paidForTest: paid => { const L = ledgerFor(walletState.address); for (const k in paid) { const toChest = Math.min(paid[k], L.lchest[k] || 0); L.lchest[k] -= toChest; L.pchest[k] = (L.pchest[k] || 0) + toChest; L.pend[k] = (L.pend[k] || 0) + paid[k] - toChest; } ledgerSave(); } },   /* tests */ trip: () => TRIP && TRIP.state(), trade: () => trade, peers: () => Array.from(remotes.values()).map(r => r.from), _remIds: () => Array.from(remotes.keys()), optionsAt: (cx, cy) => { const L = []; for (const t of targetsAt(cx, cy)) for (const o of optionsFor(t)) L.push(o.html.replace(/<[^>]+>/g, '')); return L; }, _remAnim: () => JSON.stringify(Array.from(remotes.values()).map(r => [r.anim, r.buf.length, r.buf.length && r.buf[r.buf.length - 1].a])),
         stop() { stopped = true; },
-        sfxAt: (n, at) => sfx(n, at), sky: () => { const B = SUNL.b, s = sunAt(Date.now()), M = moonAt(Date.now(), s); return B ? { up: dot3(s, B.u), moonUp: dot3(M.v, B.u), moonLit: M.lit, dir: SUNL.dir, sun: sun.intensity, hemi: hemi.intensity } : null; },
+        sfxAt: (n, at) => sfx(n, at), sky: () => { const B = SUNL.b, t = sunTime(B), s = sunAt(t), M = moonAt(t, s); return B ? { up: dot3(s, B.u), moonUp: dot3(M.v, B.u), moonLit: M.lit, dir: SUNL.dir, sun: sun.intensity, hemi: hemi.intensity } : null; },
         versionCheck, oneDevice: () => ({ sid: ONE.sid, at: ONE.at, room: !!ONE.room, addr: ONE.addr, stopped, version: VER.mine, told: VER.told })
       };
       void _handle;
