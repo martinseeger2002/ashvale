@@ -190,16 +190,35 @@
        again could hand back the room just left, which still sends but no longer hears - so the Bank's replies (svok, ground,
        felled, boats) almost never arrived */
     let BANK_LOAD_ROOM = null;
+    /* NEVER A NEW CHARACTER OVER A SAVED HERO (SadFrog, 2026-10-24: a signed-in player's hero was "gone"). A sign-in whose Bank
+       answered after the 20 s below got a new character; this device kept it as the newer save, and the next load handed it to the
+       Bank over the real one. So: a save this device never synced with the Bank (no 'base', no 'mine': a character started here
+       while the Bank had not answered) never outranks the Bank's; and a signed-in player with no synced save here waits for the
+       Bank (BANK_WAIT, the loading screen counting) instead of starting fresh. The save it replaces is not lost: the arcade keeps
+       a page's last 10 values of each key (wallet.js storageDoor history). */
+    const BANK_WAIT = 90000;
+    const savedWithBank = l => !!(l && (l.base != null || l.mine != null));
+    /* the Bank answered with its save `at`: true = play the Bank's, false = this device's own (see cloudLoad) */
+    const cloudWins = (local, at) => !savedWithBank(local) ? at > 0
+      : local.base != null ? at !== +local.base && !(local.mine != null && at === +local.mine)   /* the Bank holding this device's own last save (its 'svok' lost on the way): this device's copy is as new or newer */
+      : at !== +local.mine;
+    let BANK_MISSED = false;   /* signed in, and the Bank never answered: this character is fresh and nothing of it is kept (CLOUD_OK stays false) */
     function cloudLoad(st) {
       if (!G.arcade || !net || !net.join) return Promise.resolve();
       let local = null; try { local = JSON.parse(st.get(SAVE_KEY) || 'null'); } catch (e) { local = null; }
+      const synced = savedWithBank(local);
       return new Promise(done => {
-        let R = null, fin = false; const parts = {};
-        const end = () => { if (fin) return; fin = true; clearTimeout(tm); if (R) BANK_LOAD_ROOM = R; done(); };
-        const tm = setTimeout(end, local ? 8000 : 20000);   /* no Bank in time: this device's save. With no save here (a new device) it waits longer - a cold sign-in takes the realtime room 10 s and more, and giving up would start a new character */
+        let R = null, fin = false, counting = null; const parts = {};
+        const end = () => { if (fin) return; fin = true; clearTimeout(tm); clearInterval(counting); if (R) BANK_LOAD_ROOM = R; done(); };
+        let tm = setTimeout(end, synced ? 8000 : 20000);   /* no Bank in time: this device's save. With no save here (a new device) it waits longer - a cold sign-in takes the realtime room 10 s and more */
         net.join('bank', { game: 'ashvale' }).then(res => {
           if (fin || !res || !res.online) return end();
           R = res.room; const me = R.me && R.me.address; if (!me) return end();
+          if (!synced && !R.me.guest) {   /* signed in, with nothing of ours to play: wait for the Bank's answer, saying so (a guest keeps the 20 s: the Bank never answers a guest) */
+            const t0 = Date.now(); clearTimeout(tm);
+            tm = setTimeout(() => { BANK_MISSED = true; console.warn('ASHVALE: the Bank did not answer in ' + BANK_WAIT / 1000 + ' s: a fresh character, not kept'); end(); }, BANK_WAIT);
+            counting = setInterval(() => { if (G.ASH_LOAD) G.ASH_LOAD.set(0.72, 'Asking the Bank for your hero… ' + Math.round((Date.now() - t0) / 1000) + ' s'); }, 1000);
+          }
           R.on('message', ({ from, data }) => {
             if (fin || !data || data.t !== 'ld' || data.to !== me || !bankSays(from) || !homeIs(data)) return;
             if (!data.n) { CLOUD_OK = true; return end(); }   /* the Bank holds no save for this address */
@@ -210,8 +229,9 @@
               const cloud = json ? JSON.parse(json) : null, at = +data.id || 0;
               /* which to play (2026-10-07: gear changed on another device was gone back on this one): the Bank's, whenever it is not
                  the very save this device last synced with ('base') - some other device has played since; this device's own, when it
-                 is (it may hold play the Bank has not had yet). A save from before 'base' existed: the newer by its time, as before. */
-              const takeCloud = local && local.base != null ? at !== +local.base && !(local.mine != null && at === +local.mine) : at > ((local && local.at) || 0);   /* the Bank holding this device's own last save (its 'svok' lost on the way): this device's copy is as new or newer */
+                 is (it may hold play the Bank has not had yet). A save this device never synced (2026-10-24, above): the Bank's,
+                 whatever the clocks say. */
+              const takeCloud = cloudWins(local, at);
               if (!takeCloud && local && at) return st.set(SAVE_KEY, JSON.stringify(Object.assign(local, { base: at })));   /* ours goes on from the Bank's current one */
               if (takeCloud) {   /* play the Bank's ('' = a New character was made) */
                 console.info('ASHVALE: the save from the Bank (' + new Date(at).toISOString() + ') is newer than this device\'s');
@@ -617,18 +637,6 @@
         e.tx = x; e.ty = y; return true;
       }
       const faceYaw = f => Math.atan2(DIRS[f][0], DIRS[f][1]);
-      /* EMOTES (2026-10-25, the operator: "an emotes menu icon ... a few emotes players can make"): the Emotes tab and the chat (/wave ...).
-         Each is a one-shot clip on your character (src/models.js); others see it because your position messages carry the clip playing */
-      const EMOTES = [['wave', 'Wave', 'wave', '\u{1F44B}'], ['politebow', 'Bow', 'bow', '\u{1F647}'], ['cheer', 'Cheer', 'cheer', '\u{1F64C}'], ['clap', 'Clap', 'clap', '\u{1F44F}'],
-        ['dance', 'Dance', 'dance', '\u{1F483}'], ['laugh', 'Laugh', 'laugh', '\u{1F602}'], ['shrug', 'Shrug', 'shrug', '\u{1F937}'], ['salute', 'Salute', 'salute', '\u{1FAE1}'],
-        ['think', 'Think', 'think', '\u{1F914}'], ['point', 'Point', 'point', '\u{1F449}'], ['fistpump', 'Fist pump', 'fistpump', '\u270A'], ['excited', 'Excited', 'excited', '\u{1F929}'],
-        ['slump', 'Slump', 'slump', '\u{1F61E}']].map(([id, name, cmd, icon]) => ({ id, name, cmd, icon }));
-      function doEmote(id) {
-        const em = EMOTES.find(e => e.id === id); if (!em || !myEnt) return false;
-        if (me.dead) { hud.chat('Not while you are down.', 'warn'); return false; }
-        if (me.boat || myEnt.canoe) { hud.chat('Not in a canoe: you would tip it.', 'warn'); return false; }
-        playOnce(myEnt, em.id); return true;
-      }
       function playOnce(e, name, speed) { e.oneShot = true; e.lastOne = name; e.oneT = performance.now(); e.H.play(name, { loop: false, speed: speed || 1 }); }
 
       const myEnt = makeEnt('p:' + PID, MOD.humanoid({ skin: '#e0b48c', hair: '#4a2c18', shirt: '#3d6a9a', pants: '#5a4632', shoes: '#3a2a1a' }), { kind: 'self' });
@@ -1157,9 +1165,6 @@
         GLOW.mesh.count = n; GLOW.mesh.instanceMatrix.needsUpdate = true; if (GLOW.mesh.instanceColor) GLOW.mesh.instanceColor.needsUpdate = true;
       }
       const CAVE = { on: false, t: 0, me: null, pool: [], keep: null };
-      /* underground, the dark between the flames is never quite black (2026-10-25, the operator: "a player should be able to always see");
-         it was 0.14, which left anything away from a flame unseen. Still no light of your own (2026-10-07) */
-      const CAVE_AMBIENT = 0.42;
       /* A FIXED NUMBER OF LIGHTS. three.js builds every material's shader for the number of lights in the scene; one light more
          or fewer and every material in sight is compiled again (52 programs - that was most of the wait going into the cave or
          a wigwam, and a stall each time a town's area loaded). So the lights are all there from the start and are only ever
@@ -1191,7 +1196,7 @@
           if (inCave) {
             CAVE.keep = { bg: scene.background.getHex(), fc: scene.fog.color.getHex(), fn: scene.fog.near, ff: scene.fog.far, hemi: hemi.intensity, sun: sun.intensity };
             if (wxMod && wxMod.set) try { wxMod.set('clear', 0, { instant: true }); } catch (e) { /* weather module */ }
-            scene.background.setHex(0x030303); scene.fog.color.setHex(0x030303); scene.fog.near = fullDungeon ? 28 : 5; scene.fog.far = fullDungeon ? 44 : 16; hemi.intensity = CAVE_AMBIENT; sun.intensity = 0.04;
+            scene.background.setHex(0x030303); scene.fog.color.setHex(0x030303); scene.fog.near = fullDungeon ? 28 : 5; scene.fog.far = fullDungeon ? 44 : 16; hemi.intensity = 0.14; sun.intensity = 0.04;
             /* no light of your own (2026-10-07: "The player should not give off any light. The only light should be coming from the torches") */
           } else {
             const K = CAVE.keep || {}; scene.background.setHex(K.bg != null ? K.bg : SKY); scene.fog.color.setHex(K.fc != null ? K.fc : SKY); scene.fog.near = K.fn || 24; scene.fog.far = K.ff || 52;
@@ -1211,17 +1216,15 @@
              trails between them, sadfrog 2026-10-07), ranges, campfires, and torches dropped on the ground (2026-10-07) */
           /* every light out to the edge of what you can see (2026-10-07: "The light from the illumination should load
              farther out"): the nearest few are real lights, every one of them gets a pool of light on the ground (GLOW) */
-          const R = inCave ? 24 : Math.min(viewR(), 90), LT = { torch: 1.6, sconce: 1.5, lamp: 2.6, range: 0.9, campfire: 0.9, tripod_brazier: 1.5, burn_barrel: 1.05, ember_heap: 0.5, lantern_post: 1.25, camp_gate: 2.55, wayshrine: 1.48, abbey_altar: 1.7 },   /* the decor fires light too (2026-10-25: the Hollow Den, the Drowned Tower and the crypts were lit only by braziers that lit nothing) */ near = [], add = o => { if ((o.lv | 0) !== (me.lv | 0) || !LT[o.k] || Math.abs(o.x - me.x) >= R || Math.abs(o.y - me.y) >= R) return; if (core.lampLit && !core.lampLit(o.x, o.y)) return; if (o.litIn && core.fireLit && !core.fireLit(o.x, o.y)) return;   /* a fire that lights only in one season (zone data `litIn`): out of it, the ring is cold, and cold stones light nothing */ near.push([o.x, o.y, LT[o.k], o.k === 'lamp' ? 0xffd27a : 0xff9a3c, o.k === 'lamp']); };
+          const R = inCave ? 24 : Math.min(viewR(), 90), LT = { torch: 1.6, sconce: 1.5, lamp: 2.6, range: 0.9, campfire: 0.9 }, near = [], add = o => { if ((o.lv | 0) !== (me.lv | 0) || !LT[o.k] || Math.abs(o.x - me.x) >= R || Math.abs(o.y - me.y) >= R) return; if (core.lampLit && !core.lampLit(o.x, o.y)) return; if (o.litIn && core.fireLit && !core.fireLit(o.x, o.y)) return;   /* a fire that lights only in one season (zone data `litIn`): out of it, the ring is cold, and cold stones light nothing */ near.push([o.x, o.y, LT[o.k], o.k === 'lamp' ? 0xffd27a : 0xff9a3c, o.k === 'lamp']); };
           for (const o of core.M.objects || []) {
             if (o.k !== 'dungeonroom' || (o.lv | 0) !== (me.lv | 0)) { add(o); continue; }
             const w = o.w || 8, h = o.h || 8, lv = o.lv | 0;
             const lamps = [[1, 1], [w / 2, 1], [w - 1, 1], [w - 1, h / 2], [w - 1, h - 1], [w / 2, h - 1], [1, h - 1], [1, h / 2]];
             for (const a of lamps) {
               const lx = o.x + a[0], ly = o.y + a[1];
-              if (Math.abs(lx - me.x) < R && Math.abs(ly - me.y) < R) near.push([lx, ly, 1.55 + lv * 3.2, lv === -4 ? 0xc8a2ff : 0xff9a3c, false, lv * 3.2]);
+              if (Math.abs(lx - me.x) < R && Math.abs(ly - me.y) < R) near.push([lx, ly, 1.55 + lv * 3.2, lv === -4 ? 0xb06cff : 0xff9a3c, false, lv * 3.2]);
             }
-            /* the Heart's chamber: the heart itself lights the middle of the room (2026-10-25, the operator: "a player should be able to always see") */
-            if (lv === -4 && Math.abs(o.x + w / 2 - me.x) < R && Math.abs(o.y + h / 2 - me.y) < R) near.push([o.x + w / 2 - 0.5, o.y + h / 2 - 0.5, 1.4 + lv * 3.2, 0xe0c4ff, true, lv * 3.2]);
           }
           if (!inCave && core.M.roadTorchesIn) for (const o of core.M.roadTorchesIn(me.x - R, me.y - R, me.x + R, me.y + R)) add(o);
           for (const f of fires.values()) { const q = f.position; if (Math.abs(q.x - me.x) < R && Math.abs(q.z - me.y) < R) near.push([q.x - 0.5, q.z - 0.5, 0.8, 0xff9a3c]); }
@@ -1254,17 +1257,6 @@
       const ENGSKY = deps.engsky.install({ THREE, DATA, PI, SCENE, CAVE, D, PID, SKY, camera, core, coreCall, hemi, hud, isPhone, me, myEnt, q, say, scene, send, showWeather, sun, zoneHere,
         pineSnow, get cam() { return cam; }, get wxMod() { return wxMod; }, get wxShown() { return wxShown; }, set wxShown(v) { wxShown = v; } });
       const { DAY_S, DEMO, NS, SEASON, SEASONS, SKYM, SKYV, STARS, SUNL, SUN_EPOCH, TL, dayTick, underSeason, dot3, moonAt, skyNow, sunAt, sunTime } = ENGSKY;
-      /* FILM (2026-10-25, for the promo-video studio and tests; the Marketing session's list): a camera of its own (ASH.film.camera),
-         the HUD off (?nohud, ASH.film.hud), a local hour (?hour=H, ASH.film.hour), an instanced area by name (?enter=<zone>[:floor],
-         ASH.enter) and a promise for when the land around is built (ASH.zonesReady). Nothing changes for a player who asks for none. */
-      const FILM = { cam: null, focus: new THREE.Vector3(), fov0: camera.fov };
-      const HOUR = { want: q.has('hour') ? +q.get('hour') : null };
-      function applyHour() {   /* the sky's clock moved so it is hour H where you stand (noon = the sun highest here) */
-        const B = SUNL.b, H = HOUR.want; HOUR.want = null; if (!B || !isFinite(H)) return;
-        const DMS = DAY_S * 1000, t = skyNow(); let best = -2, noon = t;
-        for (let k = 0; k < 192; k++) { const tt = t + k * DMS / 192, v = dot3(sunAt(tt), B.u); if (v > best) { best = v; noon = tt; } }
-        TL.off += noon + (((H % 24) + 24) % 24 - 12) / 24 * DMS - t; TL.noon = null;
-      }
       /* ---------- HAND TORCHES (2026-10-07: "a torch ... hold it at night and illuminate his surroundings"): whoever holds
          one (the off hand) carries a warm flickering light of its Light radius - you, and up to three players near you */
       const TORCH = { me: new THREE.PointLight(0xffa040, 0, 8, 1.3), pool: [] };   /* made now, not on first use: see A FIXED NUMBER OF LIGHTS */
@@ -1571,13 +1563,10 @@
         cam.snap = false;
         const cp = Math.max(0.3, cam.pitch);
         camera.position.set(camT.x + Math.sin(cam.yaw) * Math.cos(cp) * cam.dist, camT.y + Math.sin(cp) * cam.dist, camT.z + Math.cos(cam.yaw) * Math.cos(cp) * cam.dist);
-        /* below the ground (a keep's dungeon floors, me.lv < 0) the surface overhead is not the floor: the camera stays above YOUR floor, not the
-           land's - it was pushed up to the ruins far above, and the Heart's chambers sank into the fog (2026-10-25) */
-        const deep = (me.lv | 0) < 0, floorY = (x, z) => deep ? camT.y - 1 : heightAt(x, z);
-        const gy = floorY(camera.position.x, camera.position.z) + 0.6; if (camera.position.y < gy) camera.position.y = gy;
+        const gy = heightAt(camera.position.x, camera.position.z) + 0.6; if (camera.position.y < gy) camera.position.y = gy;
         /* and the ground between: on a cliff (the great mountain's ledges, 2026-10-18) the slope between the camera and you would fill the
            view, so the camera rises until its line down to you clears the ground at a quarter, half and three-quarters of the way */
-        if (!cam.film && !deep && cam.mode !== 'chess' && cam.mode !== 'poker') for (const t of [0.25, 0.5, 0.75]) {
+        if (!cam.film && cam.mode !== 'chess' && cam.mode !== 'poker') for (const t of [0.25, 0.5, 0.75]) {
           const lx = camT.x + (camera.position.x - camT.x) * t, lz = camT.z + (camera.position.z - camT.z) * t, need = heightAt(lx, lz) + 0.8;
           const ly = camT.y + (camera.position.y - camT.y) * t; if (ly < need) camera.position.y = camT.y + (need - camT.y) / t;
         }
@@ -2519,9 +2508,9 @@
         const now = performance.now(); while (sayTimes.length && now - sayTimes[0] > 10000) sayTimes.shift();
         if (sayTimes.length >= 5 || (sayTimes.length && now - sayTimes[sayTimes.length - 1] < 1200)) { hud.chat("You're talking too fast.", 'warn'); return; }
         sayTimes.push(now);
-        const emo = /^\/([a-z]+)$/i.exec(text), em = emo && EMOTES.find(e => e.cmd === emo[1].toLowerCase());   /* [Claude 2026-10-21] the operator: the reactions "should carry over to player avatars in the actual game" - played on you, seen by others (the animation rides your position messages) */
-        if (em) { doEmote(em.id); return; }
-        if (/^\/(emotes?|help emotes)$/i.test(text)) { hud.chat('Emotes: ' + EMOTES.map(e => '/' + e.cmd).join(' ') + ' (or the Emotes tab)', 'sys'); return; }
+        const emo = /^\/(cheer|fistpump|clap|excited|slump)$/i.exec(text);   /* [Claude 2026-10-21] the operator: the reactions "should carry over to player avatars in the actual game" - played on you, seen by others (the animation rides your position messages) */
+        if (emo) { playOnce(myEnt, emo[1].toLowerCase()); return; }
+        if (/^\/(emotes?|help emotes)$/i.test(text)) { hud.chat('Emotes: /cheer /fistpump /clap /excited /slump', 'sys'); return; }
         const dmTo = /^\/@([A-Za-z0-9_]{1,32})\s+(\S.*)$/.exec(text);   /* "/@tag message": a direct message, no distance limit */
         if (dmTo) { sendDm(dmTo[1], dmTo[2]); return; }
         if (text.startsWith('/@')) { hud.chat('To send a direct message: /@name your message', 'sys'); return; }
@@ -3145,11 +3134,6 @@
         for (const r of regions) if (r.built) r.built.update(dt, tSec);
         if (PAD && !(LR && LR.playing()) && !(GF && GF.playing())) PAD.poll(now, dt);   /* the Lily Run reads the pad itself */
         updateCamera(dt);
-        if (FILM.cam) {   /* a film shot (ASH.film.camera): eye, look and lens, over the game's own camera */
-          camera.position.set(FILM.cam.eye[0], FILM.cam.eye[1], FILM.cam.eye[2]); camera.lookAt(FILM.focus);
-          const fov = FILM.cam.fov || (host.clientWidth / Math.max(1, host.clientHeight) < 1.2 ? 55 : 45); if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
-        }
-        if (HOUR.want != null && SUNL.b) applyHour();
         /* the character creator is a room of your own (2026-10-21 playtest: "view is blocked by an npc", "if 2 people start at the same time they
            can't see their character"): while it is open everyone else - people, monsters, other players, pets - is hidden, and comes back after */
         if (cam.mode === 'creator') { for (const e of ents.values()) if (e !== myEnt && e.root.visible) { e.root.visible = false; SOLO.add(e); } if (tutArrow) tutArrow.visible = false; }
@@ -3195,8 +3179,7 @@
         netPos(now); netNeighbours(now); tblTick(now); flushNet();
         if (fogMod && myEnt) fogMod.focus(myEnt.root.position);
         if (wxMod && wxMod.focus && myEnt) wxMod.focus(myEnt.root.position);
-        if (SCENE.see && myEnt && (!myEnt.root.visible || FILM.cam)) SCENE.see.uSeeR.value = 0;   /* no circle round a hidden avatar or in a film shot (2026-10-25) */
-        else if (SCENE.see && myEnt) {   /* see-through: a circle round the avatar's chest on screen, for anything 2 m or more in front of it */
+        if (SCENE.see && myEnt) {   /* see-through: a circle round the avatar's chest on screen, for anything 2 m or more in front of it */
           const S = SCENE.see, hp = _seeV.copy(myEnt.root.position); hp.y += 1.0;
           const d = camera.position.distanceTo(hp); hp.project(camera);
           const sz = renderer.getDrawingBufferSize(_seeS);
@@ -3205,7 +3188,7 @@
         /* FOGV: the fog's distances are meant from the player; three measures them from the camera, which stands cam.dist
            behind - so they are pushed out by that much for the draw (and a hawk sees further), then put back for whoever
            set them (the weather module, the cave, the plain fog) */
-        const fn0 = scene.fog.near, ff0 = scene.fog.far, fk = CAVE.on ? 1 : viewR() / VIEW, back = FILM.cam ? camera.position.distanceTo(FILM.focus) : cam.dist;   /* a film shot: from what it looks at */
+        const fn0 = scene.fog.near, ff0 = scene.fog.far, fk = CAVE.on ? 1 : viewR() / VIEW, back = cam.dist;
         scene.fog.near = fn0 * fk + back; scene.fog.far = ff0 * fk + back;
         { const cf = Math.max(90, scene.fog.far + 8); if (Math.abs(camera.far - cf) > 2) { camera.far = cf; camera.updateProjectionMatrix(); } }
         lightBudget();
@@ -3217,7 +3200,7 @@
             scene.background = bg; renderer.autoClear = true;
           } else renderer.render(scene, camera);
           if (cam.mode === 'tables' && TBP && TBP.inset) TBP.inset(renderer, scene);   /* [Claude 2026-10-21] the corner view of the dice or the wheel (the operator) */
-          if (!FIRST_DRAWN) { FIRST_DRAWN = true; if (G.ASH_LOAD) setTimeout(() => G.ASH_LOAD.done(), 120); }   /* [Claude 2026-10-13] the world is on screen: the loading screen goes */
+          if (!FIRST_DRAWN) { FIRST_DRAWN = true; if (G.ASH_LOAD) setTimeout(() => G.ASH_LOAD.done(), 120); if (BANK_MISSED) hud.chat('The Bank did not answer, so your hero was not loaded. This is a fresh character and nothing you do now is kept. Reload the page to try again.', 'sys'); }   /* [Claude 2026-10-13] the world is on screen: the loading screen goes */
         }   /* behind a loading screen nothing is drawn: the frame time goes to building the place you are going to */
         scene.fog.near = fn0; scene.fog.far = ff0;
       }
@@ -3352,52 +3335,6 @@
         if (isFriend(a)) setFriend(from, false);
         else { PALS.tags.delete(a); PALS.on.delete(a); PALS.rows = palRows(); hud.chat('@' + String(from.tag || '').replace(/^@/, '') + ' is off your friends list.', 'sys'); if (hud.tab === 'friends') hud.refresh('friends'); }
       }
-      /* ARCADE ACCESS (2026-10-23, SadFrog: wallet access asked "in the game", and a game that "can switch nodes based on
-         location/ping"): arcade.access (/r/access.js) -- status(), wallet() (the arcade's own card over the game, naming
-         Ashvale's publisher), nodes() (the arcades the one we are on knows, timed from this browser) and move() (the
-         arcade's card says what signing in there means). The launcher asks once, after the tutorial; Settings shows both. */
-      const ACC = { st: null, nodes: null, asked: false };
-      async function accessApi() {
-        if (!(G.arcade && G.arcade.access) && G.parent && G.parent !== G && /^https?:/.test(location.protocol))
-          await new Promise(ok => { const s = G.document.createElement('script'); s.src = '/r/access.js'; s.onload = s.onerror = () => ok(); G.document.head.appendChild(s); setTimeout(ok, 8000); });
-        return G.arcade && G.arcade.access || null;
-      }
-      async function accessStatus() {
-        const A = await accessApi(); if (!A) return null;
-        try { ACC.st = await A.status(); } catch (e) { ACC.st = null; }
-        if (hud.tab === 'settings') hud.refresh('settings');
-        return ACC.st;
-      }
-      async function accessWallet() {
-        const A = await accessApi(); if (!A) { hud.chat('Wallet access is asked through the arcade: open Ashvale there.', 'warn'); return; }
-        try { const r = await A.wallet(); hud.chat(r.wallet ? 'Ashvale has wallet access: trades and payments still ask you each time.' : 'Wallet access stays off. You can allow it any time in Settings.', 'sys'); }
-        catch (e) { hud.chat('Wallet access: ' + String((e && e.message) || e), 'warn'); }
-        accessStatus();
-      }
-      async function accessNodes() {
-        const A = await accessApi(); if (!A) return [];
-        try { ACC.nodes = await A.nodes(); } catch (e) { ACC.nodes = []; }
-        if (hud.tab === 'settings') hud.refresh('settings');
-        return ACC.nodes;
-      }
-      async function accessMove(base) {
-        const A = await accessApi(); if (!A) return;
-        try { const r = await A.move(base); if (r.status === 'moving') { hud.chat('Taking you to ' + String(base).replace(/^https:\/\//, '') + '...', 'sys'); persist(true); } }
-        catch (e) { hud.chat('Could not move: ' + String((e && e.message) || e), 'warn'); }
-      }
-      /* the launcher's ask: a signed-in player, past Tutorial Island and the creator, once per browser (then Settings) */
-      setTimeout(function launcherAsk() {
-        if (ACC.asked || settings.walletAsked || GUEST) return;
-        if (me.tut || cam.mode === 'creator') { setTimeout(launcherAsk, 30000); return; }
-        ACC.asked = true;
-        accessStatus().then(st => {
-          if (!st || !st.signedIn || st.wallet) return;
-          settings.walletAsked = true; store.set(SET, JSON.stringify(settings));
-          hud.confirm('Let Ashvale use your wallet?', 'Ashvale can ask your arcade wallet to trade items with other players and to keep what you win. ' +
-            'The arcade shows its own card next, naming Ashvale\'s publisher, and every trade or payment still asks you first. You can change this any time in Settings.',
-            'Continue', 'Not now', () => accessWallet());
-        });
-      }, 20000);
       function palRows() {
         const seen = new Set(Array.from(remotes.values()).map(r => r.from && r.from.address).filter(Boolean)), rows = [];
         for (const [a, tag] of PALS.tags) if (PALS.on.has(a) || isFriend(a)) rows.push({ tag, online: !!PALS.on.get(a) || seen.has(a), game: isFriend(a) });
@@ -3460,9 +3397,7 @@
           walletState: () => walletState, walletRefresh: () => walletRefresh(), pid: PID,
           chestState: (...a) => { const C = chestState(...a); return C && C.here ? Object.assign({}, C, { chest: C.here }) : C; },   /* [Claude 2026-10-14] the chest window shows this home's chest */ chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a), depositInv: () => depositInv(), depositWorn: () => depositWorn(), withdrawAll: () => withdrawAll(),   /* the Bank part installs after the HUD is made */
           friends: () => ({ rows: PALS.rows.slice(), note: PALS.note, addMsg: PALS.addMsg || null }),
-          emotes: () => EMOTES.map(e => Object.assign({}, e)), emote: id => doEmote(id),
           friendAdd: tag => friendAdd(tag).then(res => { PALS.addMsg = res; if (hud.tab === 'friends') hud.refresh('friends'); return res; }),
-          access: () => ({ st: ACC.st, nodes: ACC.nodes }), accessStatus, accessWallet, accessNodes, accessMove,
           friendsRefresh: () => { loadPals().then(() => { if (hud.tab === 'friends') hud.refresh('friends'); }); },
           walletTake: (id) => chestTake(id, 1),   /* the same ledger as the chest (it bypassed it and could duplicate an NFT) */
           icon: id => { try { return MOD.icon(id, 64); } catch (e) { return null; } },
@@ -3718,8 +3653,6 @@
          the Spider Cave at his own levels); ?kit=1 adds a staff, armour and food. Never inside the arcade. */
       if (!(G.parent && G.parent !== G) && q.get('lv')) { for (const kv of q.get('lv').split(',')) { const [k, v] = kv.split(':'); if (me.xp[k] != null && +v > 0) me.xp[k] = core.xpFor(+v) * 10; } me.hp = core.lv(me, 'hitpoints'); hud.refresh('all'); }
       if (!(G.parent && G.parent !== G) && q.get('kit')) setTimeout(() => { for (const [id, n] of [['staff_t3', 1], ['body_t2', 1], ['helmet_t2', 1], ['salmon', 8], ['potion', 2], ['antidote', 2]]) if (core.item(id)) game.give(id, n); hud.refresh('all'); }, 900);
-      if (q.has('nohud')) host.classList.add('nohud');   /* = ASH.film.hud(false) (game is defined below) */
-      if (q.get('enter') && (!(G.parent && G.parent !== G) || typeof G.ASH_QS === 'string')) { const [zid, fl] = q.get('enter').split(':'); setTimeout(() => game.enter(zid, +fl || 1).catch(e => hud.chat(e.message, 'warn')), 800); }
       if (q.get('go') && (!(G.parent && G.parent !== G) || typeof G.ASH_QS === 'string')) { const gg = q.get('go').split(',').map(Number); if (gg.length === 2 && gg.every(Number.isFinite)) setTimeout(() => game.teleport(gg[0], gg[1]), 800); }
       netRoom();
       if (hintedAddr || hintedTag) walletRefresh().then(() => { if (q.has('chest')) hud.openChest(); });
@@ -3734,56 +3667,6 @@
         give(id, n) { const p = me; for (let k = 0; k < (core.item(id).stack ? 1 : n || 1); k++) { const f = p.inv.indexOf(null); if (core.item(id).stack) { const i = p.inv.findIndex(s => s && s.id === id); if (i >= 0) { p.inv[i].n += n || 1; break; } } if (f < 0) break; p.inv[f] = { id, n: core.item(id).stack ? n || 1 : 1 }; } hud.refresh('all'); },
         setLevel(skill, L) { me.xp[skill] = core.xpFor(L) * 10; if (skill === 'hitpoints') me.hp = L; hud.refresh('all'); },
         teleport(x, y) { me.x = x; me.y = y; me.path = []; place(myEnt, x, y); cam.snap = true; streamRegions(); arriveCheck(); },
-        /* an instanced area by its zone id (crypts, towercellars, spidercave, hollowden ...), where its stairs or cave mouth lands you;
-           floor: 1 the way in, 2+ the levels below (each level's own stairs down, in order). Resolves where you were put. */
-        async enter(zoneId, floor) {
-          const zi = ZINDEX && ZINDEX.find(z => z.id === zoneId), z = zi ? await fetchZone(zoneId) : (D.zones || []).find(q => q.id === zoneId);
-          if (!z || !z.origin) throw new Error('no area ' + zoneId);
-          const [ox, oy] = z.origin, [w, h] = z.size, inside = (x, y) => x >= ox && y >= oy && x < ox + w && y < oy + h;
-          const lands = [];
-          for (const zz of (D.zones || []).concat(Object.values(LZ))) for (const o of zz.objects || [])   /* ways in and down only: an up-stair lands at the floor above's foot */
-            if (Array.isArray(o.to) && inside(o.to[0], o.to[1]) && o.k !== 'stairsup' && o.k !== 'caveexit') lands.push([o.to[0] | 0, o.to[1] | 0, inside(o.x, o.y) ? 1 : 0]);
-          const ways = [...new Map(lands.sort((a, b) => a[2] - b[2] || a[0] - b[0]).map(t => [t[0] + ',' + t[1], t])).values()];
-          const fl = Math.max(1, floor | 0), at = ways[fl - 1] || ways[0] || (z.spawn ? [ox + z.spawn[0], oy + z.spawn[1]] : [ox + (w >> 1), oy + (h >> 1)]);
-          game.teleport(at[0], at[1]); return { zone: zoneId, floor: ways[fl - 1] ? fl : 1, x: at[0], y: at[1] };
-        },
-        /* resolves true once the area you stand in is here and the land around you is built (false after `ms`, 60 s by default) */
-        zonesReady(ms) {
-          const until = performance.now() + (ms || 60000);
-          return new Promise(res => {
-            const look = () => {
-              const zi = zoneAtIndex(me.x, me.y), here = !zi || core.hasZone(zi.id);
-              const pcx = me.x >> 6, pcy = me.y >> 6;
-              let built = here && !travelling && !TRAVEL.on && FIRST_DRAWN && regions.filter(r => !r.chunk && regionDist(r, me.x, me.y) <= LOAD_D).every(r => r.built);
-              if (built && SEEDED) for (let cy = pcy - 1; cy <= pcy + 1 && built; cy++) for (let cx = pcx - 1; cx <= pcx + 1; cx++) {
-                const rect = [cx * 64, cy * 64, 64, 64]; if (regionDist({ rect }, me.x, me.y) <= CH_NEAR && !chunkRegs.has(cx + ',' + cy)) { built = false; break; }
-              }
-              if (built) setTimeout(() => res(true), 400); else if (performance.now() > until) res(false); else setTimeout(look, 250);
-            };
-            look();
-          });
-        },
-        /* the film API: a camera of its own, the HUD off, a local hour. Scripted players are _inject(id, data, keep): data is a net
-           state - p [x, z] tile position (floats), a 'walk' | 'run' | 'idle' ..., s the sender's clock in ms (later wins), l the FLOOR
-           (0 ground, 1 upstairs, -1 a cellar: not a level), o an outfit, g gear {weapon, body, ...}, n a name, h a home, k a tool */
-        film: {
-          camera(o) {
-            if (!o || !Array.isArray(o.eye) || !Array.isArray(o.look)) throw new Error('film.camera needs eye [x, y, z] and look [x, y, z]');
-            FILM.cam = { eye: o.eye.map(Number), look: o.look.map(Number), fov: +o.fov || 0 }; FILM.focus.set(FILM.cam.look[0], FILM.cam.look[1], FILM.cam.look[2]);
-          },
-          release() { FILM.cam = null; resize(); cam.snap = true; },   /* resize() puts back the lens this screen's shape wants (45 or 55) */
-          hud(on) { host.classList.toggle('nohud', on === false); },
-          hour(H) { HOUR.want = +H; },
-          get active() { return !!FILM.cam; }
-        },
-        /* the soundtrack, scripted: play a track (by id, as data/music.json names it), back to the area's own, or start the sound
-           without a click (a browser allows that only where the page may autoplay, e.g. a capture run with autoplay allowed) */
-        music: {
-          play(id) { if (MUSIC && MUSIC._loop) MUSIC._loop(String(id)); },
-          auto() { if (MUSIC && MUSIC._auto) MUSIC._auto(); },
-          start() { if (MUSIC && MUSIC._wake) MUSIC._wake(); },
-          state: () => (MUSIC ? MUSIC.state() : null)
-        },
         paintScores,
         netHealth: () => ({ online: !!room, lost: NW.lost, heardAgo: NW.heard ? Math.round(performance.now() - NW.heard) : null, fails: NW.fails, saveFails }), _netBreak: () => { if (room) { const R = room; R.send = () => Promise.resolve(false); } },
         zones: () => ({ loaded: (core.D.zones || []).map(z => z.id), index: ZINDEX ? ZINDEX.map(z => z.id) : null, waiting: Object.keys(LZ_WAIT), travelling }),
@@ -3812,7 +3695,7 @@
           resetLedgerForTest: () => { if (!walletState.address) return; ledgerDrop(); save = null; try { G.localStorage.removeItem(CKEY(walletState.address)); } catch (e) { /* none */ } ledgerFor(walletState.address); },   /* a lost count: the tests' worst case */
           paidForTest: paid => { const L = ledgerFor(walletState.address); for (const k in paid) { const toChest = Math.min(paid[k], L.lchest[k] || 0); L.lchest[k] -= toChest; L.pchest[k] = (L.pchest[k] || 0) + toChest; L.pend[k] = (L.pend[k] || 0) + paid[k] - toChest; } ledgerSave(); } },   /* tests */ trip: () => TRIP && TRIP.state(), trade: () => trade, peers: () => Array.from(remotes.values()).map(r => r.from), _remIds: () => Array.from(remotes.keys()), optionsAt: (cx, cy) => { const L = []; for (const t of targetsAt(cx, cy)) for (const o of optionsFor(t)) L.push(o.html.replace(/<[^>]+>/g, '')); return L; }, _remAnim: () => JSON.stringify(Array.from(remotes.values()).map(r => [r.anim, r.buf.length, r.buf.length && r.buf[r.buf.length - 1].a])),
         stop() { stopped = true; },
-        sfxAt: (n, at) => sfx(n, at), sky: () => { const B = SUNL.b, t = sunTime(B), s = sunAt(t), M = moonAt(t, s); return B ? { up: dot3(s, B.u), moonUp: dot3(M.v, B.u), moonLit: M.lit, dir: SUNL.dir, sun: sun.intensity, hemi: hemi.intensity } : null; },
+        sfxAt: (n, at) => sfx(n, at), sky: () => { const B = SUNL.b, s = sunAt(Date.now()), M = moonAt(Date.now(), s); return B ? { up: dot3(s, B.u), moonUp: dot3(M.v, B.u), moonLit: M.lit, dir: SUNL.dir, sun: sun.intensity, hemi: hemi.intensity } : null; },
         versionCheck, oneDevice: () => ({ sid: ONE.sid, at: ONE.at, room: !!ONE.room, addr: ONE.addr, stopped, version: VER.mine, told: VER.told })
       };
       void _handle;

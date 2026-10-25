@@ -28,7 +28,10 @@ def gzbytes(path):
         import gzip; return gzip.compress(raw, 9, mtime=0)
 def fill(key, path, e):
     live = ST['modules'].get(key)
-    if live and live.get('sha') == sha(path): e['id'] = live['id']; return False
+    if live and live.get('sha') == sha(path):
+        e['id'] = live['id']
+        if key == 'netretry' and live.get('gz'): e['gz'] = 1   # [Claude 2026-10-25] netretry is on chain gzipped: its entry keeps gz when it has not changed, or nothing gzipped unpacks
+        return False
     fid = ('' if GZ else 'cand') + hashlib.sha256((key + sha(path)).encode()).hexdigest()[:64 if GZ else 60]
     served[fid] = (path, 'application/gzip' if GZ else 'application/json' if path.endswith('.json') else 'application/javascript'); e['id'] = fid
     if GZ and key == 'netretry': e['gz'] = 1

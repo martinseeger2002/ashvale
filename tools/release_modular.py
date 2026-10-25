@@ -113,7 +113,8 @@ def browser():
         from drvc import start, login
         d = start('ashvale'); login(d, 'ashvale')
     return d
-import resident as R
+try: import resident as R   # the browser path's helpers (ghost-devs tools); the RPC path (ASH_PUBLISH) never uses them
+except ImportError: R = None
 if LOCAL:
     class _R:
         @staticmethod
