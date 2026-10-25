@@ -17338,6 +17338,8 @@ POSSIBILITY OF SUCH DAMAGE. */
 .ash .dlg .go .btn{margin:4px 4px 0;cursor:pointer}
 .ash .tutgoal{position:absolute;left:calc((100% - 300px) / 2);top:10px;transform:translateX(-50%);width:max-content;max-width:min(520px,calc(100vw - 340px));padding:8px 16px;background:linear-gradient(#d8c8a0,#c4b386);box-shadow:inset 0 0 0 2px #8a7650,0 3px 8px #000a;color:#000;font:600 14px/1.35 "Trebuchet MS",Verdana,sans-serif;text-align:center;z-index:40;pointer-events:none;display:none}
 .ash.nohud>:not(canvas.gl){display:none!important}   /* ?nohud, ASH.film.hud(false): the 3D view alone (2026-10-25) */
+.ash .emogrid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}.ash .emogrid .btn{margin:0;padding:6px 2px;line-height:1.15}.ash .emogrid .emo{display:block;font-size:20px}.ash .emogrid .lbl{display:block;font-size:11px}
+@media (max-height:520px){.ash .emogrid{grid-template-columns:repeat(4,1fr);gap:3px}.ash .emogrid .btn{padding:3px 2px}.ash .emogrid .emo{font-size:16px}.ash .emogrid .lbl{font-size:10px}.ash .emoinfo{display:none}}
 .ash .addf input{padding:4px 6px;border:1px solid #1b1610;border-radius:4px;background:#2a231b;color:#f3e7cc;font:inherit;box-shadow:inset 0 1px 3px #0008}.ash .addf input:focus{outline:1px solid #c8a050}
 .ash .tutgoal b{color:#801}.ash .tutgoal .st{color:#5a4428;font-size:12px}.ash .tutgoal .ok{color:#1e6a10;font-size:16px}
 @media (max-width:700px),(max-height:520px){.ash .tutgoal{left:8px;right:calc(var(--mm) + var(--tab) + 22px);transform:none;width:auto;max-width:none;padding:6px 10px;font-size:13px}}
@@ -17448,6 +17450,7 @@ POSSIBILITY OF SUCH DAMAGE. */
     skills: SV('M3 20h3V12H3zm5 0h3V6H8zm5 0h3V9h-3zm5 0h3V3h-3z', '#7fd06a'),
     quest: SV('M6 4h12v16H6z M4 3.5a1.5 1.5 0 011.5-1.5h13a1.5 1.5 0 010 3h-13A1.5 1.5 0 014 3.5z M4 20.5a1.5 1.5 0 011.5-1.5h13a1.5 1.5 0 010 3h-13A1.5 1.5 0 014 20.5z M8.5 9h7M8.5 12h7M8.5 15h5', '#e8dcb0'),   // a scroll, rolled top and bottom (2026-10-21 playtest: the tutorial calls it the scroll)
     friends: SV('M8 11a3 3 0 100-6 3 3 0 000 6zM2 19c0-3 2.5-5 6-5s6 2 6 5M16 11a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM14 14c2.8 0 6 1.6 6 4.5', '#7dcea0'),
+    emotes: SV('M12 3a9 9 0 100 18 9 9 0 000-18z M9 8.6a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2z M15 8.6a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2z M7.6 13.2c1 2 2.6 3 4.4 3s3.4-1 4.4-3', '#f2c64a'),   // a smiling face (the Emotes tab, 2026-10-25)
     wallet: SV('M3 7h16v12H3z M3 7l3-3h11v3 M15 12h4v3h-4z', '#e8b54a'),
     inv: SV('M7 7c0-3 2-4 5-4s5 1 5 4h2l1 14H4L5 7zm2 0h6c0-2-1-2-3-2S9 5 9 7z', '#b8874a'),
     equip: SV('M6 3h12l1 6-3 3v9H8v-9L5 9z', '#a9b0ba'),
@@ -17711,6 +17714,11 @@ POSSIBILITY OF SUCH DAMAGE. */
         };
       } else if (ST.tab === 'magic') {
         panel.innerHTML = '<h4>Magic</h4><div class="soonbox">' + A.ICON.magic.replace('<svg ', '<svg style="width:42px;height:42px;display:block;margin:0 auto 8px" ') + 'Available soon<small>Spellbooks are on their way. Until then, a staff in hand casts its own spell (see Combat).</small></div>';
+      } else if (ST.tab === 'emotes') {   /* EMOTES (2026-10-25): tap one and your character does it; everyone near you sees it */
+        const L = api.emotes ? api.emotes() : [];
+        panel.innerHTML = '<h4>Emotes</h4><div class="emogrid">' + L.map(e => '<button class="btn" data-emo="' + A.esc(e.id) + '" title="/' + A.esc(e.cmd) + '"><span class="emo">' + e.icon + '</span><span class="lbl">' + A.esc(e.name) + '</span></button>').join('') + '</div>' +
+          '<div class="info emoinfo" style="margin-top:6px">Everyone near you sees it. You can also type one in the chat, like /wave.</div>';
+        for (const b of panel.querySelectorAll('[data-emo]')) b.onclick = () => { if (api.emote) api.emote(b.dataset.emo); };
       } else if (ST.tab === 'music') {   /* the soundtrack's list, drawn by src/engmusic.js */
         if (api.musicPanel) api.musicPanel(panel, () => refresh('music')); else panel.innerHTML = '<h4>Music</h4>';
       } else if (ST.tab === 'settings') {
@@ -18793,7 +18801,7 @@ POSSIBILITY OF SUCH DAMAGE. */
     const dlg = el('dlg stone ui', ui), ctx = el('ctx ui', ui), shopEl = el('shop stone ui', ui), help = el('help stone ui', ui), err = el('err ui', ui);
     const st = { tab: api.isPhone ? null : 'inv', shopId: null, shopSel: null, skillSel: null, newGameArm: 0 };   /* shared with the hud parts */
     let lines = [], dlgQ = null;
-    const TABS = [['combat', 'Combat'], ['skills', 'Skills'], ['quest', 'Quests'], ['friends', 'Friends'], ['inv', 'Inventory'], ['equip', 'Equipment'], ['prayer', 'Prayer'], ['magic', 'Magic'], ['music', 'Music'], ['settings', 'Settings']];   /* no Wallet tab (2026-10-05: the chest shows your wallet) */
+    const TABS = [['combat', 'Combat'], ['skills', 'Skills'], ['quest', 'Quests'], ['friends', 'Friends'], ['emotes', 'Emotes'], ['inv', 'Inventory'], ['equip', 'Equipment'], ['prayer', 'Prayer'], ['magic', 'Magic'], ['music', 'Music'], ['settings', 'Settings']];   /* no Wallet tab (2026-10-05: the chest shows your wallet) */
     for (const [k, title] of TABS) { const b = el('tab stone', tabs, A.ICON[k], 'button'); b.title = title; b.dataset.k = k; b.onclick = () => { setTab(st.tab === k ? null : k); api.sfx && api.sfx('click'); }; }
     function setTab(k) { st.tab = k; if (k && api.onTab) api.onTab(k); for (const b of tabs.children) b.classList.toggle('on', b.dataset.k === k); panel.classList.toggle('open', !!k); K.refresh(k); if (k === 'friends' && api.friendsRefresh) api.friendsRefresh(); }
     function promptSay(text) {
@@ -19688,6 +19696,27 @@ function createModels(THREE, opts) {
       0.4, { torso: [0.38], neck: [0.55], shL: [-2.05, 0, -0.2], shR: [-2.05, 0, 0.2], elL: [-2.35], elR: [-2.35], kneeL: [0.12], kneeR: [0.12] },
       0.72, { torso: [0.4, 0.06, 0], neck: [0.55, -0.1, 0], shL: [-2.05, 0, -0.2], shR: [-2.05, 0, 0.2], elL: [-2.35], elR: [-2.35], kneeL: [0.12], kneeR: [0.12] },
       0.88, { torso: [0.25], neck: [0.35], shL: [-0.2, 0, 0.1], shR: [-0.2, 0, -0.1] }, 1, {}) },
+    /* EMOTES (2026-10-25, the operator: "an emotes menu ... make the emotes actually move the character appropriately"): one-shots any player
+       plays from the Emotes tab (or /wave, /bow ...), seen by everyone near through the position messages; `politebow` because `bow` is the
+       archery draw. env eases each in and out so it starts and ends on the pose you had */
+    wave: { dur: 2.0, fn: (t, b) => { const e = Math.min(1, t / 0.15, (1 - t) / 0.15), s = Math.sin(TAU * t * 3);   /* the right hand up, waving */
+      return withBase(b, { shR: [-2.75 * e, 0, (-0.3 - 0.32 * s) * e], elR: [(-0.45 - 0.3 * s) * e], neck: [-0.08 * e, 0.12 * e, 0], torso: [0, 0.08 * e, -0.04 * e] }); } },
+    politebow: { dur: 1.9, fn: KS(0, {}, 0.3, { torso: [0.78], neck: [0.3], shR: [-0.75, 0, -0.15], elR: [-1.75], shL: [0.18, 0, 0.12], elL: [-0.1], hipL: [-0.12], hipR: [-0.12] },
+      0.68, { torso: [0.78], neck: [0.3], shR: [-0.75, 0, -0.15], elR: [-1.75], shL: [0.18, 0, 0.12], elL: [-0.1], hipL: [-0.12], hipR: [-0.12] }, 1, {}) },   /* a hand to the chest, a deep bow */
+    dance: { dur: 2.6, fn: (t, b) => { const e = Math.min(1, t / 0.1, (1 - t) / 0.1), s = Math.sin(TAU * t * 4), w = Math.sin(TAU * t * 2);   /* a step from foot to foot, arms pumping */
+      return withBase(b, { lift: [0.05 * Math.abs(s) * e], kneeL: [0.45 * Math.max(0, s) * e], kneeR: [0.45 * Math.max(0, -s) * e], hipL: [-0.3 * Math.max(0, s) * e], hipR: [-0.3 * Math.max(0, -s) * e],
+        torso: [0.05 * e, 0.35 * w * e, 0.08 * s * e], shL: [(-1.3 + 0.55 * s) * e, 0, 0.55 * e], shR: [(-1.3 - 0.55 * s) * e, 0, -0.55 * e], elL: [-1.3 * e], elR: [-1.3 * e], neck: [0, -0.25 * w * e, 0.1 * s * e] }); } },
+    laugh: { dur: 1.8, fn: (t, b) => { const e = Math.min(1, t / 0.12, (1 - t) / 0.15), q = Math.sin(TAU * t * 9);   /* head back, hands on the belly, shaking */
+      return withBase(b, { torso: [(-0.26 + 0.07 * q) * e, 0, 0.04 * q * e], neck: [(-0.55 + 0.06 * q) * e], shL: [-0.7 * e, 0, 0.28 * e], shR: [-0.7 * e, 0, -0.28 * e], elL: [-1.75 * e], elR: [-1.75 * e],
+        kneeL: [0.12 * e], kneeR: [0.12 * e], lift: [(0.03 * q - 0.02) * e] }); } },
+    shrug: { dur: 1.5, fn: KS(0, {}, 0.3, { shL: [-0.25, 0, 0.6], shR: [-0.25, 0, -0.6], elL: [-1.55], elR: [-1.55], neck: [-0.05, 0, 0.22], lift: [0.03] },
+      0.7, { shL: [-0.25, 0, 0.6], shR: [-0.25, 0, -0.6], elL: [-1.55], elR: [-1.55], neck: [-0.05, 0, 0.22], lift: [0.03] }, 1, {}) },   /* forearms up, palms out, head tilted */
+    salute: { dur: 1.7, fn: KS(0, {}, 0.25, { shR: [-1.45, 0.25, -1.05], elR: [-2.45], neck: [-0.06], torso: [-0.04] },
+      0.78, { shR: [-1.45, 0.25, -1.05], elR: [-2.45], neck: [-0.06], torso: [-0.04] }, 1, {}) },   /* the right hand to the brow, standing straight */
+    think: { dur: 2.4, fn: KS(0, {}, 0.25, { shR: [-1.0, 0, -0.15], elR: [-2.55], shL: [-0.55, 0, 0.35], elL: [-1.65], neck: [0.18, 0.25, 0] },
+      0.82, { shR: [-1.0, 0, -0.15], elR: [-2.55], shL: [-0.55, 0, 0.35], elL: [-1.65], neck: [0.18, 0.25, 0] }, 1, {}) },   /* a hand at the chin, the other arm across */
+    point: { dur: 1.5, fn: KS(0, {}, 0.22, { shR: [-1.6, 0, -0.05], elR: [-0.05], torso: [0, -0.12, 0], neck: [0, -0.1, 0] },
+      0.75, { shR: [-1.6, 0, -0.05], elR: [-0.05], torso: [0, -0.12, 0], neck: [0, -0.1, 0] }, 1, {}) },   /* the right arm straight out ahead */
     /* [Claude 2026-10-21] a dealer at a table (the operator: "Also belly up the dealers and give them animations"): dealeridle leans on the
        table edge, hands resting on it, the weight shifting; deal flicks a card off the right hand, flip turns one over, sweep draws the
        lost bets in, pay pushes GOLD out, spin sets a wheel going and sends the ball, nomore waves over the layout, point shows the dice,
@@ -29377,6 +29406,18 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
         e.tx = x; e.ty = y; return true;
       }
       const faceYaw = f => Math.atan2(DIRS[f][0], DIRS[f][1]);
+      /* EMOTES (2026-10-25, the operator: "an emotes menu icon ... a few emotes players can make"): the Emotes tab and the chat (/wave ...).
+         Each is a one-shot clip on your character (src/models.js); others see it because your position messages carry the clip playing */
+      const EMOTES = [['wave', 'Wave', 'wave', '\u{1F44B}'], ['politebow', 'Bow', 'bow', '\u{1F647}'], ['cheer', 'Cheer', 'cheer', '\u{1F64C}'], ['clap', 'Clap', 'clap', '\u{1F44F}'],
+        ['dance', 'Dance', 'dance', '\u{1F483}'], ['laugh', 'Laugh', 'laugh', '\u{1F602}'], ['shrug', 'Shrug', 'shrug', '\u{1F937}'], ['salute', 'Salute', 'salute', '\u{1FAE1}'],
+        ['think', 'Think', 'think', '\u{1F914}'], ['point', 'Point', 'point', '\u{1F449}'], ['fistpump', 'Fist pump', 'fistpump', '\u270A'], ['excited', 'Excited', 'excited', '\u{1F929}'],
+        ['slump', 'Slump', 'slump', '\u{1F61E}']].map(([id, name, cmd, icon]) => ({ id, name, cmd, icon }));
+      function doEmote(id) {
+        const em = EMOTES.find(e => e.id === id); if (!em || !myEnt) return false;
+        if (me.dead) { hud.chat('Not while you are down.', 'warn'); return false; }
+        if (me.boat || myEnt.canoe) { hud.chat('Not in a canoe: you would tip it.', 'warn'); return false; }
+        playOnce(myEnt, em.id); return true;
+      }
       function playOnce(e, name, speed) { e.oneShot = true; e.lastOne = name; e.oneT = performance.now(); e.H.play(name, { loop: false, speed: speed || 1 }); }
 
       const myEnt = makeEnt('p:' + PID, MOD.humanoid({ skin: '#e0b48c', hair: '#4a2c18', shirt: '#3d6a9a', pants: '#5a4632', shoes: '#3a2a1a' }), { kind: 'self' });
@@ -31267,9 +31308,9 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
         const now = performance.now(); while (sayTimes.length && now - sayTimes[0] > 10000) sayTimes.shift();
         if (sayTimes.length >= 5 || (sayTimes.length && now - sayTimes[sayTimes.length - 1] < 1200)) { hud.chat("You're talking too fast.", 'warn'); return; }
         sayTimes.push(now);
-        const emo = /^\/(cheer|fistpump|clap|excited|slump)$/i.exec(text);   /* [Claude 2026-10-21] the operator: the reactions "should carry over to player avatars in the actual game" - played on you, seen by others (the animation rides your position messages) */
-        if (emo) { playOnce(myEnt, emo[1].toLowerCase()); return; }
-        if (/^\/(emotes?|help emotes)$/i.test(text)) { hud.chat('Emotes: /cheer /fistpump /clap /excited /slump', 'sys'); return; }
+        const emo = /^\/([a-z]+)$/i.exec(text), em = emo && EMOTES.find(e => e.cmd === emo[1].toLowerCase());   /* [Claude 2026-10-21] the operator: the reactions "should carry over to player avatars in the actual game" - played on you, seen by others (the animation rides your position messages) */
+        if (em) { doEmote(em.id); return; }
+        if (/^\/(emotes?|help emotes)$/i.test(text)) { hud.chat('Emotes: ' + EMOTES.map(e => '/' + e.cmd).join(' ') + ' (or the Emotes tab)', 'sys'); return; }
         const dmTo = /^\/@([A-Za-z0-9_]{1,32})\s+(\S.*)$/.exec(text);   /* "/@tag message": a direct message, no distance limit */
         if (dmTo) { sendDm(dmTo[1], dmTo[2]); return; }
         if (text.startsWith('/@')) { hud.chat('To send a direct message: /@name your message', 'sys'); return; }
@@ -31895,7 +31936,7 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
         updateCamera(dt);
         if (FILM.cam) {   /* a film shot (ASH.film.camera): eye, look and lens, over the game's own camera */
           camera.position.set(FILM.cam.eye[0], FILM.cam.eye[1], FILM.cam.eye[2]); camera.lookAt(FILM.focus);
-          const fov = FILM.cam.fov || FILM.fov0; if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+          const fov = FILM.cam.fov || (host.clientWidth / Math.max(1, host.clientHeight) < 1.2 ? 55 : 45); if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
         }
         if (HOUR.want != null && SUNL.b) applyHour();
         /* the character creator is a room of your own (2026-10-21 playtest: "view is blocked by an npc", "if 2 people start at the same time they
@@ -32208,6 +32249,7 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
           walletState: () => walletState, walletRefresh: () => walletRefresh(), pid: PID,
           chestState: (...a) => { const C = chestState(...a); return C && C.here ? Object.assign({}, C, { chest: C.here }) : C; },   /* [Claude 2026-10-14] the chest window shows this home's chest */ chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a), depositInv: () => depositInv(), depositWorn: () => depositWorn(), withdrawAll: () => withdrawAll(),   /* the Bank part installs after the HUD is made */
           friends: () => ({ rows: PALS.rows.slice(), note: PALS.note, addMsg: PALS.addMsg || null }),
+          emotes: () => EMOTES.map(e => Object.assign({}, e)), emote: id => doEmote(id),
           friendAdd: tag => friendAdd(tag).then(res => { PALS.addMsg = res; if (hud.tab === 'friends') hud.refresh('friends'); return res; }),
           access: () => ({ st: ACC.st, nodes: ACC.nodes }), accessStatus, accessWallet, accessNodes, accessMove,
           friendsRefresh: () => { loadPals().then(() => { if (hud.tab === 'friends') hud.refresh('friends'); }); },
@@ -32518,7 +32560,7 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
             if (!o || !Array.isArray(o.eye) || !Array.isArray(o.look)) throw new Error('film.camera needs eye [x, y, z] and look [x, y, z]');
             FILM.cam = { eye: o.eye.map(Number), look: o.look.map(Number), fov: +o.fov || 0 }; FILM.focus.set(FILM.cam.look[0], FILM.cam.look[1], FILM.cam.look[2]);
           },
-          release() { FILM.cam = null; camera.fov = FILM.fov0; camera.updateProjectionMatrix(); cam.snap = true; },
+          release() { FILM.cam = null; resize(); cam.snap = true; },   /* resize() puts back the lens this screen's shape wants (45 or 55) */
           hud(on) { host.classList.toggle('nohud', on === false); },
           hour(H) { HOUR.want = +H; },
           get active() { return !!FILM.cam; }

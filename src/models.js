@@ -518,6 +518,27 @@ export function createModels(THREE, opts) {
       0.4, { torso: [0.38], neck: [0.55], shL: [-2.05, 0, -0.2], shR: [-2.05, 0, 0.2], elL: [-2.35], elR: [-2.35], kneeL: [0.12], kneeR: [0.12] },
       0.72, { torso: [0.4, 0.06, 0], neck: [0.55, -0.1, 0], shL: [-2.05, 0, -0.2], shR: [-2.05, 0, 0.2], elL: [-2.35], elR: [-2.35], kneeL: [0.12], kneeR: [0.12] },
       0.88, { torso: [0.25], neck: [0.35], shL: [-0.2, 0, 0.1], shR: [-0.2, 0, -0.1] }, 1, {}) },
+    /* EMOTES (2026-10-25, the operator: "an emotes menu ... make the emotes actually move the character appropriately"): one-shots any player
+       plays from the Emotes tab (or /wave, /bow ...), seen by everyone near through the position messages; `politebow` because `bow` is the
+       archery draw. env eases each in and out so it starts and ends on the pose you had */
+    wave: { dur: 2.0, fn: (t, b) => { const e = Math.min(1, t / 0.15, (1 - t) / 0.15), s = Math.sin(TAU * t * 3);   /* the right hand up, waving */
+      return withBase(b, { shR: [-2.75 * e, 0, (-0.3 - 0.32 * s) * e], elR: [(-0.45 - 0.3 * s) * e], neck: [-0.08 * e, 0.12 * e, 0], torso: [0, 0.08 * e, -0.04 * e] }); } },
+    politebow: { dur: 1.9, fn: KS(0, {}, 0.3, { torso: [0.78], neck: [0.3], shR: [-0.75, 0, -0.15], elR: [-1.75], shL: [0.18, 0, 0.12], elL: [-0.1], hipL: [-0.12], hipR: [-0.12] },
+      0.68, { torso: [0.78], neck: [0.3], shR: [-0.75, 0, -0.15], elR: [-1.75], shL: [0.18, 0, 0.12], elL: [-0.1], hipL: [-0.12], hipR: [-0.12] }, 1, {}) },   /* a hand to the chest, a deep bow */
+    dance: { dur: 2.6, fn: (t, b) => { const e = Math.min(1, t / 0.1, (1 - t) / 0.1), s = Math.sin(TAU * t * 4), w = Math.sin(TAU * t * 2);   /* a step from foot to foot, arms pumping */
+      return withBase(b, { lift: [0.05 * Math.abs(s) * e], kneeL: [0.45 * Math.max(0, s) * e], kneeR: [0.45 * Math.max(0, -s) * e], hipL: [-0.3 * Math.max(0, s) * e], hipR: [-0.3 * Math.max(0, -s) * e],
+        torso: [0.05 * e, 0.35 * w * e, 0.08 * s * e], shL: [(-1.3 + 0.55 * s) * e, 0, 0.55 * e], shR: [(-1.3 - 0.55 * s) * e, 0, -0.55 * e], elL: [-1.3 * e], elR: [-1.3 * e], neck: [0, -0.25 * w * e, 0.1 * s * e] }); } },
+    laugh: { dur: 1.8, fn: (t, b) => { const e = Math.min(1, t / 0.12, (1 - t) / 0.15), q = Math.sin(TAU * t * 9);   /* head back, hands on the belly, shaking */
+      return withBase(b, { torso: [(-0.26 + 0.07 * q) * e, 0, 0.04 * q * e], neck: [(-0.55 + 0.06 * q) * e], shL: [-0.7 * e, 0, 0.28 * e], shR: [-0.7 * e, 0, -0.28 * e], elL: [-1.75 * e], elR: [-1.75 * e],
+        kneeL: [0.12 * e], kneeR: [0.12 * e], lift: [(0.03 * q - 0.02) * e] }); } },
+    shrug: { dur: 1.5, fn: KS(0, {}, 0.3, { shL: [-0.25, 0, 0.6], shR: [-0.25, 0, -0.6], elL: [-1.55], elR: [-1.55], neck: [-0.05, 0, 0.22], lift: [0.03] },
+      0.7, { shL: [-0.25, 0, 0.6], shR: [-0.25, 0, -0.6], elL: [-1.55], elR: [-1.55], neck: [-0.05, 0, 0.22], lift: [0.03] }, 1, {}) },   /* forearms up, palms out, head tilted */
+    salute: { dur: 1.7, fn: KS(0, {}, 0.25, { shR: [-1.45, 0.25, -1.05], elR: [-2.45], neck: [-0.06], torso: [-0.04] },
+      0.78, { shR: [-1.45, 0.25, -1.05], elR: [-2.45], neck: [-0.06], torso: [-0.04] }, 1, {}) },   /* the right hand to the brow, standing straight */
+    think: { dur: 2.4, fn: KS(0, {}, 0.25, { shR: [-1.0, 0, -0.15], elR: [-2.55], shL: [-0.55, 0, 0.35], elL: [-1.65], neck: [0.18, 0.25, 0] },
+      0.82, { shR: [-1.0, 0, -0.15], elR: [-2.55], shL: [-0.55, 0, 0.35], elL: [-1.65], neck: [0.18, 0.25, 0] }, 1, {}) },   /* a hand at the chin, the other arm across */
+    point: { dur: 1.5, fn: KS(0, {}, 0.22, { shR: [-1.6, 0, -0.05], elR: [-0.05], torso: [0, -0.12, 0], neck: [0, -0.1, 0] },
+      0.75, { shR: [-1.6, 0, -0.05], elR: [-0.05], torso: [0, -0.12, 0], neck: [0, -0.1, 0] }, 1, {}) },   /* the right arm straight out ahead */
     /* [Claude 2026-10-21] a dealer at a table (the operator: "Also belly up the dealers and give them animations"): dealeridle leans on the
        table edge, hands resting on it, the weight shifting; deal flicks a card off the right hand, flip turns one over, sweep draws the
        lost bets in, pay pushes GOLD out, spin sets a wheel going and sends the ball, nomore waves over the layout, point shows the dice,

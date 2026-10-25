@@ -617,6 +617,18 @@
         e.tx = x; e.ty = y; return true;
       }
       const faceYaw = f => Math.atan2(DIRS[f][0], DIRS[f][1]);
+      /* EMOTES (2026-10-25, the operator: "an emotes menu icon ... a few emotes players can make"): the Emotes tab and the chat (/wave ...).
+         Each is a one-shot clip on your character (src/models.js); others see it because your position messages carry the clip playing */
+      const EMOTES = [['wave', 'Wave', 'wave', '\u{1F44B}'], ['politebow', 'Bow', 'bow', '\u{1F647}'], ['cheer', 'Cheer', 'cheer', '\u{1F64C}'], ['clap', 'Clap', 'clap', '\u{1F44F}'],
+        ['dance', 'Dance', 'dance', '\u{1F483}'], ['laugh', 'Laugh', 'laugh', '\u{1F602}'], ['shrug', 'Shrug', 'shrug', '\u{1F937}'], ['salute', 'Salute', 'salute', '\u{1FAE1}'],
+        ['think', 'Think', 'think', '\u{1F914}'], ['point', 'Point', 'point', '\u{1F449}'], ['fistpump', 'Fist pump', 'fistpump', '\u270A'], ['excited', 'Excited', 'excited', '\u{1F929}'],
+        ['slump', 'Slump', 'slump', '\u{1F61E}']].map(([id, name, cmd, icon]) => ({ id, name, cmd, icon }));
+      function doEmote(id) {
+        const em = EMOTES.find(e => e.id === id); if (!em || !myEnt) return false;
+        if (me.dead) { hud.chat('Not while you are down.', 'warn'); return false; }
+        if (me.boat || myEnt.canoe) { hud.chat('Not in a canoe: you would tip it.', 'warn'); return false; }
+        playOnce(myEnt, em.id); return true;
+      }
       function playOnce(e, name, speed) { e.oneShot = true; e.lastOne = name; e.oneT = performance.now(); e.H.play(name, { loop: false, speed: speed || 1 }); }
 
       const myEnt = makeEnt('p:' + PID, MOD.humanoid({ skin: '#e0b48c', hair: '#4a2c18', shirt: '#3d6a9a', pants: '#5a4632', shoes: '#3a2a1a' }), { kind: 'self' });
@@ -2507,9 +2519,9 @@
         const now = performance.now(); while (sayTimes.length && now - sayTimes[0] > 10000) sayTimes.shift();
         if (sayTimes.length >= 5 || (sayTimes.length && now - sayTimes[sayTimes.length - 1] < 1200)) { hud.chat("You're talking too fast.", 'warn'); return; }
         sayTimes.push(now);
-        const emo = /^\/(cheer|fistpump|clap|excited|slump)$/i.exec(text);   /* [Claude 2026-10-21] the operator: the reactions "should carry over to player avatars in the actual game" - played on you, seen by others (the animation rides your position messages) */
-        if (emo) { playOnce(myEnt, emo[1].toLowerCase()); return; }
-        if (/^\/(emotes?|help emotes)$/i.test(text)) { hud.chat('Emotes: /cheer /fistpump /clap /excited /slump', 'sys'); return; }
+        const emo = /^\/([a-z]+)$/i.exec(text), em = emo && EMOTES.find(e => e.cmd === emo[1].toLowerCase());   /* [Claude 2026-10-21] the operator: the reactions "should carry over to player avatars in the actual game" - played on you, seen by others (the animation rides your position messages) */
+        if (em) { doEmote(em.id); return; }
+        if (/^\/(emotes?|help emotes)$/i.test(text)) { hud.chat('Emotes: ' + EMOTES.map(e => '/' + e.cmd).join(' ') + ' (or the Emotes tab)', 'sys'); return; }
         const dmTo = /^\/@([A-Za-z0-9_]{1,32})\s+(\S.*)$/.exec(text);   /* "/@tag message": a direct message, no distance limit */
         if (dmTo) { sendDm(dmTo[1], dmTo[2]); return; }
         if (text.startsWith('/@')) { hud.chat('To send a direct message: /@name your message', 'sys'); return; }
@@ -3135,7 +3147,7 @@
         updateCamera(dt);
         if (FILM.cam) {   /* a film shot (ASH.film.camera): eye, look and lens, over the game's own camera */
           camera.position.set(FILM.cam.eye[0], FILM.cam.eye[1], FILM.cam.eye[2]); camera.lookAt(FILM.focus);
-          const fov = FILM.cam.fov || FILM.fov0; if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+          const fov = FILM.cam.fov || (host.clientWidth / Math.max(1, host.clientHeight) < 1.2 ? 55 : 45); if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
         }
         if (HOUR.want != null && SUNL.b) applyHour();
         /* the character creator is a room of your own (2026-10-21 playtest: "view is blocked by an npc", "if 2 people start at the same time they
@@ -3448,6 +3460,7 @@
           walletState: () => walletState, walletRefresh: () => walletRefresh(), pid: PID,
           chestState: (...a) => { const C = chestState(...a); return C && C.here ? Object.assign({}, C, { chest: C.here }) : C; },   /* [Claude 2026-10-14] the chest window shows this home's chest */ chestTake: (...a) => chestTake(...a), chestStore: (...a) => chestStore(...a), chestDeposit: (...a) => chestDeposit(...a), depositInv: () => depositInv(), depositWorn: () => depositWorn(), withdrawAll: () => withdrawAll(),   /* the Bank part installs after the HUD is made */
           friends: () => ({ rows: PALS.rows.slice(), note: PALS.note, addMsg: PALS.addMsg || null }),
+          emotes: () => EMOTES.map(e => Object.assign({}, e)), emote: id => doEmote(id),
           friendAdd: tag => friendAdd(tag).then(res => { PALS.addMsg = res; if (hud.tab === 'friends') hud.refresh('friends'); return res; }),
           access: () => ({ st: ACC.st, nodes: ACC.nodes }), accessStatus, accessWallet, accessNodes, accessMove,
           friendsRefresh: () => { loadPals().then(() => { if (hud.tab === 'friends') hud.refresh('friends'); }); },
@@ -3758,7 +3771,7 @@
             if (!o || !Array.isArray(o.eye) || !Array.isArray(o.look)) throw new Error('film.camera needs eye [x, y, z] and look [x, y, z]');
             FILM.cam = { eye: o.eye.map(Number), look: o.look.map(Number), fov: +o.fov || 0 }; FILM.focus.set(FILM.cam.look[0], FILM.cam.look[1], FILM.cam.look[2]);
           },
-          release() { FILM.cam = null; camera.fov = FILM.fov0; camera.updateProjectionMatrix(); cam.snap = true; },
+          release() { FILM.cam = null; resize(); cam.snap = true; },   /* resize() puts back the lens this screen's shape wants (45 or 55) */
           hud(on) { host.classList.toggle('nohud', on === false); },
           hour(H) { HOUR.want = +H; },
           get active() { return !!FILM.cam; }

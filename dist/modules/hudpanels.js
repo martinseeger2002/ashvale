@@ -168,6 +168,11 @@
         };
       } else if (ST.tab === 'magic') {
         panel.innerHTML = '<h4>Magic</h4><div class="soonbox">' + A.ICON.magic.replace('<svg ', '<svg style="width:42px;height:42px;display:block;margin:0 auto 8px" ') + 'Available soon<small>Spellbooks are on their way. Until then, a staff in hand casts its own spell (see Combat).</small></div>';
+      } else if (ST.tab === 'emotes') {   /* EMOTES (2026-10-25): tap one and your character does it; everyone near you sees it */
+        const L = api.emotes ? api.emotes() : [];
+        panel.innerHTML = '<h4>Emotes</h4><div class="emogrid">' + L.map(e => '<button class="btn" data-emo="' + A.esc(e.id) + '" title="/' + A.esc(e.cmd) + '"><span class="emo">' + e.icon + '</span><span class="lbl">' + A.esc(e.name) + '</span></button>').join('') + '</div>' +
+          '<div class="info emoinfo" style="margin-top:6px">Everyone near you sees it. You can also type one in the chat, like /wave.</div>';
+        for (const b of panel.querySelectorAll('[data-emo]')) b.onclick = () => { if (api.emote) api.emote(b.dataset.emo); };
       } else if (ST.tab === 'music') {   /* the soundtrack's list, drawn by src/engmusic.js */
         if (api.musicPanel) api.musicPanel(panel, () => refresh('music')); else panel.innerHTML = '<h4>Music</h4>';
       } else if (ST.tab === 'settings') {
