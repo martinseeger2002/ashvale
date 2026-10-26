@@ -1445,3 +1445,10 @@ the walk here feature".
   never left the wallet: nothing owed, left held.
 - Trap: tools/release_modular.py has no --help - it RUNS (built src with unreleased work into dist; the browser path crashed before
   inscribing). dist restored by git checkout; dry run 0 changed before the real release.
+
+## Lost sign-in says reload - 2026-10-26 (registry v207, 91f0ce65)
+engfortune + engtables only (claude/reload-msg b85a897). When the arcade restarts and forgets an open page's viewer
+ticket, /r/send answers 403 "this wallet does not tell inscriptions who is looking"; the machines and tables now say
+"The arcade restarted and this page lost its sign-in. Reload the page and your N GOLD goes to the @ashvale Bank - it is
+still in your wallet." The deposit keeps waiting (15 min) and goes after the reload. tests/gold_sends_pw.py 15/15.
+The arcade side (tickets survive restarts, 12 h sliding) shipped the same day on .25 master cf6dbea.

@@ -31,8 +31,11 @@ WALLET = r"""(() => {
   const hex = () => Array.from(crypto.getRandomValues(new Uint8Array(32))).map(x => x.toString(16).padStart(2, '0')).join('');
   const posts = window.__posts = [], polls = {}, words = window.__words = [];
   let feRefusals = 3, tbLost = 1;
+  window.__signedOut = 0;   /* sends refused as from a page whose arcade sign-in was lost (the arcade restarted) */
   window.fetch = (orig => (u, o) => {
     u = String(u);
+    if (u === '/r/send' && window.__signedOut > 0) { window.__signedOut--;
+      return Promise.resolve(new Response(JSON.stringify({ wallet: 'off', error: 'this wallet does not tell inscriptions who is looking' }), { status: 403 })); }
     if (u === '/r/send') { const b = JSON.parse(o.body), id = 'snd' + posts.length; posts.push(b); polls[id] = b;
       return Promise.resolve(new Response(JSON.stringify({ id, status: 'pending' }), { status: 202 })); }
     if (u.startsWith('/r/send/')) { const id = decodeURIComponent(u.slice(8)), b = polls[id];
@@ -75,6 +78,11 @@ with sync_playwright() as p:
     refs = [x.get('ref') for x in fep]
     check(len(fep) == 4 and len(set(refs)) == 4 and str(refs[0]).startswith('fe:') and all(str(r).startswith(str(refs[0])) for r in refs), 'four sends, each a new ref after a refusal: %s' % refs)
     check(pack() == p0 - 1500, 'nothing came back to the pack twice (%d)' % pack())
+    # the arcade restarted and forgot the page's sign-in: the player is told to reload, the deposit waits and then goes
+    ev(pg, 'window.__signedOut = 2; ASH.core.cmd("me", {c: "fein", m: %s, n: 200, s: "tb:%s:aaaabbbbccccdddd"})' % (json.dumps(tb['id']), tb['id']))
+    check(wait(pg, 'document.body.innerText.includes("Reload the page and your 200 GOLD")', 30), 'a lost sign-in says to reload the page')
+    check(wait(pg, '__words.some(o => o.t === "tbin" && o.n === 200 && o.tx && o.tx.length === 64)', 120), 'once signed in again the 200 GOLD went')
+    check(not any(o['t'] in ('feinx', 'tbinx') for o in ev(pg, '__words')), 'the signed-out deposit was not voided')
     check(not errs, 'no page errors %s' % errs[:3])
     b.close()
 print(('%d FAILED' % len(fails)) if fails else 'ALL OK')

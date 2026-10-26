@@ -143,7 +143,8 @@
     /* [Claude 2026-10-26] a deposit gives up only after GIVE_UP, not after three tries in 45 s: an arcade restart, or GOLD a payout put
        in the pack before the wallet could spend it ("only 476 of ASHVALE GOLD is here to send", @nZVso 10-22), voided deposits the
        machine had already been played on, and the Bank held those sittings for good. The ref makes every retry the same send. */
-    const GIVE_UP = 15 * 60000, ARRIVING = /only [0-9,]+ of .* is here to send/i;
+    const GIVE_UP = 15 * 60000, ARRIVING = /only [0-9,]+ of .* is here to send/i,
+      SIGNED_OUT = /who is looking|nobody signed in/i;   /* [Claude 2026-10-26] the arcade restarted and forgot this page's sign-in: only a reload brings it back */
     async function payNext() {
       const L = ledger(); if (!L || paying) return; L.feb = L.feb || [];
       const b = L.feb.find(x => !x.tx && !x.failed && Date.now() >= (x.next || 0)); if (!b) return;
@@ -154,7 +155,7 @@
       const oo = (L.out.coins || []).find(x => x.id === id);
       const fail = why => {
         b.tries = (b.tries | 0) + 1; b.next = Date.now() + Math.min(60000, 15000 * b.tries);
-        if (why) { console.warn('ASHVALE: the Fortune Engine send to @ashvale failed:', why); if (b.tries === 1) hud.chat(ARRIVING.test(String(why)) ? 'Your ' + fmt(b.n) + ' GOLD goes to the @ashvale Bank as soon as your last payout lands in your wallet.' : 'Your wallet did not send the ' + fmt(b.n) + ' GOLD to the @ashvale Bank yet: ' + String(why).slice(0, 120), 'warn'); }
+        if (why) { console.warn('ASHVALE: the Fortune Engine send to @ashvale failed:', why); if (b.tries === 1) hud.chat(ARRIVING.test(String(why)) ? 'Your ' + fmt(b.n) + ' GOLD goes to the @ashvale Bank as soon as your last payout lands in your wallet.' : SIGNED_OUT.test(String(why)) ? 'The arcade restarted and this page lost its sign-in. Reload the page and your ' + fmt(b.n) + ' GOLD goes to the @ashvale Bank - it is still in your wallet.' : 'Your wallet did not send the ' + fmt(b.n) + ' GOLD to the @ashvale Bank yet: ' + String(why).slice(0, 120), 'warn'); }
         if (Date.now() - (b.at || 0) > GIVE_UP) {   /* it never left the wallet */
           b.failed = true; L.out.coins = (L.out.coins || []).filter(x => x.id !== id);
           bankSend(b.s + '|x|' + b.id, { t: 'feinx', v: 1, s: b.s, id: b.id });   /* the Bank takes that credit back (or holds the sitting if it was played) */

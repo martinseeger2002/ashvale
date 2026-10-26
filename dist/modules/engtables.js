@@ -90,7 +90,8 @@
     /* [Claude 2026-10-26] as the Fortune Engines: a deposit gives up only after GIVE_UP (it used to void after three tries in 45 s,
        and a played-on sitting was held for good), every retry is the same send (ref), and one lost status read no longer counts as a
        failed send - before, it sent the same GOLD again */
-    const GIVE_UP = 15 * 60000, ARRIVING = /only [0-9,]+ of .* is here to send/i;
+    const GIVE_UP = 15 * 60000, ARRIVING = /only [0-9,]+ of .* is here to send/i,
+      SIGNED_OUT = /who is looking|nobody signed in/i;   /* [Claude 2026-10-26] the arcade restarted and forgot this page's sign-in: only a reload brings it back */
     async function payNext() {
       const L = ledger(); if (!L || paying) return; L.tbb = L.tbb || [];
       const b = L.tbb.find(x => !x.tx && !x.failed && Date.now() >= (x.next || 0)); if (!b) return;
@@ -102,7 +103,7 @@
       const fail = why => {
         b.tries = (b.tries | 0) + 1; b.next = Date.now() + Math.min(60000, 15000 * b.tries);
         if (why) console.warn('ASHVALE: the table send to @ashvale failed:', why);
-        if (why && b.tries === 1) hud.chat(ARRIVING.test(String(why)) ? 'Your ' + fmt(b.n) + ' GOLD goes to the @ashvale Bank as soon as your last payout lands in your wallet.' : 'Your wallet did not send the ' + fmt(b.n) + ' GOLD to the @ashvale Bank yet: ' + String(why).slice(0, 120), 'warn');
+        if (why && b.tries === 1) hud.chat(ARRIVING.test(String(why)) ? 'Your ' + fmt(b.n) + ' GOLD goes to the @ashvale Bank as soon as your last payout lands in your wallet.' : SIGNED_OUT.test(String(why)) ? 'The arcade restarted and this page lost its sign-in. Reload the page and your ' + fmt(b.n) + ' GOLD goes to the @ashvale Bank - it is still in your wallet.' : 'Your wallet did not send the ' + fmt(b.n) + ' GOLD to the @ashvale Bank yet: ' + String(why).slice(0, 120), 'warn');
         if (Date.now() - (b.at || 0) > GIVE_UP) { b.failed = true; L.out.coins = (L.out.coins || []).filter(x => x.id !== id); bankSend(b.s + '|x|' + b.id, { t: 'tbinx', v: 1, s: b.s, id: b.id }); refund(b); }
         ENGBANK.ledgerSave();
       };
