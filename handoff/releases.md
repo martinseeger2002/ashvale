@@ -1417,3 +1417,17 @@ the walk here feature".
   that) unpacks every /content/ file starting 1f 8b for the launcher and the engine. 884 KB -> 182 KB (21%) this release.
 - Tests: core, clubhouse, golfrules ALL OK; golf_rejoin_pw and golf_nines_pw ALL OK on the move (subagent); candidate_live --gz booted
   the live launcher with the gzipped candidate (the gzipped golf zone reads).
+
+## see-through restored - 2026-10-25 (Claude): RELEASED (registry v205 4ece3872, module scene only)
+- the operator: "We used to be able to see through buildings and objects that were behind us ... now it only dissolves a really tiny
+  little circle" -> "Just restore it to how it was before the golf fix" -> "ship it". b1d9326 (0.8.174) had limited the
+  see-through to a circle round the avatar (sz.y*0.13) so the clubhouse would not open up from the first tee; the shader is
+  back to dissolving everything nearer the camera than you, anywhere on screen (program key see2). The clubhouse interior
+  will show from the first tee again (the operator's call). b1d9326's camera-comes-in-from-a-house part is kept.
+- Shipped ONLY scene: dist/ as committed matched the chain 0/474, the built scene module (and the inline page) patched with the
+  same two lines as src/scene.js, release_modular --no-build -> 1 changed. tools/hold_live.py was NOT used: it fetched
+  core/engine back at the wrong sizes (gzipped modules) and called scene never-inscribed - fix that tool before relying on it.
+  The other 7 modules with unreleased work in src (core hud hudart hudpanels models engmusic engine) are still unreleased.
+- Tests: core_test ALL OK; visible-Chromium before/after at the General Store (go=10,41 camyaw=0); check_live v205, no console
+  errors. A lost WebGL context ("graphics were reset") showed 1 in 3 runs on BOTH the released and the new page (GPU 91% busy).
+- tests/play_pw.py is stale: it waits for '.cc input' but a new player now gets the wardrobe - it fails before testing anything.
