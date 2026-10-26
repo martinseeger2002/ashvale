@@ -68,7 +68,7 @@ def stand(pg, tbl):
     ev(pg, 't => ASH.tables()._standAt(t)', tbl)
     return wait(pg, '!!document.querySelector(".tabp.bar")', 40)
 with sync_playwright() as p:
-    b = p.chromium.launch(headless=os.environ.get('HEADED') is None, args=['--use-angle=gl'] if os.environ.get('HEADED') else ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
+    b = p.chromium.launch(headless=os.environ.get('HEADED') is None, args=['--use-gl=egl', '--ignore-gpu-blocklist'] if os.environ.get('HEADED') else ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
     errs = []
     for i, nm in enumerate(['Ann', 'Ben']):
         pg = b.new_page(viewport={'width': 1000, 'height': 680}); pg.on('pageerror', lambda e, nm=nm: errs.append(nm + ' ' + str(e)))

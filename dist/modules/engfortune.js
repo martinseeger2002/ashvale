@@ -140,6 +140,10 @@
     /* ---------- the deposit: out of the pack (core), to @ashvale (/r/send, counted in L.out so the wallet's own returns never send it
        again), then the Bank's word; three failed sends give it back to the pack */
     let paying = false;
+    /* [Claude 2026-10-26] a deposit gives up only after GIVE_UP, not after three tries in 45 s: an arcade restart, or GOLD a payout put
+       in the pack before the wallet could spend it ("only 476 of ASHVALE GOLD is here to send", @nZVso 10-22), voided deposits the
+       machine had already been played on, and the Bank held those sittings for good. The ref makes every retry the same send. */
+    const GIVE_UP = 15 * 60000, ARRIVING = /only [0-9,]+ of .* is here to send/i;
     async function payNext() {
       const L = ledger(); if (!L || paying) return; L.feb = L.feb || [];
       const b = L.feb.find(x => !x.tx && !x.failed && Date.now() >= (x.next || 0)); if (!b) return;
@@ -149,9 +153,9 @@
       if (!(L.out.coins || []).some(x => x.id === id)) { (L.out.coins = L.out.coins || []).push({ id, n: b.n, piece: null, st: 'pending', t: Date.now() }); ENGBANK.ledgerSave(); }
       const oo = (L.out.coins || []).find(x => x.id === id);
       const fail = why => {
-        b.tries = (b.tries | 0) + 1; b.next = Date.now() + 15000 * b.tries;
-        if (why) { console.warn('ASHVALE: the Fortune Engine send to @ashvale failed:', why); if (b.tries === 1) hud.chat('Your wallet did not send the ' + fmt(b.n) + ' GOLD to the @ashvale Bank yet: ' + String(why).slice(0, 120), 'warn'); }
-        if (b.tries >= 3) {   /* it never left the wallet */
+        b.tries = (b.tries | 0) + 1; b.next = Date.now() + Math.min(60000, 15000 * b.tries);
+        if (why) { console.warn('ASHVALE: the Fortune Engine send to @ashvale failed:', why); if (b.tries === 1) hud.chat(ARRIVING.test(String(why)) ? 'Your ' + fmt(b.n) + ' GOLD goes to the @ashvale Bank as soon as your last payout lands in your wallet.' : 'Your wallet did not send the ' + fmt(b.n) + ' GOLD to the @ashvale Bank yet: ' + String(why).slice(0, 120), 'warn'); }
+        if (Date.now() - (b.at || 0) > GIVE_UP) {   /* it never left the wallet */
           b.failed = true; L.out.coins = (L.out.coins || []).filter(x => x.id !== id);
           bankSend(b.s + '|x|' + b.id, { t: 'feinx', v: 1, s: b.s, id: b.id });   /* the Bank takes that credit back (or holds the sitting if it was played) */
           /* [Claude 2026-10-16] back in the pack only if the machine was not played on it: a played deposit's sitting is held by the
@@ -178,14 +182,14 @@
     setInterval(payNext, 4000);
     /* [Claude 2026-10-17] the operator: a deposit and a spin during an arcade restart froze the machine; after a reload his 1,000 stayed
        neither in the pack nor on the machine (the send never went, nothing gave it back). Now: a deposit whose send has not gone
-       in 5 minutes is called off - the Bank voids it, the GOLD (still in the wallet) is back in the pack - and a deposit core
+       in 20 minutes is called off - the Bank voids it, the GOLD (still in the wallet) is back in the pack - and a deposit core
        took while the wallet was unknown is handled as soon as it is known. */
     const HELD_EV = [];
     setInterval(() => {
       const L = ledger(); if (!L) return;
       while (HELD_EV.length) event(HELD_EV.shift());
       if (paying) return;
-      for (const b of (L.feb || [])) if (!b.tx && !b.failed && !b.refunded && Date.now() - (b.at || 0) > 300000) {
+      for (const b of (L.feb || [])) if (!b.tx && !b.failed && !b.refunded && Date.now() - (b.at || 0) > GIVE_UP + 300000) {   /* payNext never got to it */
         b.failed = true; L.out = L.out || {}; L.out.coins = (L.out.coins || []).filter(x => x.id !== 'fe:' + b.id);
         bankSend(b.s + '|x|' + b.id, { t: 'feinx', v: 1, s: b.s, id: b.id });
         refund(b); ENGBANK.ledgerSave();

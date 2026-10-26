@@ -1431,3 +1431,17 @@ the walk here feature".
 - Tests: core_test ALL OK; visible-Chromium before/after at the General Store (go=10,41 camyaw=0); check_live v205, no console
   errors. A lost WebGL context ("graphics were reset") showed 1 in 3 runs on BOTH the released and the new page (GPU 91% busy).
 - tests/play_pw.py is stale: it waits for '.cc input' but a new player now gets the wardrobe - it fails before testing anything.
+
+## GOLD sends fixed - 2026-10-26 (Claude): RELEASED (registry v206 38382952, modules engfortune + engtables only)
+- the operator: "Gold disappearing from slot machines and table games" -> "release it and make sure that everybody gets their gold back".
+- Audit: the Bank matched the chain (every proven deposit paid back in full, every payout tx landed). The losses were the game's
+  sends: a deposit voided itself after 3 tries in 45 s (an arcade restart 10-24; a payout not yet spendable, "only 476 of ASHVALE
+  GOLD is here to send", 10-22) and the Bank held sittings played on it; tables had no ref, and one lost status read resent the GOLD.
+- Fix (claude/gold-sends 28b6f41): give up only after 15 min (backoff <= 60 s), tables carry ref, a lost poll keeps the last status.
+  tests/gold_sends_pw.py 12/12 (6 FAIL on the old build); fortune_pw ALL OK; tables_pw has the same 2 seating FAILs on old and new
+  (its HEADED args are now --use-gl=egl).
+- Paid by hand: job 4543 61 GOLD to nfqSK (never sent: 'Work queue depth exceeded'), --retry; @apple 139 (pk poker1:1:858748 held)
+  and 200 (tb:cb2:b608 net win; the unsent 500 stayed in the wallet). The other 21 held sittings are net losses whose deposits
+  never left the wallet: nothing owed, left held.
+- Trap: tools/release_modular.py has no --help - it RUNS (built src with unreleased work into dist; the browser path crashed before
+  inscribing). dist restored by git checkout; dry run 0 changed before the real release.

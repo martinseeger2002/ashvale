@@ -87,6 +87,10 @@
       const old = Date.now() - 7 * 86400000; for (const s in L.tbs) if ((L.tbs[s].at || 0) < old) delete L.tbs[s];
     }, 15000);
     let paying = false;
+    /* [Claude 2026-10-26] as the Fortune Engines: a deposit gives up only after GIVE_UP (it used to void after three tries in 45 s,
+       and a played-on sitting was held for good), every retry is the same send (ref), and one lost status read no longer counts as a
+       failed send - before, it sent the same GOLD again */
+    const GIVE_UP = 15 * 60000, ARRIVING = /only [0-9,]+ of .* is here to send/i;
     async function payNext() {
       const L = ledger(); if (!L || paying) return; L.tbb = L.tbb || [];
       const b = L.tbb.find(x => !x.tx && !x.failed && Date.now() >= (x.next || 0)); if (!b) return;
@@ -96,19 +100,20 @@
       if (!(L.out.coins || []).some(x => x.id === id)) { (L.out.coins = L.out.coins || []).push({ id, n: b.n, piece: null, st: 'pending', t: Date.now() }); ENGBANK.ledgerSave(); }
       const oo = (L.out.coins || []).find(x => x.id === id);
       const fail = why => {
-        b.tries = (b.tries | 0) + 1; b.next = Date.now() + 15000 * b.tries;
-        if (why && b.tries === 1) hud.chat('Your wallet did not send the ' + fmt(b.n) + ' GOLD to the @ashvale Bank yet: ' + String(why).slice(0, 120), 'warn');
-        if (b.tries >= 3) { b.failed = true; L.out.coins = (L.out.coins || []).filter(x => x.id !== id); bankSend(b.s + '|x|' + b.id, { t: 'tbinx', v: 1, s: b.s, id: b.id }); refund(b); }
+        b.tries = (b.tries | 0) + 1; b.next = Date.now() + Math.min(60000, 15000 * b.tries);
+        if (why) console.warn('ASHVALE: the table send to @ashvale failed:', why);
+        if (why && b.tries === 1) hud.chat(ARRIVING.test(String(why)) ? 'Your ' + fmt(b.n) + ' GOLD goes to the @ashvale Bank as soon as your last payout lands in your wallet.' : 'Your wallet did not send the ' + fmt(b.n) + ' GOLD to the @ashvale Bank yet: ' + String(why).slice(0, 120), 'warn');
+        if (Date.now() - (b.at || 0) > GIVE_UP) { b.failed = true; L.out.coins = (L.out.coins || []).filter(x => x.id !== id); bankSend(b.s + '|x|' + b.id, { t: 'tbinx', v: 1, s: b.s, id: b.id }); refund(b); }
         ENGBANK.ledgerSave();
       };
       try {
         const r = await fetch('/r/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-          body: JSON.stringify({ to: '@ashvale', label: 'ASHVALE', note: 'Clubhouse table', silent: true, kind: 'token', propertyid: pid, amount: String(b.n) }) });
+          body: JSON.stringify({ to: '@ashvale', label: 'ASHVALE', note: 'Clubhouse table', silent: true, kind: 'token', propertyid: pid, amount: String(b.n), ref: id + (b.rf ? ':' + b.rf : '') }) });
         const j = await r.json().catch(() => ({}));
-        if (r.status !== 202 || !j.id || j.status === 'failed') { fail(j.error || ('the arcade said ' + r.status)); return; }
+        if (!(r.status === 202 || (r.status === 200 && j.repeat)) || !j.id || j.status === 'failed' || j.status === 'expired') { if (j.id) b.rf = (b.rf | 0) + 1; fail(j.error || j.status || ('the arcade said ' + r.status)); return; }
         let st = j;
-        for (let i = 0; i < 200 && st && st.status !== 'sent' && st.status !== 'failed'; i++) { await new Promise(ok => setTimeout(ok, 3000)); st = await fetch('/r/send/' + encodeURIComponent(j.id), { credentials: 'same-origin' }).then(x => x.json()).catch(() => null); }
-        if (!st || st.status !== 'sent' || !st.txid) { fail((st && (st.error || st.status)) || 'no answer from the wallet'); return; }
+        for (let i = 0; i < 200 && st && st.status !== 'sent' && st.status !== 'failed'; i++) { await new Promise(ok => setTimeout(ok, 3000)); st = await fetch('/r/send/' + encodeURIComponent(j.id), { credentials: 'same-origin' }).then(x => x.json()).catch(() => null) || st; }
+        if (!st || st.status !== 'sent' || !st.txid) { if (st && (st.status === 'failed' || st.status === 'expired')) b.rf = (b.rf | 0) + 1; fail((st && (st.error || st.status)) || 'no answer from the wallet'); return; }
         b.tx = st.txid; b.sentAt = Date.now(); if (oo) { oo.st = 'sent'; oo.t = Date.now(); } ENGBANK.ledgerSave(); setTimeout(K.walletRefresh, 60000);
         bankSend(b.s + '|tx|' + b.id, { t: 'tbin', v: 1, s: b.s, n: b.n, id: b.id, tx: b.tx });
         L.tbb = L.tbb.filter(x => !((x.tx || x.failed) && Date.now() - (x.at || 0) > 7 * 86400000));
@@ -117,11 +122,11 @@
     }
     setInterval(payNext, 4000);
     const HELD_EV = [];
-    setInterval(() => {   /* a deposit whose send has not gone in 5 minutes is called off: the GOLD (still in the wallet) back in the pack */
+    setInterval(() => {   /* a deposit whose send has not gone in 20 minutes is called off: the GOLD (still in the wallet) back in the pack */
       const L = ledger(); if (!L) return;
       while (HELD_EV.length) event(HELD_EV.shift());
       if (paying) return;
-      for (const b of (L.tbb || [])) if (!b.tx && !b.failed && !b.refunded && Date.now() - (b.at || 0) > 300000) {
+      for (const b of (L.tbb || [])) if (!b.tx && !b.failed && !b.refunded && Date.now() - (b.at || 0) > GIVE_UP + 300000) {   /* payNext never got to it */
         b.failed = true; L.out = L.out || {}; L.out.coins = (L.out.coins || []).filter(x => x.id !== 'tb:' + b.id);
         bankSend(b.s + '|x|' + b.id, { t: 'tbinx', v: 1, s: b.s, id: b.id }); refund(b); ENGBANK.ledgerSave();
       }
