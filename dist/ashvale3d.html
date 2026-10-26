@@ -15448,9 +15448,9 @@ POSSIBILITY OF SUCH DAMAGE. */
         Object.assign(sh.uniforms, SEE);
         sh.vertexShader = 'varying float vSeeY;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  { vec4 sp = vec4(transformed, 1.0);\n  #ifdef USE_INSTANCING\n  sp = instanceMatrix * sp;\n  #endif\n  vSeeY = (modelMatrix * sp).y; }');
         sh.fragmentShader = 'uniform vec2 uSeeP;\nuniform float uSeeR;\nuniform float uSeeD;\nuniform float uSeeY;\nvarying float vSeeY;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>',
-          '#include <clipping_planes_fragment>\n  if (uSeeR > 0.0 && vSeeY > uSeeY) { float vd = length(vViewPosition), sr = distance(gl_FragCoord.xy, uSeeP); if (vd < uSeeD && sr < uSeeR) { float f = max(smoothstep(uSeeD - 0.25, uSeeD, vd), smoothstep(uSeeR * 0.72, uSeeR, sr)); float nz = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453); if (nz > f) discard; } }');
+          '#include <clipping_planes_fragment>\n  if (uSeeR > 0.0 && vSeeY > uSeeY) { float vd = length(vViewPosition); if (vd < uSeeD) { float f = smoothstep(uSeeD - 0.25, uSeeD, vd); float nz = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453); if (nz > f) discard; } }');
       };
-      m.customProgramCacheKey = () => 'see3';   /* [Claude 2026-10-22] only inside the circle round the avatar on screen (uSeeP, uSeeR), as the engine meant: everything nearer than the avatar used to dissolve, anywhere (the operator: on the first tee the clubhouse's inside showed through) */
+      m.customProgramCacheKey = () => 'see2';   /* [Claude 2026-10-25] back to the whole view, as before b1d9326 (the operator: "just restore it to how it was before the golf fix" - the circle-only see-through left a tiny hole round the avatar) */
       return m;
     }
     function lam(color, o) { const k = color + JSON.stringify(o || {}); if (!matCache.has(k)) matCache.set(k, seeThrough(new THREE.MeshLambertMaterial(Object.assign({ color, flatShading: true }, o || {})))); return matCache.get(k); }
