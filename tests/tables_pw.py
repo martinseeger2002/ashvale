@@ -92,6 +92,10 @@ with sync_playwright() as p:
     ev(ann, 'ASH.tables()._bet("pass")'); ev(ann, 'ASH.tables()._bet("field")'); ev(ben, 'ASH.tables()._bet("dp")')
     check(wait(ann, 'ASH.tables()._view().felt === 10', 15) and wait(ben, 'ASH.tables()._view().felt === 5', 15), 'bets on the felt: Ann 10 (pass + field, 5 each), Ben 5 (don\'t pass)')
     check(wait(ben, 'ASH.tables()._tbs().get("cd1").felt["%s"] && Object.keys(ASH.tables()._tbs().get("cd1").felt).length === 2' % '', 10) or True, 'Ben sees both players\' bets')
+    # The piles themselves, not only the numbers (2026-10-28: "the bet does not show as on the felt"): one GOLD pile with its amount
+    # over it for each bet, seen on both screens.
+    PILES = '(t => { let n = 0; const T = ASH.tables()._T(t); if (!T) return -1; T.group.traverse(o => { if (o.isSprite && o.visible) { let v = true; for (let q = o; q; q = q.parent) if (!q.visible) v = false; if (v) n++; } }); return n; })'
+    check(wait(ann, PILES + '("cd1") >= 3', 10) and wait(ben, PILES + '("cd1") >= 3', 10), 'three GOLD piles on the dice felt on both screens (Ann %s, Ben %s)' % (ev(ann, PILES + '("cd1")'), ev(ben, PILES + '("cd1")')))
     if SHOTS: os.makedirs(SHOTS, exist_ok=True); time.sleep(1); ann.screenshot(path=os.path.join(SHOTS, 'tables_dice_bets.png'))
     check(wait(ann, 'ASH.tables()._view().phase === "show"', 20), 'bets close, the dice are rolled')
     time.sleep(2.5)
@@ -142,6 +146,7 @@ with sync_playwright() as p:
     check(wait(ann, 'ASH.tables()._view().phase === "bet"', 30), 'betting opens at the wheel')
     ev(ann, 'ASH.tables()._bet("red:")'); ev(ann, 'ASH.tables()._bet("s:17")')
     check(wait(ann, 'ASH.tables()._view().felt === 10', 15), 'red and 17 on the felt')
+    check(wait(ann, PILES + '("cw1") >= 2', 10), 'two GOLD piles on the wheel felt (%s)' % ev(ann, PILES + '("cw1")'))
     check(wait(ann, 'ASH.tables()._view().phase === "show"', 20), 'the wheel spins')
     time.sleep(3)
     if SHOTS: ann.screenshot(path=os.path.join(SHOTS, 'tables_wheel.png'))

@@ -132,12 +132,15 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
     setPuck(0);
     /* ---- GOLD on the felt: coin piles (the operator: a bigger wager, a bigger pile) with the amount over each */
     const coins = new THREE.Group(); table.add(coins);
-    const nCoins = n => n <= 5 ? n : Math.round(5 + 2.4 * Math.sqrt(n - 5));
+    /* [Claude 2026-10-28] the operator: "Make one pile of coins for each player instead of scattered piles": a bet is ONE stack on its spot (taller for
+       more GOLD, at most 12 coins), not up to 60 coins in stacks of 8 laid out in a ring that spilled over the boxes round it */
+    const nCoins = n => n <= 5 ? n : Math.min(12, Math.round(5 + 1.2 * Math.sqrt(n - 5)));
+    const stack = (grp, k, seed) => { for (let i = 0; i < k; i++) kit.coinPile(grp, 1, 1, 0, i * 0.0075, 0, seed + i * 0.7); };
     function label(n) { const c = document.createElement('canvas'); c.width = 128; c.height = 64; const x = c.getContext('2d'); x.fillStyle = 'rgba(43,29,20,.85)'; x.fillRect(6, 10, 116, 44);
       x.fillStyle = '#ffe08a'; x.font = 'bold 34px Georgia, serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(String(n), 64, 33);
       const t = new THREE.CanvasTexture(c); const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false })); sp.scale.set(0.09, 0.045, 1); sp.renderOrder = 5; return sp; }
-    function pile(n, x, z, seed) { if (!(n > 0)) return; const grp = new THREE.Group(); grp.position.set(x, BED_Y, z); const k = nCoins(n); kit.coinPile(grp, k, 1, 0, 0, 0, seed);
-      const l = label(n); l.position.y = Math.ceil(k / Math.ceil(k / 8)) * 0.0075 + 0.05; grp.add(l); coins.add(grp); }
+    function pile(n, x, z, seed) { if (!(n > 0)) return; const grp = new THREE.Group(); grp.position.set(x, BED_Y, z); const k = nCoins(n); stack(grp, k, seed);
+      const l = label(n); l.position.y = k * 0.0075 + 0.05; grp.add(l); coins.add(grp); }
     function clearCoins() { for (const c of coins.children.slice()) { c.traverse(o => { if (o.isSprite) { o.material.map.dispose(); o.material.dispose(); } }); coins.remove(c); } }
     function show(v) {
       clearCoins(); setPuck(v.point || 0);
