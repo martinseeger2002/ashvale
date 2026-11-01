@@ -2161,7 +2161,7 @@
         try {
           if (room) { const old = room; room = null; try { const st = stateMsg(performance.now()); st.p = [me.x + 0.5, me.y + 0.5]; old.send(st); } catch (e) { /* gone */ } dropRemotes(true); hosts.clear(); applyAuth(); await old.leave(); }   /* a last word where I am now: whoever rides in my canoe follows me across
           hosts.clear(); electedOnce = false; myJoin = Date.now(); joinedAt = performance.now(); passive = true; applyAuth();   /* passive until the hosts are known */
-          const res = await net.join(z, { game: 'ashvale', loopback: q.has('loopback') });
+          const res = await net.join(z, { game: 'ashvale', loopback: q.has('loopback'), fast: !q.has('nofast'), max: isPhone ? 6 : 12 });
           hud.setOnline(!!(res && res.online));
           if (res && res.online) { NW.heard = performance.now(); NW.fails = 0; NW.was = true; NW.quietTry = false; if (NW.lost) { NW.lost = false; hud.netLost && hud.netLost(false); hud.chat('Back in touch with other players.', 'sys'); } }
           else if (NW.was && (NW.lost || NW.quietTry)) { NW.quietTry = false; NW.tries++; if (!NW.lost) NW.lost = true; hud.netLost && hud.netLost(true, 'net', 'the arcade is not answering' + (NW.tries > 2 ? ': reload the page' : ', still trying')); }
@@ -2503,20 +2503,35 @@
           if (pureState(q.o) || (q.o.F !== undefined && Object.keys(q.o).length === 1)) outQ.splice(i, 1);
         }
       }
+      /* [Claude 2026-11-01] THE FAST LANE (net.js): what is sent in the region's room goes straight to everyone linked with us,
+         a place unreliably (the next one corrects it) and anything else reliably, in order. If somebody in the room has no
+         working link, the same message, with the same number, also joins the room's queue below. */
+      let fastSeq = Math.floor(Math.random() * 5e5);
+      const allFast = () => !!(room && room.fast && room.fast.all());
       function netSend(o, R, pri) {   /* R: a neighbour room (viewer presence); default the main room. One budget for both. pri: the lane (netPri) */
         if (DROP_NEXT && o && o[DROP_NEXT] !== undefined) { DROP_NEXT = null; return; }
         if (!room) return false; R = R || null;
         try { if (new TextEncoder().encode(JSON.stringify(o)).length > 500) return false; } catch (e) { return false; }
+        let n = 0;
+        if (!R && room.fast) {
+          const to = room.fast.live();
+          if (to.length) {
+            n = fastSeq = (fastSeq % 999999) + 1;
+            room.fast.send(Object.assign({ _: n }, o), { to, reliable: !pureState(o) }); netStats.fast = (netStats.fast || 0) + 1;
+            if (allFast()) return true;
+          }
+        }
         supersedeMobRows(o, R);
-        if (pureState(o)) { const i = outQ.findIndex(w => w.R === R && pureState(w.o)); if (i >= 0) { outQ[i].o = o; return true; } }
-        outQ.push({ o, R, pri: pri == null ? netPri(o) : pri, at: performance.now() }); flushNet(); return true;
+        if (pureState(o)) { const i = outQ.findIndex(w => w.R === R && pureState(w.o)); if (i >= 0) { outQ[i].o = o; outQ[i].n = n; return true; } }
+        outQ.push({ o, R, n, pri: pri == null ? netPri(o) : pri, at: performance.now() }); flushNet(); return true;
       }
       function flushNet() {
         if (!room) { outQ.length = 0; return; }
         /* [Claude 2026-10-13] a budget per room (the arcade counts each room apart): five a second, nine in two, in each */
         const now = performance.now(), ok = new Map();
         const times = R => R ? (R.__t || (R.__t = [])) : netStats.times;
-        const free = R => { if (ok.has(R)) return ok.get(R); const T = times(R); while (T.length && now - T[0] > 2000) T.shift(); const v = T.filter(t => now - t <= 1000).length < 5 && T.length < 9; ok.set(R, v); return v; };
+        const setup = !!(room.fast && room.fast.busy());   /* the viewer is setting up links: up to three of the room's five a second are its own */
+        const free = R => { if (ok.has(R)) return ok.get(R); const T = times(R); while (T.length && now - T[0] > 2000) T.shift(); const v = T.filter(t => now - t <= 1000).length < (setup && !R ? 2 : 5) && T.length < (setup && !R ? 4 : 9); ok.set(R, v); return v; };
         for (;;) {
           let bi = -1, bp = Infinity;   /* the lowest lane first, oldest first within it; two seconds' wait moves a message up a lane */
           for (let i = 0; i < outQ.length; i++) { const q = outQ[i]; if (!free(q.R || null)) continue; const ep = (q.pri == null ? 1 : q.pri) - Math.floor((now - (q.at || now)) / 2000); if (ep < bp) { bp = ep; bi = i; } }
@@ -2524,7 +2539,7 @@
           const w = outQ.splice(bi, 1)[0], T = times(w.R || null); T.push(now); ok.delete(w.R || null); if (!w.R) lastSend = now; netStats.sent++;
           if (w.meta && w.meta.sent) w.meta.sent();
           netStats.max2s = Math.max(netStats.max2s, netStats.times.length); netStats.max1s = Math.max(netStats.max1s, netStats.times.filter(t => now - t <= 1000).length);
-          (w.R || room).send(w.o).then(ok2 => { if (!ok2) netStats.dropped++; if (!w.R) NW.fails = ok2 ? 0 : NW.fails + 1; }, () => { netStats.dropped++; if (!w.R) NW.fails++; });
+          (w.R || room).send(w.n ? Object.assign({ _: w.n }, w.o) : w.o).then(ok2 => { if (!ok2) netStats.dropped++; if (!w.R) NW.fails = ok2 ? 0 : NW.fails + 1; }, () => { netStats.dropped++; if (!w.R) NW.fails++; });
         }
         netStats.queued = outQ.length;
       }
@@ -2571,7 +2586,8 @@
       function netPos(now) {
         if (!room) return;
         if (hosted.size && room) { hostSend(now); return; }
-        if (now - netT < 250 || now - lastSend < 200) return;
+        const quick = allFast();   /* everyone here is on the fast lane: no room budget to mind */
+        if (now - netT < (quick ? 120 : 250) || (!quick && now - lastSend < 200)) return;
         const p = myEnt.root.position, an = myEnt.oneShot ? myEnt.lastOne || 'idle' : myEnt.loco || 'idle', key = p.x.toFixed(2) + ',' + p.z.toFixed(2) + ',' + myEnt.yaw.toFixed(2) + ',' + an;
         if (key === lastPosKey && now - netT < 1000) return;   /* standing still: a 1 Hz heartbeat is enough */
         lastPosKey = key; netT = now;
@@ -2879,7 +2895,7 @@
         return sent;
       }
       function hostSend(now) {
-        if (now - hostT < 400) return;
+        if (now - hostT < (allFast() ? 150 : 400)) return;
         const rows = mobRows(false), evs = hostQ.splice(0);
         const st = stateMsg(now), key = st.p.join(',') + st.a;
         if (!rows.length && !evs.length && key === lastPosKey && now - hostT < 1000) return;
@@ -3814,7 +3830,7 @@
         remotesInfo: () => Array.from(remotes).map(([id, r]) => ({ id, boat: r.boat, ride: r.ride, offline: !!r.offline, name: r.name, via: r.via || null, at: [Math.round(r.e.root.position.x), Math.round(r.e.root.position.z)] })),   /* tests: who rides with whom, and who is a dropped-out partner */
         tables: () => ({ deal: Object.assign({}, TBL.deal), tj: Object.assign({}, TBL.tj), rooms: tbl ? tbl.rooms().map(R => R.id) : [], mem: Object.fromEntries(Object.entries(TBL.mem).map(([k, M]) => [k, Array.from(M).map(([id, m]) => [id, m.j, m.s, m.d])])) }),
         remoteView: id => { const r = remotes.get(id); return r ? { x: r.e.root.position.x, z: r.e.root.position.z, anim: r.anim, vs: r.vs || 0, dly: r.dly || 0 } : null; },   /* tests: how another player is drawn here */
-        net: () => ({ host: hostOf(zoneHere()), amHost: !!room && hostOf(zoneHere()) === myNetId, hosts: Object.fromEntries(hosts), hosted: Array.from(hosted), area: zoneHere(), region: roomZone, myId: myNetId, ids: Array.from(remotes.keys()), room: room && room.id, me: room && room.me, neighbours: nb ? nb.rooms().map(R => R.id) : [], viewers: Array.from(remotes).filter(e => e[1].viewOnly).map(e => e[0]), status: netStatus, stats: Object.assign({ perSec: +(netStats.sent / Math.max(1, (performance.now() - netStats.t0) / 1000)).toFixed(2) }, netStats, { times: undefined }), gear: Array.from(remotes.values()).map(r => [r.name, r.e.H.gear || null]), remotes: Array.from(remotes.keys()), names: Array.from(remotes.values()).map(r => r.e.tag && r.e.tag.textContent.replace(/^Total level \d+/, '')) }),   /* the name itself, without the level line above it */
+        net: () => ({ host: hostOf(zoneHere()), amHost: !!room && hostOf(zoneHere()) === myNetId, hosts: Object.fromEntries(hosts), hosted: Array.from(hosted), area: zoneHere(), region: roomZone, myId: myNetId, ids: Array.from(remotes.keys()), room: room && room.id, me: room && room.me, neighbours: nb ? nb.rooms().map(R => R.id) : [], viewers: Array.from(remotes).filter(e => e[1].viewOnly).map(e => e[0]), status: netStatus, fast: room && room.fast ? { live: room.fast.live(), all: room.fast.all(), peers: room.fast.peers() } : null, stats: Object.assign({ perSec: +(netStats.sent / Math.max(1, (performance.now() - netStats.t0) / 1000)).toFixed(2) }, netStats, { times: undefined }), gear: Array.from(remotes.values()).map(r => [r.name, r.e.H.gear || null]), remotes: Array.from(remotes.keys()), names: Array.from(remotes.values()).map(r => r.e.tag && r.e.tag.textContent.replace(/^Total level \d+/, '')) }),   /* the name itself, without the level line above it */
         weather: (kind, intensity, ticks) => coreCall(() => core.setWeather(zoneHere(), kind, intensity == null ? 80 : intensity, ticks || 500)),
         skyDirs: () => ({ north: trueNorth(me.x, me.y), season: SEASON.name, sun: SUNL.sv, moon: SUNL.mv, info: { eclipse: +(SUNL.eclipse || 0).toFixed(3), lunar: +(SUNL.lunar || 0).toFixed(3) } }),   /* a test aims the camera at the sun or the moon */
         wx: () => Object.assign({ season: SEASON.name, snowy: SEASON.snowy }, wxMod && wxMod.state ? wxMod.state() : {}),

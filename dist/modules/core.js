@@ -1791,6 +1791,8 @@
        When the quest is done - the ferryman's step - they cross to their home's spawn. Only when the game asks for it (opts.tutorial; the
        engine does, but for ?notut and the dev tour), so a core made for a test or a tool starts characters where they always did. */
     const TUT = RU.tutorial || null;
+    const TUT_TREE_REGROW = (TUT && TUT.treeRegrow) || 50;   /* ticks until a felled island tree stands again (~30 s) */
+    function tutTree(x, y) { return !!TUT && zoneOf(x, y) === TUT.zone; }
     function tutorialTick(p) {
       if (!p.tut || !TUT || p.dead) return;
       const q = p.quests[TUT.quest], Q = D.quests.quests[TUT.quest];
@@ -2413,7 +2415,7 @@
     function nodeDef(n) { return RU.nodes[n.kind]; }
     const FOREVER = 1e15, PLANT_HOUR = 6000;   /* one hour: 6000 ticks of 0.6 s */
     function setFelled(cells) {   /* trees other players felled, from the @ashvale Bank's shared list: down for good here too */
-      let n = 0; for (const c of cells || []) { const x = c[0] | 0, y = c[1] | 0; if (!inMap(x, y)) continue; const i = idx(x, y), nd = nodeAt(i); if (!nd || !RU.nodes[nd.kind] || RU.nodes[nd.kind].skill !== 'woodcutting' || S.dep[i] >= FOREVER) continue; S.dep[i] = FOREVER; ev({ e: 'deplete', node: i }); n++; }
+      let n = 0; for (const c of cells || []) { const x = c[0] | 0, y = c[1] | 0; if (!inMap(x, y) || tutTree(x, y)) continue;   /* the island's grow back */ const i = idx(x, y), nd = nodeAt(i); if (!nd || !RU.nodes[nd.kind] || RU.nodes[nd.kind].skill !== 'woodcutting' || S.dep[i] >= FOREVER) continue; S.dep[i] = FOREVER; ev({ e: 'deplete', node: i }); n++; }
       return n;
     }
     function gatherTick(p, n) {
@@ -2522,10 +2524,14 @@
       msg(p, nd.say ? nd.say : skill === 'woodcutting' ? 'You get some ' + IT[n.item].name.toLowerCase() + '.' : skill === 'mining' ? 'You manage to mine some ' + IT[n.item].name.split(' ')[0].toLowerCase() + '.' : 'You catch some ' + IT[n.item].name.toLowerCase().replace('raw ', '') + '.');
       ev({ e: 'gather', p: p.id, node: i, ok: true, item: n.item });
       if (nd.deplete && R.int(nd.deplete) === 0) {
-        S.dep[i] = nd.regrow < 0 ? FOREVER : S.t + nd.regrow;
-        if (nd.skill === 'woodcutting') S.fell[i] = S.t;
-        ev({ e: 'deplete', node: i, p: p.id, x: n.x, y: n.y, forever: nd.regrow < 0 ? 1 : 0 });
-        if (nd.skill === 'woodcutting' && canReplant(p)) msg(p, 'A stump is left. A sapling can go there.', 'quest');
+        /* Tutorial Island's trees grow back (2026-10-24, the operator: "make sure trees grow back on Ashvale's tutorial
+           island"): every new player chops one for the first campfire, so felled-for-good would leave the island bare */
+        const islandTree = nd.skill === 'woodcutting' && tutTree(n.x, n.y);
+        const regrow = islandTree ? TUT_TREE_REGROW : nd.regrow;
+        S.dep[i] = regrow < 0 ? FOREVER : S.t + regrow;
+        if (nd.skill === 'woodcutting' && !islandTree) S.fell[i] = S.t;
+        ev({ e: 'deplete', node: i, p: p.id, x: n.x, y: n.y, forever: regrow < 0 ? 1 : 0 });
+        if (nd.skill === 'woodcutting' && canReplant(p) && !islandTree) msg(p, 'A stump is left. A sapling can go there.', 'quest');
         p.act = null; p.skilling = null;
       }   /* regrow < 0: felled for good (2026-10-05) */
     }
@@ -4178,7 +4184,7 @@
       for (const z in occ) { if (S.seen[z] != null && S.t - S.seen[z] > EMPTY_TICKS && isAuth(z)) repopulate(z); S.seen[z] = S.t; }
       agePlants();
       ageStumps();
-      for (const k in S.dep) if (S.dep[k] <= S.t) { delete S.dep[k]; ev({ e: 'regrow', node: +k }); }
+      for (const k in S.dep) if (S.dep[k] <= S.t) { delete S.dep[k]; ev({ e: 'regrow', node: +k, x: kx(+k), y: ky(+k) }); }   /* x, y: the client takes the stump away */
       for (const f of S.fires.slice()) if (f.until <= S.t && isAuth(zoneOf(f.x, f.y))) fireOut(f.uid);
       pokerTick(); seatTick(); chessSweep(); seatWaitTick();
       weatherTick();

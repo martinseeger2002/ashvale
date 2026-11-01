@@ -2,6 +2,7 @@
      const r = await net.join(roomId, {game, loopback})   -> {online, room, why, backend}
      room.me                     {id, tag, address, guest}   (tag without '@'; '' for guests)
      room.send(obj) -> Promise<bool>   never throws or rejects (false = dropped: too big, too fast, not in room)
+     room.fast                   null, or (join with {fast: true, max}) {live() -> ids, all(), busy(), send(obj, {to, reliable}), peers()}
      room.on('message', fn({from, data})) / on('join', fn({from})) / on('leave', fn({from})) / on('closed', fn(why)) / on('rejoined', fn({me}))
      room.members() -> [player]  ;  room.leave() -> Promise
    A player is {id, tag, address, guest}; remote state is keyed by id. The sender is stamped by the arcade node, never
@@ -14,16 +15,55 @@
   'use strict';
   const MAX = 512;
   const norm = p => p ? { id: String(p.id || p.address || p.tag || '?'), tag: String(p.tag || '').replace(/^@/, ''), address: p.address || null, guest: !!p.guest } : { id: '?', tag: '', address: null, guest: true };
+  /* THE FAST LANE (2026-11-01: "instead of using the slow server ... switch it over to the fast lane"): a room joined
+     with {fast: true} also links the players' browsers straight to each other (the arcade's WebRTC data channels). The room
+     stays: it is how players find each other, and it still carries everyone a link does not reach (a phone behind carrier
+     NAT, an older page, a viewer from the next region), so what is sent both ways carries a number (_) and is heard once.
+     A link counts only while it is heard from: a dropped network leaves it 'direct' for up to 30 s, and what is sent down
+     it is simply lost, so a link quiet for LINK_DEAD ms is treated as gone and the room carries that player again. */
+  const LINK_BEAT = 700, LINK_DEAD = 3000;
+  function fastLane(r, me, fns) {
+    const heard = new Map(), seen = new Map();
+    const once = (id, d) => {
+      if (!d || typeof d !== 'object' || d._ == null) return true;
+      const s = seen.get(id) || new Set(); seen.set(id, s);
+      if (s.has(d._)) return false;
+      s.add(d._); if (s.size > 300) s.delete(s.values().next().value);
+      return true;
+    };
+    const take = (data, p, direct) => {
+      const from = norm(p); if (direct) heard.set(from.id, Date.now());
+      if (data && data._k) return;   /* a link's heartbeat */
+      if (!once(from.id, data)) return;
+      for (const f of fns) if (from.id !== me.id || (f.o && f.o.self)) f.fn({ from, data });
+    };
+    if (!r.fast) return { take, lane: null };
+    r.fast.on('message', (data, p) => take(data, p, true));
+    r.fast.on('peer', (p, state) => { const id = norm(p).id; if (state === 'direct') heard.set(id, Date.now()); else heard.delete(id); });
+    const peers = () => { try { return r.fast.peers() || {}; } catch (e) { return {}; } };
+    const live = () => { const P = peers(), now = Date.now(); return Object.keys(P).filter(id => P[id] === 'direct' && now - (heard.get(id) || 0) < LINK_DEAD); };
+    const beat = setInterval(() => { const to = live(); if (to.length) r.fast.send('{"_k":1}', { to }); }, LINK_BEAT);
+    return { take, stop() { clearInterval(beat); }, lane: {
+      live,
+      send(obj, o) { r.fast.send(obj, o); },
+      all() { const L = live(); return (r.members() || []).every(p => { const id = norm(p).id; return id === me.id || L.includes(id); }); },
+      busy() { const P = peers(); return Object.keys(P).some(id => P[id] === 'connecting'); },   /* setting up links: the viewer is using the room's budget */
+      peers
+    } };
+  }
   function arcadeRoom(r, roomId) {
-    const me = norm(r.me);
+    const me = norm(r.me), fns = [], F = fastLane(r, me, fns);
+    r.on('message', (data, p) => F.take(data, p, false));
+    const stop = () => { if (F.stop) F.stop(); };
+    r.on('closed', stop);
     const room = {
-      id: roomId, me,
+      id: roomId, me, fast: F.lane,
       send(obj) {
         try { return Promise.resolve(r.send(obj)).then(() => true, () => false); } catch (e) { return Promise.resolve(false); }
       },
       members() { try { return (r.members() || []).map(norm); } catch (e) { return [me]; } },
       on(t, fn, o) {   /* o.self: also the messages stamped with our own id (another device of the same player can share it) */
-        if (t === 'message') r.on('message', (data, p) => { const from = norm(p); if (from.id !== me.id || (o && o.self)) fn({ from, data }); });
+        if (t === 'message') fns.push({ fn, o });
         else if (t === 'join' || t === 'leave') r.on(t, p => { const from = norm(p); if (from.id !== me.id) fn({ from }); });
         else if (t === 'closed') r.on('closed', why => fn(why));
         /* [Claude 2026-10-13] the arcade seated this page again after its streams dropped (realtime.js, docs/multiplayer.md): the
@@ -31,7 +71,7 @@
         else if (t === 'rejoined') { try { r.on('rejoined', m => fn({ me: m ? norm(m) : me })); } catch (e) { /* older arcade */ } }
         return room;
       },
-      leave() { try { return Promise.resolve(r.leave()).catch(() => { }); } catch (e) { return Promise.resolve(); } }
+      leave() { stop(); try { return Promise.resolve(r.leave()).catch(() => { }); } catch (e) { return Promise.resolve(); } }
     };
     return room;
   }
@@ -72,7 +112,8 @@
       const RT = G.arcade && G.arcade.realtime;
       if (RT && typeof RT.join === 'function') {
         let r = null;
-        try { r = await RT.join(String(roomId).slice(0, 60), { game: opts.game || 'ashvale' }); } catch (e) { r = { online: false, why: e && e.message }; }
+        const how = { game: opts.game || 'ashvale' }; if (opts.fast) { how.fast = true; if (opts.max) how.max = opts.max; }
+        try { r = await RT.join(String(roomId).slice(0, 60), how); } catch (e) { r = { online: false, why: e && e.message }; }
         if (!r || r.online === false) return { online: false, why: (r && r.why) || 'unavailable', backend: 'arcade' };
         try { console.info('ASHVALE realtime: joined ' + roomId + ' as ' + JSON.stringify(r.me)); } catch (e) { /* ignore */ }
         return { online: true, room: arcadeRoom(r, roomId), backend: 'arcade' };
