@@ -42,7 +42,7 @@
     r.fast.on('peer', (p, state) => { const id = norm(p).id; if (state === 'direct') heard.set(id, Date.now()); else heard.delete(id); });
     const peers = () => { try { return r.fast.peers() || {}; } catch (e) { return {}; } };
     const live = () => { const P = peers(), now = Date.now(); return Object.keys(P).filter(id => P[id] === 'direct' && now - (heard.get(id) || 0) < LINK_DEAD); };
-    const beat = setInterval(() => { const to = live(); if (to.length) r.fast.send('{"_k":1}', { to }); }, LINK_BEAT);
+    const beat = setInterval(() => { const P = peers(), to = Object.keys(P).filter(id => P[id] === 'direct'); if (to.length) r.fast.send('{"_k":1}', { to }); }, LINK_BEAT);   /* a quiet link too: this is how it comes back */
     return { take, stop() { clearInterval(beat); }, lane: {
       live,
       send(obj, o) { r.fast.send(obj, o); },

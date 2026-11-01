@@ -53,17 +53,20 @@ def until(fr, js, secs, what):
 
 
 def join(b, base, i, errs, blocked=False):
-    ctx = b.new_context(viewport={'width': 560, 'height': 380}); pg = ctx.new_page(); errs[i] = []
+    ctx = b.new_context(viewport={'width': 800, 'height': 480}); pg = ctx.new_page(); errs[i] = []
+    ctx.add_init_script("try { localStorage.setItem('arcade.deskview', 'web'); } catch (e) {}")
     pg.add_init_script(BLOCK if blocked else MUTE)
     pg.on('pageerror', lambda e: errs[i].append(str(e)))
-    pg.goto(f'{base}/inscriptions/{GAME}/full', timeout=120000); pg.wait_for_selector('.inscription-frame', timeout=60000)
-    fr = None; end = time.time() + 60
-    while fr is None and time.time() < end:
-        fr = next((f for f in pg.frames if f != pg.main_frame), None); time.sleep(0.2)
-    for w in pg.frames:
-        if w != pg.main_frame: fr = w
-    if not until(fr, 'window.ASH && ASH.core && ASH.net && !!ASH.net().room', 150, f'player {i} in a room'):
-        raise SystemExit(f'player {i} never joined: {errs[i][:3]}')
+    pg.goto(f'{base}/inscriptions/{GAME}/full', timeout=120000)
+    fr = None; end = time.time() + 180
+    while time.time() < end and fr is None:
+        for f in pg.frames:
+            try:
+                if f != pg.main_frame and f.evaluate('!!(window.ASH && ASH.core && ASH.net && ASH.net().room)'): fr = f; break
+            except Exception: pass
+        time.sleep(0.5)
+    if fr is None:
+        raise SystemExit(f'player {i} never joined: {errs[i][:3]} {[f.url[:70] for f in pg.frames]}')
     fr.evaluate('ASH.hud.showHelp && ASH.hud.showHelp(false)')
     fr.evaluate(LOG)
     print(f'player {i} in', fr.evaluate(NET), flush=True)
@@ -73,7 +76,7 @@ def join(b, base, i, errs, blocked=False):
 def chat_times(frames, say_i, hear, n=12):
     out = []
     for k in range(n):
-        at = int(time.time() * 1000); frames[say_i][1].evaluate(SAY, f'ping{at}'); time.sleep(1.5)
+        at = int(time.time() * 1000); frames[say_i][1].evaluate(SAY, f'ping{at}'); time.sleep(2.2)   # the game allows 5 lines in 10 s
         got = [h for h in frames[hear][1].evaluate('window.__heard') if h[0] == str(at)]
         if got: out.append(got[0][1] - at)
     return out
@@ -106,6 +109,15 @@ def main():
             time.sleep(10); z = frames[0][1].evaluate(NET)
             check(z['sent'] - a['sent'] <= 3, f"with every link up the room goes silent: {z['sent'] - a['sent']} room sends in 10 s, {z['sentFast'] - a['sentFast']} on the fast lane")
             check(z['sentFast'] > a['sentFast'], 'the walk went out on the fast lane')
+            MOBS = 'JSON.stringify(ASH.core.S.mobs.filter(m => !m.dead && ASH.net().hosted.includes(m.zone) || !m.dead && m.zone === ASH.net().area).map(m => [m.uid, m.x, m.y, m.hp]).sort())'
+            who = next(i for i, (_, fr) in enumerate(frames) if fr.evaluate('ASH.net().amHost'))
+            other = (who + 1) % N; time.sleep(6)   # the host's whole snapshot comes every 5 s
+            at_host = frames[who][1].evaluate('ASH.core.S.mobs.filter(m => !m.dead).map(m => [m.uid, m.x, m.y]).length')
+            ups = frames[who][1].evaluate(f'(() => {{ const near = ASH.core.S.mobs.filter(m => !m.dead && ASH.net().hosted.includes(m.zone)); return near.length ? near.slice(0, 40).map(m => m.uid) : []; }})()')
+            look = 'ASH.core.S.mobs.filter(m => (%s).includes(m.uid)).map(m => [m.uid, m.x, m.y]).sort((a, b) => a[0] - b[0])' % ups
+            A, B = frames[who][1].evaluate(look), frames[other][1].evaluate(look)
+            near = sum(1 for x, y in zip(A, B) if x[0] == y[0] and abs(x[1] - y[1]) + abs(x[2] - y[2]) <= 3)
+            check(len(A) == 0 or near >= len(A) * 0.8, f'monsters agree with no room traffic: {near} of {len(A)} within 3 tiles of the host ({at_host} loaded)')
             ts = chat_times(frames, 0, 1); check(len(ts) >= 10, f'chat over the FAST LANE: {len(ts)}/12 arrive')
             print('     FAST chat ms: median %d, max %d' % (statistics.median(ts), max(ts)))
             heard = frames[1][1].evaluate('(() => { const c = {}; for (const h of window.__heard) c[h[0]] = 1; return Object.keys(c).length; })()')

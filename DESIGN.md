@@ -247,6 +247,15 @@ The operator: "utilizing the JSON string for item inscriptions and category and 
   state (approved by the operator); the schema item stays the kind, condition is instance state.
 
 ## 6. Multiplayer (arcade demo) and the arcade page
+**The fast lane (2026-11-01, net.js + engine netSend):** the region room is joined with `{fast: true, max: 12}` (6 on a phone).
+Every pair links directly (all-to-all, not a star: an area's host changes as players walk, and a host is a player's own
+browser, often a phone, so a star's one hub would carry everyone's traffic and take everyone down when it left). netSend
+sends to the live links first, places unreliably and everything else reliably; if anyone in the room has no live link the
+same numbered message (`_`) also joins the room queue, and net.js hears each number once. With every link up the room is
+silent and places go at about 8 a second (hosts' rows about 6); with anyone on the room alone, the old 4 and 2.5. A link
+counts only if heard in the last 3 s (a 0.7 s heartbeat), because a dropped network leaves it 'direct' for up to 30 s. While
+links are being made the room budget is 2 a second: the viewer's signaling takes up to 3. Neighbour rooms, card-table rooms
+and the Bank stay on rooms. `?nofast` turns it off. Test: tests/fastlane_pw.py (a real throwaway arcade node).
 **Contract (Arcade realtime, master 7e951fb):** `arcade.realtime.join(name, {game:'ashvale'})` -> Promise<Room>, never
 rejects (`room.online === false` + `room.why`, e.g. in the feed embed: solo). `room.me = {id, address, tag, guest, node}`
 (guests: id `guest-...`, tag ''). `on('join'|'leave', p)`, `on('message', (data, p))`, `on('closed', why)`;
