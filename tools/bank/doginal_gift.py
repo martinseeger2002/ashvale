@@ -12,8 +12,10 @@ A Doginal is a real thing on Dogecoin MAINNET: a send cannot be undone. So:
   - before signing, the offer is read: the dog's coin first, its whole value to the winner, change only back here, the fee under FEE_MOST;
   - one gift at a time, the next only when the last is in a block;
   - a day's cap, and nothing goes out at all unless ASH_DOGINAL_GIFTS=1.
-This file decides nothing about WHO wins: award() is called with a player already known to have earned it. Never from a word a game sent on its own: a game can say anything.
-    python3 tools/bank/doginal_gift.py new-words | address | status | stock | give <player's Dogecoin address> <why> | step
+This file decides nothing about WHO wins: win() is called with a player already known to have earned it. Never from a word a game sent on its own: a game can say anything.
+win() only writes the winner down (safe on the room's thread); clock() does the rest, one step a minute. The winner's Dogecoin address comes from the arcade, by their game
+address, so a player never types one and can never name someone else's.
+    python3 tools/bank/doginal_gift.py new-words | address | status | stock | win <player's game address> <why> | give <a Dogecoin address> <why> | step
 """
 import hashlib, hmac, json, os, sqlite3, sys, time
 
@@ -75,7 +77,14 @@ class ArcadeWallet:
     def in_blocks(self):
         """{inscription: its collection and number}: the dogs the arcade's index says this wallet holds, by what blocks say (a send only just made is still here)."""
         r = self._ask(self.http.get('/r/doginals/' + self.address), 'holdings')
+        if r.get('unknown'): raise GiftError('%s coins cannot be read just now' % r['unknown'])   # 'not here' must mean not here: a send's state hangs on it
         return {i['inscription']: '%s #%s' % ((i.get('collection') or {}).get('name') or '', i.get('number')) for i in r.get('items') or []}
+
+    def dogecoin_of(self, who):
+        """A player's Dogecoin address, from the arcade: an account's own, which is another key than its game address (the arcade was told it by the account's wallet)."""
+        r = self.http.get('/r/doginals/' + str(who))
+        if r.status_code == 404: raise GiftError('no account here has %s' % who)
+        return self._ask(r, 'the player\'s address').get('address')
 
     def holding(self):
         """{inscription: {txid, vout, value, name}}: what can be sent now, each coin read by the arcade, none it could not read and none with two on it."""
@@ -108,12 +117,25 @@ class GiftError(Exception):
     """Not sent, and said why. Nothing was spent."""
 
 
+def _open(path):
+    db = sqlite3.connect(path, timeout=30, isolation_level=None); db.row_factory = sqlite3.Row
+    db.execute('pragma synchronous=full')
+    db.execute('create table if not exists wins(who text primary key, why text, at real, note text)')
+    return db
+
+
+def win(who, why, path=None, now=time.time):
+    """THE door for the game: this player has earned a dog. Only writes it down, so it can be called from the room's thread; the clock does the rest. True if it is new."""
+    db = _open(path or DB)
+    try: return db.execute('insert or ignore into wins(who, why, at) values(?,?,?)', (str(who), str(why)[:120], now())).rowcount == 1
+    finally: db.close()
+
+
 class Gifts:
-    def __init__(self, path, wallet, day_cap=DAY_CAP, on=None, say=print, now=time.time):
-        self.w, self.day_cap, self.say, self.now = wallet, day_cap, say, now
+    def __init__(self, path, wallet, day_cap=DAY_CAP, on=None, say=print, now=time.time, tell=None):
+        self.w, self.day_cap, self.say, self.now, self.tell = wallet, day_cap, say, now, tell or (lambda word: None)
         self.on = os.environ.get('ASH_DOGINAL_GIFTS') == '1' if on is None else on
-        self.db = sqlite3.connect(path, timeout=30, isolation_level=None); self.db.row_factory = sqlite3.Row
-        self.db.execute('pragma synchronous=full')
+        self.db = _open(path)
         self.db.execute("""create table if not exists gifts(id integer primary key, who text not null unique, inscription text not null unique, name text, to_addr text not null, why text,
             state text not null, txid text, note text, at real, sent_at real, done_at real)""")
 
@@ -129,7 +151,7 @@ class Gifts:
         left = self.left()
         self.db.execute('begin immediate')
         try:
-            if self.db.execute('select 1 from gifts where who=?', (who,)).fetchone(): raise GiftError('this player has had one')
+            if self.db.execute('select 1 from gifts where who=? or to_addr=?', (who, to_addr)).fetchone(): raise GiftError('this player has had one')
             if self.db.execute('select count(*) n from gifts where at>?', (self.now() - 86400,)).fetchone()['n'] >= self.day_cap: raise GiftError('the day\'s gifts are all given')
             taken = {r['inscription'] for r in self.db.execute('select inscription from gifts')}
             pick = next((k for k in sorted(left, key=lambda k: left[k]['name']) if k not in taken), None)
@@ -140,6 +162,24 @@ class Gifts:
             self.db.execute('rollback'); raise
         self.say('DOGINAL AWARDED', who, pick, left[pick]['name'], to_addr, why)
         return self.db.execute('select * from gifts where who=?', (who,)).fetchone()
+
+    def _word(self, g, state):
+        self.tell({'t': 'doginal', 'v': 1, 'to': g['who'], 'state': state, 'inscription': g['inscription'], 'name': g['name'], 'txid': g['txid']})
+
+    def _next_win(self):
+        """The oldest win that can become a gift. A win that cannot yet stays written down, with why, and does not hold up the ones behind it; the day's cap and an empty wallet do hold them."""
+        for r in self.db.execute('select * from wins order by at limit 20').fetchall():
+            if self.db.execute('select 1 from gifts where who=?', (r['who'],)).fetchone():
+                self.db.execute('delete from wins where who=?', (r['who'],)); self.say('DOGINAL WIN DROPPED', r['who'], 'has had one'); continue
+            if self.db.execute('select count(*) n from gifts where at>?', (self.now() - 86400,)).fetchone()['n'] >= self.day_cap: return 'day cap'
+            try: self.award(r['who'], self.w.dogecoin_of(r['who']), r['why'])
+            except GiftError as e:
+                if r['note'] != str(e)[:200]: self.say('DOGINAL WIN WAITS', r['who'], str(e)[:160])
+                self.db.execute('update wins set note=? where who=?', (str(e)[:200], r['who']))
+                if 'none left' in str(e): return 'none left'
+                continue
+            self.db.execute('delete from wins where who=?', (r['who'],)); return 'awarded'
+        return 'idle'
 
     def _read(self, o, ins, coin, to):
         """The offer, before it is signed: the bytes themselves are read and every digest is worked out here, so what gets signed is what was read."""
@@ -165,12 +205,13 @@ class Gifts:
         if g:
             if g['inscription'] in self.w.in_blocks(): return 'waiting'   # not in a block yet
             self.db.execute("update gifts set state='done', done_at=? where id=?", (self.now(), g['id'])); self.say('DOGINAL DELIVERED', g['who'], g['inscription'], g['txid'])
-            return 'done'
+            self._word(g, 'done'); return 'done'
         g = self.db.execute("select * from gifts where state in ('sending', 'waiting') order by id limit 1").fetchone()
-        if not g: return 'idle'
+        if not g: return self._next_win()
         coin = self.w.holding().get(g['inscription'])
         if not coin:
-            if g['state'] == 'sending':   # the send got through and the answer did not: it left, and only this send could have moved it
+            if g['state'] == 'sending':   # the send got through and the answer did not: it left, and only this send could have moved it. Blocks say so, not a coin list that came up short
+                if g['inscription'] in self.w.in_blocks(): return 'waiting'
                 self.db.execute("update gifts set state='sent', note='answer lost' where id=?", (g['id'],)); return 'sent'
             self.db.execute('update gifts set note=? where id=?', ('the dog is not in the wallet', g['id'])); self.say('DOGINAL HELD', g['who'], 'not in the wallet'); return 'held'
         self.db.execute("update gifts set state='sending' where id=?", (g['id'],))
@@ -180,11 +221,12 @@ class Gifts:
         except Exception as e:   # cut off with the words sent: 'sending' stays. The coin can only move once, so a try again can only be this same gift
             self.db.execute('update gifts set note=? where id=?', (str(e)[:200], g['id'])); self.say('DOGINAL SEND CUT OFF', g['who'], str(e)[:160]); return 'cut off'
         self.db.execute("update gifts set state='sent', txid=?, sent_at=?, note=null where id=?", (txid, self.now(), g['id'])); self.say('DOGINAL SENT', g['who'], g['inscription'], g['name'], g['to_addr'], txid)
-        return 'sent'
+        self._word(dict(g, txid=txid), 'sent'); return 'sent'
 
     def status(self):
         n = {r['state']: r['n'] for r in self.db.execute('select state, count(*) n from gifts group by state')}
-        return {'address': self.w.address, 'on': self.on, 'left': len(self.left()), 'gifts': n, 'day_cap': self.day_cap}
+        return {'address': self.w.address, 'on': self.on, 'left': len(self.left()), 'gifts': n, 'day_cap': self.day_cap,
+                'wins waiting': [dict(r) for r in self.db.execute('select who, why, note from wins order by at')]}
 
 
 class _Http:
@@ -195,8 +237,19 @@ class _Http:
     def post(self, path, json=None): return self.s.post(self.base + path, json=json, timeout=120)
 
 
-def live():
-    return Gifts(DB, ArcadeWallet(_Http(APP), open(WORDS).read().strip(), APP))
+def live(**k):
+    return Gifts(DB, ArcadeWallet(_Http(APP), open(WORDS).read().strip(), APP), **k)
+
+
+def clock(stop, every=60, say=print, tell=None):
+    """The Bank's thread. An error here is said and tried again next turn: nothing in this file can stop the Bank, and with no wins and no gifts it asks the arcade nothing."""
+    G = None
+    while not stop.is_set():
+        try:
+            G = G or live(say=say, tell=tell)
+            G.step()
+        except Exception as e: say('DOGINAL CLOCK', type(e).__name__, str(e)[:200])
+        stop.wait(every)
 
 
 def main(argv):
@@ -211,6 +264,7 @@ def main(argv):
     elif cmd == 'status': print(json.dumps(G.status(), indent=1))
     elif cmd == 'stock':
         for k, v in G.left().items(): print(k, v['name'])
+    elif cmd == 'win': print(win(argv[1], ' '.join(argv[2:]) or 'given by hand'))
     elif cmd == 'give': print(dict(G.award(argv[1], argv[1], ' '.join(argv[2:]) or 'given by hand')))
     elif cmd == 'step': print(G.step())
     else: raise SystemExit(__doc__)

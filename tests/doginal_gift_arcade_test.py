@@ -11,6 +11,7 @@ from test_web import app_state, client                          # noqa: F401,E40
 from test_me_page import LOCAL                                  # noqa: E402
 from test_dogecoin_network import _with_doge                    # noqa: E402
 from arcade import doginals, funding, rawchain                  # noqa: E402
+import json, threading                                         # noqa: E402
 from arcade.config import DOGECOIN                              # noqa: E402
 from arcade.publish import Key                                  # noqa: E402
 from arcade.script import b58check_encode, hash160              # noqa: E402
@@ -80,8 +81,9 @@ def W(client, monkeypatch, tmp_path):
     known = {INS1: 41, INS2: 42}   # OTHER is on no collection: never given away
     monkeypatch.setattr(state, 'collection_registry', lambda: types.SimpleNamespace(item=lambda net, i: {'id': i, 'root': 'r', 'name': 'Anti Doginal Dogs', 'number': known[i], 'traits': {}} if i in known else None), raising=False)
     wallet.login(); fill()
-    G = DG.Gifts(str(tmp_path / 'g.sqlite'), wallet, on=True, say=lambda *a: None)
-    return types.SimpleNamespace(G=G, core=core, http=http, wallet=wallet, fill=fill, app=app)
+    path = str(tmp_path / 'g.sqlite'); told = []
+    G = DG.Gifts(path, wallet, on=True, say=lambda *a: None, tell=told.append)
+    return types.SimpleNamespace(G=G, core=core, http=http, wallet=wallet, fill=fill, app=app, path=path, told=told)
 
 
 def test_the_key_is_the_wallets_own_derivation():
@@ -127,8 +129,74 @@ def test_off_means_off(W):
 def test_a_send_cut_off_is_never_paid_twice(W):
     W.G.award('nPlayerOne', WIN1, 'x'); W.http.fail_next_sign = True
     assert W.G.step() == 'cut off' and len(W.core.sent) == 1
-    assert W.G.step() == 'sent' and len(W.core.sent) == 1, 'the dog has left: nothing more goes'
-    W.fill(); assert W.G.step() == 'done'
+    assert W.G.step() == 'waiting' and len(W.core.sent) == 1, 'blocks still show it here, and nothing more goes'
+    W.fill(); assert W.G.step() == 'sent' and len(W.core.sent) == 1, 'the dog has left'
+    assert W.G.step() == 'done'
+
+
+def _win(W, who, why='x'): return DG.win(who, why, path=W.path)
+def _left(W): return [dict(r) for r in W.G.db.execute('select * from wins')]
+
+
+def test_a_win_becomes_a_gift_by_the_clock_and_the_player_hears(W):
+    assert _win(W, WIN1) is True and _win(W, WIN1) is False, 'a win is written once'
+    assert W.G.step() == 'awarded' and W.core.sent == [] and _left(W) == []
+    assert W.G.step() == 'sent' and W.G.step() == 'waiting'
+    W.fill(); assert W.G.step() == 'done' and W.G.step() == 'idle'
+    assert [w['state'] for w in W.told] == ['sent', 'done'] and all(w['to'] == WIN1 and w['inscription'] == INS1 and w['txid'] for w in W.told)
+    assert all(len(json.dumps(w)) < 500 for w in W.told), 'a word the room will carry'
+
+
+def test_a_player_gets_one_however_often_they_win(W):
+    W.G.award(WIN1, WIN1, 'x'); _win(W, WIN1)
+    W.G.db.execute("update gifts set state='done'")
+    assert W.G.step() == 'idle' and _left(W) == []
+    assert len(W.G.db.execute('select * from gifts').fetchall()) == 1
+
+
+def test_two_names_on_one_dogecoin_address_get_one(W):
+    W.G.award('nPlayerOne', WIN1, 'x')
+    with pytest.raises(DG.GiftError): W.G.award('nPlayerTwo', WIN1, 'y')
+
+
+def test_a_stranger_waits_and_holds_up_nobody(W):
+    stranger = b58check_encode(113, bytes(20))
+    _win(W, stranger); W.G.db.execute('update wins set at=0'); _win(W, WIN1)
+    assert W.G.step() == 'awarded'
+    assert [(r['who'], 'no account' in r['note']) for r in _left(W)] == [(stranger, True)]
+
+
+def test_the_days_cap_keeps_the_win_for_tomorrow(W):
+    W.G.day_cap = 0; _win(W, WIN1)
+    assert W.G.step() == 'day cap' and len(_left(W)) == 1 and W.core.sent == []
+    W.G.day_cap = 1; assert W.G.step() == 'awarded'
+
+
+def test_no_dogs_left_keeps_the_win(W):
+    W.G.db.execute("insert into gifts(who, inscription, to_addr, state) values('a', ?, 'x', 'done'), ('b', ?, 'y', 'done')", (INS1, INS2))
+    _win(W, WIN1); assert W.G.step() == 'none left' and len(_left(W)) == 1
+
+
+def test_a_coin_that_cannot_be_read_settles_nothing(W, monkeypatch):
+    W.G.award(WIN1, WIN1, 'x'); assert W.G.step() == 'sent'
+    W.fill()
+    guard = funding.GUARD
+    def cannot(txid): raise doginals.Unknown('not now')
+    W.core.coins[('ee' * 32, 0)] = (100_000, funding.p2pkh_script(W.wallet.address)); W.fill()
+    monkeypatch.setattr(guard, 'held', cannot)
+    with pytest.raises(DG.GiftError): W.G.step()
+    assert W.G.db.execute('select state from gifts').fetchone()['state'] == 'sent'
+
+
+def test_the_clock_says_an_error_and_goes_on(monkeypatch):
+    stop = threading.Event(); said = []; turns = []
+    def bad(**k):
+        turns.append(1)
+        if len(turns) == 3: stop.set()
+        raise OSError('no words')
+    monkeypatch.setattr(DG, 'live', bad)
+    DG.clock(stop, every=0, say=lambda *a: said.append(a))
+    assert len(said) == 3 and said[0][0] == 'DOGINAL CLOCK'
 
 
 @pytest.mark.parametrize('bad', ['second_winner', 'change_elsewhere', 'extra_output', 'wrong_first_input', 'huge_fee', 'digest_of_something_else', 'part_of_the_coin'])
