@@ -1452,3 +1452,12 @@ ticket, /r/send answers 403 "this wallet does not tell inscriptions who is looki
 "The arcade restarted and this page lost its sign-in. Reload the page and your N GOLD goes to the @ashvale Bank - it is
 still in your wallet." The deposit keeps waiting (15 min) and goes after the reload. tests/gold_sends_pw.py 15/15.
 The arcade side (tickets survive restarts, 12 h sliding) shipped the same day on .25 master cf6dbea.
+
+## The fast lane - 2026-11-01 (registry v209)
+net + engine only; emotes, film API, wallet access menu and tutorial trees stay held (src has them, the chain does not). The live engine with the fast lane edits on top, tools/hold_live.py for the rest (fixed: it wrote gzipped bytes for modules on chain gzipped). Region rooms link all-to-all, the room carries anyone without a live link; Bank, card-table and neighbour rooms stay on rooms. tests/fastlane_pw.py on the exact release bytes: all pass but one threshold (4 room sends in 10 s, limit 3). check_live loads v209.
+
+## Tables and golf fixes - 2026-11-01 (released after v209)
+engtables (credit and felt held until the throw or spin stops), dicetable (a bet lies inside its box), dicerules (odds past 500 at 3x; the Bank's copy still stops them at 500), engolf (lay of the green over the ground, never culled). tests/dice_felt_pw.py all pass, dicerules_test 37 ok, golf_tap_pw 14 ok. tables_pw fails credit-at-once and bets-on-the-felt on the live code too: the test is stale, not these changes.
+
+## Saves reach the Bank - 2026-11-01 (released, engine + engbank only; other lanes still held)
+A player's saves stopped reaching the Bank from the 14:09 ROOM DOWN (noJCeJyZ, back to step 8 of 20 on Tutorial Island). One save on its way at a time, sent again until svok; a silent room is rejoined; quest steps push at once; 10 s not 20; a packed copy ready for a closing page; cloudWins counts was. tests/cloud_lost_test.js (300 runs), cloud_pick_test, bank_lineage_test pass. Bank unchanged.

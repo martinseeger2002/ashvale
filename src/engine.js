@@ -200,8 +200,8 @@
     const savedWithBank = l => !!(l && (l.base != null || l.mine != null));
     /* the Bank answered with its save `at`: true = play the Bank's, false = this device's own (see cloudLoad) */
     const cloudWins = (local, at) => !savedWithBank(local) ? at > 0
-      : local.base != null ? at !== +local.base && !(local.mine != null && at === +local.mine)   /* the Bank holding this device's own last save (its 'svok' lost on the way): this device's copy is as new or newer */
-      : at !== +local.mine;
+      : local.base != null ? at !== +local.base && !(local.mine != null && at === +local.mine) && !(local.was != null && at === +local.was)   /* the Bank holding this device's own last save, or the one before it (its 'svok' lost on the way): this device's copy is as new or newer */
+      : at !== +local.was && at !== +local.mine;
     let BANK_MISSED = false;   /* signed in, and the Bank never answered: this character is fresh and nothing of it is kept (CLOUD_OK stays false) */
     function cloudLoad(st) {
       if (!G.arcade || !net || !net.join) return Promise.resolve();
@@ -948,7 +948,7 @@
         /* SAVE OFTEN (2026-10-08: iOS closed the game for memory in the Spider Cave and the reload put the operator back at its mouth, in
            older gear): a crash never says goodbye, so this device's copy is kept every 10 ticks (6 s), and the moments that matter -
            gear changed, a teleport or a portal, into or out of an area - go to the Bank at once as well */
-        { const pl = core.S.players[PID], zn = pl ? core.zoneOf(pl.x, pl.y) : null, big = evs.some(ev => ev.p === PID && (ev.e === 'equip' || ev.e === 'teleport' || ev.e === 'portal' || ev.e === 'cross' || ev.e === 'chest' || ev.e === 'boat')) || zn !== SAVEZ.zone;
+        { const pl = core.S.players[PID], zn = pl ? core.zoneOf(pl.x, pl.y) : null, big = evs.some(ev => ev.p === PID && (ev.e === 'equip' || ev.e === 'teleport' || ev.e === 'portal' || ev.e === 'cross' || ev.e === 'chest' || ev.e === 'boat' || ev.e === 'quest')) || zn !== SAVEZ.zone;
           SAVEZ.zone = zn;
           if (big && performance.now() - SAVEZ.t > 3000) { SAVEZ.t = performance.now(); persist(true); }
           else if (core.S.t % 10 === 0) persist(); }
@@ -2387,7 +2387,7 @@
       }
       /* ASHVALE 3D engine part: THE TOWN CHEST AND THE @ashvale BANK (split out of engine.js, 2026-10-08). The chest ledger, returns, - in its own module (src/engbank.js, 2026-10-08) */
       const ENGBANK = deps.engbank.install({ get BANK_LOAD_ROOM() { return BANK_LOAD_ROOM; }, set BANK_LOAD_ROOM(v) { BANK_LOAD_ROOM = v; }, DATA, SCENE, THREE, YOURFIRST_ADDR, net, netGear, palsHeard, D, DAY_S, MOD, PID, SEASON, SEASONS, SKYM, SUNL, SUN_EPOCH, TL, WAL, carriedHeard, core, coreCall, evicted, hud, me, proxies, proxyMat, q, scene, skyNow, sunTime, walletRefresh, walletState, waterY,
-        get CLOUD() { return CLOUD; }, HOME, withHome, homeIs, get trade() { return trade; },
+        get CLOUD() { return CLOUD; }, cloudTook: id => cloudTook(id), HOME, withHome, homeIs, get trade() { return trade; },
         get save() { return save; }, paintScores });
       const { CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer } = ENGBANK;
       scoreTell = ENGBANK.scoreTell; scoresAsk = ENGBANK.scoresAsk;
@@ -3461,34 +3461,60 @@
         for (let i = 0; i < all.length; i += 8) R.send({ t: 'pals?', v: 1, q: PALS.q, a: all.slice(i, i + 8) });
       }
       setTimeout(() => { reportBook().catch(() => {}); setInterval(() => reportBook().catch(() => {}), 600000); }, 15000);
-      /* the save to the Bank (cloudLoad above): only when it changed, at most every 20 s, at once when you leave */
+      /* the save to the Bank (cloudLoad above): only when it changed, at most every 10 s, at once when you leave or a quest moves on.
+         [Claude 2026-11-01] the operator: "somebody said that they had completed the tutorial island and then they left the game and then when they
+         came back ... they had to recomplete half": the Bank's room dropped at 14:09 and that player's saves stopped reaching it. A save was
+         counted as sent the moment it left, none was sent again, and the next load took the Bank's old copy over this device's newer one.
+         Now one save is on its way at a time (CLOUD.wait) and it goes again until the Bank says 'svok' (engbank); a room that stays quiet is
+         left and joined again. A leaving page may send the newest over one still waiting, once: the Bank then holds base, was or mine, and
+         cloudWins counts all three as this device's own. CLOUD.pk: the last save already packed, because a closing page has no time to pack. */
       const CLOUD = { last: null, at: (save && save.at) || 0, sent: '', t: 0, mine: save && save.mine != null ? +save.mine : null, base: save && save.base != null ? +save.base : null };   /* base: the Bank's save this game continues */
-      function cloudPush(json, now) {
-        if (!G.arcade || !CLOUD_OK || !json || json === CLOUD.sent || (!now && performance.now() - CLOUD.t < 20000)) return;
-        CLOUD.t = performance.now(); const at = CLOUD.at;
-        packSave(json).then(b => bankRoom().then(R => {
-          if (!R) return; const n = Math.max(1, Math.ceil(b.length / CHUNK));
-          if (n > 40) { console.warn('ASHVALE: the save is too big for the Bank (' + b.length + ' B)'); return; }
+      function cloudSend(w, closing) {
+        w.t = performance.now(); w.tries++;
+        return bankRoom().then(R => {
+          if (!R) return; const n = Math.max(1, Math.ceil(w.b.length / CHUNK)), base = w.base != null ? w.base : w.tries > 1 ? w.id : null;   /* sent again: a Bank that took the first try must not take this for an older save */
+          if (n > 40) { console.warn('ASHVALE: the save is too big for the Bank (' + w.b.length + ' B)'); return; }
           /* mine: the last save THIS game sent - if the Bank's 'svok' for it never reached us, the Bank still knows no other device
              came between (2026-10-08: a lost svok left base one save behind and the next save was refused as another device's) */
-          const mine = CLOUD.mine; CLOUD.sent = json; CLOUD.mine = at; for (let i = 0; i < n; i++) R.send(Object.assign(withHome({ t: 'sv', id: at, i, n, d: b.slice(i * CHUNK, (i + 1) * CHUNK) }), CLOUD.base != null ? { base: CLOUD.base } : {}, mine != null ? { mine } : {})); holdSend();
-        })).catch(e => console.warn('ASHVALE: cloud save', e && e.message));
+          const piece = i => R.send(Object.assign(withHome({ t: 'sv', id: w.id, i, n, d: w.b.slice(i * CHUNK, (i + 1) * CHUNK) }), base != null ? { base } : {}, w.mine != null ? { mine: w.mine } : {}));
+          for (let i = 0; i < n; i++) { if (closing || !i) piece(i); else setTimeout(() => piece(i), i * 230); }   /* inside the room's five a second, unless there is no time */
+          holdSend();
+        }).catch(e => console.warn('ASHVALE: cloud save', e && e.message));
       }
+      function cloudPush(json, now, closing) {
+        if (!G.arcade || !CLOUD_OK || !json || json === CLOUD.sent || (!now && performance.now() - CLOUD.t < 10000)) return;
+        const old = CLOUD.wait; if (old && (old.json === json || !now || old.over)) return;   /* one at a time: the timer below sends it again */
+        CLOUD.t = performance.now(); const at = CLOUD.at, pk = CLOUD.pk, ready = pk && (pk.json === json || closing);
+        (ready ? Promise.resolve(pk.b) : packSave(json)).then(b => {
+          const w = { id: at, json: ready ? pk.json : json, b, base: CLOUD.base, mine: old ? old.id : CLOUD.mine, over: !!old, t: 0, t0: performance.now(), tries: 0 };
+          if (CLOUD.wait !== old || w.id === (old && old.id)) return;
+          CLOUD.was = old ? old.id : CLOUD.mine; CLOUD.mine = w.id; CLOUD.wait = w;
+          return cloudSend(w, closing);
+        }).catch(e => console.warn('ASHVALE: cloud save', e && e.message));
+      }
+      function cloudTook(id) { const w = CLOUD.wait; CLOUD.base = id; if (w && w.id === id) { CLOUD.sent = w.json; CLOUD.wait = null; if (w.told) hud.chat('Your progress has reached the Bank again.', 'sys'); } }
+      setInterval(() => {
+        const w = CLOUD.wait, now = performance.now(); if (!w || stopped || now - w.t < 6000) return;
+        if (w.tries % 4 === 0 && ENGBANK.bankReset) ENGBANK.bankReset();   /* a room that sends and never answers */
+        if (!w.told && now - w.t0 > 60000) { w.told = true; hud.chat('The Bank is not answering. Your progress is safe on this device and will be sent when it does.', 'warn'); }
+        cloudSend(w);
+      }, 2000);
       const SAVEZ = { zone: undefined, t: 0 };
       function persist(leaving) {
         if (stopped) return;
-        try { tellHere(leaving === true); } catch (e) { /* the Bank is out of reach: the next save */ }
+        try { tellHere(leaving === true || leaving === 'bye'); } catch (e) { /* the Bank is out of reach: the next save */ }
         const P = core.exportPlayer(PID), LS = ledgerSnap(); if (P && LS) P.chestLedger = LS;   /* the chest ledger saves with the bag it describes */
         if (P && PET_PICK) P.pet = PET_PICK;   /* the chosen pet (engpet) */
-        const json = JSON.stringify(P); if (json !== CLOUD.last) { CLOUD.at = Date.now(); CLOUD.last = json; } if (P) { P.at = CLOUD.at; if (CLOUD.base != null) P.base = CLOUD.base; if (CLOUD.mine != null) P.mine = CLOUD.mine; }
-        cloudPush(json, leaving === true || leaving === 'now');   /* 'now' [Claude 2026-10-12]: straight to the Bank, not after the 20 s wait */
+        const json = JSON.stringify(P); if (json !== CLOUD.last) { CLOUD.at = Date.now(); CLOUD.last = json; if (!leaving) packSave(json).then(b => { CLOUD.pk = { json, b }; }).catch(() => {}); }
+        cloudPush(json, !!leaving, leaving === 'bye');   /* 'now' [Claude 2026-10-12]: straight to the Bank, not after the 10 s wait */
+        if (P) { P.at = CLOUD.at; if (CLOUD.base != null) P.base = CLOUD.base; if (CLOUD.mine != null) P.mine = CLOUD.mine; if (CLOUD.was != null) P.was = CLOUD.was; }
         Promise.resolve(store.set(SAVE, JSON.stringify(P))).then(ok => {   /* false: the arcade did not take it */
           if (ok === false) { if (++saveFails === 2) hud.netLost && hud.netLost(true, 'save'); }
           else { if (saveFails >= 2) { hud.netLost && hud.netLost(false, 'save'); hud.chat('Your progress is saving again.', 'sys'); } saveFails = 0; }
         });
       }   /* stopped: New character cleared the save; the reload's visibilitychange must not write the old one back */
       document.addEventListener('visibilitychange', () => { if (document.hidden) persist(true); else { lastTick = performance.now(); } });
-      window.addEventListener('pagehide', () => persist(true));
+      window.addEventListener('pagehide', () => persist('bye'));
 
       function hudApi() {
         return {

@@ -38,7 +38,7 @@
     if (key === 'dp' && point) return "Don't Pass takes bets on the come-out only.";
     if ((key === 'come' || key === 'dc') && !point) return (key === 'come' ? 'Come' : "Don't Come") + ' takes bets once a point is on.';
     if (key === 'odds') { if (!point || !seat.bets.pass) return 'Odds go behind a Pass Line bet once the point is on.';
-      if ((seat.bets.odds || 0) + amt > seat.bets.pass * ODDS_X) return 'Odds are capped at three times your Pass Line bet.'; }
+      if ((seat.bets.odds || 0) + amt > seat.bets.pass * ODDS_X) return 'Odds are capped at three times your Pass Line bet.'; return null; }
     if (/^codds/.test(key)) { const n = +key.slice(5), c = seat.come.find(q => q.n === n);
       if (!c) return 'Come odds go on a Come bet that has moved to ' + n + '.';
       if ((c.odds || 0) + amt > c.amt * ODDS_X) return 'Odds are capped at three times your Come bet.'; return null; }

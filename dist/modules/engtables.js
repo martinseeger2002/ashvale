@@ -181,6 +181,10 @@
       return { point: st.point, sides, felt: st.felt || {}, spots, idx, hand: st.hand || null, turn: st.hand && st.hand.turn };
     }
     const shown = new Map();   /* table -> the round whose result was last played */
+    /* [Claude 2026-11-01] the operator: "the bet is being paid or taken before the results are shown ... only after the results are shown to the
+       player". The Bank settles before the throw is played, and every word after that (the 5 s heartbeat's answer above all) carried the
+       new credit and felt. While a throw or a spin plays, HELD keeps the table as it stood before it; the result lands when it stops. */
+    const HELD = new Map(), HELD_MOST = 16000;
     /* [Claude 2026-10-22] a table too big for the room's 512 bytes comes as a short 'tbs' (pc pieces follow) and one 'tbp' a sitting (the operator: "Bets
        aren't showing up on the roulette table" - the whole word was refused): put back together, then heard as one; a piece lost, it goes on without it */
     const PEND = new Map();
@@ -208,13 +212,19 @@
       const v = viewOf(d, o);
       if (d.ph === 'show' && d.last && shown.get(tbl) !== d.last.r) {
         shown.set(tbl, d.last.r);
+        const held = { st: prev || d, t: 0 };
         let after = () => { T.show(viewOf(TBS.get(tbl) || d, o)); if (K.reShade) K.reShade(); if (TV && TV.tbl === tbl) resultSay(d); react(tbl, d, prev); };
-        const after0 = after; after = () => { after0(); dealerRound(tbl, T, o, d, prev, 'result'); };
+        const after0 = after; after = () => {
+          if (HELD.get(tbl) === held) { clearTimeout(held.t); HELD.delete(tbl); } else if (held.t) return;
+          after0(); dealerRound(tbl, T, o, d, prev, 'result');
+          const cur = TBS.get(tbl); if (cur && cur.ph === 'bet') { if (o.game === 'dice' && T.rest) T.rest(); dealerRound(tbl, T, o, cur, d, 'open'); }   /* the next round opened while this one played */
+        };
         if (o.game !== 'twentyone') dealerRound(tbl, T, o, d, prev, 'close');
-        if (o.game === 'dice' && T.roll) { T.roll(d.last.dice, d.last.r, after); return; }
-        if (o.game === 'wheel' && T.spin) { T.spin(d.last.n, after, n => { if (TV && TV.tbl === tbl) popNumber(n); }); return; }
+        if (o.game === 'dice' && T.roll) { HELD.set(tbl, held); held.t = setTimeout(after, HELD_MOST); T.roll(d.last.dice, d.last.r, after); if (TV && TV.tbl === tbl) draw(); return; }
+        if (o.game === 'wheel' && T.spin) { HELD.set(tbl, held); held.t = setTimeout(after, HELD_MOST); T.spin(d.last.n, after, n => { if (TV && TV.tbl === tbl) popNumber(n); }); if (TV && TV.tbl === tbl) draw(); return; }
         after(); return;
       }
+      if (HELD.has(tbl)) return;   /* a throw is playing: this word lands when it stops */
       if (TV && TV.tbl === tbl && !TV.inflight && !(TV.ins > 0)) { const me0 = (d.seats || {})[String(TV.spot + 1)]; if (me0 && me0.s === TV.s && me0.credit != null) TV.credit = me0.credit | 0; }   /* the Bank's count, once nothing of ours is on its way */
       if (o.game === 'dice' && d.ph === 'bet' && T.rest && (!prev || prev.ph !== 'bet')) T.rest();
       if (d.ph === 'bet' && prev && prev.ph !== 'bet') dealerRound(tbl, T, o, d, prev, 'open');
@@ -240,7 +250,8 @@
       else if (TV.game === 'wheel') head = L.n + (L.n ? ' ' + L.colour : ', zero') + '.';
       else head = 'The dealer has ' + (L.bj ? 'twenty-one in two cards' : L.total > 21 ? L.total + ': bust' : L.total) + '.';
       TV.lines = mine; say(head + (pay ? '  You get ' + fmt(pay) + ' GOLD back.' : mine.length ? '  Nothing back this time.' : ''), pay > 0);
-      if (TV) TV.credit = ((d.seats || {})[String(TV.spot + 1)] || {}).credit != null ? (d.seats[String(TV.spot + 1)].credit | 0) : TV.credit;
+      const seatNow = ((TBS.get(TV.tbl) || d).seats || {})[String(TV.spot + 1)] || (d.seats || {})[String(TV.spot + 1)] || {};
+      if (TV && seatNow.credit != null) TV.credit = seatNow.credit | 0;
       draw();
     }
     /* ---------- the dealers: an ASHVALE character behind each table (models.js), waistcoat and white sleeves */
@@ -447,7 +458,7 @@
       hud.tablesClose();
     }
     function say(t, big) { if (!TV) return; TV.msg = t; TV.big = !!big; draw(); }
-    function myFelt() { const st = TBS.get(TV.tbl); if (!st) return 0; const x = (st.seats || {})[String(TV.spot + 1)]; return x && x.s === TV.s ? x.felt | 0 : 0; }
+    function myFelt() { const h = HELD.get(TV.tbl), st = h ? h.st : TBS.get(TV.tbl); if (!st) return 0; const x = (st.seats || {})[String(TV.spot + 1)]; return x && x.s === TV.s ? x.felt | 0 : 0; }
     function view() {
       const st = TBS.get(TV.tbl) || {}, left = Math.max(0, Math.round(((st.left | 0) - (Date.now() - (st.heardAt || Date.now()))) / 1000));
       const v = { title: TITLE[TV.game], game: TV.game, credit: TV.credit, felt: myFelt(), coin: TV.coin, msg: TV.msg, big: TV.big, lines: TV.lines, pack: packGold(), sat: TV.sat,
@@ -529,7 +540,7 @@
           F.spot = i; F.tile = F.o.spots[i]; F.moving = performance.now(); K.send({ c: 'walk', x: F.tile[0], y: F.tile[1] }); say(E.taken + ' Moving along the rail.'); draw(); return; }
         if (E[d.err] !== '') say(E[d.err] || d.err);
       }
-      if (d.st === 'open' && !(F.ins > 0 && !d.id)) F.credit = d.credit | 0;
+      if (d.st === 'open' && !(F.ins > 0 && !d.id) && !HELD.has(F.tbl)) F.credit = d.credit | 0;
       if (d.id && F.ins > 0 && !d.tx) F.ins--;
       if (d.st === 'open' && !(ledger() && ledger().tbs && ledger().tbs[F.s])) { const L = ledger(); if (L) { L.tbs = L.tbs || {}; L.tbs[F.s] = { at: Date.now(), m: F.tbl, back: 0 }; ENGBANK.ledgerSave(); } }   /* bets moved back to you: this sitting's GOLD comes home through the ledger too */
       if (d.note && d.st !== 'closing') say(d.note);
@@ -712,7 +723,7 @@
     if (ENGBANK.tbHear) ENGBANK.tbHear(heard);
     function net() { }
     return { menu, tap, hold, look, zoom, pinch, inset, pose, tagHidden, camera, target, frame, event, net, seated: () => !!TV, standUp,
-      _T: tbl => tableOf(tbl), _atRail: () => [...SPOTENT].map(([k, e]) => [k, +e.yaw.toFixed(2), +e.tyaw.toFixed(2), +e.root.position.x.toFixed(2), +e.root.position.z.toFixed(2), e._tb, e.H.animation]), _view: () => TV && view(), _tbs: () => TBS, _bank: (fn, addr) => { SENDTO = fn; if (addr) { K.walletState.address = addr; K.walletState.data = K.walletState.data || {}; K.walletState.data.pids = Object.assign({ coins: 26 }, K.walletState.data.pids || {}); } return heard; }, _hear: d => heard(d), _bet: tapKey, _holdKey: k => TV && holdKey(k), _tv: () => TV, _drop: () => { TV = null; leaveView(); atTried = false; }, _enter: (tbl, i) => enter(tbl, i), _deposit: deposit, _act: act, _ins: ins, _bet21: bet21, _clear: clear, _leave: () => leave(true), _standAt: standAt };
+      _T: tbl => tableOf(tbl), _s: () => TV && TV.s, _atRail: () => [...SPOTENT].map(([k, e]) => [k, +e.yaw.toFixed(2), +e.tyaw.toFixed(2), +e.root.position.x.toFixed(2), +e.root.position.z.toFixed(2), e._tb, e.H.animation]), _view: () => TV && view(), _tbs: () => TBS, _bank: (fn, addr) => { SENDTO = fn; if (addr) { K.walletState.address = addr; K.walletState.data = K.walletState.data || {}; K.walletState.data.pids = Object.assign({ coins: 26 }, K.walletState.data.pids || {}); } return heard; }, _hear: d => heard(d), _bet: tapKey, _holdKey: k => TV && holdKey(k), _tv: () => TV, _drop: () => { TV = null; leaveView(); atTried = false; }, _enter: (tbl, i) => enter(tbl, i), _deposit: deposit, _act: act, _ins: ins, _bet21: bet21, _clear: clear, _leave: () => leave(true), _standAt: standAt };
   }
   const API = { install };
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engtables', { api: 1, v: 1, needs: {} }, () => API);

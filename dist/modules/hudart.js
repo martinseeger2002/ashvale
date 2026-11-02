@@ -117,9 +117,6 @@
 .ash .dlg .go{color:#00c;font-size:12px;margin-top:6px}
 .ash .dlg .go .btn{margin:4px 4px 0;cursor:pointer}
 .ash .tutgoal{position:absolute;left:calc((100% - 300px) / 2);top:10px;transform:translateX(-50%);width:max-content;max-width:min(520px,calc(100vw - 340px));padding:8px 16px;background:linear-gradient(#d8c8a0,#c4b386);box-shadow:inset 0 0 0 2px #8a7650,0 3px 8px #000a;color:#000;font:600 14px/1.35 "Trebuchet MS",Verdana,sans-serif;text-align:center;z-index:40;pointer-events:none;display:none}
-.ash.nohud>:not(canvas.gl){display:none!important}   /* ?nohud, ASH.film.hud(false): the 3D view alone (2026-10-25) */
-.ash .emogrid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}.ash .emogrid .btn{margin:0;padding:6px 2px;line-height:1.15}.ash .emogrid .emo{display:block;font-size:20px}.ash .emogrid .lbl{display:block;font-size:11px}
-@media (max-height:520px){.ash .emogrid{grid-template-columns:repeat(4,1fr);gap:3px}.ash .emogrid .btn{padding:3px 2px}.ash .emogrid .emo{font-size:16px}.ash .emogrid .lbl{font-size:10px}.ash .emoinfo{display:none}}
 .ash .addf input{padding:4px 6px;border:1px solid #1b1610;border-radius:4px;background:#2a231b;color:#f3e7cc;font:inherit;box-shadow:inset 0 1px 3px #0008}.ash .addf input:focus{outline:1px solid #c8a050}
 .ash .tutgoal b{color:#801}.ash .tutgoal .st{color:#5a4428;font-size:12px}.ash .tutgoal .ok{color:#1e6a10;font-size:16px}
 @media (max-width:700px),(max-height:520px){.ash .tutgoal{left:8px;right:calc(var(--mm) + var(--tab) + 22px);transform:none;width:auto;max-width:none;padding:6px 10px;font-size:13px}}
@@ -230,7 +227,6 @@
     skills: SV('M3 20h3V12H3zm5 0h3V6H8zm5 0h3V9h-3zm5 0h3V3h-3z', '#7fd06a'),
     quest: SV('M6 4h12v16H6z M4 3.5a1.5 1.5 0 011.5-1.5h13a1.5 1.5 0 010 3h-13A1.5 1.5 0 014 3.5z M4 20.5a1.5 1.5 0 011.5-1.5h13a1.5 1.5 0 010 3h-13A1.5 1.5 0 014 20.5z M8.5 9h7M8.5 12h7M8.5 15h5', '#e8dcb0'),   // a scroll, rolled top and bottom (2026-10-21 playtest: the tutorial calls it the scroll)
     friends: SV('M8 11a3 3 0 100-6 3 3 0 000 6zM2 19c0-3 2.5-5 6-5s6 2 6 5M16 11a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM14 14c2.8 0 6 1.6 6 4.5', '#7dcea0'),
-    emotes: SV('M12 3a9 9 0 100 18 9 9 0 000-18z M9 8.6a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2z M15 8.6a1.1 1.1 0 100 2.2 1.1 1.1 0 000-2.2z M7.6 13.2c1 2 2.6 3 4.4 3s3.4-1 4.4-3', '#f2c64a'),   // a smiling face (the Emotes tab, 2026-10-25)
     wallet: SV('M3 7h16v12H3z M3 7l3-3h11v3 M15 12h4v3h-4z', '#e8b54a'),
     inv: SV('M7 7c0-3 2-4 5-4s5 1 5 4h2l1 14H4L5 7zm2 0h6c0-2-1-2-3-2S9 5 9 7z', '#b8874a'),
     equip: SV('M6 3h12l1 6-3 3v9H8v-9L5 9z', '#a9b0ba'),

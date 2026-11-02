@@ -99,6 +99,9 @@ for key, path, entry, parent, name in list(each_module()):
     url = APP + '/content/' + live['id']
     with urllib.request.urlopen(url, timeout=120) as r:
         blob = r.read()
+    if blob[:2] == b'\x1f\x8b':      # on chain gzipped since 0.8.176; changes are spotted by the plain file's hash
+        import gzip
+        blob = gzip.decompress(blob)
     print('HOLD   %-22s %s  <- %s' % (key, os.path.getsize(path), live['id'][:16]))
     if not DRY:
         with open(path, 'wb') as f:

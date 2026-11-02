@@ -551,7 +551,7 @@
           R.on('message', ({ from, data }) => {
             const bankFrom = from && (from.address === DATA.assets.issuer || from.address === YOURFIRST_ADDR || from.tag === 'yourfirstname');
             if (data && data.t === 'boats' && bankFrom && R.me && data.to === R.me.address) { boatsHeard(data); return; }
-            if (data && data.t === 'svok' && bankFrom && R.me && data.to === R.me.address && K.homeIs(data)) { K.CLOUD.base = +data.id; return; }   /* the Bank took our save: the next continues it */
+            if (data && data.t === 'svok' && bankFrom && R.me && data.to === R.me.address && K.homeIs(data)) { K.cloudTook(+data.id); return; }   /* the Bank took our save: the next continues it */
             if (data && data.t === 'svx' && bankFrom && R.me && data.to === R.me.address && K.homeIs(data)) { console.info('ASHVALE: another device has played since this game loaded: stopping'); evicted(); return; }   /* canoes left at the bank near me */
             if (data && data.t === 'holds' && bankFrom && R.me && data.to === R.me.address && K.homeIs(data)) { holdsHeard(data); return; }   /* what the wallet's other characters carry */
             if (data && data.t === 'felled' && bankFrom && R.me && data.to === R.me.address) { core.setFelled(data.cells || []); return; }
@@ -673,7 +673,7 @@
       let pkAskT = 0;
       function pkAsk() { pkAskT = Date.now(); bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'pk?', v: 1 }); }).catch(() => {}); }
       setInterval(() => { const P = core.S.players[PID]; if (P && P.pk && P.pk.sn && !(P.seat && P.seat.k === 'pk') && Date.now() - pkAskT > 30000) pkAsk(); }, 5000);
-    return { bestTell, feHear: fn => { FE_HEAR = fn; }, tbHear: fn => { TB_HEAR = fn; }, setChestHome, chestsAsk, chestsHeard, chestHomes: () => JSON.parse(JSON.stringify(CS.by)), pkEvent, pkAsk, CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
+    return { bankReset() { const R = bank.room; bank.room = null; if (R) try { R.leave(); } catch (e) { /* gone */ } }, bestTell, feHear: fn => { FE_HEAR = fn; }, tbHear: fn => { TB_HEAR = fn; }, setChestHome, chestsAsk, chestsHeard, chestHomes: () => JSON.parse(JSON.stringify(CS.by)), pkEvent, pkAsk, CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engbank', { api: 1, v: 2, needs: {} }, () => ({ api: 1, install }));
   if (typeof module !== 'undefined' && module.exports) module.exports = { install };

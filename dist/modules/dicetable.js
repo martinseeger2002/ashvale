@@ -140,26 +140,32 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
       x.fillStyle = '#ffe08a'; x.font = 'bold 34px Georgia, serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(String(n), 64, 33);
       const t = new THREE.CanvasTexture(c); const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false })); sp.scale.set(0.12, 0.06, 1); sp.renderOrder = 5; return sp; }
     function pile(n, x, z, seed) { if (!(n > 0)) return; const grp = new THREE.Group(); grp.position.set(x, BED_Y, z); grp.scale.setScalar(1.35); const k = nCoins(n); stack(grp, k, seed);
-      const l = label(n); l.position.set(0, 0.02, -0.075); grp.add(l);   /* beside the stack, toward the dealer: from above a label over it hid the coins */ coins.add(grp); }
+      const l = label(n); l.position.set(0, 0.02, -0.055); grp.add(l);   /* beside the stack, toward the dealer: from above a label over it hid the coins */ coins.add(grp); }
+    /* [Claude 2026-11-01] the operator: "when I place a bet on nine, it goes between nine and 10 ... it should be on nine": every bet was pushed sideways by
+       up to 9 cm for the player's turn in the list, and a number's box is 14 cm wide. A bet now lies in the middle of its box; the next player's
+       on that box beside it, always inside the box's own edges. */
+    const SLOT = [[0, 0], [-0.7, 0.55], [0.7, 0.55], [-0.7, -0.55], [0.7, -0.55], [0, 0.7]], COIN_R = 0.035;
+    const onBox = (a, n, dz) => { const s = SLOT[n % SLOT.length], hx = Math.max(0, (a.x1 - a.x0) / 2 - COIN_R), hz = Math.max(0, (a.z1 - a.z0) / 2 - COIN_R), cz = (a.z0 + a.z1) / 2 + (dz || 0);
+      return [(a.x0 + a.x1) / 2 + s[0] * hx, Math.max(a.z0 + COIN_R, Math.min(a.z1 - COIN_R, cz + s[1] * hz))]; };
     function clearCoins() { for (const c of coins.children.slice()) { c.traverse(o => { if (o.isSprite) { o.material.map.dispose(); o.material.dispose(); } }); coins.remove(c); } }
     function show(v) {
       clearCoins(); setPuck(v.point || 0);
       const LINE = { pass: 1, dp: 1, field: 1, come: 1, dc: 1 };
-      let k = 0;
+      let k = 0; const used = new Map(), turn = a => { const n = used.get(a) || 0; used.set(a, n + 1); return n; };
       for (const s in (v.felt || {})) {
         /* 2026-10-21: "Your bet needs to show up on the side of the table that you click on" - a bet lies at the end where it was
            tapped (the end of the player's spot for bets not tapped here: others', and come bets moved to their number) */
-        const seat = v.felt[s], sx = v.spots && v.spots[s] != null ? v.spots[s] : 0, off = ((k++ % 6) - 2.5) * 0.035, sd = (v.sides || {})[s] || {};
+        const seat = v.felt[s], sx = v.spots && v.spots[s] != null ? v.spots[s] : 0, sd = (v.sides || {})[s] || {}; k++;
         const at = key => sd[key] != null ? sd[key] : sx, endOf = x => (x < 0 ? -1 : 1) * HL * 0.6;   /* the middle of that end's half */
         for (const key in seat.bets || {}) {
-          if (key === 'odds') { const ox = at('pass'), c = main('pass', ox); if (c) pile(seat.bets[key], c[0] + 0.12, c[1], 3); continue; }
+          if (key === 'odds') { const ox = at('pass'), c = main('pass', ox); if (c) pile(seat.bets[key], Math.max(c[2].x0 + 0.04, Math.min(c[2].x1 - 0.04, (sd.pass != null ? ox : c[0]) + 0.1)), c[1], 3); continue; }
           const two = AREAS.filter(a => a.key === key).length > 1, kx = at(key);
           const c = two ? (LINE[key] ? main(key, kx) : centre(key, endOf(kx))) : centre(key, null); if (!c) continue;
-          const x = LINE[key] ? Math.max(c[2].x0 + 0.04, Math.min(c[2].x1 - 0.04, sd[key] != null ? kx : c[0])) : c[0] + off;
-          pile(seat.bets[key], x, c[1] + (LINE[key] ? 0 : off * 0.6), k);
+          if (LINE[key]) { pile(seat.bets[key], Math.max(c[2].x0 + 0.04, Math.min(c[2].x1 - 0.04, sd[key] != null ? kx : c[0])), c[1], k); continue; }
+          const q = onBox(c[2], turn(c[2])); pile(seat.bets[key], q[0], q[1], k);
         }
-        for (const c0 of seat.come || []) { const c = centre('place' + c0.n, endOf(at('come'))); if (c) { pile(c0.amt, c[0] + off, c[1] - 0.04, k); if (c0.odds) pile(c0.odds, c[0] + off + 0.03, c[1] - 0.02, k + 1); } }
-        for (const c0 of seat.dcome || []) { const c = centre('place' + c0.n, endOf(at('dc'))); if (c) pile(c0.amt, c[0] + off, c[1] - 0.085, k); }
+        for (const c0 of seat.come || []) { const c = centre('place' + c0.n, endOf(at('come'))); if (c) { const q = onBox(c[2], turn(c[2]), 0.04); pile(c0.amt, q[0], q[1], k); if (c0.odds) pile(c0.odds, q[0] + 0.03, q[1] + 0.02, k + 1); } }
+        for (const c0 of seat.dcome || []) { const c = centre('place' + c0.n, endOf(at('dc'))); if (c) { const q = onBox(c[2], turn(c[2]), -0.05); pile(c0.amt, q[0], q[1], k); } }
       }
     }
     /* ---- the dice: rounded red cubes with white pips; a recorded throw (dicethrows) played back, each die turned to the Bank's face */
@@ -225,7 +231,7 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
       if (!anim) { if (!gath || gath.done) hold -= dt || 0; if (hold <= 0) return null; }
       _f.copy(dice[0].outer.position).add(dice[1].outer.position).multiplyScalar(0.5); return { p: table.localToWorld(_f.clone()), r: gath && gath.done ? 0.075 : Math.max(0.16, dice[0].outer.position.distanceTo(dice[1].outer.position) / 2 + 0.1), label: gath && gath.done ? String(gath.total) : null };   /* both dice in the square, as close as that allows; once the stick has drawn them in, their total */
     }
-    return { group, body, hot: [felt], felt, areaAt, show, roll, rest, update, focus, _gath: () => gath && { u: +gath.u.toFixed(2), done: !!gath.done, total: gath.total, stick: stick.visible, dice: dice.map(d => [+d.outer.position.x.toFixed(3), +d.outer.position.z.toFixed(3)]) }, rail: railRect(HL + RAIL_W + 0.03, HW + RAIL_W + 0.03), dealerAt: [0, -(HW + RAIL_W + 0.03 + 0.16)],   /* the stickman, mid-table on the pit side */ eyeY: 1.55, bedY: BED_Y, HL, HW, game: 'dice', half: C0 + 0.02 };   /* half: the two ends are one layout twice - the top-down view shows your end and the propositions (|x| < C0) */
+    return { group, body, hot: [felt], felt, areaAt, show, roll, rest, update, focus, _areas: AREAS, _piles: () => coins.children.map(c => [c.position.x, c.position.z]), _gath: () => gath && { u: +gath.u.toFixed(2), done: !!gath.done, total: gath.total, stick: stick.visible, dice: dice.map(d => [+d.outer.position.x.toFixed(3), +d.outer.position.z.toFixed(3)]) }, rail: railRect(HL + RAIL_W + 0.03, HW + RAIL_W + 0.03), dealerAt: [0, -(HW + RAIL_W + 0.03 + 0.16)],   /* the stickman, mid-table on the pit side */ eyeY: 1.55, bedY: BED_Y, HL, HW, game: 'dice', half: C0 + 0.02 };   /* half: the two ends are one layout twice - the top-down view shows your end and the propositions (|x| < C0) */
   }
   const API = { build, S, BED_Y };
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('dicetable', { api: 1, v: 1, needs: {} }, () => API);

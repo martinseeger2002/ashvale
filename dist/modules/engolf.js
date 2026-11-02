@@ -727,8 +727,10 @@
       if (marks) return marks;
       const ring = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.35, 32), new THREE.MeshBasicMaterial({ color: 0xffe25a, transparent: true, opacity: 0.85, depthTest: false })); ring.rotation.x = -Math.PI / 2; ring.renderOrder = 5;
       const line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.6, gapSize: 0.5, transparent: true, opacity: 0.8, depthTest: false })); line.renderOrder = 4;
-      const grid = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 }));
-      const dotPos = new Float32Array(260 * 3), dots = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xfff6a8, size: 0.045 })); dots.geometry.setAttribute('position', new THREE.BufferAttribute(dotPos, 3));
+      const grid = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthTest: false })); grid.renderOrder = 3;
+      const dotPos = new Float32Array(260 * 3), dots = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xfff6a8, size: 0.045, transparent: true, depthTest: false })); dots.renderOrder = 3; dots.geometry.setAttribute('position', new THREE.BufferAttribute(dotPos, 3));
+      /* [Claude 2026-11-01] the operator: "Lay of the green when putting ... flashes up for a second, but then it disappears": 5 cm over the drawn green, the course's own surface (pushed toward the camera) covered the lines and dots, and the dots kept their first green's bounds, so later greens could cull them. Drawn over the ground like the aim line, and never culled */
+      grid.frustumCulled = dots.frustumCulled = false;
       for (const m of [ring, line, grid, dots]) K.scene.add(m);
       marks = { ring, line, grid, dots, dotPos, seed: [], gridFor: 0 }; return marks;
     }
@@ -930,6 +932,7 @@
       net(id, d) { if (d == null) { this.drop(id); return; } heard(id, d); },
       drop(id) { const x = RM.get(id); if (x) { dropKit(x.k); RM.delete(id); }
         const m = ST && ST.m.find(v => String(v[0]) === String(id) && v[3] !== ST.sn); if (m) lost(m[3], Date.now()); },   /* [Claude 2026-10-22] their presence went: the seat is held 2 min */
+      _marks: () => marks, _gY: (x, z) => gY(x, z),
       _state: () => ST && { st: ST.st, rests: Array.from(RM.values()).map(x => ({ sn: x.g && x.g.sn, sw: x.g && x.g.sw, ph: x.g && x.g.ph, rest: x.rest || null, now: Date.now() })), phase: ST.phase, hole: ST.hole, strokes: ST.strokes, card: ST.card.slice(), ball: ST.ball, aim: ST.aim, club: ST.club, set: ST.set, buy: ST.buy, f: ST.f, settled: ST.settled, m: ST.m, cards: ST.cards, quit: ST.quit, away: ST.away, tok: ST.tok, tk: ST.tk, sn: ST.sn, rid: ST.rid, k: ST.k, turn: turnOf(ST.hole), order: teeOrder(ST.hole), pin: hole().pin, meter: ST.meter },   /* tests */
       _ballY: () => MEK && MEK.ball ? [+MEK.ball.position.x.toFixed(2), +MEK.ball.position.y.toFixed(3), +MEK.ball.position.z.toFixed(2)] : null,   /* tests: where my ball is drawn */
       _meSeen() { const e = K.myEnt; if (!e || !e.root) return { e: false }; let o = e.root, vis = true, top = null; while (o) { if (!o.visible) vis = false; top = o; o = o.parent; }

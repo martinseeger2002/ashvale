@@ -6,7 +6,7 @@ const fs = require('fs'), path = require('path');
 let fails = 0; const ok = (c, m) => { if (!c) fails++; console.log(c ? 'ok  ' : 'FAIL', m); };
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'engine.js'), 'utf8');
 const savedWithBank = eval('(' + src.match(/const savedWithBank = (l => [^\n]*);/)[1] + ')');
-const cloudWins = eval('(' + src.match(/const cloudWins = (\(local, at\) => [\s\S]*?: at !== \+local\.mine);/)[1].replace(/\/\*[\s\S]*?\*\//g, '') + ')');
+const cloudWins = eval('(' + src.match(/const cloudWins = (\(local, at\) => [\s\S]*?at !== \+local\.mine);/)[1].replace(/\/\*[\s\S]*?\*\//g, '') + ')');
 const BANK = 1000;   /* the Bank's save id (ms) */
 ok(cloudWins(null, BANK) === true, 'nothing here: the Bank\'s');
 ok(cloudWins({ at: 5000 }, BANK) === true, 'a newer save this device never synced (a fresh character): still the Bank\'s');
@@ -15,6 +15,7 @@ ok(cloudWins({ at: 5000, base: 900 }, BANK) === true, 'another device has played
 ok(cloudWins({ at: 5000, base: 900, mine: BANK }, BANK) === false, 'the Bank holds this device\'s own last save (its svok lost): its own');
 ok(cloudWins({ at: 5000, mine: BANK }, BANK) === false, 'a first device that saved to the Bank and has not loaded since: its own');
 ok(cloudWins({ at: 5000, mine: 700 }, BANK) === true, 'a first device whose save the Bank no longer holds: the Bank\'s');
+ok(cloudWins({ at: 5000, mine: 1200, was: BANK }, BANK) === false && cloudWins({ at: 5000, base: 900, mine: 1200, was: BANK }, BANK) === false, 'the Bank holds the save before this device\'s last (a newest save lost as the page closed): its own');
 ok(savedWithBank({ at: 1 }) === false && savedWithBank({ base: 0 }) === true && savedWithBank(null) === false, 'synced means a base or a mine');
 ok(/if \(!synced && !R\.me\.guest\) \{/.test(src) && /BANK_WAIT/.test(src) && /Asking the Bank for your hero/.test(src), 'a signed-in player (not a guest) with nothing synced waits for the Bank, the loading screen counting');
 ok(/BANK_MISSED\) hud\.chat\(/.test(src), 'and is told when the Bank never answered (a fresh character, nothing kept)');

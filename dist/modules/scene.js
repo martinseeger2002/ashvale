@@ -1374,15 +1374,15 @@
             break;
           }
           case 'dungeonroom': {   /* one chamber directly under the same keep footprint; lv is negative */
-            const lv = o.lv | 0, by = y + lv * 3.2, w = o.w || 8, h = o.h || 8, L = dungeonLayer(lv), DB = L.b, ST = lv === -4 ? 0x4a4058 : 0x4a4742, FL = lv === -4 ? 0x3a3148 : 0x363532;   /* the Heart's stone a little lighter (2026-10-25: it was too dark to see in) */
+            const lv = o.lv | 0, by = y + lv * 3.2, w = o.w || 8, h = o.h || 8, L = dungeonLayer(lv), DB = L.b, ST = lv === -4 ? 0x363040 : 0x4a4742, FL = lv === -4 ? 0x292331 : 0x363532;
             DB.add('box', FL, o.x + w / 2, by - 0.09, o.y + h / 2, w, 0.18, h);
             DB.add('box', 0x1b1a1c, o.x + w / 2, by + 3.05, o.y + h / 2, w + 0.5, 0.2, h + 0.5);   /* a real ceiling: no sky, weather or upper floor leaks through */
-            for (let tz = 1; tz < h - 1; tz++) for (let tx = 1; tx < w - 1; tx++) if ((tx + tz) % 2 === 0) DB.add('box', lv === -4 ? 0x463d55 : 0x403e39, o.x + tx + 0.5, by + 0.015, o.y + tz + 0.5, 0.94, 0.04, 0.94);
+            for (let tz = 1; tz < h - 1; tz++) for (let tx = 1; tx < w - 1; tx++) if ((tx + tz) % 2 === 0) DB.add('box', lv === -4 ? 0x332b3c : 0x403e39, o.x + tx + 0.5, by + 0.015, o.y + tz + 0.5, 0.94, 0.04, 0.94);
             for (let i = 0; i < w; i++) { DB.add('box', ST, o.x + i + 0.5, by + 1.5, o.y + 0.08, 1, 3, 0.22); DB.add('box', ST, o.x + i + 0.5, by + 1.5, o.y + h - 0.08, 1, 3, 0.22); }
             for (let i = 0; i < h; i++) { DB.add('box', ST, o.x + 0.08, by + 1.5, o.y + i + 0.5, 0.22, 3, 1); DB.add('box', ST, o.x + w - 0.08, by + 1.5, o.y + i + 0.5, 0.22, 3, 1); }
             for (const [dx, dz] of [[1.2,1.2],[w-1.2,1.2],[1.2,h-1.2],[w-1.2,h-1.2]]) { DB.add('cyl', 0x5b5650, o.x + dx, by + 1.45, o.y + dz, 0.55, 2.9, 0.55); DB.add('box', 0x716a61, o.x + dx, by + 2.85, o.y + dz, 0.9, 0.18, 0.9); }
             for (const [dx, dz] of [[1, 1], [w / 2, 1], [w - 1, 1], [w - 1, h / 2], [w - 1, h - 1], [w / 2, h - 1], [1, h - 1], [1, h / 2]]) {
-              const f = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.42, 6), new THREE.MeshBasicMaterial({ color: lv === -4 ? 0xc8a2ff : 0xff8a20 })); f.position.set(o.x + dx, by + 1.55, o.y + dz); L.g.add(f); torches.push({ f, ph: dx + dz + lv, x: o.x + dx, y: by + 1.5, z: o.y + dz, lv });
+              const f = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.42, 6), new THREE.MeshBasicMaterial({ color: lv === -4 ? 0xb06cff : 0xff8a20 })); f.position.set(o.x + dx, by + 1.55, o.y + dz); L.g.add(f); torches.push({ f, ph: dx + dz + lv, x: o.x + dx, y: by + 1.5, z: o.y + dz, lv });
             }
             break;
           }
