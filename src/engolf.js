@@ -684,7 +684,7 @@
       const top = ST.phase === 'rise' ? ST.meter : ST.phase === 'aim' ? 0 : ST.stop;
       E.fill.style.left = pct(toX(top)); E.fill.style.width = pct(toX(0) - toX(top));
       E.pow.style.display = ST.phase === 'fall' || ST.phase === 'go' ? 'block' : 'none'; E.pow.style.left = pct(toX(ST.stop));
-      const h = hole(), d = Math.hypot(h.pin[0] - ST.ball.x, h.pin[1] - ST.ball.y), pt = clubObj().id === 'PT', v = pt ? d / reachNow() * 100 : d / reachNow() * LINE;
+      const h = hole(), d = Math.hypot(h.pin[0] - ST.ball.x, h.pin[1] - ST.ball.y), pt = clubObj().id === 'PT', v = pt ? d / reachNow() * 100 : (d / reachNow()) ** (1 / 1.5) * LINE;   /* the full-swing carry grows as power^1.5 (golfrules powerCurve) */
       E.pin.style.display = v > 1 && v <= 100 ? 'block' : 'none'; E.pin.style.left = pct(toX(v));
       const tol = R.SETS[ST.set].line; E.max.style.display = pt ? 'none' : 'block'; E.max.style.left = pct(toX(LINE + tol)); E.max.style.width = pct(toX(LINE - tol) - toX(LINE + tol));
       E.zero.style.left = pct(toX(0)); E.sweet.style.left = pct(toX(WIN())); E.sweet.style.width = pct(toX(-WIN()) - toX(WIN()));

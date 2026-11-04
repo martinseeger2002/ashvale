@@ -1461,3 +1461,14 @@ engtables (credit and felt held until the throw or spin stops), dicetable (a bet
 
 ## Saves reach the Bank - 2026-11-01 (released, engine + engbank only; other lanes still held)
 A player's saves stopped reaching the Bank from the 14:09 ROOM DOWN (noJCeJyZ, back to step 8 of 20 on Tutorial Island). One save on its way at a time, sent again until svok; a silent room is rejoined; quest steps push at once; 10 s not 20; a packed copy ready for a closing page; cloudWins counts was. tests/cloud_lost_test.js (300 runs), cloud_pick_test, bank_lineage_test pass. Bank unchanged.
+
+## Golf swings and putts measured from a handheld golf game - 2026-11-03 (registry v212, 0086c310)
+golfrules + engolf only (claude/golf-gbc); core, engine, scene, hud*, models, engmusic held at live bytes with tools/hold_live.py.
+The operator: skill comes from the club sets, not a character, with the mechanics of the handheld game (notes outside the repo,
+~/gbc-emu/play/NOTES.md - never name it publicly). Carry grows as power^1.5 (the pin mark follows); sets = Meet window
+5.5/7/7.5/8 and Control edge bend .07/.055/.03/.015; little lost inside the window, ~-20% at its edge, a quarter outside;
+headwind costs ~2.4x what a tailwind gives; driver roll ~10% of carry; putts roll range x power, slow in proportion to speed
+and break at the end. Kept: the operator's MAX zone, faster power stroke, two putt ranges, tap-in. golfrules_test (Master 61 /
+Standard 73 / Starter 82 on par 71) and tests/golf_gbc_test.js ALL OK; golf_pw HEADED fails the same tap-in/scorecard/touch
+lines on unchanged main. The first run hit its 1500 s timeout waiting for the index; --no-build resumed by hash.
+Trap again: release_modular.py --help RUNS a build (stopped before inscribing).

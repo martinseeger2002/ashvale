@@ -9,25 +9,29 @@
   'use strict';
   /* clubs: carry at full power with the Standard set (m), loft (deg) and how far it runs after landing (share of the carry) */
   const CLUBS = [
-    { id: '1W', name: 'Driver', carry: 57.5, loft: 11, roll: 0.24 },
-    { id: '3W', name: '3 Wood', carry: 52.5, loft: 15, roll: 0.2 },
-    { id: '3I', name: '3 Iron', carry: 47.5, loft: 21, roll: 0.15 },
-    { id: '5I', name: '5 Iron', carry: 42.5, loft: 27, roll: 0.12 },
-    { id: '7I', name: '7 Iron', carry: 37.5, loft: 34, roll: 0.09 },
-    { id: '9I', name: '9 Iron', carry: 32.5, loft: 42, roll: 0.07 },
-    { id: 'PW', name: 'Pitching Wedge', carry: 27.5, loft: 48, roll: 0.05 },
+    { id: '1W', name: 'Driver', carry: 57.5, loft: 11, roll: 0.1 },
+    { id: '3W', name: '3 Wood', carry: 52.5, loft: 15, roll: 0.09 },
+    { id: '3I', name: '3 Iron', carry: 47.5, loft: 21, roll: 0.08 },
+    { id: '5I', name: '5 Iron', carry: 42.5, loft: 27, roll: 0.07 },
+    { id: '7I', name: '7 Iron', carry: 37.5, loft: 34, roll: 0.06 },
+    { id: '9I', name: '9 Iron', carry: 32.5, loft: 42, roll: 0.05 },
+    { id: 'PW', name: 'Pitching Wedge', carry: 27.5, loft: 48, roll: 0.04 },
     { id: 'SW', name: 'Sand Wedge', carry: 20, loft: 58, roll: 0.03 },
     { id: 'PT', name: 'Putter', carry: 0, loft: 0, roll: 0 }
   ];
   /* the four sets of the pro shop (the operator: 500 / 2,500 / 10,000 / 40,000 GOLD). dist scales every carry; sweep is the
      seconds the swing meter takes to fill (slower = easier to stop where you want; 2026-10-19: the first cut was too fast); window is how wide the sweet spot is
      (meter units either side of the line); line is how wide the MAX power zone is (meter units either side of it; the operator:
-     better clubs widen both zones and drive further); spin scales top- and backspin */
+     better clubs widen both zones and drive further); spin scales top- and backspin.
+     2026-11-03 ("golf skill should be done by upgrading our clubs ... the mechanics should work similar to the GBC
+     game"): a set is a level of that game's golfer. dist = its Drive; window = its Meet Area, the hit window measured there
+     (+-67 ms at the first level, +-100 ms one level up, +-133 ms at the top, at this meter's falling speed); hook = its
+     Control, how much of the carry an edge-of-the-window strike bends (about 7% at Control 0 down to 1.5% at Control 8). */
   const SETS = {
-    starter: { name: 'Starter Set', price: 500, dist: 0.88, sweep: 1.45, window: 4, line: 1, spin: 0.8, hook: 1.25 },
-    standard: { name: 'Standard Set', price: 2500, dist: 1, sweep: 1.65, window: 5, line: 1.6, spin: 1, hook: 1 },
-    pro: { name: 'Pro Set', price: 10000, dist: 1.09, sweep: 1.85, window: 6, line: 2.3, spin: 1.2, hook: 0.75 },
-    master: { name: 'Master Set', price: 40000, dist: 1.18, sweep: 2.05, window: 7, line: 3, spin: 1.45, hook: 0.5 }
+    starter: { name: 'Starter Set', price: 500, dist: 0.88, sweep: 1.45, window: 5.5, line: 1, spin: 0.8, hook: 0.07 },
+    standard: { name: 'Standard Set', price: 2500, dist: 1, sweep: 1.65, window: 7, line: 1.6, spin: 1, hook: 0.055 },
+    pro: { name: 'Pro Set', price: 10000, dist: 1.09, sweep: 1.85, window: 7.5, line: 2.3, spin: 1.2, hook: 0.03 },
+    master: { name: 'Master Set', price: 40000, dist: 1.18, sweep: 2.05, window: 8, line: 3, spin: 1.45, hook: 0.015 }
   };
   /* the lie: how much of a full shot a ground lets you make (shown as a % on the HUD) */
   const LIE = { t: 1, f: 1, e: 0.95, g: 0.9, r: 0.8, h: 0.62, s: 0.6, x: 0.8 };   /* x: the path to the clubhouse, played as rough */
@@ -35,6 +39,12 @@
   /* rolling: slowing in m/s per second on each ground; greens are quick */
   const DECEL = { t: 1.1, f: 1.1, e: 1.5, g: 0.62, r: 2.8, h: 4.2, x: 2.8 };
   const GRAV = 9.8 * 0.6;          /* how hard a slope pulls a rolling ball */
+  /* GBC (2026-11-03): on the green a ball's speed falls by a share of itself (about 1.8% a frame there, half-life 0.6 s),
+     plus a little constant friction so it stops: it runs out fast and then crawls, and that crawl is where the green
+     breaks it */
+  const G_DRAG = 1.15, G_FRIC = 0.12;
+  function greenRun(v0) { const k = G_DRAG, c = G_FRIC; return v0 / k - c / (k * k) * Math.log(1 + k * v0 / c); }
+  function greenSpeed(d) { let lo = 0, hi = 40; for (let i = 0; i < 50; i++) { const m = (lo + hi) / 2; if (greenRun(m) < d) lo = m; else hi = m; } return (lo + hi) / 2; }
   const CUP = 0.11, CUP_FAST = 1.45;  /* holed within CUP of the pin when slower than CUP_FAST m/s; faster lips out */
   const PUTT_MAX = 22;             /* a full putt runs this far on a flat green */
   const PUTT = { short: 6, long: PUTT_MAX };   /* the operator: two putting settings - the short one gives the meter a fine touch near the hole */
@@ -83,8 +93,15 @@
      edge of the window, more = a mishit). Off-centre curves the ball (+ right, - left) and costs distance */
   /* the hook (-) or slice (+) as a share of the carry: gentle inside the sweet spot (up to 3%), then growing (the operator:
      the first cut hooked far too much - 16% of the carry at the edge of the window) */
-  function curve(imp) { const a = Math.abs(imp), c = a <= 1 ? 0.03 * a : Math.min(0.16, 0.03 + 0.06 * (a - 1)); return Math.sign(imp) * c; }
-  function impactLoss(imp) { const a = Math.abs(imp); return 1 - 0.12 * Math.min(1, a) ** 2 - 0.25 * Math.max(0, Math.min(2, a - 1)); }
+  /* measured in the GBC game (2026-11-03): inside the hit window a strike loses little (2% a third of the way out, 5% two
+     thirds out) and bends in proportion to how far off it is, up to the set's Control at the edge, where it has lost about
+     a fifth of its distance; outside the window it is a mishit, a topped ball that runs about a quarter of the way */
+  const MISHIT = 0.25;
+  function curve(imp, hook) { const a = Math.abs(imp); return Math.sign(imp) * (hook == null ? 0.055 : hook) * (a <= 1 ? a : Math.max(0, 1 - (a - 1) * 2)); }
+  function impactLoss(imp) { const a = Math.abs(imp); return a <= 1 ? 1 - 0.07 * a - 0.15 * smooth((a - 0.6) / 0.4) : MISHIT; }
+  /* the GBC game's power curve: carry grows as power^1.5 (half the meter carries about 36% of a full shot); past full power
+     (the MAX zone's bonus) it is linear */
+  function powerCurve(p) { p = Math.max(0, p); return p <= 1 ? p ** 1.5 : p; }
 
   /* a full shot. b = {x, y}; s = {club (id), aim (radians, map angle), power 0..1, impact, spin 'top'|'none'|'back',
      set (id), wind [wx, wy] m/s, n (hole), pin [x, y]}. Returns {path: [[x, y, z, t]...], end: [x, y], surf, kind, drop,
@@ -93,14 +110,20 @@
     const club = CLUBS.find(c => c.id === s.club) || CLUBS[0], set = SETS[s.set] || SETS.standard;
     if (club.id === 'PT') return putt(C, b, s);
     const surf0 = C.surf(b.x, b.y);
-    const D = club.carry * set.dist * Math.max(0, Math.min(POWER_BONUS, s.power)) * lieOf(surf0, club) * impactLoss(s.impact || 0);
+    const pw = Math.max(0, Math.min(POWER_BONUS, s.power));
+    const D = club.carry * set.dist * powerCurve(pw) * lieOf(surf0, club) * impactLoss(s.impact || 0);
     const dx = Math.cos(s.aim), dy = Math.sin(s.aim), rx = -dy, ry = dx;
     /* 2026-10-20: the strike's centre line flies straight; struck left of it the ball bends right, right of it left (an
        early strike, the marker still left of centre, is a negative impact); the better the set, the less it bends (set.hook) */
-    const L = -curve(s.impact || 0) * (set.hook || 1) * D;       /* the bend at landing, metres (+ to the player's right) */
-    const T = Math.max(0.6, (1.6 + club.loft / 18) * Math.sqrt(Math.max(0.05, D / club.carry)));   /* time in the air */
-    const W = s.wind || [0, 0], drift = 0.3 * T;
-    const Hm = Math.max(1.2, D * (0.08 + club.loft / 250));
+    const L = -curve(s.impact || 0, set.hook) * D;       /* the bend at landing, metres (+ to the player's right) */
+    /* GBC: time in the air grows with power, the apex as power^2.5 (a full drive peaks about 25 yd up for 4.7 s) */
+    const pe = Math.min(1.08, Math.max(0.05, (D / (club.carry * set.dist)) ** (1 / 1.5)));
+    const T = Math.max(0.6, (1.6 + club.loft / 18) * pe);   /* time in the air */
+    /* wind (GBC): a crosswind carries the ball sideways the whole flight; into the wind costs about 0.8 of that, a following
+       wind gives back only a third (a 20 mph headwind took 12 yd off a 200 yd drive, a tailwind added 5) */
+    const W0 = s.wind || [0, 0], along = W0[0] * dx + W0[1] * dy, ax = W0[0] - along * dx, ay = W0[1] - along * dy, ka = along > 0 ? 0.33 : 0.8;
+    const W = [ax + along * ka * dx, ay + along * ka * dy], drift = 0.3 * T;
+    const Hm = Math.max(1.2, D * (0.08 + club.loft / 250) * pe);
     const path = []; let hit = null, kind = null;
     const N = Math.max(12, Math.ceil(D / 0.4));
     const at = u => [b.x + dx * D * u + rx * L * u * u + W[0] * drift * u ** 1.5, b.y + dy * D * u + ry * L * u * u + W[1] * drift * u ** 1.5, 4 * Hm * u * (1 - u)];
@@ -144,7 +167,8 @@
   function putt(C, b, s) {
     if (s.tap && canTap(C, b, s.pin)) return tapIn(C, b, s);
     const a = s.aim + (s.impact || 0) * 0.045, set = SETS[s.set] || SETS.standard;
-    const v0 = Math.sqrt(2 * DECEL.g * (PUTT[s.range] || PUTT_MAX) * Math.max(0, Math.min(1, s.power))) * (1 - 0.06 * Math.min(2, Math.abs(s.impact || 0))) * (set.dist ** 0.15);
+    /* GBC: a putt's power is its length - power x the range rolls that far on a flat green */
+    const v0 = greenSpeed((PUTT[s.range] || PUTT_MAX) * Math.max(0, Math.min(1, s.power))) * (1 - 0.06 * Math.min(2, Math.abs(s.impact || 0))) * (set.dist ** 0.15);
     const path = [[b.x, b.y, C.height(b.x, b.y), 0]];
     const r = roll(C, [b.x, b.y], [Math.cos(a) * v0, Math.sin(a) * v0], s.pin, path, 0);
     return finish(C, b, r, path, 0, s);
@@ -171,13 +195,14 @@
           if (!lip) { lip = true; const q = (k % 2 ? 1 : -1) * 0.45, c = Math.cos(q), si = Math.sin(q); [vx, vy] = [(vx * c - vy * si) * 0.6, (vx * si + vy * c) * 0.6]; }
         }
       }
-      if (sp < 0.04) { if (Math.hypot(ax, ay) < dec * 0.9) { vx = vy = 0; break; } }
-      const ns = Math.max(0, sp - dec * STEP);
+      const hold = s === 'g' ? G_FRIC * 3 : dec * 0.9;   /* a slope gentler than this cannot start a stopped ball again */
+      if (sp < 0.04) { if (Math.hypot(ax, ay) < hold) { vx = vy = 0; break; } }
+      const ns = (s === 'g') ? Math.max(0, sp - (G_DRAG * sp + G_FRIC) * STEP) : Math.max(0, sp - dec * STEP);
       if (sp > 0) { vx *= ns / sp; vy *= ns / sp; }
       vx += ax * STEP; vy += ay * STEP;
       x += vx * STEP; y += vy * STEP; t += STEP;
       if (k % 3 === 0) path.push([x, y, C.height(x, y), t]);
-      if (sp < 0.04 && Math.hypot(vx, vy) < 0.04 && Math.hypot(ax, ay) < dec * 0.9) break;
+      if (sp < 0.04 && Math.hypot(vx, vy) < 0.04 && Math.hypot(ax, ay) < hold) break;
     }
     if (!holed) path.push([x, y, C.height(x, y), t]);   /* a holed ball's last point is already at the bottom of the cup */
     return { x, y, kind, holed, lip, dry };
@@ -230,7 +255,7 @@
     return { '-3': 'ALBATROSS', '-2': 'EAGLE', '-1': 'BIRDIE', 0: 'PAR', 1: 'BOGEY', 2: 'DOUBLE BOGEY', 3: 'TRIPLE BOGEY' }[d] || (d > 0 ? '+' + d : String(d));
   }
 
-  const API = { CLUBS, SETS, LIE, DECEL, CUP, PUTT_MAX, PUTT, POWER_BONUS, puttRange, TAP_IN, canTap, MAX_STROKES, makeCourse, shot, lieOf, windFor, pickClub, aimPoint, scoreName, treeShape };
+  const API = { powerCurve, greenRun, greenSpeed, MISHIT, CLUBS, SETS, LIE, DECEL, CUP, PUTT_MAX, PUTT, POWER_BONUS, puttRange, TAP_IN, canTap, MAX_STROKES, makeCourse, shot, lieOf, windFor, pickClub, aimPoint, scoreName, treeShape };
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('golfrules', { api: 1, v: 1, needs: {} }, () => API);
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

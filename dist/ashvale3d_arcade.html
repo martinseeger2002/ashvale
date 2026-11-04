@@ -19645,7 +19645,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           R.on('message', ({ from, data }) => {
             const bankFrom = from && (from.address === DATA.assets.issuer || from.address === YOURFIRST_ADDR || from.tag === 'yourfirstname');
             if (data && data.t === 'boats' && bankFrom && R.me && data.to === R.me.address) { boatsHeard(data); return; }
-            if (data && data.t === 'svok' && bankFrom && R.me && data.to === R.me.address && K.homeIs(data)) { K.CLOUD.base = +data.id; return; }   /* the Bank took our save: the next continues it */
+            if (data && data.t === 'svok' && bankFrom && R.me && data.to === R.me.address && K.homeIs(data)) { K.cloudTook(+data.id); return; }   /* the Bank took our save: the next continues it */
             if (data && data.t === 'svx' && bankFrom && R.me && data.to === R.me.address && K.homeIs(data)) { console.info('ASHVALE: another device has played since this game loaded: stopping'); evicted(); return; }   /* canoes left at the bank near me */
             if (data && data.t === 'holds' && bankFrom && R.me && data.to === R.me.address && K.homeIs(data)) { holdsHeard(data); return; }   /* what the wallet's other characters carry */
             if (data && data.t === 'felled' && bankFrom && R.me && data.to === R.me.address) { core.setFelled(data.cells || []); return; }
@@ -19767,7 +19767,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       let pkAskT = 0;
       function pkAsk() { pkAskT = Date.now(); bankRoom().then(R => { if (R && R.me && !R.me.guest) R.send({ t: 'pk?', v: 1 }); }).catch(() => {}); }
       setInterval(() => { const P = core.S.players[PID]; if (P && P.pk && P.pk.sn && !(P.seat && P.seat.k === 'pk') && Date.now() - pkAskT > 30000) pkAsk(); }, 5000);
-    return { bestTell, feHear: fn => { FE_HEAR = fn; }, tbHear: fn => { TB_HEAR = fn; }, setChestHome, chestsAsk, chestsHeard, chestHomes: () => JSON.parse(JSON.stringify(CS.by)), pkEvent, pkAsk, CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
+    return { bankReset() { const R = bank.room; bank.room = null; if (R) try { R.leave(); } catch (e) { /* gone */ } }, bestTell, feHear: fn => { FE_HEAR = fn; }, tbHear: fn => { TB_HEAR = fn; }, setChestHome, chestsAsk, chestsHeard, chestHomes: () => JSON.parse(JSON.stringify(CS.by)), pkEvent, pkAsk, CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer, scoreTell, scoresAsk };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engbank', { api: 1, v: 2, needs: {} }, () => ({ api: 1, install }));
   if (typeof module !== 'undefined' && module.exports) module.exports = { install };
@@ -21745,25 +21745,29 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
   'use strict';
   /* clubs: carry at full power with the Standard set (m), loft (deg) and how far it runs after landing (share of the carry) */
   const CLUBS = [
-    { id: '1W', name: 'Driver', carry: 57.5, loft: 11, roll: 0.24 },
-    { id: '3W', name: '3 Wood', carry: 52.5, loft: 15, roll: 0.2 },
-    { id: '3I', name: '3 Iron', carry: 47.5, loft: 21, roll: 0.15 },
-    { id: '5I', name: '5 Iron', carry: 42.5, loft: 27, roll: 0.12 },
-    { id: '7I', name: '7 Iron', carry: 37.5, loft: 34, roll: 0.09 },
-    { id: '9I', name: '9 Iron', carry: 32.5, loft: 42, roll: 0.07 },
-    { id: 'PW', name: 'Pitching Wedge', carry: 27.5, loft: 48, roll: 0.05 },
+    { id: '1W', name: 'Driver', carry: 57.5, loft: 11, roll: 0.1 },
+    { id: '3W', name: '3 Wood', carry: 52.5, loft: 15, roll: 0.09 },
+    { id: '3I', name: '3 Iron', carry: 47.5, loft: 21, roll: 0.08 },
+    { id: '5I', name: '5 Iron', carry: 42.5, loft: 27, roll: 0.07 },
+    { id: '7I', name: '7 Iron', carry: 37.5, loft: 34, roll: 0.06 },
+    { id: '9I', name: '9 Iron', carry: 32.5, loft: 42, roll: 0.05 },
+    { id: 'PW', name: 'Pitching Wedge', carry: 27.5, loft: 48, roll: 0.04 },
     { id: 'SW', name: 'Sand Wedge', carry: 20, loft: 58, roll: 0.03 },
     { id: 'PT', name: 'Putter', carry: 0, loft: 0, roll: 0 }
   ];
   /* the four sets of the pro shop (the operator: 500 / 2,500 / 10,000 / 40,000 GOLD). dist scales every carry; sweep is the
      seconds the swing meter takes to fill (slower = easier to stop where you want; 2026-10-19: the first cut was too fast); window is how wide the sweet spot is
      (meter units either side of the line); line is how wide the MAX power zone is (meter units either side of it; the operator:
-     better clubs widen both zones and drive further); spin scales top- and backspin */
+     better clubs widen both zones and drive further); spin scales top- and backspin.
+     2026-11-03 ("golf skill should be done by upgrading our clubs ... the mechanics should work similar to the GBC
+     game"): a set is a level of that game's golfer. dist = its Drive; window = its Meet Area, the hit window measured there
+     (+-67 ms at the first level, +-100 ms one level up, +-133 ms at the top, at this meter's falling speed); hook = its
+     Control, how much of the carry an edge-of-the-window strike bends (about 7% at Control 0 down to 1.5% at Control 8). */
   const SETS = {
-    starter: { name: 'Starter Set', price: 500, dist: 0.88, sweep: 1.45, window: 4, line: 1, spin: 0.8, hook: 1.25 },
-    standard: { name: 'Standard Set', price: 2500, dist: 1, sweep: 1.65, window: 5, line: 1.6, spin: 1, hook: 1 },
-    pro: { name: 'Pro Set', price: 10000, dist: 1.09, sweep: 1.85, window: 6, line: 2.3, spin: 1.2, hook: 0.75 },
-    master: { name: 'Master Set', price: 40000, dist: 1.18, sweep: 2.05, window: 7, line: 3, spin: 1.45, hook: 0.5 }
+    starter: { name: 'Starter Set', price: 500, dist: 0.88, sweep: 1.45, window: 5.5, line: 1, spin: 0.8, hook: 0.07 },
+    standard: { name: 'Standard Set', price: 2500, dist: 1, sweep: 1.65, window: 7, line: 1.6, spin: 1, hook: 0.055 },
+    pro: { name: 'Pro Set', price: 10000, dist: 1.09, sweep: 1.85, window: 7.5, line: 2.3, spin: 1.2, hook: 0.03 },
+    master: { name: 'Master Set', price: 40000, dist: 1.18, sweep: 2.05, window: 8, line: 3, spin: 1.45, hook: 0.015 }
   };
   /* the lie: how much of a full shot a ground lets you make (shown as a % on the HUD) */
   const LIE = { t: 1, f: 1, e: 0.95, g: 0.9, r: 0.8, h: 0.62, s: 0.6, x: 0.8 };   /* x: the path to the clubhouse, played as rough */
@@ -21771,6 +21775,12 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
   /* rolling: slowing in m/s per second on each ground; greens are quick */
   const DECEL = { t: 1.1, f: 1.1, e: 1.5, g: 0.62, r: 2.8, h: 4.2, x: 2.8 };
   const GRAV = 9.8 * 0.6;          /* how hard a slope pulls a rolling ball */
+  /* GBC (2026-11-03): on the green a ball's speed falls by a share of itself (about 1.8% a frame there, half-life 0.6 s),
+     plus a little constant friction so it stops: it runs out fast and then crawls, and that crawl is where the green
+     breaks it */
+  const G_DRAG = 1.15, G_FRIC = 0.12;
+  function greenRun(v0) { const k = G_DRAG, c = G_FRIC; return v0 / k - c / (k * k) * Math.log(1 + k * v0 / c); }
+  function greenSpeed(d) { let lo = 0, hi = 40; for (let i = 0; i < 50; i++) { const m = (lo + hi) / 2; if (greenRun(m) < d) lo = m; else hi = m; } return (lo + hi) / 2; }
   const CUP = 0.11, CUP_FAST = 1.45;  /* holed within CUP of the pin when slower than CUP_FAST m/s; faster lips out */
   const PUTT_MAX = 22;             /* a full putt runs this far on a flat green */
   const PUTT = { short: 6, long: PUTT_MAX };   /* the operator: two putting settings - the short one gives the meter a fine touch near the hole */
@@ -21819,8 +21829,15 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
      edge of the window, more = a mishit). Off-centre curves the ball (+ right, - left) and costs distance */
   /* the hook (-) or slice (+) as a share of the carry: gentle inside the sweet spot (up to 3%), then growing (the operator:
      the first cut hooked far too much - 16% of the carry at the edge of the window) */
-  function curve(imp) { const a = Math.abs(imp), c = a <= 1 ? 0.03 * a : Math.min(0.16, 0.03 + 0.06 * (a - 1)); return Math.sign(imp) * c; }
-  function impactLoss(imp) { const a = Math.abs(imp); return 1 - 0.12 * Math.min(1, a) ** 2 - 0.25 * Math.max(0, Math.min(2, a - 1)); }
+  /* measured in the GBC game (2026-11-03): inside the hit window a strike loses little (2% a third of the way out, 5% two
+     thirds out) and bends in proportion to how far off it is, up to the set's Control at the edge, where it has lost about
+     a fifth of its distance; outside the window it is a mishit, a topped ball that runs about a quarter of the way */
+  const MISHIT = 0.25;
+  function curve(imp, hook) { const a = Math.abs(imp); return Math.sign(imp) * (hook == null ? 0.055 : hook) * (a <= 1 ? a : Math.max(0, 1 - (a - 1) * 2)); }
+  function impactLoss(imp) { const a = Math.abs(imp); return a <= 1 ? 1 - 0.07 * a - 0.15 * smooth((a - 0.6) / 0.4) : MISHIT; }
+  /* the GBC game's power curve: carry grows as power^1.5 (half the meter carries about 36% of a full shot); past full power
+     (the MAX zone's bonus) it is linear */
+  function powerCurve(p) { p = Math.max(0, p); return p <= 1 ? p ** 1.5 : p; }
 
   /* a full shot. b = {x, y}; s = {club (id), aim (radians, map angle), power 0..1, impact, spin 'top'|'none'|'back',
      set (id), wind [wx, wy] m/s, n (hole), pin [x, y]}. Returns {path: [[x, y, z, t]...], end: [x, y], surf, kind, drop,
@@ -21829,14 +21846,20 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
     const club = CLUBS.find(c => c.id === s.club) || CLUBS[0], set = SETS[s.set] || SETS.standard;
     if (club.id === 'PT') return putt(C, b, s);
     const surf0 = C.surf(b.x, b.y);
-    const D = club.carry * set.dist * Math.max(0, Math.min(POWER_BONUS, s.power)) * lieOf(surf0, club) * impactLoss(s.impact || 0);
+    const pw = Math.max(0, Math.min(POWER_BONUS, s.power));
+    const D = club.carry * set.dist * powerCurve(pw) * lieOf(surf0, club) * impactLoss(s.impact || 0);
     const dx = Math.cos(s.aim), dy = Math.sin(s.aim), rx = -dy, ry = dx;
     /* 2026-10-20: the strike's centre line flies straight; struck left of it the ball bends right, right of it left (an
        early strike, the marker still left of centre, is a negative impact); the better the set, the less it bends (set.hook) */
-    const L = -curve(s.impact || 0) * (set.hook || 1) * D;       /* the bend at landing, metres (+ to the player's right) */
-    const T = Math.max(0.6, (1.6 + club.loft / 18) * Math.sqrt(Math.max(0.05, D / club.carry)));   /* time in the air */
-    const W = s.wind || [0, 0], drift = 0.3 * T;
-    const Hm = Math.max(1.2, D * (0.08 + club.loft / 250));
+    const L = -curve(s.impact || 0, set.hook) * D;       /* the bend at landing, metres (+ to the player's right) */
+    /* GBC: time in the air grows with power, the apex as power^2.5 (a full drive peaks about 25 yd up for 4.7 s) */
+    const pe = Math.min(1.08, Math.max(0.05, (D / (club.carry * set.dist)) ** (1 / 1.5)));
+    const T = Math.max(0.6, (1.6 + club.loft / 18) * pe);   /* time in the air */
+    /* wind (GBC): a crosswind carries the ball sideways the whole flight; into the wind costs about 0.8 of that, a following
+       wind gives back only a third (a 20 mph headwind took 12 yd off a 200 yd drive, a tailwind added 5) */
+    const W0 = s.wind || [0, 0], along = W0[0] * dx + W0[1] * dy, ax = W0[0] - along * dx, ay = W0[1] - along * dy, ka = along > 0 ? 0.33 : 0.8;
+    const W = [ax + along * ka * dx, ay + along * ka * dy], drift = 0.3 * T;
+    const Hm = Math.max(1.2, D * (0.08 + club.loft / 250) * pe);
     const path = []; let hit = null, kind = null;
     const N = Math.max(12, Math.ceil(D / 0.4));
     const at = u => [b.x + dx * D * u + rx * L * u * u + W[0] * drift * u ** 1.5, b.y + dy * D * u + ry * L * u * u + W[1] * drift * u ** 1.5, 4 * Hm * u * (1 - u)];
@@ -21880,7 +21903,8 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
   function putt(C, b, s) {
     if (s.tap && canTap(C, b, s.pin)) return tapIn(C, b, s);
     const a = s.aim + (s.impact || 0) * 0.045, set = SETS[s.set] || SETS.standard;
-    const v0 = Math.sqrt(2 * DECEL.g * (PUTT[s.range] || PUTT_MAX) * Math.max(0, Math.min(1, s.power))) * (1 - 0.06 * Math.min(2, Math.abs(s.impact || 0))) * (set.dist ** 0.15);
+    /* GBC: a putt's power is its length - power x the range rolls that far on a flat green */
+    const v0 = greenSpeed((PUTT[s.range] || PUTT_MAX) * Math.max(0, Math.min(1, s.power))) * (1 - 0.06 * Math.min(2, Math.abs(s.impact || 0))) * (set.dist ** 0.15);
     const path = [[b.x, b.y, C.height(b.x, b.y), 0]];
     const r = roll(C, [b.x, b.y], [Math.cos(a) * v0, Math.sin(a) * v0], s.pin, path, 0);
     return finish(C, b, r, path, 0, s);
@@ -21907,13 +21931,14 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
           if (!lip) { lip = true; const q = (k % 2 ? 1 : -1) * 0.45, c = Math.cos(q), si = Math.sin(q); [vx, vy] = [(vx * c - vy * si) * 0.6, (vx * si + vy * c) * 0.6]; }
         }
       }
-      if (sp < 0.04) { if (Math.hypot(ax, ay) < dec * 0.9) { vx = vy = 0; break; } }
-      const ns = Math.max(0, sp - dec * STEP);
+      const hold = s === 'g' ? G_FRIC * 3 : dec * 0.9;   /* a slope gentler than this cannot start a stopped ball again */
+      if (sp < 0.04) { if (Math.hypot(ax, ay) < hold) { vx = vy = 0; break; } }
+      const ns = (s === 'g') ? Math.max(0, sp - (G_DRAG * sp + G_FRIC) * STEP) : Math.max(0, sp - dec * STEP);
       if (sp > 0) { vx *= ns / sp; vy *= ns / sp; }
       vx += ax * STEP; vy += ay * STEP;
       x += vx * STEP; y += vy * STEP; t += STEP;
       if (k % 3 === 0) path.push([x, y, C.height(x, y), t]);
-      if (sp < 0.04 && Math.hypot(vx, vy) < 0.04 && Math.hypot(ax, ay) < dec * 0.9) break;
+      if (sp < 0.04 && Math.hypot(vx, vy) < 0.04 && Math.hypot(ax, ay) < hold) break;
     }
     if (!holed) path.push([x, y, C.height(x, y), t]);   /* a holed ball's last point is already at the bottom of the cup */
     return { x, y, kind, holed, lip, dry };
@@ -21966,7 +21991,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
     return { '-3': 'ALBATROSS', '-2': 'EAGLE', '-1': 'BIRDIE', 0: 'PAR', 1: 'BOGEY', 2: 'DOUBLE BOGEY', 3: 'TRIPLE BOGEY' }[d] || (d > 0 ? '+' + d : String(d));
   }
 
-  const API = { CLUBS, SETS, LIE, DECEL, CUP, PUTT_MAX, PUTT, POWER_BONUS, puttRange, TAP_IN, canTap, MAX_STROKES, makeCourse, shot, lieOf, windFor, pickClub, aimPoint, scoreName, treeShape };
+  const API = { powerCurve, greenRun, greenSpeed, MISHIT, CLUBS, SETS, LIE, DECEL, CUP, PUTT_MAX, PUTT, POWER_BONUS, puttRange, TAP_IN, canTap, MAX_STROKES, makeCourse, shot, lieOf, windFor, pickClub, aimPoint, scoreName, treeShape };
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('golfrules', { api: 1, v: 1, needs: {} }, () => API);
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -22670,7 +22695,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       const top = ST.phase === 'rise' ? ST.meter : ST.phase === 'aim' ? 0 : ST.stop;
       E.fill.style.left = pct(toX(top)); E.fill.style.width = pct(toX(0) - toX(top));
       E.pow.style.display = ST.phase === 'fall' || ST.phase === 'go' ? 'block' : 'none'; E.pow.style.left = pct(toX(ST.stop));
-      const h = hole(), d = Math.hypot(h.pin[0] - ST.ball.x, h.pin[1] - ST.ball.y), pt = clubObj().id === 'PT', v = pt ? d / reachNow() * 100 : d / reachNow() * LINE;
+      const h = hole(), d = Math.hypot(h.pin[0] - ST.ball.x, h.pin[1] - ST.ball.y), pt = clubObj().id === 'PT', v = pt ? d / reachNow() * 100 : (d / reachNow()) ** (1 / 1.5) * LINE;   /* the full-swing carry grows as power^1.5 (golfrules powerCurve) */
       E.pin.style.display = v > 1 && v <= 100 ? 'block' : 'none'; E.pin.style.left = pct(toX(v));
       const tol = R.SETS[ST.set].line; E.max.style.display = pt ? 'none' : 'block'; E.max.style.left = pct(toX(LINE + tol)); E.max.style.width = pct(toX(LINE - tol) - toX(LINE + tol));
       E.zero.style.left = pct(toX(0)); E.sweet.style.left = pct(toX(WIN())); E.sweet.style.width = pct(toX(-WIN()) - toX(WIN()));
@@ -22713,8 +22738,10 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       if (marks) return marks;
       const ring = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.35, 32), new THREE.MeshBasicMaterial({ color: 0xffe25a, transparent: true, opacity: 0.85, depthTest: false })); ring.rotation.x = -Math.PI / 2; ring.renderOrder = 5;
       const line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.6, gapSize: 0.5, transparent: true, opacity: 0.8, depthTest: false })); line.renderOrder = 4;
-      const grid = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 }));
-      const dotPos = new Float32Array(260 * 3), dots = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xfff6a8, size: 0.045 })); dots.geometry.setAttribute('position', new THREE.BufferAttribute(dotPos, 3));
+      const grid = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthTest: false })); grid.renderOrder = 3;
+      const dotPos = new Float32Array(260 * 3), dots = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xfff6a8, size: 0.045, transparent: true, depthTest: false })); dots.renderOrder = 3; dots.geometry.setAttribute('position', new THREE.BufferAttribute(dotPos, 3));
+      /* [Claude 2026-11-01] the operator: "Lay of the green when putting ... flashes up for a second, but then it disappears": 5 cm over the drawn green, the course's own surface (pushed toward the camera) covered the lines and dots, and the dots kept their first green's bounds, so later greens could cull them. Drawn over the ground like the aim line, and never culled */
+      grid.frustumCulled = dots.frustumCulled = false;
       for (const m of [ring, line, grid, dots]) K.scene.add(m);
       marks = { ring, line, grid, dots, dotPos, seed: [], gridFor: 0 }; return marks;
     }
@@ -22916,6 +22943,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
       net(id, d) { if (d == null) { this.drop(id); return; } heard(id, d); },
       drop(id) { const x = RM.get(id); if (x) { dropKit(x.k); RM.delete(id); }
         const m = ST && ST.m.find(v => String(v[0]) === String(id) && v[3] !== ST.sn); if (m) lost(m[3], Date.now()); },   /* [Claude 2026-10-22] their presence went: the seat is held 2 min */
+      _marks: () => marks, _gY: (x, z) => gY(x, z),
       _state: () => ST && { st: ST.st, rests: Array.from(RM.values()).map(x => ({ sn: x.g && x.g.sn, sw: x.g && x.g.sw, ph: x.g && x.g.ph, rest: x.rest || null, now: Date.now() })), phase: ST.phase, hole: ST.hole, strokes: ST.strokes, card: ST.card.slice(), ball: ST.ball, aim: ST.aim, club: ST.club, set: ST.set, buy: ST.buy, f: ST.f, settled: ST.settled, m: ST.m, cards: ST.cards, quit: ST.quit, away: ST.away, tok: ST.tok, tk: ST.tk, sn: ST.sn, rid: ST.rid, k: ST.k, turn: turnOf(ST.hole), order: teeOrder(ST.hole), pin: hole().pin, meter: ST.meter },   /* tests */
       _ballY: () => MEK && MEK.ball ? [+MEK.ball.position.x.toFixed(2), +MEK.ball.position.y.toFixed(3), +MEK.ball.position.z.toFixed(2)] : null,   /* tests: where my ball is drawn */
       _meSeen() { const e = K.myEnt; if (!e || !e.root) return { e: false }; let o = e.root, vis = true, top = null; while (o) { if (!o.visible) vis = false; top = o; o = o.parent; }
@@ -22975,7 +23003,7 @@ ASH3D.define('models', { api: 1, v: "1" }, () => ({ createModels }));
     if (key === 'dp' && point) return "Don't Pass takes bets on the come-out only.";
     if ((key === 'come' || key === 'dc') && !point) return (key === 'come' ? 'Come' : "Don't Come") + ' takes bets once a point is on.';
     if (key === 'odds') { if (!point || !seat.bets.pass) return 'Odds go behind a Pass Line bet once the point is on.';
-      if ((seat.bets.odds || 0) + amt > seat.bets.pass * ODDS_X) return 'Odds are capped at three times your Pass Line bet.'; }
+      if ((seat.bets.odds || 0) + amt > seat.bets.pass * ODDS_X) return 'Odds are capped at three times your Pass Line bet.'; return null; }
     if (/^codds/.test(key)) { const n = +key.slice(5), c = seat.come.find(q => q.n === n);
       if (!c) return 'Come odds go on a Come bet that has moved to ' + n + '.';
       if ((c.odds || 0) + amt > c.amt * ODDS_X) return 'Odds are capped at three times your Come bet.'; return null; }
@@ -23438,26 +23466,32 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
       x.fillStyle = '#ffe08a'; x.font = 'bold 34px Georgia, serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(String(n), 64, 33);
       const t = new THREE.CanvasTexture(c); const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false })); sp.scale.set(0.12, 0.06, 1); sp.renderOrder = 5; return sp; }
     function pile(n, x, z, seed) { if (!(n > 0)) return; const grp = new THREE.Group(); grp.position.set(x, BED_Y, z); grp.scale.setScalar(1.35); const k = nCoins(n); stack(grp, k, seed);
-      const l = label(n); l.position.set(0, 0.02, -0.075); grp.add(l);   /* beside the stack, toward the dealer: from above a label over it hid the coins */ coins.add(grp); }
+      const l = label(n); l.position.set(0, 0.02, -0.055); grp.add(l);   /* beside the stack, toward the dealer: from above a label over it hid the coins */ coins.add(grp); }
+    /* [Claude 2026-11-01] the operator: "when I place a bet on nine, it goes between nine and 10 ... it should be on nine": every bet was pushed sideways by
+       up to 9 cm for the player's turn in the list, and a number's box is 14 cm wide. A bet now lies in the middle of its box; the next player's
+       on that box beside it, always inside the box's own edges. */
+    const SLOT = [[0, 0], [-0.7, 0.55], [0.7, 0.55], [-0.7, -0.55], [0.7, -0.55], [0, 0.7]], COIN_R = 0.035;
+    const onBox = (a, n, dz) => { const s = SLOT[n % SLOT.length], hx = Math.max(0, (a.x1 - a.x0) / 2 - COIN_R), hz = Math.max(0, (a.z1 - a.z0) / 2 - COIN_R), cz = (a.z0 + a.z1) / 2 + (dz || 0);
+      return [(a.x0 + a.x1) / 2 + s[0] * hx, Math.max(a.z0 + COIN_R, Math.min(a.z1 - COIN_R, cz + s[1] * hz))]; };
     function clearCoins() { for (const c of coins.children.slice()) { c.traverse(o => { if (o.isSprite) { o.material.map.dispose(); o.material.dispose(); } }); coins.remove(c); } }
     function show(v) {
       clearCoins(); setPuck(v.point || 0);
       const LINE = { pass: 1, dp: 1, field: 1, come: 1, dc: 1 };
-      let k = 0;
+      let k = 0; const used = new Map(), turn = a => { const n = used.get(a) || 0; used.set(a, n + 1); return n; };
       for (const s in (v.felt || {})) {
         /* 2026-10-21: "Your bet needs to show up on the side of the table that you click on" - a bet lies at the end where it was
            tapped (the end of the player's spot for bets not tapped here: others', and come bets moved to their number) */
-        const seat = v.felt[s], sx = v.spots && v.spots[s] != null ? v.spots[s] : 0, off = ((k++ % 6) - 2.5) * 0.035, sd = (v.sides || {})[s] || {};
+        const seat = v.felt[s], sx = v.spots && v.spots[s] != null ? v.spots[s] : 0, sd = (v.sides || {})[s] || {}; k++;
         const at = key => sd[key] != null ? sd[key] : sx, endOf = x => (x < 0 ? -1 : 1) * HL * 0.6;   /* the middle of that end's half */
         for (const key in seat.bets || {}) {
-          if (key === 'odds') { const ox = at('pass'), c = main('pass', ox); if (c) pile(seat.bets[key], c[0] + 0.12, c[1], 3); continue; }
+          if (key === 'odds') { const ox = at('pass'), c = main('pass', ox); if (c) pile(seat.bets[key], Math.max(c[2].x0 + 0.04, Math.min(c[2].x1 - 0.04, (sd.pass != null ? ox : c[0]) + 0.1)), c[1], 3); continue; }
           const two = AREAS.filter(a => a.key === key).length > 1, kx = at(key);
           const c = two ? (LINE[key] ? main(key, kx) : centre(key, endOf(kx))) : centre(key, null); if (!c) continue;
-          const x = LINE[key] ? Math.max(c[2].x0 + 0.04, Math.min(c[2].x1 - 0.04, sd[key] != null ? kx : c[0])) : c[0] + off;
-          pile(seat.bets[key], x, c[1] + (LINE[key] ? 0 : off * 0.6), k);
+          if (LINE[key]) { pile(seat.bets[key], Math.max(c[2].x0 + 0.04, Math.min(c[2].x1 - 0.04, sd[key] != null ? kx : c[0])), c[1], k); continue; }
+          const q = onBox(c[2], turn(c[2])); pile(seat.bets[key], q[0], q[1], k);
         }
-        for (const c0 of seat.come || []) { const c = centre('place' + c0.n, endOf(at('come'))); if (c) { pile(c0.amt, c[0] + off, c[1] - 0.04, k); if (c0.odds) pile(c0.odds, c[0] + off + 0.03, c[1] - 0.02, k + 1); } }
-        for (const c0 of seat.dcome || []) { const c = centre('place' + c0.n, endOf(at('dc'))); if (c) pile(c0.amt, c[0] + off, c[1] - 0.085, k); }
+        for (const c0 of seat.come || []) { const c = centre('place' + c0.n, endOf(at('come'))); if (c) { const q = onBox(c[2], turn(c[2]), 0.04); pile(c0.amt, q[0], q[1], k); if (c0.odds) pile(c0.odds, q[0] + 0.03, q[1] + 0.02, k + 1); } }
+        for (const c0 of seat.dcome || []) { const c = centre('place' + c0.n, endOf(at('dc'))); if (c) { const q = onBox(c[2], turn(c[2]), -0.05); pile(c0.amt, q[0], q[1], k); } }
       }
     }
     /* ---- the dice: rounded red cubes with white pips; a recorded throw (dicethrows) played back, each die turned to the Bank's face */
@@ -23523,7 +23557,7 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
       if (!anim) { if (!gath || gath.done) hold -= dt || 0; if (hold <= 0) return null; }
       _f.copy(dice[0].outer.position).add(dice[1].outer.position).multiplyScalar(0.5); return { p: table.localToWorld(_f.clone()), r: gath && gath.done ? 0.075 : Math.max(0.16, dice[0].outer.position.distanceTo(dice[1].outer.position) / 2 + 0.1), label: gath && gath.done ? String(gath.total) : null };   /* both dice in the square, as close as that allows; once the stick has drawn them in, their total */
     }
-    return { group, body, hot: [felt], felt, areaAt, show, roll, rest, update, focus, _gath: () => gath && { u: +gath.u.toFixed(2), done: !!gath.done, total: gath.total, stick: stick.visible, dice: dice.map(d => [+d.outer.position.x.toFixed(3), +d.outer.position.z.toFixed(3)]) }, rail: railRect(HL + RAIL_W + 0.03, HW + RAIL_W + 0.03), dealerAt: [0, -(HW + RAIL_W + 0.03 + 0.16)],   /* the stickman, mid-table on the pit side */ eyeY: 1.55, bedY: BED_Y, HL, HW, game: 'dice', half: C0 + 0.02 };   /* half: the two ends are one layout twice - the top-down view shows your end and the propositions (|x| < C0) */
+    return { group, body, hot: [felt], felt, areaAt, show, roll, rest, update, focus, _areas: AREAS, _piles: () => coins.children.map(c => [c.position.x, c.position.z]), _gath: () => gath && { u: +gath.u.toFixed(2), done: !!gath.done, total: gath.total, stick: stick.visible, dice: dice.map(d => [+d.outer.position.x.toFixed(3), +d.outer.position.z.toFixed(3)]) }, rail: railRect(HL + RAIL_W + 0.03, HW + RAIL_W + 0.03), dealerAt: [0, -(HW + RAIL_W + 0.03 + 0.16)],   /* the stickman, mid-table on the pit side */ eyeY: 1.55, bedY: BED_Y, HL, HW, game: 'dice', half: C0 + 0.02 };   /* half: the two ends are one layout twice - the top-down view shows your end and the propositions (|x| < C0) */
   }
   const API = { build, S, BED_Y };
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('dicetable', { api: 1, v: 1, needs: {} }, () => API);
@@ -24065,6 +24099,10 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
       return { point: st.point, sides, felt: st.felt || {}, spots, idx, hand: st.hand || null, turn: st.hand && st.hand.turn };
     }
     const shown = new Map();   /* table -> the round whose result was last played */
+    /* [Claude 2026-11-01] the operator: "the bet is being paid or taken before the results are shown ... only after the results are shown to the
+       player". The Bank settles before the throw is played, and every word after that (the 5 s heartbeat's answer above all) carried the
+       new credit and felt. While a throw or a spin plays, HELD keeps the table as it stood before it; the result lands when it stops. */
+    const HELD = new Map(), HELD_MOST = 16000;
     /* [Claude 2026-10-22] a table too big for the room's 512 bytes comes as a short 'tbs' (pc pieces follow) and one 'tbp' a sitting (the operator: "Bets
        aren't showing up on the roulette table" - the whole word was refused): put back together, then heard as one; a piece lost, it goes on without it */
     const PEND = new Map();
@@ -24092,13 +24130,19 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
       const v = viewOf(d, o);
       if (d.ph === 'show' && d.last && shown.get(tbl) !== d.last.r) {
         shown.set(tbl, d.last.r);
+        const held = { st: prev || d, t: 0 };
         let after = () => { T.show(viewOf(TBS.get(tbl) || d, o)); if (K.reShade) K.reShade(); if (TV && TV.tbl === tbl) resultSay(d); react(tbl, d, prev); };
-        const after0 = after; after = () => { after0(); dealerRound(tbl, T, o, d, prev, 'result'); };
+        const after0 = after; after = () => {
+          if (HELD.get(tbl) === held) { clearTimeout(held.t); HELD.delete(tbl); } else if (held.t) return;
+          after0(); dealerRound(tbl, T, o, d, prev, 'result');
+          const cur = TBS.get(tbl); if (cur && cur.ph === 'bet') { if (o.game === 'dice' && T.rest) T.rest(); dealerRound(tbl, T, o, cur, d, 'open'); }   /* the next round opened while this one played */
+        };
         if (o.game !== 'twentyone') dealerRound(tbl, T, o, d, prev, 'close');
-        if (o.game === 'dice' && T.roll) { T.roll(d.last.dice, d.last.r, after); return; }
-        if (o.game === 'wheel' && T.spin) { T.spin(d.last.n, after, n => { if (TV && TV.tbl === tbl) popNumber(n); }); return; }
+        if (o.game === 'dice' && T.roll) { HELD.set(tbl, held); held.t = setTimeout(after, HELD_MOST); T.roll(d.last.dice, d.last.r, after); if (TV && TV.tbl === tbl) draw(); return; }
+        if (o.game === 'wheel' && T.spin) { HELD.set(tbl, held); held.t = setTimeout(after, HELD_MOST); T.spin(d.last.n, after, n => { if (TV && TV.tbl === tbl) popNumber(n); }); if (TV && TV.tbl === tbl) draw(); return; }
         after(); return;
       }
+      if (HELD.has(tbl)) return;   /* a throw is playing: this word lands when it stops */
       if (TV && TV.tbl === tbl && !TV.inflight && !(TV.ins > 0)) { const me0 = (d.seats || {})[String(TV.spot + 1)]; if (me0 && me0.s === TV.s && me0.credit != null) TV.credit = me0.credit | 0; }   /* the Bank's count, once nothing of ours is on its way */
       if (o.game === 'dice' && d.ph === 'bet' && T.rest && (!prev || prev.ph !== 'bet')) T.rest();
       if (d.ph === 'bet' && prev && prev.ph !== 'bet') dealerRound(tbl, T, o, d, prev, 'open');
@@ -24124,7 +24168,8 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
       else if (TV.game === 'wheel') head = L.n + (L.n ? ' ' + L.colour : ', zero') + '.';
       else head = 'The dealer has ' + (L.bj ? 'twenty-one in two cards' : L.total > 21 ? L.total + ': bust' : L.total) + '.';
       TV.lines = mine; say(head + (pay ? '  You get ' + fmt(pay) + ' GOLD back.' : mine.length ? '  Nothing back this time.' : ''), pay > 0);
-      if (TV) TV.credit = ((d.seats || {})[String(TV.spot + 1)] || {}).credit != null ? (d.seats[String(TV.spot + 1)].credit | 0) : TV.credit;
+      const seatNow = ((TBS.get(TV.tbl) || d).seats || {})[String(TV.spot + 1)] || (d.seats || {})[String(TV.spot + 1)] || {};
+      if (TV && seatNow.credit != null) TV.credit = seatNow.credit | 0;
       draw();
     }
     /* ---------- the dealers: an ASHVALE character behind each table (models.js), waistcoat and white sleeves */
@@ -24331,7 +24376,7 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
       hud.tablesClose();
     }
     function say(t, big) { if (!TV) return; TV.msg = t; TV.big = !!big; draw(); }
-    function myFelt() { const st = TBS.get(TV.tbl); if (!st) return 0; const x = (st.seats || {})[String(TV.spot + 1)]; return x && x.s === TV.s ? x.felt | 0 : 0; }
+    function myFelt() { const h = HELD.get(TV.tbl), st = h ? h.st : TBS.get(TV.tbl); if (!st) return 0; const x = (st.seats || {})[String(TV.spot + 1)]; return x && x.s === TV.s ? x.felt | 0 : 0; }
     function view() {
       const st = TBS.get(TV.tbl) || {}, left = Math.max(0, Math.round(((st.left | 0) - (Date.now() - (st.heardAt || Date.now()))) / 1000));
       const v = { title: TITLE[TV.game], game: TV.game, credit: TV.credit, felt: myFelt(), coin: TV.coin, msg: TV.msg, big: TV.big, lines: TV.lines, pack: packGold(), sat: TV.sat,
@@ -24413,7 +24458,7 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
           F.spot = i; F.tile = F.o.spots[i]; F.moving = performance.now(); K.send({ c: 'walk', x: F.tile[0], y: F.tile[1] }); say(E.taken + ' Moving along the rail.'); draw(); return; }
         if (E[d.err] !== '') say(E[d.err] || d.err);
       }
-      if (d.st === 'open' && !(F.ins > 0 && !d.id)) F.credit = d.credit | 0;
+      if (d.st === 'open' && !(F.ins > 0 && !d.id) && !HELD.has(F.tbl)) F.credit = d.credit | 0;
       if (d.id && F.ins > 0 && !d.tx) F.ins--;
       if (d.st === 'open' && !(ledger() && ledger().tbs && ledger().tbs[F.s])) { const L = ledger(); if (L) { L.tbs = L.tbs || {}; L.tbs[F.s] = { at: Date.now(), m: F.tbl, back: 0 }; ENGBANK.ledgerSave(); } }   /* bets moved back to you: this sitting's GOLD comes home through the ledger too */
       if (d.note && d.st !== 'closing') say(d.note);
@@ -24596,7 +24641,7 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
     if (ENGBANK.tbHear) ENGBANK.tbHear(heard);
     function net() { }
     return { menu, tap, hold, look, zoom, pinch, inset, pose, tagHidden, camera, target, frame, event, net, seated: () => !!TV, standUp,
-      _T: tbl => tableOf(tbl), _atRail: () => [...SPOTENT].map(([k, e]) => [k, +e.yaw.toFixed(2), +e.tyaw.toFixed(2), +e.root.position.x.toFixed(2), +e.root.position.z.toFixed(2), e._tb, e.H.animation]), _view: () => TV && view(), _tbs: () => TBS, _bank: (fn, addr) => { SENDTO = fn; if (addr) { K.walletState.address = addr; K.walletState.data = K.walletState.data || {}; K.walletState.data.pids = Object.assign({ coins: 26 }, K.walletState.data.pids || {}); } return heard; }, _hear: d => heard(d), _bet: tapKey, _holdKey: k => TV && holdKey(k), _tv: () => TV, _drop: () => { TV = null; leaveView(); atTried = false; }, _enter: (tbl, i) => enter(tbl, i), _deposit: deposit, _act: act, _ins: ins, _bet21: bet21, _clear: clear, _leave: () => leave(true), _standAt: standAt };
+      _T: tbl => tableOf(tbl), _s: () => TV && TV.s, _atRail: () => [...SPOTENT].map(([k, e]) => [k, +e.yaw.toFixed(2), +e.tyaw.toFixed(2), +e.root.position.x.toFixed(2), +e.root.position.z.toFixed(2), e._tb, e.H.animation]), _view: () => TV && view(), _tbs: () => TBS, _bank: (fn, addr) => { SENDTO = fn; if (addr) { K.walletState.address = addr; K.walletState.data = K.walletState.data || {}; K.walletState.data.pids = Object.assign({ coins: 26 }, K.walletState.data.pids || {}); } return heard; }, _hear: d => heard(d), _bet: tapKey, _holdKey: k => TV && holdKey(k), _tv: () => TV, _drop: () => { TV = null; leaveView(); atTried = false; }, _enter: (tbl, i) => enter(tbl, i), _deposit: deposit, _act: act, _ins: ins, _bet21: bet21, _clear: clear, _leave: () => leave(true), _standAt: standAt };
   }
   const API = { install };
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engtables', { api: 1, v: 1, needs: {} }, () => API);
@@ -25364,8 +25409,8 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
     const savedWithBank = l => !!(l && (l.base != null || l.mine != null));
     /* the Bank answered with its save `at`: true = play the Bank's, false = this device's own (see cloudLoad) */
     const cloudWins = (local, at) => !savedWithBank(local) ? at > 0
-      : local.base != null ? at !== +local.base && !(local.mine != null && at === +local.mine)   /* the Bank holding this device's own last save (its 'svok' lost on the way): this device's copy is as new or newer */
-      : at !== +local.mine;
+      : local.base != null ? at !== +local.base && !(local.mine != null && at === +local.mine) && !(local.was != null && at === +local.was)   /* the Bank holding this device's own last save, or the one before it (its 'svok' lost on the way): this device's copy is as new or newer */
+      : at !== +local.was && at !== +local.mine;
     let BANK_MISSED = false;   /* signed in, and the Bank never answered: this character is fresh and nothing of it is kept (CLOUD_OK stays false) */
     function cloudLoad(st) {
       if (!G.arcade || !net || !net.join) return Promise.resolve();
@@ -26112,7 +26157,7 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
         /* SAVE OFTEN (2026-10-08: iOS closed the game for memory in the Spider Cave and the reload put the operator back at its mouth, in
            older gear): a crash never says goodbye, so this device's copy is kept every 10 ticks (6 s), and the moments that matter -
            gear changed, a teleport or a portal, into or out of an area - go to the Bank at once as well */
-        { const pl = core.S.players[PID], zn = pl ? core.zoneOf(pl.x, pl.y) : null, big = evs.some(ev => ev.p === PID && (ev.e === 'equip' || ev.e === 'teleport' || ev.e === 'portal' || ev.e === 'cross' || ev.e === 'chest' || ev.e === 'boat')) || zn !== SAVEZ.zone;
+        { const pl = core.S.players[PID], zn = pl ? core.zoneOf(pl.x, pl.y) : null, big = evs.some(ev => ev.p === PID && (ev.e === 'equip' || ev.e === 'teleport' || ev.e === 'portal' || ev.e === 'cross' || ev.e === 'chest' || ev.e === 'boat' || ev.e === 'quest')) || zn !== SAVEZ.zone;
           SAVEZ.zone = zn;
           if (big && performance.now() - SAVEZ.t > 3000) { SAVEZ.t = performance.now(); persist(true); }
           else if (core.S.t % 10 === 0) persist(); }
@@ -27551,7 +27596,7 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
       }
       /* ASHVALE 3D engine part: THE TOWN CHEST AND THE @ashvale BANK (split out of engine.js, 2026-10-08). The chest ledger, returns, - in its own module (src/engbank.js, 2026-10-08) */
       const ENGBANK = deps.engbank.install({ get BANK_LOAD_ROOM() { return BANK_LOAD_ROOM; }, set BANK_LOAD_ROOM(v) { BANK_LOAD_ROOM = v; }, DATA, SCENE, THREE, YOURFIRST_ADDR, net, netGear, palsHeard, D, DAY_S, MOD, PID, SEASON, SEASONS, SKYM, SUNL, SUN_EPOCH, TL, WAL, carriedHeard, core, coreCall, evicted, hud, me, proxies, proxyMat, q, scene, skyNow, sunTime, walletRefresh, walletState, waterY,
-        get CLOUD() { return CLOUD; }, HOME, withHome, homeIs, get trade() { return trade; },
+        get CLOUD() { return CLOUD; }, cloudTook: id => cloudTook(id), HOME, withHome, homeIs, get trade() { return trade; },
         get save() { return save; }, paintScores });
       const { CKEY, holdsAsk, holdSend, bank, bankRoom, boatHide, boatShow, boatTell, chestDeposit, chestEvent, chestState, chestStore, chestTake, depositInv, depositWorn, withdrawAll, depositSoon, docksShow, fellTell, ledgerDrop, ledgerFor, ledgerSave, ledgerSnap, markTell, persistTell, tradeOfferable, tradeSettled, tradeUndone, tellOffer } = ENGBANK;
       scoreTell = ENGBANK.scoreTell; scoresAsk = ENGBANK.scoresAsk;
@@ -28625,34 +28670,60 @@ function railRect(ax, az) {   /* [Claude 2026-10-21] the rail's outside edge nea
         for (let i = 0; i < all.length; i += 8) R.send({ t: 'pals?', v: 1, q: PALS.q, a: all.slice(i, i + 8) });
       }
       setTimeout(() => { reportBook().catch(() => {}); setInterval(() => reportBook().catch(() => {}), 600000); }, 15000);
-      /* the save to the Bank (cloudLoad above): only when it changed, at most every 20 s, at once when you leave */
+      /* the save to the Bank (cloudLoad above): only when it changed, at most every 10 s, at once when you leave or a quest moves on.
+         [Claude 2026-11-01] the operator: "somebody said that they had completed the tutorial island and then they left the game and then when they
+         came back ... they had to recomplete half": the Bank's room dropped at 14:09 and that player's saves stopped reaching it. A save was
+         counted as sent the moment it left, none was sent again, and the next load took the Bank's old copy over this device's newer one.
+         Now one save is on its way at a time (CLOUD.wait) and it goes again until the Bank says 'svok' (engbank); a room that stays quiet is
+         left and joined again. A leaving page may send the newest over one still waiting, once: the Bank then holds base, was or mine, and
+         cloudWins counts all three as this device's own. CLOUD.pk: the last save already packed, because a closing page has no time to pack. */
       const CLOUD = { last: null, at: (save && save.at) || 0, sent: '', t: 0, mine: save && save.mine != null ? +save.mine : null, base: save && save.base != null ? +save.base : null };   /* base: the Bank's save this game continues */
-      function cloudPush(json, now) {
-        if (!G.arcade || !CLOUD_OK || !json || json === CLOUD.sent || (!now && performance.now() - CLOUD.t < 20000)) return;
-        CLOUD.t = performance.now(); const at = CLOUD.at;
-        packSave(json).then(b => bankRoom().then(R => {
-          if (!R) return; const n = Math.max(1, Math.ceil(b.length / CHUNK));
-          if (n > 40) { console.warn('ASHVALE: the save is too big for the Bank (' + b.length + ' B)'); return; }
+      function cloudSend(w, closing) {
+        w.t = performance.now(); w.tries++;
+        return bankRoom().then(R => {
+          if (!R) return; const n = Math.max(1, Math.ceil(w.b.length / CHUNK)), base = w.base != null ? w.base : w.tries > 1 ? w.id : null;   /* sent again: a Bank that took the first try must not take this for an older save */
+          if (n > 40) { console.warn('ASHVALE: the save is too big for the Bank (' + w.b.length + ' B)'); return; }
           /* mine: the last save THIS game sent - if the Bank's 'svok' for it never reached us, the Bank still knows no other device
              came between (2026-10-08: a lost svok left base one save behind and the next save was refused as another device's) */
-          const mine = CLOUD.mine; CLOUD.sent = json; CLOUD.mine = at; for (let i = 0; i < n; i++) R.send(Object.assign(withHome({ t: 'sv', id: at, i, n, d: b.slice(i * CHUNK, (i + 1) * CHUNK) }), CLOUD.base != null ? { base: CLOUD.base } : {}, mine != null ? { mine } : {})); holdSend();
-        })).catch(e => console.warn('ASHVALE: cloud save', e && e.message));
+          const piece = i => R.send(Object.assign(withHome({ t: 'sv', id: w.id, i, n, d: w.b.slice(i * CHUNK, (i + 1) * CHUNK) }), base != null ? { base } : {}, w.mine != null ? { mine: w.mine } : {}));
+          for (let i = 0; i < n; i++) { if (closing || !i) piece(i); else setTimeout(() => piece(i), i * 230); }   /* inside the room's five a second, unless there is no time */
+          holdSend();
+        }).catch(e => console.warn('ASHVALE: cloud save', e && e.message));
       }
+      function cloudPush(json, now, closing) {
+        if (!G.arcade || !CLOUD_OK || !json || json === CLOUD.sent || (!now && performance.now() - CLOUD.t < 10000)) return;
+        const old = CLOUD.wait; if (old && (old.json === json || !now || old.over)) return;   /* one at a time: the timer below sends it again */
+        CLOUD.t = performance.now(); const at = CLOUD.at, pk = CLOUD.pk, ready = pk && (pk.json === json || closing);
+        (ready ? Promise.resolve(pk.b) : packSave(json)).then(b => {
+          const w = { id: at, json: ready ? pk.json : json, b, base: CLOUD.base, mine: old ? old.id : CLOUD.mine, over: !!old, t: 0, t0: performance.now(), tries: 0 };
+          if (CLOUD.wait !== old || w.id === (old && old.id)) return;
+          CLOUD.was = old ? old.id : CLOUD.mine; CLOUD.mine = w.id; CLOUD.wait = w;
+          return cloudSend(w, closing);
+        }).catch(e => console.warn('ASHVALE: cloud save', e && e.message));
+      }
+      function cloudTook(id) { const w = CLOUD.wait; CLOUD.base = id; if (w && w.id === id) { CLOUD.sent = w.json; CLOUD.wait = null; if (w.told) hud.chat('Your progress has reached the Bank again.', 'sys'); } }
+      setInterval(() => {
+        const w = CLOUD.wait, now = performance.now(); if (!w || stopped || now - w.t < 6000) return;
+        if (w.tries % 4 === 0 && ENGBANK.bankReset) ENGBANK.bankReset();   /* a room that sends and never answers */
+        if (!w.told && now - w.t0 > 60000) { w.told = true; hud.chat('The Bank is not answering. Your progress is safe on this device and will be sent when it does.', 'warn'); }
+        cloudSend(w);
+      }, 2000);
       const SAVEZ = { zone: undefined, t: 0 };
       function persist(leaving) {
         if (stopped) return;
-        try { tellHere(leaving === true); } catch (e) { /* the Bank is out of reach: the next save */ }
+        try { tellHere(leaving === true || leaving === 'bye'); } catch (e) { /* the Bank is out of reach: the next save */ }
         const P = core.exportPlayer(PID), LS = ledgerSnap(); if (P && LS) P.chestLedger = LS;   /* the chest ledger saves with the bag it describes */
         if (P && PET_PICK) P.pet = PET_PICK;   /* the chosen pet (engpet) */
-        const json = JSON.stringify(P); if (json !== CLOUD.last) { CLOUD.at = Date.now(); CLOUD.last = json; } if (P) { P.at = CLOUD.at; if (CLOUD.base != null) P.base = CLOUD.base; if (CLOUD.mine != null) P.mine = CLOUD.mine; }
-        cloudPush(json, leaving === true || leaving === 'now');   /* 'now' [Claude 2026-10-12]: straight to the Bank, not after the 20 s wait */
+        const json = JSON.stringify(P); if (json !== CLOUD.last) { CLOUD.at = Date.now(); CLOUD.last = json; if (!leaving) packSave(json).then(b => { CLOUD.pk = { json, b }; }).catch(() => {}); }
+        cloudPush(json, !!leaving, leaving === 'bye');   /* 'now' [Claude 2026-10-12]: straight to the Bank, not after the 10 s wait */
+        if (P) { P.at = CLOUD.at; if (CLOUD.base != null) P.base = CLOUD.base; if (CLOUD.mine != null) P.mine = CLOUD.mine; if (CLOUD.was != null) P.was = CLOUD.was; }
         Promise.resolve(store.set(SAVE, JSON.stringify(P))).then(ok => {   /* false: the arcade did not take it */
           if (ok === false) { if (++saveFails === 2) hud.netLost && hud.netLost(true, 'save'); }
           else { if (saveFails >= 2) { hud.netLost && hud.netLost(false, 'save'); hud.chat('Your progress is saving again.', 'sys'); } saveFails = 0; }
         });
       }   /* stopped: New character cleared the save; the reload's visibilitychange must not write the old one back */
       document.addEventListener('visibilitychange', () => { if (document.hidden) persist(true); else { lastTick = performance.now(); } });
-      window.addEventListener('pagehide', () => persist(true));
+      window.addEventListener('pagehide', () => persist('bye'));
 
       function hudApi() {
         return {
