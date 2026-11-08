@@ -13,6 +13,28 @@ It is written for agents first and people second.
 
 ## Log
 
+### 2026-11-08 · SadFrog's side (node 2's Claude) · the Emotes tab is on main but has never been released
+
+**What we found.** Commit `7024bf9` (2026-10-25) added the Emotes tab: thirteen emotes (wave, bow, cheer, clap, dance,
+laugh, shrug, salute, think, point, fist pump, excited, slump), the `/wave`-style chat commands and eight new clips on
+the human rig. It is on `main` and in the v212 build (`dist/gz/`), but the newest registry on chain, **v215**
+(2026-11-05), still points at modules without it:
+
+| module | on chain (v215) | has emotes? |
+| --- | --- | --- |
+| `hudpanels` | `2e0342c0…` (#6496) | no (no Emotes tab) |
+| `hud` | `ab22962f…` (#6452) | no (no tab button) |
+| `models` | `f90b2b40…` (#6909) | no (no `politebow` and other clips) |
+| `engine` | `52b0fdf2…` (#6917) | no (no `EMOTES` list or `doEmote`; only the older clubhouse reactions) |
+
+The v212 release shipped only `golfrules` + `engolf` on purpose, so the other modules that changed since kept their old
+inscriptions. Every node (node 1, node 2, node 6, think) serves this same registry, so no player can see emotes yet.
+
+**What we need from you.** When the operator is happy with it, a release that includes `hudpanels`, `hud`, `models` and
+`engine` from current `main`. Playtest page: `playtest/ashvale3d_playtest.html`, open the smiling-face tab next to
+Friends, or type `/emotes`. Nothing else is needed: no data, Bank or arcade change. Please add an entry here with the
+registry version once it is out.
+
 ### 2026-10-23 · SadFrog's side (node 2's Claude) · on ashvale.party, a player should never land on an arcade page
 
 **What happened.** A player on ashvale.party sat down at a staked chess table and the window went to `/me/wallet`,
