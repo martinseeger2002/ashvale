@@ -142,5 +142,9 @@ SX0, SY0, SX1, SY1 = 545, -104, 582, -24
 shore = {'name': 'Saltmere Links shore', 'level': 'safe', 'flat': True, 'origin': [SX0, SY0], 'size': [SX1 - SX0, SY1 - SY0], 'ground': 'grass', 'ownWays': True,
   'tiles': [''.join(raw(x, y) for x in range(SX0, SX1)) for y in range(SY0, SY1)], 'objects': [], 'npcs': [], 'spawns': [], 'fishing': []}
 for nm, z in (('golf', golf), ('golfpath', path), ('golfshore', shore)):
-    json.dump(module(nm, z), open(os.path.join(ROOT, 'data', 'zone.%s.json' % nm), 'w'), separators=(',', ':'))
+    zp = os.path.join(ROOT, 'data', 'zone.%s.json' % nm); m = module(nm, z)
+    if os.path.exists(zp):   # [Claude 2026-11-04] the course the zone carries (tools/make_golf.py) stays
+        old = json.load(open(zp)).get('data', {})
+        if 'course' in old and 'course' not in m['data']: m['data']['course'] = old['course']
+    json.dump(m, open(zp, 'w'), separators=(',', ':'))
     print(nm, z['origin'], z['size'], sum(r.count('p') for r in z['tiles']), 'path tiles')

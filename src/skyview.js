@@ -74,14 +74,18 @@
         const p = new THREE.Points(g, m); p.frustumCulled = false; p.renderOrder = 2; stars.add(p); starMats.push(m);
       }
       if (typeof document !== 'undefined' && SM.mw && SM.mw.length) {
-        const W = 2048, H = 1024, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const c = cv.getContext('2d');
-        if ('filter' in c) c.filter = 'blur(7px)';
+        /* [Claude 2026-11-04] painted sharp, then softened by scaling down and back up: blur(7px) on the context blurred each fill on its own,
+           and the browser ran it all at the texture's first upload - 6.9 s of the first night frame (the operator: "We need to get load time to be faster") */
+        const W = 2048, H = 1024, cv = document.createElement('canvas'); cv.width = 512; cv.height = 256; const raw = document.createElement('canvas'); raw.width = W; raw.height = H; const c = raw.getContext('2d');
         for (const [lvl, flat] of SM.mw) {
           const pts = []; for (let i = 0; i < flat.length; i += 2) pts.push([flat[i] / 10, flat[i + 1] / 10]);
           for (let i = 1; i < pts.length; i++) { while (pts[i][0] - pts[i - 1][0] > 180) pts[i][0] -= 360; while (pts[i][0] - pts[i - 1][0] < -180) pts[i][0] += 360; }
           c.fillStyle = 'rgba(205,215,255,' + (0.045 + 0.012 * lvl) + ')';
           for (const sh of [-360, 0, 360]) { c.beginPath(); pts.forEach((p, i) => { const x = (p[0] + sh) / 360 * W, y = (1 - (p[1] + 90) / 180) * H; if (i) c.lineTo(x, y); else c.moveTo(x, y); }); c.closePath(); c.fill(); }
         }
+        { const o = cv.getContext('2d'), t = document.createElement('canvas'); t.width = 256; t.height = 128; const tc = t.getContext('2d'); if ('imageSmoothingQuality' in tc) tc.imageSmoothingQuality = o.imageSmoothingQuality = 'high';
+          const h = document.createElement('canvas'); h.width = 1024; h.height = 512; const hc = h.getContext('2d'); if ('imageSmoothingQuality' in hc) hc.imageSmoothingQuality = 'high';
+          hc.drawImage(raw, 0, 0, 1024, 512); tc.drawImage(h, 0, 0, 256, 128); o.drawImage(t, 0, 0, cv.width, cv.height); }
         const tex = new THREE.CanvasTexture(cv); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
         const NA = 96, ND = 48, pos = [], uv = [], ind = [];
         for (let j = 0; j <= ND; j++) for (let i = 0; i <= NA; i++) { const v = dirOf(i / NA * 360, -90 + j / ND * 180); pos.push(v[0] * 5200, v[1] * 5200, v[2] * 5200); uv.push(i / NA, j / ND); }

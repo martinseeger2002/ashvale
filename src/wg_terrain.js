@@ -96,6 +96,7 @@
       EDITS = null; if (!list || !list.length) return;
       const m = new Map();
       list.forEach((e, i) => {
+        if (e.op === 'relief') e = unpackRelief(e);
         const u = e.u, l = Math.hypot(u[0], u[1], u[2]) || 1, E = Object.assign({}, e, { u: [u[0] / l, u[1] / l, u[2] / l], r: Math.max(1, +e.r || 20), i }); E.reach = reach(E); const k = E.reach / R;
         for (let a = Math.floor((E.u[0] - k) / EG); a <= Math.floor((E.u[0] + k) / EG); a++) for (let b = Math.floor((E.u[1] - k) / EG); b <= Math.floor((E.u[1] + k) / EG); b++) for (let c = Math.floor((E.u[2] - k) / EG); c <= Math.floor((E.u[2] + k) / EG); c++) {
           const key = ekey(a, b, c); let L = m.get(key); if (!L) m.set(key, L = []); L.push(E);
@@ -103,13 +104,44 @@
       });
       EDITS = m;
     }
+    /* [Claude 2026-11-04] a relief's grids may come packed (the zone module carries them, the operator: "modular for all of the
+       different zones"): d as base64 little-endian int16 (cm), k as base64 bytes (per cent). Same numbers as the plain lists. */
+    function b64bytes(s) {
+      if (typeof Buffer !== 'undefined' && Buffer.from) return new Uint8Array(Buffer.from(s, 'base64'));
+      const bin = root.atob(s), o = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) o[i] = bin.charCodeAt(i); return o;
+    }
+    const UNPACKED = new WeakMap();
+    function unpackRelief(e) {
+      if (typeof e.d !== 'string' && typeof e.k !== 'string') return e;
+      if (UNPACKED.has(e)) return UNPACKED.get(e);
+      const o = Object.assign({}, e); UNPACKED.set(e, o);
+      if (typeof e.d === 'string') { const b = b64bytes(e.d), n = b.length >> 1, d = new Int16Array(n); for (let i = 0; i < n; i++) { const v = b[2 * i] | (b[2 * i + 1] << 8); d[i] = v >= 32768 ? v - 65536 : v; } o.d = d; }
+      if (typeof e.k === 'string') o.k = b64bytes(e.k);
+      return o;
+    }
     const fall = (t) => t >= 1 ? 0 : (1 - t * t) * (1 - t * t);
+    /* [Claude 2026-11-03] a RELIEF: a measured height grid laid on the land (the operator: the bay course "as close to being an exact
+       replica as possible including terrain"). On face e.f: e.p its middle on that face's plane, e.m the 2x2 that turns plane
+       metres from e.p into local east / south metres (e.u: the middle on the sphere, for the edit buckets), a grid of e.w x e.h heights (cm) every e.s metres from local (e.x0, e.y0), fading back to the land's
+       own height over the last e.b metres of its edge. Only + - * / floor: the same land on every engine. */
+    function reliefH(e, f, x, y, h) {
+      if (f !== e.f) return h;
+      const dx = x - e.p[0], dy = y - e.p[1], lx = e.m[0] * dx + e.m[1] * dy, ly = e.m[2] * dx + e.m[3] * dy;   /* the face's plane -> the vale frame's metres (the net lays a face rigidly) */
+      const gx = (lx - e.x0) / e.s, gy = (ly - e.y0) / e.s;
+      if (!(gx >= 0 && gy >= 0 && gx <= e.w - 1 && gy <= e.h - 1)) return h;
+      const i = Math.min(e.w - 2, Math.floor(gx)), j = Math.min(e.h - 2, Math.floor(gy)), fx = gx - i, fy = gy - j, D = e.d, W = e.w;
+      const v = ((D[j * W + i] * (1 - fx) + D[j * W + i + 1] * fx) * (1 - fy) + (D[(j + 1) * W + i] * (1 - fx) + D[(j + 1) * W + i + 1] * fx) * fy) / 100;
+      const Kk = e.k, kk = Kk ? ((Kk[j * W + i] * (1 - fx) + Kk[j * W + i + 1] * fx) * (1 - fy) + (Kk[(j + 1) * W + i] * (1 - fx) + Kk[(j + 1) * W + i + 1] * fx) * fy) / 100 : 1;   /* e.k: how much of it to lay down (per cent), fading it into the land round it */
+      const de = Math.min(gx, gy, e.w - 1 - gx, e.h - 1 - gy) * e.s, t = de >= e.b ? 1 : de / e.b, k = t * t * (3 - 2 * t) * kk;
+      return h + (v - h) * k;
+    }
     /* a stroke's reach: a step's slopes run past its flat top */
-    const reach = (e) => e.op === 'step' ? e.r + Math.max(1, +e.k || 8) : e.r;
-    function editH(ux, uy, uz, h) {   /* the edited height; leaves the zone override (EDC weight, EDT/EDM) for the climate */
+    const reach = (e) => e.op === 'step' ? e.r + Math.max(1, +e.k || 8) : e.op === 'relief' ? Math.max(e.r, Math.hypot(Math.max(-e.x0, e.x0 + (e.w - 1) * e.s), Math.max(-e.y0, e.y0 + (e.h - 1) * e.s)) + 2) : e.r;
+    function editH(ux, uy, uz, h, f, x, y) {   /* the edited height; leaves the zone override (EDC weight, EDT/EDM) for the climate */
       EDC = 0; EDW = -1e9; EDFW = 0;
       const L = EDITS.get(ekey(Math.floor(ux / EG), Math.floor(uy / EG), Math.floor(uz / EG))); if (!L) return h;
       for (const e of L) {
+        if (e.op === 'relief') { h = reliefH(e, f, x, y, h); continue; }
         const dx = ux - e.u[0], dy = uy - e.u[1], dz = uz - e.u[2], d = Math.sqrt(dx * dx + dy * dy + dz * dz) * R; if (d >= e.reach) continue;
         const w = fall(d / e.r);
         if (e.op === 'step') {   /* a click of the SimCity-style raise/lower: a flat top of radius r, then a smooth slope `k` metres wide */
@@ -230,7 +262,7 @@
       out.peakS = peakS;
       /* the world editor's strokes, on the generated ground BEFORE the towns' building pads and the rivers, so a pad
          (sampled from this ground) and a river channel see the edited land once, not twice */
-      if (EDIT_ON && EDITS) h = editH(ux, uy, uz, h); else { EDC = 0; EDFW = 0; EDW = -1e9; }
+      if (EDIT_ON && EDITS) h = editH(ux, uy, uz, h, f, x, y); else { EDC = 0; EDFW = 0; EDW = -1e9; }
       /* inside a town the land keeps its own shape; only the building pads are levelled, blending over 4 m */
       if (piece > 0 && NP) for (let k = 0; k < NP; k++) {
         const pc = ctx.PIECES[k]; if (pc.face !== f || !pc.pads) continue;

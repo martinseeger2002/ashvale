@@ -34,9 +34,9 @@ class AshvaleBrowser:
         try: self.ctx.storage_state(path=STATE); os.chmod(STATE, 0o600)
         finally: self.b.close(); self._p.stop()
     def login(self):
-        from drvc import accounts
         pg = self.pg; pg.goto(APP + '/join'); pg.wait_for_timeout(4000)
-        if pg.locator('#in-tag').count():
+        if pg.locator('#in-tag').count() and pg.locator('#in-tag').is_visible():
+            from drvc import accounts   # [Claude 2026-11-04] only when the saved session has run out (the password file is gone)
             pg.fill('#in-tag', 'ashvale'); pg.fill('#in-pw', accounts()['ashvale']['password']); pg.click('#enter'); pg.wait_for_timeout(10000)
     def confirm_card(self):
         self.pg.wait_for_timeout(3000)

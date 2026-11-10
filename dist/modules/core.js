@@ -115,7 +115,12 @@
        to Ashvale. And the Ashvale town portal should have a portal to tutorial Island. Neither of these need attunement"): a hop to
        or from it needs no attunement at either end, and it is no town to wake in */
     const freeHop = (a, b) => !!(a && b && (a.free || b.free));
-    const canHop = (p, a, b) => joins(a, b) && (freeHop(a, b) || !!(p.attuned && p.attuned[a.id] && p.attuned[b.id]));
+    /* [Claude 2026-11-04] a portal's `item` (the bay course - the operator: it opens only for players who own the Master club set): a hop to or from it needs one in the pack */
+    /* (2026-11-04) or worn, or kept in your chest: the chest is the wallet's, outside the rules - the engine answers for its own player
+       (setHeld); a hop is decided by the game of the player who makes it (the others see a puppet move) */
+    let HELD = null;
+    const itemOk = (p, P) => !P.item || invCount(p, P.item) > 0 || Object.values(p.eq || {}).some(v => v && (v === P.item || v.id === P.item)) || !!(HELD && !p.puppet && HELD(p.id, P.item));
+    const canHop = (p, a, b) => joins(a, b) && itemOk(p, a) && itemOk(p, b) && (freeHop(a, b) || !!(p.attuned && p.attuned[a.id] && p.attuned[b.id]));
     /* where you wake after dying (2026-10-05: "instead of spawning in the spawn spot they should be brought to the town
        portal of the town that they were most recently in"): each portal's town is the zone it stands in; p.town = the last
        town zone you were in; the wake-up spot is that town's portal, else the old spawn (the Ashvale well) */
@@ -934,7 +939,9 @@
            a group's stake goes out of the bag into p.gf (the engine sends it to @ashvale - the card table's pkbuy), and the
            round's share comes back into the bag once (pkcash: the Bank pays it home). A player who leaves forfeits (the operator). */
         case 'golfgo': { const x = c.x | 0, y = c.y | 0, on = (a, b) => a >= 545 && a < 740 && b >= -418 && b < -104;   /* the course box (data/golf.course.json box); [Claude 2026-10-22] 20 east and 20 north with the course (the operator: "further away from the clubhouse along the shoreline") */
-          if (!p.dead && on(p.x, p.y) && on(x, y) && !(M.blocked && M.blocked(x, y))) teleport(p, { id: 'golf', to: [x, y] }, null); break; }
+          const onB = (a, b) => a >= -50644 && a < -50056 && b >= -40862 && b < -40398;   /* [Claude 2026-11-03] the bay course (data/golfbay.course.json box) */
+          if (!p.dead && on(p.x, p.y) && on(x, y) && !(M.blocked && M.blocked(x, y))) teleport(p, { id: 'golf', to: [x, y] }, null);
+          else if (!p.dead && onB(p.x, p.y) && onB(x, y) && !(M.blocked && M.blocked(x, y))) teleport(p, { id: 'golfbay', to: [x, y] }, null); break; }
         case 'golffee': { const n = c.n | 0;   /* 2026-10-20: the green fee - 25 GOLD a nine, 50 for all eighteen - paid to the club as the round starts */
           if ((n !== 25 && n !== 50) || p.dead || !(p.x >= 545 && p.x < 740 && p.y >= -418 && p.y < -104)) break;
           if (invCount(p, 'coins') < n) { msg(p, 'You cannot pay the green fee of ' + n + ' GOLD.', 'warn'); break; }
@@ -1310,6 +1317,7 @@
        Bank adds up the wins games report, one per name; Elo and the match ledger stay in chess_park_plan phase 2. */
     const SCORE_TXT = { chain_dragon: { title: 'DRAGON KILLERS', sub: n => 'Slain ' + n + (n === 1 ? ' time' : ' times'), read: n => 'The chained dragon has been slain ' + n + ' time' + (n === 1 ? '' : 's') + '.', list: 'The names of its slayers, by how many times:' },
                         golf_round: { title: 'THE SALTMERE LINKS', sub: n => 'Best rounds (par 71)', read: n => 'The best rounds on the Saltmere Links, lowest first (par 71).', list: 'Best rounds:', low: true },   /* [Claude 2026-10-19] a best round per name (the Bank keeps the lowest) */
+                        golf_bay: { title: 'GULLHAVEN LINKS', sub: n => 'Best rounds (par 72)', read: n => 'The best rounds on GullHaven Links, lowest first (par 72).', list: 'Best rounds:', low: true },   /* [Claude 2026-11-04] the bay course's own board */
                         lily_run: { title: 'THE LILY RUN', sub: n => 'Best scores', read: n => 'The best runs at the Lily Run, frog by frog.', list: 'Best scores:' },   /* [Claude 2026-10-19] a best score per name (the Bank keeps the highest), not a count */
                         chess_wins: { title: 'CHESS CHAMPIONS', sub: n => n + (n === 1 ? ' game won' : ' games won'), read: n => n + ' game' + (n === 1 ? ' has' : 's have') + ' been won at the Chess Park tables.', list: 'The standings, by games won:' } };
     function scoreBoard(key) {
@@ -1791,6 +1799,8 @@
        When the quest is done - the ferryman's step - they cross to their home's spawn. Only when the game asks for it (opts.tutorial; the
        engine does, but for ?notut and the dev tour), so a core made for a test or a tool starts characters where they always did. */
     const TUT = RU.tutorial || null;
+    const TUT_TREE_REGROW = (TUT && TUT.treeRegrow) || 50;   /* ticks until a felled island tree stands again (~30 s) */
+    function tutTree(x, y) { return !!TUT && zoneOf(x, y) === TUT.zone; }
     function tutorialTick(p) {
       if (!p.tut || !TUT || p.dead) return;
       const q = p.quests[TUT.quest], Q = D.quests.quests[TUT.quest];
@@ -1974,7 +1984,7 @@
       if (n.portal) {   /* touching a portal attunes you to it; you can travel to any portal you have touched (2026-10-04) */
         p.attuned = p.attuned || {}; const fresh = !p.attuned[n.portal]; p.attuned[n.portal] = 1; const P0 = portalOf(n.portal);
         if (fresh) msg(p, 'The stones hum as you touch them: you will always find your way back to ' + (P0 ? P0.name : 'here') + (P0 && P0.only ? ' through the ' + P0.only.map(id => (portalOf(id) || { name: id }).name).join(' or the ') + ' portal.' : ' through any town portal.'), 'info');
-        ev({ e: 'portal', p: p.id, npc: n.id, here: n.portal, to: PORTALS.filter(P => canHop(p, P0, P)).map(P => ({ id: P.id, name: P.name })), unknown: PORTALS.filter(P => joins(P0, P) && !canHop(p, P0, P)).map(P => P.name), back: p.tp ? p.tp.name : null }); return; }   /* back: a read Scroll of town portal's one way back */
+        ev({ e: 'portal', p: p.id, npc: n.id, here: n.portal, to: PORTALS.filter(P => canHop(p, P0, P)).map(P => ({ id: P.id, name: P.name })), unknown: PORTALS.filter(P => joins(P0, P) && !canHop(p, P0, P) && itemOk(p, P)).map(P => P.name), locked: PORTALS.filter(P => joins(P0, P) && !itemOk(p, P)).map(P => ({ name: P.name, item: (IT[P.item] && IT[P.item].name) || P.item })), back: p.tp ? p.tp.name : null }); return; }   /* back: a read Scroll of town portal's one way back */
       const ga = n.giftAfter, giftOk = !ga || ((p.quests[ga.quest] || {}).step || 0) > ga.step;   /* a gift can wait for a quest step (the Ashvale stone: after the Goblin Chief) */
       /* a "go and speak to so-and-so" step is met by speaking to them, wherever they happen to stand (the operator
          2026-10-05: quest goals are data, not code). Checked before their shop or their own lines, so an errand
@@ -2413,7 +2423,7 @@
     function nodeDef(n) { return RU.nodes[n.kind]; }
     const FOREVER = 1e15, PLANT_HOUR = 6000;   /* one hour: 6000 ticks of 0.6 s */
     function setFelled(cells) {   /* trees other players felled, from the @ashvale Bank's shared list: down for good here too */
-      let n = 0; for (const c of cells || []) { const x = c[0] | 0, y = c[1] | 0; if (!inMap(x, y)) continue; const i = idx(x, y), nd = nodeAt(i); if (!nd || !RU.nodes[nd.kind] || RU.nodes[nd.kind].skill !== 'woodcutting' || S.dep[i] >= FOREVER) continue; S.dep[i] = FOREVER; ev({ e: 'deplete', node: i }); n++; }
+      let n = 0; for (const c of cells || []) { const x = c[0] | 0, y = c[1] | 0; if (!inMap(x, y) || tutTree(x, y)) continue;   /* the island's grow back */ const i = idx(x, y), nd = nodeAt(i); if (!nd || !RU.nodes[nd.kind] || RU.nodes[nd.kind].skill !== 'woodcutting' || S.dep[i] >= FOREVER) continue; S.dep[i] = FOREVER; ev({ e: 'deplete', node: i }); n++; }
       return n;
     }
     function gatherTick(p, n) {
@@ -2522,10 +2532,14 @@
       msg(p, nd.say ? nd.say : skill === 'woodcutting' ? 'You get some ' + IT[n.item].name.toLowerCase() + '.' : skill === 'mining' ? 'You manage to mine some ' + IT[n.item].name.split(' ')[0].toLowerCase() + '.' : 'You catch some ' + IT[n.item].name.toLowerCase().replace('raw ', '') + '.');
       ev({ e: 'gather', p: p.id, node: i, ok: true, item: n.item });
       if (nd.deplete && R.int(nd.deplete) === 0) {
-        S.dep[i] = nd.regrow < 0 ? FOREVER : S.t + nd.regrow;
-        if (nd.skill === 'woodcutting') S.fell[i] = S.t;
-        ev({ e: 'deplete', node: i, p: p.id, x: n.x, y: n.y, forever: nd.regrow < 0 ? 1 : 0 });
-        if (nd.skill === 'woodcutting' && canReplant(p)) msg(p, 'A stump is left. A sapling can go there.', 'quest');
+        /* Tutorial Island's trees grow back (2026-10-24, the operator: "make sure trees grow back on Ashvale's tutorial
+           island"): every new player chops one for the first campfire, so felled-for-good would leave the island bare */
+        const islandTree = nd.skill === 'woodcutting' && tutTree(n.x, n.y);
+        const regrow = islandTree ? TUT_TREE_REGROW : nd.regrow;
+        S.dep[i] = regrow < 0 ? FOREVER : S.t + regrow;
+        if (nd.skill === 'woodcutting' && !islandTree) S.fell[i] = S.t;
+        ev({ e: 'deplete', node: i, p: p.id, x: n.x, y: n.y, forever: regrow < 0 ? 1 : 0 });
+        if (nd.skill === 'woodcutting' && canReplant(p) && !islandTree) msg(p, 'A stump is left. A sapling can go there.', 'quest');
         p.act = null; p.skilling = null;
       }   /* regrow < 0: felled for good (2026-10-05) */
     }
@@ -4178,7 +4192,7 @@
       for (const z in occ) { if (S.seen[z] != null && S.t - S.seen[z] > EMPTY_TICKS && isAuth(z)) repopulate(z); S.seen[z] = S.t; }
       agePlants();
       ageStumps();
-      for (const k in S.dep) if (S.dep[k] <= S.t) { delete S.dep[k]; ev({ e: 'regrow', node: +k }); }
+      for (const k in S.dep) if (S.dep[k] <= S.t) { delete S.dep[k]; ev({ e: 'regrow', node: +k, x: kx(+k), y: ky(+k) }); }   /* x, y: the client takes the stump away */
       for (const f of S.fires.slice()) if (f.until <= S.t && isAuth(zoneOf(f.x, f.y))) fireOut(f.uid);
       pokerTick(); seatTick(); chessSweep(); seatWaitTick();
       weatherTick();
@@ -4329,7 +4343,7 @@
     return {
       setNewHome: h => { if (HOMES[h]) NEWHOME = h; }, markGift: (pid, id, n) => markGift(S.players[pid], id, n), homeOf: p => (p && p.home) || 'ashvale', npcFor, lineFor, questForHome, questMarks,
       patchAt, patchView: (pid, o) => (S.players[pid] && o && FARM ? patchView(S.players[pid], o) : null), farm: FARM,
-      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, trapOf, offerOf, isBlessed: (pid, x, y) => !!(S.players[pid] && blessed(S.players[pid], x, y)), setNature, natureHours, setNatureTell, seasonOn, dayHour, fireLit, steamFor, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
+      API, S, M, D, log, cmd, tick, addPlayer, removePlayer, exportPlayer, hash, addZone, setHeld: fn => { HELD = typeof fn === 'function' ? fn : null; }, bankGround, persists: (id, n) => !perishable(id, n), setBoats, dockFull, underMove, setSkyTell, trapOf, offerOf, isBlessed: (pid, x, y) => !!(S.players[pid] && blessed(S.players[pid], x, y)), setNature, natureHours, setNatureTell, seasonOn, dayHour, fireLit, steamFor, setMarks, natureMarks: () => MARKS, boats: () => Array.from(BOATS.values()), fallThrough, lakeKey, sunkIn, lazy: LAZY, zoneIndex: () => ZINDEX, hasZone: (id) => !!(M.hasZone && M.hasZone(id)),
       tableAt, tableById, tables, chessOf, chessRow, chessRows, chessGame, chessTurn, chessMoves, applyChess, hostSit, hostStand, hostMove, hostSel, standUp,
       setTableAuth: (id, v) => { if (v == null) delete TAUTH[id]; else TAUTH[id] = !!v; }, tableAuth: id => tAuth(pokerTableById(id)),
       pokerTableAt, pokerTableById, pokerTables, pokerSeatKeys, pokerOpen, pokerOf, pokerRow, pokerRows, pokerGame, applyPoker, pokerClockTicks: () => PK_CLOCK, pokerReclaim, pokerNetId, pokerBankSeen, chessReclaim, chessNetId, chessLimbo, seatHeld, setOnline: (b) => { S.online = !!b; }, hostPokerSit, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED, PK_AWAY], hostPokerStand, hostPokerAct, pokerLeave, pokerSeatFlags: () => [PK_IN, PK_FOLD, PK_ALLIN, PK_CARD, PK_ACTED],

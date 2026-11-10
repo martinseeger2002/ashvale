@@ -37,7 +37,7 @@
         W.setSetPieces(W.piecesFromZones(zones, sp.face, gx, gy, { belt: { whisperwood: 90, village: 30 } }));
         const vz = zones.find(z => z.start); if (vz) start0 = { face: sp.face, x: gx + vz.start[0] + 0.5, y: -(gy + vz.start[1]) - 0.5 };
       }
-      const parts = {}; for (const k in DATA) if (k.indexOf('part.') === 0) parts[k.slice(5)] = DATA[k];
+      const parts = {}; for (const k in DATA) { if (k.indexOf('part.') === 0) parts[k.slice(5)] = DATA[k]; else if (k.indexOf('parts_') === 0 && DATA[k] && DATA[k].parts) Object.assign(parts, DATA[k].parts); }   /* parts_<kind>: the packs (build.py, 2026-11-04) */
       const R = deps.roam.createRoam({ THREE, host: rHost, W, palette: DATA.atlas_palette, chunk: deps.atlas_chunk, shapes: deps.atlas_shapes, fog: deps.fog,
         createModels: deps.models && deps.models.createModels, parts, quality });
       R.camera.far = R.Q.load + 220; R.camera.updateProjectionMatrix();

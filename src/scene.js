@@ -705,6 +705,7 @@
           if (map.underNear && map.underNear(cx, cy)) return map.underAt(cx, cy) != null ? own(cx, cy) : 3.1;   /* underground: the cave's own floor and walls, solid rock round it */
           const sh = map.groundH(cx, cy);
           if (!(P(cx - 1, cy - 1) || P(cx, cy - 1) || P(cx - 1, cy) || P(cx, cy))) return sh;
+          if (map.worldLandAt && map.worldLandAt(cx - 1, cy - 1) && map.worldLandAt(cx, cy)) return sh;   /* [Claude 2026-11-04] a zone on the world's own land (zone.land 'world': the bay course's relief - its hills, not a town's level ground) */
           const a0 = at(cx - 1, cy - 1), a1 = at(cx, cy - 1), a2 = at(cx - 1, cy), a3 = at(cx, cy);
           if ((a0 === '~' || a1 === '~' || a2 === '~' || a3 === '~' || a0 === 'v' || a1 === 'v' || a2 === 'v' || a3 === 'v') && !(map.flatAt && map.flatAt(cx, cy) && sh > map.waterH())) return sh;   /* [Claude 2026-10-20] in a level zone a pond the world does not have (its land stands above the water line) is dug by own() instead - it showed as a hill (the golf course's ponds) */   /* water beds follow the world itself, even inside a set piece: a parcel of a sea town must not flatten the sea floor into a shelf */
           const t = depth(cx, cy) / 8, w = t * t * (3 - 2 * t);
@@ -849,11 +850,19 @@
           const j = 0.9 + hash2(cx * 7 + 1, cy * 13 + 5) * 0.2; col[i * 3] = acc.r * j; col[i * 3 + 1] = acc.g * j; col[i * 3 + 2] = acc.b * j;
         }
         const ind = [];
+        /* [Claude 2026-11-04] a zone on the world's own land (the bay course: 834 x 710 m, a third of it sea) drew every metre of its
+           seabed, 1.2M triangles in one mesh - with the course on top it crashed a phone. Its bed more than 2.5 m under the water
+           is a flat floor of the bed's own colour instead (under 86% opaque water both read the same) */
+        const DEEPY = (seeded ? map.waterH() - 0.05 : WATER_Y) - 2.5, deepC = [0, 0, 0, 0];
         for (let y = Y0; y < Y1; y++) for (let x = X0; x < X1; x++) {
           if (!mine(x, y)) continue;
           const a = (y - Y0) * (RW + 1) + (x - X0), b = a + 1, c = a + RW + 1, d = c + 1;
+          if (map.worldLandAt && pos[a * 3 + 1] < DEEPY && pos[b * 3 + 1] < DEEPY && pos[c * 3 + 1] < DEEPY && pos[d * 3 + 1] < DEEPY && map.worldLandAt(x, y)) {
+            deepC[0] += col[a * 3]; deepC[1] += col[a * 3 + 1]; deepC[2] += col[a * 3 + 2]; deepC[3]++; continue; }
           if ((x + y) & 1) ind.push(a, c, b, b, c, d); else ind.push(a, c, d, a, d, b);
         }
+        if (deepC[3]) { const fl = new THREE.Mesh(new THREE.PlaneGeometry(RW, RH), new THREE.MeshLambertMaterial({ color: new THREE.Color(deepC[0] / deepC[3], deepC[1] / deepC[3], deepC[2] / deepC[3]) }));
+          fl.rotation.x = -Math.PI / 2; fl.position.set(X0 + RW / 2, DEEPY - 0.1, Y0 + RH / 2); group.add(fl); }
         /* leaf litter lies only under the trees that drop their leaves (2026-10-07): each corner's share of broadleaf
            crowns within 2.6 m, from the tiles themselves so it runs on across chunk edges */
         const leafy = new Float32Array((RW + 1) * (RH + 1)), PAD = 3, GW = RW + 2 * PAD, dec = new Uint8Array(GW * (RH + 2 * PAD));
@@ -867,6 +876,22 @@
         const terrain = new THREE.Mesh(g, seasonGround(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })));
         terrain.receiveShadow = true; terrain.userData.pick = { kind: 'ground' }; group.add(terrain);
         var terrainMesh = terrain;
+        /* [Claude 2026-11-04] a very large area (the bay course, 834 x 710 m) as one mesh is drawn whole wherever the camera looks
+           (the operator, iPhone 12: "moving the camera around is kind of choppy"): it is drawn as 64 m tiles sharing the same corners, so
+           what is behind the camera is skipped. The whole mesh stays, hidden, as what taps and the ground ray hit. */
+        if (RW * RH > 150000 && ind.length) {
+          const T = 64, NT = Math.ceil(RW / T), buckets = new Map();
+          for (let t = 0; t < ind.length; t += 6) { const v = ind[t], x = v % (RW + 1), y = (v / (RW + 1)) | 0, k = ((y / T) | 0) * NT + ((x / T) | 0);
+            let B = buckets.get(k); if (!B) buckets.set(k, B = []); for (let u = 0; u < 6; u++) B.push(ind[t + u]); }
+          for (const B of buckets.values()) {
+            const tg = new THREE.BufferGeometry(); for (const nm of ['position', 'color', 'aLeafy', 'normal']) if (g.attributes[nm]) tg.setAttribute(nm, g.attributes[nm]);
+            tg.setIndex(B); const bb = new THREE.Box3(); const vv = new THREE.Vector3();
+            for (const v of B) bb.expandByPoint(vv.fromBufferAttribute(g.attributes.position, v));
+            tg.boundingBox = bb; tg.boundingSphere = bb.getBoundingSphere(new THREE.Sphere());
+            const tm = new THREE.Mesh(tg, terrain.material); tm.receiveShadow = true; group.add(tm);
+          }
+          terrain.visible = false; terrain.userData.pickOnly = true;   /* setFloor leaves it hidden */
+        }
         if (opts.outer && !seeded) { const outer = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshLambertMaterial({ color: 0x3d6a2a }));
           outer.rotation.x = -Math.PI / 2; outer.position.set(W / 2, -0.32, H / 2); outer.receiveShadow = true; group.add(outer); }
       }
@@ -1153,6 +1178,40 @@
         pk.userData.pick = { kind: 'decor', k: o.k, x: o.x, y: o.y }; group.add(pk); pickables.push(pk);
       }
       const storeyH = (o, lv) => { const bi = map.buildingAt ? map.buildingAt(o.x, o.y, lv) : -1, Bd = bi >= 0 && map.buildings ? map.buildings[bi] : null; return Bd && Bd.lh ? Bd.lh : 1.8; };
+      /* [Claude 2026-11-04] THE LODGE at the bay course (zone.golfbay, o.lodge = { face }): our own take on a seaside golf lodge
+         (the operator: the main clubhouse in its proper place, not a copy) - the house kit's walls and slate roof, and on the side that
+         faces the course a white-columned veranda under a flat roof, a gabled entrance in its middle, lanterns, two brick chimneys */
+      function lodgeTrim(o) {
+        const f = (o.lodge && o.lodge.face) || 's', horiz = f === 's' || f === 'n', x0 = o.x, z0 = o.y, x1 = o.x + o.w, z1 = o.y + o.h;
+        let base = -9; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) base = Math.max(base, hAt(x, y), hAt(x + 1, y + 1));
+        base += 0.04;
+        const D = 2.6, out = f === 's' || f === 'e' ? 1 : -1, edge = f === 's' ? z1 : f === 'n' ? z0 : f === 'e' ? x1 : x0, L0 = horiz ? x0 : z0, L1 = horiz ? x1 : z1, len = L1 - L0, mid = (L0 + L1) / 2;
+        const at = (l, d) => horiz ? [l, edge + out * d] : [edge + out * d, l];   /* along the face, out from the wall */
+        const box = (col, l, d, y, sl, sy, sd) => { const p = at(l, d); B.add('box', col, p[0], y, p[1], horiz ? sl : sd, sy, horiz ? sd : sl); };
+        const WHITE = 0xf1ede2, SLATE = 0x464d56, DECK = 0x8a6a48, H = 2.7;
+        box(0x7c766c, mid, D / 2, base - 0.12, len + 0.4, 0.3, D + 0.1);   /* the plinth */
+        box(DECK, mid, D / 2, base + 0.04, len + 0.2, 0.06, D);   /* the deck boards */
+        for (let k = 1; k < D * 3; k++) box(0x6e5236, mid, k / 3, base + 0.075, len + 0.1, 0.01, 0.025);
+        const n = Math.max(3, Math.round(len / 2.2));
+        for (let i = 0; i <= n; i++) { const l = L0 + 0.25 + (len - 0.5) * i / n, p = at(l, D - 0.25);
+          B.add('cyl', WHITE, p[0], base + H / 2, p[1], 0.26, H, 0.26); B.add('box', WHITE, p[0], base + 0.09, p[1], 0.42, 0.12, 0.42); B.add('box', WHITE, p[0], base + H - 0.06, p[1], 0.38, 0.12, 0.38);
+          if (i % 2 === 1) { B.add('box', 0x2b2b2b, p[0], base + H - 0.45, p[1], 0.16, 0.24, 0.16); B.add('box', 0xffd98a, p[0], base + H - 0.47, p[1], 0.1, 0.16, 0.1); }   /* a lantern on every other column */
+        }
+        for (let i = 0; i < n; i++) { const l0 = L0 + 0.25 + (len - 0.5) * i / n, l1 = L0 + 0.25 + (len - 0.5) * (i + 1) / n; if (Math.abs((l0 + l1) / 2 - mid) < 1.4) continue;
+          box(WHITE, (l0 + l1) / 2, D - 0.25, base + 0.85, l1 - l0 - 0.26, 0.08, 0.08); for (let q = 1; q < 5; q++) box(WHITE, l0 + (l1 - l0) * q / 5, D - 0.25, base + 0.48, 0.05, 0.72, 0.05); }   /* the railing, open in the middle */
+        box(SLATE, mid, D / 2, base + H + 0.08, len + 0.6, 0.16, D + 0.35);   /* the veranda roof */
+        box(WHITE, mid, D + 0.12, base + H - 0.05, len + 0.6, 0.22, 0.08);   /* its white fascia */
+        const pw = 4.2, ph = 1.5, tri = new THREE.CylinderGeometry(1, 1, 0.3, 3);   /* the entrance gable: a triangle over the steps */
+        tri.rotateX(Math.PI / 2); tri.rotateZ(Math.PI / 2); tri.scale(pw / 1.732, ph / 1.5, 1);
+        const gm = mesh(tri, WHITE, 0, 0, 0), gp = at(mid, D + 0.05); gm.position.set(gp[0], base + H + 0.16 + ph * 0.5 - 0.02, gp[1]); if (!horiz) gm.rotation.y = Math.PI / 2; group.add(gm);
+        const gs = mesh(tri.clone().scale(0.82, 0.8, 1.2), SLATE, 0, 0, 0); gs.position.copy(gm.position); gs.position.y += 0.12; gs.rotation.y = gm.rotation.y; group.add(gs);
+        box(0x8b7458, mid, D + 0.45, base - 0.08, 2.6, 0.16, 0.5); box(0x8b7458, mid, D + 0.85, base - 0.2, 2.6, 0.16, 0.4);   /* the steps down to the course */
+        const WH = o.lh || 1.8, S = Math.min(o.w, o.h) + 0.6;
+        for (const t of [0.22, 0.78]) { const l = L0 + len * t, p = at(l, -Math.min(o.w, o.h) * 0.3);
+          B.add('box', 0x8a4e3c, p[0], base + WH + S * 0.42 * 0.7, p[1], 0.7, S * 0.42 * 1.1 + 1.2, 0.7); B.add('box', 0x5d5249, p[0], base + WH + S * 0.42 * 1.25 + 0.65, p[1], 0.85, 0.12, 0.85); }   /* two brick chimneys */
+        const vr = f === 's' ? [x0, z1, x1, z1 + D] : f === 'n' ? [x0, z0 - D, x1, z0] : f === 'e' ? [x1, z0, x1 + D, z1] : [x0 - D, z0, x0, z1];
+        for (let y = Math.floor(vr[1]); y < Math.ceil(vr[3]); y++) for (let x = Math.floor(vr[0]); x < Math.ceil(vr[2]); x++) if (Number.isNaN(floor.get(x, y))) floor.set(x, y, base + 0.07);   /* you walk on the deck */
+      }
       function building(o) {
         const x0 = o.x, z0 = o.y, x1 = o.x + o.w, z1 = o.y + o.h, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
         let base = -9; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) base = Math.max(base, hAt(x, y), hAt(x + 1, y + 1));
@@ -1316,7 +1375,7 @@
         const x = o.x + (o.w || 1) / 2, z = o.y + (o.h || 1) / 2; let y = heightAt(x, z);
         if (DK && DK[o.k]) { decor(o, x, y, z); continue; }   /* reusable scenery (DECOR) */
         switch (o.k) {
-          case 'house': case 'shop': case 'smithy': case 'church': building(o); break;
+          case 'house': case 'shop': case 'smithy': case 'church': building(o); if (o.lodge) lodgeTrim(o); break;
           case 'truins': {   /* a tall ruined keep: broken towers, no roof, a pole in the yard */
             const ST = 0x8c8880, DK = 0x5a564e, x0 = o.x, z0 = o.y, w = o.w || 16, h = o.h || 16, yb = y;
             for (let tz = 3; tz < h - 3; tz++) for (let tx = 3; tx < w - 3; tx++) {
@@ -2186,7 +2245,7 @@
         group, heightAt, pickables, waterY: seeded ? map.waterH() - 0.05 : WATER_Y, terrain: terrainMesh, rect: RC, roofs, mounts,
         setFloor(lv) {
           lv |= 0;
-          for (const c of group.children) c.visible = lv < 0 ? ((c.userData && c.userData.dungeonLevel) === lv) : !(c.userData && c.userData.dungeonLevel < 0);
+          for (const c of group.children) c.visible = !(c.userData && c.userData.pickOnly) && (lv < 0 ? ((c.userData && c.userData.dungeonLevel) === lv) : !(c.userData && c.userData.dungeonLevel < 0));
         },
         setView(px, pz, r) {   /* seeded chunks: show a quadrant's trees only while it is within r metres of the player */
           if (!chunk) return;

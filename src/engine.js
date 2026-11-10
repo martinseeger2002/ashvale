@@ -153,8 +153,13 @@
          characters stand there, and for the rest it is a few KB that warm the cache */
       if (ZINDEX && !G.ASH3D_LAZY_DELAY) { const hs = HOME && DATA.rules && DATA.rules.homes && DATA.rules.homes[HOME] && DATA.rules.homes[HOME].spawn, r0 = (Array.isArray(hs) && hs) || (ZINDEX.find(z => z.respawn) || {}).respawn;   /* this home's spawn */ if (r0) for (const id of zonesNear(r0[0], r0[1])) fetchZone(id).catch(() => {}); }   /* (not on a playtest page that shows a slow arrival) */
       const st = await openStoreOnly();
+      /* [Claude 2026-11-04] (the operator: "We need to get load time to be faster") the land around this device's save loads WHILE the Bank is
+         asked for the save (that can take seconds); only if the Bank's save stands somewhere else is that land loaded after it */
+      const before = st.get(SAVE_KEY) || '', landNow = preloadZones(st).catch(e => console.warn('ASHVALE: zones', e && e.message));
       try { await cloudLoad(st); } catch (e) { console.warn('ASHVALE: cloud save', e && e.message); }
-      try { await preloadZones(st); } catch (e) { console.warn('ASHVALE: zones', e && e.message); } return st;
+      await landNow;
+      if ((st.get(SAVE_KEY) || '') !== before) try { await preloadZones(st); } catch (e) { console.warn('ASHVALE: zones', e && e.message); }
+      return st;
     }
     /* ---------- THE SAVE LIVES WITH THE BANK (2026-10-07: "the ashvale bank should hold game states instead of local storage
        ... and stats and the rest of the game state. That way, anyone can login on their account from any device and being the
@@ -307,7 +312,7 @@
       let FE = null;   /* [Claude 2026-10-16] the Fortune Engines' part (engfortune.js), installed with the Bank client below */
       let TBP = null;   /* [Claude 2026-10-20] the clubhouse tables' part (engtables.js, found by name: a table game never needs an engine change) */
       let LR = null;   /* [Claude 2026-10-19] the Lily Run (englily.js) */
-      let GF = null;   /* [Claude 2026-10-19] the Saltmere Links (engolf.js) */
+      let GF = null, golfCourses = () => {};   /* [Claude 2026-10-19] the Saltmere Links (engolf.js); golfCourses: 2026-11-04, the courses come with their zones */
       let PET = null;  /* [Claude 2026-10-17] pets from Doginals (engpet.js): a Doginal Dog or an Anti Doginal Dog in the wallet walks at your heel */
       let PET_PICK = save && typeof save.pet === 'string' ? save.pet : null;   /* [Claude 2026-10-19] the operator: the pet you chose stays chosen next session, any device: it rides in the save the Bank keeps ('frog:4242') */
       if (!/^@/.test(String(me.name || ''))) me.name = '@guest';   /* [Claude 2026-10-15] no chosen names any more: '@guest' until the arcade says your @tag (the operator: "There's no need for two names") */
@@ -373,21 +378,21 @@
       const PH = {}, PH_SENT = {};   /* the dealer's sealed set per table: {h, items: [[ref, blob]...]} - sent on its own small message (Ph) */
       function phSend(t, force) { const P = PH[t]; if (!P || !P.done) return; const now = performance.now(); if (!force && now - (PH_SENT[t] || 0) < 3000) return; PH_SENT[t] = now; netSendBig({ Ph: [t, P.h, MYPK, P.items] }, tRoom(t)); }
       const bounded = (m, n) => { while (m.size > n) m.delete(m.keys().next().value); };
-      const SCORE_KEYS = ['chain_dragon', 'chess_wins', 'lily_run', 'golf_round'], SCORE_BOARD = { chain_dragon: 'dragon', chess_wins: 'chess', lily_run: 'lily', golf_round: 'golf' };   /* [Claude 2026-10-11] score key -> the sign it paints */
+      const SCORE_KEYS = ['chain_dragon', 'chess_wins', 'lily_run', 'golf_round', 'golf_bay'], SCORE_BOARD = { chain_dragon: 'dragon', chess_wins: 'chess', lily_run: 'lily', golf_round: 'golf', golf_bay: 'golfbay' };   /* [Claude 2026-10-11] score key -> the sign it paints */
       /* 2026-10-12 (the operator: "the bank is the only thing that stores the high score and it doesn't get the high score from
          the clients"): what a sign shows comes only from the Bank's answer. Nothing is read from this device's storage and
          nothing from the character's own kill counts - either would repaint a board the Bank has cleared. */
       function syncMounts() {   /* wall-hung quest rewards (Aldric's sword) stay on the wall until they're given */
         for (const r of regions) if (r.built && r.built.mounts) for (const m of r.built.mounts) { const q = me.quests && me.quests[m.quest]; m.obj.visible = !(q && q.step >= m.untilStep); }
       }
-      const parts = {}; for (const k in DATA) if (k.indexOf('part.') === 0) parts[k.slice(5)] = DATA[k];
+      const parts = {}; for (const k in DATA) { if (k.indexOf('part.') === 0) parts[k.slice(5)] = DATA[k]; else if (k.indexOf('parts_') === 0 && DATA[k] && DATA[k].parts) Object.assign(parts, DATA[k].parts); }   /* parts_<kind>: the packs (build.py, 2026-11-04) */
       const MOD = deps.models.createModels(THREE, { parts, onReject: (id, why) => console.warn('ASHVALE: model part rejected: ' + id + ' (' + why + ')') });
 
       /* ---------- renderer */
       const canvas = document.createElement('canvas'); canvas.className = 'gl'; host.appendChild(canvas);
       let renderer;
       const hud = HUD.create(host, hudApi());
-      try { renderer = new THREE.WebGLRenderer({ canvas, antialias: !isPhone || devicePixelRatio < 2, powerPreference: 'high-performance' }); }
+      try { renderer = new THREE.WebGLRenderer({ canvas, antialias: !isPhone || devicePixelRatio < 2, powerPreference: 'high-performance' }); if (!q.has('glcheck')) renderer.debug.checkShaderErrors = false; }   /* [Claude 2026-11-04] boot time: three's shader check reads every program's link status at once, waiting for each compile in turn (7 s of the first frame); ?glcheck turns it back on */
       catch (e) { hud.fatal('ASHVALE needs WebGL, which this browser could not start. Try another browser or turn on hardware acceleration.'); return null; }
       renderer.setPixelRatio(Math.min(devicePixelRatio || 1, isPhone ? 1.75 : 2));
       renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -1070,6 +1075,7 @@
             if (!L.length) hud.chat('Touch the town portal in another town, and you can travel there from here.', 'sys');
             else { const r = host.getBoundingClientRect(); hud.menu(r.width / 2, r.height / 2, L); }
             if ((e.unknown || []).length) hud.chat('Not yet attuned: ' + e.unknown.join(', ') + '.', 'sys');
+            for (const L of e.locked || []) hud.chat(L.name + ' opens for players who own the ' + L.item + ' (in your pack, worn or in your chest).', 'sys');   /* [Claude 2026-11-04] the bay course */
           } break;
           case 'angels': { const t = ents.get('p:' + e.p); if (t) { angelFlare(t.root.position); if (t.H && t.H.play) t.H.play('cast', { loop: false }); } if (mine) sfx('level'); break; }
           case 'teleport': if (mine) {
@@ -1079,7 +1085,7 @@
               CAVE.hold = true; TRAVEL.hold = true; requestAnimationFrame(() => setTimeout(() => { CAVE.hold = false; place(myEnt, e.x, e.y); cam.snap = true; streamRegions(true); sfx('equip'); arriveCheck(); TRAVEL.warm = true; let k = 0; const settle = () => { if (++k < 3) requestAnimationFrame(settle); else TRAVEL.hold = false; }; requestAnimationFrame(settle); }, 30));   /* and it stays until the new place has been built and drawn a few frames (the first draw compiles its materials) */
             } else { place(myEnt, e.x, e.y); cam.snap = true; streamRegions(); sfx('equip'); arriveCheck(); }
           } break;
-          case 'zoneadd': zoneArrived(e, now); break;
+          case 'zoneadd': zoneArrived(e, now); golfCourses(); break;
           case 'boatland': boatShow(e.x, e.y, e.face); docksShow(); if (e.by === PID) { boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, face: e.face, on: 0 }); } break;
           case 'cross': if (e.p === PID) { place(myEnt, e.x, e.y); cam.yaw += e.turn || 0; cam.tyaw += e.turn || 0; cam.snap = true; streamRegions(); TN.key = ''; } break;   /* over a cut edge of the net: the same ground, new map coordinates, the view turned with them */
           case 'boatgone': boatHide(e.x, e.y); docksShow(); if (e.by === PID) boatTell({ t: 'boat', v: 1, x: e.x, y: e.y, on: 1 }); break;
@@ -2413,7 +2419,9 @@
       LR = deps.englily && deps.lilyrules && PET ? deps.englily.install({ THREE, scene, core, hud, PID, cam, camera, renderer, myEnt, FPV, send, netSend: o => netSendBig(o, null, 'lr'), PET, rules: deps.lilyrules, heightAt, CHAR,
         playOnce: (e, name) => { if (!e.dead && !e.oneShot) playOnce(e, name); }, bestTell: (...a) => ENGBANK && ENGBANK.bestTell && ENGBANK.bestTell(...a), scoresAsk: f => scoresAsk(f), get me() { return me; } }) : null;
       /* [Claude 2026-10-19] THE SALTMERE LINKS (engolf.js): the course drawn on its zone, Fergus the starter, rounds alone or in groups (stakes through @ashvale, as at the card table), the golf HUD */
-      GF = deps.engolf && deps.golfrules && deps.golfcourse ? deps.engolf.install({ THREE, scene, core, hud, PID, cam, camera, renderer, myEnt, send, netSend: o => netSendBig(o, null, 'gf'), PET, rules: deps.golfrules, course: deps.golfcourse, heightAt,
+      /* [Claude 2026-11-04] each course comes with its zone (zone module `course`; the operator: "We need to get load time to be faster"): the
+         golf part starts when the first course's zone is here (golfCourses, on every 'zoneadd'), and takes the next ones with addCourse */
+      const golfInstall = (course) => deps.engolf && deps.golfrules ? deps.engolf.install({ THREE, scene, core, hud, PID, cam, camera, renderer, myEnt, send, netSend: o => netSendBig(o, null, 'gf'), PET, rules: deps.golfrules, course, courses: [], heightAt,
         playOnce: (e, name) => { if (!e.dead) playOnce(e, name); }, bestTell: (...a) => ENGBANK && ENGBANK.bestTell && ENGBANK.bestTell(...a), scoresAsk: f => scoresAsk(f), get me() { return me; },
         netId: () => myNetId, boardWho: () => boardWho(), myAddr: () => walletState.address || null, coins: () => core.invCount(me, 'coins'),
         /* [Claude 2026-10-22] the round kept for a rejoin (the operator: "if you accidentally close the application while playing a round of golf, you
@@ -2424,6 +2432,12 @@
         remoteEnt: id => { const r = remotes.get(id) || remotes.get(String(id)); return r ? r.e : null; },
         pkEvent: (e, addrOf) => ENGBANK && ENGBANK.pkEvent && ENGBANK.pkEvent(e, addrOf),
         esc: s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])) }) : null;
+      golfCourses = () => {
+        for (const z of core.D.zones || []) { if (!z.course) continue; if (!GF) GF = golfInstall(z.course); else if (GF.addCourse) GF.addCourse(z.course); }
+      };
+      golfCourses();
+      /* [Claude 2026-11-04] the bay course's portal opens for a Master set in the chest too (the operator): the chest is the wallet's gear */
+      if (core.setHeld) core.setHeld((pid, id) => String(pid) === String(PID) && !!(walletState.data && walletState.data.gear && (walletState.data.gear[id] || []).length));
       function boardWho() {   /* the keep board is the arcade @tag, not the default Adventurer (2026-10-10) */
         const t = (room && room.me && room.me.tag) || hintedTag || me.tag;
         if (t) { const h = String(t).replace(/^@/, '').replace(/[^\w]/g, '').slice(0, 16); if (h.length >= 2 && !/^adventurer$/i.test(h)) return '@' + h; }
@@ -3882,5 +3896,5 @@
     }
     return { api: 1, start, openStore };
   }
-  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engine', { api: 1, v: 2, needs: { three: 160, core: 2, models: 1, scene: 2, hud: 1, net: 2, trade: 1, wallet: 1, trip: 2, audit: 1, gamepad: 1, data: 1, engsky: 1, engbank: 1, engfortune: 1, engpet: 1, engmusic: 1, englily: 1, lilyrules: 1, engolf: 1, golfrules: 1, golfcourse: 1 } }, engineFactory);
+  if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engine', { api: 1, v: 2, needs: { three: 160, core: 2, models: 1, scene: 2, hud: 1, net: 2, trade: 1, wallet: 1, trip: 2, audit: 1, gamepad: 1, data: 1, engsky: 1, engbank: 1, engfortune: 1, engpet: 1, engmusic: 1, englily: 1, lilyrules: 1, engolf: 1, golfrules: 1 } }, engineFactory);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -107,7 +107,13 @@
       ctx.fieldTrue = fieldTrue;
       ctx.clearCaches = () => { LAT.clear(); ctx.clearSites(); };
       let EDL = T.edits || null, LASTPC = null;
-      const setEdits = (list) => { EDL = list && list.length ? list.slice() : null; ctx.setEdits(EDL); ctx.clearCaches(); if (LASTPC) ctx.setSetPieces(LASTPC); ctx.clearCaches(); };   /* the world editor (the operator): the towns' pads follow the new ground */
+      /* [Claude 2026-11-04] a zone's own edits (zone module `edits`: the bay course's relief) come and go with the zone, after
+         the world's (EDL), in zone-id order - the same land whichever order the zones arrived in. They must lie inside the
+         zone (tests/lazy_zones_test.js: outside every town the land is the same with or without it). */
+      const ZED = new Map();
+      const applyEdits = () => { const all = (EDL || []).concat(...Array.from(ZED.keys()).sort().map(k => ZED.get(k))); ctx.setEdits(all.length ? all : null); ctx.clearCaches(); if (LASTPC) ctx.setSetPieces(LASTPC); ctx.clearCaches(); };
+      const setEdits = (list) => { EDL = list && list.length ? list.slice() : null; applyEdits(); };   /* the world editor (the operator): the towns' pads follow the new ground */
+      const zoneEdits = (id, list) => { if (list && list.length) ZED.set(String(id), list); else if (!ZED.delete(String(id))) return false; applyEdits(); return true; };
       const FFB = new Float64Array(6), FLD = new Float64Array(NF);
       function field(face, x, y, out) { ctx.foldInto(face, x, y, FFB); return fieldTrue(FFB[0], FFB[1], FFB[2], out || FLD); }
 
@@ -263,7 +269,7 @@
         net,
         api: API, V, WATER, BIOME, BLOCK, LOS, seed, G, climOf: ctx.climOf || null, climate: ctx.climate || null, rivers: ctx.rivers || null, riverLines: () => ctx.rivers ? ctx.rivers.lines() : null,
         sample, newSample: ctx.newSample, field, lattice, height: (f, x, y) => sample(f, x, y, SMP).h,
-        setEdits, edits: () => EDL,
+        setEdits, edits: () => EDL, zoneEdits,
         walkable: ctx.walkable, tileAt: ctx.tileAt, tiles: ctx.tiles, forTiles: ctx.forTiles, sites: ctx.sites, setSetPieces: (l) => { LASTPC = l; ctx.setSetPieces(l); }, setGroves: (l) => { ctx.setGroves(l); ctx.clearCaches(); }, piecesFromZones, objectsIn,
         pathDist: (f, x, y) => ctx.pathDist ? ctx.pathDist(f, x, y) : 1e9,   /* < 0 on a path (plane point); world.js keeps solid decor off the paths */
         roadObjects: (face, gx0, gy0, gx1, gy1) => { const L = ctx.ROAD_OBJ || []; return face == null ? L.slice() : L.filter(o => o.face === face && o.x >= gx0 && o.x <= gx1 && o.y >= gy0 && o.y <= gy1); },

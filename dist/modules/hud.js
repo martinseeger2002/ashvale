@@ -51,7 +51,7 @@
     const dlg = el('dlg stone ui', ui), ctx = el('ctx ui', ui), shopEl = el('shop stone ui', ui), help = el('help stone ui', ui), err = el('err ui', ui);
     const st = { tab: api.isPhone ? null : 'inv', shopId: null, shopSel: null, skillSel: null, newGameArm: 0 };   /* shared with the hud parts */
     let lines = [], dlgQ = null;
-    const TABS = [['combat', 'Combat'], ['skills', 'Skills'], ['quest', 'Quests'], ['friends', 'Friends'], ['inv', 'Inventory'], ['equip', 'Equipment'], ['prayer', 'Prayer'], ['magic', 'Magic'], ['music', 'Music'], ['settings', 'Settings']];   /* no Wallet tab (2026-10-05: the chest shows your wallet) */
+    const TABS = [['combat', 'Combat'], ['skills', 'Skills'], ['quest', 'Quests'], ['friends', 'Friends'], ['emotes', 'Emotes'], ['inv', 'Inventory'], ['equip', 'Equipment'], ['prayer', 'Prayer'], ['magic', 'Magic'], ['music', 'Music'], ['settings', 'Settings']];   /* no Wallet tab (2026-10-05: the chest shows your wallet) */
     for (const [k, title] of TABS) { const b = el('tab stone', tabs, A.ICON[k], 'button'); b.title = title; b.dataset.k = k; b.onclick = () => { setTab(st.tab === k ? null : k); api.sfx && api.sfx('click'); }; }
     function setTab(k) { st.tab = k; if (k && api.onTab) api.onTab(k); for (const b of tabs.children) b.classList.toggle('on', b.dataset.k === k); panel.classList.toggle('open', !!k); K.refresh(k); if (k === 'friends' && api.friendsRefresh) api.friendsRefresh(); }
     function promptSay(text) {

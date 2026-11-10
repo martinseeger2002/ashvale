@@ -13,23 +13,32 @@
    install(K) -> { frame(now, dt), camera(cam3, dt), talk(), tap(), playing(), net(id, d), drop(id), event(e) } */
 (function (G) {
   'use strict';
-  const FERGUS = 'Fergus the starter';
+  let FERGUS = 'Fergus the starter';   /* the starter who talks: the course's own (useCourse) */
   const SETS = [['golf_master', 'master'], ['golf_pro', 'pro'], ['golf_standard', 'standard'], ['golf_starter', 'starter']];
   const BALL_R = 0.035, LINE = 86;
   const FMT = { free: 'a friendly round', pot: 'winner takes the pot', stroke: 'per stroke' };
   function install(K) {
-    const THREE = K.THREE, R = K.rules, C = R.makeCourse(K.course), D = C.data, YD = C.yd;
-    const [BX0, BY0, BX1, BY1] = D.box;
-    const yd = m => Math.round(m * YD), ft = m => Math.round(m * YD * 3);
+    const THREE = K.THREE, R = K.rules;
+    /* [Claude 2026-11-03] more than one course (the bay course, tools/golf/bay): every course the engine passes is made once;
+       the one the player is near is THE course (C) while no round is on, and everything below reads it */
+    /* [Claude 2026-11-04] each course comes with its zone (zone module `course`, the operator: "We need to get load time to be faster"):
+       the engine installs this part when the first one arrives and hands over the rest with addCourse */
+    const COURSES = [K.course].concat(K.courses || []).filter(Boolean).map(c => R.makeCourse(c));
+    let C = COURSES[0], D = C.data, YD = C.yd, BX0, BY0, BX1, BY1, LIFT = [];
+    const yd = m => Math.round(m * YD), ft = m => Math.round(m * YD * 3);   /* YD: the course's (let, above) */
     const ME = () => String(K.netId ? K.netId() : K.PID);   /* who I am to the others (the room's id; the game's own player id is the same 'me' everywhere) */
     /* 2026-10-20 ("weird grass that covers your ball near one of the greens"): a green's tilt dips up to ~10 cm below the
        world's ground on its low side, and there the world's own grass drew over the course and the ball. Drawn, each green is
        lifted by its deepest dip, fading out with the tilt (the rules' heights are untouched: every game plays the same shots) */
     const smoothT = t => t * t * (3 - 2 * t);
-    const LIFT = C.holes.map(h => { let lo = 0;
+    const liftsOf = (C) => C.holes.map(h => { let lo = 0;
       for (let dx = -10; dx <= 10; dx += 0.25) for (let dy = -10; dy <= 10; dy += 0.25) { const r = Math.hypot(dx, dy); if (r > 10) continue;
         lo = Math.min(lo, h.slope[0] * dx + h.slope[1] * dy + h.swell * Math.cos(Math.min(1, r / 7.6) * Math.PI / 2) ** 2 - 0.006); }
       return -lo + 0.005; });
+    function useCourse(c) { C = c; D = C.data; YD = C.yd; [BX0, BY0, BX1, BY1] = D.box; LIFT = c._lift || (c._lift = liftsOf(c)); FERGUS = D.starter || 'Fergus the starter'; }
+    const courseName = () => D.title || 'the Saltmere Links';   /* the bay course carries its own title */
+    useCourse(C);
+    const nearOf = (c, x, y) => { const b = c.data.box; return x > b[0] - 80 && x < b[2] + 80 && y > b[1] - 80 && y < b[3] + 120; };
     const lift = (x, z) => { for (let i = 0; i < C.holes.length; i++) { const g = C.holes[i].green, r = Math.hypot(x - g[0], z - g[1]); if (r > 10) continue; return LIFT[i] * (r < 7.6 ? 1 : 1 - smoothT((r - 7.6) / 2.4)); } return 0; };
     const gY = (x, z) => K.heightAt(x, z) + C.height(x, z) + lift(x, z);   /* where the course is drawn: the world's ground plus the greens' tilt, never under the ground */
     const nearCourse = (x, y) => x > BX0 - 80 && x < BX1 + 80 && y > BY0 - 80 && y < BY1 + 120;
@@ -57,10 +66,17 @@
     function build() {
       const grp = new THREE.Group(), W = BX1 - BX0, H = BY1 - BY0, nx = W + 1, nz = H + 1;
       const pos = new Float32Array(nx * nz * 3), uv = new Float32Array(nx * nz * 2), idx = [];
+      /* [Claude 2026-11-04] only the metres the overlay paints: a square whose cells (and their neighbours, for the texture's
+         filtering) are all clear draws nothing (alphaTest), so it gets no triangles - the bay course's box is 40% sea, and its
+         whole box as one sheet (546k triangles) helped crash a phone */
+      const Q = D.q, RW = D.rows[0].length, RH = D.rows.length, paint = new Uint8Array(W * H);
+      for (let j = 0; j < RH; j++) { const row = D.rows[j]; for (let i = 0; i < RW; i++) if (COL[row[i]]) {
+        for (let b = Math.max(0, Math.floor((j - 1) / Q)); b <= Math.min(H - 1, Math.floor((j + 1) / Q)); b++)
+          for (let a = Math.max(0, Math.floor((i - 1) / Q)); a <= Math.min(W - 1, Math.floor((i + 1) / Q)); a++) paint[b * W + a] = 1; } }
       for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
         const x = BX0 + i, z = BY0 + j, k = j * nx + i;
         pos.set([x, gY(x, z) + 0.035, z], k * 3); uv.set([i / (nx - 1), 1 - j / (nz - 1)], k * 2);
-        if (i < nx - 1 && j < nz - 1) idx.push(k, k + nx, k + 1, k + 1, k + nx, k + nx + 1);
+        if (i < nx - 1 && j < nz - 1 && paint[j * W + i]) idx.push(k, k + nx, k + 1, k + 1, k + nx, k + nx + 1);
       }
       const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); geo.setIndex(idx); geo.computeVertexNormals();
       const mat = new THREE.MeshLambertMaterial({ map: overlayTexture(), transparent: false, alphaTest: 0.5, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
@@ -269,7 +285,7 @@
     let lastPress = -1e9, presses = 0;
     function press() {
       if (!ST || K.hud.golfCardOpen()) return;
-      const t = performance.now(); if (t - lastPress < 250) return;
+      const t = performance.now(); if (t - lastPress < 120) return;   /* [Claude 2026-11-05] was 250 ms: touchstart + pointerdown of one touch come within a few ms, and 250 ms ate the strike of a short chip (its marker is back on the line that soon) */
       if (ST.phase === 'aim' && tapNow()) { lastPress = t; presses++; tapIn(); return; }   /* 2026-10-20: inside 10 ft the swing button IS the tap-in, one press */
       if (ST.phase === 'aim') { if (!myTurn()) return; ST.phase = 'rise'; ST.meter = 0; lastPress = t; presses++; return; }
       if (ST.phase === 'rise' && clubObj().id === 'PT') { setPower(ST.meter); ST.impact = 0; lastPress = t; presses++; goSwing(); return; }   /* 2026-10-20 ("hard to click three times for a short putt"): a putt is two taps, start and strength; it rolls along the aim */
@@ -329,7 +345,7 @@
     function finishRound() {
       ST.done = true; tell(true);
       const tot = ST.card.reduce((s, v) => s + v, 0), nm = K.boardWho && K.boardWho();
-      if (nm && K.bestTell && tot >= 18 && ST.nine === 'full') K.bestTell('golf_round', nm, tot, Date.now() - ST.t0, 18);   /* the best rounds are eighteen holes */
+      if (nm && K.bestTell && tot >= 18 && ST.nine === 'full') K.bestTell(D.board || 'golf_round', nm, tot, Date.now() - ST.t0, 18);   /* the best rounds are eighteen holes */
       showCard('end');
     }
     /* ---------- the group's result: once every player has finished or left, each game works out the payouts the same way,
@@ -420,7 +436,7 @@
       if (age > REJOIN()) {   /* back too late: the round has gone on without me - as if I had left it */
         RESUME = null; clearKept();
         if (!r.done && r.buy > 0) K.send({ c: 'golfforfeit', s: 'golf:' + r.rid + ':' + r.sn });
-        K.hud.chat('You were away from your round on the Saltmere Links for more than ' + upTo() + ', so it went on without you' + (!r.done && r.buy > 0 ? ' and your stake is forfeit.' : '.'), 'sys'); return;
+        K.hud.chat('You were away from your round on ' + courseName() + ' for more than ' + upTo() + ', so it went on without you' + (!r.done && r.buy > 0 ? ' and your stake is forfeit.' : '.'), 'sys'); return;
       }
       if (!o.gone && age < 8000) return;   /* it may still be playing in another tab of this browser: only once that page went, or has been quiet 8 s */
       if (r.m.length > 1 && K.netId && String(K.netId()) === String(K.PID) && Date.now() - BOOT < 20000) return;   /* a group: wait for the room (the others know me again by my new room id) */
@@ -593,7 +609,7 @@
       if (ST || talking) return; talking = true;
       const done = () => { talking = false; };
       const set = bestSet(), coins = K.coins();
-      const intro = ['Welcome to the Saltmere Links! Eighteen holes along the coast, with the sea wind for company.', 'Press once to start your swing, again to set the power - the gold MAX mark is a full shot, right on it a little extra - and a third time when the marker is back on the line.'];
+      const intro = [(D.welcome || 'Welcome to the Saltmere Links! Eighteen holes along the coast, with the sea wind for company.'), 'Press once to start your swing, again to set the power - the gold MAX mark is a full shot, right on it a little extra - and a third time when the marker is back on the line.'];
       if (!set) { K.hud.dialog(FERGUS, intro.concat(['You will need a set of clubs first. Isla sells them over at the counter - a Starter set is 500 GOLD.']), done); return; }
       const open = Array.from(OPEN.values()).filter(o => Date.now() - o.at < 8000 && o.m.length < 4 && String(o.host) !== ME());
       const opts = [{ id: 'solo', label: 'Play a round on my own' }, { id: 'group', label: 'Open a group' }];
@@ -621,7 +637,7 @@
           LOBBY = { g: o.g, host: o.host, f: o.f, a: o.a, nine: o.nine, m: o.m.concat([[ME(), myName(), K.myAddr() || '']]), at: Date.now() };
           if (K.netSend) K.netSend({ gf: { t: 'join', g: o.g, nm: myName(), ad: K.myAddr() || '' } }); lobbyCard();
         }
-        else if (pick === 'board') { if (K.scoresAsk) K.scoresAsk(true); K.hud.dialog(FERGUS, K.core.scoreRead('golf_round'), () => ask()); }
+        else if (pick === 'board') { if (K.scoresAsk) K.scoresAsk(true); K.hud.dialog(FERGUS, K.core.scoreRead(D.board || 'golf_round'), () => ask()); }
         else done();
       }, opts);
       K.hud.dialog(FERGUS, intro, () => ask());
@@ -630,7 +646,7 @@
     function showCard(mode) {
       if (!ST) return;
       const rows = [0, 9].filter(o => o >= ST.h0 && o < ST.h1).map(o => C.holes.slice(o, o + 9)), who = ST.m.map(x => [x[3], x[1]]);
-      let html = '<h3>The Saltmere Links</h3>';
+      let html = '<h3>' + (D.title || 'The Saltmere Links') + '</h3>';
       for (const part of rows) {
         html += '<table><tr><th>' + (part[0].n > 9 ? 'IN' : 'OUT') + '</th>' + part.map(h => '<td>' + h.n + '</td>').join('') + '<td>Σ</td></tr><tr><th>Par</th>' + part.map(h => '<td>' + h.par + '</td>').join('') + '<td>' + part.reduce((s, h) => s + h.par, 0) + '</td></tr>';
         for (const [sn, nm] of who) {
@@ -806,6 +822,7 @@
     let rmT = 0;
     function frame(nowMs, dt) {
       const P = K.core.S.players[K.PID]; if (!P) return;
+      if (!ST && COURSES.length > 1 && !nearOf(C, P.x, P.y)) { const c = COURSES.find(c => nearOf(c, P.x, P.y)); if (c && c !== C) { if (built) { K.scene.remove(built.grp); built.grp.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); built = null; } useCourse(c); } }   /* walked to another course */
       if (!built) { if (nearCourse(P.x, P.y) && K.heightAt) built = build(); else if (!ST) return; }
       if (!ST) tryResume();   /* [Claude 2026-10-22] a round kept by the page before this one */
       for (const [g, o] of OPEN) if (Date.now() - o.at > 15000) OPEN.delete(g);
@@ -924,6 +941,7 @@
       return true;
     }
     return {
+      addCourse(d) { if (!d || COURSES.some(c => c.data.name === d.name)) return false; COURSES.push(R.makeCourse(d)); return true; },   /* another course's zone arrived */
       frame, camera, talk,
       tap: () => !!ST,                         /* taps never walk during a round (they aim) */
       playing: () => !!ST,

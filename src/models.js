@@ -1164,7 +1164,7 @@ export function createModels(THREE, opts) {
     size = size || 64; const key = id + '@' + size;
     if (ICONS.has(key)) return ICONS.get(key);
     try {
-      if (!iconR) { iconR = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true }); iconR.setClearColor(0x000000, 0); }
+      if (!iconR) { iconR = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true }); iconR.setClearColor(0x000000, 0); iconR.debug.checkShaderErrors = false; }
       iconR.setSize(size, size, false);
       const sc = new THREE.Scene(); sc.add(new THREE.AmbientLight(0xffffff, 1.1)); const dl = new THREE.DirectionalLight(0xffffff, 1.6); dl.position.set(2, 4, 3); sc.add(dl);
       const obj = item(id); sc.add(obj);

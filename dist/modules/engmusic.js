@@ -145,7 +145,9 @@
       };
       el.oninput = (e) => { if (e.target.dataset && e.target.dataset.ma === 'vol') { S.vol = (+e.target.value || 0) / 100; if (master) master.gain.value = S.vol; save(); } };
     }
-    return { frame, panel, state: () => ({ playing: cur && cur.id, area: areaTrack, unlocked: S.unlocked.slice(), mode: S.mode, on: S.on, ctx: ctx ? ctx.state : null }), _play: play };
+    return { frame, panel, state: () => ({ playing: cur && cur.id, area: areaTrack, unlocked: S.unlocked.slice(), mode: S.mode, on: S.on, ctx: ctx ? ctx.state : null }), _play: play,
+      /* for ASH.music (the film API, 2026-10-25): a track on loop whether or not it is unlocked, back to the area's, and the sound woken */
+      _loop: id => { if (!D.tracks[id]) return; S.mode = 'loop'; S.loop = id; play(id); }, _auto: () => { S.mode = 'auto'; S.loop = null; if (areaTrack) play(areaTrack); }, _wake: wake };
   }
   if (G.ASH3D && G.ASH3D.define) G.ASH3D.define('engmusic', { api: 1, v: 1, needs: {} }, () => ({ api: 1, install }));
 })(typeof globalThis !== 'undefined' ? globalThis : this);

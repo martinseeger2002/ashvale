@@ -137,14 +137,19 @@
           /* the Milky Way: its outline (five levels of brightness) painted soft onto a sky-sized sphere in the same frame */
           let mwMesh = null;
           if (typeof document !== 'undefined' && SM.mw && SM.mw.length) {
-            const W = 2048, H = 1024, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const c = cv.getContext('2d');
-            if ('filter' in c) c.filter = 'blur(7px)';
+            /* [Claude 2026-11-04] painted sharp on `raw`, then blurred ONCE onto cv: blur(7px) on the context blurred every one of the fills on its
+               own, and the browser runs that only at the texture's upload - 6.9 s of the first night frame (the operator: "We need to get load time
+               to be faster"). The same picture: the fills add up, then the one blur softens them together. */
+            const W = 2048, H = 1024, cv = document.createElement('canvas'); cv.width = 512; cv.height = 256; const raw = document.createElement('canvas'); raw.width = W; raw.height = H; const c = raw.getContext('2d');
             for (const [lvl, flat] of SM.mw) {
               const pts = []; for (let i = 0; i < flat.length; i += 2) pts.push([flat[i] / 10, flat[i + 1] / 10]);
               for (let i = 1; i < pts.length; i++) { while (pts[i][0] - pts[i - 1][0] > 180) pts[i][0] -= 360; while (pts[i][0] - pts[i - 1][0] < -180) pts[i][0] += 360; }   /* unwrapped across 0h */
               c.fillStyle = 'rgba(205,215,255,' + (0.045 + 0.012 * lvl) + ')';
               for (const sh of [-360, 0, 360]) { c.beginPath(); pts.forEach((p, i) => { const x = (p[0] + sh) / 360 * W, y = (1 - (p[1] + 90) / 180) * H; if (i) c.lineTo(x, y); else c.moveTo(x, y); }); c.closePath(); c.fill(); }
             }
+            { const o = cv.getContext('2d'), t = document.createElement('canvas'); t.width = 256; t.height = 128; const tc = t.getContext('2d'); tc.imageSmoothingEnabled = o.imageSmoothingEnabled = true; if ('imageSmoothingQuality' in tc) tc.imageSmoothingQuality = o.imageSmoothingQuality = 'high';
+              const h = document.createElement('canvas'); h.width = 1024; h.height = 512; const hc = h.getContext('2d'); if ('imageSmoothingQuality' in hc) hc.imageSmoothingQuality = 'high';
+              hc.drawImage(raw, 0, 0, 1024, 512); tc.drawImage(h, 0, 0, 256, 128); o.drawImage(t, 0, 0, cv.width, cv.height); }   /* the soft glow by scaling down and back up (a canvas blur filter took seconds) */
             const tex = new THREE.CanvasTexture(cv); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
             const NA = 96, ND = 48, pos = [], uv = [], ind = [];
             for (let j = 0; j <= ND; j++) for (let i = 0; i <= NA; i++) { const ra = i / NA * 360, dec = -90 + j / ND * 180; pos.push(...dirOf(ra, dec)); uv.push(i / NA, j / ND); }

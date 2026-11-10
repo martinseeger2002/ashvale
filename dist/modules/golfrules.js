@@ -122,7 +122,11 @@
     /* wind (GBC): a crosswind carries the ball sideways the whole flight; into the wind costs about 0.8 of that, a following
        wind gives back only a third (a 20 mph headwind took 12 yd off a 200 yd drive, a tailwind added 5) */
     const W0 = s.wind || [0, 0], along = W0[0] * dx + W0[1] * dy, ax = W0[0] - along * dx, ay = W0[1] - along * dy, ka = along > 0 ? 0.33 : 0.8;
-    const W = [ax + along * ka * dx, ay + along * ka * dy], drift = 0.3 * T;
+    /* [Claude 2026-11-05] the operator: "if your hit accuracy is right on your ball should not slice" - a part swing (short of MAX)
+       was blown sideways far more than a full one for its length (a half wedge 33% of its carry in an 11 mph crosswind, a
+       full one 24%), because its time in the air hardly shrinks. The wind's push now shrinks with the carry: the same share
+       of the distance at any power, a full shot exactly as before (the GBC measurements) */
+    const W = [ax + along * ka * dx, ay + along * ka * dy], drift = 0.3 * T * Math.sqrt(pe);
     const Hm = Math.max(1.2, D * (0.08 + club.loft / 250) * pe);
     const path = []; let hit = null, kind = null;
     const N = Math.max(12, Math.ceil(D / 0.4));

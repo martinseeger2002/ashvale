@@ -34,7 +34,7 @@ JS_MODULES.insert(JS_MODULES.index('engine'), 'engfortune')   # [Claude 2026-10-
 JS_MODULES.insert(JS_MODULES.index('engine'), 'engpet')   # [Claude 2026-10-17] pets from Doginals (a Doginal Dog or ADD in the wallet)
 JS_MODULES.insert(JS_MODULES.index('engine'), 'lilyrules')   # [Claude 2026-10-19] the Lily Run: its rules (pure)
 JS_MODULES.insert(JS_MODULES.index('engine'), 'englily')   # [Claude 2026-10-19] the Lily Run: board, keeper, camera, the run
-for _m in ('golfrules', 'golfcourse', 'engolf'): JS_MODULES.insert(JS_MODULES.index('engine'), _m)
+for _m in ('golfrules', 'engolf'): JS_MODULES.insert(JS_MODULES.index('engine'), _m)   # [2026-11-04] the courses are in their zones (zone.golf / zone.golfbay `course`)
 # [Claude 2026-10-20] the clubhouse tables (the operator: "their own modules"): each game's rules (the same files the Bank runs), its table, the
 # dice table's recorded throws, the shared engine part and the shared bar - found by name, so the engine, scene and hud never list them
 for _m in ('dicerules', 'wheelrules', 'twentyonerules', 'dicethrows', 'dicetable', 'wheeltable', 'twentyonetable', 'engtables', 'hudtables'): JS_MODULES.insert(JS_MODULES.index('engine'), _m)   # [Claude 2026-10-19] the Saltmere Links: rules (pure), the course data (tools/make_golf.py), the engine part
@@ -58,10 +58,11 @@ DATA_MODULES.append('atlas_palette')   # the Atlas's colours (src/earth.js PAL):
 DATA_PATHS = {'wg_tables': 'atlas/wg_tables', 'atlas_palette': 'atlas/atlas_palette'}   # data modules that live in a subfolder of data/
 ZONES = ['village', 'eastend', 'whisperwood', 'saltmere', 'castle', 'wolfden', 'cavemouth', 'spidercave', 'ancientchapel', 'lilyrun', 'lilyrunpath', 'golf', 'golfpath', 'golfshore', 'evengrove', 'ziibiing', 'lodges', 'ricelake', 'sugarcamp', 'flintbank', 'obsidianbank', 'willowbank', 'dragonapproach', 'dragonkeep']   # ziibiing + lodges: the Ojibwe village on the river and its wigwams' insides (tools/make_zone_ziibiing.py)   # castle: the lake castle 4 km out (tools/castle/make_castle.js)   # dragonapproach: Squire Elian at -11,-78; dragonkeep: the ruined keep at -54,-99
 ZONES = ZONES + ['thornwatch', 'redmoor', 'hollowden', 'sistersbarrow', 'fivestones', 'gloamwood', 'emberfall', 'blackmere', 'towercellars', 'abbey', 'crypts']   # Thornwatch Camp, the Red Moor, the Hollow Den under it and the Sisters' Barrow south of it (tools/thornwatch/, 2026-10-18)
-ZONES = ZONES + ['mt_lodge', 'mt_shrine', 'mt_ledge', 'mt_warden', 'mt_crags', 'mt_pass', 'mt_farside', 'mt_tower', 'tutorial']   # the great mountain's camps (tools/mountain/make_camps.js, 2026-10-18)   # saltmere: the second town, on the sea shore 3.4 km east (tools/make_zone_saltmere.mjs)
+ZONES = ZONES + ['mt_lodge', 'mt_shrine', 'mt_ledge', 'mt_warden', 'mt_crags', 'mt_pass', 'mt_farside', 'mt_tower', 'tutorial', 'golfbay']   # the great mountain's camps (tools/mountain/make_camps.js, 2026-10-18)   # saltmere: the second town, on the sea shore 3.4 km east (tools/make_zone_saltmere.mjs)
 if os.environ.get('ASH_NO_CASTLE') == '1':   # 2026-10-05: "forget about this castle for now" - a release without it
     ZONES = [z for z in ZONES if z != 'castle']
 AREA = os.environ.get('ASH_AREA_LOADING', '1') != '0'   # area loading (handoff/area_loading.md): live since registry v62 (the operator's OK 2026-10-06); ASH_AREA_LOADING=0 builds the old layout
+PART_PACKS = os.environ.get('ASH_PART_PACKS', '1') != '0'
 PARTS_DIR = os.path.join(DATA, 'parts')   # model part modules (characters, gear, clothes): one JSON each, no code
 
 
@@ -106,6 +107,12 @@ def zone_stub_tiles(z):
     return out
 
 
+def stub_rle(r):
+    """[Claude 2026-11-04] a stub row run-length coded (the operator: "We need to get load time to be faster"): each letter, then how many
+    times it repeats when more than once ('.120~3P'). Tile letters are never digits. Read by src/world.js stubTiles()."""
+    return ''.join(m.group(1) + (str(len(m.group(0))) if len(m.group(0)) > 1 else '') for m in re.finditer(r'(.)\1*', r))
+
+
 def zone_index(zones):
     """data module `zoneindex` (handoff/area_loading.md): what the game must know about EVERY zone while only the zones
     near the player are loaded - where each is, who lives there, and worldgen's view of it from outside"""
@@ -115,9 +122,9 @@ def zone_index(zones):
         pads = [{k: o[k] for k in ('k', 'x', 'y', 'w', 'h', 'top') if k in o} for o in z.get('objects') or []
                 if o.get('k') in PAD_KINDS and o.get('w') and o.get('h') and not (o['w'] < 3 and o['h'] < 3)
                 and ox <= o['x'] < ox + w and oy <= o['y'] < oy + h]
-        e = {'id': zid, 'name': z.get('name', zid), 'origin': z['origin'], 'size': z['size'], 'stub': zone_stub_tiles(z), 'pads': pads,
+        e = {'id': zid, 'name': z.get('name', zid), 'origin': z['origin'], 'size': z['size'], 'stubR': [stub_rle(r) for r in zone_stub_tiles(z)], 'pads': pads,
              'npcs': [{'id': n['id'], 'name': n.get('name', n['id']), 'x': n['x'], 'y': n['y']} for n in z.get('npcs') or []]}
-        for k in ('level', 'ground', 'respawn', 'weather', 'under', 'setPiece', 'style', 'surface', 'surfaceOffset', 'ownWays', 'flat', 'turf', 'returnTo'):   # ownWays: no paths grow from its edges (src/wg_paths.js), so the stubs must know it too (Thornwatch, 2026-10-18)   # setPiece: false keeps a zone off worldgen (Claude 2026-10-16)   # under: a cave area outside the land (surface = its entrance up top)
+        for k in ('level', 'ground', 'respawn', 'weather', 'under', 'setPiece', 'style', 'surface', 'surfaceOffset', 'ownWays', 'flat', 'turf', 'land', 'returnTo'):   # ownWays: no paths grow from its edges (src/wg_paths.js), so the stubs must know it too (Thornwatch, 2026-10-18)   # setPiece: false keeps a zone off worldgen (Claude 2026-10-16)   # under: a cave area outside the land (surface = its entrance up top)
             if k in z: e[k] = z[k]
         out.append(e)
     return {"ashvale3d": "module", "name": "zoneindex", "api": 1, "v": 1, "data": {"zones": out}}
@@ -224,6 +231,21 @@ def main():
         with open(zp, 'w') as f: json.dump(zi, f, separators=(',', ':'))
     elif os.path.exists(zp): os.remove(zp)
     parts = part_modules()
+    if parts and PART_PACKS:
+        # [Claude 2026-11-04] the parts in a few packs, one per kind (the operator: "We need to get load time to be faster"): 357 part
+        # modules were 357 downloads at boot, each a round trip; a pack is one data module 'parts_<kind>' = {parts: {pid: module}}
+        # (src/engine.js and src/atlas.js read both). ASH_PART_PACKS=0 keeps one module per part.
+        packs = {}
+        for pid, j in parts: packs.setdefault(pid.split('.')[0].split('_')[0], {})[pid] = j['data']   # what DATA['part.<pid>'] was
+        for kind in sorted(packs):
+            nm = 'parts_' + kind; pj = {"ashvale3d": "module", "name": nm, "api": 1, "v": 1, "data": {"parts": packs[kind]}}
+            mods[nm] = "ASH3D.defineData(" + json.dumps(pj, separators=(',', ':')) + ");\n"
+            reg['modules']['data'][nm] = {"id": None, "v": 1, "api": 1, "kind": "json"}
+            with open(os.path.join(DIST, 'modules', nm + '.json'), 'w') as f: json.dump(pj, f, separators=(',', ':'))
+            DATA_MODULES.append(nm)
+        for fn in os.listdir(os.path.join(DIST, 'modules')):
+            if fn.startswith('part.') and fn.endswith('.json'): os.remove(os.path.join(DIST, 'modules', fn))
+        parts = []
     if parts:
         reg['modules']['parts'] = {}
     for pid, j in parts:

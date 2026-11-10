@@ -94,7 +94,7 @@
     /* one zone's content into the set-piece lists; returns what it added (area loading adds zones later: M.addZone) */
     function ingest(z) {
       const n0 = npcs.length, s0 = spawns.length, o0 = objects.length;
-      pieces.push({ id: z.id, x0: z.origin[0], y0: z.origin[1], x1: z.origin[0] + z.size[0], y1: z.origin[1] + z.size[1], tiles: decks(z), spot: z.setPiece === false, flat: !!z.flat, turf: !!z.turf });   /* turf: mown grass, no tufts or flowers (the golf course) */   /* flat: a level ground (the golf course - 2026-10-20: "look like the golf course you showed me") */
+      pieces.push({ id: z.id, x0: z.origin[0], y0: z.origin[1], x1: z.origin[0] + z.size[0], y1: z.origin[1] + z.size[1], tiles: decks(z), spot: z.setPiece === false, flat: !!z.flat, turf: !!z.turf, wland: z.land === 'world' });   /* turf: mown grass, no tufts or flowers (the golf course) */   /* flat: a level ground (the golf course - 2026-10-20: "look like the golf course you showed me") */
       W = Math.max(W, z.origin[0] + z.size[0]); H = Math.max(H, z.origin[1] + z.size[1]);
       for (const n of z.npcs || []) npcs.push(Object.assign({ zone: z.id }, n));
       for (const s of z.spawns || []) spawns.push(Object.assign({ zone: z.id }, s));
@@ -354,7 +354,7 @@
         const o = bl[i], w = o.w || 1, h = o.h || 1, ring = [];
         for (let x = o.x - 2; x <= o.x + w + 1; x++) ring.push([x, o.y - 2], [x, o.y + h + 1]);
         for (let y = o.y - 1; y <= o.y + h; y++) ring.push([o.x - 2, y], [o.x + w + 1, y]);
-        for (let k = 0, t = (o.x * 7 + o.y * 13) % ring.length; k < YD.n && made < YD.max && t < (o.x * 7 + o.y * 13) % ring.length + ring.length; t++) {
+        for (let k = 0, t0 = (((o.x * 7 + o.y * 13) % ring.length) + ring.length) % ring.length, t = t0; k < YD.n && made < YD.max && t < t0 + ring.length; t++) {   /* [Claude 2026-11-03] never a negative start: far west and north (the bay course) o.x, o.y are negative; the same start as before wherever it was not */
           const [x, y] = ring[t % ring.length];
           if (zoneAt(x, y) !== P.id || blocked(x, y) || insideAt(x, y) || spawns.some(q => q.x === x && q.y === y)) continue;
           spawns.push({ zone: P.id, m: YD.birds[(i + k) % YD.birds.length], x, y }); k++; made++; t += 3;
@@ -375,7 +375,7 @@
         const o = bl[i], w = o.w || 1, h = o.h || 1, ring = [];
         for (let x = o.x - 3; x <= o.x + w + 2; x++) ring.push([x, o.y + h + 2], [x, o.y - 3]);
         for (let y = o.y - 2; y <= o.y + h + 1; y++) ring.push([o.x + w + 2, y], [o.x - 3, y]);
-        for (let t = (o.x * 11 + o.y * 5) % ring.length, n = 0; n < ring.length; n++, t++) {
+        for (let t = (((o.x * 11 + o.y * 5) % ring.length) + ring.length) % ring.length, n = 0; n < ring.length; n++, t++) {   /* never negative (the bay course's west/north coordinates) */
           const [x, y] = ring[t % ring.length];
           if (zoneAt(x, y) !== P.id || blocked(x, y) || insideAt(x, y) || spawns.some(q => q.x === x && q.y === y)) continue;
           spawns.push({ zone: P.id, m: kinds[made % kinds.length], x, y }); made++; break;
@@ -413,6 +413,7 @@
       regionOf: (x, y) => 'vale:' + FACE + ':' + Math.floor((x + GX) / REG) + ':' + Math.floor((y + GY) / REG),
       seeded: !!WG, inPiece: (x, y) => { const z = chunkAt(x, y).zi[ci(x, y)]; return !!z && !pieces[z - 1].spot; },
       flatAt: (x, y) => { const z = chunkAt(x, y).zi[ci(x, y)]; return !!z && !!pieces[z - 1].flat; },
+      worldLandAt: (x, y) => { const z = chunkAt(x, y).zi[ci(x, y)]; return !!z && !!pieces[z - 1].wland; },   /* [Claude 2026-11-04] zone.land 'world': the zone's ground is the world's own (the bay course's measured relief) */
       turfAt: (x, y) => { const z = chunkAt(x, y).zi[ci(x, y)]; return !!z && !!pieces[z - 1].turf; },   /* a spot zone (setPiece: false) stands on the world's own ground: the scene draws it as the land (the great mountain's camps, 2026-10-18) */ underAt, underNear, underStyle, waterKind, iceAt, setIce, latOf,
       /* seeded land, in the vale frame: sites (camps, ore, fishing; ids and monster uids from worldgen), the ground height
          at a tile corner relative to the set pieces' base height (so the old map keeps its own heights), the biome */
@@ -464,6 +465,7 @@
     const C = Object.assign({}, DEF_CFG, D.globecfg || {});
     const G = AG.createGlobe({ n: C.n, radius_m: C.radius_m, seed: C.seed });
     const W = WGM.createWorldgen(G, { seed: C.seed });
+    for (const z of pieceZones(D)) if (z.edits && W.zoneEdits) W.zoneEdits(z.id, z.edits);   /* a zone's own land (the bay's relief) */
     W.setSetPieces(W.piecesFromZones(pieceZones(D), C.face, C.origin[0], C.origin[1], { belt: C.belt || {}, links: C.links || [], groves: C.groves || [], walls: C.walls || [] }));
     return W;
   }
@@ -479,13 +481,21 @@
     const have = new Map((D.zones || []).map(z => [z.id, z]));
     return ZI.filter(onLand).map(e => have.get(e.id) || stubZone(e));   /* an underground area is not on the land */
   }
-  function stubZone(e) { return { id: e.id, origin: e.origin, size: e.size, tiles: e.stub, objects: e.pads || [], ownWays: !!e.ownWays, flat: !!e.flat, turf: !!e.turf }; }   /* ownWays: as the full zone (wg_paths), or the stub would grow paths the zone does not */
+  /* [Claude 2026-11-04] the index carries each stub run-length coded (build.py stub_rle: a letter, then its count when more than one) */
+  const STUBS = new WeakMap();
+  function stubTiles(e) {
+    if (e.stub) return e.stub; if (!e.stubR) return []; if (STUBS.has(e)) return STUBS.get(e);
+    const out = e.stubR.map(r => r.replace(/(\D)(\d+)/g, (m, c, n) => c.repeat(+n))); STUBS.set(e, out); return out;
+  }
+  function stubZone(e) { return { id: e.id, origin: e.origin, size: e.size, tiles: stubTiles(e), objects: e.pads || [], ownWays: !!e.ownWays, flat: !!e.flat, turf: !!e.turf, land: e.land }; }   /* ownWays: as the full zone (wg_paths), or the stub would grow paths the zone does not */
   /* a zone that arrived after the world was made: worldgen gets its real inside (the stub's place in the list is kept) */
   function arriveWorldgen(W, D, z) {
     if (z && (z.under || z.setPiece === false)) return false;   /* an underground area is not on the land; nor is a spot zone (setPiece: false) */
     const C = Object.assign({}, DEF_CFG, D.globecfg || {});
     const sp = W.piecesFromZones([z], C.face, C.origin[0], C.origin[1], { belt: C.belt || {}, links: C.links || [], groves: C.groves || [], walls: C.walls || [] })[0];
-    return W.replacePiece ? W.replacePiece(sp) : false;
+    const ok = W.replacePiece ? W.replacePiece(sp) : false;
+    if (ok && z.edits && W.zoneEdits) W.zoneEdits(z.id, z.edits);   /* [Claude 2026-11-04] its own land arrives with it (the bay's relief) */
+    return ok;
   }
   const AshWorld = { API, V, CH, createWorld, seededWorldgen, pieceZones, stubZone, arriveWorldgen, key, kx, ky };
   if (root.ASH3D && root.ASH3D.define) root.ASH3D.define('world', { api: API, v: V }, () => AshWorld);
