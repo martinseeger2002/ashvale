@@ -1,0 +1,3 @@
+ASHVALE 0.8.189 is out: emotes! Open the smiling-face tab next to Friends for 13 of them (wave, bow, cheer, dance, shrug, salute, fist pump and more), or type one in the chat like /wave. Everyone near you sees it. Thanks sadfrogltc for spotting it was never released.
+
+Also new: dungeons are never pitch dark (decor fires light the room), Tutorial Island's trees grow back, and on the golf course a part swing no longer slices in the wind and a short chip always counts.
